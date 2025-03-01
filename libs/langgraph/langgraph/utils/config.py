@@ -1,30 +1,95 @@
+import uuid
 from collections import ChainMap
-from typing import Any, Optional, Sequence, cast
+from contextvars import ContextVar
+from typing import Any, Optional, Sequence, Union, cast
 
-from langchain_core.callbacks import (
-    AsyncCallbackManager,
-    BaseCallbackManager,
-    CallbackManager,
-    Callbacks,
-)
-from langchain_core.runnables import RunnableConfig
-from langchain_core.runnables.config import (
-    CONFIG_KEYS,
-    COPIABLE_KEYS,
-    DEFAULT_RECURSION_LIMIT,
-    var_child_runnable_config,
+from langsmith.run_trees import RunTree, get_cached_client
+from typing_extensions import TypedDict
+
+from langgraph.checkpoint.base import CheckpointConfig, CheckpointMetadata
+
+
+class RunnableConfig(TypedDict, total=False):
+    """Configuration for a Runnable."""
+
+    tags: list[str]
+    """
+    Tags for this call and any sub-calls (eg. a Chain calling an LLM).
+    You can use these to filter calls.
+    """
+
+    metadata: dict[str, Any]
+    """
+    Metadata for this call and any sub-calls (eg. a Chain calling an LLM).
+    Keys should be strings, values should be JSON-serializable.
+    """
+
+    run_name: str
+    """
+    Name for the tracer run for this call. Defaults to the name of the class.
+    """
+
+    max_concurrency: Optional[int]
+    """
+    Maximum number of parallel calls to make. If not provided, defaults to
+    ThreadPoolExecutor's default.
+    """
+
+    recursion_limit: int
+    """
+    Maximum number of times a call can recurse. If not provided, defaults to 25.
+    """
+
+    configurable: dict[str, Any]
+    """
+    Runtime values for attributes previously made configurable on this Runnable,
+    or sub-Runnables, through .configurable_fields() or .configurable_alternatives().
+    Check .output_schema() for a description of the attributes that have been made
+    configurable.
+    """
+
+    run_id: Optional[uuid.UUID]
+    """
+    Unique identifier for the tracer run for this call. If not provided, a new UUID
+        will be generated.
+    """
+
+    run_tree: RunTree
+    """
+    The trace tree of the caller.
+    """
+
+
+AnyConfig = Union[RunnableConfig, CheckpointConfig]
+
+CONFIG_KEYS = [
+    "tags",
+    "metadata",
+    "run_tree",
+    "run_name",
+    "max_concurrency",
+    "recursion_limit",
+    "configurable",
+    "run_id",
+]
+
+COPIABLE_KEYS = [
+    "tags",
+    "metadata",
+    "run_tree",
+    "configurable",
+]
+
+DEFAULT_RECURSION_LIMIT = 25
+
+var_child_runnable_config = ContextVar(
+    "child_runnable_config", default=RunnableConfig()
 )
 
-from langgraph.checkpoint.base import CheckpointMetadata
-from langgraph.config import get_config, get_store, get_stream_writer  # noqa
-from langgraph.constants import (
-    CONF,
-    CONFIG_KEY_CHECKPOINT_ID,
-    CONFIG_KEY_CHECKPOINT_MAP,
-    CONFIG_KEY_CHECKPOINT_NS,
-    NS_END,
-    NS_SEP,
-)
+
+def set_config_in_context(context: AnyConfig) -> None:
+    """Set the context for the current thread."""
+    var_child_runnable_config.set(context)
 
 
 def recast_checkpoint_ns(ns: str) -> str:
@@ -36,14 +101,23 @@ def recast_checkpoint_ns(ns: str) -> str:
     Returns:
         str: The checkpoint namespace without task IDs.
     """
+    from langgraph.constants import (
+        NS_END,
+        NS_SEP,
+    )
+
     return NS_SEP.join(
         part.split(NS_END)[0] for part in ns.split(NS_SEP) if not part.isdigit()
     )
 
 
 def patch_configurable(
-    config: Optional[RunnableConfig], patch: dict[str, Any]
+    config: Optional[AnyConfig], patch: dict[str, Any]
 ) -> RunnableConfig:
+    from langgraph.constants import (
+        CONF,
+    )
+
     if config is None:
         return {CONF: patch}
     elif CONF not in config:
@@ -53,8 +127,16 @@ def patch_configurable(
 
 
 def patch_checkpoint_map(
-    config: Optional[RunnableConfig], metadata: Optional[CheckpointMetadata]
+    config: Optional[AnyConfig],
+    metadata: Optional[CheckpointMetadata],
 ) -> RunnableConfig:
+    from langgraph.constants import (
+        CONF,
+        CONFIG_KEY_CHECKPOINT_ID,
+        CONFIG_KEY_CHECKPOINT_MAP,
+        CONFIG_KEY_CHECKPOINT_NS,
+    )
+
     if config is None:
         return config
     elif parents := (metadata.get("parents") if metadata else None):
@@ -72,7 +154,7 @@ def patch_checkpoint_map(
         return config
 
 
-def merge_configs(*configs: Optional[RunnableConfig]) -> RunnableConfig:
+def merge_configs(*configs: Optional[AnyConfig]) -> RunnableConfig:
     """Merge multiple configs into one.
 
     Args:
@@ -81,6 +163,10 @@ def merge_configs(*configs: Optional[RunnableConfig]) -> RunnableConfig:
     Returns:
         RunnableConfig: The merged config.
     """
+    from langgraph.constants import (
+        CONF,
+    )
+
     base: RunnableConfig = {}
     # Even though the keys aren't literals, this is correct
     # because both dicts are the same type
@@ -105,35 +191,6 @@ def merge_configs(*configs: Optional[RunnableConfig]) -> RunnableConfig:
                     base[key] = {**base_value, **value}  # type: ignore[dict-item]
                 else:
                     base[key] = value
-            elif key == "callbacks":
-                base_callbacks = base.get("callbacks")
-                # callbacks can be either None, list[handler] or manager
-                # so merging two callbacks values has 6 cases
-                if isinstance(value, list):
-                    if base_callbacks is None:
-                        base["callbacks"] = value.copy()
-                    elif isinstance(base_callbacks, list):
-                        base["callbacks"] = base_callbacks + value
-                    else:
-                        # base_callbacks is a manager
-                        mngr = base_callbacks.copy()
-                        for callback in value:
-                            mngr.add_handler(callback, inherit=True)
-                        base["callbacks"] = mngr
-                elif isinstance(value, BaseCallbackManager):
-                    # value is a manager
-                    if base_callbacks is None:
-                        base["callbacks"] = value.copy()
-                    elif isinstance(base_callbacks, list):
-                        mngr = value.copy()
-                        for callback in base_callbacks:
-                            mngr.add_handler(callback, inherit=True)
-                        base["callbacks"] = mngr
-                    else:
-                        # base_callbacks is also a manager
-                        base["callbacks"] = base_callbacks.merge(value)
-                else:
-                    raise NotImplementedError
             elif key == "recursion_limit":
                 if config["recursion_limit"] != DEFAULT_RECURSION_LIMIT:
                     base["recursion_limit"] = config["recursion_limit"]
@@ -145,9 +202,9 @@ def merge_configs(*configs: Optional[RunnableConfig]) -> RunnableConfig:
 
 
 def patch_config(
-    config: Optional[RunnableConfig],
+    config: Optional[AnyConfig],
     *,
-    callbacks: Callbacks = None,
+    runtree: Optional[RunTree] = None,
     recursion_limit: Optional[int] = None,
     max_concurrency: Optional[int] = None,
     run_name: Optional[str] = None,
@@ -157,7 +214,7 @@ def patch_config(
 
     Args:
         config (Optional[RunnableConfig]): The config to patch.
-        callbacks (Optional[BaseCallbackManager], optional): The callbacks to set.
+        runtree (Optional[RunTree], optional): The runtree to set.
           Defaults to None.
         recursion_limit (Optional[int], optional): The recursion limit to set.
           Defaults to None.
@@ -170,11 +227,15 @@ def patch_config(
     Returns:
         RunnableConfig: The patched config.
     """
+    from langgraph.constants import (
+        CONF,
+    )
+
     config = config.copy() if config is not None else {}
-    if callbacks is not None:
+    if runtree is not None:
         # If we're replacing callbacks, we need to unset run_name
         # As that should apply only to the same run as the original callbacks
-        config["callbacks"] = callbacks
+        config["run_tree"] = runtree
         if "run_name" in config:
             del config["run_name"]
         if "run_id" in config:
@@ -190,56 +251,21 @@ def patch_config(
     return config
 
 
-def get_callback_manager_for_config(
-    config: RunnableConfig, tags: Optional[Sequence[str]] = None
-) -> CallbackManager:
-    """Get a callback manager for a config.
-
-    Args:
-        config (RunnableConfig): The config.
-
-    Returns:
-        CallbackManager: The callback manager.
-    """
-    from langchain_core.callbacks.manager import CallbackManager
-
-    # merge tags
-    all_tags = config.get("tags")
-    if all_tags is not None and tags is not None:
-        all_tags = [*all_tags, *tags]
-    elif tags is not None:
-        all_tags = list(tags)
-    # use existing callbacks if they exist
-    if (callbacks := config.get("callbacks")) and isinstance(
-        callbacks, CallbackManager
-    ):
-        if all_tags:
-            callbacks.add_tags(all_tags)
-        if metadata := config.get("metadata"):
-            callbacks.add_metadata(metadata)
-        return callbacks
-    else:
-        # otherwise create a new manager
-        return CallbackManager.configure(
-            inheritable_callbacks=config.get("callbacks"),
-            inheritable_tags=all_tags,
-            inheritable_metadata=config.get("metadata"),
-        )
-
-
-def get_async_callback_manager_for_config(
-    config: RunnableConfig,
+def get_runtree_for_config(
+    config: AnyConfig,
+    inputs: Any,
+    *,
+    name: str,
     tags: Optional[Sequence[str]] = None,
-) -> AsyncCallbackManager:
-    """Get an async callback manager for a config.
+) -> RunTree:
+    """Get a runtree for a config.
 
     Args:
         config (RunnableConfig): The config.
 
     Returns:
-        AsyncCallbackManager: The async callback manager.
+        RunTree: The runtree.
     """
-    from langchain_core.callbacks.manager import AsyncCallbackManager
 
     # merge tags
     all_tags = config.get("tags")
@@ -248,20 +274,26 @@ def get_async_callback_manager_for_config(
     elif tags is not None:
         all_tags = list(tags)
     # use existing callbacks if they exist
-    if (callbacks := config.get("callbacks")) and isinstance(
-        callbacks, AsyncCallbackManager
-    ):
-        if all_tags:
-            callbacks.add_tags(all_tags)
-        if metadata := config.get("metadata"):
-            callbacks.add_metadata(metadata)
-        return callbacks
+    if (runtree := config.get("run_tree")) and isinstance(runtree, RunTree):
+        # TODO why is this needed?
+        if not hasattr(runtree, "ls_client"):
+            runtree.ls_client = get_cached_client()
+        return runtree.create_child(
+            inputs=inputs if isinstance(inputs, dict) else {"input": inputs},
+            tags=all_tags,
+            extra={"metadata": config.get("metadata")},
+            name=name,
+            run_id=config.get("run_id", uuid.uuid4()),
+        )
     else:
         # otherwise create a new manager
-        return AsyncCallbackManager.configure(
-            inheritable_callbacks=config.get("callbacks"),
-            inheritable_tags=config.get("tags"),
-            inheritable_metadata=config.get("metadata"),
+        return RunTree(
+            id=config.get("run_id", uuid.uuid4()),
+            name=name,
+            extra={"metadata": config.get("metadata")},
+            tags=all_tags,
+            inputs=inputs if isinstance(inputs, dict) else {"input": inputs},
+            ls_client=get_cached_client(),
         )
 
 
@@ -272,7 +304,7 @@ def _is_not_empty(value: Any) -> bool:
         return value is not None
 
 
-def ensure_config(*configs: Optional[RunnableConfig]) -> RunnableConfig:
+def ensure_config(*configs: Optional[AnyConfig]) -> RunnableConfig:
     """Ensure that a config is a dict with all keys present.
 
     Args:
@@ -282,6 +314,10 @@ def ensure_config(*configs: Optional[RunnableConfig]) -> RunnableConfig:
     Returns:
         RunnableConfig: The ensured config.
     """
+    from langgraph.constants import (
+        CONF,
+    )
+
     empty = RunnableConfig(
         tags=[],
         metadata=ChainMap(),

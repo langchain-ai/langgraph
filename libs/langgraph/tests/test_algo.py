@@ -9,14 +9,13 @@ def test_prepare_next_tasks() -> None:
     processes = {}
     checkpoint = empty_checkpoint()
 
-    with ChannelsManager({}, checkpoint, config) as (channels, managed):
+    with ChannelsManager({}, checkpoint, config) as channels:
         assert (
             prepare_next_tasks(
                 checkpoint,
                 {},
                 processes,
                 channels,
-                managed,
                 config,
                 0,
                 for_execution=False,
@@ -29,7 +28,6 @@ def test_prepare_next_tasks() -> None:
                 {},
                 processes,
                 channels,
-                managed,
                 config,
                 0,
                 for_execution=True,

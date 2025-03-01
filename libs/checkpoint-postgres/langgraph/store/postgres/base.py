@@ -7,7 +7,6 @@ from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from typing import (
-    TYPE_CHECKING,
     Any,
     Callable,
     Generic,
@@ -26,10 +25,10 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 from typing_extensions import TypedDict
 
-from langgraph.checkpoint.postgres import _ainternal as _ainternal
 from langgraph.checkpoint.postgres import _internal as _pg_internal
 from langgraph.store.base import (
     BaseStore,
+    Embeddings,
     GetOp,
     IndexConfig,
     Item,
@@ -43,9 +42,6 @@ from langgraph.store.base import (
     get_text_at_path,
     tokenize_path,
 )
-
-if TYPE_CHECKING:
-    from langchain_core.embeddings import Embeddings
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +123,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS store_vectors_embedding_idx ON store_vec
 ]
 
 
-C = TypeVar("C", bound=Union[_pg_internal.Conn, _ainternal.Conn])
+C = TypeVar("C", bound=_pg_internal.Conn)
 
 
 class PoolConfig(TypedDict, total=False):

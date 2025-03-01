@@ -2,12 +2,10 @@ import asyncio
 import sys
 from typing import Any
 
-from langchain_core.runnables import RunnableConfig
-from langchain_core.runnables.config import var_child_runnable_config
-
 from langgraph.constants import CONF, CONFIG_KEY_STORE, CONFIG_KEY_STREAM_WRITER
 from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
+from langgraph.utils.config import RunnableConfig, var_child_runnable_config
 
 
 def _no_op_stream_writer(c: Any) -> None:
@@ -44,10 +42,6 @@ def get_store() -> BaseStore:
         .compile(store=store)
     )
 
-    # or with entrypoint
-    @entrypoint(store=store)
-    def workflow(inputs):
-        ...
     ```
 
     !!! warning "Async with Python < 3.11"
@@ -87,32 +81,6 @@ def get_store() -> BaseStore:
         ```pycon
         {'foo': 3}
         ```
-
-    Example: Using with functional API
-        ```python
-        from langgraph.func import entrypoint, task
-        from langgraph.store.memory import InMemoryStore
-        from langgraph.config import get_store
-
-        store = InMemoryStore()
-        store.put(("values",), "foo", {"bar": 2})
-
-        @task
-        def my_task(value: int):
-            my_store = get_store()
-            stored_value = my_store.get(("values",), "foo").value["bar"]
-            return stored_value + 1
-
-        @entrypoint(store=store)
-        def workflow(value: int):
-            return my_task(value).result()
-
-        workflow.invoke(1)
-        ```
-
-        ```pycon
-        3
-        ```
     """
     config = get_config()
     return config[CONF][CONFIG_KEY_STORE]
@@ -151,29 +119,6 @@ def get_stream_writer() -> StreamWriter:
         )
 
         for chunk in graph.stream({"foo": 1}, stream_mode="custom"):
-            print(chunk)
-        ```
-
-        ```pycon
-        {'custom_data': 'Hello!'}
-        ```
-
-    Example: Using with functional API
-        ```python
-        from langgraph.func import entrypoint, task
-        from langgraph.config import get_stream_writer
-
-        @task
-        def my_task(value: int):
-            my_stream_writer = get_stream_writer()
-            my_stream_writer({"custom_data": "Hello!"})
-            return value + 1
-
-        @entrypoint(store=store)
-        def workflow(value: int):
-            return my_task(value).result()
-
-        for chunk in workflow.stream(1, stream_mode="custom"):
             print(chunk)
         ```
 

@@ -2,8 +2,6 @@ from collections import Counter
 from typing import Any, Iterator, Literal, Mapping, Optional, Sequence, TypeVar, Union
 from uuid import UUID
 
-from langchain_core.runnables.utils import AddableDict
-
 from langgraph.channels.base import BaseChannel, EmptyChannelError
 from langgraph.checkpoint.base import PendingWrite
 from langgraph.constants import (
@@ -123,14 +121,6 @@ def map_input(
                 logger.warning(f"Input channel {k} not found in {input_channels}")
 
 
-class AddableValuesDict(AddableDict):
-    def __add__(self, other: dict[str, Any]) -> "AddableValuesDict":
-        return self | other
-
-    def __radd__(self, other: dict[str, Any]) -> "AddableValuesDict":
-        return other | self
-
-
 def map_output_values(
     output_channels: Union[str, Sequence[str]],
     pending_writes: Union[Literal[True], Sequence[tuple[str, Any]]],
@@ -146,15 +136,7 @@ def map_output_values(
         if pending_writes is True or {
             c for c, _ in pending_writes if c in output_channels
         }:
-            yield AddableValuesDict(read_channels(channels, output_channels))
-
-
-class AddableUpdatesDict(AddableDict):
-    def __add__(self, other: dict[str, Any]) -> "AddableUpdatesDict":
-        return [self, other]
-
-    def __radd__(self, other: dict[str, Any]) -> "AddableUpdatesDict":
-        raise TypeError("AddableUpdatesDict does not support right-side addition")
+            yield read_channels(channels, output_channels)
 
 
 def map_output_updates(
@@ -213,7 +195,7 @@ def map_output_updates(
             grouped[node] = value[0]
     if cached:
         grouped["__metadata__"] = {"cached": cached}  # type: ignore[assignment]
-    yield AddableUpdatesDict(grouped)
+    yield grouped
 
 
 T = TypeVar("T")

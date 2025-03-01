@@ -12,6 +12,7 @@ from typing import Any
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 
+from langgraph.graph.message import Message
 from tests.any_str import AnyStr
 
 
@@ -38,7 +39,7 @@ def _AnyIdAIMessageChunk(**kwargs: Any) -> AIMessageChunk:
 
 def _AnyIdHumanMessage(**kwargs: Any) -> HumanMessage:
     """Create a human message with an any id field."""
-    message = HumanMessage(**kwargs)
+    message = Message(role="user", **kwargs)
     message.id = AnyStr()
     return message
 

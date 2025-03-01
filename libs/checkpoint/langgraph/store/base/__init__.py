@@ -13,10 +13,8 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, Iterable, Literal, NamedTuple, Optional, TypedDict, Union, cast
 
-from langchain_core.embeddings import Embeddings
-
 from langgraph.store.base.embed import (
-    AEmbeddingsFunc,
+    Embeddings,
     EmbeddingsFunc,
     ensure_embeddings,
     get_text_at_path,
@@ -493,13 +491,11 @@ class IndexConfig(TypedDict, total=False):
         - cohere:embed-multilingual-light-v3.0: 384
     """
 
-    embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc, str]
+    embed: Union[EmbeddingsFunc, str]
     """Optional function to generate embeddings from text.
     
     Can be specified in three ways:
-        1. A LangChain Embeddings instance
         2. A synchronous embedding function (EmbeddingsFunc)
-        3. An asynchronous embedding function (AEmbeddingsFunc)
         4. A provider string (e.g., "openai:text-embedding-3-small")
     
     ???+ example "Examples"

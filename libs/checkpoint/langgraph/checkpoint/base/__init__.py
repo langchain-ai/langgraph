@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from datetime import datetime, timezone
 from typing import (  # noqa: UP035
     Any,
@@ -14,8 +14,6 @@ from typing import (  # noqa: UP035
     Union,
 )
 
-from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
-
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_methods
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
@@ -30,6 +28,24 @@ from langgraph.checkpoint.serde.types import (
 
 V = TypeVar("V", int, float, str)
 PendingWrite = Tuple[str, str, Any]
+
+
+class CheckpointConfig(TypedDict, total=False):
+    """Configuration for a Runnable."""
+
+    metadata: dict[str, Any]
+    """
+    Metadata for this call and any sub-calls (eg. a Chain calling an LLM).
+    Keys should be strings, values should be JSON-serializable.
+    """
+
+    configurable: dict[str, Any]
+    """
+    Runtime values for attributes previously made configurable on this Runnable,
+    or sub-Runnables, through .configurable_fields() or .configurable_alternatives().
+    Check .output_schema() for a description of the attributes that have been made
+    configurable.
+    """
 
 
 # Marked as total=False to allow for future expansion.
@@ -157,39 +173,11 @@ def create_checkpoint(
 class CheckpointTuple(NamedTuple):
     """A tuple containing a checkpoint and its associated data."""
 
-    config: RunnableConfig
+    config: CheckpointConfig
     checkpoint: Checkpoint
     metadata: CheckpointMetadata
-    parent_config: Optional[RunnableConfig] = None
+    parent_config: Optional[CheckpointConfig] = None
     pending_writes: Optional[List[PendingWrite]] = None
-
-
-CheckpointThreadId = ConfigurableFieldSpec(
-    id="thread_id",
-    annotation=str,
-    name="Thread ID",
-    description=None,
-    default="",
-    is_shared=True,
-)
-
-CheckpointNS = ConfigurableFieldSpec(
-    id="checkpoint_ns",
-    annotation=str,
-    name="Checkpoint NS",
-    description='Checkpoint namespace. Denotes the path to the subgraph node the checkpoint originates from, separated by `|` character, e.g. `"child|grandchild"`. Defaults to "" (root graph).',
-    default="",
-    is_shared=True,
-)
-
-CheckpointId = ConfigurableFieldSpec(
-    id="checkpoint_id",
-    annotation=Optional[str],
-    name="Checkpoint ID",
-    description="Pass to fetch a past checkpoint. If None, fetches the latest checkpoint.",
-    default=None,
-    is_shared=True,
-)
 
 
 class BaseCheckpointSaver(Generic[V]):
@@ -215,20 +203,11 @@ class BaseCheckpointSaver(Generic[V]):
     ) -> None:
         self.serde = maybe_add_typed_methods(serde or self.serde)
 
-    @property
-    def config_specs(self) -> list[ConfigurableFieldSpec]:
-        """Define the configuration options for the checkpoint saver.
-
-        Returns:
-            list[ConfigurableFieldSpec]: List of configuration field specs.
-        """
-        return [CheckpointThreadId, CheckpointNS, CheckpointId]
-
-    def get(self, config: RunnableConfig) -> Optional[Checkpoint]:
+    def get(self, config: CheckpointConfig) -> Optional[Checkpoint]:
         """Fetch a checkpoint using the given configuration.
 
         Args:
-            config (RunnableConfig): Configuration specifying which checkpoint to retrieve.
+            config (CheckpointConfig): Configuration specifying which checkpoint to retrieve.
 
         Returns:
             Optional[Checkpoint]: The requested checkpoint, or None if not found.
@@ -236,11 +215,11 @@ class BaseCheckpointSaver(Generic[V]):
         if value := self.get_tuple(config):
             return value.checkpoint
 
-    def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+    def get_tuple(self, config: CheckpointConfig) -> Optional[CheckpointTuple]:
         """Fetch a checkpoint tuple using the given configuration.
 
         Args:
-            config (RunnableConfig): Configuration specifying which checkpoint to retrieve.
+            config (CheckpointConfig): Configuration specifying which checkpoint to retrieve.
 
         Returns:
             Optional[CheckpointTuple]: The requested checkpoint tuple, or None if not found.
@@ -252,18 +231,18 @@ class BaseCheckpointSaver(Generic[V]):
 
     def list(
         self,
-        config: Optional[RunnableConfig],
+        config: Optional[CheckpointConfig],
         *,
         filter: Optional[Dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
+        before: Optional[CheckpointConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[CheckpointTuple]:
         """List checkpoints that match the given criteria.
 
         Args:
-            config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.
+            config (Optional[CheckpointConfig]): Base configuration for filtering checkpoints.
             filter (Optional[Dict[str, Any]]): Additional filtering criteria.
-            before (Optional[RunnableConfig]): List checkpoints created before this configuration.
+            before (Optional[CheckpointConfig]): List checkpoints created before this configuration.
             limit (Optional[int]): Maximum number of checkpoints to return.
 
         Returns:
@@ -276,21 +255,21 @@ class BaseCheckpointSaver(Generic[V]):
 
     def put(
         self,
-        config: RunnableConfig,
+        config: CheckpointConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
-    ) -> RunnableConfig:
+    ) -> CheckpointConfig:
         """Store a checkpoint with its configuration and metadata.
 
         Args:
-            config (RunnableConfig): Configuration for the checkpoint.
+            config (CheckpointConfig): Configuration for the checkpoint.
             checkpoint (Checkpoint): The checkpoint to store.
             metadata (CheckpointMetadata): Additional metadata for the checkpoint.
             new_versions (ChannelVersions): New channel versions as of this write.
 
         Returns:
-            RunnableConfig: Updated configuration after storing the checkpoint.
+            CheckpointConfig: Updated configuration after storing the checkpoint.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
@@ -299,7 +278,7 @@ class BaseCheckpointSaver(Generic[V]):
 
     def put_writes(
         self,
-        config: RunnableConfig,
+        config: CheckpointConfig,
         writes: Sequence[Tuple[str, Any]],
         task_id: str,
         task_path: str = "",
@@ -307,101 +286,7 @@ class BaseCheckpointSaver(Generic[V]):
         """Store intermediate writes linked to a checkpoint.
 
         Args:
-            config (RunnableConfig): Configuration of the related checkpoint.
-            writes (List[Tuple[str, Any]]): List of writes to store.
-            task_id (str): Identifier for the task creating the writes.
-            task_path (str): Path of the task creating the writes.
-
-        Raises:
-            NotImplementedError: Implement this method in your custom checkpoint saver.
-        """
-        raise NotImplementedError
-
-    async def aget(self, config: RunnableConfig) -> Optional[Checkpoint]:
-        """Asynchronously fetch a checkpoint using the given configuration.
-
-        Args:
-            config (RunnableConfig): Configuration specifying which checkpoint to retrieve.
-
-        Returns:
-            Optional[Checkpoint]: The requested checkpoint, or None if not found.
-        """
-        if value := await self.aget_tuple(config):
-            return value.checkpoint
-
-    async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
-        """Asynchronously fetch a checkpoint tuple using the given configuration.
-
-        Args:
-            config (RunnableConfig): Configuration specifying which checkpoint to retrieve.
-
-        Returns:
-            Optional[CheckpointTuple]: The requested checkpoint tuple, or None if not found.
-
-        Raises:
-            NotImplementedError: Implement this method in your custom checkpoint saver.
-        """
-        raise NotImplementedError
-
-    async def alist(
-        self,
-        config: Optional[RunnableConfig],
-        *,
-        filter: Optional[Dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
-    ) -> AsyncIterator[CheckpointTuple]:
-        """Asynchronously list checkpoints that match the given criteria.
-
-        Args:
-            config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.
-            filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata.
-            before (Optional[RunnableConfig]): List checkpoints created before this configuration.
-            limit (Optional[int]): Maximum number of checkpoints to return.
-
-        Returns:
-            AsyncIterator[CheckpointTuple]: Async iterator of matching checkpoint tuples.
-
-        Raises:
-            NotImplementedError: Implement this method in your custom checkpoint saver.
-        """
-        raise NotImplementedError
-        yield
-
-    async def aput(
-        self,
-        config: RunnableConfig,
-        checkpoint: Checkpoint,
-        metadata: CheckpointMetadata,
-        new_versions: ChannelVersions,
-    ) -> RunnableConfig:
-        """Asynchronously store a checkpoint with its configuration and metadata.
-
-        Args:
-            config (RunnableConfig): Configuration for the checkpoint.
-            checkpoint (Checkpoint): The checkpoint to store.
-            metadata (CheckpointMetadata): Additional metadata for the checkpoint.
-            new_versions (ChannelVersions): New channel versions as of this write.
-
-        Returns:
-            RunnableConfig: Updated configuration after storing the checkpoint.
-
-        Raises:
-            NotImplementedError: Implement this method in your custom checkpoint saver.
-        """
-        raise NotImplementedError
-
-    async def aput_writes(
-        self,
-        config: RunnableConfig,
-        writes: Sequence[Tuple[str, Any]],
-        task_id: str,
-        task_path: str = "",
-    ) -> None:
-        """Asynchronously store intermediate writes linked to a checkpoint.
-
-        Args:
-            config (RunnableConfig): Configuration of the related checkpoint.
+            config (CheckpointConfig): Configuration of the related checkpoint.
             writes (List[Tuple[str, Any]]): List of writes to store.
             task_id (str): Identifier for the task creating the writes.
             task_path (str): Path of the task creating the writes.
@@ -439,7 +324,7 @@ class EmptyChannelError(Exception):
     pass
 
 
-def get_checkpoint_id(config: RunnableConfig) -> Optional[str]:
+def get_checkpoint_id(config: CheckpointConfig) -> Optional[str]:
     """Get checkpoint ID in a backwards-compatible manner (fallback on thread_ts)."""
     return config["configurable"].get(
         "checkpoint_id", config["configurable"].get("thread_ts")
@@ -447,7 +332,7 @@ def get_checkpoint_id(config: RunnableConfig) -> Optional[str]:
 
 
 def get_checkpoint_metadata(
-    config: RunnableConfig, metadata: CheckpointMetadata
+    config: CheckpointConfig, metadata: CheckpointMetadata
 ) -> CheckpointMetadata:
     """Get checkpoint metadata in a backwards-compatible manner."""
     metadata = metadata.copy()

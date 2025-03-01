@@ -2,7 +2,6 @@ import random
 from collections.abc import Sequence
 from typing import Any, Optional, cast
 
-from langchain_core.runnables import RunnableConfig
 from psycopg.types.json import Jsonb
 
 from langgraph.checkpoint.base import (
@@ -10,6 +9,7 @@ from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     ChannelVersions,
     Checkpoint,
+    CheckpointConfig,
     CheckpointMetadata,
     get_checkpoint_id,
 )
@@ -262,9 +262,9 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
 
     def _search_where(
         self,
-        config: Optional[RunnableConfig],
+        config: Optional[CheckpointConfig],
         filter: MetadataInput,
-        before: Optional[RunnableConfig] = None,
+        before: Optional[CheckpointConfig] = None,
     ) -> tuple[str, list[Any]]:
         """Return WHERE clause predicates for alist() given config, filter, before.
 

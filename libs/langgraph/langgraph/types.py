@@ -19,22 +19,19 @@ from typing import (
     get_type_hints,
 )
 
-from langchain_core.runnables import Runnable, RunnableConfig
 from typing_extensions import Self
 
-from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
+from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
+    CheckpointConfig,
+    CheckpointMetadata,
+)
+from langgraph.utils.config import RunnableConfig
+from langgraph.utils.runnable import Runnable
 
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
     from langgraph.store.base import BaseStore
-
-
-try:
-    from langchain_core.messages.tool import ToolOutputMixin
-except ImportError:
-
-    class ToolOutputMixin:  # type: ignore[no-redef]
-        pass
 
 
 All = Literal["*"]
@@ -166,13 +163,13 @@ class StateSnapshot(NamedTuple):
     """Current values of channels"""
     next: tuple[str, ...]
     """The name of the node to execute in each task for this step."""
-    config: RunnableConfig
+    config: CheckpointConfig
     """Config used to fetch this snapshot"""
     metadata: Optional[CheckpointMetadata]
     """Metadata associated with this snapshot"""
     created_at: Optional[str]
     """Timestamp of snapshot creation"""
-    parent_config: Optional[RunnableConfig]
+    parent_config: Optional[CheckpointConfig]
     """Config used to fetch the parent snapshot, if any"""
     tasks: tuple[PregelTask, ...]
     """Tasks to execute in this step. If already attempted, may contain an error."""
@@ -253,7 +250,7 @@ N = TypeVar("N", bound=Hashable)
 
 
 @dataclasses.dataclass(**_DC_KWARGS)
-class Command(Generic[N], ToolOutputMixin):
+class Command(Generic[N]):
     """One or more commands to update the graph's state and send messages to nodes.
 
     Args:
@@ -461,6 +458,7 @@ def interrupt(value: Any) -> Any:
     Raises:
         GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
     """
+    from langgraph.config import get_config
     from langgraph.constants import (
         CONFIG_KEY_CHECKPOINT_NS,
         CONFIG_KEY_SCRATCHPAD,
@@ -469,7 +467,6 @@ def interrupt(value: Any) -> Any:
         RESUME,
     )
     from langgraph.errors import GraphInterrupt
-    from langgraph.utils.config import get_config
 
     conf = get_config()["configurable"]
     # track interrupt index

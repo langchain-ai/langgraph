@@ -60,7 +60,7 @@ MAXFAIL ?=
 MAXFAIL_ARGS := $(if $(MAXFAIL),--maxfail $(MAXFAIL),)
 
 test_watch:
-	make start-postgres && poetry run ptw . -- --ff -vv -x $(XDIST_ARGS) $(MAXFAIL_ARGS) --snapshot-update --tb short $(TEST); \
+	make start-postgres && poetry run ptw . -- --ff -vv -x $(MAXFAIL_ARGS) --snapshot-update --tb short $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE

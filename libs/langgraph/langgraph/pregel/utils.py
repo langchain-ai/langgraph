@@ -1,11 +1,8 @@
 from typing import Optional
 
-from langchain_core.runnables import RunnableLambda, RunnableSequence
-from langchain_core.runnables.utils import get_function_nonlocals
-
 from langgraph.checkpoint.base import ChannelVersions
 from langgraph.pregel.protocol import PregelProtocol
-from langgraph.utils.runnable import Runnable, RunnableCallable, RunnableSeq
+from langgraph.utils.runnable import Runnable, RunnableSeq
 
 
 def get_new_channel_versions(
@@ -38,20 +35,7 @@ def find_subgraph_pregel(candidate: Runnable) -> Optional[PregelProtocol]:
             and (not isinstance(c, Pregel) or c.checkpointer is not False)
         ):
             return c
-        elif isinstance(c, RunnableSequence) or isinstance(c, RunnableSeq):
+        elif isinstance(c, RunnableSeq):
             candidates.extend(c.steps)
-        elif isinstance(c, RunnableLambda):
-            candidates.extend(c.deps)
-        elif isinstance(c, RunnableCallable):
-            if c.func is not None:
-                candidates.extend(
-                    nl.__self__ if hasattr(nl, "__self__") else nl
-                    for nl in get_function_nonlocals(c.func)
-                )
-            elif c.afunc is not None:
-                candidates.extend(
-                    nl.__self__ if hasattr(nl, "__self__") else nl
-                    for nl in get_function_nonlocals(c.afunc)
-                )
 
     return None

@@ -5,7 +5,7 @@ import random
 from collections import Counter, defaultdict
 from typing import Any
 
-from langchain_core.embeddings import Embeddings
+from langgraph.store.base.embed import Embeddings
 
 
 class CharacterEmbeddings(Embeddings):

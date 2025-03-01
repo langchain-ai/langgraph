@@ -17,19 +17,15 @@ from ipaddress import (
     IPv6Interface,
     IPv6Network,
 )
-from typing import Any, Callable, Optional, Union, cast
+from typing import Any, Callable, Optional, Union
 from uuid import UUID
 
 import msgpack  # type: ignore[import-untyped]
-from langchain_core.load.load import Reviver
-from langchain_core.load.serializable import Serializable
 from zoneinfo import ZoneInfo
 
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.types import SendProtocol
 from langgraph.store.base import Item
-
-LC_REVIVER = Reviver()
 
 
 class JsonPlusSerializer(SerializerProtocol):
@@ -55,9 +51,7 @@ class JsonPlusSerializer(SerializerProtocol):
         return out
 
     def _default(self, obj: Any) -> Union[str, dict[str, Any]]:
-        if isinstance(obj, Serializable):
-            return cast(dict[str, Any], obj.to_json())
-        elif hasattr(obj, "model_dump") and callable(obj.model_dump):
+        if hasattr(obj, "model_dump") and callable(obj.model_dump):
             return self._encode_constructor_args(
                 obj.__class__, method=(None, "model_construct"), kwargs=obj.model_dump()
             )
@@ -177,7 +171,7 @@ class JsonPlusSerializer(SerializerProtocol):
             except Exception:
                 return None
 
-        return LC_REVIVER(value)
+        return value
 
     def dumps(self, obj: Any) -> bytes:
         return json.dumps(obj, default=self._default, ensure_ascii=False).encode(

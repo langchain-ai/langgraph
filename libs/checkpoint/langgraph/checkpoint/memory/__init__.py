@@ -4,18 +4,17 @@ import pickle
 import random
 import shutil
 from collections import defaultdict
-from collections.abc import AsyncIterator, Iterator, Sequence
-from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
+from collections.abc import Iterator, Sequence
+from contextlib import AbstractContextManager, ExitStack
 from types import TracebackType
 from typing import Any, Optional
-
-from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
     Checkpoint,
+    CheckpointConfig,
     CheckpointMetadata,
     CheckpointTuple,
     SerializerProtocol,
@@ -27,9 +26,7 @@ from langgraph.checkpoint.serde.types import TASKS, ChannelProtocol
 logger = logging.getLogger(__name__)
 
 
-class InMemorySaver(
-    BaseCheckpointSaver[str], AbstractContextManager, AbstractAsyncContextManager
-):
+class InMemorySaver(BaseCheckpointSaver[str], AbstractContextManager):
     """An in-memory checkpoint saver.
 
     This checkpoint saver stores checkpoints in memory using a defaultdict.
@@ -96,18 +93,7 @@ class InMemorySaver(
     ) -> Optional[bool]:
         return self.stack.__exit__(exc_type, exc_value, traceback)
 
-    async def __aenter__(self) -> "InMemorySaver":
-        return self.stack.__enter__()
-
-    async def __aexit__(
-        self,
-        __exc_type: Optional[type[BaseException]],
-        __exc_value: Optional[BaseException],
-        __traceback: Optional[TracebackType],
-    ) -> Optional[bool]:
-        return self.stack.__exit__(__exc_type, __exc_value, __traceback)
-
-    def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+    def get_tuple(self, config: CheckpointConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the in-memory storage.
 
         This method retrieves a checkpoint tuple from the in-memory storage based on the
@@ -116,7 +102,7 @@ class InMemorySaver(
         for the given thread ID is retrieved.
 
         Args:
-            config (RunnableConfig): The config to use for retrieving the checkpoint.
+            config (CheckpointConfig): The config to use for retrieving the checkpoint.
 
         Returns:
             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
@@ -211,10 +197,10 @@ class InMemorySaver(
 
     def list(
         self,
-        config: Optional[RunnableConfig],
+        config: Optional[CheckpointConfig],
         *,
         filter: Optional[dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
+        before: Optional[CheckpointConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[CheckpointTuple]:
         """List checkpoints from the in-memory storage.
@@ -223,9 +209,9 @@ class InMemorySaver(
         on the provided criteria.
 
         Args:
-            config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.
+            config (Optional[CheckpointConfig]): Base configuration for filtering checkpoints.
             filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata.
-            before (Optional[RunnableConfig]): List checkpoints created before this configuration.
+            before (Optional[CheckpointConfig]): List checkpoints created before this configuration.
             limit (Optional[int]): Maximum number of checkpoints to return.
 
         Yields:
@@ -330,24 +316,24 @@ class InMemorySaver(
 
     def put(
         self,
-        config: RunnableConfig,
+        config: CheckpointConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
-    ) -> RunnableConfig:
+    ) -> CheckpointConfig:
         """Save a checkpoint to the in-memory storage.
 
         This method saves a checkpoint to the in-memory storage. The checkpoint is associated
         with the provided config.
 
         Args:
-            config (RunnableConfig): The config to associate with the checkpoint.
+            config (CheckpointConfig): The config to associate with the checkpoint.
             checkpoint (Checkpoint): The checkpoint to save.
             metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
             new_versions (dict): New versions as of this write
 
         Returns:
-            RunnableConfig: The updated config containing the saved checkpoint's timestamp.
+            CheckpointConfig: The updated config containing the saved checkpoint's timestamp.
         """
         c = checkpoint.copy()
         c.pop("pending_sends")  # type: ignore[misc]
@@ -372,7 +358,7 @@ class InMemorySaver(
 
     def put_writes(
         self,
-        config: RunnableConfig,
+        config: CheckpointConfig,
         writes: Sequence[tuple[str, Any]],
         task_id: str,
         task_path: str = "",
@@ -383,13 +369,13 @@ class InMemorySaver(
         with the provided config.
 
         Args:
-            config (RunnableConfig): The config to associate with the writes.
+            config (CheckpointConfig): The config to associate with the writes.
             writes (list[tuple[str, Any]]): The writes to save.
             task_id (str): Identifier for the task creating the writes.
             task_path (str): Path of the task creating the writes.
 
         Returns:
-            RunnableConfig: The updated config containing the saved writes' timestamp.
+            CheckpointConfig: The updated config containing the saved writes' timestamp.
         """
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
@@ -407,85 +393,6 @@ class InMemorySaver(
                 self.serde.dumps_typed(v),
                 task_path,
             )
-
-    async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
-        """Asynchronous version of get_tuple.
-
-        This method is an asynchronous wrapper around get_tuple that runs the synchronous
-        method in a separate thread using asyncio.
-
-        Args:
-            config (RunnableConfig): The config to use for retrieving the checkpoint.
-
-        Returns:
-            Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
-        """
-        return self.get_tuple(config)
-
-    async def alist(
-        self,
-        config: Optional[RunnableConfig],
-        *,
-        filter: Optional[dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
-    ) -> AsyncIterator[CheckpointTuple]:
-        """Asynchronous version of list.
-
-        This method is an asynchronous wrapper around list that runs the synchronous
-        method in a separate thread using asyncio.
-
-        Args:
-            config (RunnableConfig): The config to use for listing the checkpoints.
-
-        Yields:
-            AsyncIterator[CheckpointTuple]: An asynchronous iterator of checkpoint tuples.
-        """
-        for item in self.list(config, filter=filter, before=before, limit=limit):
-            yield item
-
-    async def aput(
-        self,
-        config: RunnableConfig,
-        checkpoint: Checkpoint,
-        metadata: CheckpointMetadata,
-        new_versions: ChannelVersions,
-    ) -> RunnableConfig:
-        """Asynchronous version of put.
-
-        Args:
-            config (RunnableConfig): The config to associate with the checkpoint.
-            checkpoint (Checkpoint): The checkpoint to save.
-            metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
-            new_versions (dict): New versions as of this write
-
-        Returns:
-            RunnableConfig: The updated config containing the saved checkpoint's timestamp.
-        """
-        return self.put(config, checkpoint, metadata, new_versions)
-
-    async def aput_writes(
-        self,
-        config: RunnableConfig,
-        writes: Sequence[tuple[str, Any]],
-        task_id: str,
-        task_path: str = "",
-    ) -> None:
-        """Asynchronous version of put_writes.
-
-        This method is an asynchronous wrapper around put_writes that runs the synchronous
-        method in a separate thread using asyncio.
-
-        Args:
-            config (RunnableConfig): The config to associate with the writes.
-            writes (List[Tuple[str, Any]]): The writes to save, each as a (channel, value) pair.
-            task_id (str): Identifier for the task creating the writes.
-            task_path (str): Path of the task creating the writes.
-
-        Returns:
-            None
-        """
-        return self.put_writes(config, writes, task_id, task_path)
 
     def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
         if current is None:
@@ -572,4 +479,4 @@ class PersistentDict(defaultdict):
                 except Exception:
                     logging.error(f"Failed to load file: {fileobj.name}")
                     raise
-            raise ValueError("File not in a supported f ormat")
+            raise ValueError("File not in a supported format")

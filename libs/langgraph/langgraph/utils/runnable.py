@@ -1,65 +1,25 @@
-import asyncio
 import enum
 import inspect
-import sys
-from contextlib import AsyncExitStack
+from abc import ABC, abstractmethod
 from contextvars import copy_context
-from functools import partial, wraps
 from typing import (
     Any,
-    AsyncIterator,
-    Awaitable,
     Callable,
-    Coroutine,
-    Iterator,
+    Generic,
     Optional,
-    Protocol,
     Sequence,
-    Tuple,
+    TypeVar,
     Union,
     cast,
 )
 
-from langchain_core.runnables.base import (
-    Runnable,
-    RunnableConfig,
-    RunnableLambda,
-    RunnableParallel,
-    RunnableSequence,
-)
-from langchain_core.runnables.base import (
-    RunnableLike as LCRunnableLike,
-)
-from langchain_core.runnables.config import (
-    run_in_executor,
-    var_child_runnable_config,
-)
-from langchain_core.runnables.utils import Input, Output
-from langchain_core.tracers._streaming import _StreamingCallbackHandler
-from typing_extensions import TypeGuard
-
-from langgraph.constants import (
-    CONF,
-    CONFIG_KEY_PREVIOUS,
-    CONFIG_KEY_STORE,
-    CONFIG_KEY_STREAM_WRITER,
-)
-from langgraph.store.base import BaseStore
-from langgraph.types import StreamWriter
 from langgraph.utils.config import (
+    AnyConfig,
     ensure_config,
-    get_async_callback_manager_for_config,
-    get_callback_manager_for_config,
+    get_runtree_for_config,
     patch_config,
+    set_config_in_context,
 )
-
-try:
-    from langchain_core.runnables.config import _set_config_context
-except ImportError:
-    # For forwards compatibility
-    def _set_config_context(context: RunnableConfig) -> None:  # type: ignore
-        """Set the context for the current thread."""
-        var_child_runnable_config.set(context)
 
 
 # Before Python 3.11 native StrEnum is not available
@@ -67,127 +27,58 @@ class StrEnum(str, enum.Enum):
     """A string enum."""
 
 
-# Special type to denote any type is accepted
-ANY_TYPE = object()
-
-ASYNCIO_ACCEPTS_CONTEXT = sys.version_info >= (3, 11)
-
-# List of keyword arguments that can be injected at runtime from the config object.
-# A named argument may appear multiple times if it appears with distinct types.
-KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
-    (
-        sys.intern("writer"),
-        (StreamWriter, "StreamWriter", inspect.Parameter.empty),
-        CONFIG_KEY_STREAM_WRITER,
-        lambda _: None,
-    ),
-    (
-        # Covers store that is not optional (will raise an error if a store
-        # cannot be injected).
-        sys.intern("store"),
-        (
-            BaseStore,
-            "BaseStore",
-            inspect.Parameter.empty,
-        ),
-        CONFIG_KEY_STORE,
-        inspect.Parameter.empty,
-    ),
-    (
-        # Covers store that is optional. Will set to None if not found in config.
-        sys.intern("store"),
-        (
-            Optional[BaseStore],
-            # Best effort to catch some forward references.
-            # This will not work for cases like `"Union[None, BaseStore]"`,
-            # we'll need to re-write logic to use get_type_hints()
-            # to resolve forward references.
-            "Optional[BaseStore]",
-        ),
-        CONFIG_KEY_STORE,
-        None,
-    ),
-    (
-        sys.intern("previous"),
-        (ANY_TYPE,),
-        CONFIG_KEY_PREVIOUS,
-        inspect.Parameter.empty,
-    ),
-)
-"""List of kwargs that can be passed to functions, and their corresponding
-config keys, default values and type annotations.
-
-Used to configure keyword arguments that can be injected at runtime
-from the config object as kwargs to `invoke`, `ainvoke`, `stream` and `astream`.
-
-For a keyword to be injected from the config object, the function signature
-must contain a kwarg with the same name and a matching type annotation.
-
-Each tuple contains:
-- the name of the kwarg in the function signature
-- the type annotation(s) for the kwarg
-- the config key to look for the value in
-- the default value for the kwarg
-"""
-
-VALID_KINDS = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+Input = TypeVar("Input", contravariant=True)
+Output = TypeVar("Output", covariant=True)
 
 
-class _RunnableWithWriter(Protocol[Input, Output]):
-    def __call__(self, state: Input, *, writer: StreamWriter) -> Output: ...
+class Runnable(Generic[Input, Output], ABC):
+    """A unit of work that can be invoked, batched, streamed, transformed and composed."""  # noqa: E501
 
+    name: Optional[str]
+    """The name of the Runnable. Used for debugging and tracing."""
 
-class _RunnableWithStore(Protocol[Input, Output]):
-    def __call__(self, state: Input, *, store: BaseStore) -> Output: ...
+    """ --- Public API --- """
 
+    def get_name(self, name: Optional[str] = None) -> str:
+        """Get the name of the Runnable.
 
-class _RunnableWithWriterStore(Protocol[Input, Output]):
-    def __call__(
-        self, state: Input, *, writer: StreamWriter, store: BaseStore
-    ) -> Output: ...
+        Returns:
+            The name of the Runnable.
+        """
+        return name or self.name or self.__class__.__name__
 
+    @abstractmethod
+    def invoke(
+        self, input: Input, config: Optional[AnyConfig] = None, **kwargs: Any
+    ) -> Output:
+        """Transform a single input into an output. Override to implement.
 
-class _RunnableWithConfigWriter(Protocol[Input, Output]):
-    def __call__(
-        self, state: Input, *, config: RunnableConfig, writer: StreamWriter
-    ) -> Output: ...
+        Args:
+            input: The input to the Runnable.
+            config: A config to use when invoking the Runnable.
+               The config supports standard keys like 'tags', 'metadata' for tracing
+               purposes, 'max_concurrency' for controlling how much work to do
+               in parallel, and other keys. Please refer to the RunnableConfig
+               for more details.
 
-
-class _RunnableWithConfigStore(Protocol[Input, Output]):
-    def __call__(
-        self, state: Input, *, config: RunnableConfig, store: BaseStore
-    ) -> Output: ...
-
-
-class _RunnableWithConfigWriterStore(Protocol[Input, Output]):
-    def __call__(
-        self,
-        state: Input,
-        *,
-        config: RunnableConfig,
-        writer: StreamWriter,
-        store: BaseStore,
-    ) -> Output: ...
+        Returns:
+            The output of the Runnable.
+        """
 
 
 RunnableLike = Union[
-    LCRunnableLike,
-    _RunnableWithWriter[Input, Output],
-    _RunnableWithStore[Input, Output],
-    _RunnableWithWriterStore[Input, Output],
-    _RunnableWithConfigWriter[Input, Output],
-    _RunnableWithConfigStore[Input, Output],
-    _RunnableWithConfigWriterStore[Input, Output],
+    Runnable[Input, Output],
+    Callable[[Input], Output],
+    Callable[[Input, AnyConfig], Output],
 ]
 
 
 class RunnableCallable(Runnable):
-    """A much simpler version of RunnableLambda that requires sync and async functions."""
+    """Wraps a callable as a Runnable."""
 
     def __init__(
         self,
         func: Optional[Callable[..., Union[Any, Runnable]]],
-        afunc: Optional[Callable[..., Awaitable[Union[Any, Runnable]]]] = None,
         *,
         name: Optional[str] = None,
         tags: Optional[Sequence[str]] = None,
@@ -204,42 +95,13 @@ class RunnableCallable(Runnable):
                         self.name = func.__name__
                 except AttributeError:
                     pass
-            elif afunc:
-                try:
-                    self.name = afunc.__name__
-                except AttributeError:
-                    pass
         self.func = func
-        self.afunc = afunc
         self.tags = tags
         self.kwargs = kwargs
         self.trace = trace
-        self.recurse = recurse
         self.explode_args = explode_args
-        # check signature
-        if func is None and afunc is None:
-            raise ValueError("At least one of func or afunc must be provided.")
-        params = inspect.signature(cast(Callable, func or afunc)).parameters
-
-        self.func_accepts_config = "config" in params
-        # Mapping from kwarg name to (config key, default value) to be used.
-        # The default value is used if the config key is not found in the config.
-        self.func_accepts: dict[str, Tuple[str, Any]] = {}
-
-        for kw, typ, config_key, default in KWARGS_CONFIG_KEYS:
-            p = params.get(kw)
-
-            if p is None or p.kind not in VALID_KINDS:
-                # If parameter is not found or is not a valid kind, skip
-                continue
-
-            if typ != (ANY_TYPE,) and p.annotation not in typ:
-                # A specific type is required, but the function annotation does
-                # not match the expected type.
-                continue
-
-            # If the kwarg is accepted by the function, store the default value
-            self.func_accepts[kw] = (config_key, default)
+        self.func_accepts_config = "config" in inspect.signature(func).parameters
+        self.recurse = recurse
 
     def __repr__(self) -> str:
         repr_args = {
@@ -250,7 +112,7 @@ class RunnableCallable(Runnable):
         return f"{self.get_name()}({', '.join(f'{k}={v!r}' for k, v in repr_args.items())})"
 
     def invoke(
-        self, input: Any, config: Optional[RunnableConfig] = None, **kwargs: Any
+        self, input: Any, config: Optional[AnyConfig] = None, **kwargs: Any
     ) -> Any:
         if self.func is None:
             raise TypeError(
@@ -268,138 +130,35 @@ class RunnableCallable(Runnable):
             kwargs = {**self.kwargs, **kwargs}
         if self.func_accepts_config:
             kwargs["config"] = config
-        _conf = config[CONF]
-
-        for kw, (config_key, default_value) in self.func_accepts.items():
-            # If the kwarg is already set, use the set value
-            if kw in kwargs:
-                continue
-
-            if (
-                # If the kwarg is requested, but isn't in the config AND has no
-                # default value, raise an error
-                config_key not in _conf and default_value is inspect.Parameter.empty
-            ):
-                raise ValueError(
-                    f"Missing required config key '{config_key}' for '{self.name}'."
-                )
-
-            kwargs[kw] = _conf.get(config_key, default_value)
 
         context = copy_context()
         if self.trace:
-            callback_manager = get_callback_manager_for_config(config, self.tags)
-            run_manager = callback_manager.on_chain_start(
-                None,
+            runtree = get_runtree_for_config(
+                config,
                 input,
-                name=config.get("run_name") or self.get_name(),
-                run_id=config.pop("run_id", None),
+                name=cast(str, config.get("run_name", self.get_name())),
+                tags=self.tags,
             )
             try:
-                child_config = patch_config(config, callbacks=run_manager.get_child())
+                child_config = patch_config(config, runtree=runtree)
                 context = copy_context()
-                context.run(_set_config_context, child_config)
+                context.run(set_config_in_context, child_config)
                 ret = context.run(self.func, *args, **kwargs)
             except BaseException as e:
-                run_manager.on_chain_error(e)
+                runtree.end(error=str(e))
                 raise
             else:
-                run_manager.on_chain_end(ret)
+                runtree.end(outputs=ret if isinstance(ret, dict) else {"output": ret})
         else:
-            context.run(_set_config_context, config)
+            context.run(set_config_in_context, config)
             ret = context.run(self.func, *args, **kwargs)
         if isinstance(ret, Runnable) and self.recurse:
             return ret.invoke(input, config)
         return ret
 
-    async def ainvoke(
-        self, input: Any, config: Optional[RunnableConfig] = None, **kwargs: Any
-    ) -> Any:
-        if not self.afunc:
-            return self.invoke(input, config)
-        if config is None:
-            config = ensure_config()
-        if self.explode_args:
-            args, _kwargs = input
-            kwargs = {**self.kwargs, **_kwargs, **kwargs}
-        else:
-            args = (input,)
-            kwargs = {**self.kwargs, **kwargs}
-        if self.func_accepts_config:
-            kwargs["config"] = config
-        _conf = config[CONF]
-        for kw, (config_key, default_value) in self.func_accepts.items():
-            # If the kwarg has already been set, use the set value
-            if kw in kwargs:
-                continue
-
-            if (
-                # If the kwarg is requested, but isn't in the config AND has no
-                # default value, raise an error
-                config_key not in _conf and default_value is inspect.Parameter.empty
-            ):
-                raise ValueError(
-                    f"Missing required config key '{config_key}' for '{self.name}'."
-                )
-            kwargs[kw] = _conf.get(config_key, default_value)
-        context = copy_context()
-        if self.trace:
-            callback_manager = get_async_callback_manager_for_config(config, self.tags)
-            run_manager = await callback_manager.on_chain_start(
-                None,
-                input,
-                name=config.get("run_name") or self.name,
-                run_id=config.pop("run_id", None),
-            )
-            try:
-                child_config = patch_config(config, callbacks=run_manager.get_child())
-                context.run(_set_config_context, child_config)
-                coro = cast(Coroutine[None, None, Any], self.afunc(*args, **kwargs))
-                if ASYNCIO_ACCEPTS_CONTEXT:
-                    ret = await asyncio.create_task(coro, context=context)
-                else:
-                    ret = await coro
-            except BaseException as e:
-                await run_manager.on_chain_error(e)
-                raise
-            else:
-                await run_manager.on_chain_end(ret)
-        else:
-            context.run(_set_config_context, config)
-            if ASYNCIO_ACCEPTS_CONTEXT:
-                coro = cast(Coroutine[None, None, Any], self.afunc(*args, **kwargs))
-                ret = await asyncio.create_task(coro, context=context)
-            else:
-                ret = await self.afunc(*args, **kwargs)
-        if isinstance(ret, Runnable) and self.recurse:
-            return await ret.ainvoke(input, config)
-        return ret
-
-
-def is_async_callable(
-    func: Any,
-) -> TypeGuard[Callable[..., Awaitable]]:
-    """Check if a function is async."""
-    return (
-        asyncio.iscoroutinefunction(func)
-        or hasattr(func, "__call__")
-        and asyncio.iscoroutinefunction(func.__call__)
-    )
-
-
-def is_async_generator(
-    func: Any,
-) -> TypeGuard[Callable[..., AsyncIterator]]:
-    """Check if a function is an async generator."""
-    return (
-        inspect.isasyncgenfunction(func)
-        or hasattr(func, "__call__")
-        and inspect.isasyncgenfunction(func.__call__)
-    )
-
 
 def coerce_to_runnable(
-    thing: RunnableLike, *, name: Optional[str], trace: bool
+    thing: RunnableLike, *, name: Optional[str] = None, trace: bool = True
 ) -> Runnable:
     """Coerce a runnable-like object into a Runnable.
 
@@ -409,22 +168,20 @@ def coerce_to_runnable(
     Returns:
         A Runnable.
     """
-    if isinstance(thing, Runnable):
+    try:
+        from langchain_core.runnables import Runnable as LC_Runnable
+    except ImportError:
+        LC_Runnable = None
+    if LC_Runnable and isinstance(thing, LC_Runnable):
         return thing
-    elif is_async_generator(thing) or inspect.isgeneratorfunction(thing):
-        return RunnableLambda(thing, name=name)
+    elif isinstance(thing, Runnable):
+        return thing
     elif callable(thing):
-        if is_async_callable(thing):
-            return RunnableCallable(None, thing, name=name, trace=trace)
-        else:
-            return RunnableCallable(
-                thing,
-                wraps(thing)(partial(run_in_executor, None, thing)),  # type: ignore[arg-type]
-                name=name,
-                trace=trace,
-            )
-    elif isinstance(thing, dict):
-        return RunnableParallel(thing)
+        return RunnableCallable(
+            thing,
+            name=name,
+            trace=trace,
+        )
     else:
         raise TypeError(
             f"Expected a Runnable, callable or dict."
@@ -433,11 +190,7 @@ def coerce_to_runnable(
 
 
 class RunnableSeq(Runnable):
-    """Sequence of Runnables, where the output of each is the input of the next.
-
-    RunnableSeq is a simpler version of RunnableSequence that is internal to
-    LangGraph.
-    """
+    """Sequence of Runnables, where the output of each is the input of the next."""
 
     def __init__(
         self,
@@ -456,9 +209,7 @@ class RunnableSeq(Runnable):
         """
         steps_flat: list[Runnable] = []
         for step in steps:
-            if isinstance(step, RunnableSequence):
-                steps_flat.extend(step.steps)
-            elif isinstance(step, RunnableSeq):
+            if isinstance(step, RunnableSeq):
                 steps_flat.extend(step.steps)
             else:
                 steps_flat.append(coerce_to_runnable(step, name=None, trace=True))
@@ -470,252 +221,31 @@ class RunnableSeq(Runnable):
         self.name = name
         self.trace_inputs = trace_inputs
 
-    def __or__(
-        self,
-        other: Any,
-    ) -> Runnable:
-        if isinstance(other, RunnableSequence):
-            return RunnableSeq(
-                *self.steps,
-                other.first,
-                *other.middle,
-                other.last,
-                name=self.name or other.name,
-            )
-        elif isinstance(other, RunnableSeq):
-            return RunnableSeq(
-                *self.steps,
-                *other.steps,
-                name=self.name or other.name,
-            )
-        else:
-            return RunnableSeq(
-                *self.steps,
-                coerce_to_runnable(other, name=None, trace=True),
-                name=self.name,
-            )
-
-    def __ror__(
-        self,
-        other: Any,
-    ) -> Runnable:
-        if isinstance(other, RunnableSequence):
-            return RunnableSequence(
-                other.first,
-                *other.middle,
-                other.last,
-                *self.steps,
-                name=other.name or self.name,
-            )
-        elif isinstance(other, RunnableSeq):
-            return RunnableSeq(
-                *other.steps,
-                *self.steps,
-                name=other.name or self.name,
-            )
-        else:
-            return RunnableSequence(
-                coerce_to_runnable(other, name=None, trace=True),
-                *self.steps,
-                name=self.name,
-            )
-
     def invoke(
-        self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
+        self, input: Input, config: Optional[AnyConfig] = None, **kwargs: Any
     ) -> Any:
         if config is None:
             config = ensure_config()
-        # setup callbacks and context
-        callback_manager = get_callback_manager_for_config(config)
-        # start the root run
-        run_manager = callback_manager.on_chain_start(
-            None,
+        # setup runtree and context
+        runtree = get_runtree_for_config(
+            config,
             self.trace_inputs(input) if self.trace_inputs is not None else input,
-            name=config.get("run_name") or self.get_name(),
-            run_id=config.pop("run_id", None),
+            name=cast(str, config.get("run_name", self.get_name())),
         )
 
         # invoke all steps in sequence
         try:
             for i, step in enumerate(self.steps):
                 # mark each step as a child run
-                config = patch_config(
-                    config, callbacks=run_manager.get_child(f"seq:step:{i + 1}")
-                )
+                config = patch_config(config, runtree=runtree)
                 if i == 0:
                     input = step.invoke(input, config, **kwargs)
                 else:
                     input = step.invoke(input, config)
         # finish the root run
         except BaseException as e:
-            run_manager.on_chain_error(e)
+            runtree.end(error=str(e))
             raise
         else:
-            run_manager.on_chain_end(input)
+            runtree.end(outputs=input if isinstance(input, dict) else {"output": input})
             return input
-
-    async def ainvoke(
-        self,
-        input: Input,
-        config: Optional[RunnableConfig] = None,
-        **kwargs: Optional[Any],
-    ) -> Any:
-        if config is None:
-            config = ensure_config()
-        # setup callbacks
-        callback_manager = get_async_callback_manager_for_config(config)
-        # start the root run
-        run_manager = await callback_manager.on_chain_start(
-            None,
-            self.trace_inputs(input) if self.trace_inputs is not None else input,
-            name=config.get("run_name") or self.get_name(),
-            run_id=config.pop("run_id", None),
-        )
-
-        # invoke all steps in sequence
-        try:
-            for i, step in enumerate(self.steps):
-                # mark each step as a child run
-                config = patch_config(
-                    config, callbacks=run_manager.get_child(f"seq:step:{i + 1}")
-                )
-                if i == 0:
-                    input = await step.ainvoke(input, config, **kwargs)
-                else:
-                    input = await step.ainvoke(input, config)
-        # finish the root run
-        except BaseException as e:
-            await run_manager.on_chain_error(e)
-            raise
-        else:
-            await run_manager.on_chain_end(input)
-            return input
-
-    def stream(
-        self,
-        input: Input,
-        config: Optional[RunnableConfig] = None,
-        **kwargs: Optional[Any],
-    ) -> Iterator[Any]:
-        if config is None:
-            config = ensure_config()
-        # setup callbacks
-        callback_manager = get_callback_manager_for_config(config)
-        # start the root run
-        run_manager = callback_manager.on_chain_start(
-            None,
-            self.trace_inputs(input) if self.trace_inputs is not None else input,
-            name=config.get("run_name") or self.get_name(),
-            run_id=config.pop("run_id", None),
-        )
-
-        try:
-            # stream the last steps
-            # transform the input stream of each step with the next
-            # steps that don't natively support transforming an input stream will
-            # buffer input in memory until all available, and then start emitting output
-            for idx, step in enumerate(self.steps):
-                config = patch_config(
-                    config,
-                    callbacks=run_manager.get_child(f"seq:step:{idx + 1}"),
-                )
-                if idx == 0:
-                    iterator = step.stream(input, config, **kwargs)
-                else:
-                    iterator = step.transform(iterator, config)
-            if stream_handler := next(
-                (
-                    cast(_StreamingCallbackHandler, h)
-                    for h in run_manager.handlers
-                    if isinstance(h, _StreamingCallbackHandler)
-                ),
-                None,
-            ):
-                # populates streamed_output in astream_log() output if needed
-                iterator = stream_handler.tap_output_iter(run_manager.run_id, iterator)
-            output: Any = None
-            add_supported = False
-            for chunk in iterator:
-                yield chunk
-                # collect final output
-                if output is None:
-                    output = chunk
-                elif add_supported:
-                    try:
-                        output = output + chunk
-                    except TypeError:
-                        output = chunk
-                        add_supported = False
-                else:
-                    output = chunk
-        except BaseException as e:
-            run_manager.on_chain_error(e)
-            raise
-        else:
-            run_manager.on_chain_end(output)
-
-    async def astream(
-        self,
-        input: Input,
-        config: Optional[RunnableConfig] = None,
-        **kwargs: Optional[Any],
-    ) -> AsyncIterator[Any]:
-        if config is None:
-            config = ensure_config()
-        # setup callbacks
-        callback_manager = get_async_callback_manager_for_config(config)
-        # start the root run
-        run_manager = await callback_manager.on_chain_start(
-            None,
-            self.trace_inputs(input) if self.trace_inputs is not None else input,
-            name=config.get("run_name") or self.get_name(),
-            run_id=config.pop("run_id", None),
-        )
-
-        try:
-            async with AsyncExitStack() as stack:
-                # stream the last steps
-                # transform the input stream of each step with the next
-                # steps that don't natively support transforming an input stream will
-                # buffer input in memory until all available, and then start emitting output
-                for idx, step in enumerate(self.steps):
-                    config = patch_config(
-                        config,
-                        callbacks=run_manager.get_child(f"seq:step:{idx + 1}"),
-                    )
-                    if idx == 0:
-                        aiterator = step.astream(input, config, **kwargs)
-                    else:
-                        aiterator = step.atransform(aiterator, config)
-                    if hasattr(aiterator, "aclose"):
-                        stack.push_async_callback(aiterator.aclose)
-                if stream_handler := next(
-                    (
-                        cast(_StreamingCallbackHandler, h)
-                        for h in run_manager.handlers
-                        if isinstance(h, _StreamingCallbackHandler)
-                    ),
-                    None,
-                ):
-                    # populates streamed_output in astream_log() output if needed
-                    aiterator = stream_handler.tap_output_aiter(
-                        run_manager.run_id, aiterator
-                    )
-                output: Any = None
-                add_supported = False
-                async for chunk in aiterator:
-                    yield chunk
-                    # collect final output
-                    if add_supported:
-                        try:
-                            output = output + chunk
-                        except TypeError:
-                            output = chunk
-                            add_supported = False
-                    else:
-                        output = chunk
-        except BaseException as e:
-            await run_manager.on_chain_error(e)
-            raise
-        else:
-            await run_manager.on_chain_end(output)

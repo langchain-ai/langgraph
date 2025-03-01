@@ -6,12 +6,9 @@ with LangChain-compatible tools while maintaining support for both synchronous a
 asynchronous operations.
 """
 
-import asyncio
 import functools
 import json
-from typing import Any, Awaitable, Callable, Optional, Sequence, Union
-
-from langchain_core.embeddings import Embeddings
+from typing import Any, Callable, Optional, Sequence, Union
 
 EmbeddingsFunc = Callable[[Sequence[str]], list[list[float]]]
 """Type for synchronous embedding functions.
@@ -21,16 +18,10 @@ where each embedding is a list of floats. The dimensionality of the embeddings
 should be consistent for all inputs.
 """
 
-AEmbeddingsFunc = Callable[[Sequence[str]], Awaitable[list[list[float]]]]
-"""Type for asynchronous embedding functions.
-
-Similar to EmbeddingsFunc, but returns an awaitable that resolves to the embeddings.
-"""
-
 
 def ensure_embeddings(
-    embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc, str, None],
-) -> Embeddings:
+    embed: Union[EmbeddingsFunc, str, None],
+) -> "Embeddings":
     """Ensure that an embedding function conforms to LangChain's Embeddings interface.
 
     This function wraps arbitrary embedding functions to make them compatible with
@@ -96,10 +87,10 @@ def ensure_embeddings(
 
     if isinstance(embed, Embeddings):
         return embed
-    return EmbeddingsLambda(embed)
+    return Embeddings(embed)
 
 
-class EmbeddingsLambda(Embeddings):
+class Embeddings:
     """Wrapper to convert embedding functions into LangChain's Embeddings interface.
 
     This class allows arbitrary embedding functions to be used with LangChain-compatible
@@ -140,12 +131,10 @@ class EmbeddingsLambda(Embeddings):
 
     def __init__(
         self,
-        func: Union[EmbeddingsFunc, AEmbeddingsFunc],
+        func: EmbeddingsFunc,
     ) -> None:
         if func is None:
             raise ValueError("func must be provided")
-        if _is_async_callable(func):
-            self.afunc = func
         else:
             self.func = func
 
@@ -183,41 +172,6 @@ class EmbeddingsLambda(Embeddings):
             and taking the first result.
         """
         return self.embed_documents([text])[0]
-
-    async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
-        """Asynchronously embed a list of texts into vectors.
-
-        Args:
-            texts: list of texts to convert to embeddings.
-
-        Returns:
-            list of embeddings, one per input text. Each embedding is a list of floats.
-
-        Note:
-            If no async function was provided, this falls back to the sync implementation.
-        """
-        afunc = getattr(self, "afunc", None)
-        if afunc is None:
-            return await super().aembed_documents(texts)
-        return await afunc(texts)
-
-    async def aembed_query(self, text: str) -> list[float]:
-        """Asynchronously embed a single piece of text.
-
-        Args:
-            text: Text to convert to an embedding.
-
-        Returns:
-            Embedding vector as a list of floats.
-
-        Note:
-            This is equivalent to calling aembed_documents with a single text
-            and taking the first result.
-        """
-        afunc = getattr(self, "afunc", None)
-        if afunc is None:
-            return await super().aembed_query(text)
-        return (await afunc([text]))[0]
 
 
 def get_text_at_path(obj: Any, path: Union[str, list[str]]) -> list[str]:
@@ -382,26 +336,6 @@ def tokenize_path(path: str) -> list[str]:
     return tokens
 
 
-def _is_async_callable(
-    func: Any,
-) -> bool:
-    """Check if a function is async.
-
-    This includes both async def functions and classes with async __call__ methods.
-
-    Args:
-        func: Function or callable object to check.
-
-    Returns:
-        True if the function is async, False otherwise.
-    """
-    return (
-        asyncio.iscoroutinefunction(func)
-        or hasattr(func, "__call__")  # noqa: B004
-        and asyncio.iscoroutinefunction(func.__call__)
-    )
-
-
 @functools.lru_cache
 def _get_init_embeddings() -> Optional[Callable[[str], Embeddings]]:
     try:
@@ -415,5 +349,5 @@ def _get_init_embeddings() -> Optional[Callable[[str], Embeddings]]:
 __all__ = [
     "ensure_embeddings",
     "EmbeddingsFunc",
-    "AEmbeddingsFunc",
+    "Embeddings",
 ]

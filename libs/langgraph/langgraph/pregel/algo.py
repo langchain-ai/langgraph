@@ -21,10 +21,6 @@ from typing import (
 )
 from uuid import UUID
 
-from langchain_core.callbacks import Callbacks
-from langchain_core.callbacks.manager import AsyncParentRunManager, ParentRunManager
-from langchain_core.runnables.config import RunnableConfig
-
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -63,8 +59,6 @@ from langgraph.constants import (
     Send,
 )
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
-from langgraph.managed.base import ManagedValueMapping
-from langgraph.pregel.call import get_runnable_for_task
 from langgraph.pregel.io import read_channel, read_channels
 from langgraph.pregel.log import logger
 from langgraph.pregel.manager import ChannelsManager
@@ -72,13 +66,11 @@ from langgraph.pregel.read import PregelNode
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
-    LoopProtocol,
     PregelExecutableTask,
     PregelScratchpad,
     PregelTask,
-    RetryPolicy,
 )
-from langgraph.utils.config import merge_configs, patch_config
+from langgraph.utils.config import AnyConfig, merge_configs, patch_config
 
 GetNextVersion = Callable[[Optional[V], BaseChannel], V]
 SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
@@ -109,28 +101,6 @@ class PregelTaskWrites(NamedTuple):
     name: str
     writes: Sequence[tuple[str, Any]]
     triggers: Sequence[str]
-
-
-class Call:
-    __slots__ = ("func", "input", "retry", "callbacks")
-
-    func: Callable
-    input: Any
-    retry: Optional[RetryPolicy]
-    callbacks: Callbacks
-
-    def __init__(
-        self,
-        func: Callable,
-        input: Any,
-        *,
-        retry: Optional[RetryPolicy],
-        callbacks: Callbacks,
-    ) -> None:
-        self.func = func
-        self.input = input
-        self.retry = retry
-        self.callbacks = callbacks
 
 
 def should_interrupt(
@@ -167,12 +137,9 @@ def should_interrupt(
 
 
 def local_read(
-    step: int,
     checkpoint: Checkpoint,
     channels: Mapping[str, BaseChannel],
-    managed: ManagedValueMapping,
     task: WritesProtocol,
-    config: RunnableConfig,
     select: Union[list[str], str],
     fresh: bool = False,
 ) -> Union[dict[str, Any], Any]:
@@ -180,7 +147,6 @@ def local_read(
     Used by conditional edges to read a copy of the state with reflecting the writes
     from that node only."""
     if isinstance(select, str):
-        managed_keys = []
         for c, _ in task.writes:
             if c == select:
                 updated = {c}
@@ -188,22 +154,16 @@ def local_read(
         else:
             updated = set()
     else:
-        managed_keys = [k for k in select if k in managed]
-        select = [k for k in select if k not in managed]
         updated = set(select).intersection(c for c, _ in task.writes)
     if fresh and updated:
         with ChannelsManager(
             {k: v for k, v in channels.items() if k in updated},
             checkpoint,
-            LoopProtocol(config=config, step=step, stop=step + 1),
-            skip_context=True,
-        ) as (local_channels, _):
+        ) as local_channels:
             apply_writes(copy_checkpoint(checkpoint), local_channels, [task], None)
             values = read_channels({**channels, **local_channels}, select)
     else:
         values = read_channels(channels, select)
-    if managed_keys:
-        values.update({k: managed[k]() for k in managed_keys})
     return values
 
 
@@ -233,10 +193,9 @@ def apply_writes(
     channels: Mapping[str, BaseChannel],
     tasks: Iterable[WritesProtocol],
     get_next_version: Optional[GetNextVersion],
-) -> dict[str, list[Any]]:
+) -> None:
     """Apply writes from a set of tasks (usually the tasks from a Pregel step)
-    to the checkpoint and channels, and return managed values writes to be applied
-    externally."""
+    to the checkpoint and channels"""
     # sort tasks on path, to ensure deterministic order for update application
     # any path parts after the 3rd are ignored for sorting
     # (we use them for eg. task ids which aren't good for sorting)
@@ -280,7 +239,6 @@ def apply_writes(
 
     # Group writes by channel
     pending_writes_by_channel: dict[str, list[Any]] = defaultdict(list)
-    pending_writes_by_managed: dict[str, list[Any]] = defaultdict(list)
     for task in tasks:
         for chan, val in task.writes:
             if chan in (NO_WRITES, PUSH, RESUME, INTERRUPT, RETURN, ERROR):
@@ -289,8 +247,6 @@ def apply_writes(
                 checkpoint["pending_sends"].append(val)
             elif chan in channels:
                 pending_writes_by_channel[chan].append(val)
-            else:
-                pending_writes_by_managed[chan].append(val)
 
     # Find the highest version of all channels
     if checkpoint["channel_versions"]:
@@ -319,9 +275,6 @@ def apply_writes(
                         channels[chan],
                     )
 
-    # Return managed values writes to be applied externally
-    return pending_writes_by_managed
-
 
 @overload
 def prepare_next_tasks(
@@ -329,14 +282,12 @@ def prepare_next_tasks(
     pending_writes: list[PendingWrite],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
-    managed: ManagedValueMapping,
-    config: RunnableConfig,
+    config: AnyConfig,
     step: int,
     *,
     for_execution: Literal[False],
     store: Literal[None] = None,
     checkpointer: Literal[None] = None,
-    manager: Literal[None] = None,
 ) -> dict[str, PregelTask]: ...
 
 
@@ -346,14 +297,12 @@ def prepare_next_tasks(
     pending_writes: list[PendingWrite],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
-    managed: ManagedValueMapping,
-    config: RunnableConfig,
+    config: AnyConfig,
     step: int,
     *,
     for_execution: Literal[True],
     store: Optional[BaseStore],
     checkpointer: Optional[BaseCheckpointSaver],
-    manager: Union[None, ParentRunManager, AsyncParentRunManager],
 ) -> dict[str, PregelExecutableTask]: ...
 
 
@@ -362,14 +311,12 @@ def prepare_next_tasks(
     pending_writes: list[PendingWrite],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
-    managed: ManagedValueMapping,
-    config: RunnableConfig,
+    config: AnyConfig,
     step: int,
     *,
     for_execution: bool,
     store: Optional[BaseStore] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
-    manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> Union[dict[str, PregelTask], dict[str, PregelExecutableTask]]:
     """Prepare the set of tasks that will make up the next Pregel step.
     This is the union of all PUSH tasks (Sends) and PULL tasks (nodes triggered
@@ -384,13 +331,11 @@ def prepare_next_tasks(
             pending_writes=pending_writes,
             processes=processes,
             channels=channels,
-            managed=managed,
             config=config,
             step=step,
             for_execution=for_execution,
             store=store,
             checkpointer=checkpointer,
-            manager=manager,
         ):
             tasks.append(task)
     # Check if any processes should be run in next step
@@ -403,13 +348,11 @@ def prepare_next_tasks(
             pending_writes=pending_writes,
             processes=processes,
             channels=channels,
-            managed=managed,
             config=config,
             step=step,
             for_execution=for_execution,
             store=store,
             checkpointer=checkpointer,
-            manager=manager,
         ):
             tasks.append(task)
     return {t.id: t for t in tasks}
@@ -423,13 +366,11 @@ def prepare_single_task(
     pending_writes: list[PendingWrite],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
-    managed: ManagedValueMapping,
-    config: RunnableConfig,
+    config: AnyConfig,
     step: int,
     for_execution: bool,
     store: Optional[BaseStore] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
-    manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> Union[None, PregelTask, PregelExecutableTask]:
     """Prepares a single task for the next Pregel step, given a task path, which
     uniquely identifies a PUSH or PULL task within the graph."""
@@ -437,90 +378,7 @@ def prepare_single_task(
     configurable = config.get(CONF, {})
     parent_ns = configurable.get(CONFIG_KEY_CHECKPOINT_NS, "")
 
-    if task_path[0] == PUSH and isinstance(task_path[-1], Call):
-        # (PUSH, parent task path, idx of PUSH write, id of parent task, Call)
-        task_path_t = cast(tuple[str, tuple, int, str, Call], task_path)
-        call = task_path_t[-1]
-        proc_ = get_runnable_for_task(call.func)
-        name = proc_.name
-        if name is None:
-            raise ValueError("`call` functions must have a `__name__` attribute")
-        # create task id
-        triggers = [PUSH]
-        checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
-        task_id = _uuid5_str(
-            checkpoint_id,
-            checkpoint_ns,
-            str(step),
-            name,
-            PUSH,
-            task_path_str(task_path[1]),
-            str(task_path[2]),
-        )
-        task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
-        metadata = {
-            "langgraph_step": step,
-            "langgraph_node": name,
-            "langgraph_triggers": triggers,
-            "langgraph_path": task_path[:3],
-            "langgraph_checkpoint_ns": task_checkpoint_ns,
-        }
-        if task_id_checksum is not None:
-            assert task_id == task_id_checksum, f"{task_id} != {task_id_checksum}"
-        if for_execution:
-            writes: deque[tuple[str, Any]] = deque()
-            return PregelExecutableTask(
-                name,
-                call.input,
-                proc_,
-                writes,
-                patch_config(
-                    merge_configs(config, {"metadata": metadata}),
-                    run_name=name,
-                    callbacks=call.callbacks
-                    or (manager.get_child(f"graph:step:{step}") if manager else None),
-                    configurable={
-                        CONFIG_KEY_TASK_ID: task_id,
-                        # deque.extend is thread-safe
-                        CONFIG_KEY_SEND: partial(
-                            local_write,
-                            writes.extend,
-                            processes.keys(),
-                        ),
-                        CONFIG_KEY_READ: partial(
-                            local_read,
-                            step,
-                            checkpoint,
-                            channels,
-                            managed,
-                            PregelTaskWrites(task_path[:3], name, writes, triggers),
-                            config,
-                        ),
-                        CONFIG_KEY_STORE: (store or configurable.get(CONFIG_KEY_STORE)),
-                        CONFIG_KEY_CHECKPOINTER: (
-                            checkpointer or configurable.get(CONFIG_KEY_CHECKPOINTER)
-                        ),
-                        CONFIG_KEY_CHECKPOINT_MAP: {
-                            **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
-                            parent_ns: checkpoint["id"],
-                        },
-                        CONFIG_KEY_CHECKPOINT_ID: None,
-                        CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
-                        CONFIG_KEY_SCRATCHPAD: _scratchpad(
-                            pending_writes,
-                            task_id,
-                        ),
-                    },
-                ),
-                triggers,
-                call.retry,
-                None,
-                task_id,
-                task_path[:3],
-            )
-        else:
-            return PregelTask(task_id, name, task_path[:3])
-    elif task_path[0] == PUSH:
+    if task_path[0] == PUSH:
         if len(task_path) == 2:
             # SEND tasks, executed in superstep n+1
             # (PUSH, idx of pending send)
@@ -569,7 +427,7 @@ def prepare_single_task(
             if node := proc.node:
                 if proc.metadata:
                     metadata.update(proc.metadata)
-                writes = deque()
+                writes: deque[tuple[str, Any]] = deque()
                 return PregelExecutableTask(
                     packet.node,
                     packet.arg,
@@ -580,9 +438,6 @@ def prepare_single_task(
                             config, {"metadata": metadata, "tags": proc.tags}
                         ),
                         run_name=packet.node,
-                        callbacks=(
-                            manager.get_child(f"graph:step:{step}") if manager else None
-                        ),
                         configurable={
                             CONFIG_KEY_TASK_ID: task_id,
                             # deque.extend is thread-safe
@@ -593,14 +448,11 @@ def prepare_single_task(
                             ),
                             CONFIG_KEY_READ: partial(
                                 local_read,
-                                step,
                                 checkpoint,
                                 channels,
-                                managed,
                                 PregelTaskWrites(
                                     task_path[:3], packet.node, writes, triggers
                                 ),
-                                config,
                             ),
                             CONFIG_KEY_STORE: (
                                 store or configurable.get(CONFIG_KEY_STORE)
@@ -656,9 +508,7 @@ def prepare_single_task(
             > seen.get(chan, null_version)
         ):
             try:
-                val = next(
-                    _proc_input(proc, managed, channels, for_execution=for_execution)
-                )
+                val = next(_proc_input(proc, channels, for_execution=for_execution))
             except StopIteration:
                 return
             except Exception as exc:
@@ -703,11 +553,6 @@ def prepare_single_task(
                                 config, {"metadata": metadata, "tags": proc.tags}
                             ),
                             run_name=name,
-                            callbacks=(
-                                manager.get_child(f"graph:step:{step}")
-                                if manager
-                                else None
-                            ),
                             configurable={
                                 CONFIG_KEY_TASK_ID: task_id,
                                 # deque.extend is thread-safe
@@ -718,14 +563,11 @@ def prepare_single_task(
                                 ),
                                 CONFIG_KEY_READ: partial(
                                     local_read,
-                                    step,
                                     checkpoint,
                                     channels,
-                                    managed,
                                     PregelTaskWrites(
                                         task_path[:3], name, writes, triggers
                                     ),
-                                    config,
                                 ),
                                 CONFIG_KEY_STORE: (
                                     store or configurable.get(CONFIG_KEY_STORE)
@@ -788,7 +630,6 @@ def _scratchpad(
 
 def _proc_input(
     proc: PregelNode,
-    managed: ManagedValueMapping,
     channels: Mapping[str, BaseChannel],
     *,
     for_execution: bool,
@@ -807,8 +648,6 @@ def _proc_input(
                         val[k] = read_channel(channels, chan, catch=False)
                     except EmptyChannelError:
                         continue
-                else:
-                    val[k] = managed[k]()
         except EmptyChannelError:
             return
     elif isinstance(proc.channels, list):

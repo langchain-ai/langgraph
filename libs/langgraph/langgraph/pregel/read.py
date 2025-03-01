@@ -3,31 +3,24 @@ from __future__ import annotations
 from functools import cached_property
 from typing import (
     Any,
-    AsyncIterator,
     Callable,
-    Iterator,
     Mapping,
     Optional,
     Sequence,
     Union,
 )
 
-from langchain_core.runnables import (
-    Runnable,
-    RunnableConfig,
-    RunnablePassthrough,
-    RunnableSerializable,
-)
-from langchain_core.runnables.base import Input, Other, coerce_to_runnable
-from langchain_core.runnables.utils import ConfigurableFieldSpec
-
-from langgraph.constants import CONF, CONFIG_KEY_READ
+from langgraph.constants import CONF, CONFIG_KEY_READ, EMPTY_SEQ
 from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.utils import find_subgraph_pregel
 from langgraph.pregel.write import ChannelWrite
-from langgraph.utils.config import merge_configs
-from langgraph.utils.runnable import RunnableCallable, RunnableSeq
+from langgraph.utils.config import RunnableConfig, merge_configs
+from langgraph.utils.runnable import (
+    Runnable,
+    RunnableCallable,
+    RunnableSeq,
+)
 
 READ_TYPE = Callable[[Union[str, Sequence[str]], bool], Union[Any, dict[str, Any]]]
 
@@ -42,18 +35,6 @@ class ChannelRead(RunnableCallable):
 
     mapper: Optional[Callable[[Any], Any]] = None
 
-    @property
-    def config_specs(self) -> list[ConfigurableFieldSpec]:
-        return [
-            ConfigurableFieldSpec(
-                id=CONFIG_KEY_READ,
-                name=CONFIG_KEY_READ,
-                description=None,
-                default=None,
-                annotation=None,
-            ),
-        ]
-
     def __init__(
         self,
         channel: Union[str, list[str]],
@@ -67,16 +48,14 @@ class ChannelRead(RunnableCallable):
         self.mapper = mapper
         self.channel = channel
 
-    def get_name(
-        self, suffix: Optional[str] = None, *, name: Optional[str] = None
-    ) -> str:
+    def get_name(self, *, name: Optional[str] = None) -> str:
         if name:
             pass
         elif isinstance(self.channel, str):
             name = f"ChannelRead<{self.channel}>"
         else:
             name = f"ChannelRead<{','.join(self.channel)}>"
-        return super().get_name(suffix, name=name)
+        return super().get_name(name=name)
 
     def _read(self, _: Any, config: RunnableConfig) -> Any:
         return self.do_read(
@@ -109,7 +88,7 @@ class ChannelRead(RunnableCallable):
             return read(select, fresh)
 
 
-DEFAULT_BOUND: RunnablePassthrough = RunnablePassthrough()
+DEFAULT_BOUND = RunnableCallable(lambda input: input)
 
 
 class PregelNode(Runnable):
@@ -161,6 +140,7 @@ class PregelNode(Runnable):
         metadata: Optional[Mapping[str, Any]] = None,
         bound: Optional[Runnable[Any, Any]] = None,
         retry_policy: Optional[RetryPolicy] = None,
+        subgraphs: Sequence[PregelProtocol] = EMPTY_SEQ,
     ) -> None:
         self.channels = channels
         self.triggers = list(triggers)
@@ -170,7 +150,9 @@ class PregelNode(Runnable):
         self.retry_policy = retry_policy
         self.tags = tags
         self.metadata = metadata
-        if self.bound is not DEFAULT_BOUND:
+        if subgraphs:
+            self.subgraphs = list(subgraphs)
+        elif self.bound is not DEFAULT_BOUND:
             try:
                 subgraph = find_subgraph_pregel(self.bound)
             except Exception:
@@ -201,7 +183,6 @@ class PregelNode(Runnable):
             writers[-2] = ChannelWrite(
                 writes=writers[-2].writes + writers[-1].writes,
                 tags=writers[-2].tags,
-                require_at_least_one_of=writers[-2].require_at_least_one_of,
             )
             writers.pop()
         return writers
@@ -221,59 +202,9 @@ class PregelNode(Runnable):
         else:
             return self.bound
 
-    def join(self, channels: Sequence[str]) -> PregelNode:
-        assert isinstance(channels, list) or isinstance(
-            channels, tuple
-        ), "channels must be a list or tuple"
-        assert isinstance(
-            self.channels, dict
-        ), "all channels must be named when using .join()"
-        return self.copy(
-            update=dict(
-                channels={
-                    **self.channels,
-                    **{chan: chan for chan in channels},
-                }
-            ),
-        )
-
-    def __or__(
-        self,
-        other: Union[
-            Runnable[Any, Other],
-            Callable[[Any], Other],
-            Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
-        ],
-    ) -> PregelNode:
-        if isinstance(other, Runnable) and ChannelWrite.is_writer(other):
-            return self.copy(update=dict(writers=[*self.writers, other]))
-        elif self.bound is DEFAULT_BOUND:
-            return self.copy(update=dict(bound=coerce_to_runnable(other)))
-        else:
-            return self.copy(update=dict(bound=RunnableSeq(self.bound, other)))
-
-    def pipe(
-        self,
-        *others: Runnable[Any, Other] | Callable[[Any], Other],
-        name: Optional[str] = None,
-    ) -> RunnableSerializable[Any, Other]:
-        for other in others:
-            self = self | other
-        return self
-
-    def __ror__(
-        self,
-        other: Union[
-            Runnable[Other, Any],
-            Callable[[Any], Other],
-            Mapping[str, Union[Runnable[Other, Any], Callable[[Other], Any]]],
-        ],
-    ) -> RunnableSerializable:
-        raise NotImplementedError()
-
     def invoke(
         self,
-        input: Input,
+        input: dict[str, Any],
         config: Optional[RunnableConfig] = None,
         **kwargs: Optional[Any],
     ) -> Any:
@@ -282,40 +213,3 @@ class PregelNode(Runnable):
             merge_configs({"metadata": self.metadata, "tags": self.tags}, config),
             **kwargs,
         )
-
-    async def ainvoke(
-        self,
-        input: Input,
-        config: Optional[RunnableConfig] = None,
-        **kwargs: Optional[Any],
-    ) -> Any:
-        return await self.bound.ainvoke(
-            input,
-            merge_configs({"metadata": self.metadata, "tags": self.tags}, config),
-            **kwargs,
-        )
-
-    def stream(
-        self,
-        input: Input,
-        config: Optional[RunnableConfig] = None,
-        **kwargs: Optional[Any],
-    ) -> Iterator[Any]:
-        yield from self.bound.stream(
-            input,
-            merge_configs({"metadata": self.metadata, "tags": self.tags}, config),
-            **kwargs,
-        )
-
-    async def astream(
-        self,
-        input: Input,
-        config: Optional[RunnableConfig] = None,
-        **kwargs: Optional[Any],
-    ) -> AsyncIterator[Any]:
-        async for item in self.bound.astream(
-            input,
-            merge_configs({"metadata": self.metadata, "tags": self.tags}, config),
-            **kwargs,
-        ):
-            yield item

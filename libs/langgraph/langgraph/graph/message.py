@@ -1,53 +1,51 @@
 import uuid
-import warnings
-from functools import partial
 from typing import (
     Annotated,
     Any,
-    Callable,
     Literal,
     Optional,
+    Protocol,
     Sequence,
     Union,
-    cast,
+    runtime_checkable,
 )
 
-from langchain_core.messages import (
-    AnyMessage,
-    BaseMessage,
-    BaseMessageChunk,
-    MessageLikeRepresentation,
-    RemoveMessage,
-    convert_to_messages,
-    message_chunk_to_message,
-)
+from pydantic import BaseModel
 from typing_extensions import TypedDict
 
-from langgraph.graph.state import StateGraph
 
-Messages = Union[list[MessageLikeRepresentation], MessageLikeRepresentation]
-
-
-def _add_messages_wrapper(func: Callable) -> Callable[[Messages, Messages], Messages]:
-    def _add_messages(
-        left: Optional[Messages] = None, right: Optional[Messages] = None, **kwargs: Any
-    ) -> Union[Messages, Callable[[Messages, Messages], Messages]]:
-        if left is not None and right is not None:
-            return func(left, right, **kwargs)
-        elif left is not None or right is not None:
-            msg = (
-                f"Must specify non-null arguments for both 'left' and 'right'. Only "
-                f"received: '{'left' if left else 'right'}'."
-            )
-            raise ValueError(msg)
-        else:
-            return partial(func, **kwargs)
-
-    _add_messages.__doc__ = func.__doc__
-    return cast(Callable[[Messages, Messages], Messages], _add_messages)
+@runtime_checkable
+class MessageProtocol(Protocol):
+    content: Union[str, list]
+    id: Optional[str]
 
 
-@_add_messages_wrapper
+class Message(BaseModel, extra="allow"):
+    role: str
+    content: Union[str, list]
+    id: Optional[str] = None
+
+
+MessageLike = Union[MessageProtocol, list[str], tuple[str, str], str, dict[str, Any]]
+
+Messages = Union[list[MessageLike], MessageLike]
+
+
+def convert_to_message(
+    message: MessageLike,
+) -> MessageProtocol:
+    if isinstance(message, MessageProtocol):
+        return message
+    elif isinstance(message, str):
+        return Message(role="user", content=message)
+    elif isinstance(message, Sequence):
+        return Message(role=message[0], content=message[1])
+    elif isinstance(message, dict):
+        return Message(**message)
+    else:
+        raise TypeError(f"Expected a message-like object, but got {type(message)}")
+
+
 def add_messages(
     left: Messages,
     right: Messages,
@@ -164,14 +162,8 @@ def add_messages(
     if not isinstance(right, list):
         right = [right]  # type: ignore[assignment]
     # coerce to message
-    left = [
-        message_chunk_to_message(cast(BaseMessageChunk, m))
-        for m in convert_to_messages(left)
-    ]
-    right = [
-        message_chunk_to_message(cast(BaseMessageChunk, m))
-        for m in convert_to_messages(right)
-    ]
+    left = [convert_to_message(m) for m in left]
+    right = [convert_to_message(m) for m in right]
     # assign missing ids
     for m in left:
         if m.id is None:
@@ -185,98 +177,14 @@ def add_messages(
     ids_to_remove = set()
     for m in right:
         if (existing_idx := merged_by_id.get(m.id)) is not None:
-            if isinstance(m, RemoveMessage):
-                ids_to_remove.add(m.id)
-            else:
-                ids_to_remove.discard(m.id)
-                merged[existing_idx] = m
+            ids_to_remove.discard(m.id)
+            merged[existing_idx] = m
         else:
-            if isinstance(m, RemoveMessage):
-                raise ValueError(
-                    f"Attempting to delete a message with an ID that doesn't exist ('{m.id}')"
-                )
-
             merged_by_id[m.id] = len(merged)
             merged.append(m)
     merged = [m for m in merged if m.id not in ids_to_remove]
-
-    if format == "langchain-openai":
-        merged = _format_messages(merged)
-    elif format:
-        msg = f"Unrecognized {format=}. Expected one of 'langchain-openai', None."
-        raise ValueError(msg)
-    else:
-        pass
-
     return merged
 
 
-class MessageGraph(StateGraph):
-    """A StateGraph where every node receives a list of messages as input and returns one or more messages as output.
-
-    MessageGraph is a subclass of StateGraph whose entire state is a single, append-only* list of messages.
-    Each node in a MessageGraph takes a list of messages as input and returns zero or more
-    messages as output. The `add_messages` function is used to merge the output messages from each node
-    into the existing list of messages in the graph's state.
-
-    Examples:
-        ```pycon
-        >>> from langgraph.graph.message import MessageGraph
-        ...
-        >>> builder = MessageGraph()
-        >>> builder.add_node("chatbot", lambda state: [("assistant", "Hello!")])
-        >>> builder.set_entry_point("chatbot")
-        >>> builder.set_finish_point("chatbot")
-        >>> builder.compile().invoke([("user", "Hi there.")])
-        [HumanMessage(content="Hi there.", id='...'), AIMessage(content="Hello!", id='...')]
-        ```
-
-        ```pycon
-        >>> from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-        >>> from langgraph.graph.message import MessageGraph
-        ...
-        >>> builder = MessageGraph()
-        >>> builder.add_node(
-        ...     "chatbot",
-        ...     lambda state: [
-        ...         AIMessage(
-        ...             content="Hello!",
-        ...             tool_calls=[{"name": "search", "id": "123", "args": {"query": "X"}}],
-        ...         )
-        ...     ],
-        ... )
-        >>> builder.add_node(
-        ...     "search", lambda state: [ToolMessage(content="Searching...", tool_call_id="123")]
-        ... )
-        >>> builder.set_entry_point("chatbot")
-        >>> builder.add_edge("chatbot", "search")
-        >>> builder.set_finish_point("search")
-        >>> builder.compile().invoke([HumanMessage(content="Hi there. Can you search for X?")])
-        {'messages': [HumanMessage(content="Hi there. Can you search for X?", id='b8b7d8f4-7f4d-4f4d-9c1d-f8b8d8f4d9c1'),
-                     AIMessage(content="Hello!", id='f4d9c1d8-8d8f-4d9c-b8b7-d8f4f4d9c1d8'),
-                     ToolMessage(content="Searching...", id='d8f4f4d9-c1d8-4f4d-b8b7-d8f4f4d9c1d8', tool_call_id="123")]}
-        ```
-    """
-
-    def __init__(self) -> None:
-        super().__init__(Annotated[list[AnyMessage], add_messages])  # type: ignore[arg-type]
-
-
 class MessagesState(TypedDict):
-    messages: Annotated[list[AnyMessage], add_messages]
-
-
-def _format_messages(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
-    try:
-        from langchain_core.messages import convert_to_openai_messages
-    except ImportError:
-        msg = (
-            "Must have langchain-core>=0.3.11 installed to use automatic message "
-            "formatting (format='langchain-openai'). Please update your langchain-core "
-            "version or remove the 'format' flag. Returning un-formatted "
-            "messages."
-        )
-        warnings.warn(msg)
-        return list(messages)
-    else:
-        return convert_to_messages(convert_to_openai_messages(messages))
+    messages: Annotated[list[MessageProtocol], add_messages]

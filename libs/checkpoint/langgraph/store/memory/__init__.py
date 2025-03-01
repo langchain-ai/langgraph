@@ -108,10 +108,9 @@ from datetime import datetime, timezone
 from importlib import util
 from typing import Any, Iterable, Optional
 
-from langchain_core.embeddings import Embeddings
-
 from langgraph.store.base import (
     BaseStore,
+    Embeddings,
     GetOp,
     IndexConfig,
     Item,

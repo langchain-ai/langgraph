@@ -3,7 +3,6 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from typing import Any, Optional
 
-from langchain_core.runnables import RunnableConfig
 from psycopg import Capabilities, Connection, Cursor, Pipeline
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
@@ -13,6 +12,7 @@ from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     ChannelVersions,
     Checkpoint,
+    CheckpointConfig,
     CheckpointMetadata,
     CheckpointTuple,
     get_checkpoint_id,
@@ -20,7 +20,6 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.postgres import _internal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
-from langgraph.checkpoint.postgres.shallow import ShallowPostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
 Conn = _internal.Conn  # For backward compatibility
@@ -97,10 +96,10 @@ class PostgresSaver(BasePostgresSaver):
 
     def list(
         self,
-        config: Optional[RunnableConfig],
+        config: Optional[CheckpointConfig],
         *,
         filter: Optional[dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
+        before: Optional[CheckpointConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[CheckpointTuple]:
         """List checkpoints from the database.
@@ -109,9 +108,9 @@ class PostgresSaver(BasePostgresSaver):
         on the provided config. The checkpoints are ordered by checkpoint ID in descending order (newest first).
 
         Args:
-            config (RunnableConfig): The config to use for listing the checkpoints.
+            config (CheckpointConfig): The config to use for listing the checkpoints.
             filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata. Defaults to None.
-            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified checkpoint ID are returned. Defaults to None.
+            before (Optional[CheckpointConfig]): If provided, only checkpoints before the specified checkpoint ID are returned. Defaults to None.
             limit (Optional[int]): The maximum number of checkpoints to return. Defaults to None.
 
         Yields:
@@ -171,7 +170,7 @@ class PostgresSaver(BasePostgresSaver):
                     self._load_writes(value["pending_writes"]),
                 )
 
-    def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+    def get_tuple(self, config: CheckpointConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the database.
 
         This method retrieves a checkpoint tuple from the Postgres database based on the
@@ -180,7 +179,7 @@ class PostgresSaver(BasePostgresSaver):
         for the given thread ID is retrieved.
 
         Args:
-            config (RunnableConfig): The config to use for retrieving the checkpoint.
+            config (CheckpointConfig): The config to use for retrieving the checkpoint.
 
         Returns:
             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
@@ -254,24 +253,24 @@ class PostgresSaver(BasePostgresSaver):
 
     def put(
         self,
-        config: RunnableConfig,
+        config: CheckpointConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
-    ) -> RunnableConfig:
+    ) -> CheckpointConfig:
         """Save a checkpoint to the database.
 
         This method saves a checkpoint to the Postgres database. The checkpoint is associated
         with the provided config and its parent config (if any).
 
         Args:
-            config (RunnableConfig): The config to associate with the checkpoint.
+            config (CheckpointConfig): The config to associate with the checkpoint.
             checkpoint (Checkpoint): The checkpoint to save.
             metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
             new_versions (ChannelVersions): New channel versions as of this write.
 
         Returns:
-            RunnableConfig: Updated configuration after storing the checkpoint.
+            CheckpointConfig: Updated configuration after storing the checkpoint.
 
         Examples:
 
@@ -325,7 +324,7 @@ class PostgresSaver(BasePostgresSaver):
 
     def put_writes(
         self,
-        config: RunnableConfig,
+        config: CheckpointConfig,
         writes: Sequence[tuple[str, Any]],
         task_id: str,
         task_path: str = "",
@@ -335,7 +334,7 @@ class PostgresSaver(BasePostgresSaver):
         This method saves intermediate writes associated with a checkpoint to the Postgres database.
 
         Args:
-            config (RunnableConfig): Configuration of the related checkpoint.
+            config (CheckpointConfig): Configuration of the related checkpoint.
             writes (List[Tuple[str, Any]]): List of writes to store.
             task_id (str): Identifier for the task creating the writes.
         """
@@ -400,4 +399,4 @@ class PostgresSaver(BasePostgresSaver):
                     yield cur
 
 
-__all__ = ["PostgresSaver", "BasePostgresSaver", "ShallowPostgresSaver", "Conn"]
+__all__ = ["PostgresSaver", "BasePostgresSaver", "Conn"]

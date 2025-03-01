@@ -57,7 +57,7 @@ CONFIG_KEY_STREAM = sys.intern("__pregel_stream")
 CONFIG_KEY_STREAM_WRITER = sys.intern("__pregel_stream_writer")
 # holds a `StreamWriter` for stream_mode=custom
 CONFIG_KEY_STORE = sys.intern("__pregel_store")
-# holds a `BaseStore` made available to managed values
+# holds a `BaseStore` made available in context
 CONFIG_KEY_RESUMING = sys.intern("__pregel_resuming")
 # holds a boolean indicating if subgraphs should resume from a previous checkpoint
 CONFIG_KEY_TASK_ID = sys.intern("__pregel_task_id")
