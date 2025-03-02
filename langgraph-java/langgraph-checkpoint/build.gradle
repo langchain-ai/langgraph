@@ -1,0 +1,5 @@
+dependencies {
+    // MessagePack for serialization
+    implementation 'org.msgpack:msgpack-core:0.9.3'
+    implementation 'org.msgpack:jackson-dataformat-msgpack:0.9.3'
+}

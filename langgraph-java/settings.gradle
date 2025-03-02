@@ -1,0 +1,5 @@
+rootProject.name = 'langgraph-java'
+
+include 'langgraph-checkpoint'
+include 'langgraph-core'
+include 'langgraph-examples'
