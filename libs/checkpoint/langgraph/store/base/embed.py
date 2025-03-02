@@ -46,15 +46,6 @@ def ensure_embeddings(
         result = embeddings.embed_query("hello")  # Returns [0.1, 0.2]
         ```
 
-        Wrap an asynchronous embedding function:
-        ```python
-        async def my_async_fn(texts):
-            return [[0.1, 0.2] for _ in texts]
-
-        embeddings = ensure_embeddings(my_async_fn)
-        result = await embeddings.aembed_query("hello")  # Returns [0.1, 0.2]
-        ```
-
         Initialize embeddings using a provider string:
         ```python
         # Requires langchain>=0.3.9 and langgraph-checkpoint>=2.0.11
@@ -117,16 +108,6 @@ class Embeddings:
         result = embeddings.embed_query("hello")  # Returns [0.1, 0.2]
         await embeddings.aembed_query("hello")  # Also returns [0.1, 0.2]
         ```
-
-        With an async function:
-        ```python
-        async def my_async_fn(texts):
-            return [[0.1, 0.2] for _ in texts]
-
-        embeddings = EmbeddingsLambda(my_async_fn)
-        await embeddings.aembed_query("hello")  # Returns [0.1, 0.2]
-        # Note: embed_query() would raise an error
-        ```
     """
 
     def __init__(
@@ -147,16 +128,8 @@ class Embeddings:
         Returns:
             list of embeddings, one per input text. Each embedding is a list of floats.
 
-        Raises:
-            ValueError: If the instance was initialized with only an async function.
         """
-        func = getattr(self, "func", None)
-        if func is None:
-            raise ValueError(
-                "EmbeddingsLambda was initialized with an async function but no sync function. "
-                "Use aembed_documents for async operation or provide a sync function."
-            )
-        return func(texts)
+        return self.func(texts)
 
     def embed_query(self, text: str) -> list[float]:
         """Embed a single piece of text.

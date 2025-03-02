@@ -1,36 +1,15 @@
 # mypy: disable-error-code="operator"
-import asyncio
 import json
-from datetime import datetime
-from typing import Any, Iterable
 
 import pytest
-from pytest_mock import MockerFixture
 
 from langgraph.store.base import (
-    GetOp,
     InvalidNamespaceError,
-    Item,
-    Op,
     PutOp,
-    Result,
     get_text_at_path,
 )
-from langgraph.store.base.batch import AsyncBatchedBaseStore
 from langgraph.store.memory import InMemoryStore
 from tests.embed_test_utils import CharacterEmbeddings
-
-
-class MockAsyncBatchedStore(AsyncBatchedBaseStore):
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__()
-        self._store = InMemoryStore(**kwargs)
-
-    def batch(self, ops: Iterable[Op]) -> list[Result]:
-        return self._store.batch(ops)
-
-    async def abatch(self, ops: Iterable[Op]) -> list[Result]:
-        return self._store.batch(ops)
 
 
 def test_get_text_at_path() -> None:
@@ -99,59 +78,6 @@ def test_get_text_at_path() -> None:
     assert get_text_at_path(nested_data, "items[abc].value") == []
     assert get_text_at_path(nested_data, "{unclosed") == []
     assert get_text_at_path(nested_data, "nested[{invalid}]") == []
-
-
-async def test_async_batch_store(mocker: MockerFixture) -> None:
-    abatch = mocker.stub()
-
-    class MockStore(AsyncBatchedBaseStore):
-        def batch(self, ops: Iterable[Op]) -> list[Result]:
-            raise NotImplementedError
-
-        async def abatch(self, ops: Iterable[Op]) -> list[Result]:
-            assert all(isinstance(op, GetOp) for op in ops)
-            abatch(ops)
-            return [
-                Item(
-                    value={},
-                    key=getattr(op, "key", ""),
-                    namespace=getattr(op, "namespace", ()),
-                    created_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
-                    updated_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
-                )
-                for op in ops
-            ]
-
-    store = MockStore()
-
-    # concurrent calls are batched
-    results = await asyncio.gather(
-        store.aget(namespace=("a",), key="b"),
-        store.aget(namespace=("c",), key="d"),
-    )
-    assert results == [
-        Item(
-            value={},
-            key="b",
-            namespace=("a",),
-            created_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
-            updated_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
-        ),
-        Item(
-            value={},
-            key="d",
-            namespace=("c",),
-            created_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
-            updated_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
-        ),
-    ]
-    assert abatch.call_count == 1
-    assert [tuple(c.args[0]) for c in abatch.call_args_list] == [
-        (
-            GetOp(("a",), "b"),
-            GetOp(("c",), "d"),
-        ),
-    ]
 
 
 def test_list_namespaces_basic() -> None:
@@ -406,105 +332,6 @@ async def test_cannot_put_empty_namespace() -> None:
     store.delete(("langgraph", "foo"), "bar")
     assert store.get(("langgraph", "foo"), "bar") is None
 
-    async_store = MockAsyncBatchedStore()
-    doc = {"foo": "bar"}
-
-    with pytest.raises(InvalidNamespaceError):
-        await async_store.aput((), "foo", doc)
-
-    with pytest.raises(InvalidNamespaceError):
-        await async_store.aput(("the", "thing.about"), "foo", doc)
-
-    with pytest.raises(InvalidNamespaceError):
-        await async_store.aput(("some", "fun", ""), "foo", doc)
-
-    with pytest.raises(InvalidNamespaceError):
-        await async_store.aput(("langgraph", "foo"), "bar", doc)
-
-    await async_store.aput(("foo", "langgraph", "foo"), "bar", doc)
-    val = await async_store.aget(("foo", "langgraph", "foo"), "bar")
-    assert val is not None
-    assert val.value == doc
-    assert (await async_store.asearch(("foo", "langgraph", "foo")))[0].value == doc
-    assert (await async_store.asearch(("foo", "langgraph", "foo"), query="bar"))[
-        0
-    ].value == doc
-    await async_store.adelete(("foo", "langgraph", "foo"), "bar")
-    assert (await async_store.aget(("foo", "langgraph", "foo"), "bar")) is None
-
-    await async_store.abatch([PutOp(("valid", "namespace"), "key", doc)])
-    val = await async_store.aget(("valid", "namespace"), "key")
-    assert val is not None
-    assert val.value == doc
-    assert (await async_store.asearch(("valid", "namespace")))[0].value == doc
-    await async_store.adelete(("valid", "namespace"), "key")
-    assert (await async_store.aget(("valid", "namespace"), "key")) is None
-
-
-async def test_async_batch_store_deduplication(mocker: MockerFixture) -> None:
-    abatch = mocker.spy(InMemoryStore, "batch")
-    store = MockAsyncBatchedStore()
-
-    same_doc = {"value": "same"}
-    diff_doc = {"value": "different"}
-    await asyncio.gather(
-        store.aput(namespace=("test",), key="same", value=same_doc),
-        store.aput(namespace=("test",), key="different", value=diff_doc),
-    )
-    abatch.reset_mock()
-
-    results = await asyncio.gather(
-        store.aget(namespace=("test",), key="same"),
-        store.aget(namespace=("test",), key="same"),
-        store.aget(namespace=("test",), key="different"),
-    )
-
-    assert len(results) == 3
-    assert results[0] == results[1]
-    assert results[0] != results[2]
-    assert results[0].value == same_doc  # type: ignore
-    assert results[2].value == diff_doc  # type: ignore
-    assert len(abatch.call_args_list) == 1
-    ops = list(abatch.call_args_list[0].args[1])
-    assert len(ops) == 2
-    assert GetOp(("test",), "same") in ops
-    assert GetOp(("test",), "different") in ops
-
-    abatch.reset_mock()
-
-    doc1 = {"value": 1}
-    doc2 = {"value": 2}
-    results = await asyncio.gather(
-        store.aput(namespace=("test",), key="key", value=doc1),
-        store.aput(namespace=("test",), key="key", value=doc2),
-    )
-    assert len(abatch.call_args_list) == 1
-    ops = list(abatch.call_args_list[0].args[1])
-    assert len(ops) == 1
-    assert ops[0] == PutOp(("test",), "key", doc2)
-    assert len(results) == 2
-    assert all(result is None for result in results)
-
-    result = await store.aget(namespace=("test",), key="key")
-    assert result is not None
-    assert result.value == doc2
-
-    abatch.reset_mock()
-
-    results = await asyncio.gather(
-        store.asearch(("test",), filter={"value": 2}),
-        store.asearch(("test",), filter={"value": 2}),
-    )
-    assert len(abatch.call_args_list) == 1
-    ops = list(abatch.call_args_list[0].args[1])
-    assert len(ops) == 1
-    assert len(results) == 2
-    assert results[0] == results[1]
-    assert len(results[0]) == 1
-    assert results[0][0].value == doc2
-
-    abatch.reset_mock()
-
 
 @pytest.fixture
 def fake_embeddings() -> CharacterEmbeddings:
@@ -719,88 +546,6 @@ async def test_async_vector_search_with_filters(
     )
     assert len(results) == 1
     assert results[0].key == "doc3"
-
-
-async def test_async_batched_vector_search_concurrent(
-    fake_embeddings: CharacterEmbeddings,
-) -> None:
-    """Test concurrent vector search operations using async batched store."""
-    store = MockAsyncBatchedStore(
-        index={"dims": fake_embeddings.dims, "embed": fake_embeddings}
-    )
-
-    colors = ["red", "blue", "green", "yellow", "purple"]
-    items = ["apple", "car", "house", "book", "phone"]
-    scores = [3.0, 3.5, 4.0, 4.5, 5.0]
-
-    docs = []
-    for i in range(50):
-        color = colors[i % len(colors)]
-        item = items[i % len(items)]
-        score = scores[i % len(scores)]
-        docs.append(
-            (
-                f"doc{i}",
-                {"text": f"{color} {item}", "color": color, "score": score, "index": i},
-            )
-        )
-    coros = [
-        *[store.aput(("test",), key, value) for key, value in docs],
-        *[store.adelete(("test",), key) for key, value in docs],
-        *[store.aput(("test",), key, value) for key, value in docs],
-    ]
-    await asyncio.gather(*coros)
-
-    # Prepare multiple search queries with different filters
-    search_queries: list[tuple[str, dict[str, Any]]] = [
-        ("apple", {"color": "red"}),
-        ("car", {"color": "blue"}),
-        ("house", {"color": "green"}),
-        ("phone", {"score": {"$gt": 4.99}}),
-        ("book", {"score": {"$lte": 3.5}}),
-        ("apple", {"score": {"$gte": 3.0}, "color": "red"}),
-        ("car", {"score": {"$lt": 5.1}, "color": "blue"}),
-        ("house", {"index": {"$gt": 25}}),
-        ("phone", {"index": {"$lte": 10}}),
-    ]
-
-    all_results = await asyncio.gather(
-        *[
-            store.asearch(("test",), query=query, filter=filter_)
-            for query, filter_ in search_queries
-        ]
-    )
-
-    for results, (query, filter_) in zip(all_results, search_queries):
-        assert len(results) > 0, f"No results for query '{query}' with filter {filter_}"
-
-        for result in results:
-            if "color" in filter_:
-                assert result.value["color"] == filter_["color"]
-
-            if "score" in filter_:
-                score = result.value["score"]
-                for op, value in filter_["score"].items():
-                    if op == "$gt":
-                        assert score > value
-                    elif op == "$gte":
-                        assert score >= value
-                    elif op == "$lt":
-                        assert score < value
-                    elif op == "$lte":
-                        assert score <= value
-
-            if "index" in filter_:
-                index = result.value["index"]
-                for op, value in filter_["index"].items():
-                    if op == "$gt":
-                        assert index > value
-                    elif op == "$gte":
-                        assert index >= value
-                    elif op == "$lt":
-                        assert index < value
-                    elif op == "$lte":
-                        assert index <= value
 
 
 def test_vector_search_pagination(fake_embeddings: CharacterEmbeddings) -> None:

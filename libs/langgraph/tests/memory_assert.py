@@ -114,17 +114,6 @@ class MemorySaverAssertCheckpointMetadata(InMemorySaver):
             }
         }
 
-    async def aput(
-        self,
-        config: RunnableConfig,
-        checkpoint: Checkpoint,
-        metadata: CheckpointMetadata,
-        new_versions: ChannelVersions,
-    ) -> RunnableConfig:
-        return await asyncio.get_running_loop().run_in_executor(
-            None, self.put, config, checkpoint, metadata, new_versions
-        )
-
 
 class MemorySaverNoPending(InMemorySaver):
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:

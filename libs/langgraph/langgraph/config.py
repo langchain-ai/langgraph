@@ -1,5 +1,3 @@
-import asyncio
-import sys
 from typing import Any
 
 from langgraph.constants import CONF, CONFIG_KEY_STORE, CONFIG_KEY_STREAM_WRITER
@@ -13,14 +11,6 @@ def _no_op_stream_writer(c: Any) -> None:
 
 
 def get_config() -> RunnableConfig:
-    if sys.version_info < (3, 11):
-        try:
-            if asyncio.current_task():
-                raise RuntimeError(
-                    "Python 3.11 or later required to use this in an async context"
-                )
-        except RuntimeError:
-            pass
     if var_config := var_child_runnable_config.get():
         return var_config
     else:
@@ -43,12 +33,6 @@ def get_store() -> BaseStore:
     )
 
     ```
-
-    !!! warning "Async with Python < 3.11"
-
-        If you are using Python < 3.11 and are running LangGraph asynchronously,
-        `get_store()` won't work since it uses [contextvar](https://docs.python.org/3/library/contextvars.html) propagation (only available in [Python >= 3.11](https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task)).
-
 
     Example: Using with StateGraph
         ```python
@@ -89,13 +73,7 @@ def get_store() -> BaseStore:
 def get_stream_writer() -> StreamWriter:
     """Access LangGraph [StreamWriter][langgraph.types.StreamWriter] from inside a graph node or entrypoint task at runtime.
 
-    Can be called from inside any [StateGraph][langgraph.graph.StateGraph] node or
-    functional API [task][langgraph.func.task].
-
-    !!! warning "Async with Python < 3.11"
-
-        If you are using Python < 3.11 and are running LangGraph asynchronously,
-        `get_stream_writer()` won't work since it uses [contextvar](https://docs.python.org/3/library/contextvars.html) propagation (only available in [Python >= 3.11](https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task)).
+    Can be called from inside any [StateGraph][langgraph.graph.StateGraph] node.
 
     Example: Using with StateGraph
         ```python

@@ -114,12 +114,6 @@ class RunnableCallable(Runnable):
     def invoke(
         self, input: Any, config: Optional[AnyConfig] = None, **kwargs: Any
     ) -> Any:
-        if self.func is None:
-            raise TypeError(
-                f'No synchronous function provided to "{self.name}".'
-                "\nEither initialize with a synchronous function or invoke"
-                " via the async API (ainvoke, astream, etc.)"
-            )
         if config is None:
             config = ensure_config()
         if self.explode_args:

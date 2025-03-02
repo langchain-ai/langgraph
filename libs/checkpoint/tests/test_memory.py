@@ -77,7 +77,7 @@ class TestMemorySaver:
             "run_id": "my_run_id",
         }
 
-    async def test_search(self) -> None:
+    def test_search(self) -> None:
         # set up test
         # save checkpoints
         self.memory_saver.put(self.config_1, self.chkpnt_1, self.metadata_1, {})
@@ -125,51 +125,6 @@ class TestMemorySaver:
         } == {"", "inner"}
 
         # TODO: test before and limit params
-
-    async def test_asearch(self) -> None:
-        # set up test
-        # save checkpoints
-        self.memory_saver.put(self.config_1, self.chkpnt_1, self.metadata_1, {})
-        self.memory_saver.put(self.config_2, self.chkpnt_2, self.metadata_2, {})
-        self.memory_saver.put(self.config_3, self.chkpnt_3, self.metadata_3, {})
-
-        # call method / assertions
-        query_1 = {"source": "input"}  # search by 1 key
-        query_2 = {
-            "step": 1,
-            "writes": {"foo": "bar"},
-        }  # search by multiple keys
-        query_3: dict[str, Any] = {}  # search by no keys, return all checkpoints
-        query_4 = {"source": "update", "step": 1}  # no match
-
-        search_results_1 = [
-            c async for c in self.memory_saver.alist(None, filter=query_1)
-        ]
-        assert len(search_results_1) == 1
-        assert search_results_1[0].metadata == {
-            "thread_id": "thread-1",
-            "thread_ts": "1",
-            **self.metadata_1,
-        }
-
-        search_results_2 = [
-            c async for c in self.memory_saver.alist(None, filter=query_2)
-        ]
-        assert len(search_results_2) == 1
-        assert search_results_2[0].metadata == {
-            "thread_id": "thread-2",
-            **self.metadata_2,
-        }
-
-        search_results_3 = [
-            c async for c in self.memory_saver.alist(None, filter=query_3)
-        ]
-        assert len(search_results_3) == 3
-
-        search_results_4 = [
-            c async for c in self.memory_saver.alist(None, filter=query_4)
-        ]
-        assert len(search_results_4) == 0
 
 
 def test_memory_saver() -> None:

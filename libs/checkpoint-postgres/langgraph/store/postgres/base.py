@@ -849,9 +849,6 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
             cur.execute(query, params)
             results[idx] = [_decode_ns_bytes(row["truncated_prefix"]) for row in cur]
 
-    async def abatch(self, ops: Iterable[Op]) -> list[Result]:
-        return await asyncio.get_running_loop().run_in_executor(None, self.batch, ops)
-
     def setup(self) -> None:
         """Set up the store database.
 

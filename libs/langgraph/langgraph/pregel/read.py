@@ -62,11 +62,6 @@ class ChannelRead(RunnableCallable):
             config, select=self.channel, fresh=self.fresh, mapper=self.mapper
         )
 
-    async def _aread(self, _: Any, config: RunnableConfig) -> Any:
-        return self.do_read(
-            config, select=self.channel, fresh=self.fresh, mapper=self.mapper
-        )
-
     @staticmethod
     def do_read(
         config: RunnableConfig,

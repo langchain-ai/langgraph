@@ -59,35 +59,6 @@
     results = store.search(("docs",), query="python programming")
     ```
 
-    Async vector search using OpenAI SDK:
-    ```python
-    from openai import AsyncOpenAI
-    from langgraph.store.memory import InMemoryStore
-
-    client = AsyncOpenAI()
-
-    async def aembed_texts(texts: list[str]) -> list[list[float]]:
-        response = await client.embeddings.create(
-            model="text-embedding-3-small",
-            input=texts
-        )
-        return [e.embedding for e in response.data]
-
-    store = InMemoryStore(
-        index={
-            "dims": 1536,
-            "embed": aembed_texts
-        }
-    )
-
-    # Store documents
-    await store.aput(("docs",), "doc1", {"text": "Python tutorial"})
-    await store.aput(("docs",), "doc2", {"text": "TypeScript guide"})
-
-    # Search by similarity
-    results = await store.asearch(("docs",), query="python programming")
-    ```
-
 Warning:
     This store keeps all data in memory. Data is lost when the process exits.
     For persistence, use a database-backed store like PostgresStore.
@@ -99,7 +70,6 @@ Tip:
     ```
 """
 
-import asyncio
 import concurrent.futures as cf
 import functools
 import logging
@@ -214,21 +184,6 @@ class InMemoryStore(BaseStore):
         self._apply_put_ops(put_ops)
         return results
 
-    async def abatch(self, ops: Iterable[Op]) -> list[Result]:
-        # The batch/abatch methods are treated as internal.
-        # Users should access via put/search/get/list_namespaces/etc.
-        results, put_ops, search_ops = self._prepare_ops(ops)
-        if search_ops:
-            queryinmem_store = await self._aembed_search_queries(search_ops)
-            self._batch_search(search_ops, queryinmem_store, results)
-
-        to_embed = self._extract_texts(put_ops)
-        if to_embed and self.index_config and self.embeddings:
-            embeddings = await self.embeddings.aembed_documents(list(to_embed))
-            self._insertinmem_store(to_embed, embeddings)
-        self._apply_put_ops(put_ops)
-        return results
-
     # Helpers
 
     def _filter_items(self, op: SearchOp) -> list[tuple[Item, list[list[float]]]]:
@@ -277,21 +232,6 @@ class InMemoryStore(BaseStore):
                     }
                     for query, future in futures.items():
                         queryinmem_store[query] = future.result()
-
-        return queryinmem_store
-
-    async def _aembed_search_queries(
-        self,
-        search_ops: dict[int, tuple[SearchOp, list[tuple[Item, list[list[float]]]]]],
-    ) -> dict[str, list[float]]:
-        queryinmem_store = {}
-        if self.index_config and self.embeddings and search_ops:
-            queries = {op.query for (op, _) in search_ops.values() if op.query}
-
-            if queries:
-                coros = [self.embeddings.aembed_query(q) for q in list(queries)]
-                results = await asyncio.gather(*coros)
-                queryinmem_store = dict(zip(queries, results))
 
         return queryinmem_store
 
