@@ -29,8 +29,8 @@ public class PregelNodeTest {
         // Test minimal constructor
         PregelNode node1 = new PregelNode("node1", new TestAction());
         assertThat(node1.getName()).isEqualTo("node1");
-        assertThat(node1.getSubscribe()).isEmpty();
-        assertThat(node1.getTrigger()).isNull();
+        assertThat(node1.getChannels()).isEmpty();
+        assertThat(node1.getTriggerChannels()).isEmpty();
         assertThat(node1.getWriteEntries()).isEmpty();
         assertThat(node1.getRetryPolicy()).isNull();
 
@@ -38,8 +38,8 @@ public class PregelNodeTest {
         List<String> subscriptions = Arrays.asList("channel1", "channel2");
         PregelNode node2 = new PregelNode("node2", new TestAction(), subscriptions);
         assertThat(node2.getName()).isEqualTo("node2");
-        assertThat(node2.getSubscribe()).containsExactlyInAnyOrderElementsOf(subscriptions);
-        assertThat(node2.getTrigger()).isNull();
+        assertThat(node2.getChannels()).containsExactlyInAnyOrderElementsOf(subscriptions);
+        assertThat(node2.getTriggerChannels()).isEmpty();
         assertThat(node2.getWriteEntries()).isEmpty();
     }
 
@@ -47,47 +47,61 @@ public class PregelNodeTest {
     void testBuilderPattern() {
         // Test builder with all options
         PregelNode node = new PregelNode.Builder("builder-node", new TestAction())
-                .subscribe("channel1")
-                .subscribeAll(Arrays.asList("channel2", "channel3"))
-                .trigger("triggerChannel")
-                .writer("output1")
-                .writer(new ChannelWriteEntry("output2"))
-                .writeAllNames(Arrays.asList("output3", "output4"))
+                .channels("channel1")
+                .channels(Arrays.asList("channel2", "channel3"))
+                .triggerChannels("triggerChannel")
+                .writers("output1")
+                .writers(new ChannelWriteEntry("output2"))
+                .writers("output3", "output4")
                 .build();
 
         assertThat(node.getName()).isEqualTo("builder-node");
-        assertThat(node.getSubscribe()).containsExactlyInAnyOrder("channel1", "channel2", "channel3");
-        assertThat(node.getTrigger()).isEqualTo("triggerChannel");
+        assertThat(node.getChannels()).containsExactlyInAnyOrder("channel1", "channel2", "channel3");
+        assertThat(node.getTriggerChannels()).contains("triggerChannel");
         assertThat(node.getWriters()).containsExactlyInAnyOrder("output1", "output2", "output3", "output4");
     }
 
     @Test
-    void testSubscriptions() {
+    void testInputChannels() {
         PregelNode node = new PregelNode.Builder("test", new TestAction())
-                .subscribe("channel1")
-                .subscribe("channel2")
+                .channels("channel1")
+                .channels("channel2")
                 .build();
 
-        assertThat(node.subscribesTo("channel1")).isTrue();
-        assertThat(node.subscribesTo("channel2")).isTrue();
-        assertThat(node.subscribesTo("channel3")).isFalse();
+        assertThat(node.readsFrom("channel1")).isTrue();
+        assertThat(node.readsFrom("channel2")).isTrue();
+        assertThat(node.readsFrom("channel3")).isFalse();
     }
 
     @Test
-    void testTriggers() {
+    void testTriggerChannels() {
         PregelNode node = new PregelNode.Builder("test", new TestAction())
-                .trigger("triggerChannel")
+                .triggerChannels("triggerChannel")
                 .build();
 
-        assertThat(node.hasTrigger("triggerChannel")).isTrue();
-        assertThat(node.hasTrigger("otherTrigger")).isFalse();
+        assertThat(node.isTriggeredBy("triggerChannel")).isTrue();
+        assertThat(node.isTriggeredBy("otherTrigger")).isFalse();
     }
+    
+    @Test
+    void testMultipleTriggerChannels() {
+        PregelNode node = new PregelNode.Builder("test", new TestAction())
+                .triggerChannels("trigger1")
+                .triggerChannels("trigger2")
+                .build();
+
+        assertThat(node.isTriggeredBy("trigger1")).isTrue();
+        assertThat(node.isTriggeredBy("trigger2")).isTrue();
+        assertThat(node.isTriggeredBy("trigger3")).isFalse();
+        assertThat(node.getTriggerChannels()).containsExactlyInAnyOrder("trigger1", "trigger2");
+    }
+    
 
     @Test
     void testWriters() {
         PregelNode node = new PregelNode.Builder("test", new TestAction())
-                .writer("channel1")
-                .writer("channel2")
+                .writers("channel1")
+                .writers("channel2")
                 .build();
 
         assertThat(node.canWriteTo("channel1")).isTrue();
@@ -112,9 +126,9 @@ public class PregelNodeTest {
                 .build();
 
         PregelNode node = new PregelNode.Builder("test", new TestAction())
-                .writer(entry1)
-                .writer(entry2)
-                .writer(entry3)
+                .writers(entry1)
+                .writers(entry2)
+                .writers(entry3)
                 .build();
 
         // Test retrieving write entries
@@ -136,11 +150,11 @@ public class PregelNodeTest {
         // Setup test node with various write entries
         PregelNode node = new PregelNode.Builder("test", new TestAction())
                 // Passthrough entry
-                .writer("channel1")
+                .writers("channel1")
                 // Fixed value entry
-                .writer(new ChannelWriteEntry("channel2", "fixed-value"))
+                .writers(new ChannelWriteEntry("channel2", "fixed-value"))
                 // Entry with mapper
-                .writer(ChannelWriteEntry.builder("channel3")
+                .writers(ChannelWriteEntry.builder("channel3")
                         .passthrough()
                         .mapper(value -> "mapped-" + value)
                         .skipNone(false)

@@ -1,6 +1,7 @@
 package com.langgraph.pregel.execute;
 
 import com.langgraph.checkpoint.base.BaseCheckpointSaver;
+import com.langgraph.pregel.GraphRecursionError;
 import com.langgraph.pregel.StreamMode;
 import com.langgraph.pregel.registry.ChannelRegistry;
 import com.langgraph.pregel.state.Checkpoint;
@@ -91,7 +92,9 @@ public class PregelLoop {
         Map<String, Object> result = null;
         stepCount.set(0);
         
-        while (stepCount.incrementAndGet() <= maxSteps) {
+        while (stepCount.get() < maxSteps) {
+            stepCount.incrementAndGet();
+            
             // Execute a single superstep
             SuperstepResult stepResult = superstepManager.executeStep(context);
             
@@ -106,6 +109,22 @@ public class PregelLoop {
             // Check if we're done
             if (!stepResult.hasMoreWork()) {
                 break;
+            }
+        }
+        
+        // Since we've now exited the main loop, only throw an error if:
+        // 1. We've reached the max steps limit, AND
+        // 2. We still have more work to do (which means we didn't finish naturally)
+        if (stepCount.get() >= maxSteps) {
+            // Execute a "check" step to see if we still have more work
+            // This is also a form of final step which may complete the execution
+            SuperstepResult finalResult = superstepManager.executeStep(context);
+            result = finalResult.getState(); // update the result with this final step
+            
+            // Only if this final step shows there's STILL more work after reaching limits,
+            // we have a genuine recursion issue - otherwise we just completed normally
+            if (finalResult.hasMoreWork()) {
+                throw new GraphRecursionError("Maximum iteration steps reached: " + maxSteps);
             }
         }
         
@@ -139,7 +158,8 @@ public class PregelLoop {
         stepCount.set(0);
         boolean continueExecution = true;
         
-        while (continueExecution && stepCount.incrementAndGet() <= maxSteps) {
+        while (continueExecution && stepCount.get() < maxSteps) {
+            stepCount.incrementAndGet();
             // Execute a single superstep
             SuperstepResult stepResult = superstepManager.executeStep(context);
             
@@ -159,6 +179,28 @@ public class PregelLoop {
             // Check if we're done
             if (!stepResult.hasMoreWork()) {
                 break;
+            }
+        }
+        
+        // Only throw if we've both:
+        // 1. Reached max steps limit AND
+        // 2. The caller wants to continue (they returned true) AND
+        // 3. We actually still have more work in the execution engine
+        if (continueExecution && stepCount.get() >= maxSteps) {
+            // Execute one final step to see if it completes the execution
+            SuperstepResult finalResult = superstepManager.executeStep(context);
+            
+            // If the final step shows we still have work to do after reaching limits
+            // AND the callback wanted to continue, then we have a genuine recursion issue
+            if (finalResult.hasMoreWork()) {
+                throw new GraphRecursionError("Maximum iteration steps reached in streaming: " + maxSteps);
+            }
+            
+            // Otherwise we just completed normally on this final step
+            if (callback != null) {
+                // Call the callback with the final state
+                Map<String, Object> streamData = formatStreamOutput(finalResult, streamMode);
+                callback.apply(streamData); // Ignore the return value as we're done anyway
             }
         }
     }

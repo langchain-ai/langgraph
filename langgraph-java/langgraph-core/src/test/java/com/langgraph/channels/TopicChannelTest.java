@@ -14,9 +14,8 @@ public class TopicChannelTest {
     @Test
     void testEmptyChannel() {
         TopicChannel<String> channel = new TopicChannel<>(String.class);
-        assertThatThrownBy(channel::get)
-            .isInstanceOf(EmptyChannelException.class)
-            .hasMessageContaining("empty");
+        // With Python compatibility, uninitialized channels return empty list rather than throwing
+        assertThat(channel.get()).isNotNull().isEmpty();
     }
     
     @Test
@@ -46,9 +45,8 @@ public class TopicChannelTest {
         boolean updated = channel.update(Collections.emptyList());
         assertThat(updated).isFalse();
         
-        // Channel should still be empty
-        assertThatThrownBy(channel::get)
-            .isInstanceOf(EmptyChannelException.class);
+        // Channel should still be uninitialized (returns empty list with Python compatibility)
+        assertThat(channel.get()).isNotNull().isEmpty();
     }
     
     @Test
@@ -95,8 +93,7 @@ public class TopicChannelTest {
         assertThat(consumed).isTrue();
         
         // Channel should be empty after consuming
-        assertThatThrownBy(channel::get)
-            .isInstanceOf(EmptyChannelException.class);
+        assertThat(channel.get()).isNotNull().isEmpty();
         
         // Add new values after reset
         channel.update(Collections.singletonList("new"));
@@ -134,9 +131,9 @@ public class TopicChannelTest {
         TopicChannel<String> channel = new TopicChannel<>(String.class);
         channel.update(Collections.emptyList());
         
-        // Channel should still be empty
-        assertThatThrownBy(channel::checkpoint)
-            .isInstanceOf(EmptyChannelException.class);
+        // Channel should still be empty but return an empty list with Python compatibility
+        List<String> emptyCheckpoint = channel.checkpoint();
+        assertThat(emptyCheckpoint).isNotNull().isEmpty();
         
         // Now add some values and then create an empty topic
         channel.update(Collections.singletonList("test"));

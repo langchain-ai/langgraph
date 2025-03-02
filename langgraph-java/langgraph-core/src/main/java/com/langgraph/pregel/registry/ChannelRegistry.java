@@ -1,6 +1,7 @@
 package com.langgraph.pregel.registry;
 
 import com.langgraph.channels.BaseChannel;
+import com.langgraph.channels.EmptyChannelException;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -182,10 +183,12 @@ public class ChannelRegistry {
             String name = entry.getKey();
             BaseChannel channel = entry.getValue();
             
+            // Get value, will return null for uninitialized channels (Python compatibility)
             Object value = channel.getValue();
-            if (value != null) {
-                values.put(name, value);
-            }
+            
+            // Always include the channel in the output, even if value is null
+            // This ensures Python compatibility where channels are always present
+            values.put(name, value);
         }
         
         return values;
@@ -203,9 +206,13 @@ public class ChannelRegistry {
             String name = entry.getKey();
             BaseChannel channel = entry.getValue();
             
-            Object data = channel.checkpoint();
-            if (data != null) {
+            try {
+                Object data = channel.checkpoint();
+                // Always include the channel, even if data is null
                 checkpointData.put(name, data);
+            } catch (EmptyChannelException e) {
+                // Include null value for uninitialized channels for Python compatibility
+                checkpointData.put(name, null);
             }
         }
         

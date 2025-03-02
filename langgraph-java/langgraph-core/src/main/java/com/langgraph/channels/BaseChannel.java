@@ -17,11 +17,15 @@ public interface BaseChannel<V, U, C> {
      * Returns the current value of the channel without type safety checks.
      * This is mainly used internally by the framework.
      *
-     * @return Current value as Object
-     * @throws EmptyChannelException if the channel has not been updated yet
+     * @return Current value as Object, or null if the channel has not been updated yet
      */
-    default Object getValue() throws EmptyChannelException {
-        return get();
+    default Object getValue() {
+        try {
+            return get();
+        } catch (EmptyChannelException e) {
+            // Return null for Python compatibility when channel is not initialized
+            return null;
+        }
     }
     
     /**
@@ -30,6 +34,7 @@ public interface BaseChannel<V, U, C> {
     default void resetUpdated() {
         // Default implementation does nothing
     }
+    
     /**
      * Updates the channel with a sequence of values.
      * The order of the updates in the list is arbitrary.
@@ -87,4 +92,28 @@ public interface BaseChannel<V, U, C> {
      * @param key Channel key/name
      */
     void setKey(String key);
+    
+    /**
+     * Returns the Class representing the type of values stored in this channel.
+     * This is useful for runtime type checking.
+     * 
+     * @return The Class object for the value type
+     */
+    Class<V> getValueType();
+    
+    /**
+     * Returns the Class representing the type of updates this channel accepts.
+     * This enables runtime type checking of inputs.
+     * 
+     * @return The Class object for the update type
+     */
+    Class<U> getUpdateType();
+    
+    /**
+     * Returns the Class representing the type of checkpoint data for this channel.
+     * Useful for serialization and deserialization.
+     * 
+     * @return The Class object for the checkpoint type
+     */
+    Class<C> getCheckpointType();
 }

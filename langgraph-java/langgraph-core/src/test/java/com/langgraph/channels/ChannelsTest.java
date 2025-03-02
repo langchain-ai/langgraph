@@ -47,9 +47,8 @@ public class ChannelsTest {
         boolean consumed = resetChannel.consume();
         assertThat(consumed).isTrue();
         
-        // Channel should be empty
-        assertThatThrownBy(resetChannel::get)
-            .isInstanceOf(EmptyChannelException.class);
+        // Channel should be empty but not throw with Python compatibility
+        assertThat(resetChannel.get()).isEmpty();
         
         // Create with key
         TopicChannel<String> namedChannel = Channels.topic(String.class, "messages", false);

@@ -38,7 +38,7 @@ public class BinaryOperatorChannel<V> extends AbstractChannel<V, V, V> {
      * @param initialValue The initial value to use if none has been set yet
      */
     public BinaryOperatorChannel(Class<V> valueType, BinaryOperator<V> operator, V initialValue) {
-        super(valueType);
+        super(valueType, valueType, valueType); // For BinaryOperatorChannel, V=U=C
         this.operator = operator;
         this.initialValue = initialValue;
     }
@@ -52,7 +52,7 @@ public class BinaryOperatorChannel<V> extends AbstractChannel<V, V, V> {
      * @param initialValue The initial value to use if none has been set yet
      */
     public BinaryOperatorChannel(Class<V> valueType, String key, BinaryOperator<V> operator, V initialValue) {
-        super(valueType, key);
+        super(valueType, valueType, valueType, key); // For BinaryOperatorChannel, V=U=C
         this.operator = operator;
         this.initialValue = initialValue;
     }
@@ -84,10 +84,9 @@ public class BinaryOperatorChannel<V> extends AbstractChannel<V, V, V> {
     }
     
     @Override
-    @SuppressWarnings("unchecked")
     public BaseChannel<V, V, V> fromCheckpoint(V checkpoint) {
         BinaryOperatorChannel<V> newChannel = new BinaryOperatorChannel<>(
-            (Class<V>) valueType, key, operator, initialValue);
+            valueType, key, operator, initialValue);
         // Even null is a valid checkpoint value - it means the channel was initialized with null
         newChannel.value = checkpoint;
         newChannel.initialized = true;

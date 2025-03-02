@@ -68,6 +68,8 @@ public class SuperstepManager {
      */
     public SuperstepResult executeStep(Map<String, Object> context) {
         // Plan phase: Determine nodes to execute based on channel updates
+        // For Python compatibility, this will now return tasks even if no channels
+        // have been updated, ensuring nodes run with uninitialized channels
         List<PregelTask> tasks = taskPlanner.planAndPrioritize(updatedChannels);
         
         if (tasks.isEmpty()) {
@@ -87,15 +89,17 @@ public class SuperstepManager {
             
             // Prepare inputs for this task
             Map<String, Object> inputs = new HashMap<>();
-            for (String channelName : node.getSubscribe()) {
+            for (String channelName : node.getChannels()) {
                 if (channelRegistry.contains(channelName)) {
                     inputs.put(channelName, channelRegistry.get(channelName).getValue());
                 }
             }
             
-            // Add trigger value if present
-            if (task.getTrigger() != null && channelRegistry.contains(task.getTrigger())) {
-                inputs.put(task.getTrigger(), channelRegistry.get(task.getTrigger()).getValue());
+            // Add trigger channel values if present
+            for (String triggerChannel : node.getTriggerChannels()) {
+                if (channelRegistry.contains(triggerChannel)) {
+                    inputs.put(triggerChannel, channelRegistry.get(triggerChannel).getValue());
+                }
             }
             
             // Create executable task

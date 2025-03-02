@@ -131,16 +131,16 @@ public class NodeRegistryTest {
     void testGetSubscribers() {
         // Use PregelNode.Builder to add subscriptions
         mockNode1 = new PregelNode.Builder("node1", mockAction)
-            .subscribe("channel1")
+            .channels("channel1")
             .build();
         
         mockNode2 = new PregelNode.Builder("node2", mockAction)
-            .subscribe("channel2")
+            .channels("channel2")
             .build();
         
         mockNode3 = new PregelNode.Builder("node3", mockAction)
-            .subscribe("channel1")
-            .subscribe("channel2")
+            .channels("channel1")
+            .channels("channel2")
             .build();
         
         NodeRegistry registry = new NodeRegistry(Arrays.asList(mockNode1, mockNode2, mockNode3));
@@ -156,15 +156,15 @@ public class NodeRegistryTest {
     void testGetTriggered() {
         // Use PregelNode.Builder to set triggers
         mockNode1 = new PregelNode.Builder("node1", mockAction)
-            .trigger("trigger1")
+            .triggerChannels("trigger1")
             .build();
         
         mockNode2 = new PregelNode.Builder("node2", mockAction)
-            .trigger("trigger2")
+            .triggerChannels("trigger2")
             .build();
         
         mockNode3 = new PregelNode.Builder("node3", mockAction)
-            .trigger("trigger1")
+            .triggerChannels("trigger1")
             .build();
         
         NodeRegistry registry = new NodeRegistry(Arrays.asList(mockNode1, mockNode2, mockNode3));
@@ -180,16 +180,16 @@ public class NodeRegistryTest {
     void testGetWriters() {
         // Use PregelNode.Builder to set writers
         mockNode1 = new PregelNode.Builder("node1", mockAction)
-            .writer("channel1")
+            .writers("channel1")
             .build();
         
         mockNode2 = new PregelNode.Builder("node2", mockAction)
-            .writer("channel2")
+            .writers("channel2")
             .build();
         
         mockNode3 = new PregelNode.Builder("node3", mockAction)
-            .writer("channel1")
-            .writer("channel2")
+            .writers("channel1")
+            .writers("channel2")
             .build();
         
         NodeRegistry registry = new NodeRegistry(Arrays.asList(mockNode1, mockNode2, mockNode3));
@@ -213,11 +213,11 @@ public class NodeRegistryTest {
     void testValidateSubscriptionsFail() {
         // Use PregelNode.Builder to set subscriptions
         mockNode1 = new PregelNode.Builder("node1", mockAction)
-            .subscribe("validChannel")
+            .channels("validChannel")
             .build();
         
         mockNode2 = new PregelNode.Builder("node2", mockAction)
-            .subscribe("invalidChannel")
+            .channels("invalidChannel")
             .build();
         
         NodeRegistry registry = new NodeRegistry(Arrays.asList(mockNode1, mockNode2));
@@ -226,18 +226,18 @@ public class NodeRegistryTest {
         
         assertThatThrownBy(() -> registry.validateSubscriptions(validChannels))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("subscribes to non-existent channel");
+                .hasMessageContaining("reads from non-existent channel");
     }
     
     @Test
     void testValidateWritersFail() {
         // Use PregelNode.Builder to set writers
         mockNode1 = new PregelNode.Builder("node1", mockAction)
-            .writer("validChannel")
+            .writers("validChannel")
             .build();
         
         mockNode2 = new PregelNode.Builder("node2", mockAction)
-            .writer("invalidChannel")
+            .writers("invalidChannel")
             .build();
         
         NodeRegistry registry = new NodeRegistry(Arrays.asList(mockNode1, mockNode2));
@@ -253,11 +253,11 @@ public class NodeRegistryTest {
     void testValidateTriggersFail() {
         // Use PregelNode.Builder to set triggers
         mockNode1 = new PregelNode.Builder("node1", mockAction)
-            .trigger("validChannel")
+            .triggerChannels("validChannel")
             .build();
         
         mockNode2 = new PregelNode.Builder("node2", mockAction)
-            .trigger("invalidChannel")
+            .triggerChannels("invalidChannel")
             .build();
         
         NodeRegistry registry = new NodeRegistry(Arrays.asList(mockNode1, mockNode2));

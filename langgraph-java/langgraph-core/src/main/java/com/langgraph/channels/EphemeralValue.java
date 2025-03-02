@@ -24,8 +24,10 @@ public class EphemeralValue<V> extends AbstractChannel<V, V, Void> {
      *
      * @param valueType The class representing the value type of this channel
      */
+    @SuppressWarnings("unchecked")
     public EphemeralValue(Class<V> valueType) {
-        super(valueType);
+        // For EphemeralValue, V=U but C is Void (always null in checkpoint)
+        super(valueType, valueType, (Class<Void>) Void.class);
     }
     
     /**
@@ -34,8 +36,10 @@ public class EphemeralValue<V> extends AbstractChannel<V, V, Void> {
      * @param valueType The class representing the value type of this channel
      * @param key The key (name) of this channel
      */
+    @SuppressWarnings("unchecked")
     public EphemeralValue(Class<V> valueType, String key) {
-        super(valueType, key);
+        // For EphemeralValue, V=U but C is Void (always null in checkpoint)
+        super(valueType, valueType, (Class<Void>) Void.class, key);
     }
     
     @Override
@@ -70,10 +74,9 @@ public class EphemeralValue<V> extends AbstractChannel<V, V, Void> {
     }
     
     @Override
-    @SuppressWarnings("unchecked")
     public BaseChannel<V, V, Void> fromCheckpoint(Void checkpoint) {
         // Always start from an empty state, regardless of checkpoint
-        return new EphemeralValue<>((Class<V>) valueType, key);
+        return new EphemeralValue<>(valueType, key);
     }
     
     /**

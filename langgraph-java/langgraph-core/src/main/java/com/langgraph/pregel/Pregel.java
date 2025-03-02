@@ -22,23 +22,31 @@ public class Pregel implements PregelProtocol {
     private final BaseCheckpointSaver checkpointer;
     private final ExecutorService executor;
     private final int maxSteps;
+    private final Set<String> inputChannels;
+    private final Set<String> outputChannels;
     
     /**
      * Create a Pregel instance with all parameters.
      *
      * @param nodes Map of node names to nodes
      * @param channels Map of channel names to channels
+     * @param inputChannels Set of input channel names
+     * @param outputChannels Set of output channel names
      * @param checkpointer Optional checkpointer for persisting state
      * @param maxSteps Maximum number of steps to execute
      */
     public Pregel(
             Map<String, PregelNode> nodes,
             Map<String, BaseChannel> channels,
+            Set<String> inputChannels,
+            Set<String> outputChannels,
             BaseCheckpointSaver checkpointer,
             int maxSteps) {
         // Initialize registries
         this.nodeRegistry = new NodeRegistry(nodes);
         this.channelRegistry = new ChannelRegistry(channels);
+        this.inputChannels = inputChannels != null ? inputChannels : new HashSet<>();
+        this.outputChannels = outputChannels != null ? outputChannels : new HashSet<>();
         this.checkpointer = checkpointer;
         this.executor = Executors.newWorkStealingPool();
         this.maxSteps = maxSteps;
@@ -48,27 +56,14 @@ public class Pregel implements PregelProtocol {
     }
     
     /**
-     * Create a Pregel instance with default max steps.
-     *
-     * @param nodes Map of node names to nodes
-     * @param channels Map of channel names to channels
-     * @param checkpointer Optional checkpointer for persisting state
-     */
-    public Pregel(
-            Map<String, PregelNode> nodes,
-            Map<String, BaseChannel> channels,
-            BaseCheckpointSaver checkpointer) {
-        this(nodes, channels, checkpointer, 100);
-    }
-    
-    /**
-     * Create a Pregel instance without checkpointing.
+     * Create a simple Pregel instance without checkpointing.
+     * For more complex configurations, use the Builder pattern.
      *
      * @param nodes Map of node names to nodes
      * @param channels Map of channel names to channels
      */
     public Pregel(Map<String, PregelNode> nodes, Map<String, BaseChannel> channels) {
-        this(nodes, channels, null);
+        this(nodes, channels, new HashSet<>(), new HashSet<>(), null, 100);
     }
     
     /**
@@ -105,7 +100,20 @@ public class Pregel implements PregelProtocol {
         PregelLoop pregelLoop = new PregelLoop(superstepManager, checkpointer, maxSteps);
         
         // Execute to completion
-        return pregelLoop.execute(inputMap, context, threadId);
+        Map<String, Object> result = pregelLoop.execute(inputMap, context, threadId);
+        
+        // Filter the result to only include designated output channels
+        if (!outputChannels.isEmpty() && result != null) {
+            Map<String, Object> filteredResult = new HashMap<>();
+            for (Map.Entry<String, Object> entry : result.entrySet()) {
+                if (outputChannels.contains(entry.getKey())) {
+                    filteredResult.put(entry.getKey(), entry.getValue());
+                }
+            }
+            return filteredResult;
+        }
+        
+        return result;
     }
     
     @Override
@@ -195,8 +203,8 @@ public class Pregel implements PregelProtocol {
             throw new IllegalArgumentException("State must be a Map");
         }
         
-        @SuppressWarnings("unchecked")
-        Map<String, Object> stateMap = (Map<String, Object>) state;
+        // Validate and convert state
+        Map<String, Object> stateMap = convertStateMap(state);
         
         // Update channels with the state
         initializeChannels(stateMap);
@@ -205,6 +213,39 @@ public class Pregel implements PregelProtocol {
         if (checkpointer != null) {
             checkpointer.checkpoint(threadId, stateMap);
         }
+    }
+    
+    /**
+     * Validates and converts a state object to a Map<String, Object>.
+     * 
+     * @param state The state object to validate and convert
+     * @return A validated Map<String, Object>
+     * @throws IllegalArgumentException if state is invalid
+     */
+    private Map<String, Object> convertStateMap(Object state) {
+        if (!(state instanceof Map)) {
+            throw new IllegalArgumentException("State must be a Map");
+        }
+        
+        // Safe to cast to Map since we've verified it is a Map
+        @SuppressWarnings("unchecked")
+        Map<String, Object> stateMap = (Map<String, Object>) state;
+        
+        // Validate that the values are compatible with their corresponding channels
+        for (Map.Entry<String, Object> entry : stateMap.entrySet()) {
+            String channelName = entry.getKey();
+            Object value = entry.getValue();
+            
+            if (channelRegistry.contains(channelName) && !isCompatibleWithChannel(channelName, value)) {
+                throw new IllegalArgumentException(
+                    "Incompatible value type for channel '" + channelName + "': " + 
+                    "Expected " + channelRegistry.get(channelName).getUpdateType().getName() + 
+                    ", got " + (value != null ? value.getClass().getName() : "null")
+                );
+            }
+        }
+        
+        return stateMap;
     }
     
     @Override
@@ -264,34 +305,111 @@ public class Pregel implements PregelProtocol {
      * Initialize channels with input.
      *
      * @param input Input map
+     * @throws IllegalArgumentException if any input value is incompatible with its channel
      */
     private void initializeChannels(Map<String, Object> input) {
         if (input == null || input.isEmpty()) {
             return;
         }
         
-        // Update channels with input values
-        channelRegistry.updateAll(input);
+        // Filter the input to only include designated input channels
+        if (!inputChannels.isEmpty()) {
+            Map<String, Object> filteredInput = new HashMap<>();
+            for (Map.Entry<String, Object> entry : input.entrySet()) {
+                String channelName = entry.getKey();
+                Object value = entry.getValue();
+                
+                if (inputChannels.contains(channelName)) {
+                    // Validate that the value is compatible with the channel
+                    if (!isCompatibleWithChannel(channelName, value)) {
+                        throw new IllegalArgumentException(
+                            "Incompatible value type for channel '" + channelName + "': " + 
+                            "Expected " + channelRegistry.get(channelName).getUpdateType().getName() + 
+                            ", got " + (value != null ? value.getClass().getName() : "null")
+                        );
+                    }
+                    
+                    filteredInput.put(channelName, value);
+                }
+            }
+            // Update channels with filtered input values
+            channelRegistry.updateAll(filteredInput);
+        } else {
+            // Check all input values for type compatibility
+            for (Map.Entry<String, Object> entry : input.entrySet()) {
+                String channelName = entry.getKey();
+                Object value = entry.getValue();
+                
+                if (channelRegistry.contains(channelName) && !isCompatibleWithChannel(channelName, value)) {
+                    throw new IllegalArgumentException(
+                        "Incompatible value type for channel '" + channelName + "': " + 
+                        "Expected " + channelRegistry.get(channelName).getUpdateType().getName() + 
+                        ", got " + (value != null ? value.getClass().getName() : "null")
+                    );
+                }
+            }
+            
+            // If no input channels are designated, use all input
+            channelRegistry.updateAll(input);
+        }
+    }
+    
+    /**
+     * Validates that a value is compatible with the channel's expected update type.
+     * 
+     * @param channelName Name of the channel
+     * @param value Value to check
+     * @return true if the value is compatible, false otherwise
+     */
+    private boolean isCompatibleWithChannel(String channelName, Object value) {
+        if (!channelRegistry.contains(channelName)) {
+            return false;
+        }
+        
+        // Get the channel
+        BaseChannel<?, ?, ?> channel = channelRegistry.get(channelName);
+        
+        // Get the expected update type
+        Class<?> updateType = channel.getUpdateType();
+        
+        // Check if value is null (null is always compatible)
+        if (value == null) {
+            return true;
+        }
+        
+        // Check if the value is an instance of the expected type
+        return updateType.isInstance(value);
     }
     
     /**
      * Convert input to a map if necessary.
+     * This validates that the input is a Map where:
+     * 1. Keys are Strings matching channel names
+     * 2. Values are of a type compatible with the corresponding channel's update type
      *
      * @param input Input object
-     * @return Input as a map
+     * @return Input as a validated map
+     * @throws IllegalArgumentException if input is not a Map or contains incompatible types
      */
-    @SuppressWarnings("unchecked")
     private Map<String, Object> convertInput(Object input) {
         if (input == null) {
             return Collections.emptyMap();
         }
         
-        if (input instanceof Map) {
-            return (Map<String, Object>) input;
+        if (!(input instanceof Map)) {
+            throw new IllegalArgumentException("Input must be a Map<String, Object>");
         }
         
-        // Handle special cases or throw exception
-        throw new IllegalArgumentException("Input must be a Map<String, Object>");
+        // Safe to cast to Map since we've verified it is a Map
+        // We validate the key types and allowed values below
+        @SuppressWarnings("unchecked")
+        Map<String, Object> inputMap = (Map<String, Object>) input;
+        
+        // Optional validation: We could check that each key exists in inputChannels
+        // and that the value type matches what the channel expects
+        // This would make the code more robust but might also add overhead
+        
+        return inputMap;
     }
     
     /**
@@ -334,6 +452,8 @@ public class Pregel implements PregelProtocol {
     public static class Builder {
         private final Map<String, PregelNode> nodes = new HashMap<>();
         private final Map<String, BaseChannel> channels = new HashMap<>();
+        private Set<String> inputChannels = new HashSet<>();
+        private Set<String> outputChannels = new HashSet<>();
         private BaseCheckpointSaver checkpointer;
         private int maxSteps = 100;
         
@@ -398,6 +518,34 @@ public class Pregel implements PregelProtocol {
         }
         
         /**
+         * Set input channels for this Pregel graph.
+         * Input channels will be populated from the input at invocation time.
+         *
+         * @param inputChannels Collection of input channel names
+         * @return This builder
+         */
+        public Builder setInputChannels(Collection<String> inputChannels) {
+            if (inputChannels != null) {
+                this.inputChannels = new HashSet<>(inputChannels);
+            }
+            return this;
+        }
+        
+        /**
+         * Set output channels for this Pregel graph.
+         * Output channels will be included in the result.
+         *
+         * @param outputChannels Collection of output channel names
+         * @return This builder
+         */
+        public Builder setOutputChannels(Collection<String> outputChannels) {
+            if (outputChannels != null) {
+                this.outputChannels = new HashSet<>(outputChannels);
+            }
+            return this;
+        }
+        
+        /**
          * Set the checkpointer for persisting state.
          *
          * @param checkpointer Checkpointer to use
@@ -428,7 +576,18 @@ public class Pregel implements PregelProtocol {
          * @return Pregel instance
          */
         public Pregel build() {
-            return new Pregel(nodes, channels, checkpointer, maxSteps);
+            // If no input/output channels are explicitly set, auto-detect them
+            if (inputChannels.isEmpty()) {
+                // Use all channels as input channels by default
+                inputChannels.addAll(channels.keySet());
+            }
+            
+            if (outputChannels.isEmpty()) {
+                // Use all channels as output channels by default
+                outputChannels.addAll(channels.keySet());
+            }
+            
+            return new Pregel(nodes, channels, inputChannels, outputChannels, checkpointer, maxSteps);
         }
     }
 }

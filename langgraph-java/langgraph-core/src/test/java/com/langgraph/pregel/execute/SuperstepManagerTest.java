@@ -88,6 +88,21 @@ public class SuperstepManagerTest {
         public void setKey(String key) {
             this.key = key;
         }
+        
+        @Override
+        public Class<Object> getValueType() {
+            return Object.class;
+        }
+        
+        @Override
+        public Class<Object> getUpdateType() {
+            return Object.class;
+        }
+        
+        @Override
+        public Class<Object> getCheckpointType() {
+            return Object.class;
+        }
     }
     
     @BeforeEach
@@ -120,8 +135,12 @@ public class SuperstepManagerTest {
             return outputs;
         };
         
-        node1 = new PregelNode("node1", node1Action, Collections.singleton("input"));
-        node2 = new PregelNode("node2", node2Action, new HashSet<>(Arrays.asList("input", "intermediate")));
+        node1 = new PregelNode.Builder("node1", node1Action)
+                .channels(Collections.singleton("input"))
+                .build();
+        node2 = new PregelNode.Builder("node2", node2Action)
+                .channels(Arrays.asList("input", "intermediate"))
+                .build();
         
         nodeRegistry.register(node1);
         nodeRegistry.register(node2);
@@ -193,7 +212,9 @@ public class SuperstepManagerTest {
             return outputs;
         };
         
-        PregelNode customNode1 = new PregelNode("node1", customNode1Action, Collections.singleton("input"));
+        PregelNode customNode1 = new PregelNode.Builder("node1", customNode1Action)
+                .channels(Collections.singleton("input"))
+                .build();
         
         // Re-register the node
         nodeRegistry = new NodeRegistry();
@@ -250,8 +271,12 @@ public class SuperstepManagerTest {
         };
         
         // Create and register the nodes
-        PregelNode customNode1 = new PregelNode("node1", node1Action, Collections.singleton("input"));
-        PregelNode customNode2 = new PregelNode("node2", node2Action, new HashSet<>(Arrays.asList("input", "intermediate")));
+        PregelNode customNode1 = new PregelNode.Builder("node1", node1Action)
+                .channels(Collections.singleton("input"))
+                .build();
+        PregelNode customNode2 = new PregelNode.Builder("node2", node2Action)
+                .channels(Arrays.asList("input", "intermediate"))
+                .build();
         
         nodeRegistry = new NodeRegistry();
         nodeRegistry.register(customNode1);
@@ -305,7 +330,9 @@ public class SuperstepManagerTest {
             throw nodeException;
         };
         
-        PregelNode failingNode = new PregelNode("node1", failingAction, Collections.singleton("input"));
+        PregelNode failingNode = new PregelNode.Builder("node1", failingAction)
+                .channels(Collections.singleton("input"))
+                .build();
         
         nodeRegistry = new NodeRegistry();
         nodeRegistry.register(failingNode);
@@ -418,7 +445,9 @@ public class SuperstepManagerTest {
             return outputs;
         };
         
-        PregelNode customNode = new PregelNode("node1", customAction, Collections.singleton("input"));
+        PregelNode customNode = new PregelNode.Builder("node1", customAction)
+                .channels(Collections.singleton("input"))
+                .build();
         
         nodeRegistry = new NodeRegistry();
         nodeRegistry.register(customNode);

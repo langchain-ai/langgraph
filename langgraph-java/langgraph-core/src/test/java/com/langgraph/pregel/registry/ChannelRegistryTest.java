@@ -223,10 +223,10 @@ public class ChannelRegistryTest {
         
         assertThat(updatedChannels).containsExactlyInAnyOrder("channel1", "channel3");
         
-        // Verify the actual state instead of mock interactions
+        // Verify the actual state
         assertThat(channel1.get()).isEqualTo("value1");
-        assertThatThrownBy(() -> nonUpdatingChannel.get())
-                .isInstanceOf(EmptyChannelException.class);
+        // With Python compatibility, uninitialized channels return null
+        assertThat(nonUpdatingChannel.get()).isNull();
         assertThat(channel3.get()).isEqualTo(3.14);
     }
     
@@ -260,10 +260,13 @@ public class ChannelRegistryTest {
         
         Map<String, Object> values = registry.collectValues();
         
-        assertThat(values).hasSize(2);
+        // With Python compatibility all channels should be included
+        assertThat(values).hasSize(3);
         assertThat(values).containsEntry("channel1", "value1");
         assertThat(values).containsEntry("channel3", 42.0);
-        assertThat(values).doesNotContainKey("channel2");
+        assertThat(values).containsKey("channel2");
+        // channel2 is uninitialized so should have null value
+        assertThat(values.get("channel2")).isNull();
     }
     
     @Test
@@ -280,10 +283,13 @@ public class ChannelRegistryTest {
         
         Map<String, Object> checkpointData = registry.checkpoint();
         
-        assertThat(checkpointData).hasSize(2);
+        // With Python compatibility all channels should be included
+        assertThat(checkpointData).hasSize(3);
         assertThat(checkpointData).containsEntry("channel1", "checkpoint1");
         assertThat(checkpointData).containsEntry("channel3", 42.0);
-        assertThat(checkpointData).doesNotContainKey("channel2");
+        assertThat(checkpointData).containsKey("channel2");
+        // Uninitialized channel has null checkpoint with Python compatibility
+        assertThat(checkpointData.get("channel2")).isNull();
     }
     
     @Test

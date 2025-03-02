@@ -1,0 +1,5 @@
+dependencies {
+    // Internal dependencies
+    implementation project(':langgraph-checkpoint')
+    implementation project(':langgraph-core')
+}

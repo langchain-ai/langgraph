@@ -25,7 +25,8 @@ public class LastValue<V> extends AbstractChannel<V, V, V> {
      * @param valueType The class representing the value type of this channel
      */
     public LastValue(Class<V> valueType) {
-        super(valueType);
+        // For LastValue, V=U=C (they are all the same type)
+        super(valueType, valueType, valueType);
     }
     
     /**
@@ -35,7 +36,8 @@ public class LastValue<V> extends AbstractChannel<V, V, V> {
      * @param key The key (name) of this channel
      */
     public LastValue(Class<V> valueType, String key) {
-        super(valueType, key);
+        // For LastValue, V=U=C (they are all the same type)
+        super(valueType, valueType, valueType, key);
     }
     
     @Override
@@ -57,16 +59,14 @@ public class LastValue<V> extends AbstractChannel<V, V, V> {
     
     @Override
     public V get() throws EmptyChannelException {
-        if (!initialized) {
-            throw new EmptyChannelException("LastValue channel at key '" + key + "' is empty (never updated)");
-        }
+        // Return null if not initialized, for Python compatibility
+        // This prevents EmptyChannelException when accessing uninitialized channels
         return value;
     }
     
     @Override
-    @SuppressWarnings("unchecked")
     public BaseChannel<V, V, V> fromCheckpoint(V checkpoint) {
-        LastValue<V> newChannel = new LastValue<>((Class<V>) valueType, key);
+        LastValue<V> newChannel = new LastValue<>(valueType, key);
         // Even null is a valid checkpoint value - it means the channel was initialized with null
         newChannel.value = checkpoint;
         newChannel.initialized = true;

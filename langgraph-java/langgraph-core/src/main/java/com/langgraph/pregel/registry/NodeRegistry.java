@@ -140,26 +140,26 @@ public class NodeRegistry {
     }
     
     /**
-     * Get all nodes that subscribe to the given channel.
+     * Get all nodes that read from the given channel.
      *
      * @param channelName Channel name
-     * @return Set of nodes that subscribe to the channel
+     * @return Set of nodes that read from the channel
      */
     public Set<PregelNode> getSubscribers(String channelName) {
         return nodes.values().stream()
-                .filter(node -> node.subscribesTo(channelName))
+                .filter(node -> node.readsFrom(channelName))
                 .collect(Collectors.toSet());
     }
     
     /**
-     * Get all nodes that have the given trigger.
+     * Get all nodes that are triggered by the given channel.
      *
      * @param triggerName Trigger name
-     * @return Set of nodes that have the trigger
+     * @return Set of nodes that are triggered by the channel
      */
     public Set<PregelNode> getTriggered(String triggerName) {
         return nodes.values().stream()
-                .filter(node -> node.hasTrigger(triggerName))
+                .filter(node -> node.isTriggeredBy(triggerName))
                 .collect(Collectors.toSet());
     }
     
@@ -194,17 +194,17 @@ public class NodeRegistry {
     }
     
     /**
-     * Validate that nodes only subscribe to existing channels.
+     * Validate that nodes only read from existing channels.
      *
      * @param channelNames Set of valid channel names
-     * @throws IllegalStateException If a node subscribes to a non-existent channel
+     * @throws IllegalStateException If a node reads from a non-existent channel
      */
     public void validateSubscriptions(Set<String> channelNames) {
         for (PregelNode node : nodes.values()) {
-            for (String channelName : node.getSubscribe()) {
+            for (String channelName : node.getChannels()) {
                 if (!channelNames.contains(channelName)) {
                     throw new IllegalStateException(
-                            "Node '" + node.getName() + "' subscribes to non-existent channel '" + channelName + "'");
+                            "Node '" + node.getName() + "' reads from non-existent channel '" + channelName + "'");
                 }
             }
         }
@@ -228,17 +228,18 @@ public class NodeRegistry {
     }
     
     /**
-     * Validate that nodes only use existing triggers.
+     * Validate that nodes only use existing trigger channels.
      *
      * @param channelNames Set of valid channel names
-     * @throws IllegalStateException If a node uses a non-existent trigger
+     * @throws IllegalStateException If a node uses a non-existent trigger channel
      */
     public void validateTriggers(Set<String> channelNames) {
         for (PregelNode node : nodes.values()) {
-            String trigger = node.getTrigger();
-            if (trigger != null && !channelNames.contains(trigger)) {
-                throw new IllegalStateException(
-                        "Node '" + node.getName() + "' has non-existent trigger '" + trigger + "'");
+            for (String triggerChannel : node.getTriggerChannels()) {
+                if (!channelNames.contains(triggerChannel)) {
+                    throw new IllegalStateException(
+                            "Node '" + node.getName() + "' has non-existent trigger channel '" + triggerChannel + "'");
+                }
             }
         }
     }

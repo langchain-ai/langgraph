@@ -8,14 +8,32 @@ import java.util.stream.Collectors;
 
 /**
  * Represents an actor (node) in the Pregel system.
- * A node is a computational unit that subscribes to channels for inputs,
+ * A node is a computational unit that reads from input channels,
  * executes an action, and writes results to output channels.
+ * 
+ * <p>There are two key concepts for how nodes interact with channels:
+ * <ul>
+ *   <li>Input Channels ({@link #channels}): Channels from which the node reads values.
+ *       When a node executes, it receives values from all its input channels.
+ *   </li>
+ *   <li>Trigger Channels ({@link #triggerChannels}): Special channel(s) that determine when this node
+ *       should execute. A node will execute when any of its trigger channels are updated.
+ *   </li>
+ * </ul>
+ * </p>
+ * 
+ * <p>In Python LangGraph, nodes only run on the first superstep if they have the input channel
+ * as one of their triggers. In Java LangGraph, we now match this behavior - nodes only run
+ * in the first superstep if they have appropriate trigger channels defined. For proper 
+ * Python compatibility, it's important to explicitly define input channel as a trigger on 
+ * nodes that should execute first.
+ * </p>
  */
 public class PregelNode {
     private final String name;
     private final PregelExecutable action;
-    private final Set<String> subscribe;
-    private final String trigger;
+    private final Set<String> channels;         // Input channels (formerly "subscribe")
+    private final Set<String> triggerChannels;  // Trigger channels (formerly "trigger")
     private final List<ChannelWriteEntry> writers;
     private final RetryPolicy retryPolicy;
     
@@ -24,16 +42,16 @@ public class PregelNode {
      *
      * @param name Unique identifier for the node
      * @param action Function to execute when the node is triggered
-     * @param subscribe Channel names this node listens to for updates
-     * @param trigger Special condition for node execution
+     * @param channels Channel names this node reads values from
+     * @param triggerChannels Channel(s) that determine when this node executes
      * @param writeEntries Channel write entries that specify how to write outputs
      * @param retryPolicy Strategy for handling execution failures
      */
     public PregelNode(
             String name,
             PregelExecutable action,
-            Collection<String> subscribe,
-            String trigger,
+            Collection<String> channels,
+            Collection<String> triggerChannels,
             Collection<ChannelWriteEntry> writeEntries,
             RetryPolicy retryPolicy) {
         if (name == null || name.isEmpty()) {
@@ -45,41 +63,15 @@ public class PregelNode {
         
         this.name = name;
         this.action = action;
-        this.subscribe = subscribe != null ? new HashSet<>(subscribe) : Collections.emptySet();
-        this.trigger = trigger;
+        this.channels = channels != null ? new HashSet<>(channels) : Collections.emptySet();
+        this.triggerChannels = triggerChannels != null ? new HashSet<>(triggerChannels) : Collections.emptySet();
         this.writers = writeEntries != null ? new ArrayList<>(writeEntries) : Collections.emptyList();
         this.retryPolicy = retryPolicy;
     }
     
     /**
-     * Create a PregelNode with simple string channel names for outputs.
-     *
-     * @param name Unique identifier for the node
-     * @param action Function to execute when the node is triggered
-     * @param subscribe Channel names this node listens to for updates
-     * @param trigger Special condition for node execution
-     * @param outputChannels Channel names to write outputs
-     * @param retryPolicy Strategy for handling execution failures
-     */
-    public static PregelNode fromOutputChannels(
-            String name,
-            PregelExecutable action,
-            Collection<String> subscribe,
-            String trigger,
-            Collection<String> outputChannels,
-            RetryPolicy retryPolicy) {
-        
-        List<ChannelWriteEntry> writeEntries = outputChannels != null ? 
-                outputChannels.stream()
-                       .map(ChannelWriteEntry::new)
-                       .collect(Collectors.toList()) : 
-                Collections.emptyList();
-                
-        return new PregelNode(name, action, subscribe, trigger, writeEntries, retryPolicy);
-    }
-    
-    /**
      * Create a PregelNode with just name and action.
+     * For more complex configurations, use the Builder pattern.
      *
      * @param name Unique identifier for the node
      * @param action Function to execute when the node is triggered
@@ -89,14 +81,16 @@ public class PregelNode {
     }
     
     /**
-     * Create a PregelNode with name, action, and subscriptions.
+     * Create a PregelNode with name, action, and input channels.
+     * This constructor exists primarily for testing purposes.
+     * For more complex configurations, use the Builder pattern.
      *
      * @param name Unique identifier for the node
      * @param action Function to execute when the node is triggered
-     * @param subscribe Channel names this node listens to for updates
+     * @param channels Channel names this node reads values from
      */
-    public PregelNode(String name, PregelExecutable action, Collection<String> subscribe) {
-        this(name, action, subscribe, null, (Collection<ChannelWriteEntry>) null, null);
+    public PregelNode(String name, PregelExecutable action, Collection<String> channels) {
+        this(name, action, channels, null, (Collection<ChannelWriteEntry>) null, null);
     }
     
     /**
@@ -118,22 +112,23 @@ public class PregelNode {
     }
     
     /**
-     * Get the channels this node subscribes to.
+     * Get the input channels this node reads from.
      *
      * @return Set of channel names (immutable)
      */
-    public Set<String> getSubscribe() {
-        return Collections.unmodifiableSet(subscribe);
+    public Set<String> getChannels() {
+        return Collections.unmodifiableSet(channels);
     }
     
     /**
-     * Get the trigger condition for this node.
+     * Get the trigger channels for this node.
      *
-     * @return Trigger condition or null if not triggered
+     * @return Set of trigger channels (immutable)
      */
-    public String getTrigger() {
-        return trigger;
+    public Set<String> getTriggerChannels() {
+        return Collections.unmodifiableSet(triggerChannels);
     }
+    
     
     /**
      * Get the write entries for this node.
@@ -165,24 +160,25 @@ public class PregelNode {
     }
     
     /**
-     * Check if this node subscribes to a specific channel.
+     * Check if this node reads from a specific channel.
      *
      * @param channelName Channel name to check
-     * @return True if the node subscribes to the channel
+     * @return True if the node reads from the channel
      */
-    public boolean subscribesTo(String channelName) {
-        return subscribe.contains(channelName);
+    public boolean readsFrom(String channelName) {
+        return channels.contains(channelName);
     }
     
     /**
-     * Check if this node has a specific trigger.
+     * Check if this node is triggered by a specific channel.
      *
-     * @param triggerName Trigger name to check
-     * @return True if the node has the trigger
+     * @param channelName Channel name to check
+     * @return True if the node is triggered by the channel
      */
-    public boolean hasTrigger(String triggerName) {
-        return trigger != null && trigger.equals(triggerName);
+    public boolean isTriggeredBy(String channelName) {
+        return triggerChannels.contains(channelName);
     }
+    
     
     /**
      * Check if this node can write to a specific channel.
@@ -268,8 +264,8 @@ public class PregelNode {
     public String toString() {
         return "PregelNode{" +
                 "name='" + name + '\'' +
-                ", subscribes=" + subscribe +
-                (trigger != null ? ", trigger='" + trigger + '\'' : "") +
+                ", channels=" + channels +
+                ", triggerChannels=" + triggerChannels +
                 ", writers=" + writers +
                 '}';
     }
@@ -280,8 +276,8 @@ public class PregelNode {
     public static class Builder {
         private final String name;
         private final PregelExecutable action;
-        private Set<String> subscribe = new HashSet<>();
-        private String trigger;
+        private Set<String> channels = new HashSet<>();
+        private Set<String> triggerChannels = new HashSet<>();
         private List<ChannelWriteEntry> writers = new ArrayList<>();
         private RetryPolicy retryPolicy;
         
@@ -303,62 +299,104 @@ public class PregelNode {
         }
         
         /**
-         * Add a subscription to a channel.
+         * Add input channels that this node will read from.
          *
-         * @param channelName Channel name to subscribe to
+         * @param channelNames Channel names to read from (can be a single name or multiple names)
          * @return This builder
          */
-        public Builder subscribe(String channelName) {
-            if (channelName != null && !channelName.isEmpty()) {
-                subscribe.add(channelName);
-            }
-            return this;
-        }
-        
-        /**
-         * Add multiple subscriptions.
-         *
-         * @param channelNames Channel names to subscribe to
-         * @return This builder
-         */
-        public Builder subscribeAll(Collection<String> channelNames) {
+        public Builder channels(Collection<String> channelNames) {
             if (channelNames != null) {
-                channelNames.forEach(this::subscribe);
+                for (String channelName : channelNames) {
+                    if (channelName != null && !channelName.isEmpty()) {
+                        channels.add(channelName);
+                    }
+                }
             }
             return this;
         }
         
         /**
-         * Set the trigger.
+         * Add a single input channel that this node will read from.
          *
-         * @param trigger Trigger condition
+         * @param channelName Channel name to read from
          * @return This builder
          */
-        public Builder trigger(String trigger) {
-            this.trigger = trigger;
-            return this;
-        }
-        
-        /**
-         * Add a writer entry.
-         *
-         * @param writeEntry Channel write entry
-         * @return This builder
-         */
-        public Builder writer(ChannelWriteEntry writeEntry) {
-            if (writeEntry != null) {
-                writers.add(writeEntry);
+        public Builder channels(String channelName) {
+            if (channelName != null && !channelName.isEmpty()) {
+                channels.add(channelName);
             }
             return this;
         }
         
         /**
-         * Add a simple writer for backward compatibility.
+         * Add trigger channels that determine when this node executes.
+         *
+         * @param channelNames Channel names that trigger execution (can be a single name or multiple names)
+         * @return This builder
+         */
+        public Builder triggerChannels(Collection<String> channelNames) {
+            if (channelNames != null) {
+                for (String channelName : channelNames) {
+                    if (channelName != null && !channelName.isEmpty()) {
+                        triggerChannels.add(channelName);
+                    }
+                }
+            }
+            return this;
+        }
+        
+        /**
+         * Add a single trigger channel that determines when this node executes.
+         *
+         * @param channelName Channel name that triggers execution
+         * @return This builder
+         */
+        public Builder triggerChannels(String channelName) {
+            if (channelName != null && !channelName.isEmpty()) {
+                triggerChannels.add(channelName);
+            }
+            return this;
+        }
+        
+        
+        /**
+         * Add writers that specify where this node will write its output.
+         *
+         * @param entries Collection of ChannelWriteEntry objects
+         * @return This builder
+         */
+        public Builder writers(Collection<ChannelWriteEntry> entries) {
+            if (entries != null) {
+                for (ChannelWriteEntry entry : entries) {
+                    if (entry != null) {
+                        writers.add(entry);
+                    }
+                }
+            }
+            return this;
+        }
+        
+        /**
+         * Add a single writer that specifies where this node will write its output.
+         *
+         * @param entry ChannelWriteEntry object
+         * @return This builder
+         */
+        public Builder writers(ChannelWriteEntry entry) {
+            if (entry != null) {
+                writers.add(entry);
+            }
+            return this;
+        }
+        
+        /**
+         * Add a simple writer to the specified channel.
+         * The node's output value for this channel will be passed through.
          *
          * @param channelName Channel name this node can write to
          * @return This builder
          */
-        public Builder writer(String channelName) {
+        public Builder writers(String channelName) {
             if (channelName != null && !channelName.isEmpty()) {
                 writers.add(new ChannelWriteEntry(channelName));
             }
@@ -366,27 +404,33 @@ public class PregelNode {
         }
         
         /**
-         * Add multiple writer entries.
+         * Add multiple simple writers to the specified channels.
+         * The node's output values for these channels will be passed through.
          *
-         * @param writeEntries Collection of channel write entries
+         * @param channelNames Channel names this node can write to
          * @return This builder
          */
-        public Builder writeAll(Collection<ChannelWriteEntry> writeEntries) {
-            if (writeEntries != null) {
-                writeEntries.forEach(this::writer);
+        public Builder writers(String... channelNames) {
+            if (channelNames != null) {
+                for (String name : channelNames) {
+                    writers(name);
+                }
             }
             return this;
         }
         
         /**
-         * Add multiple simple writers for backward compatibility.
+         * Add multiple simple writers from a collection of channel names.
+         * The node's output values for these channels will be passed through.
          *
-         * @param writerNames Channel names this node can write to
+         * @param channelNames Collection of channel names this node can write to
          * @return This builder
          */
-        public Builder writeAllNames(Collection<String> writerNames) {
-            if (writerNames != null) {
-                writerNames.forEach(this::writer);
+        public Builder writersFromCollection(Collection<String> channelNames) {
+            if (channelNames != null) {
+                for (String name : channelNames) {
+                    writers(name);
+                }
             }
             return this;
         }
@@ -408,7 +452,7 @@ public class PregelNode {
          * @return PregelNode instance
          */
         public PregelNode build() {
-            return new PregelNode(name, action, subscribe, trigger, writers, retryPolicy);
+            return new PregelNode(name, action, channels, triggerChannels, writers, retryPolicy);
         }
     }
 }

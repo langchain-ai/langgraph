@@ -26,17 +26,17 @@ public class TaskPlannerTest {
         
         // Create real nodes
         node1 = new PregelNode.Builder("node1", simpleExecutable)
-                .subscribeAll(Collections.singleton("channel1"))
+                .channels(Collections.singleton("channel1"))
                 .build();
         
         node2 = new PregelNode.Builder("node2", simpleExecutable)
-                .subscribeAll(Arrays.asList("channel2", "channel3"))
+                .channels(Arrays.asList("channel2", "channel3"))
                 .build();
         
         testRetryPolicy = RetryPolicy.maxAttempts(3);
         
         node3 = new PregelNode.Builder("node3", simpleExecutable)
-                .trigger("channel4")
+                .triggerChannels("channel4")
                 .retryPolicy(testRetryPolicy)
                 .build();
         
@@ -56,14 +56,35 @@ public class TaskPlannerTest {
     
     @Test
     void testPlanWithEmptyUpdatedChannels() {
-        TaskPlanner planner = new TaskPlanner(nodes);
+        // Setup test data with input channel as trigger
+        PregelExecutable simpleExecutable = (inputs, context) -> Collections.emptyMap();
         
-        // Empty updated channels should return empty task list
+        // Create nodes with "input" as trigger
+        PregelNode inputNode = new PregelNode.Builder("inputNode", simpleExecutable)
+                .triggerChannels("input")
+                .build();
+                
+        Map<String, PregelNode> nodesWithInputTrigger = new HashMap<>();
+        nodesWithInputTrigger.put("inputNode", inputNode);
+        
+        // Create planner with nodes that have input trigger
+        TaskPlanner planner = new TaskPlanner(nodesWithInputTrigger);
+        
+        // With Python compatibility, only nodes with input trigger should execute on first run
         List<PregelTask> tasks = planner.plan(Collections.emptyList());
-        assertThat(tasks).isEmpty();
+        assertThat(tasks).hasSize(1);
+        assertThat(tasks).extracting(PregelTask::getNode)
+            .containsExactly("inputNode");
         
-        // Null updated channels should return empty task list
+        // Also test with null updated channels
         tasks = planner.plan(null);
+        assertThat(tasks).hasSize(1);
+        assertThat(tasks).extracting(PregelTask::getNode)
+            .containsExactly("inputNode");
+            
+        // Test with regular nodes (no input triggers) should return empty list
+        TaskPlanner regularPlanner = new TaskPlanner(nodes);
+        tasks = regularPlanner.plan(Collections.emptyList());
         assertThat(tasks).isEmpty();
     }
     

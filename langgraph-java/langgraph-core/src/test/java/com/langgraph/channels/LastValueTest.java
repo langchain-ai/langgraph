@@ -14,9 +14,8 @@ public class LastValueTest {
     @Test
     void testEmptyChannel() {
         LastValue<String> channel = new LastValue<>(String.class);
-        assertThatThrownBy(channel::get)
-            .isInstanceOf(EmptyChannelException.class)
-            .hasMessageContaining("empty");
+        // With Python compatibility, uninitialized channels return null rather than throwing
+        assertThat(channel.get()).isNull();
     }
     
     @Test
@@ -46,9 +45,8 @@ public class LastValueTest {
         boolean updated = channel.update(Collections.emptyList());
         assertThat(updated).isFalse();
         
-        // Channel should still be empty
-        assertThatThrownBy(channel::get)
-            .isInstanceOf(EmptyChannelException.class);
+        // Channel should still be uninitialized (returns null with Python compatibility)
+        assertThat(channel.get()).isNull();
     }
     
     @Test

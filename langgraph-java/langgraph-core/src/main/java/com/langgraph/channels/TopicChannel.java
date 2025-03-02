@@ -27,35 +27,61 @@ public class TopicChannel<V> extends AbstractChannel<List<V>, V, List<V>> {
     private final boolean resetOnConsume;
     
     /**
+     * The element type class.
+     */
+    private final Class<V> elementType;
+    
+    /**
      * Creates a new Topic channel with the specified value type.
      * By default, the channel will not reset after consumption.
      *
-     * @param valueType The class representing the value type of this channel
+     * @param elementType The class representing the element type within the list
      */
-    public TopicChannel(Class<V> valueType) {
-        this(valueType, false);
+    public TopicChannel(Class<V> elementType) {
+        this(elementType, false);
     }
     
     /**
      * Creates a new Topic channel with the specified value type and reset behavior.
      *
-     * @param valueType The class representing the value type of this channel
+     * @param elementType The class representing the element type within the list
      * @param resetOnConsume Whether to reset the channel after consume() is called
      */
-    public TopicChannel(Class<V> valueType, boolean resetOnConsume) {
-        super(valueType);
+    @SuppressWarnings("unchecked")
+    public TopicChannel(Class<V> elementType, boolean resetOnConsume) {
+        // For TopicChannel: 
+        // - Value type is List<V> but at runtime we can only get List.class
+        // - Update type is V (single elements are added)
+        // - Checkpoint type is List<V> (same as value type)
+        super(
+            (Class<List<V>>) (Class<?>) List.class, // Value type (List<V>)
+            elementType,                            // Update type (V)
+            (Class<List<V>>) (Class<?>) List.class  // Checkpoint type (List<V>)
+        );
+        this.elementType = elementType;
         this.resetOnConsume = resetOnConsume;
     }
     
     /**
      * Creates a new Topic channel with the specified value type, key, and reset behavior.
      *
-     * @param valueType The class representing the value type of this channel
+     * @param elementType The class representing the element type within the list
      * @param key The key (name) of this channel
      * @param resetOnConsume Whether to reset the channel after consume() is called
      */
-    public TopicChannel(Class<V> valueType, String key, boolean resetOnConsume) {
-        super(valueType, key);
+    @SuppressWarnings("unchecked")
+    public TopicChannel(Class<V> elementType, String key, boolean resetOnConsume) {
+        // For TopicChannel: 
+        // - Value type is List<V> but at runtime we can only get List.class
+        // - Update type is V (single elements are added)
+        // - Checkpoint type is List<V> (same as value type)
+        super(
+            (Class<List<V>>) (Class<?>) List.class, // Value type (List<V>)
+            elementType,                            // Update type (V)
+            (Class<List<V>>) (Class<?>) List.class, // Checkpoint type (List<V>)
+            key
+        );
+        this.elementType = elementType;
         this.resetOnConsume = resetOnConsume;
     }
     
@@ -72,16 +98,14 @@ public class TopicChannel<V> extends AbstractChannel<List<V>, V, List<V>> {
     
     @Override
     public List<V> get() throws EmptyChannelException {
-        if (!initialized) {
-            throw new EmptyChannelException("Topic channel at key '" + key + "' is empty (never updated)");
-        }
+        // Always return the current list (empty or not) for Python compatibility
+        // This prevents EmptyChannelException when accessing uninitialized channels
         return Collections.unmodifiableList(values);
     }
     
     @Override
-    @SuppressWarnings("unchecked")
     public BaseChannel<List<V>, V, List<V>> fromCheckpoint(List<V> checkpoint) {
-        TopicChannel<V> newChannel = new TopicChannel<>((Class<V>) valueType, key, resetOnConsume);
+        TopicChannel<V> newChannel = new TopicChannel<>(elementType, key, resetOnConsume);
         if (checkpoint != null) {
             newChannel.values = new ArrayList<>(checkpoint);
             newChannel.initialized = true;
@@ -97,6 +121,15 @@ public class TopicChannel<V> extends AbstractChannel<List<V>, V, List<V>> {
             return true;
         }
         return false;
+    }
+    
+    /**
+     * Returns the element type class.
+     *
+     * @return The element type class
+     */
+    public Class<V> getElementType() {
+        return elementType;
     }
     
     /**
@@ -125,7 +158,7 @@ public class TopicChannel<V> extends AbstractChannel<List<V>, V, List<V>> {
         }
         
         TopicChannel<?> other = (TopicChannel<?>) obj;
-        return valueType.equals(other.valueType) &&
+        return elementType.equals(other.elementType) &&
                key.equals(other.key) &&
                initialized == other.initialized &&
                resetOnConsume == other.resetOnConsume &&
@@ -139,7 +172,7 @@ public class TopicChannel<V> extends AbstractChannel<List<V>, V, List<V>> {
      */
     @Override
     public int hashCode() {
-        int result = valueType.hashCode();
+        int result = elementType.hashCode();
         result = 31 * result + key.hashCode();
         result = 31 * result + (initialized ? 1 : 0);
         result = 31 * result + (resetOnConsume ? 1 : 0);

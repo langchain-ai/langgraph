@@ -109,7 +109,6 @@ public class MsgPackSerializer implements ReflectionSerializer {
      * @param packer MessagePack packer
      * @throws IOException If packing fails
      */
-    @SuppressWarnings("unchecked")
     private void serializeObject(Object obj, MessageBufferPacker packer) throws IOException {
         if (obj == null) {
             packer.packNil();
@@ -120,7 +119,12 @@ public class MsgPackSerializer implements ReflectionSerializer {
         
         // Check for registered serializer
         if (serializers.containsKey(type)) {
-            TypeSerializer<Object> serializer = (TypeSerializer<Object>) serializers.get(type);
+            // This cast is safe because we only put serializers for a specific type in the map
+            TypeSerializer<?> untypedSerializer = serializers.get(type);
+            // We need this cast but it's type-safe because we only store TypeSerializer<T> for Class<T>
+            @SuppressWarnings("unchecked") 
+            TypeSerializer<Object> serializer = (TypeSerializer<Object>) untypedSerializer;
+            
             Object serialized = serializer.toSerializable(obj);
             
             // Pack as a special type
@@ -272,7 +276,6 @@ public class MsgPackSerializer implements ReflectionSerializer {
      * @return Deserialized object
      * @throws IOException If unpacking fails
      */
-    @SuppressWarnings("unchecked")
     private Object deserializeObject(MessageUnpacker unpacker) throws IOException {
         if (!unpacker.hasNext()) {
             throw new SerializationException("Unexpected end of data");
@@ -357,15 +360,20 @@ public class MsgPackSerializer implements ReflectionSerializer {
                         // Check for registered deserializer
                         if ("value".equals(secondKeyStr) && deserializers.containsKey(type)) {
                             Object serialized = deserializeObject(unpacker);
-                            TypeDeserializer<Object> deserializer = 
-                                (TypeDeserializer<Object>) deserializers.get(type);
+                            TypeDeserializer<?> untypedDeserializer = deserializers.get(type);
+                            // We need this cast but it's type-safe because we only store TypeDeserializer<T> for Class<T>
+                            @SuppressWarnings("unchecked")
+                            TypeDeserializer<Object> deserializer = (TypeDeserializer<Object>) untypedDeserializer;
                             return deserializer.fromSerialized(serialized);
                         }
                         
                         // Handle enums
                         if ("value".equals(secondKeyStr) && type.isEnum()) {
                             String enumValue = (String) deserializeObject(unpacker);
-                            return Enum.valueOf((Class<Enum>) type, enumValue);
+                            // This cast is required for enum handling and is type-safe
+                            @SuppressWarnings("unchecked")
+                            Class<Enum> enumClass = (Class<Enum>) type;
+                            return Enum.valueOf(enumClass, enumValue);
                         }
                         
                         // Handle records
