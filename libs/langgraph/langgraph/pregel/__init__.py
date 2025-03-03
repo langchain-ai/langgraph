@@ -5,6 +5,7 @@ import concurrent
 import concurrent.futures
 import queue
 from collections import deque
+from dataclasses import is_dataclass
 from functools import partial
 from typing import (
     Any,
@@ -120,7 +121,7 @@ from langgraph.utils.config import (
     recast_checkpoint_ns,
 )
 from langgraph.utils.fields import get_enhanced_type_hints
-from langgraph.utils.pydantic import create_model
+from langgraph.utils.pydantic import create_model, is_supported_by_pydantic
 from langgraph.utils.queue import AsyncQueue, SyncQueue  # type: ignore[attr-defined]
 
 WriteValue = Union[Callable[[Input], Output], Any]
@@ -613,11 +614,11 @@ class Pregel(PregelProtocol):
     def config_schema(
         self, *, include: Optional[Sequence[str]] = None
     ) -> Type[BaseModel]:
-        # If the config type is not set explicitly OR
-        # if the checkpointer is turned on, then we'll want to infer the config.
-        # When the checkpointer is turned on, additional fields are injected
-        # into the configurable object which correspond to the checkpointing parameters.
-        if self.config_type is None or self.checkpointer is not None:
+        # If the config type is not set explicitly, we will try to infer it.
+        # If the config type is provided, but isn't directly supported by pydantic
+        # (e.g., vanilla python class), we will also delegate to the parent class,
+        # which handles cases where Pydantic doesn't support the type.
+        if self.config_type is None or not is_supported_by_pydantic(self.config_type):
             return super().config_schema(include=include)
 
         include = include or []
