@@ -20,26 +20,58 @@ public class EphemeralValue<V> extends AbstractChannel<V, V, Void> {
     private boolean initialized = false;
     
     /**
-     * Creates a new EphemeralValue channel with the specified value type.
+     * Creates a new EphemeralValue channel using TypeReference with the specified value type.
      *
-     * @param valueType The class representing the value type of this channel
+     * @param valueTypeRef TypeReference capturing the value type
      */
     @SuppressWarnings("unchecked")
-    public EphemeralValue(Class<V> valueType) {
+    protected EphemeralValue(TypeReference<V> valueTypeRef) {
         // For EphemeralValue, V=U but C is Void (always null in checkpoint)
-        super(valueType, valueType, (Class<Void>) Void.class);
+        super(valueTypeRef, valueTypeRef, new TypeReference<Void>() {});
     }
     
     /**
-     * Creates a new EphemeralValue channel with the specified value type and key.
+     * Creates a new EphemeralValue channel using TypeReference with specified key.
      *
-     * @param valueType The class representing the value type of this channel
+     * @param valueTypeRef TypeReference capturing the value type
      * @param key The key (name) of this channel
      */
     @SuppressWarnings("unchecked")
-    public EphemeralValue(Class<V> valueType, String key) {
+    protected EphemeralValue(TypeReference<V> valueTypeRef, String key) {
         // For EphemeralValue, V=U but C is Void (always null in checkpoint)
-        super(valueType, valueType, (Class<Void>) Void.class, key);
+        super(valueTypeRef, valueTypeRef, new TypeReference<Void>() {}, key);
+    }
+    
+    /**
+     * Factory method to create an EphemeralValue channel with proper generic type capture.
+     * 
+     * <p>Example usage:
+     * <pre>
+     * EphemeralValue&lt;String&gt; channel = EphemeralValue.&lt;String&gt;create();
+     * </pre>
+     * 
+     * @param <T> The type parameter for the channel
+     * @return A new EphemeralValue channel with the captured type parameter
+     */
+    public static <T> EphemeralValue<T> create() {
+        return new EphemeralValue<>(new TypeReference<T>() {});
+    }
+    
+    /**
+     * Factory method to create an EphemeralValue channel with proper generic type capture
+     * and a specified key.
+     * 
+     * <p>Example usage:
+     * <pre>
+     * EphemeralValue&lt;String&gt; channel = EphemeralValue.&lt;String&gt;create("myChannel");
+     * </pre>
+     * 
+     * @param <T> The type parameter for the channel
+     * @param key The key (name) for the channel
+     * @return A new EphemeralValue channel with the captured type parameter and specified key
+     */
+    public static <T> EphemeralValue<T> create(String key) {
+        return new EphemeralValue<>(new TypeReference<T>() {}, key);
     }
     
     @Override
@@ -76,7 +108,7 @@ public class EphemeralValue<V> extends AbstractChannel<V, V, Void> {
     @Override
     public BaseChannel<V, V, Void> fromCheckpoint(Void checkpoint) {
         // Always start from an empty state, regardless of checkpoint
-        return new EphemeralValue<>(valueType, key);
+        return new EphemeralValue<>(valueTypeRef, key);
     }
     
     /**
@@ -103,11 +135,12 @@ public class EphemeralValue<V> extends AbstractChannel<V, V, Void> {
         if (!(obj instanceof EphemeralValue)) {
             return false;
         }
+        if (!super.equals(obj)) {
+            return false;
+        }
         
         EphemeralValue<?> other = (EphemeralValue<?>) obj;
-        return valueType.equals(other.valueType) &&
-               key.equals(other.key) &&
-               initialized == other.initialized &&
+        return initialized == other.initialized &&
                (value == null ? other.value == null : value.equals(other.value));
     }
     
@@ -118,8 +151,7 @@ public class EphemeralValue<V> extends AbstractChannel<V, V, Void> {
      */
     @Override
     public int hashCode() {
-        int result = valueType.hashCode();
-        result = 31 * result + key.hashCode();
+        int result = super.hashCode();
         result = 31 * result + (initialized ? 1 : 0);
         result = 31 * result + (value != null ? value.hashCode() : 0);
         return result;

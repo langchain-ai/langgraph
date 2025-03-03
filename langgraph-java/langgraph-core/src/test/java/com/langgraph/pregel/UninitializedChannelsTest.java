@@ -2,6 +2,7 @@ package com.langgraph.pregel;
 
 import com.langgraph.channels.BaseChannel;
 import com.langgraph.channels.LastValue;
+import com.langgraph.channels.TypeReference;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -43,8 +44,8 @@ public class UninitializedChannelsTest {
         .build();
         
         // Create channels without initializing them
-        LastValue<Integer> inputChannel = new LastValue<>(Integer.class, "input");
-        LastValue<Integer> outputChannel = new LastValue<>(Integer.class, "output");
+        LastValue<Integer> inputChannel = LastValue.<Integer>create("input");
+        LastValue<Integer> outputChannel = LastValue.<Integer>create("output");
         
         // Note: We intentionally don't initialize the channels with update()
         
@@ -113,9 +114,9 @@ public class UninitializedChannelsTest {
         .build();
         
         // Create channels without initialization
-        LastValue<Integer> initialChannel = new LastValue<>(Integer.class, "initial");
-        LastValue<Integer> intermediateChannel = new LastValue<>(Integer.class, "intermediate");
-        LastValue<Integer> finalChannel = new LastValue<>(Integer.class, "final");
+        LastValue<Integer> initialChannel = LastValue.<Integer>create("initial");
+        LastValue<Integer> intermediateChannel = LastValue.<Integer>create("intermediate");
+        LastValue<Integer> finalChannel = LastValue.<Integer>create("final");
         
         Map<String, BaseChannel> channels = new HashMap<>();
         channels.put("initial", initialChannel);
@@ -175,9 +176,9 @@ public class UninitializedChannelsTest {
         .build();
         
         // Create channels - one initialized, one not
-        LastValue<Integer> value1Channel = new LastValue<>(Integer.class, "value1");
-        LastValue<Integer> value2Channel = new LastValue<>(Integer.class, "value2");
-        LastValue<Integer> resultChannel = new LastValue<>(Integer.class, "result");
+        LastValue<Integer> value1Channel = LastValue.<Integer>create("value1");
+        LastValue<Integer> value2Channel = LastValue.<Integer>create("value2");
+        LastValue<Integer> resultChannel = LastValue.<Integer>create("result");
         
         // This test specifically tests mixing pre-initialized and uninitialized channels
         // We intentionally initialize one channel but not the other to test the behavior

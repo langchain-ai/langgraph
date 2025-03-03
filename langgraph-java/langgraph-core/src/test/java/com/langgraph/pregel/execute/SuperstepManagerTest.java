@@ -30,8 +30,8 @@ public class SuperstepManagerTest {
     private TaskExecutor taskExecutor;
     private Map<String, Object> context;
     
-    private PregelNode node1;
-    private PregelNode node2;
+    private PregelNode<Object, Object> node1;
+    private PregelNode<Object, Object> node2;
     private TestChannel inputChannel;
     private TestChannel intermediateChannel;
     
@@ -146,7 +146,7 @@ public class SuperstepManagerTest {
         nodeRegistry.register(node2);
         
         // Setup task components
-        Map<String, PregelNode> nodesMap = new HashMap<>();
+        Map<String, PregelNode<?, ?>> nodesMap = new HashMap<>();
         nodesMap.put("node1", node1);
         nodesMap.put("node2", node2);
         taskPlanner = new TaskPlanner(nodesMap);
@@ -177,7 +177,7 @@ public class SuperstepManagerTest {
     @Test
     void testExecuteStepWithNoTasks() {
         // Create specialized TaskPlanner that returns empty task list
-        Map<String, PregelNode> nodes = new HashMap<>();
+        Map<String, PregelNode<?, ?>> nodes = new HashMap<>();
         nodes.put("node1", node1);
         nodes.put("node2", node2);
         
@@ -226,7 +226,7 @@ public class SuperstepManagerTest {
         channelRegistry.register("output", outputChannel);
         
         // Create specialized TaskPlanner that returns a single task for node1
-        Map<String, PregelNode> nodes = new HashMap<>();
+        Map<String, PregelNode<?, ?>> nodes = new HashMap<>();
         nodes.put("node1", customNode1);
         
         TaskPlanner singleTaskPlanner = new TaskPlanner(nodes) {
@@ -288,7 +288,7 @@ public class SuperstepManagerTest {
         channelRegistry.register("output", outputChannel);
         
         // Create specialized TaskPlanner that returns multiple tasks
-        Map<String, PregelNode> nodes = new HashMap<>();
+        Map<String, PregelNode<?, ?>> nodes = new HashMap<>();
         nodes.put("node1", customNode1);
         nodes.put("node2", customNode2);
         
@@ -338,7 +338,7 @@ public class SuperstepManagerTest {
         nodeRegistry.register(failingNode);
         
         // Create specialized TaskPlanner that returns a task for the failing node
-        Map<String, PregelNode> nodes = new HashMap<>();
+        Map<String, PregelNode<?, ?>> nodes = new HashMap<>();
         nodes.put("node1", failingNode);
         
         TaskPlanner exceptionTaskPlanner = new TaskPlanner(nodes) {
@@ -397,7 +397,7 @@ public class SuperstepManagerTest {
     @Test
     void testExecuteStepClearsUpdatedChannels() {
         // Create a special TaskPlanner for this test
-        Map<String, PregelNode> nodes = new HashMap<>();
+        Map<String, PregelNode<?, ?>> nodes = new HashMap<>();
         nodes.put("node1", node1);
         nodes.put("node2", node2);
         
@@ -458,7 +458,7 @@ public class SuperstepManagerTest {
         channelRegistry.register("output", outputChannel);
         
         // Create specialized TaskPlanner that returns a single task for node1
-        Map<String, PregelNode> nodes = new HashMap<>();
+        Map<String, PregelNode<?, ?>> nodes = new HashMap<>();
         nodes.put("node1", customNode);
         
         TaskPlanner singleTaskPlanner = new TaskPlanner(nodes) {

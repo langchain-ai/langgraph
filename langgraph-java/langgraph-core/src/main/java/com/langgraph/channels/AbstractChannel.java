@@ -1,5 +1,7 @@
 package com.langgraph.channels;
 
+import java.lang.reflect.Type;
+
 /**
  * Abstract base implementation of BaseChannel that provides common functionality.
  *
@@ -9,19 +11,19 @@ package com.langgraph.channels;
  */
 public abstract class AbstractChannel<V, U, C> implements BaseChannel<V, U, C> {
     /**
-     * The value type class.
+     * The full generic type information for value type.
      */
-    protected final Class<V> valueType;
+    protected final TypeReference<V> valueTypeRef;
     
     /**
-     * The update type class.
+     * The full generic type information for update type.
      */
-    protected final Class<U> updateType;
+    protected final TypeReference<U> updateTypeRef;
     
     /**
-     * The checkpoint type class.
+     * The full generic type information for checkpoint type.
      */
-    protected final Class<C> checkpointType;
+    protected final TypeReference<C> checkpointTypeRef;
     
     /**
      * The channel key (name).
@@ -29,30 +31,31 @@ public abstract class AbstractChannel<V, U, C> implements BaseChannel<V, U, C> {
     protected String key = "";
     
     /**
-     * Creates a new channel with the specified type information.
+     * Creates a new channel with full generic type information.
      * 
-     * @param valueType The class representing the value type of this channel
-     * @param updateType The class representing the update type of this channel
-     * @param checkpointType The class representing the checkpoint type of this channel
+     * @param valueTypeRef TypeReference for the value type
+     * @param updateTypeRef TypeReference for the update type
+     * @param checkpointTypeRef TypeReference for the checkpoint type
      */
-    protected AbstractChannel(Class<V> valueType, Class<U> updateType, Class<C> checkpointType) {
-        this.valueType = valueType;
-        this.updateType = updateType;
-        this.checkpointType = checkpointType;
+    protected AbstractChannel(TypeReference<V> valueTypeRef, TypeReference<U> updateTypeRef, TypeReference<C> checkpointTypeRef) {
+        this.valueTypeRef = valueTypeRef;
+        this.updateTypeRef = updateTypeRef;
+        this.checkpointTypeRef = checkpointTypeRef;
     }
     
     /**
-     * Creates a new channel with the specified type information and key.
+     * Creates a new channel with full generic type information and key.
      * 
-     * @param valueType The class representing the value type of this channel
-     * @param updateType The class representing the update type of this channel
-     * @param checkpointType The class representing the checkpoint type of this channel
+     * @param valueTypeRef TypeReference for the value type
+     * @param updateTypeRef TypeReference for the update type
+     * @param checkpointTypeRef TypeReference for the checkpoint type
      * @param key The key (name) of this channel
      */
-    protected AbstractChannel(Class<V> valueType, Class<U> updateType, Class<C> checkpointType, String key) {
-        this.valueType = valueType;
-        this.updateType = updateType;
-        this.checkpointType = checkpointType;
+    protected AbstractChannel(TypeReference<V> valueTypeRef, TypeReference<U> updateTypeRef, 
+                              TypeReference<C> checkpointTypeRef, String key) {
+        this.valueTypeRef = valueTypeRef;
+        this.updateTypeRef = updateTypeRef;
+        this.checkpointTypeRef = checkpointTypeRef;
         this.key = key;
     }
     
@@ -88,16 +91,54 @@ public abstract class AbstractChannel<V, U, C> implements BaseChannel<V, U, C> {
     
     @Override
     public Class<V> getValueType() {
-        return valueType;
+        return valueTypeRef.getRawClass();
     }
     
     @Override
     public Class<U> getUpdateType() {
-        return updateType;
+        return updateTypeRef.getRawClass();
     }
     
     @Override
     public Class<C> getCheckpointType() {
-        return checkpointType;
+        return checkpointTypeRef.getRawClass();
+    }
+    
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        
+        AbstractChannel<?, ?, ?> that = (AbstractChannel<?, ?, ?>) o;
+        
+        // Compare key, valueTypeRef, updateTypeRef, and checkpointTypeRef
+        // The exact comparison of stored values is responsibility of subclasses
+        if (!key.equals(that.key)) return false;
+        if (!valueTypeRef.equals(that.valueTypeRef)) return false;
+        if (!updateTypeRef.equals(that.updateTypeRef)) return false;
+        return checkpointTypeRef.equals(that.checkpointTypeRef);
+    }
+    
+    @Override
+    public int hashCode() {
+        int result = valueTypeRef.hashCode();
+        result = 31 * result + updateTypeRef.hashCode();
+        result = 31 * result + checkpointTypeRef.hashCode();
+        result = 31 * result + key.hashCode();
+        return result;
+    }
+    
+    /**
+     * Handle a single-value update when channels support it.
+     * This method can be overridden by channels that want to support
+     * single-value updates (like TopicChannel). The default implementation
+     * returns false, indicating the update was not handled.
+     * 
+     * @param singleValue The single value to update with
+     * @return true if the channel was updated, false otherwise
+     */
+    public boolean updateSingleValue(U singleValue) {
+        // Default implementation doesn't support single value updates
+        return false;
     }
 }

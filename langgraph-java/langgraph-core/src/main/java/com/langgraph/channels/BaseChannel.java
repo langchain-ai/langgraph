@@ -116,4 +116,18 @@ public interface BaseChannel<V, U, C> {
      * @return The Class object for the checkpoint type
      */
     Class<C> getCheckpointType();
+    
+    /**
+     * Updates the channel with a single value.
+     * This is a convenience method that some channel implementations may support
+     * for single-value updates. The default implementation returns false, indicating
+     * the single-value update was not handled.
+     *
+     * @param singleValue A single update value
+     * @return true if the channel was updated, false otherwise
+     * @throws InvalidUpdateException if the update is invalid for this channel type
+     */
+    default boolean updateSingleValue(U singleValue) throws InvalidUpdateException {
+        return false;
+    }
 }

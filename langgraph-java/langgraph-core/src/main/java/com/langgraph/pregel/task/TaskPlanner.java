@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
  * to only execute nodes with the appropriate input channel trigger in the first superstep.</p>
  */
 public class TaskPlanner {
-    private final Map<String, PregelNode> nodes;
+    private final Map<String, PregelNode<?, ?>> nodes;
     
     // The input channel name, used to determine which nodes should run in first superstep
     private final String inputChannelName;
@@ -44,7 +44,7 @@ public class TaskPlanner {
      *
      * @param nodes Map of node names to nodes
      */
-    public TaskPlanner(Map<String, PregelNode> nodes) {
+    public TaskPlanner(Map<String, PregelNode<?, ?>> nodes) {
         this(nodes, "input");
     }
     
@@ -54,7 +54,7 @@ public class TaskPlanner {
      * @param nodes Map of node names to nodes
      * @param inputChannelName The name of the input channel
      */
-    public TaskPlanner(Map<String, PregelNode> nodes, String inputChannelName) {
+    public TaskPlanner(Map<String, PregelNode<?, ?>> nodes, String inputChannelName) {
         if (nodes == null) {
             throw new IllegalArgumentException("Nodes cannot be null");
         }
@@ -74,12 +74,13 @@ public class TaskPlanner {
         if (updatedChannels == null || updatedChannels.isEmpty()) {
             // Proper Python compatibility: only run nodes with input channel trigger
             List<PregelTask> tasks = new ArrayList<>();
-            for (PregelNode node : nodes.values()) {
+            for (PregelNode<?, ?> node : nodes.values()) {
                 // Use the newer method for checking trigger channels
                 if (node.isTriggeredBy(inputChannelName)) {
                     // Use the first trigger channel for Task creation
-                    String trigger = node.getTriggerChannels().isEmpty() ? 
-                        null : node.getTriggerChannels().iterator().next();
+                    Set<String> triggerChannels = node.getTriggerChannels();
+                    String trigger = triggerChannels.isEmpty() ? 
+                        null : triggerChannels.iterator().next();
                     tasks.add(new PregelTask(node.getName(), trigger, node.getRetryPolicy()));
                 }
             }
@@ -92,11 +93,12 @@ public class TaskPlanner {
         // Collect tasks to execute
         List<PregelTask> tasks = new ArrayList<>();
         
-        for (PregelNode node : nodes.values()) {
+        for (PregelNode<?, ?> node : nodes.values()) {
             // Check if the node reads from any updated channels
             boolean shouldExecute = false;
             
-            for (String channelName : node.getChannels()) {
+            Set<String> nodeChannels = node.getChannels();
+            for (String channelName : nodeChannels) {
                 if (updatedChannelSet.contains(channelName)) {
                     shouldExecute = true;
                     break;
@@ -105,7 +107,8 @@ public class TaskPlanner {
             
             // Check if the node is triggered by any updated channels
             if (!shouldExecute) {
-                for (String channelName : node.getTriggerChannels()) {
+                Set<String> nodeTriggers = node.getTriggerChannels();
+                for (String channelName : nodeTriggers) {
                     if (updatedChannelSet.contains(channelName)) {
                         shouldExecute = true;
                         break;
@@ -115,8 +118,9 @@ public class TaskPlanner {
             
             if (shouldExecute) {
                 // Use the first trigger channel for Task creation
-                String trigger = node.getTriggerChannels().isEmpty() ? 
-                    null : node.getTriggerChannels().iterator().next();
+                Set<String> triggerChannels = node.getTriggerChannels();
+                String trigger = triggerChannels.isEmpty() ? 
+                    null : triggerChannels.iterator().next();
                 tasks.add(new PregelTask(node.getName(), trigger, node.getRetryPolicy()));
             }
         }

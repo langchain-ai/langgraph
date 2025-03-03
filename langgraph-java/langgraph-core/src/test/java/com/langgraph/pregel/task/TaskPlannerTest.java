@@ -13,34 +13,34 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class TaskPlannerTest {
     
-    private PregelNode node1;
-    private PregelNode node2;
-    private PregelNode node3;
-    private Map<String, PregelNode> nodes;
+    private PregelNode<Object, Object> node1;
+    private PregelNode<Object, Object> node2;
+    private PregelNode<Object, Object> node3;
+    private Map<String, PregelNode<?, ?>> nodes;
     private RetryPolicy testRetryPolicy;
     
     @BeforeEach
     void setUp() {
-        // Create a simple executable for testing
-        PregelExecutable simpleExecutable = (inputs, context) -> Collections.emptyMap();
+        // Create a simple executable for testing with proper generic type
+        PregelExecutable<Object, Object> simpleExecutable = (inputs, context) -> Collections.emptyMap();
         
-        // Create real nodes
-        node1 = new PregelNode.Builder("node1", simpleExecutable)
+        // Create real nodes with proper generic types
+        node1 = new PregelNode.Builder<Object, Object>("node1", simpleExecutable)
                 .channels(Collections.singleton("channel1"))
                 .build();
         
-        node2 = new PregelNode.Builder("node2", simpleExecutable)
+        node2 = new PregelNode.Builder<Object, Object>("node2", simpleExecutable)
                 .channels(Arrays.asList("channel2", "channel3"))
                 .build();
         
         testRetryPolicy = RetryPolicy.maxAttempts(3);
         
-        node3 = new PregelNode.Builder("node3", simpleExecutable)
+        node3 = new PregelNode.Builder<Object, Object>("node3", simpleExecutable)
                 .triggerChannels("channel4")
                 .retryPolicy(testRetryPolicy)
                 .build();
         
-        // Create nodes map
+        // Create nodes map with proper generic types
         nodes = new HashMap<>();
         nodes.put("node1", node1);
         nodes.put("node2", node2);
@@ -57,14 +57,14 @@ public class TaskPlannerTest {
     @Test
     void testPlanWithEmptyUpdatedChannels() {
         // Setup test data with input channel as trigger
-        PregelExecutable simpleExecutable = (inputs, context) -> Collections.emptyMap();
+        PregelExecutable<Object, Object> simpleExecutable = (inputs, context) -> Collections.emptyMap();
         
         // Create nodes with "input" as trigger
-        PregelNode inputNode = new PregelNode.Builder("inputNode", simpleExecutable)
+        PregelNode<Object, Object> inputNode = new PregelNode.Builder<Object, Object>("inputNode", simpleExecutable)
                 .triggerChannels("input")
                 .build();
                 
-        Map<String, PregelNode> nodesWithInputTrigger = new HashMap<>();
+        Map<String, PregelNode<?, ?>> nodesWithInputTrigger = new HashMap<>();
         nodesWithInputTrigger.put("inputNode", inputNode);
         
         // Create planner with nodes that have input trigger

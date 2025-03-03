@@ -18,18 +18,18 @@ import static org.mockito.Mockito.*;
 public class NodeRegistryTest {
     
     @Mock
-    private PregelExecutable mockAction;
+    private PregelExecutable<Object, Object> mockAction;
     
-    private PregelNode mockNode1;
-    private PregelNode mockNode2;
-    private PregelNode mockNode3;
+    private PregelNode<Object, Object> mockNode1;
+    private PregelNode<Object, Object> mockNode2;
+    private PregelNode<Object, Object> mockNode3;
     
     @BeforeEach
     void setUp() {
-        // Create real PregelNode instances instead of mocks
-        mockNode1 = new PregelNode("node1", mockAction);
-        mockNode2 = new PregelNode("node2", mockAction);
-        mockNode3 = new PregelNode("node3", mockAction);
+        // Create real PregelNode instances with proper generic types
+        mockNode1 = new PregelNode.Builder<>("node1", mockAction).build();
+        mockNode2 = new PregelNode.Builder<>("node2", mockAction).build();
+        mockNode3 = new PregelNode.Builder<>("node3", mockAction).build();
     }
     
     @Test
@@ -64,8 +64,8 @@ public class NodeRegistryTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("already registered");
         
-        // Create new node with same name
-        PregelNode duplicateNode = new PregelNode("node1", mockAction);
+        // Create new node with same name and proper generic type
+        PregelNode<Object, Object> duplicateNode = new PregelNode.Builder<>("node1", mockAction).build();
         
         assertThatThrownBy(() -> registry.register(duplicateNode))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -95,7 +95,7 @@ public class NodeRegistryTest {
     
     @Test
     void testConstructorWithMap() {
-        Map<String, PregelNode> nodes = new HashMap<>();
+        Map<String, PregelNode<?, ?>> nodes = new HashMap<>();
         nodes.put("node1", mockNode1);
         nodes.put("node2", mockNode2);
         
@@ -108,7 +108,7 @@ public class NodeRegistryTest {
     
     @Test
     void testConstructorWithMapNameMismatch() {
-        Map<String, PregelNode> nodes = new HashMap<>();
+        Map<String, PregelNode<?, ?>> nodes = new HashMap<>();
         nodes.put("wrongName", mockNode1); // Node name is "node1" but map key is "wrongName"
         
         assertThatThrownBy(() -> new NodeRegistry(nodes))
@@ -129,24 +129,24 @@ public class NodeRegistryTest {
     
     @Test
     void testGetSubscribers() {
-        // Use PregelNode.Builder to add subscriptions
-        mockNode1 = new PregelNode.Builder("node1", mockAction)
+        // Use PregelNode.Builder to add subscriptions with generic types
+        mockNode1 = new PregelNode.Builder<Object, Object>("node1", mockAction)
             .channels("channel1")
             .build();
         
-        mockNode2 = new PregelNode.Builder("node2", mockAction)
+        mockNode2 = new PregelNode.Builder<Object, Object>("node2", mockAction)
             .channels("channel2")
             .build();
         
-        mockNode3 = new PregelNode.Builder("node3", mockAction)
+        mockNode3 = new PregelNode.Builder<Object, Object>("node3", mockAction)
             .channels("channel1")
             .channels("channel2")
             .build();
         
         NodeRegistry registry = new NodeRegistry(Arrays.asList(mockNode1, mockNode2, mockNode3));
         
-        Set<PregelNode> channel1Subscribers = registry.getSubscribers("channel1");
-        Set<PregelNode> channel2Subscribers = registry.getSubscribers("channel2");
+        Set<PregelNode<?, ?>> channel1Subscribers = registry.getSubscribers("channel1");
+        Set<PregelNode<?, ?>> channel2Subscribers = registry.getSubscribers("channel2");
         
         assertThat(channel1Subscribers).containsExactlyInAnyOrder(mockNode1, mockNode3);
         assertThat(channel2Subscribers).containsExactlyInAnyOrder(mockNode2, mockNode3);
@@ -154,23 +154,23 @@ public class NodeRegistryTest {
     
     @Test
     void testGetTriggered() {
-        // Use PregelNode.Builder to set triggers
-        mockNode1 = new PregelNode.Builder("node1", mockAction)
+        // Use PregelNode.Builder to set triggers with generic types
+        mockNode1 = new PregelNode.Builder<Object, Object>("node1", mockAction)
             .triggerChannels("trigger1")
             .build();
         
-        mockNode2 = new PregelNode.Builder("node2", mockAction)
+        mockNode2 = new PregelNode.Builder<Object, Object>("node2", mockAction)
             .triggerChannels("trigger2")
             .build();
         
-        mockNode3 = new PregelNode.Builder("node3", mockAction)
+        mockNode3 = new PregelNode.Builder<Object, Object>("node3", mockAction)
             .triggerChannels("trigger1")
             .build();
         
         NodeRegistry registry = new NodeRegistry(Arrays.asList(mockNode1, mockNode2, mockNode3));
         
-        Set<PregelNode> trigger1Nodes = registry.getTriggered("trigger1");
-        Set<PregelNode> trigger2Nodes = registry.getTriggered("trigger2");
+        Set<PregelNode<?, ?>> trigger1Nodes = registry.getTriggered("trigger1");
+        Set<PregelNode<?, ?>> trigger2Nodes = registry.getTriggered("trigger2");
         
         assertThat(trigger1Nodes).containsExactlyInAnyOrder(mockNode1, mockNode3);
         assertThat(trigger2Nodes).containsExactlyInAnyOrder(mockNode2);
@@ -178,24 +178,24 @@ public class NodeRegistryTest {
     
     @Test
     void testGetWriters() {
-        // Use PregelNode.Builder to set writers
-        mockNode1 = new PregelNode.Builder("node1", mockAction)
+        // Use PregelNode.Builder to set writers with generic types
+        mockNode1 = new PregelNode.Builder<Object, Object>("node1", mockAction)
             .writers("channel1")
             .build();
         
-        mockNode2 = new PregelNode.Builder("node2", mockAction)
+        mockNode2 = new PregelNode.Builder<Object, Object>("node2", mockAction)
             .writers("channel2")
             .build();
         
-        mockNode3 = new PregelNode.Builder("node3", mockAction)
+        mockNode3 = new PregelNode.Builder<Object, Object>("node3", mockAction)
             .writers("channel1")
             .writers("channel2")
             .build();
         
         NodeRegistry registry = new NodeRegistry(Arrays.asList(mockNode1, mockNode2, mockNode3));
         
-        Set<PregelNode> channel1Writers = registry.getWriters("channel1");
-        Set<PregelNode> channel2Writers = registry.getWriters("channel2");
+        Set<PregelNode<?, ?>> channel1Writers = registry.getWriters("channel1");
+        Set<PregelNode<?, ?>> channel2Writers = registry.getWriters("channel2");
         
         assertThat(channel1Writers).containsExactlyInAnyOrder(mockNode1, mockNode3);
         assertThat(channel2Writers).containsExactlyInAnyOrder(mockNode2, mockNode3);
@@ -211,12 +211,12 @@ public class NodeRegistryTest {
     
     @Test
     void testValidateSubscriptionsFail() {
-        // Use PregelNode.Builder to set subscriptions
-        mockNode1 = new PregelNode.Builder("node1", mockAction)
+        // Use PregelNode.Builder to set subscriptions with generic types
+        mockNode1 = new PregelNode.Builder<Object, Object>("node1", mockAction)
             .channels("validChannel")
             .build();
         
-        mockNode2 = new PregelNode.Builder("node2", mockAction)
+        mockNode2 = new PregelNode.Builder<Object, Object>("node2", mockAction)
             .channels("invalidChannel")
             .build();
         
@@ -231,12 +231,12 @@ public class NodeRegistryTest {
     
     @Test
     void testValidateWritersFail() {
-        // Use PregelNode.Builder to set writers
-        mockNode1 = new PregelNode.Builder("node1", mockAction)
+        // Use PregelNode.Builder to set writers with generic types
+        mockNode1 = new PregelNode.Builder<Object, Object>("node1", mockAction)
             .writers("validChannel")
             .build();
         
-        mockNode2 = new PregelNode.Builder("node2", mockAction)
+        mockNode2 = new PregelNode.Builder<Object, Object>("node2", mockAction)
             .writers("invalidChannel")
             .build();
         
@@ -251,12 +251,12 @@ public class NodeRegistryTest {
     
     @Test
     void testValidateTriggersFail() {
-        // Use PregelNode.Builder to set triggers
-        mockNode1 = new PregelNode.Builder("node1", mockAction)
+        // Use PregelNode.Builder to set triggers with generic types
+        mockNode1 = new PregelNode.Builder<Object, Object>("node1", mockAction)
             .triggerChannels("validChannel")
             .build();
         
-        mockNode2 = new PregelNode.Builder("node2", mockAction)
+        mockNode2 = new PregelNode.Builder<Object, Object>("node2", mockAction)
             .triggerChannels("invalidChannel")
             .build();
         

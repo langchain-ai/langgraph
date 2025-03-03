@@ -1,5 +1,7 @@
 package com.langgraph.channels;
 
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -27,62 +29,145 @@ public class TopicChannel<V> extends AbstractChannel<List<V>, V, List<V>> {
     private final boolean resetOnConsume;
     
     /**
-     * The element type class.
-     */
-    private final Class<V> elementType;
-    
-    /**
-     * Creates a new Topic channel with the specified value type.
-     * By default, the channel will not reset after consumption.
+     * Creates a new Topic channel using TypeReference with specified reset behavior.
      *
-     * @param elementType The class representing the element type within the list
-     */
-    public TopicChannel(Class<V> elementType) {
-        this(elementType, false);
-    }
-    
-    /**
-     * Creates a new Topic channel with the specified value type and reset behavior.
-     *
-     * @param elementType The class representing the element type within the list
+     * @param elementTypeRef TypeReference capturing the element type
      * @param resetOnConsume Whether to reset the channel after consume() is called
      */
-    @SuppressWarnings("unchecked")
-    public TopicChannel(Class<V> elementType, boolean resetOnConsume) {
-        // For TopicChannel: 
-        // - Value type is List<V> but at runtime we can only get List.class
-        // - Update type is V (single elements are added)
-        // - Checkpoint type is List<V> (same as value type)
+    protected TopicChannel(TypeReference<V> elementTypeRef, boolean resetOnConsume) {
+        // Create TypeReferences for the other types (List<V> in this case)
         super(
-            (Class<List<V>>) (Class<?>) List.class, // Value type (List<V>)
-            elementType,                            // Update type (V)
-            (Class<List<V>>) (Class<?>) List.class  // Checkpoint type (List<V>)
+            createListTypeReference(elementTypeRef),  // Value type (List<V>)
+            elementTypeRef,                          // Update type (V)
+            createListTypeReference(elementTypeRef)   // Checkpoint type (List<V>)
         );
-        this.elementType = elementType;
         this.resetOnConsume = resetOnConsume;
     }
     
     /**
-     * Creates a new Topic channel with the specified value type, key, and reset behavior.
+     * Creates a new Topic channel using TypeReference with specified key and reset behavior.
      *
-     * @param elementType The class representing the element type within the list
+     * @param elementTypeRef TypeReference capturing the element type
      * @param key The key (name) of this channel
      * @param resetOnConsume Whether to reset the channel after consume() is called
      */
-    @SuppressWarnings("unchecked")
-    public TopicChannel(Class<V> elementType, String key, boolean resetOnConsume) {
-        // For TopicChannel: 
-        // - Value type is List<V> but at runtime we can only get List.class
-        // - Update type is V (single elements are added)
-        // - Checkpoint type is List<V> (same as value type)
+    protected TopicChannel(TypeReference<V> elementTypeRef, String key, boolean resetOnConsume) {
+        // Create TypeReferences for the other types (List<V> in this case)
         super(
-            (Class<List<V>>) (Class<?>) List.class, // Value type (List<V>)
-            elementType,                            // Update type (V)
-            (Class<List<V>>) (Class<?>) List.class, // Checkpoint type (List<V>)
+            createListTypeReference(elementTypeRef),  // Value type (List<V>)
+            elementTypeRef,                          // Update type (V)
+            createListTypeReference(elementTypeRef),  // Checkpoint type (List<V>)
             key
         );
-        this.elementType = elementType;
         this.resetOnConsume = resetOnConsume;
+    }
+    
+    /**
+     * Factory method to create a TypeReference for List<V> given a TypeReference for V.
+     *
+     * @param <V> The element type
+     * @param elementTypeRef The TypeReference for the element type
+     * @return A TypeReference for List<V>
+     */
+    @SuppressWarnings("unchecked")
+    private static <V> TypeReference<List<V>> createListTypeReference(final TypeReference<V> elementTypeRef) {
+        final Type elementType = elementTypeRef.getType();
+        
+        return new TypeReference<List<V>>() {
+            @Override
+            public Type getType() {
+                // Create a ParameterizedType for List<V>
+                return new ParameterizedType() {
+                    @Override
+                    public Type[] getActualTypeArguments() {
+                        return new Type[] { elementType };
+                    }
+                    
+                    @Override
+                    public Type getRawType() {
+                        return List.class;
+                    }
+                    
+                    @Override
+                    public Type getOwnerType() {
+                        return null;
+                    }
+                    
+                    @Override
+                    public String toString() {
+                        return "java.util.List<" + elementType + ">";
+                    }
+                };
+            }
+            
+            @Override
+            public Class<List<V>> getRawClass() {
+                return (Class<List<V>>) (Class<?>) List.class;
+            }
+        };
+    }
+    
+    /**
+     * Factory method to create a TopicChannel with proper generic type inference.
+     * 
+     * <p>Example usage:
+     * <pre>
+     * TopicChannel&lt;Integer&gt; channel = TopicChannel.&lt;Integer&gt;create();
+     * </pre>
+     * 
+     * @param <T> The element type parameter for the channel
+     * @return A new TopicChannel with the captured type parameter
+     */
+    public static <T> TopicChannel<T> create() {
+        return new TopicChannel<>(new TypeReference<T>() {}, false);
+    }
+    
+    /**
+     * Factory method to create a TopicChannel with proper generic type inference
+     * and a specified key.
+     * 
+     * <p>Example usage:
+     * <pre>
+     * TopicChannel&lt;Integer&gt; channel = TopicChannel.&lt;Integer&gt;create("myChannel");
+     * </pre>
+     * 
+     * @param <T> The element type parameter for the channel
+     * @param key The key (name) for the channel
+     * @return A new TopicChannel with the captured type parameter and specified key
+     */
+    public static <T> TopicChannel<T> create(String key) {
+        return new TopicChannel<>(new TypeReference<T>() {}, key, false);
+    }
+    
+    /**
+     * Factory method to create a TopicChannel with proper generic type inference,
+     * specified key, and reset behavior.
+     * 
+     * <p>Example usage:
+     * <pre>
+     * TopicChannel&lt;Integer&gt; channel = TopicChannel.&lt;Integer&gt;create(true);
+     * TopicChannel&lt;String&gt; channel = TopicChannel.&lt;String&gt;create("myChannel", true);
+     * </pre>
+     * 
+     * @param <T> The element type parameter for the channel
+     * @param resetOnConsume Whether to reset the channel after consume() is called
+     * @return A new TopicChannel with the captured type parameter
+     */
+    public static <T> TopicChannel<T> create(boolean resetOnConsume) {
+        return new TopicChannel<>(new TypeReference<T>() {}, resetOnConsume);
+    }
+    
+    /**
+     * Factory method to create a TopicChannel with proper generic type inference,
+     * specified key, and reset behavior.
+     * 
+     * @param <T> The element type parameter for the channel
+     * @param key The key (name) for the channel
+     * @param resetOnConsume Whether to reset the channel after consume() is called
+     * @return A new TopicChannel with the captured type parameter and specified settings
+     */
+    public static <T> TopicChannel<T> create(String key, boolean resetOnConsume) {
+        return new TopicChannel<>(new TypeReference<T>() {}, key, resetOnConsume);
     }
     
     @Override
@@ -96,6 +181,25 @@ public class TopicChannel<V> extends AbstractChannel<List<V>, V, List<V>> {
         return true;
     }
     
+    /**
+     * Updates the channel with a single new value.
+     * This is a convenience method for handling cases where the update comes as a single value
+     * instead of a list.
+     *
+     * @param newValue The new value to add to the topic
+     * @return true if the channel was updated, false otherwise
+     */
+    @Override
+    public boolean updateSingleValue(V newValue) {
+        if (newValue == null) {
+            return false;
+        }
+        
+        values.add(newValue);
+        initialized = true;
+        return true;
+    }
+    
     @Override
     public List<V> get() throws EmptyChannelException {
         // Always return the current list (empty or not) for Python compatibility
@@ -105,11 +209,18 @@ public class TopicChannel<V> extends AbstractChannel<List<V>, V, List<V>> {
     
     @Override
     public BaseChannel<List<V>, V, List<V>> fromCheckpoint(List<V> checkpoint) {
-        TopicChannel<V> newChannel = new TopicChannel<>(elementType, key, resetOnConsume);
+        // Get the element type reference from the updateTypeRef
+        TypeReference<V> elementTypeRef = updateTypeRef;
+        
+        // Create a new channel with the same type information
+        TopicChannel<V> newChannel = new TopicChannel<>(elementTypeRef, key, resetOnConsume);
+        
+        // Restore the values from checkpoint
         if (checkpoint != null) {
             newChannel.values = new ArrayList<>(checkpoint);
             newChannel.initialized = true;
         }
+        
         return newChannel;
     }
     
@@ -129,7 +240,7 @@ public class TopicChannel<V> extends AbstractChannel<List<V>, V, List<V>> {
      * @return The element type class
      */
     public Class<V> getElementType() {
-        return elementType;
+        return updateTypeRef.getRawClass();
     }
     
     /**
@@ -156,11 +267,12 @@ public class TopicChannel<V> extends AbstractChannel<List<V>, V, List<V>> {
         if (!(obj instanceof TopicChannel)) {
             return false;
         }
+        if (!super.equals(obj)) {
+            return false;
+        }
         
         TopicChannel<?> other = (TopicChannel<?>) obj;
-        return elementType.equals(other.elementType) &&
-               key.equals(other.key) &&
-               initialized == other.initialized &&
+        return initialized == other.initialized &&
                resetOnConsume == other.resetOnConsume &&
                values.equals(other.values);
     }
@@ -172,8 +284,7 @@ public class TopicChannel<V> extends AbstractChannel<List<V>, V, List<V>> {
      */
     @Override
     public int hashCode() {
-        int result = elementType.hashCode();
-        result = 31 * result + key.hashCode();
+        int result = super.hashCode();
         result = 31 * result + (initialized ? 1 : 0);
         result = 31 * result + (resetOnConsume ? 1 : 0);
         result = 31 * result + values.hashCode();

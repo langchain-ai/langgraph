@@ -12,7 +12,7 @@ public class EphemeralValueTest {
 
     @Test
     void testEmptyChannel() {
-        EphemeralValue<String> channel = new EphemeralValue<>(String.class);
+        EphemeralValue<String> channel = EphemeralValue.<String>create();
         assertThatThrownBy(channel::get)
             .isInstanceOf(EmptyChannelException.class)
             .hasMessageContaining("empty");
@@ -20,7 +20,7 @@ public class EphemeralValueTest {
     
     @Test
     void testUpdateAndGet() {
-        EphemeralValue<String> channel = new EphemeralValue<>(String.class);
+        EphemeralValue<String> channel = EphemeralValue.<String>create();
         
         // Update with a value
         boolean updated = channel.update(Collections.singletonList("test"));
@@ -39,7 +39,7 @@ public class EphemeralValueTest {
     
     @Test
     void testEmptyUpdate() {
-        EphemeralValue<String> channel = new EphemeralValue<>(String.class);
+        EphemeralValue<String> channel = EphemeralValue.<String>create();
         
         // Empty update should return false
         boolean updated = channel.update(Collections.emptyList());
@@ -52,7 +52,7 @@ public class EphemeralValueTest {
     
     @Test
     void testMultipleValuesThrowsException() {
-        EphemeralValue<String> channel = new EphemeralValue<>(String.class);
+        EphemeralValue<String> channel = EphemeralValue.<String>create();
         
         // Multiple values should throw exception
         assertThatThrownBy(() -> channel.update(Arrays.asList("one", "two")))
@@ -62,7 +62,7 @@ public class EphemeralValueTest {
     
     @Test
     void testCheckpoint() {
-        EphemeralValue<String> channel = new EphemeralValue<>(String.class);
+        EphemeralValue<String> channel = EphemeralValue.<String>create();
         channel.update(Collections.singletonList("test"));
         
         // Create a checkpoint - should always be null for ephemeral values
@@ -79,7 +79,7 @@ public class EphemeralValueTest {
     
     @Test
     void testFromNullCheckpoint() {
-        EphemeralValue<String> channel = new EphemeralValue<>(String.class);
+        EphemeralValue<String> channel = EphemeralValue.<String>create();
         channel.update(Collections.singletonList("test"));
         
         // Create a new channel from null checkpoint
@@ -92,8 +92,8 @@ public class EphemeralValueTest {
     
     @Test
     void testEqualsAndHashCode() {
-        EphemeralValue<String> channel1 = new EphemeralValue<>(String.class);
-        EphemeralValue<String> channel2 = new EphemeralValue<>(String.class);
+        EphemeralValue<String> channel1 = EphemeralValue.<String>create();
+        EphemeralValue<String> channel2 = EphemeralValue.<String>create();
         
         // Initially equal
         assertThat(channel1).isEqualTo(channel2);
@@ -115,7 +115,7 @@ public class EphemeralValueTest {
     
     @Test
     void testNullValue() {
-        EphemeralValue<String> channel = new EphemeralValue<>(String.class);
+        EphemeralValue<String> channel = EphemeralValue.<String>create();
         
         // Update with null value
         channel.update(Collections.singletonList(null));

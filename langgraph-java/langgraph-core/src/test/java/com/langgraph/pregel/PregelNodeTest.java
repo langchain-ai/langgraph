@@ -15,7 +15,7 @@ public class PregelNodeTest {
     /**
      * Simple implementation of PregelExecutable for testing
      */
-    private static class TestAction implements PregelExecutable {
+    private static class TestAction implements PregelExecutable<Object, Object> {
         @Override
         public Map<String, Object> execute(Map<String, Object> inputs, Map<String, Object> context) {
             Map<String, Object> output = new HashMap<>();
@@ -26,27 +26,28 @@ public class PregelNodeTest {
 
     @Test
     void testConstructors() {
-        // Test minimal constructor
-        PregelNode node1 = new PregelNode("node1", new TestAction());
-        assertThat(node1.getName()).isEqualTo("node1");
-        assertThat(node1.getChannels()).isEmpty();
-        assertThat(node1.getTriggerChannels()).isEmpty();
-        assertThat(node1.getWriteEntries()).isEmpty();
-        assertThat(node1.getRetryPolicy()).isNull();
+        // Test with full constructor
+        TestAction action = new TestAction();
+        List<String> channels = Arrays.asList("channel1", "channel2");
+        List<String> triggerChannels = Arrays.asList("trigger1");
+        List<ChannelWriteEntry> writers = Arrays.asList(new ChannelWriteEntry("output1"));
+        RetryPolicy retryPolicy = RetryPolicy.builder().build();
 
-        // Test constructor with subscriptions
-        List<String> subscriptions = Arrays.asList("channel1", "channel2");
-        PregelNode node2 = new PregelNode("node2", new TestAction(), subscriptions);
-        assertThat(node2.getName()).isEqualTo("node2");
-        assertThat(node2.getChannels()).containsExactlyInAnyOrderElementsOf(subscriptions);
-        assertThat(node2.getTriggerChannels()).isEmpty();
-        assertThat(node2.getWriteEntries()).isEmpty();
+        PregelNode<Object, Object> node1 = new PregelNode<>(
+            "node1", action, channels, triggerChannels, writers, retryPolicy
+        );
+        
+        assertThat(node1.getName()).isEqualTo("node1");
+        assertThat(node1.getChannels()).containsExactlyInAnyOrderElementsOf(channels);
+        assertThat(node1.getTriggerChannels()).containsExactlyInAnyOrderElementsOf(triggerChannels);
+        assertThat(node1.getWriteEntries()).containsExactlyElementsOf(writers);
+        assertThat(node1.getRetryPolicy()).isEqualTo(retryPolicy);
     }
 
     @Test
     void testBuilderPattern() {
         // Test builder with all options
-        PregelNode node = new PregelNode.Builder("builder-node", new TestAction())
+        PregelNode<Object, Object> node = new PregelNode.Builder<>("builder-node", new TestAction())
                 .channels("channel1")
                 .channels(Arrays.asList("channel2", "channel3"))
                 .triggerChannels("triggerChannel")
@@ -63,7 +64,7 @@ public class PregelNodeTest {
 
     @Test
     void testInputChannels() {
-        PregelNode node = new PregelNode.Builder("test", new TestAction())
+        PregelNode<Object, Object> node = new PregelNode.Builder<>("test", new TestAction())
                 .channels("channel1")
                 .channels("channel2")
                 .build();
@@ -75,7 +76,7 @@ public class PregelNodeTest {
 
     @Test
     void testTriggerChannels() {
-        PregelNode node = new PregelNode.Builder("test", new TestAction())
+        PregelNode<Object, Object> node = new PregelNode.Builder<>("test", new TestAction())
                 .triggerChannels("triggerChannel")
                 .build();
 
@@ -85,7 +86,7 @@ public class PregelNodeTest {
     
     @Test
     void testMultipleTriggerChannels() {
-        PregelNode node = new PregelNode.Builder("test", new TestAction())
+        PregelNode<Object, Object> node = new PregelNode.Builder<>("test", new TestAction())
                 .triggerChannels("trigger1")
                 .triggerChannels("trigger2")
                 .build();
@@ -99,7 +100,7 @@ public class PregelNodeTest {
 
     @Test
     void testWriters() {
-        PregelNode node = new PregelNode.Builder("test", new TestAction())
+        PregelNode<Object, Object> node = new PregelNode.Builder<>("test", new TestAction())
                 .writers("channel1")
                 .writers("channel2")
                 .build();
@@ -125,7 +126,7 @@ public class PregelNodeTest {
                 .skipNone(false)
                 .build();
 
-        PregelNode node = new PregelNode.Builder("test", new TestAction())
+        PregelNode<Object, Object> node = new PregelNode.Builder<>("test", new TestAction())
                 .writers(entry1)
                 .writers(entry2)
                 .writers(entry3)
@@ -148,7 +149,7 @@ public class PregelNodeTest {
     @Test
     void testProcessOutput() {
         // Setup test node with various write entries
-        PregelNode node = new PregelNode.Builder("test", new TestAction())
+        PregelNode<Object, Object> node = new PregelNode.Builder<>("test", new TestAction())
                 // Passthrough entry
                 .writers("channel1")
                 // Fixed value entry
@@ -180,7 +181,10 @@ public class PregelNodeTest {
     @Test
     void testProcessOutputWithEmptyWriters() {
         // Node with no explicit write entries should pass all outputs through
-        PregelNode node = new PregelNode("test", new TestAction());
+        PregelNode<Object, Object> node = new PregelNode<>(
+            "test", new TestAction(), Collections.emptyList(), Collections.emptyList(), 
+            Collections.emptyList(), null
+        );
 
         Map<String, Object> nodeOutput = new HashMap<>();
         nodeOutput.put("channel1", "value1");
@@ -194,9 +198,18 @@ public class PregelNodeTest {
 
     @Test
     void testNodeEquality() {
-        PregelNode node1 = new PregelNode("same-name", new TestAction());
-        PregelNode node2 = new PregelNode("same-name", new TestAction());
-        PregelNode node3 = new PregelNode("different-name", new TestAction());
+        PregelNode<Object, Object> node1 = new PregelNode<>(
+            "same-name", new TestAction(), Collections.emptyList(), Collections.emptyList(),
+            Collections.emptyList(), null
+        );
+        PregelNode<Object, Object> node2 = new PregelNode<>(
+            "same-name", new TestAction(), Collections.emptyList(), Collections.emptyList(),
+            Collections.emptyList(), null
+        );
+        PregelNode<Object, Object> node3 = new PregelNode<>(
+            "different-name", new TestAction(), Collections.emptyList(), Collections.emptyList(),
+            Collections.emptyList(), null
+        );
 
         // Nodes with same name should be equal
         assertThat(node1).isEqualTo(node2);
@@ -209,17 +222,23 @@ public class PregelNodeTest {
     @Test
     void testInvalidConstruction() {
         // Test null name
-        assertThatThrownBy(() -> new PregelNode(null, new TestAction()))
+        assertThatThrownBy(() -> new PregelNode<>(
+                null, new TestAction(), Collections.emptyList(), Collections.emptyList(),
+                Collections.emptyList(), null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("name cannot be null");
 
         // Test empty name
-        assertThatThrownBy(() -> new PregelNode("", new TestAction()))
+        assertThatThrownBy(() -> new PregelNode<>(
+                "", new TestAction(), Collections.emptyList(), Collections.emptyList(),
+                Collections.emptyList(), null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("name cannot be null or empty");
 
         // Test null action
-        assertThatThrownBy(() -> new PregelNode("test", null))
+        assertThatThrownBy(() -> new PregelNode<>(
+                "test", null, Collections.emptyList(), Collections.emptyList(),
+                Collections.emptyList(), null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Action cannot be null");
     }

@@ -28,7 +28,7 @@ public class PregelLoopTest {
      * Implementation of PregelExecutable that handles test cases
      * with predictable and deterministic results
      */
-    static class TestAction implements PregelExecutable {
+    static class TestAction implements PregelExecutable<Object, Object> {
         @Override
         public Map<String, Object> execute(Map<String, Object> inputs, Map<String, Object> context) {
             // This needs to be deterministic and always take exactly 2 steps
@@ -199,15 +199,15 @@ public class PregelLoopTest {
         ChannelRegistry channelRegistry = new ChannelRegistry();
         
         // Setup standard test channels with default values
-        LastValue<String> channel1 = new LastValue<>(String.class, "channel1");
+        LastValue<String> channel1 = LastValue.<String>create("channel1");
         channelRegistry.register("channel1", channel1);
         channel1.update(Collections.singletonList("initial1"));
         
-        LastValue<String> channel2 = new LastValue<>(String.class, "channel2");
+        LastValue<String> channel2 = LastValue.<String>create("channel2");
         channelRegistry.register("channel2", channel2);
         channel2.update(Collections.singletonList("initial2"));
         
-        LastValue<String> channel3 = new LastValue<>(String.class, "channel3");
+        LastValue<String> channel3 = LastValue.<String>create("channel3");
         channelRegistry.register("channel3", channel3);
         channel3.update(Collections.singletonList("initial3"));
         
@@ -252,16 +252,16 @@ public class PregelLoopTest {
         ChannelRegistry channelRegistry = new ChannelRegistry();
         
         // Setup some test channels with default values
-        LastValue<String> channel1 = new LastValue<>(String.class, "channel1");
+        LastValue<String> channel1 = LastValue.<String>create("channel1");
         channelRegistry.register("channel1", channel1);
         // Initialize with empty value to avoid EmptyChannelException
         channel1.update(Collections.singletonList("initial1"));
         
-        LastValue<String> channel2 = new LastValue<>(String.class, "channel2");
+        LastValue<String> channel2 = LastValue.<String>create("channel2");
         channelRegistry.register("channel2", channel2);
         channel2.update(Collections.singletonList("initial2"));
         
-        LastValue<String> channel3 = new LastValue<>(String.class, "channel3");
+        LastValue<String> channel3 = LastValue.<String>create("channel3");
         channelRegistry.register("channel3", channel3);
         channel3.update(Collections.singletonList("initial3"));
         
@@ -272,7 +272,7 @@ public class PregelLoopTest {
         final int[] stepCounter = {0};
         
         // Create a custom node for this test with very explicit step-based behavior
-        PregelExecutable controlledAction = new PregelExecutable() {
+        PregelExecutable<Object, Object> controlledAction = new PregelExecutable<Object, Object>() {
             private int callCount = 0;
             
             @Override
@@ -367,15 +367,15 @@ public class PregelLoopTest {
         ChannelRegistry channelRegistry = new ChannelRegistry();
         
         // Setup test channels with predictable behavior
-        LastValue<String> channel1 = new LastValue<>(String.class, "channel1");
+        LastValue<String> channel1 = LastValue.<String>create("channel1");
         channelRegistry.register("channel1", channel1);
         channel1.update(Collections.singletonList("initial1"));
         
-        LastValue<String> channel2 = new LastValue<>(String.class, "channel2");
+        LastValue<String> channel2 = LastValue.<String>create("channel2");
         channelRegistry.register("channel2", channel2);
         channel2.update(Collections.singletonList("initial2"));
         
-        LastValue<String> channel3 = new LastValue<>(String.class, "channel3");
+        LastValue<String> channel3 = LastValue.<String>create("channel3");
         channelRegistry.register("channel3", channel3);
         channel3.update(Collections.singletonList("initial3"));
         
@@ -383,7 +383,7 @@ public class PregelLoopTest {
         final int[] callCounter = {0};
         
         // Create a node with very explicit behavior that completes after 2 steps
-        PregelExecutable finiteAction = new PregelExecutable() {
+        PregelExecutable<Object, Object> finiteAction = new PregelExecutable<Object, Object>() {
             @Override
             public Map<String, Object> execute(Map<String, Object> inputs, Map<String, Object> ctx) {
                 callCounter[0]++;
@@ -462,7 +462,7 @@ public class PregelLoopTest {
         ChannelRegistry channelRegistry = new ChannelRegistry();
         
         // Setup a channel that will be continually updated
-        LastValue<String> cycleChannel = new LastValue<>(String.class, "cycleChannel");
+        LastValue<String> cycleChannel = LastValue.<String>create("cycleChannel");
         channelRegistry.register("cycleChannel", cycleChannel);
         cycleChannel.update(Collections.singletonList("initialCycle"));
         
@@ -529,15 +529,15 @@ public class PregelLoopTest {
         ChannelRegistry channelRegistry = new ChannelRegistry();
         
         // Setup some test channels
-        LastValue<String> channel1 = new LastValue<>(String.class, "channel1");
+        LastValue<String> channel1 = LastValue.<String>create("channel1");
         channelRegistry.register("channel1", channel1);
         channel1.update(Collections.singletonList("initial1"));
         
-        LastValue<String> channel2 = new LastValue<>(String.class, "channel2");
+        LastValue<String> channel2 = LastValue.<String>create("channel2");
         channelRegistry.register("channel2", channel2);
         channel2.update(Collections.singletonList("initial2"));
         
-        LastValue<String> channel3 = new LastValue<>(String.class, "channel3");
+        LastValue<String> channel3 = LastValue.<String>create("channel3");
         channelRegistry.register("channel3", channel3);
         channel3.update(Collections.singletonList("initial3"));
         
@@ -547,7 +547,7 @@ public class PregelLoopTest {
         final int[] stepCounter = {0};
         
         // Create a node with predictable step-based behavior using explicit state
-        PregelExecutable controlledAction = new PregelExecutable() {
+        PregelExecutable<Object, Object> controlledAction = new PregelExecutable<Object, Object>() {
             @Override
             public Map<String, Object> execute(Map<String, Object> inputs, Map<String, Object> ctx) {
                 stepCounter[0]++;
@@ -644,15 +644,15 @@ public class PregelLoopTest {
         ChannelRegistry channelRegistry = new ChannelRegistry();
         
         // Setup some test channels
-        LastValue<String> channel1 = new LastValue<>(String.class, "channel1");
+        LastValue<String> channel1 = LastValue.<String>create("channel1");
         channelRegistry.register("channel1", channel1);
         channel1.update(Collections.singletonList("initial1"));
         
-        LastValue<String> channel2 = new LastValue<>(String.class, "channel2");
+        LastValue<String> channel2 = LastValue.<String>create("channel2");
         channelRegistry.register("channel2", channel2);
         channel2.update(Collections.singletonList("initial2"));
         
-        LastValue<String> channel3 = new LastValue<>(String.class, "channel3");
+        LastValue<String> channel3 = LastValue.<String>create("channel3");
         channelRegistry.register("channel3", channel3);
         channel3.update(Collections.singletonList("initial3"));
         
@@ -662,7 +662,7 @@ public class PregelLoopTest {
         final int[] stepCounter = {0};
         
         // Create a node with predictable step-based behavior using explicit state
-        PregelExecutable controlledAction = new PregelExecutable() {
+        PregelExecutable<Object, Object> controlledAction = new PregelExecutable<Object, Object>() {
             @Override
             public Map<String, Object> execute(Map<String, Object> inputs, Map<String, Object> ctx) {
                 stepCounter[0]++;
@@ -742,15 +742,15 @@ public class PregelLoopTest {
         ChannelRegistry channelRegistry = new ChannelRegistry();
         
         // Setup some test channels
-        LastValue<String> channel1 = new LastValue<>(String.class, "channel1");
+        LastValue<String> channel1 = LastValue.<String>create("channel1");
         channelRegistry.register("channel1", channel1);
         channel1.update(Collections.singletonList("initial1"));
         
-        LastValue<String> channel2 = new LastValue<>(String.class, "channel2");
+        LastValue<String> channel2 = LastValue.<String>create("channel2");
         channelRegistry.register("channel2", channel2);
         channel2.update(Collections.singletonList("initial2"));
         
-        LastValue<String> channel3 = new LastValue<>(String.class, "channel3");
+        LastValue<String> channel3 = LastValue.<String>create("channel3");
         channelRegistry.register("channel3", channel3);
         channel3.update(Collections.singletonList("initial3"));
         
@@ -760,7 +760,7 @@ public class PregelLoopTest {
         final int[] stepCounter = {0};
         
         // Create a node with predictable step-based behavior using explicit state
-        PregelExecutable controlledAction = new PregelExecutable() {
+        PregelExecutable<Object, Object> controlledAction = new PregelExecutable<Object, Object>() {
             @Override
             public Map<String, Object> execute(Map<String, Object> inputs, Map<String, Object> ctx) {
                 stepCounter[0]++;
@@ -838,15 +838,15 @@ public class PregelLoopTest {
         ChannelRegistry channelRegistry = new ChannelRegistry();
         
         // Setup some test channels
-        LastValue<String> channel1 = new LastValue<>(String.class, "channel1");
+        LastValue<String> channel1 = LastValue.<String>create("channel1");
         channelRegistry.register("channel1", channel1);
         channel1.update(Collections.singletonList("initial1"));
         
-        LastValue<String> channel2 = new LastValue<>(String.class, "channel2");
+        LastValue<String> channel2 = LastValue.<String>create("channel2");
         channelRegistry.register("channel2", channel2);
         channel2.update(Collections.singletonList("initial2"));
         
-        LastValue<String> channel3 = new LastValue<>(String.class, "channel3");
+        LastValue<String> channel3 = LastValue.<String>create("channel3");
         channelRegistry.register("channel3", channel3);
         channel3.update(Collections.singletonList("initial3"));
         
@@ -856,7 +856,7 @@ public class PregelLoopTest {
         final int[] stepCounter = {0};
         
         // Create a node with predictable step-based behavior using explicit state
-        PregelExecutable controlledAction = new PregelExecutable() {
+        PregelExecutable<Object, Object> controlledAction = new PregelExecutable<Object, Object>() {
             @Override
             public Map<String, Object> execute(Map<String, Object> inputs, Map<String, Object> ctx) {
                 stepCounter[0]++;
@@ -948,15 +948,15 @@ public class PregelLoopTest {
         ChannelRegistry channelRegistry = new ChannelRegistry();
         
         // Setup some test channels
-        LastValue<String> channel1 = new LastValue<>(String.class, "channel1");
+        LastValue<String> channel1 = LastValue.<String>create("channel1");
         channelRegistry.register("channel1", channel1);
         channel1.update(Collections.singletonList("initial1"));
         
-        LastValue<String> channel2 = new LastValue<>(String.class, "channel2");
+        LastValue<String> channel2 = LastValue.<String>create("channel2");
         channelRegistry.register("channel2", channel2);
         channel2.update(Collections.singletonList("initial2"));
         
-        LastValue<String> channel3 = new LastValue<>(String.class, "channel3");
+        LastValue<String> channel3 = LastValue.<String>create("channel3");
         channelRegistry.register("channel3", channel3);
         channel3.update(Collections.singletonList("initial3"));
         
@@ -966,7 +966,7 @@ public class PregelLoopTest {
         final int[] stepCounter = {0};
         
         // Create a node with predictable step-based behavior using explicit state
-        PregelExecutable controlledAction = new PregelExecutable() {
+        PregelExecutable<Object, Object> controlledAction = new PregelExecutable<Object, Object>() {
             @Override
             public Map<String, Object> execute(Map<String, Object> inputs, Map<String, Object> ctx) {
                 stepCounter[0]++;

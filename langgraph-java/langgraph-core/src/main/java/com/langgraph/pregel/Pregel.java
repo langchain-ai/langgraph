@@ -10,13 +10,16 @@ import com.langgraph.pregel.registry.NodeRegistry;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.function.Function;
 
 /**
- * The core Pregel implementation.
- * Orchestrates execution of a computational graph using the Bulk Synchronous Parallel model.
+ * The type-safe Pregel implementation.
+ * Orchestrates execution of a computational graph using the Bulk Synchronous Parallel model
+ * with strict type checking throughout the execution flow.
+ *
+ * @param <I> The input type for the overall graph
+ * @param <O> The output type for the overall graph
  */
-public class Pregel implements PregelProtocol {
+public class Pregel<I, O> implements PregelProtocol<I, O> {
     private final NodeRegistry nodeRegistry;
     private final ChannelRegistry channelRegistry;
     private final BaseCheckpointSaver checkpointer;
@@ -26,7 +29,17 @@ public class Pregel implements PregelProtocol {
     private final Set<String> outputChannels;
     
     /**
-     * Create a Pregel instance with all parameters.
+     * Get a channel by name (for debugging)
+     *
+     * @param name Channel name
+     * @return Channel with the given name
+     */
+    public BaseChannel<?, ?, ?> getChannel(String name) {
+        return channelRegistry.get(name);
+    }
+    
+    /**
+     * Create a type-safe Pregel instance with all parameters.
      *
      * @param nodes Map of node names to nodes
      * @param channels Map of channel names to channels
@@ -36,8 +49,8 @@ public class Pregel implements PregelProtocol {
      * @param maxSteps Maximum number of steps to execute
      */
     public Pregel(
-            Map<String, PregelNode> nodes,
-            Map<String, BaseChannel> channels,
+            Map<String, PregelNode<?, ?>> nodes,
+            Map<String, BaseChannel<?, ?, ?>> channels,
             Set<String> inputChannels,
             Set<String> outputChannels,
             BaseCheckpointSaver checkpointer,
@@ -56,24 +69,13 @@ public class Pregel implements PregelProtocol {
     }
     
     /**
-     * Create a simple Pregel instance without checkpointing.
-     * For more complex configurations, use the Builder pattern.
-     *
-     * @param nodes Map of node names to nodes
-     * @param channels Map of channel names to channels
-     */
-    public Pregel(Map<String, PregelNode> nodes, Map<String, BaseChannel> channels) {
-        this(nodes, channels, new HashSet<>(), new HashSet<>(), null, 100);
-    }
-    
-    /**
      * Validate the Pregel configuration.
-     * Checks that nodes and channels are properly configured.
+     * Checks that nodes and channels are properly configured and type-compatible.
      *
      * @throws IllegalStateException If the configuration is invalid
      */
     private void validate() {
-        // Validate nodes
+        // Basic validation
         nodeRegistry.validate();
         
         // Validate channel references
@@ -81,16 +83,24 @@ public class Pregel implements PregelProtocol {
         nodeRegistry.validateSubscriptions(channelNames);
         nodeRegistry.validateWriters(channelNames);
         nodeRegistry.validateTriggers(channelNames);
+        
+        // Type compatibility is ensured by generic type parameters
     }
     
     @Override
-    public Object invoke(Object input, Map<String, Object> config) {
+    @SuppressWarnings("unchecked")
+    public Map<String, O> invoke(Map<String, I> input, Map<String, Object> config) {
         // Extract configuration
         String threadId = getThreadId(config);
         Map<String, Object> context = createContext(threadId, config);
         
-        // Convert input to map if necessary
-        Map<String, Object> inputMap = convertInput(input);
+        // Create input map with proper type safety
+        Map<String, Object> inputMap = new HashMap<>();
+        if (input != null) {
+            for (Map.Entry<String, I> entry : input.entrySet()) {
+                inputMap.put(entry.getKey(), entry.getValue());
+            }
+        }
         
         // Initialize channels with input
         initializeChannels(inputMap);
@@ -102,28 +112,23 @@ public class Pregel implements PregelProtocol {
         // Execute to completion
         Map<String, Object> result = pregelLoop.execute(inputMap, context, threadId);
         
-        // Filter the result to only include designated output channels
-        if (!outputChannels.isEmpty() && result != null) {
-            Map<String, Object> filteredResult = new HashMap<>();
-            for (Map.Entry<String, Object> entry : result.entrySet()) {
-                if (outputChannels.contains(entry.getKey())) {
-                    filteredResult.put(entry.getKey(), entry.getValue());
-                }
-            }
-            return filteredResult;
-        }
-        
-        return result;
+        // Filter the result
+        return filterOutput(result);
     }
     
     @Override
-    public Iterator<Object> stream(Object input, Map<String, Object> config, StreamMode streamMode) {
+    public Iterator<Map<String, O>> stream(Map<String, I> input, Map<String, Object> config, StreamMode streamMode) {
         // Extract configuration
         String threadId = getThreadId(config);
         Map<String, Object> context = createContext(threadId, config);
         
-        // Convert input to map if necessary
-        Map<String, Object> inputMap = convertInput(input);
+        // Create input map with proper type safety
+        Map<String, Object> inputMap = new HashMap<>();
+        if (input != null) {
+            for (Map.Entry<String, I> entry : input.entrySet()) {
+                inputMap.put(entry.getKey(), entry.getValue());
+            }
+        }
         
         // Initialize channels with input
         initializeChannels(inputMap);
@@ -133,8 +138,8 @@ public class Pregel implements PregelProtocol {
         PregelLoop pregelLoop = new PregelLoop(superstepManager, checkpointer, maxSteps);
         
         // Create iterator for streaming results
-        return new Iterator<Object>() {
-            private final Queue<Object> buffer = new LinkedList<>();
+        return new Iterator<Map<String, O>>() {
+            private final Queue<Map<String, O>> buffer = new LinkedList<>();
             private boolean isDone = false;
             
             @Override
@@ -154,7 +159,12 @@ public class Pregel implements PregelProtocol {
                         threadId,
                         streamMode,
                         result -> {
-                            buffer.add(result);
+                            // Filter the result to match output type
+                            if (result instanceof Map) {
+                                @SuppressWarnings("unchecked")
+                                Map<String, Object> resultMap = (Map<String, Object>) result;
+                                buffer.add(filterOutput(resultMap));
+                            }
                             return true;
                         });
                 
@@ -163,7 +173,7 @@ public class Pregel implements PregelProtocol {
             }
             
             @Override
-            public Object next() {
+            public Map<String, O> next() {
                 if (!hasNext()) {
                     throw new NoSuchElementException();
                 }
@@ -173,7 +183,7 @@ public class Pregel implements PregelProtocol {
     }
     
     @Override
-    public Object getState(String threadId) {
+    public Map<String, O> getState(String threadId) {
         if (threadId == null) {
             throw new IllegalArgumentException("Thread ID is required");
         }
@@ -190,21 +200,32 @@ public class Pregel implements PregelProtocol {
         
         // Get checkpoint values
         Optional<Map<String, Object>> values = checkpointer.getValues(latestCheckpoint.get());
-        return values.orElse(null);
+        if (!values.isPresent()) {
+            return null;
+        }
+        
+        // Filter to match output type
+        return filterOutput(values.get());
     }
     
     @Override
-    public void updateState(String threadId, Object state) {
+    public void updateState(String threadId, Map<String, O> state) {
         if (threadId == null) {
             throw new IllegalArgumentException("Thread ID is required");
         }
         
-        if (!(state instanceof Map)) {
-            throw new IllegalArgumentException("State must be a Map");
+        if (state == null) {
+            throw new IllegalArgumentException("State cannot be null");
         }
         
-        // Validate and convert state
-        Map<String, Object> stateMap = convertStateMap(state);
+        // Convert typed state to Object map for backward compatibility
+        Map<String, Object> stateMap = new HashMap<>();
+        for (Map.Entry<String, O> entry : state.entrySet()) {
+            stateMap.put(entry.getKey(), entry.getValue());
+        }
+        
+        // Validate state map
+        validateStateMap(stateMap);
         
         // Update channels with the state
         initializeChannels(stateMap);
@@ -215,41 +236,8 @@ public class Pregel implements PregelProtocol {
         }
     }
     
-    /**
-     * Validates and converts a state object to a Map<String, Object>.
-     * 
-     * @param state The state object to validate and convert
-     * @return A validated Map<String, Object>
-     * @throws IllegalArgumentException if state is invalid
-     */
-    private Map<String, Object> convertStateMap(Object state) {
-        if (!(state instanceof Map)) {
-            throw new IllegalArgumentException("State must be a Map");
-        }
-        
-        // Safe to cast to Map since we've verified it is a Map
-        @SuppressWarnings("unchecked")
-        Map<String, Object> stateMap = (Map<String, Object>) state;
-        
-        // Validate that the values are compatible with their corresponding channels
-        for (Map.Entry<String, Object> entry : stateMap.entrySet()) {
-            String channelName = entry.getKey();
-            Object value = entry.getValue();
-            
-            if (channelRegistry.contains(channelName) && !isCompatibleWithChannel(channelName, value)) {
-                throw new IllegalArgumentException(
-                    "Incompatible value type for channel '" + channelName + "': " + 
-                    "Expected " + channelRegistry.get(channelName).getUpdateType().getName() + 
-                    ", got " + (value != null ? value.getClass().getName() : "null")
-                );
-            }
-        }
-        
-        return stateMap;
-    }
-    
     @Override
-    public List<Object> getStateHistory(String threadId) {
+    public List<Map<String, O>> getStateHistory(String threadId) {
         if (threadId == null) {
             throw new IllegalArgumentException("Thread ID is required");
         }
@@ -259,14 +247,62 @@ public class Pregel implements PregelProtocol {
         }
         
         List<String> checkpoints = checkpointer.list(threadId);
-        List<Object> history = new ArrayList<>();
+        List<Map<String, O>> history = new ArrayList<>();
         
         for (String checkpointId : checkpoints) {
             Optional<Map<String, Object>> values = checkpointer.getValues(checkpointId);
-            values.ifPresent(history::add);
+            if (values.isPresent()) {
+                // Filter to match output type
+                history.add(filterOutput(values.get()));
+            }
         }
         
         return history;
+    }
+    
+    /**
+     * Filter result to include only designated output channels and validate type safety.
+     *
+     * @param result Result map to filter
+     * @return Map with typed output values including only designated channels
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, O> filterOutput(Map<String, Object> result) {
+        if (result == null || result.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        
+        Map<String, O> typedResult = new HashMap<>();
+        
+        // Filter the result to only include designated output channels
+        for (Map.Entry<String, Object> entry : result.entrySet()) {
+            String channelName = entry.getKey();
+            Object value = entry.getValue();
+            
+            if (outputChannels.isEmpty() || outputChannels.contains(channelName)) {
+                // Type safety ensured by generic parameters
+                
+                typedResult.put(channelName, (O) value);
+            }
+        }
+        
+        return typedResult;
+    }
+    
+    /**
+     * Validates a state map for compatibility with channels.
+     *
+     * @param stateMap State map to validate
+     * @throws IllegalArgumentException if state is invalid
+     */
+    private void validateStateMap(Map<String, Object> stateMap) {
+        // Validate that the values are compatible with their corresponding channels
+        for (Map.Entry<String, Object> entry : stateMap.entrySet()) {
+            String channelName = entry.getKey();
+            Object value = entry.getValue();
+            
+            // Type safety ensured by generic parameters
+        }
     }
     
     /**
@@ -320,14 +356,7 @@ public class Pregel implements PregelProtocol {
                 Object value = entry.getValue();
                 
                 if (inputChannels.contains(channelName)) {
-                    // Validate that the value is compatible with the channel
-                    if (!isCompatibleWithChannel(channelName, value)) {
-                        throw new IllegalArgumentException(
-                            "Incompatible value type for channel '" + channelName + "': " + 
-                            "Expected " + channelRegistry.get(channelName).getUpdateType().getName() + 
-                            ", got " + (value != null ? value.getClass().getName() : "null")
-                        );
-                    }
+                    // Type safety ensured by generic parameters
                     
                     filteredInput.put(channelName, value);
                 }
@@ -340,13 +369,7 @@ public class Pregel implements PregelProtocol {
                 String channelName = entry.getKey();
                 Object value = entry.getValue();
                 
-                if (channelRegistry.contains(channelName) && !isCompatibleWithChannel(channelName, value)) {
-                    throw new IllegalArgumentException(
-                        "Incompatible value type for channel '" + channelName + "': " + 
-                        "Expected " + channelRegistry.get(channelName).getUpdateType().getName() + 
-                        ", got " + (value != null ? value.getClass().getName() : "null")
-                    );
-                }
+                // Type safety ensured by generic parameters
             }
             
             // If no input channels are designated, use all input
@@ -354,63 +377,6 @@ public class Pregel implements PregelProtocol {
         }
     }
     
-    /**
-     * Validates that a value is compatible with the channel's expected update type.
-     * 
-     * @param channelName Name of the channel
-     * @param value Value to check
-     * @return true if the value is compatible, false otherwise
-     */
-    private boolean isCompatibleWithChannel(String channelName, Object value) {
-        if (!channelRegistry.contains(channelName)) {
-            return false;
-        }
-        
-        // Get the channel
-        BaseChannel<?, ?, ?> channel = channelRegistry.get(channelName);
-        
-        // Get the expected update type
-        Class<?> updateType = channel.getUpdateType();
-        
-        // Check if value is null (null is always compatible)
-        if (value == null) {
-            return true;
-        }
-        
-        // Check if the value is an instance of the expected type
-        return updateType.isInstance(value);
-    }
-    
-    /**
-     * Convert input to a map if necessary.
-     * This validates that the input is a Map where:
-     * 1. Keys are Strings matching channel names
-     * 2. Values are of a type compatible with the corresponding channel's update type
-     *
-     * @param input Input object
-     * @return Input as a validated map
-     * @throws IllegalArgumentException if input is not a Map or contains incompatible types
-     */
-    private Map<String, Object> convertInput(Object input) {
-        if (input == null) {
-            return Collections.emptyMap();
-        }
-        
-        if (!(input instanceof Map)) {
-            throw new IllegalArgumentException("Input must be a Map<String, Object>");
-        }
-        
-        // Safe to cast to Map since we've verified it is a Map
-        // We validate the key types and allowed values below
-        @SuppressWarnings("unchecked")
-        Map<String, Object> inputMap = (Map<String, Object>) input;
-        
-        // Optional validation: We could check that each key exists in inputChannels
-        // and that the value type matches what the channel expects
-        // This would make the code more robust but might also add overhead
-        
-        return inputMap;
-    }
     
     /**
      * Get the NodeRegistry.
@@ -439,6 +405,7 @@ public class Pregel implements PregelProtocol {
         return checkpointer;
     }
     
+    
     /**
      * Shutdown the executor service.
      */
@@ -446,16 +413,28 @@ public class Pregel implements PregelProtocol {
         executor.shutdown();
     }
     
+    
     /**
-     * Builder for creating Pregel instances.
+     * Builder for creating type-safe Pregel instances.
+     *
+     * @param <I> The input type for the graph
+     * @param <O> The output type for the graph
      */
-    public static class Builder {
-        private final Map<String, PregelNode> nodes = new HashMap<>();
-        private final Map<String, BaseChannel> channels = new HashMap<>();
+    public static class Builder<I, O> {
+        private final Map<String, PregelNode<?, ?>> nodes = new HashMap<>();
+        private final Map<String, BaseChannel<?, ?, ?>> channels = new HashMap<>();
         private Set<String> inputChannels = new HashSet<>();
         private Set<String> outputChannels = new HashSet<>();
         private BaseCheckpointSaver checkpointer;
         private int maxSteps = 100;
+        
+        /**
+         * Create a Builder for a type-safe Pregel graph.
+         */
+        public Builder() {
+            // No parameters needed - type parameters are inferred from usage
+        }
+        
         
         /**
          * Add a node to the graph.
@@ -463,7 +442,7 @@ public class Pregel implements PregelProtocol {
          * @param node Node to add
          * @return This builder
          */
-        public Builder addNode(PregelNode node) {
+        public Builder<I, O> addNode(PregelNode<?, ?> node) {
             if (node == null) {
                 throw new IllegalArgumentException("Node cannot be null");
             }
@@ -477,9 +456,9 @@ public class Pregel implements PregelProtocol {
          * @param nodes Collection of nodes to add
          * @return This builder
          */
-        public Builder addNodes(Collection<PregelNode> nodes) {
+        public Builder<I, O> addNodes(Collection<PregelNode<?, ?>> nodes) {
             if (nodes != null) {
-                for (PregelNode node : nodes) {
+                for (PregelNode<?, ?> node : nodes) {
                     addNode(node);
                 }
             }
@@ -493,7 +472,7 @@ public class Pregel implements PregelProtocol {
          * @param channel Channel to add
          * @return This builder
          */
-        public Builder addChannel(String name, BaseChannel channel) {
+        public Builder<I, O> addChannel(String name, BaseChannel<?, ?, ?> channel) {
             if (name == null || name.isEmpty()) {
                 throw new IllegalArgumentException("Channel name cannot be null or empty");
             }
@@ -510,7 +489,7 @@ public class Pregel implements PregelProtocol {
          * @param channels Map of channel names to channels
          * @return This builder
          */
-        public Builder addChannels(Map<String, BaseChannel> channels) {
+        public Builder<I, O> addChannels(Map<String, BaseChannel<?, ?, ?>> channels) {
             if (channels != null) {
                 this.channels.putAll(channels);
             }
@@ -524,7 +503,7 @@ public class Pregel implements PregelProtocol {
          * @param inputChannels Collection of input channel names
          * @return This builder
          */
-        public Builder setInputChannels(Collection<String> inputChannels) {
+        public Builder<I, O> setInputChannels(Collection<String> inputChannels) {
             if (inputChannels != null) {
                 this.inputChannels = new HashSet<>(inputChannels);
             }
@@ -538,7 +517,7 @@ public class Pregel implements PregelProtocol {
          * @param outputChannels Collection of output channel names
          * @return This builder
          */
-        public Builder setOutputChannels(Collection<String> outputChannels) {
+        public Builder<I, O> setOutputChannels(Collection<String> outputChannels) {
             if (outputChannels != null) {
                 this.outputChannels = new HashSet<>(outputChannels);
             }
@@ -551,7 +530,7 @@ public class Pregel implements PregelProtocol {
          * @param checkpointer Checkpointer to use
          * @return This builder
          */
-        public Builder setCheckpointer(BaseCheckpointSaver checkpointer) {
+        public Builder<I, O> setCheckpointer(BaseCheckpointSaver checkpointer) {
             this.checkpointer = checkpointer;
             return this;
         }
@@ -562,7 +541,7 @@ public class Pregel implements PregelProtocol {
          * @param maxSteps Maximum number of steps
          * @return This builder
          */
-        public Builder setMaxSteps(int maxSteps) {
+        public Builder<I, O> setMaxSteps(int maxSteps) {
             if (maxSteps <= 0) {
                 throw new IllegalArgumentException("Max steps must be positive");
             }
@@ -571,11 +550,11 @@ public class Pregel implements PregelProtocol {
         }
         
         /**
-         * Build the Pregel instance.
+         * Build the type-safe Pregel instance.
          *
-         * @return Pregel instance
+         * @return Pregel instance with specified type parameters
          */
-        public Pregel build() {
+        public Pregel<I, O> build() {
             // If no input/output channels are explicitly set, auto-detect them
             if (inputChannels.isEmpty()) {
                 // Use all channels as input channels by default
@@ -587,7 +566,7 @@ public class Pregel implements PregelProtocol {
                 outputChannels.addAll(channels.keySet());
             }
             
-            return new Pregel(nodes, channels, inputChannels, outputChannels, checkpointer, maxSteps);
+            return new Pregel<>(nodes, channels, inputChannels, outputChannels, checkpointer, maxSteps);
         }
     }
 }

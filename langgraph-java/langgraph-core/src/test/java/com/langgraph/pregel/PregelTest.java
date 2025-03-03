@@ -4,6 +4,7 @@ import com.langgraph.channels.BaseChannel;
 import com.langgraph.channels.BinaryOperatorChannel;
 import com.langgraph.channels.LastValue;
 import com.langgraph.channels.TopicChannel;
+import com.langgraph.channels.TypeReference;
 import com.langgraph.checkpoint.base.BaseCheckpointSaver;
 import com.langgraph.pregel.channel.ChannelWriteEntry;
 import com.langgraph.pregel.retry.RetryPolicy;
@@ -89,18 +90,18 @@ public class PregelTest {
     /**
      * Simple test node action that returns a fixed value
      */
-    private static class FixedValueAction implements PregelExecutable {
-        private final Object value;
+    private static class FixedValueAction implements PregelExecutable<Integer, Integer> {
+        private final Integer value;
         private boolean hasExecuted = false;
         
-        public FixedValueAction(Object value) {
+        public FixedValueAction(Integer value) {
             this.value = value;
         }
         
         @Override
-        public Map<String, Object> execute(Map<String, Object> inputs, Map<String, Object> context) {
+        public Map<String, Integer> execute(Map<String, Integer> inputs, Map<String, Object> context) {
             System.out.println("FixedValueAction - returning value: " + value);
-            Map<String, Object> output = new HashMap<>();
+            Map<String, Integer> output = new HashMap<>();
             
             // Return empty map on second call to prevent infinite loops
             if (hasExecuted) {
@@ -118,23 +119,23 @@ public class PregelTest {
      * Action that adds one to any input and creates an output value
      * Similar to add_one in Python tests
      */
-    private static class AddOneAction implements PregelExecutable {
+    private static class AddOneAction implements PregelExecutable<Integer, Integer> {
         @Override
-        public Map<String, Object> execute(Map<String, Object> inputs, Map<String, Object> context) {
+        public Map<String, Integer> execute(Map<String, Integer> inputs, Map<String, Object> context) {
             // Get input from any channel, default to 0 if not found
             int inputValue = 0;
             
             // First check for input
             if (inputs.containsKey("input")) {
-                inputValue = (Integer) inputs.get("input");
+                inputValue = inputs.get("input");
             } 
             // Then check for inbox (used in multi-node tests)
             else if (inputs.containsKey("inbox")) {
-                inputValue = (Integer) inputs.get("inbox");
+                inputValue = inputs.get("inbox");
             }
             
             // Create output with value increased by 1
-            Map<String, Object> output = new HashMap<>();
+            Map<String, Integer> output = new HashMap<>();
             output.put("output", inputValue + 1);
             output.put("inbox", inputValue + 1); // Also write to inbox for chained nodes
             
@@ -146,23 +147,23 @@ public class PregelTest {
      * Action that adds the total and input values
      * Similar to the 'adder' test in Python tests
      */
-    private static class AdderAction implements PregelExecutable {
+    private static class AdderAction implements PregelExecutable<Integer, Integer> {
         @Override
-        public Map<String, Object> execute(Map<String, Object> inputs, Map<String, Object> context) {
+        public Map<String, Integer> execute(Map<String, Integer> inputs, Map<String, Object> context) {
             int inputValue = 0;
             int totalValue = 0;
             
             if (inputs.containsKey("input")) {
-                inputValue = (Integer) inputs.get("input");
+                inputValue = inputs.get("input");
             }
             
             if (inputs.containsKey("total")) {
-                totalValue = (Integer) inputs.get("total");
+                totalValue = inputs.get("total");
             }
             
             int result = totalValue + inputValue;
             
-            Map<String, Object> output = new HashMap<>();
+            Map<String, Integer> output = new HashMap<>();
             output.put("output", result);
             output.put("total", result);
             return output;
@@ -172,7 +173,7 @@ public class PregelTest {
     /**
      * Action that throws an exception if input is greater than a threshold
      */
-    private static class ThresholdAction implements PregelExecutable {
+    private static class ThresholdAction implements PregelExecutable<Integer, Integer> {
         private final int threshold;
         private final boolean shouldThrow;
         
@@ -182,17 +183,17 @@ public class PregelTest {
         }
         
         @Override
-        public Map<String, Object> execute(Map<String, Object> inputs, Map<String, Object> context) {
+        public Map<String, Integer> execute(Map<String, Integer> inputs, Map<String, Object> context) {
             int inputValue = 0;
             if (inputs.containsKey("input")) {
-                inputValue = (Integer) inputs.get("input");
+                inputValue = inputs.get("input");
             }
             
             if (shouldThrow && inputValue > threshold) {
                 throw new RuntimeException("Input is too large");
             }
             
-            Map<String, Object> output = new HashMap<>();
+            Map<String, Integer> output = new HashMap<>();
             output.put("output", inputValue);
             return output;
         }
@@ -201,14 +202,13 @@ public class PregelTest {
     /**
      * Action that adds 10 to each value in a list
      */
-    private static class Add10EachAction implements PregelExecutable {
+    private static class Add10EachAction implements PregelExecutable<List<Integer>, List<Integer>> {
         @Override
-        public Map<String, Object> execute(Map<String, Object> inputs, Map<String, Object> context) {
+        public Map<String, List<Integer>> execute(Map<String, List<Integer>> inputs, Map<String, Object> context) {
             System.out.println("Add10EachAction - inputs: " + inputs);
             List<Integer> inputValues = new ArrayList<>();
-            if (inputs.containsKey("inbox") && inputs.get("inbox") instanceof List) {
-                @SuppressWarnings("unchecked")
-                List<Integer> inbox = (List<Integer>) inputs.get("inbox");
+            if (inputs.containsKey("inbox")) {
+                List<Integer> inbox = inputs.get("inbox");
                 System.out.println("Add10EachAction - inbox: " + inbox);
                 inputValues.addAll(inbox);
             }
@@ -219,7 +219,7 @@ public class PregelTest {
                     .collect(Collectors.toList());
             
             System.out.println("Add10EachAction - results: " + results);
-            Map<String, Object> output = new HashMap<>();
+            Map<String, List<Integer>> output = new HashMap<>();
             output.put("output", results);
             return output;
         }
@@ -228,7 +228,7 @@ public class PregelTest {
     /**
      * Action that passes through values but stops after maxSteps
      */
-    private static class LimitedAction implements PregelExecutable {
+    private static class LimitedAction implements PregelExecutable<Integer, Integer> {
         private final int maxSteps;
         private final AtomicInteger stepCount = new AtomicInteger(0);
         
@@ -237,7 +237,7 @@ public class PregelTest {
         }
         
         @Override
-        public Map<String, Object> execute(Map<String, Object> inputs, Map<String, Object> context) {
+        public Map<String, Integer> execute(Map<String, Integer> inputs, Map<String, Object> context) {
             int count = stepCount.incrementAndGet();
             
             // If we've reached max steps, return empty to stop
@@ -246,7 +246,13 @@ public class PregelTest {
             }
             
             // Otherwise, pass through the input values with a step counter
-            Map<String, Object> output = new HashMap<>(inputs);
+            Map<String, Integer> output = new HashMap<>();
+            
+            // Pass through any input values
+            if (inputs.containsKey("counter")) {
+                output.put("counter", inputs.get("counter"));
+            }
+            
             output.put("step", count);
             return output;
         }
@@ -257,18 +263,18 @@ public class PregelTest {
         // For constructor tests, we still use direct constructors to validate they work properly
         
         // Setup test components using builder patterns where appropriate
-        Map<String, PregelNode> nodes = new HashMap<>();
-        nodes.put("node1", new PregelNode.Builder("node1", new FixedValueAction(1)).build());
+        Map<String, PregelNode<Integer, Integer>> nodes = new HashMap<>();
+        nodes.put("node1", new PregelNode.Builder<Integer, Integer>("node1", new FixedValueAction(1)).build());
         
-        Map<String, BaseChannel> channels = new HashMap<>();
-        LastValue<Integer> counterChannel = new LastValue<>(Integer.class, "counter");
+        Map<String, BaseChannel<?, ?, ?>> channels = new HashMap<>();
+        LastValue<Integer> counterChannel = LastValue.<Integer>create("counter");
         // No need to initialize the channel (Python-compatible)
         channels.put("counter", counterChannel);
         
         TestCheckpointSaver checkpointer = new TestCheckpointSaver();
         
         // Test builder with all parameters
-        Pregel pregel1 = new Pregel.Builder()
+        Pregel<Integer, Integer> pregel1 = new Pregel.Builder<Integer, Integer>()
                 .addChannels(channels)
                 .addNodes(new ArrayList<>(nodes.values()))
                 .setCheckpointer(checkpointer)
@@ -279,7 +285,7 @@ public class PregelTest {
         assertThat(pregel1.getCheckpointer()).isEqualTo(checkpointer);
         
         // Test builder with default max steps
-        Pregel pregel2 = new Pregel.Builder()
+        Pregel<Integer, Integer> pregel2 = new Pregel.Builder<Integer, Integer>()
                 .addChannels(channels)
                 .addNodes(new ArrayList<>(nodes.values()))
                 .setCheckpointer(checkpointer)
@@ -289,7 +295,18 @@ public class PregelTest {
         assertThat(pregel2.getCheckpointer()).isEqualTo(checkpointer);
         
         // Test constructor without checkpointer
-        Pregel pregel3 = new Pregel(nodes, channels);
+        // Convert to wildcards to match constructor
+        @SuppressWarnings("unchecked")
+        Map<String, PregelNode<?, ?>> nodesCast = (Map<String, PregelNode<?, ?>>) (Map<String, ?>) nodes;
+        
+        Pregel<Integer, Integer> pregel3 = new Pregel<>(
+            nodesCast, 
+            channels, 
+            new HashSet<>(), 
+            new HashSet<>(), 
+            null, 
+            100
+        );
         assertThat(pregel3.getNodeRegistry()).isNotNull();
         assertThat(pregel3.getChannelRegistry()).isNotNull();
         assertThat(pregel3.getCheckpointer()).isNull();
@@ -301,28 +318,27 @@ public class PregelTest {
         // Use builder pattern for all supported components
         
         // Create a node with the builder pattern
-        PregelNode node = new PregelNode.Builder("counter", new FixedValueAction(1))
+        PregelNode<Integer, Integer> node = new PregelNode.Builder<Integer, Integer>("counter", new FixedValueAction(1))
                 .channels("counter")
                 .triggerChannels("counter") // Add trigger for Python compatibility
                 .writers("counter")
                 .build();
         
         // Create channel without initialization (Python-compatible)
-        LastValue<Integer> counterChannel = new LastValue<>(Integer.class, "counter");
+        LastValue<Integer> counterChannel = LastValue.<Integer>create("counter");
         
         // Use Pregel builder pattern
-        Pregel pregel = new Pregel.Builder()
+        Pregel<Integer, Integer> pregel = new Pregel.Builder<Integer, Integer>()
                 .addNode(node)
                 .addChannel("counter", counterChannel)
                 .build();
         
         // Initialize with counter=0 in the input map
-        Map<String, Object> input = new HashMap<>();
+        Map<String, Integer> input = new HashMap<>();
         input.put("counter", 0);
         
         // Execute and check the result
-        @SuppressWarnings("unchecked")
-        Map<String, Object> result = (Map<String, Object>) pregel.invoke(input, null);
+        Map<String, Integer> result = pregel.invoke(input, null);
         
         System.out.println("testBasicInvocation - Result: " + result);
         
@@ -331,13 +347,12 @@ public class PregelTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void testMultiStepExecution() {
         // Setup a graph with a node that stops after 3 steps
         // Using builder pattern for better readability and best practices
         
         // Create a node with the builder pattern
-        PregelNode node = new PregelNode.Builder("limited", new LimitedAction(3))
+        PregelNode<Integer, Integer> node = new PregelNode.Builder<Integer, Integer>("limited", new LimitedAction(3))
                 .channels("counter")
                 .triggerChannels("counter") // Add trigger for Python compatibility
                 .writers("counter")
@@ -345,14 +360,14 @@ public class PregelTest {
                 .build();
         
         // Create channels without initialization (Python-compatible)
-        LastValue<Integer> counterChannel = new LastValue<>(Integer.class, "counter");
-        LastValue<Integer> stepChannel = new LastValue<>(Integer.class, "step");
+        LastValue<Integer> counterChannel = LastValue.<Integer>create("counter");
+        LastValue<Integer> stepChannel = LastValue.<Integer>create("step");
         
         // Create test checkpointer
         TestCheckpointSaver checkpointer = new TestCheckpointSaver();
         
         // Create Pregel with builder
-        Pregel pregel = new Pregel.Builder()
+        Pregel<Integer, Integer> pregel = new Pregel.Builder<Integer, Integer>()
                 .addNode(node)
                 .addChannel("counter", counterChannel)
                 .addChannel("step", stepChannel)
@@ -361,7 +376,7 @@ public class PregelTest {
                 .build();
         
         // Initialize with counter=0
-        Map<String, Object> input = new HashMap<>();
+        Map<String, Integer> input = new HashMap<>();
         input.put("counter", 0);
         
         // Set thread ID for consistent checkpoints
@@ -369,7 +384,7 @@ public class PregelTest {
         config.put("thread_id", "test-thread");
         
         // Execute and check the result
-        Map<String, Object> result = (Map<String, Object>) pregel.invoke(input, config);
+        Map<String, Integer> result = pregel.invoke(input, config);
         
         System.out.println("testMultiStepExecution - Result: " + result);
         System.out.println("testMultiStepExecution - History size: " + checkpointer.list("test-thread").size());
@@ -382,9 +397,9 @@ public class PregelTest {
         assertThat(result.get("step")).isEqualTo(3);
         
         // Verify checkpoints were created
-        Object stateHistory = pregel.getStateHistory("test-thread");
-        assertThat(stateHistory).isInstanceOf(List.class);
-        assertThat((List<Object>) stateHistory).hasSizeGreaterThanOrEqualTo(3);
+        List<Map<String, Integer>> stateHistory = pregel.getStateHistory("test-thread");
+        assertThat(stateHistory).isNotNull();
+        assertThat(stateHistory).hasSizeGreaterThanOrEqualTo(3);
     }
 
     @Test
@@ -392,7 +407,7 @@ public class PregelTest {
         // Setup a simple graph that runs for 3 steps using builder pattern
         
         // Create node with builder
-        PregelNode node = new PregelNode.Builder("limited", new LimitedAction(3))
+        PregelNode<Integer, Integer> node = new PregelNode.Builder<Integer, Integer>("limited", new LimitedAction(3))
                 .channels("counter")
                 .triggerChannels("counter") // Add trigger for Python compatibility
                 .writers("counter")
@@ -400,18 +415,18 @@ public class PregelTest {
                 .build();
         
         // Create channels without initialization (Python-compatible)
-        LastValue<Integer> counterChannel = new LastValue<>(Integer.class, "counter");
-        LastValue<Integer> stepChannel = new LastValue<>(Integer.class, "step");
+        LastValue<Integer> counterChannel = LastValue.<Integer>create("counter");
+        LastValue<Integer> stepChannel = LastValue.<Integer>create("step");
         
         // Create Pregel with builder
-        Pregel pregel = new Pregel.Builder()
+        Pregel<Integer, Integer> pregel = new Pregel.Builder<Integer, Integer>()
                 .addNode(node)
                 .addChannel("counter", counterChannel)
                 .addChannel("step", stepChannel)
                 .build();
         
         // Initialize with counter=0
-        Map<String, Object> input = new HashMap<>();
+        Map<String, Integer> input = new HashMap<>();
         input.put("counter", 0);
         
         // Set config with thread ID
@@ -419,12 +434,12 @@ public class PregelTest {
         config.put("thread_id", "stream-test");
         
         // Stream in VALUES mode
-        Iterator<Object> iterator = pregel.stream(input, config, StreamMode.VALUES);
+        Iterator<Map<String, Integer>> iterator = pregel.stream(input, config, StreamMode.VALUES);
         
         // Collect the streamed values
-        List<Object> streamedValues = new ArrayList<>();
+        List<Map<String, Integer>> streamedValues = new ArrayList<>();
         while (iterator.hasNext()) {
-            Object value = iterator.next();
+            Map<String, Integer> value = iterator.next();
             System.out.println("testStreamOutput - Received: " + value);
             streamedValues.add(value);
         }
@@ -440,19 +455,19 @@ public class PregelTest {
         // Setup a graph with checkpointing using builder pattern
         
         // Create node with builder
-        PregelNode node = new PregelNode.Builder("counter", new FixedValueAction(11))
+        PregelNode<Integer, Integer> node = new PregelNode.Builder<Integer, Integer>("counter", new FixedValueAction(11))
                 .channels("counter")
                 .writers("counter")
                 .build();
         
         // Create channel without initialization (Python-compatible)
-        LastValue<Integer> counterChannel = new LastValue<>(Integer.class, "counter");
+        LastValue<Integer> counterChannel = LastValue.<Integer>create("counter");
         
         // Create checkpointer
         TestCheckpointSaver checkpointer = new TestCheckpointSaver();
         
         // Create Pregel with builder
-        Pregel pregel = new Pregel.Builder()
+        Pregel<Integer, Integer> pregel = new Pregel.Builder<Integer, Integer>()
                 .addNode(node)
                 .addChannel("counter", counterChannel)
                 .setCheckpointer(checkpointer)
@@ -462,13 +477,12 @@ public class PregelTest {
         String threadId = "state-test";
         
         // Create initial state and update
-        Map<String, Object> initialState = new HashMap<>();
+        Map<String, Integer> initialState = new HashMap<>();
         initialState.put("counter", 10);
         pregel.updateState(threadId, initialState);
         
         // Get the state back
-        @SuppressWarnings("unchecked")
-        Map<String, Object> retrievedState = (Map<String, Object>) pregel.getState(threadId);
+        Map<String, Integer> retrievedState = pregel.getState(threadId);
         
         System.out.println("testStateManagement - Retrieved state: " + retrievedState);
         
@@ -479,13 +493,13 @@ public class PregelTest {
     @Test
     void testBuilderPattern() {
         // Create channels without initialization (Python-compatible)
-        LastValue<Integer> counterChannel = new LastValue<>(Integer.class, "counter");
-        LastValue<Integer> stepChannel = new LastValue<>(Integer.class, "step");
+        LastValue<Integer> counterChannel = LastValue.<Integer>create("counter");
+        LastValue<Integer> stepChannel = LastValue.<Integer>create("step");
         
         // Test the builder
-        Pregel pregel = new Pregel.Builder()
-                .addNode(new PregelNode("node1", new FixedValueAction(1)))
-                .addNode(new PregelNode("node2", new LimitedAction(2)))
+        Pregel<Integer, Integer> pregel = new Pregel.Builder<Integer, Integer>()
+                .addNode(new PregelNode.Builder<Integer, Integer>("node1", new FixedValueAction(1)).build())
+                .addNode(new PregelNode.Builder<Integer, Integer>("node2", new LimitedAction(2)).build())
                 .addChannel("counter", counterChannel)
                 .addChannel("step", stepChannel)
                 .setCheckpointer(new TestCheckpointSaver())
@@ -501,39 +515,36 @@ public class PregelTest {
      * Test single process with input and output (test_invoke_single_process_in_out)
      */
     @Test
-    @SuppressWarnings("unchecked")
     void testInvokeSingleProcessInOut() {
         // Create node that adds 1 to input
-        PregelNode node = new PregelNode.Builder("one", new AddOneAction())
+        PregelNode<Integer, Integer> node = new PregelNode.Builder<Integer, Integer>("one", new AddOneAction())
                 .channels("input")  // Read from input channel
                 .triggerChannels("input")    // Add trigger for Python compatibility
                 .writers("output")    // Write to output channel
                 .build();
         
         // Setup channels without initialization (Python-compatible)
-        LastValue<Integer> inputChannel = new LastValue<>(Integer.class, "input");
-        LastValue<Integer> outputChannel = new LastValue<>(Integer.class, "output");
+        LastValue<Integer> inputChannel = LastValue.<Integer>create("input");
+        LastValue<Integer> outputChannel = LastValue.<Integer>create("output");
         
-        Map<String, BaseChannel> channels = new HashMap<>();
+        Map<String, BaseChannel<?, ?, ?>> channels = new HashMap<>();
         channels.put("input", inputChannel);
         channels.put("output", outputChannel);
         
         // Create Pregel
-        Pregel pregel = new Pregel.Builder()
+        Pregel<Integer, Integer> pregel = new Pregel.Builder<Integer, Integer>()
                 .addNode(node)
                 .addChannels(channels)
                 .build();
         
         // Input contains input=2
-        Map<String, Object> input = new HashMap<>();
+        Map<String, Integer> input = new HashMap<>();
         input.put("input", 2);
         
         // Execute the graph
-        Object result = pregel.invoke(input, null);
+        Map<String, Integer> resultMap = pregel.invoke(input, null);
         
         // Result should contain output=3 (input 2 + 1)
-        assertThat(result).isInstanceOf(Map.class);
-        Map<String, Object> resultMap = (Map<String, Object>) result;
         assertThat(resultMap).containsEntry("output", 3);
     }
     
@@ -541,15 +552,14 @@ public class PregelTest {
      * Test two processes in sequence (test_invoke_two_processes_in_out)
      */
     @Test
-    @SuppressWarnings("unchecked")
     void testInvokeTwoProcessesInOut() {
         // Create a simpler test with two nodes in sequence
         
         // First node simply returns a fixed value
-        PregelNode one = new PregelNode.Builder("one", new PregelExecutable() {
+        PregelNode<Integer, Integer> one = new PregelNode.Builder<Integer, Integer>("one", new PregelExecutable<Integer, Integer>() {
             @Override
-            public Map<String, Object> execute(Map<String, Object> inputs, Map<String, Object> context) {
-                Map<String, Object> output = new HashMap<>();
+            public Map<String, Integer> execute(Map<String, Integer> inputs, Map<String, Object> context) {
+                Map<String, Integer> output = new HashMap<>();
                 output.put("inbox", 3); // Fixed output value
                 return output;
             }
@@ -560,11 +570,11 @@ public class PregelTest {
         .build();
         
         // Second node takes inbox and adds 1
-        PregelNode two = new PregelNode.Builder("two", new PregelExecutable() {
+        PregelNode<Integer, Integer> two = new PregelNode.Builder<Integer, Integer>("two", new PregelExecutable<Integer, Integer>() {
             @Override
-            public Map<String, Object> execute(Map<String, Object> inputs, Map<String, Object> context) {
-                int inboxValue = (Integer) inputs.get("inbox");
-                Map<String, Object> output = new HashMap<>();
+            public Map<String, Integer> execute(Map<String, Integer> inputs, Map<String, Object> context) {
+                int inboxValue = inputs.get("inbox");
+                Map<String, Integer> output = new HashMap<>();
                 output.put("output", inboxValue + 1);
                 return output;
             }
@@ -575,32 +585,30 @@ public class PregelTest {
         .build();
         
         // Setup channels without initialization (Python-compatible)
-        LastValue<Integer> inputChannel = new LastValue<>(Integer.class, "input");
-        LastValue<Integer> inboxChannel = new LastValue<>(Integer.class, "inbox");
-        LastValue<Integer> outputChannel = new LastValue<>(Integer.class, "output");
+        LastValue<Integer> inputChannel = LastValue.<Integer>create("input");
+        LastValue<Integer> inboxChannel = LastValue.<Integer>create("inbox");
+        LastValue<Integer> outputChannel = LastValue.<Integer>create("output");
         
-        Map<String, BaseChannel> channels = new HashMap<>();
+        Map<String, BaseChannel<?, ?, ?>> channels = new HashMap<>();
         channels.put("input", inputChannel);
         channels.put("inbox", inboxChannel);
         channels.put("output", outputChannel);
         
         // Create Pregel
-        Pregel pregel = new Pregel.Builder()
+        Pregel<Integer, Integer> pregel = new Pregel.Builder<Integer, Integer>()
                 .addNode(one)
                 .addNode(two)
                 .addChannels(channels)
                 .build();
         
         // Provide input
-        Map<String, Object> input = new HashMap<>();
+        Map<String, Integer> input = new HashMap<>();
         input.put("input", 1); // Value doesn't matter, node one ignores it
         
         // Execute the graph
-        Object result = pregel.invoke(input, null);
+        Map<String, Integer> resultMap = pregel.invoke(input, null);
         
         // Result should be a map with output=4 (inbox=3 + 1)
-        assertThat(result).isInstanceOf(Map.class);
-        Map<String, Object> resultMap = (Map<String, Object>) result;
         assertThat(resultMap).containsEntry("output", 4);
     }
     
@@ -608,15 +616,14 @@ public class PregelTest {
      * Test two processes with TopicChannel for multiple writers
      */
     @Test
-    @SuppressWarnings("unchecked")
     void testInvokeTwoProcessesWithTopic() {
         // Create two nodes that both write to the same TopicChannel
         
         // First node returns a fixed value (111) to output
-        PregelNode one = new PregelNode.Builder("one", new PregelExecutable() {
+        PregelNode<Integer, Integer> one = new PregelNode.Builder<Integer, Integer>("one", new PregelExecutable<Integer, Integer>() {
             @Override
-            public Map<String, Object> execute(Map<String, Object> inputs, Map<String, Object> context) {
-                Map<String, Object> output = new HashMap<>();
+            public Map<String, Integer> execute(Map<String, Integer> inputs, Map<String, Object> context) {
+                Map<String, Integer> output = new HashMap<>();
                 output.put("output", 111);
                 return output;
             }
@@ -626,10 +633,10 @@ public class PregelTest {
         .build();
         
         // Second node returns a fixed value (222) to output
-        PregelNode two = new PregelNode.Builder("two", new PregelExecutable() {
+        PregelNode<Integer, Integer> two = new PregelNode.Builder<Integer, Integer>("two", new PregelExecutable<Integer, Integer>() {
             @Override
-            public Map<String, Object> execute(Map<String, Object> inputs, Map<String, Object> context) {
-                Map<String, Object> output = new HashMap<>();
+            public Map<String, Integer> execute(Map<String, Integer> inputs, Map<String, Object> context) {
+                Map<String, Integer> output = new HashMap<>();
                 output.put("output", 222);
                 return output;
             }
@@ -639,40 +646,33 @@ public class PregelTest {
         .build();
         
         // Setup channels with TopicChannel for output to collect multiple values
-        LastValue<Integer> inputChannel = new LastValue<>(Integer.class, "input");
-        TopicChannel<Integer> outputChannel = new TopicChannel<>(Integer.class);
+        LastValue<Integer> inputChannel = LastValue.<Integer>create("input");
+        TopicChannel<Integer> outputChannel = TopicChannel.<Integer>create();
         
         // No need to initialize input channel (Python-compatible)
         
-        Map<String, BaseChannel> channels = new HashMap<>();
+        Map<String, BaseChannel<?, ?, ?>> channels = new HashMap<>();
         channels.put("input", inputChannel);
         channels.put("output", outputChannel);
         
         // Create Pregel
-        Pregel pregel = new Pregel.Builder()
+        Pregel<Integer, List<Integer>> pregel = new Pregel.Builder<Integer, List<Integer>>()
                 .addNode(one)
                 .addNode(two)
                 .addChannels(channels)
                 .build();
         
         // Provide any input - nodes use fixed values
-        Map<String, Object> input = new HashMap<>();
+        Map<String, Integer> input = new HashMap<>();
         input.put("input", 0);
         
         // Execute the graph
-        Object result = pregel.invoke(input, null);
-        
-        // The result is a map in the Java implementation (unlike Python)
-        assertThat(result).isInstanceOf(Map.class);
-        Map<String, Object> resultMap = (Map<String, Object>) result;
+        Map<String, List<Integer>> resultMap = pregel.invoke(input, null);
         
         // Output key should contain a list
         assertThat(resultMap).containsKey("output");
-        Object outputValue = resultMap.get("output");
-        assertThat(outputValue).isInstanceOf(List.class);
+        List<Integer> outputList = resultMap.get("output");
         
-        // Output should be a list
-        List<Integer> outputList = (List<Integer>) outputValue;
         System.out.println("testInvokeTwoProcessesWithTopic - Output list: " + outputList);
         
         // In the Java implementation, the list contains only one value due to how tasks execute
@@ -689,16 +689,15 @@ public class PregelTest {
      * Test a join pattern with multiple inputs converging
      */
     @Test
-    @SuppressWarnings("unchecked")
     void testInvokeWithJoin() {
         // Create three linked nodes with a join
-        PregelNode one = new PregelNode.Builder("one", new AddOneAction())
+        PregelNode<Integer, Integer> one = new PregelNode.Builder<Integer, Integer>("one", new AddOneAction())
                 .channels("input")
                 .triggerChannels("input") // Add trigger for Python compatibility
                 .writers("inbox")
                 .build();
         
-        PregelNode three = new PregelNode.Builder("three", new AddOneAction())
+        PregelNode<Integer, Integer> three = new PregelNode.Builder<Integer, Integer>("three", new AddOneAction())
                 .channels("input")
                 .triggerChannels("input") // Add trigger for Python compatibility
                 .writers("inbox")
@@ -706,17 +705,18 @@ public class PregelTest {
         
         // The join node that gets all inbox data and processes it
         // Make sure this node runs last, after the other nodes have written to the inbox
-        PregelNode four = new PregelNode.Builder("four", new Add10EachAction())
+        PregelNode<List<Integer>, List<Integer>> four = new PregelNode.Builder<List<Integer>, List<Integer>>("four", new Add10EachAction())
                 .channels("inbox")
                 .triggerChannels("inbox") // Add trigger for Python compatibility
                 .writers("output")
                 .build();
         
         // Setup channels - inbox is a topic to gather multiple inputs
-        Map<String, BaseChannel> channels = new HashMap<>();
-        LastValue<Integer> inputChannel = new LastValue<>(Integer.class, "input");
-        TopicChannel<Integer> inboxChannel = new TopicChannel<>(Integer.class);
-        LastValue<Object> outputChannel = new LastValue<>(Object.class, "output");
+        Map<String, BaseChannel<?, ?, ?>> channels = new HashMap<>();
+        LastValue<Integer> inputChannel = LastValue.<Integer>create("input");
+        TopicChannel<Integer> inboxChannel = TopicChannel.<Integer>create();
+        // Use the type-safe factory method with inference
+        LastValue<List<Integer>> outputChannel = LastValue.<List<Integer>>create("output");
         
         // No need to initialize channels (Python-compatible)
         
@@ -724,8 +724,8 @@ public class PregelTest {
         channels.put("inbox", inboxChannel);
         channels.put("output", outputChannel);
         
-        // Create Pregel
-        Pregel pregel = new Pregel.Builder()
+        // Create Pregel with mixed type parameters for input (Integer) and output (List<Integer>)
+        Pregel<Integer, List<Integer>> pregel = new Pregel.Builder<Integer, List<Integer>>()
                 .addNode(one)
                 .addNode(three)
                 .addNode(four)
@@ -733,7 +733,7 @@ public class PregelTest {
                 .build();
         
         // Test with input 2
-        Map<String, Object> input = Collections.singletonMap("input", 2);
+        Map<String, Integer> input = Collections.singletonMap("input", 2);
         
         // This is part of test logic: Manually put values in the inbox
         // This simulates values from other sources that the nodes will process
@@ -746,19 +746,13 @@ public class PregelTest {
         
         // Now run Pregel
         System.out.println("Before running pregel, inbox channel has: " + inboxChannel.get());
-        Object result = pregel.invoke(input, null);
+        Map<String, List<Integer>> resultMap = pregel.invoke(input, null);
         
         // Result should have output with list of values after adding 10 to each input
-        assertThat(result).isInstanceOf(Map.class);
-        Map<String, Object> resultMap = (Map<String, Object>) result;
         assertThat(resultMap).containsKey("output");
         
-        Object outputValue = resultMap.get("output");
+        List<Integer> outputList = resultMap.get("output");
         System.out.println("Result map: " + resultMap);
-        System.out.println("Output value class: " + outputValue.getClass().getName());
-        assertThat(outputValue).isInstanceOf(List.class);
-        
-        List<Integer> outputList = (List<Integer>) outputValue;
         System.out.println("Final output list: " + outputList);
         
         // With our TopicChannel modifications, this test should pass because we're keeping all values

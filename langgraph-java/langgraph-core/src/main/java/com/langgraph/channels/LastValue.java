@@ -20,24 +20,59 @@ public class LastValue<V> extends AbstractChannel<V, V, V> {
     private boolean initialized = false;
     
     /**
-     * Creates a new LastValue channel with the specified value type.
+     * Creates a new LastValue channel using TypeReference to preserve generic type information.
+     * This is especially useful for generic types like List&lt;Integer&gt;.
      *
-     * @param valueType The class representing the value type of this channel
+     * @param typeRef The TypeReference that captures the full generic type
      */
-    public LastValue(Class<V> valueType) {
+    protected LastValue(TypeReference<V> typeRef) {
         // For LastValue, V=U=C (they are all the same type)
-        super(valueType, valueType, valueType);
+        super(typeRef, typeRef, typeRef);
     }
     
     /**
-     * Creates a new LastValue channel with the specified value type and key.
+     * Creates a new LastValue channel using TypeReference to preserve generic type information,
+     * with the specified key.
      *
-     * @param valueType The class representing the value type of this channel
+     * @param typeRef The TypeReference that captures the full generic type
      * @param key The key (name) of this channel
      */
-    public LastValue(Class<V> valueType, String key) {
+    protected LastValue(TypeReference<V> typeRef, String key) {
         // For LastValue, V=U=C (they are all the same type)
-        super(valueType, valueType, valueType, key);
+        super(typeRef, typeRef, typeRef, key);
+    }
+    
+    /**
+     * Factory method to create a LastValue channel with proper generic type capture.
+     * Use this instead of constructor when dealing with generic types like List&lt;Integer&gt;.
+     * 
+     * <p>Example usage:
+     * <pre>
+     * LastValue&lt;List&lt;Integer&gt;&gt; channel = LastValue.&lt;List&lt;Integer&gt;&gt;create();
+     * </pre>
+     * 
+     * @param <T> The type parameter for the channel
+     * @return A new LastValue channel with the captured type parameter
+     */
+    public static <T> LastValue<T> create() {
+        return new LastValue<>(new TypeReference<T>() {});
+    }
+    
+    /**
+     * Factory method to create a LastValue channel with proper generic type capture
+     * and a specified key.
+     * 
+     * <p>Example usage:
+     * <pre>
+     * LastValue&lt;List&lt;Integer&gt;&gt; channel = LastValue.&lt;List&lt;Integer&gt;&gt;create("myChannel");
+     * </pre>
+     * 
+     * @param <T> The type parameter for the channel
+     * @param key The key (name) for the channel
+     * @return A new LastValue channel with the captured type parameter and specified key
+     */
+    public static <T> LastValue<T> create(String key) {
+        return new LastValue<>(new TypeReference<T>() {}, key);
     }
     
     @Override
@@ -66,7 +101,8 @@ public class LastValue<V> extends AbstractChannel<V, V, V> {
     
     @Override
     public BaseChannel<V, V, V> fromCheckpoint(V checkpoint) {
-        LastValue<V> newChannel = new LastValue<>(valueType, key);
+        LastValue<V> newChannel = new LastValue<>(valueTypeRef, key);
+        
         // Even null is a valid checkpoint value - it means the channel was initialized with null
         newChannel.value = checkpoint;
         newChannel.initialized = true;
@@ -97,11 +133,12 @@ public class LastValue<V> extends AbstractChannel<V, V, V> {
         if (!(obj instanceof LastValue)) {
             return false;
         }
+        if (!super.equals(obj)) {
+            return false;
+        }
         
         LastValue<?> other = (LastValue<?>) obj;
-        return valueType.equals(other.valueType) &&
-               key.equals(other.key) &&
-               initialized == other.initialized &&
+        return initialized == other.initialized &&
                (value == null ? other.value == null : value.equals(other.value));
     }
     
@@ -112,8 +149,7 @@ public class LastValue<V> extends AbstractChannel<V, V, V> {
      */
     @Override
     public int hashCode() {
-        int result = valueType.hashCode();
-        result = 31 * result + key.hashCode();
+        int result = super.hashCode();
         result = 31 * result + (initialized ? 1 : 0);
         result = 31 * result + (value != null ? value.hashCode() : 0);
         return result;

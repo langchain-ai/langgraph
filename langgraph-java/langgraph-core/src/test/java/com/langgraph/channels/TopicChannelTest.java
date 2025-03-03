@@ -13,14 +13,14 @@ public class TopicChannelTest {
 
     @Test
     void testEmptyChannel() {
-        TopicChannel<String> channel = new TopicChannel<>(String.class);
+        TopicChannel<String> channel = TopicChannel.<String>create();
         // With Python compatibility, uninitialized channels return empty list rather than throwing
         assertThat(channel.get()).isNotNull().isEmpty();
     }
     
     @Test
     void testUpdateAndGet() {
-        TopicChannel<String> channel = new TopicChannel<>(String.class);
+        TopicChannel<String> channel = TopicChannel.<String>create();
         
         // Update with a single value
         boolean updated = channel.update(Collections.singletonList("test"));
@@ -39,7 +39,7 @@ public class TopicChannelTest {
     
     @Test
     void testEmptyUpdate() {
-        TopicChannel<String> channel = new TopicChannel<>(String.class);
+        TopicChannel<String> channel = TopicChannel.<String>create();
         
         // Empty update should return false
         boolean updated = channel.update(Collections.emptyList());
@@ -51,7 +51,7 @@ public class TopicChannelTest {
     
     @Test
     void testMultipleUpdates() {
-        TopicChannel<String> channel = new TopicChannel<>(String.class);
+        TopicChannel<String> channel = TopicChannel.<String>create();
         
         // First update
         channel.update(Collections.singletonList("first"));
@@ -68,7 +68,7 @@ public class TopicChannelTest {
     
     @Test
     void testConsumeWithoutReset() {
-        TopicChannel<String> channel = new TopicChannel<>(String.class, false);
+        TopicChannel<String> channel = TopicChannel.<String>create(false);
         
         // Add some values
         channel.update(Arrays.asList("first", "second"));
@@ -83,7 +83,7 @@ public class TopicChannelTest {
     
     @Test
     void testConsumeWithReset() {
-        TopicChannel<String> channel = new TopicChannel<>(String.class, true);
+        TopicChannel<String> channel = TopicChannel.<String>create(true);
         
         // Add some values
         channel.update(Arrays.asList("first", "second"));
@@ -104,7 +104,7 @@ public class TopicChannelTest {
     
     @Test
     void testCheckpoint() {
-        TopicChannel<String> channel = new TopicChannel<>(String.class);
+        TopicChannel<String> channel = TopicChannel.<String>create();
         channel.update(Arrays.asList("first", "second"));
         
         // Create a checkpoint
@@ -128,7 +128,7 @@ public class TopicChannelTest {
     @Test
     void testCheckpointWithEmptyList() {
         // Create a channel and update with an empty list (which is a no-op)
-        TopicChannel<String> channel = new TopicChannel<>(String.class);
+        TopicChannel<String> channel = TopicChannel.<String>create();
         channel.update(Collections.emptyList());
         
         // Channel should still be empty but return an empty list with Python compatibility
@@ -148,8 +148,8 @@ public class TopicChannelTest {
     
     @Test
     void testEqualsAndHashCode() {
-        TopicChannel<String> channel1 = new TopicChannel<>(String.class);
-        TopicChannel<String> channel2 = new TopicChannel<>(String.class);
+        TopicChannel<String> channel1 = TopicChannel.<String>create();
+        TopicChannel<String> channel2 = TopicChannel.<String>create();
         
         // Initially equal
         assertThat(channel1).isEqualTo(channel2);
@@ -169,9 +169,42 @@ public class TopicChannelTest {
         assertThat(channel1.hashCode()).isEqualTo(channel2.hashCode());
         
         // Create channels with different reset behavior
-        TopicChannel<String> channel3 = new TopicChannel<>(String.class, true);
+        TopicChannel<String> channel3 = TopicChannel.<String>create(true);
         
         // Should not be equal to channel with different reset behavior
         assertThat(channel1).isNotEqualTo(channel3);
+    }
+    
+    @Test
+    void testSingleValueUpdate() {
+        // Create a topic channel
+        TopicChannel<String> channel = TopicChannel.<String>create();
+        
+        // Update with a single value using the updateSingleValue method
+        boolean updated = channel.updateSingleValue("first");
+        assertThat(updated).isTrue();
+        
+        // Verify the value was added
+        assertThat(channel.get()).containsExactly("first");
+        
+        // Add another value with the same method
+        channel.updateSingleValue("second");
+        
+        // Verify both values are present in correct order
+        assertThat(channel.get()).containsExactly("first", "second");
+        
+        // Try adding a null value (should be a no-op)
+        updated = channel.updateSingleValue(null);
+        assertThat(updated).isFalse();
+        
+        // Verify the list is unchanged
+        assertThat(channel.get()).containsExactly("first", "second");
+        
+        // Now mix both update methods
+        channel.update(Collections.singletonList("third"));
+        channel.updateSingleValue("fourth");
+        
+        // All values should be accumulated in order
+        assertThat(channel.get()).containsExactly("first", "second", "third", "fourth");
     }
 }

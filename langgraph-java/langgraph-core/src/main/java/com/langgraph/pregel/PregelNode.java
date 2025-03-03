@@ -7,9 +7,9 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Represents an actor (node) in the Pregel system.
+ * Represents a type-safe actor (node) in the Pregel system.
  * A node is a computational unit that reads from input channels,
- * executes an action, and writes results to output channels.
+ * executes an action, and writes results to output channels with type safety.
  * 
  * <p>There are two key concepts for how nodes interact with channels:
  * <ul>
@@ -28,17 +28,20 @@ import java.util.stream.Collectors;
  * Python compatibility, it's important to explicitly define input channel as a trigger on 
  * nodes that should execute first.
  * </p>
+ * 
+ * @param <I> The input type that the node expects
+ * @param <O> The output type that the node produces
  */
-public class PregelNode {
+public class PregelNode<I, O> {
     private final String name;
-    private final PregelExecutable action;
-    private final Set<String> channels;         // Input channels (formerly "subscribe")
-    private final Set<String> triggerChannels;  // Trigger channels (formerly "trigger")
+    private final PregelExecutable<I, O> action;
+    private final Set<String> channels;         // Input channels
+    private final Set<String> triggerChannels;  // Trigger channels
     private final List<ChannelWriteEntry> writers;
     private final RetryPolicy retryPolicy;
     
     /**
-     * Create a PregelNode with write entries for outputs.
+     * Create a typed PregelNode with write entries for outputs.
      *
      * @param name Unique identifier for the node
      * @param action Function to execute when the node is triggered
@@ -49,7 +52,7 @@ public class PregelNode {
      */
     public PregelNode(
             String name,
-            PregelExecutable action,
+            PregelExecutable<I, O> action,
             Collection<String> channels,
             Collection<String> triggerChannels,
             Collection<ChannelWriteEntry> writeEntries,
@@ -69,29 +72,7 @@ public class PregelNode {
         this.retryPolicy = retryPolicy;
     }
     
-    /**
-     * Create a PregelNode with just name and action.
-     * For more complex configurations, use the Builder pattern.
-     *
-     * @param name Unique identifier for the node
-     * @param action Function to execute when the node is triggered
-     */
-    public PregelNode(String name, PregelExecutable action) {
-        this(name, action, null, null, (Collection<ChannelWriteEntry>) null, null);
-    }
     
-    /**
-     * Create a PregelNode with name, action, and input channels.
-     * This constructor exists primarily for testing purposes.
-     * For more complex configurations, use the Builder pattern.
-     *
-     * @param name Unique identifier for the node
-     * @param action Function to execute when the node is triggered
-     * @param channels Channel names this node reads values from
-     */
-    public PregelNode(String name, PregelExecutable action, Collection<String> channels) {
-        this(name, action, channels, null, (Collection<ChannelWriteEntry>) null, null);
-    }
     
     /**
      * Get the name of the node.
@@ -107,7 +88,7 @@ public class PregelNode {
      *
      * @return Node action
      */
-    public PregelExecutable getAction() {
+    public PregelExecutable<I, O> getAction() {
         return action;
     }
     
@@ -128,7 +109,6 @@ public class PregelNode {
     public Set<String> getTriggerChannels() {
         return Collections.unmodifiableSet(triggerChannels);
     }
-    
     
     /**
      * Get the write entries for this node.
@@ -159,6 +139,7 @@ public class PregelNode {
         return retryPolicy;
     }
     
+    
     /**
      * Check if this node reads from a specific channel.
      *
@@ -178,7 +159,6 @@ public class PregelNode {
     public boolean isTriggeredBy(String channelName) {
         return triggerChannels.contains(channelName);
     }
-    
     
     /**
      * Check if this node can write to a specific channel.
@@ -205,16 +185,18 @@ public class PregelNode {
     
     /**
      * Process node output according to write entries.
+     * This method preserves type safety by ensuring the output is of the expected type.
      *
      * @param nodeOutput Output from node execution
      * @return Processed output with values transformed as specified by write entries
      */
-    public Map<String, Object> processOutput(Map<String, Object> nodeOutput) {
+    @SuppressWarnings("unchecked")
+    public Map<String, O> processOutput(Map<String, O> nodeOutput) {
         if (nodeOutput == null || nodeOutput.isEmpty()) {
             return Collections.emptyMap();
         }
         
-        Map<String, Object> result = new HashMap<>();
+        Map<String, O> result = new HashMap<>();
         
         // Process specific channel outputs
         for (ChannelWriteEntry entry : writers) {
@@ -236,7 +218,9 @@ public class PregelNode {
                 continue;
             }
             
-            result.put(channelName, value);
+            // Type safety is ensured by generic parameters
+            
+            result.put(channelName, (O) value);
         }
         
         // If no write entries are specified, pass through all outputs
@@ -247,11 +231,43 @@ public class PregelNode {
         return result;
     }
     
+    
+    /**
+     * Execute the node's action with type safety for input and output.
+     * This method ensures type safety throughout the execution flow.
+     *
+     * @param inputs Map of input values
+     * @param context Execution context
+     * @return Map of typed output values
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, O> executeTyped(Map<String, Object> inputs, Map<String, Object> context) {
+        // Convert inputs to the expected type using compile-time type safety
+        Map<String, I> typedInputs = new HashMap<>();
+        
+        for (Map.Entry<String, Object> entry : inputs.entrySet()) {
+            String channelName = entry.getKey();
+            Object value = entry.getValue();
+            
+            // Only include inputs for channels this node reads from
+            if (!channels.contains(channelName)) {
+                continue;
+            }
+            
+            // Cast value to expected input type
+            typedInputs.put(channelName, (I) value);
+        }
+        
+        // Execute the action with typed inputs
+        return action.execute(typedInputs, context);
+    }
+    
+    
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        PregelNode that = (PregelNode) o;
+        PregelNode<?, ?> that = (PregelNode<?, ?>) o;
         return Objects.equals(name, that.name);
     }
     
@@ -271,11 +287,14 @@ public class PregelNode {
     }
     
     /**
-     * Builder for creating PregelNode instances.
+     * Builder for creating type-safe PregelNode instances.
+     *
+     * @param <I> The input type that the node expects
+     * @param <O> The output type that the node produces
      */
-    public static class Builder {
+    public static class Builder<I, O> {
         private final String name;
-        private final PregelExecutable action;
+        private final PregelExecutable<I, O> action;
         private Set<String> channels = new HashSet<>();
         private Set<String> triggerChannels = new HashSet<>();
         private List<ChannelWriteEntry> writers = new ArrayList<>();
@@ -287,24 +306,27 @@ public class PregelNode {
          * @param name Unique identifier for the node
          * @param action Function to execute when the node is triggered
          */
-        public Builder(String name, PregelExecutable action) {
+        public Builder(String name, PregelExecutable<I, O> action) {
             if (name == null || name.isEmpty()) {
                 throw new IllegalArgumentException("Node name cannot be null or empty");
             }
             if (action == null) {
                 throw new IllegalArgumentException("Action cannot be null");
             }
+            
             this.name = name;
             this.action = action;
         }
         
+        
+        
         /**
          * Add input channels that this node will read from.
          *
-         * @param channelNames Channel names to read from (can be a single name or multiple names)
+         * @param channelNames Channel names to read from
          * @return This builder
          */
-        public Builder channels(Collection<String> channelNames) {
+        public Builder<I, O> channels(Collection<String> channelNames) {
             if (channelNames != null) {
                 for (String channelName : channelNames) {
                     if (channelName != null && !channelName.isEmpty()) {
@@ -321,7 +343,7 @@ public class PregelNode {
          * @param channelName Channel name to read from
          * @return This builder
          */
-        public Builder channels(String channelName) {
+        public Builder<I, O> channels(String channelName) {
             if (channelName != null && !channelName.isEmpty()) {
                 channels.add(channelName);
             }
@@ -331,10 +353,10 @@ public class PregelNode {
         /**
          * Add trigger channels that determine when this node executes.
          *
-         * @param channelNames Channel names that trigger execution (can be a single name or multiple names)
+         * @param channelNames Channel names that trigger execution
          * @return This builder
          */
-        public Builder triggerChannels(Collection<String> channelNames) {
+        public Builder<I, O> triggerChannels(Collection<String> channelNames) {
             if (channelNames != null) {
                 for (String channelName : channelNames) {
                     if (channelName != null && !channelName.isEmpty()) {
@@ -351,13 +373,12 @@ public class PregelNode {
          * @param channelName Channel name that triggers execution
          * @return This builder
          */
-        public Builder triggerChannels(String channelName) {
+        public Builder<I, O> triggerChannels(String channelName) {
             if (channelName != null && !channelName.isEmpty()) {
                 triggerChannels.add(channelName);
             }
             return this;
         }
-        
         
         /**
          * Add writers that specify where this node will write its output.
@@ -365,7 +386,7 @@ public class PregelNode {
          * @param entries Collection of ChannelWriteEntry objects
          * @return This builder
          */
-        public Builder writers(Collection<ChannelWriteEntry> entries) {
+        public Builder<I, O> writers(Collection<ChannelWriteEntry> entries) {
             if (entries != null) {
                 for (ChannelWriteEntry entry : entries) {
                     if (entry != null) {
@@ -382,7 +403,7 @@ public class PregelNode {
          * @param entry ChannelWriteEntry object
          * @return This builder
          */
-        public Builder writers(ChannelWriteEntry entry) {
+        public Builder<I, O> writers(ChannelWriteEntry entry) {
             if (entry != null) {
                 writers.add(entry);
             }
@@ -396,7 +417,7 @@ public class PregelNode {
          * @param channelName Channel name this node can write to
          * @return This builder
          */
-        public Builder writers(String channelName) {
+        public Builder<I, O> writers(String channelName) {
             if (channelName != null && !channelName.isEmpty()) {
                 writers.add(new ChannelWriteEntry(channelName));
             }
@@ -410,7 +431,7 @@ public class PregelNode {
          * @param channelNames Channel names this node can write to
          * @return This builder
          */
-        public Builder writers(String... channelNames) {
+        public Builder<I, O> writers(String... channelNames) {
             if (channelNames != null) {
                 for (String name : channelNames) {
                     writers(name);
@@ -426,7 +447,7 @@ public class PregelNode {
          * @param channelNames Collection of channel names this node can write to
          * @return This builder
          */
-        public Builder writersFromCollection(Collection<String> channelNames) {
+        public Builder<I, O> writersFromCollection(Collection<String> channelNames) {
             if (channelNames != null) {
                 for (String name : channelNames) {
                     writers(name);
@@ -441,18 +462,18 @@ public class PregelNode {
          * @param retryPolicy Retry policy for handling failures
          * @return This builder
          */
-        public Builder retryPolicy(RetryPolicy retryPolicy) {
+        public Builder<I, O> retryPolicy(RetryPolicy retryPolicy) {
             this.retryPolicy = retryPolicy;
             return this;
         }
         
         /**
-         * Build the PregelNode.
+         * Build the type-safe PregelNode.
          *
-         * @return PregelNode instance
+         * @return PregelNode instance with specified type parameters
          */
-        public PregelNode build() {
-            return new PregelNode(name, action, channels, triggerChannels, writers, retryPolicy);
+        public PregelNode<I, O> build() {
+            return new PregelNode<>(name, action, channels, triggerChannels, writers, retryPolicy);
         }
     }
 }

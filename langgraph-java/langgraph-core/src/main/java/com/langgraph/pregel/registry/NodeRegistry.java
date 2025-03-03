@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
  * Provides methods for registration, validation, and node lookup.
  */
 public class NodeRegistry {
-    private final Map<String, PregelNode> nodes;
+    private final Map<String, PregelNode<?, ?>> nodes;
     
     /**
      * Create an empty NodeRegistry.
@@ -25,7 +25,7 @@ public class NodeRegistry {
      *
      * @param nodes Collection of nodes to register
      */
-    public NodeRegistry(Collection<PregelNode> nodes) {
+    public NodeRegistry(Collection<PregelNode<?, ?>> nodes) {
         this.nodes = new HashMap<>();
         if (nodes != null) {
             nodes.forEach(this::register);
@@ -37,7 +37,7 @@ public class NodeRegistry {
      *
      * @param nodes Map of node names to nodes
      */
-    public NodeRegistry(Map<String, PregelNode> nodes) {
+    public NodeRegistry(Map<String, PregelNode<?, ?>> nodes) {
         this.nodes = new HashMap<>();
         if (nodes != null) {
             nodes.forEach((name, node) -> {
@@ -57,7 +57,7 @@ public class NodeRegistry {
      * @return This registry
      * @throws IllegalArgumentException If a node with the same name is already registered
      */
-    public NodeRegistry register(PregelNode node) {
+    public NodeRegistry register(PregelNode<?, ?> node) {
         if (node == null) {
             throw new IllegalArgumentException("Node cannot be null");
         }
@@ -78,7 +78,7 @@ public class NodeRegistry {
      * @return This registry
      * @throws IllegalArgumentException If a node with the same name is already registered
      */
-    public NodeRegistry registerAll(Collection<PregelNode> nodesToRegister) {
+    public NodeRegistry registerAll(Collection<PregelNode<?, ?>> nodesToRegister) {
         if (nodesToRegister != null) {
             nodesToRegister.forEach(this::register);
         }
@@ -92,8 +92,8 @@ public class NodeRegistry {
      * @return Node with the given name
      * @throws NoSuchElementException If no node with the given name is registered
      */
-    public PregelNode get(String name) {
-        PregelNode node = nodes.get(name);
+    public PregelNode<?, ?> get(String name) {
+        PregelNode<?, ?> node = nodes.get(name);
         if (node == null) {
             throw new NoSuchElementException("No node registered with name '" + name + "'");
         }
@@ -126,8 +126,17 @@ public class NodeRegistry {
      *
      * @return Unmodifiable map of node names to nodes
      */
-    public Map<String, PregelNode> getAll() {
+    public Map<String, PregelNode<?, ?>> getAll() {
         return Collections.unmodifiableMap(nodes);
+    }
+    
+    /**
+     * Get all registered nodes as a collection.
+     *
+     * @return Collection of all registered nodes
+     */
+    public Collection<PregelNode<?, ?>> getNodes() {
+        return Collections.unmodifiableCollection(nodes.values());
     }
     
     /**
@@ -145,7 +154,7 @@ public class NodeRegistry {
      * @param channelName Channel name
      * @return Set of nodes that read from the channel
      */
-    public Set<PregelNode> getSubscribers(String channelName) {
+    public Set<PregelNode<?, ?>> getSubscribers(String channelName) {
         return nodes.values().stream()
                 .filter(node -> node.readsFrom(channelName))
                 .collect(Collectors.toSet());
@@ -157,7 +166,7 @@ public class NodeRegistry {
      * @param triggerName Trigger name
      * @return Set of nodes that are triggered by the channel
      */
-    public Set<PregelNode> getTriggered(String triggerName) {
+    public Set<PregelNode<?, ?>> getTriggered(String triggerName) {
         return nodes.values().stream()
                 .filter(node -> node.isTriggeredBy(triggerName))
                 .collect(Collectors.toSet());
@@ -169,7 +178,7 @@ public class NodeRegistry {
      * @param channelName Channel name
      * @return Set of nodes that can write to the channel
      */
-    public Set<PregelNode> getWriters(String channelName) {
+    public Set<PregelNode<?, ?>> getWriters(String channelName) {
         return nodes.values().stream()
                 .filter(node -> node.canWriteTo(channelName))
                 .collect(Collectors.toSet());
@@ -184,7 +193,7 @@ public class NodeRegistry {
     public void validate() {
         // Validate that each node has a unique name
         Set<String> nodeNames = new HashSet<>();
-        for (PregelNode node : nodes.values()) {
+        for (PregelNode<?, ?> node : nodes.values()) {
             String name = node.getName();
             if (nodeNames.contains(name)) {
                 throw new IllegalStateException("Duplicate node name: " + name);
@@ -200,8 +209,9 @@ public class NodeRegistry {
      * @throws IllegalStateException If a node reads from a non-existent channel
      */
     public void validateSubscriptions(Set<String> channelNames) {
-        for (PregelNode node : nodes.values()) {
-            for (String channelName : node.getChannels()) {
+        for (PregelNode<?, ?> node : nodes.values()) {
+            Set<String> channels = node.getChannels();
+            for (String channelName : channels) {
                 if (!channelNames.contains(channelName)) {
                     throw new IllegalStateException(
                             "Node '" + node.getName() + "' reads from non-existent channel '" + channelName + "'");
@@ -217,8 +227,9 @@ public class NodeRegistry {
      * @throws IllegalStateException If a node writes to a non-existent channel
      */
     public void validateWriters(Set<String> channelNames) {
-        for (PregelNode node : nodes.values()) {
-            for (String channelName : node.getWriters()) {
+        for (PregelNode<?, ?> node : nodes.values()) {
+            Set<String> writers = node.getWriters();
+            for (String channelName : writers) {
                 if (!channelNames.contains(channelName)) {
                     throw new IllegalStateException(
                             "Node '" + node.getName() + "' writes to non-existent channel '" + channelName + "'");
@@ -234,8 +245,9 @@ public class NodeRegistry {
      * @throws IllegalStateException If a node uses a non-existent trigger channel
      */
     public void validateTriggers(Set<String> channelNames) {
-        for (PregelNode node : nodes.values()) {
-            for (String triggerChannel : node.getTriggerChannels()) {
+        for (PregelNode<?, ?> node : nodes.values()) {
+            Set<String> triggers = node.getTriggerChannels();
+            for (String triggerChannel : triggers) {
                 if (!channelNames.contains(triggerChannel)) {
                     throw new IllegalStateException(
                             "Node '" + node.getName() + "' has non-existent trigger channel '" + triggerChannel + "'");

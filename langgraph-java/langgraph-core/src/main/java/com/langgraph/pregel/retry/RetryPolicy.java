@@ -18,6 +18,15 @@ public interface RetryPolicy {
     RetryDecision shouldRetry(int attempt, Throwable error);
     
     /**
+     * Create a builder for RetryPolicy.
+     *
+     * @return Builder instance for creating RetryPolicy
+     */
+    static RetryPolicies.Builder builder() {
+        return RetryPolicies.builder();
+    }
+    
+    /**
      * Class representing a retry decision.
      */
     class RetryDecision {

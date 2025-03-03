@@ -89,14 +89,16 @@ public class SuperstepManager {
             
             // Prepare inputs for this task
             Map<String, Object> inputs = new HashMap<>();
-            for (String channelName : node.getChannels()) {
+            Set<String> nodeChannels = node.getChannels();
+            for (String channelName : nodeChannels) {
                 if (channelRegistry.contains(channelName)) {
                     inputs.put(channelName, channelRegistry.get(channelName).getValue());
                 }
             }
             
             // Add trigger channel values if present
-            for (String triggerChannel : node.getTriggerChannels()) {
+            Set<String> triggerChannels = node.getTriggerChannels();
+            for (String triggerChannel : triggerChannels) {
                 if (channelRegistry.contains(triggerChannel)) {
                     inputs.put(triggerChannel, channelRegistry.get(triggerChannel).getValue());
                 }
@@ -162,11 +164,25 @@ public class SuperstepManager {
                         updated.add(channelName);
                     }
                 } else if (values.size() > 1) {
-                    // Multiple updates for this channel, resolve conflicts
-                    // (This could be customized based on channel type)
-                    Object lastValue = values.stream().reduce((a, b) -> b).orElse(null);
-                    if (lastValue != null && channelRegistry.update(channelName, lastValue)) {
-                        updated.add(channelName);
+                    // Multiple updates for this channel
+                    // For a TopicChannel, we should add all values
+                    if (channelRegistry.get(channelName) instanceof com.langgraph.channels.TopicChannel) {
+                        // Update each value in the TopicChannel
+                        boolean anyUpdated = false;
+                        for (Object value : values) {
+                            if (channelRegistry.update(channelName, value)) {
+                                anyUpdated = true;
+                            }
+                        }
+                        if (anyUpdated) {
+                            updated.add(channelName);
+                        }
+                    } else {
+                        // For other channels, resolve conflicts by using the last value
+                        Object lastValue = values.stream().reduce((a, b) -> b).orElse(null);
+                        if (lastValue != null && channelRegistry.update(channelName, lastValue)) {
+                            updated.add(channelName);
+                        }
                     }
                 }
             }

@@ -13,8 +13,7 @@ public class BinaryOperatorChannelTest {
 
     @Test
     void testEmptyChannel() {
-        BinaryOperatorChannel<Integer> channel = new BinaryOperatorChannel<>(
-            Integer.class, Integer::sum, 0);
+        BinaryOperatorChannel<Integer> channel = BinaryOperatorChannel.create(Integer::sum, 0);
         
         assertThatThrownBy(channel::get)
             .isInstanceOf(EmptyChannelException.class)
@@ -23,8 +22,7 @@ public class BinaryOperatorChannelTest {
     
     @Test
     void testSumOperator() {
-        BinaryOperatorChannel<Integer> channel = new BinaryOperatorChannel<>(
-            Integer.class, Integer::sum, 0);
+        BinaryOperatorChannel<Integer> channel = BinaryOperatorChannel.create(Integer::sum, 0);
         
         // Initial update
         boolean updated = channel.update(Collections.singletonList(5));
@@ -39,8 +37,7 @@ public class BinaryOperatorChannelTest {
     
     @Test
     void testMaxOperator() {
-        BinaryOperatorChannel<Integer> channel = new BinaryOperatorChannel<>(
-            Integer.class, Integer::max, Integer.MIN_VALUE);
+        BinaryOperatorChannel<Integer> channel = BinaryOperatorChannel.create(Integer::max, Integer.MIN_VALUE);
         
         // Initial update
         channel.update(Collections.singletonList(5));
@@ -58,8 +55,7 @@ public class BinaryOperatorChannelTest {
     @Test
     void testStringConcatenation() {
         BinaryOperator<String> concat = (a, b) -> a + b;
-        BinaryOperatorChannel<String> channel = new BinaryOperatorChannel<>(
-            String.class, concat, "");
+        BinaryOperatorChannel<String> channel = BinaryOperatorChannel.create(concat, "");
         
         // Initial update
         channel.update(Collections.singletonList("Hello"));
@@ -72,8 +68,7 @@ public class BinaryOperatorChannelTest {
     
     @Test
     void testEmptyUpdate() {
-        BinaryOperatorChannel<Integer> channel = new BinaryOperatorChannel<>(
-            Integer.class, Integer::sum, 0);
+        BinaryOperatorChannel<Integer> channel = BinaryOperatorChannel.create(Integer::sum, 0);
         
         // Empty update should return false
         boolean updated = channel.update(Collections.emptyList());
@@ -88,8 +83,7 @@ public class BinaryOperatorChannelTest {
     void testUpdateOrder() {
         // Using subtraction to check order (not commutative)
         BinaryOperator<Integer> subtract = (a, b) -> a - b;
-        BinaryOperatorChannel<Integer> channel = new BinaryOperatorChannel<>(
-            Integer.class, subtract, 100);
+        BinaryOperatorChannel<Integer> channel = BinaryOperatorChannel.create(subtract, 100);
         
         // Subtract values from 100
         channel.update(Arrays.asList(20, 30));
@@ -100,8 +94,7 @@ public class BinaryOperatorChannelTest {
     
     @Test
     void testCheckpoint() {
-        BinaryOperatorChannel<Integer> channel = new BinaryOperatorChannel<>(
-            Integer.class, Integer::sum, 0);
+        BinaryOperatorChannel<Integer> channel = BinaryOperatorChannel.create(Integer::sum, 0);
         
         // Update the channel
         channel.update(Arrays.asList(5, 10, 15));

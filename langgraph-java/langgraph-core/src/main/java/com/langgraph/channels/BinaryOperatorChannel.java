@@ -33,12 +33,12 @@ public class BinaryOperatorChannel<V> extends AbstractChannel<V, V, V> {
     /**
      * Creates a new BinaryOperatorChannel with the specified value type and operator.
      *
-     * @param valueType The class representing the value type of this channel
+     * @param typeRef The TypeReference for the value type
      * @param operator The binary operator to use for aggregation
      * @param initialValue The initial value to use if none has been set yet
      */
-    public BinaryOperatorChannel(Class<V> valueType, BinaryOperator<V> operator, V initialValue) {
-        super(valueType, valueType, valueType); // For BinaryOperatorChannel, V=U=C
+    protected BinaryOperatorChannel(TypeReference<V> typeRef, BinaryOperator<V> operator, V initialValue) {
+        super(typeRef, typeRef, typeRef); // For BinaryOperatorChannel, V=U=C
         this.operator = operator;
         this.initialValue = initialValue;
     }
@@ -46,15 +46,51 @@ public class BinaryOperatorChannel<V> extends AbstractChannel<V, V, V> {
     /**
      * Creates a new BinaryOperatorChannel with the specified value type, key, and operator.
      *
-     * @param valueType The class representing the value type of this channel
+     * @param typeRef The TypeReference for the value type
      * @param key The key (name) of this channel
      * @param operator The binary operator to use for aggregation
      * @param initialValue The initial value to use if none has been set yet
      */
-    public BinaryOperatorChannel(Class<V> valueType, String key, BinaryOperator<V> operator, V initialValue) {
-        super(valueType, valueType, valueType, key); // For BinaryOperatorChannel, V=U=C
+    protected BinaryOperatorChannel(TypeReference<V> typeRef, String key, BinaryOperator<V> operator, V initialValue) {
+        super(typeRef, typeRef, typeRef, key); // For BinaryOperatorChannel, V=U=C
         this.operator = operator;
         this.initialValue = initialValue;
+    }
+    
+    /**
+     * Factory method to create a BinaryOperatorChannel with proper generic type capture.
+     * 
+     * <p>Example usage:
+     * <pre>
+     * BinaryOperatorChannel&lt;Integer&gt; channel = BinaryOperatorChannel.&lt;Integer&gt;create(Integer::sum, 0);
+     * </pre>
+     * 
+     * @param <T> The type parameter for the channel
+     * @param operator The binary operator to use for aggregation
+     * @param initialValue The initial value to use if none has been set yet
+     * @return A new BinaryOperatorChannel with the captured type parameter
+     */
+    public static <T> BinaryOperatorChannel<T> create(BinaryOperator<T> operator, T initialValue) {
+        return new BinaryOperatorChannel<>(new TypeReference<T>() {}, operator, initialValue);
+    }
+    
+    /**
+     * Factory method to create a BinaryOperatorChannel with proper generic type capture
+     * and a specified key.
+     * 
+     * <p>Example usage:
+     * <pre>
+     * BinaryOperatorChannel&lt;Integer&gt; channel = BinaryOperatorChannel.&lt;Integer&gt;create("counter", Integer::sum, 0);
+     * </pre>
+     * 
+     * @param <T> The type parameter for the channel
+     * @param key The key (name) for the channel
+     * @param operator The binary operator to use for aggregation
+     * @param initialValue The initial value to use if none has been set yet
+     * @return A new BinaryOperatorChannel with the captured type parameter and specified key
+     */
+    public static <T> BinaryOperatorChannel<T> create(String key, BinaryOperator<T> operator, T initialValue) {
+        return new BinaryOperatorChannel<>(new TypeReference<T>() {}, key, operator, initialValue);
     }
     
     @Override
@@ -86,7 +122,7 @@ public class BinaryOperatorChannel<V> extends AbstractChannel<V, V, V> {
     @Override
     public BaseChannel<V, V, V> fromCheckpoint(V checkpoint) {
         BinaryOperatorChannel<V> newChannel = new BinaryOperatorChannel<>(
-            valueType, key, operator, initialValue);
+            valueTypeRef, key, operator, initialValue);
         // Even null is a valid checkpoint value - it means the channel was initialized with null
         newChannel.value = checkpoint;
         newChannel.initialized = true;

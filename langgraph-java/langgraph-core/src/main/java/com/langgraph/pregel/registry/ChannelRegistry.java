@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
  * Provides methods for registration, validation, and channel lookup.
  */
 public class ChannelRegistry {
-    private final Map<String, BaseChannel> channels;
+    private final Map<String, BaseChannel<?, ?, ?>> channels;
     
     /**
      * Create an empty ChannelRegistry.
@@ -25,7 +25,7 @@ public class ChannelRegistry {
      *
      * @param channels Map of channel names to channels
      */
-    public ChannelRegistry(Map<String, BaseChannel> channels) {
+    public ChannelRegistry(Map<String, BaseChannel<?, ?, ?>> channels) {
         this.channels = new HashMap<>();
         if (channels != null) {
             channels.forEach(this::register);
@@ -40,7 +40,7 @@ public class ChannelRegistry {
      * @return This registry
      * @throws IllegalArgumentException If a channel with the same name is already registered
      */
-    public ChannelRegistry register(String name, BaseChannel channel) {
+    public ChannelRegistry register(String name, BaseChannel<?, ?, ?> channel) {
         if (name == null || name.isEmpty()) {
             throw new IllegalArgumentException("Channel name cannot be null or empty");
         }
@@ -63,7 +63,7 @@ public class ChannelRegistry {
      * @return This registry
      * @throws IllegalArgumentException If a channel with the same name is already registered
      */
-    public ChannelRegistry registerAll(Map<String, BaseChannel> channelsToRegister) {
+    public ChannelRegistry registerAll(Map<String, BaseChannel<?, ?, ?>> channelsToRegister) {
         if (channelsToRegister != null) {
             channelsToRegister.forEach(this::register);
         }
@@ -77,8 +77,8 @@ public class ChannelRegistry {
      * @return Channel with the given name
      * @throws NoSuchElementException If no channel with the given name is registered
      */
-    public BaseChannel get(String name) {
-        BaseChannel channel = channels.get(name);
+    public BaseChannel<?, ?, ?> get(String name) {
+        BaseChannel<?, ?, ?> channel = channels.get(name);
         if (channel == null) {
             throw new NoSuchElementException("No channel registered with name '" + name + "'");
         }
@@ -111,7 +111,7 @@ public class ChannelRegistry {
      *
      * @return Unmodifiable map of channel names to channels
      */
-    public Map<String, BaseChannel> getAll() {
+    public Map<String, BaseChannel<?, ?, ?>> getAll() {
         return Collections.unmodifiableMap(channels);
     }
     
@@ -135,6 +135,8 @@ public class ChannelRegistry {
     
     /**
      * Update a channel with a value.
+     * First tries to use the updateSingleValue method if supported by the channel,
+     * otherwise falls back to wrapping the value in a singleton list.
      *
      * @param name Channel name
      * @param value Value to update the channel with
@@ -142,8 +144,21 @@ public class ChannelRegistry {
      * @throws NoSuchElementException If no channel with the given name is registered
      */
     public boolean update(String name, Object value) {
-        BaseChannel channel = get(name);
-        return channel.update(Collections.singletonList(value));
+        BaseChannel<?, ?, ?> channel = get(name);
+        // Since we don't know the exact type at compile time, we have to use an unchecked cast
+        // This is safe because the channel will validate the type at runtime
+        @SuppressWarnings("unchecked")
+        BaseChannel<Object, Object, Object> typedChannel = (BaseChannel<Object, Object, Object>) channel;
+        
+        // First try to use the updateSingleValue method
+        boolean updated = typedChannel.updateSingleValue(value);
+        
+        // Fall back to using the update method with a singleton list if updateSingleValue didn't work
+        if (!updated) {
+            updated = typedChannel.update(Collections.singletonList(value));
+        }
+        
+        return updated;
     }
     
     /**
@@ -179,9 +194,9 @@ public class ChannelRegistry {
     public Map<String, Object> collectValues() {
         Map<String, Object> values = new HashMap<>();
         
-        for (Map.Entry<String, BaseChannel> entry : channels.entrySet()) {
+        for (Map.Entry<String, BaseChannel<?, ?, ?>> entry : channels.entrySet()) {
             String name = entry.getKey();
-            BaseChannel channel = entry.getValue();
+            BaseChannel<?, ?, ?> channel = entry.getValue();
             
             // Get value, will return null for uninitialized channels (Python compatibility)
             Object value = channel.getValue();
@@ -202,9 +217,9 @@ public class ChannelRegistry {
     public Map<String, Object> checkpoint() {
         Map<String, Object> checkpointData = new HashMap<>();
         
-        for (Map.Entry<String, BaseChannel> entry : channels.entrySet()) {
+        for (Map.Entry<String, BaseChannel<?, ?, ?>> entry : channels.entrySet()) {
             String name = entry.getKey();
-            BaseChannel channel = entry.getValue();
+            BaseChannel<?, ?, ?> channel = entry.getValue();
             
             try {
                 Object data = channel.checkpoint();
@@ -234,7 +249,13 @@ public class ChannelRegistry {
             Object data = entry.getValue();
             
             if (contains(name)) {
-                channels.get(name).fromCheckpoint(data);
+                BaseChannel<?, ?, ?> channel = channels.get(name);
+                // Since we don't know the exact type at compile time, we have to use an unchecked cast
+                // This is safe because the channel will validate the type at runtime
+                @SuppressWarnings("unchecked")
+                BaseChannel<Object, Object, Object> typedChannel = 
+                    (BaseChannel<Object, Object, Object>) channel;
+                typedChannel.fromCheckpoint(data);
             }
         }
     }
@@ -243,7 +264,7 @@ public class ChannelRegistry {
      * Reset all channels, clearing any update flags.
      */
     public void resetUpdated() {
-        for (BaseChannel channel : channels.values()) {
+        for (BaseChannel<?, ?, ?> channel : channels.values()) {
             channel.resetUpdated();
         }
     }

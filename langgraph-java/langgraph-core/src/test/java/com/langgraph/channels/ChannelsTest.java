@@ -15,7 +15,7 @@ public class ChannelsTest {
     @Test
     void testLastValueFactory() {
         // Create channel using factory
-        LastValue<String> channel = Channels.lastValue(String.class);
+        LastValue<String> channel = LastValue.<String>create();
         
         // Update the channel
         channel.update(Collections.singletonList("test"));
@@ -24,14 +24,14 @@ public class ChannelsTest {
         assertThat(channel.get()).isEqualTo("test");
         
         // Create channel with key
-        LastValue<String> namedChannel = Channels.lastValue(String.class, "input");
+        LastValue<String> namedChannel = LastValue.<String>create("input");
         assertThat(namedChannel.getKey()).isEqualTo("input");
     }
     
     @Test
     void testTopicFactory() {
         // Create topic channel using factory
-        TopicChannel<String> channel = Channels.topic(String.class);
+        TopicChannel<String> channel = TopicChannel.<String>create();
         
         // Update with values
         channel.update(Arrays.asList("one", "two"));
@@ -40,7 +40,7 @@ public class ChannelsTest {
         assertThat(channel.get()).containsExactly("one", "two");
         
         // Create reset-on-consume topic
-        TopicChannel<String> resetChannel = Channels.topic(String.class, true);
+        TopicChannel<String> resetChannel = TopicChannel.<String>create(true);
         resetChannel.update(Collections.singletonList("test"));
         
         // Consume should reset the channel
@@ -51,7 +51,7 @@ public class ChannelsTest {
         assertThat(resetChannel.get()).isEmpty();
         
         // Create with key
-        TopicChannel<String> namedChannel = Channels.topic(String.class, "messages", false);
+        TopicChannel<String> namedChannel = TopicChannel.<String>create("messages", false);
         assertThat(namedChannel.getKey()).isEqualTo("messages");
     }
     
@@ -59,7 +59,7 @@ public class ChannelsTest {
     void testBinaryOperatorFactory() {
         // Create a binary operator channel using factory
         BinaryOperator<Integer> sum = Integer::sum;
-        BinaryOperatorChannel<Integer> channel = Channels.binaryOperator(Integer.class, sum, 0);
+        BinaryOperatorChannel<Integer> channel = Channels.<Integer>binaryOperator(sum, 0);
         
         // Update with values
         channel.update(Arrays.asList(1, 2, 3));
@@ -69,14 +69,14 @@ public class ChannelsTest {
         
         // Create with key
         BinaryOperatorChannel<Integer> namedChannel = 
-            Channels.binaryOperator(Integer.class, "counter", sum, 0);
+            Channels.<Integer>binaryOperator("counter", sum, 0);
         assertThat(namedChannel.getKey()).isEqualTo("counter");
     }
     
     @Test
     void testEphemeralFactory() {
         // Create ephemeral channel using factory
-        EphemeralValue<String> channel = Channels.ephemeral(String.class);
+        EphemeralValue<String> channel = Channels.<String>ephemeral();
         
         // Update with value
         channel.update(Collections.singletonList("test"));
@@ -85,7 +85,7 @@ public class ChannelsTest {
         assertThat(channel.get()).isEqualTo("test");
         
         // Create with key
-        EphemeralValue<String> namedChannel = Channels.ephemeral(String.class, "temporary");
+        EphemeralValue<String> namedChannel = Channels.<String>ephemeral("temporary");
         assertThat(namedChannel.getKey()).isEqualTo("temporary");
     }
     

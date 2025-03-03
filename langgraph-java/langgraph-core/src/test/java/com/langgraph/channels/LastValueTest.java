@@ -13,14 +13,14 @@ public class LastValueTest {
 
     @Test
     void testEmptyChannel() {
-        LastValue<String> channel = new LastValue<>(String.class);
+        LastValue<String> channel = LastValue.<String>create();
         // With Python compatibility, uninitialized channels return null rather than throwing
         assertThat(channel.get()).isNull();
     }
     
     @Test
     void testUpdateAndGet() {
-        LastValue<String> channel = new LastValue<>(String.class);
+        LastValue<String> channel = LastValue.<String>create();
         
         // Update with a value
         boolean updated = channel.update(Collections.singletonList("test"));
@@ -39,7 +39,7 @@ public class LastValueTest {
     
     @Test
     void testEmptyUpdate() {
-        LastValue<String> channel = new LastValue<>(String.class);
+        LastValue<String> channel = LastValue.<String>create();
         
         // Empty update should return false
         boolean updated = channel.update(Collections.emptyList());
@@ -51,7 +51,7 @@ public class LastValueTest {
     
     @Test
     void testMultipleValuesThrowsException() {
-        LastValue<String> channel = new LastValue<>(String.class);
+        LastValue<String> channel = LastValue.<String>create();
         
         // Multiple values should throw exception
         assertThatThrownBy(() -> channel.update(Arrays.asList("one", "two")))
@@ -61,7 +61,7 @@ public class LastValueTest {
     
     @Test
     void testCheckpoint() {
-        LastValue<String> channel = new LastValue<>(String.class);
+        LastValue<String> channel = LastValue.<String>create();
         channel.update(Collections.singletonList("test"));
         
         // Create a checkpoint
@@ -77,7 +77,7 @@ public class LastValueTest {
     
     @Test
     void testCheckpointWithNullValue() {
-        LastValue<String> channel = new LastValue<>(String.class);
+        LastValue<String> channel = LastValue.<String>create();
         channel.update(Collections.singletonList(null));
         
         // Create a checkpoint
@@ -93,8 +93,8 @@ public class LastValueTest {
     
     @Test
     void testEqualsAndHashCode() {
-        LastValue<String> channel1 = new LastValue<>(String.class);
-        LastValue<String> channel2 = new LastValue<>(String.class);
+        LastValue<String> channel1 = LastValue.<String>create();
+        LastValue<String> channel2 = LastValue.<String>create();
         
         // Initially equal
         assertThat(channel1).isEqualTo(channel2);

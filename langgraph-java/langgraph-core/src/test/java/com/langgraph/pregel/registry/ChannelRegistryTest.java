@@ -3,6 +3,7 @@ package com.langgraph.pregel.registry;
 import com.langgraph.channels.BaseChannel;
 import com.langgraph.channels.EmptyChannelException;
 import com.langgraph.channels.LastValue;
+import com.langgraph.channels.TypeReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 
@@ -18,8 +19,8 @@ public class ChannelRegistryTest {
         private boolean initialized = false;
         private T value;
         
-        public TestChannel(Class<T> valueType, String key) {
-            super(valueType, key);
+        public TestChannel(TypeReference<T> typeRef, String key) {
+            super(typeRef, key);
         }
         
         @Override
@@ -69,9 +70,9 @@ public class ChannelRegistryTest {
     @BeforeEach
     void setUp() {
         // Create TestChannel instances for testing
-        channel1 = new TestChannel<>(String.class, "channel1");
-        channel2 = new TestChannel<>(Integer.class, "channel2");
-        channel3 = new TestChannel<>(Double.class, "channel3");
+        channel1 = new TestChannel<>(new TypeReference<String>() {}, "channel1");
+        channel2 = new TestChannel<>(new TypeReference<Integer>() {}, "channel2");
+        channel3 = new TestChannel<>(new TypeReference<Double>() {}, "channel3");
     }
     
     @Test
@@ -130,7 +131,7 @@ public class ChannelRegistryTest {
     void testRegisterAllChannels() {
         ChannelRegistry registry = new ChannelRegistry();
         
-        Map<String, BaseChannel> channels = new HashMap<>();
+        Map<String, BaseChannel<?, ?, ?>> channels = new HashMap<>();
         channels.put("channel1", channel1);
         channels.put("channel2", channel2);
         
@@ -145,7 +146,7 @@ public class ChannelRegistryTest {
     
     @Test
     void testConstructorWithMap() {
-        Map<String, BaseChannel> channels = new HashMap<>();
+        Map<String, BaseChannel<?, ?, ?>> channels = new HashMap<>();
         channels.put("channel1", channel1);
         channels.put("channel2", channel2);
         
@@ -159,7 +160,7 @@ public class ChannelRegistryTest {
     
     @Test
     void testRemoveChannel() {
-        Map<String, BaseChannel> channels = new HashMap<>();
+        Map<String, BaseChannel<?, ?, ?>> channels = new HashMap<>();
         channels.put("channel1", channel1);
         channels.put("channel2", channel2);
         
@@ -201,7 +202,7 @@ public class ChannelRegistryTest {
         ChannelRegistry registry = new ChannelRegistry();
         
         // For this test, create a special channel2 that returns false on update
-        BaseChannel<String, String, String> nonUpdatingChannel = new LastValue<>(String.class, "channel2") {
+        BaseChannel<String, String, String> nonUpdatingChannel = new LastValue<String>(new TypeReference<String>() {}, "channel2") {
             @Override
             public boolean update(List<String> values) {
                 // Override update to always return false
@@ -295,11 +296,11 @@ public class ChannelRegistryTest {
     @Test
     void testRestoreFromCheckpoint() {
         // Create new TestChannel instances
-        TestChannel<String> stringChannel = new TestChannel<>(String.class, "stringChannel");
-        TestChannel<Integer> intChannel = new TestChannel<>(Integer.class, "intChannel");
+        TestChannel<String> stringChannel = new TestChannel<>(new TypeReference<String>() {}, "stringChannel");
+        TestChannel<Integer> intChannel = new TestChannel<>(new TypeReference<Integer>() {}, "intChannel");
         
         // Override fromCheckpoint to make it work for testing
-        TestChannel<String> testChannel1 = new TestChannel<String>(String.class, "channel1") {
+        TestChannel<String> testChannel1 = new TestChannel<String>(new TypeReference<String>() {}, "channel1") {
             @Override
             public BaseChannel<String, String, String> fromCheckpoint(String checkpoint) {
                 // Just update the current instance instead of creating a new one
@@ -308,7 +309,7 @@ public class ChannelRegistryTest {
             }
         };
         
-        TestChannel<Integer> testChannel2 = new TestChannel<Integer>(Integer.class, "channel2") {
+        TestChannel<Integer> testChannel2 = new TestChannel<Integer>(new TypeReference<Integer>() {}, "channel2") {
             @Override
             public BaseChannel<Integer, Integer, Integer> fromCheckpoint(Integer checkpoint) {
                 // Just update the current instance instead of creating a new one
@@ -367,7 +368,7 @@ public class ChannelRegistryTest {
     
     @Test
     void testSubset() {
-        Map<String, BaseChannel> channels = new HashMap<>();
+        Map<String, BaseChannel<?, ?, ?>> channels = new HashMap<>();
         channels.put("channel1", channel1);
         channels.put("channel2", channel2);
         channels.put("channel3", channel3);
