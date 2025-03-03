@@ -41,23 +41,23 @@ def create_model(
         return create_model(model_name, **v1_kwargs, **(field_definitions or {}))
 
 
-def is_supported_by_pydantic(x: Any) -> bool:
+def is_supported_by_pydantic(type_: Any) -> bool:
     """Check if a given "complex" type is supported by pydantic.
 
     This will return False for primitive types like int, str, etc.
 
     The check is meant for container types like dataclasses, TypedDicts, etc.
     """
-    if is_dataclass(x):
+    if is_dataclass(type_):
         return True
 
     # Pydantic does not support mixing .v1 and root namespaces, so
     # we only check for BaseModel (not pydantic.v1.BaseModel).
-    if isinstance(x, type) and issubclass(x, BaseModel):
+    if isinstance(type_, type) and issubclass(type_, BaseModel):
         return True
 
-    if hasattr(x, "__orig_bases__"):
-        for base in x.__orig_bases__:
+    if hasattr(type_, "__orig_bases__"):
+        for base in type_.__orig_bases__:
             if base is typing_extensions.TypedDict:
                 return True
             elif base is typing.TypedDict:
