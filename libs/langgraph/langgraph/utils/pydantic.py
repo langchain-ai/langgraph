@@ -60,7 +60,8 @@ def is_supported_by_pydantic(type_: Any) -> bool:
         for base in type_.__orig_bases__:
             if base is typing_extensions.TypedDict:
                 return True
-            elif base is typing.TypedDict:
+            elif base is typing.TypedDict:  # noqa: TID251
+                # ignoring TID251 since it's OK to use typing.TypedDict in this case.
                 # Pydantic supports typing.TypedDict from Python 3.12
                 # For older versions, only typing_extensions.TypedDict is supported.
                 if sys.version_info >= (3, 12):

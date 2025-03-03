@@ -5,7 +5,6 @@ import concurrent
 import concurrent.futures
 import queue
 from collections import deque
-from dataclasses import is_dataclass
 from functools import partial
 from typing import (
     Any,

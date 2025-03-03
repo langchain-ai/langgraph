@@ -20,7 +20,7 @@ def test_is_supported_by_pydantic() -> None:
 
     assert is_supported_by_pydantic(VanillaClass) is False
 
-    class BuiltinTypedDict(typing.TypedDict):
+    class BuiltinTypedDict(typing.TypedDict):  # noqa: TID251
         x: int
 
     if sys.version_info >= (3, 12):
