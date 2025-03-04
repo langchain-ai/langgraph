@@ -55,6 +55,7 @@ from langgraph.constants import (
     ERROR,
     INPUT,
     INTERRUPT,
+    MISSING,
     NS_SEP,
     NULL_TASK_ID,
     PUSH,
@@ -566,7 +567,10 @@ class PregelLoop(LoopProtocol):
         is_resuming = bool(self.checkpoint["channel_versions"]) and bool(
             configurable.get(
                 CONFIG_KEY_RESUMING,
-                self.input is None or isinstance(self.input, Command),
+                self.input is None
+                or isinstance(self.input, Command)
+                or self.config.get("metadata", {}).get("run_id")
+                == self.checkpoint_metadata.get("run_id", MISSING),
             )
         )
 
