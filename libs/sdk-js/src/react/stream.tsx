@@ -366,11 +366,11 @@ const useControllableThreadId = (options?: {
     onThreadIdRef.current?.(threadId);
   }, []);
 
-  if (typeof options?.threadId === "undefined") {
+  if (!options || !("threadId" in options)) {
     return [localThreadId, onThreadId];
   }
 
-  return [options.threadId, onThreadId];
+  return [options.threadId ?? null, onThreadId];
 };
 
 type BagTemplate = {
