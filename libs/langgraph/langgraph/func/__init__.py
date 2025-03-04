@@ -345,7 +345,7 @@ class entrypoint:
         value: R
         """Value to return. A value will always be returned even if it is None."""
         save: S
-        """The value for the state for the next checkpoint. 
+        """The value for the state for the next checkpoint.
 
         A value will always be saved even if it is None.
         """
