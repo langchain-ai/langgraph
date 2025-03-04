@@ -8,6 +8,7 @@ to provide IDE autocompletion and validation.
 
 import inspect
 import json
+import textwrap
 from pathlib import Path
 
 import msgspec
@@ -25,15 +26,12 @@ from langgraph_cli.config import (
 
 def add_descriptions_to_schema(schema, cls):
     """Add docstring descriptions to the schema properties."""
-    class_doc = inspect.getdoc(cls)
-    if class_doc and "description" not in schema:
-        schema["description"] = class_doc
-
+    if schema.get("description"):
+        schema["description"] = inspect.cleandoc(schema["description"])
+    elif class_doc := inspect.getdoc(cls):
+        schema["description"] = inspect.cleandoc(class_doc)
     # Get attribute docstrings from the class
     attr_docs = {}
-    for name, member in inspect.getmembers(cls):
-        if isinstance(member, property) and member.__doc__:
-            attr_docs[name] = member.__doc__.strip()
 
     # Also check class annotations for docstrings
     source_lines = inspect.getsourcelines(cls)[0]
@@ -84,7 +82,7 @@ def add_descriptions_to_schema(schema, cls):
         for prop_name, prop_schema in schema["properties"].items():
             # First try to get from attribute docstrings
             if prop_name in attr_docs and "description" not in prop_schema:
-                prop_schema["description"] = attr_docs[prop_name]
+                prop_schema["description"] = textwrap.dedent(attr_docs[prop_name])
             # Fall back to class docstring parsing
             elif class_doc:
                 for line in class_doc.split("\n"):
@@ -218,7 +216,9 @@ def main():
 
     print(f"Schema written to {versioned_path} and {latest_path}")
     print(
-        f"You can now add '$schema: ./schema.json' or '$schema: ./schema.{schema_version}.json' to your langgraph.json files"
+        f"You can now add '$schema: https://raw.githubusercontent.com/langchain-ai/langgraph/refs/heads/main/libs/cli/schemas/schema.json'"
+        f" or '$schema: https://raw.githubusercontent.com/langchain-ai/langgraph/refs/heads/main/libs/cli/schemas/schema.{schema_version}.json'"
+        " to your langgraph.json files"
     )
 
 

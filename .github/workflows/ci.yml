@@ -114,6 +114,42 @@ jobs:
       - name: Run check_sdk_methods script
         run: python .github/scripts/check_sdk_methods.py
 
+  check-schema:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
+    name: "Check CLI schema hasn't changed #${{ matrix.python-version }}"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.11"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
+        uses: "./.github/actions/poetry_setup"
+        with:
+          python-version: "3.11"
+          poetry-version: ${{ env.POETRY_VERSION }}
+          cache-key: schema-check-cli
+      - name: Install CLI dependencies
+        run: |
+          cd libs/cli
+          poetry install
+      - name: Generate schema and check for changes
+        run: |
+          cd libs/cli
+          # Create a temporary copy of the current schema
+          cp schemas/schema.json schemas/schema.current.json
+          # Generate new schema
+          poetry run python generate_schema.py
+          # Compare the new schema with the original
+          if ! diff -q schemas/schema.json schemas/schema.current.json > /dev/null; then
+            echo "Error: Langgraph.json configuration schema has changed. Please run 'poetry run python generate_schema.py' in the libs/cli directory and commit the changes."
+            diff schemas/schema.json schemas/schema.current.json
+            exit 1
+          fi
+          echo "Schema check passed - no changes detected"
+
   integration-test:
     needs: changes
     if: needs.changes.outputs.python == 'true'
@@ -180,6 +216,8 @@ jobs:
         test,
         test-langgraph,
         test-scheduler-kafka,
+        check-sdk-methods,
+        check-schema,
         integration-test,
         test-js,
       ]
