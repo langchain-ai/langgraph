@@ -425,6 +425,16 @@ interface UseStreamOptions<
   apiKey?: ClientConfig["apiKey"];
 
   /**
+   * Custom call options, such as custom fetch implementation.
+   */
+  callerOptions?: ClientConfig["callerOptions"];
+
+  /**
+   * Default headers to send with requests.
+   */
+  defaultHeaders?: ClientConfig["defaultHeaders"];
+
+  /**
    * Specify the key within the state that contains messages.
    * Defaults to "messages".
    *
@@ -603,8 +613,19 @@ export function useStream<
   messagesKey ??= "messages";
 
   const client = useMemo(
-    () => new Client({ apiUrl: options.apiUrl, apiKey: options.apiKey }),
-    [options.apiKey, options.apiUrl],
+    () =>
+      new Client({
+        apiUrl: options.apiUrl,
+        apiKey: options.apiKey,
+        callerOptions: options.callerOptions,
+        defaultHeaders: options.defaultHeaders,
+      }),
+    [
+      options.apiKey,
+      options.apiUrl,
+      options.callerOptions,
+      options.defaultHeaders,
+    ],
   );
   const [threadId, onThreadId] = useControllableThreadId(options);
 
