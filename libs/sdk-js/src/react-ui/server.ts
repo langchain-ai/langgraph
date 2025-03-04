@@ -10,7 +10,7 @@ export const typedUi = <Decl extends Record<string, ElementType>>(config: {
   runName?: string;
 }) => {
   type PropMap = { [K in keyof Decl]: ComponentPropsWithoutRef<Decl[K]> };
-  let collect: unknown[] = [];
+  let collect: (UIMessage | RemoveUIMessage)[] = [];
 
   const runId = (config.metadata?.run_id as string | undefined) ?? config.runId;
   if (!runId) throw new Error("run_id is required");
