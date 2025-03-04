@@ -2517,7 +2517,7 @@ def encode_json(json: Any) -> tuple[dict[str, str], bytes]:
 
 def decode_json(r: httpx.Response) -> Any:
     body = r.read()
-    return orjson.loads(body if body else None)
+    return orjson.loads(body) if body else None
 
 
 class SyncAssistantsClient:
