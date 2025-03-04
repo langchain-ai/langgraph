@@ -3,7 +3,7 @@ import os
 import pathlib
 import textwrap
 from collections import Counter
-from typing import NamedTuple, Optional, TypedDict, Union
+from typing import Any, NamedTuple, Optional, TypedDict, Union
 
 import click
 
@@ -28,12 +28,12 @@ class IndexConfig(TypedDict, total=False):
     """
 
     embed: str
-    """Optional model (string) to generate embeddings from text or path to model or function.
+    """Model identifier to generate embeddings from text or path to model or function.
     
     Examples:
         - "openai:text-embedding-3-large"
         - "cohere:embed-multilingual-v3.0"
-        - "src/app.py:embeddings
+        - "src/app.py:embeddings"
     """
 
     fields: Optional[list[str]]
@@ -44,22 +44,35 @@ class IndexConfig(TypedDict, total=False):
 
 
 class StoreConfig(TypedDict, total=False):
-    embed: Optional[IndexConfig]
-    """Configuration for vector embeddings in store."""
+    """Configuration for the long-term memory store that comes built-in to your deployment.
+
+    Contains configuration for adding semantic search to the BaseStore, including:
+    - index: Configuration for semantic search indexing with fields for embed, dims, and fields
+    """
+
+    index: Optional[IndexConfig]
+    """Configuration for vector embeddings in store. Defines how documents are indexed and retrieved using vector embeddings."""
 
 
 class SecurityConfig(TypedDict, total=False):
-    securitySchemes: dict
-    security: list
+    """Configuration for managing the security section of your deployment's  openapi specification."""
+
+    securitySchemes: dict[str, dict[str, Any]]
+    """Security schemes for OpenAPI specification."""
+    security: list[dict[str, list[str]]]
+    """Security requirements for OpenAPI specification."""
     # path => {method => security}
-    paths: dict[str, dict[str, list]]
+    paths: dict[str, dict[str, list[dict[str, list[str]]]]]
+    """Path-specific security requirements for OpenAPI specification."""
 
 
 class AuthConfig(TypedDict, total=False):
+    """Configuration for custom authentication."""
+
     path: str
-    """Path to the authentication function in a Python file."""
+    """Path to the authentication function in a Python file. Should be in the format 'path/to/file.py:auth_function'."""
     disable_studio_auth: bool
-    """Whether to disable auth when connecting from the LangSmith Studio."""
+    """Whether to disable authentication when connecting from the LangSmith Studio. Set to true to allow LangSmith Studio to connect without authentication."""
     openapi: SecurityConfig
     """The schema to use for updating the openapi spec.
 
@@ -87,52 +100,69 @@ class AuthConfig(TypedDict, total=False):
 
 
 class CorsConfig(TypedDict, total=False):
+    """Configure how CORS will be treated in your deployment."""
+
     allow_origins: list[str]
+    """List of origins that are allowed to make cross-origin requests."""
     allow_methods: list[str]
+    """List of HTTP methods that are allowed for cross-origin requests."""
     allow_headers: list[str]
+    """List of HTTP headers that are allowed for cross-origin requests."""
     allow_credentials: bool
+    """Whether to allow credentials (cookies, authorization headers, etc) to be included in cross-origin requests."""
     allow_origin_regex: str
+    """Regex pattern for origins that are allowed to make cross-origin requests."""
     expose_headers: list[str]
+    """List of HTTP headers that browsers are allowed to access."""
     max_age: int
+    """Maximum number of seconds the results of a preflight request can be cached."""
 
 
 class HttpConfig(TypedDict, total=False):
+    """Configuration for the HTTP server that comes built-in to your deployment."""
+
     app: str
-    """Import path for a custom Starlette/FastAPI app to mount"""
+    """Import path for a custom Starlette app to mount. Should be in the format 'path/to/file.py:app_attribute'."""
     disable_assistants: bool
-    """Disable /assistants routes"""
+    """Disable /assistants routes."""
     disable_threads: bool
-    """Disable /threads routes"""
+    """Disable /threads routes."""
     disable_runs: bool
-    """Disable /runs routes"""
+    """Disable /runs routes."""
     disable_store: bool
-    """Disable /store routes"""
+    """Disable /store routes."""
     disable_meta: bool
-    """Disable /ok, /info, /metrics, and /docs routes"""
+    """Disable /ok, /info, /metrics, and /docs routes."""
     cors: Optional[CorsConfig]
-    """Cross-Origin Resource Sharing (CORS) configuration"""
+    """Cross-Origin Resource Sharing (CORS) configuration."""
 
 
 class Config(TypedDict, total=False):
     """Configuration for langgraph-cli."""
 
     python_version: str
-    """Python version to use."""
+    """Python version to use in 'major.minor' format (e.g., '3.11'). Minimum supported version is '3.11'."""
 
     node_version: Optional[str]
-    """Node.js version to use."""
+    """Node.js version to use as major version only (e.g., '20'). Minimum supported version is '20'."""
 
     pip_config_file: Optional[str]
-    """Path to a pip configuration file."""
+    """Path to a pip configuration file. Only applicable for Python projects."""
 
     dockerfile_lines: list[str]
     """Additional lines to add to the Dockerfile."""
 
     dependencies: list[str]
-    """Additional Python dependencies to install."""
+    """Python dependencies to install. Can include PyPI package names or local paths.
+    
+    Dependencies can be one of the following:
+    1. "." - which will look for local Python packages
+    2. "./local_package" - which will look for pyproject.toml, setup.py or requirements.txt in the app directory
+    3. A package name - which will be installed from PyPI
+    """
 
     graphs: dict[str, str]
-    """Mapping of graph names to their definitions."""
+    """Mapping of graph names to their definitions. Each definition should be in the format 'path/to/file.py:attribute_name'."""
 
     env: Union[dict[str, str], str]
     """Environment variables to set.
@@ -146,7 +176,11 @@ class Config(TypedDict, total=False):
     """
 
     store: Optional[StoreConfig]
-    """Configuration for vector embeddings in store."""
+    """Configuration for the long-term memory store that comes built-in to your deployment.
+    
+    Contains configuration for adding semantic search to the BaseStore, including:
+    - index: Configuration for semantic search indexing with fields for embed, dims, and fields
+    """
 
     auth: Optional[AuthConfig]
     """Configuration for authentication."""
@@ -687,9 +721,11 @@ def python_config_to_docker(
     pip_pkgs_str = f"RUN {pip_install} {' '.join(pypi_deps)}" if pypi_deps else ""
     if local_deps.pip_reqs:
         pip_reqs_str = os.linesep.join(
-            f"COPY --from=__outer_{reqpath.name} requirements.txt {destpath}"
-            if reqpath.parent in local_deps.additional_contexts
-            else f"ADD {reqpath.relative_to(config_path.parent)} {destpath}"
+            (
+                f"COPY --from=__outer_{reqpath.name} requirements.txt {destpath}"
+                if reqpath.parent in local_deps.additional_contexts
+                else f"ADD {reqpath.relative_to(config_path.parent)} {destpath}"
+            )
             for reqpath, destpath in local_deps.pip_reqs
         )
         pip_reqs_str += f'{os.linesep}RUN {pip_install} {" ".join("-r " + r for _,r in local_deps.pip_reqs)}'
@@ -724,13 +760,15 @@ RUN set -ex && \\
     )
 
     local_pkgs_str = os.linesep.join(
-        f"""# -- Adding local package {relpath} --
+        (
+            f"""# -- Adding local package {relpath} --
 COPY --from={name} . /deps/{name}
 # -- End of local package {relpath} --"""
-        if fullpath in local_deps.additional_contexts
-        else f"""# -- Adding local package {relpath} --
+            if fullpath in local_deps.additional_contexts
+            else f"""# -- Adding local package {relpath} --
 ADD {relpath} /deps/{name}
 # -- End of local package {relpath} --"""
+        )
         for fullpath, (relpath, name) in local_deps.real_pkgs.items()
     )
 
