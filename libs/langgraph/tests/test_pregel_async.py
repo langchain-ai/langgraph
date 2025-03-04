@@ -6148,13 +6148,6 @@ async def test_parent_command(checkpointer_name: str) -> None:
                 "source": "loop",
                 "writes": {
                     "alice": {
-                        "messages": [
-                            _AnyIdHumanMessage(
-                                content="get user name",
-                                additional_kwargs={},
-                                response_metadata={},
-                            ),
-                        ],
                         "user_name": "Meow",
                     }
                 },
