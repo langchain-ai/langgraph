@@ -55,6 +55,7 @@ from langgraph.constants import (
     ERROR,
     INPUT,
     INTERRUPT,
+    MISSING,
     NS_SEP,
     NULL_TASK_ID,
     PUSH,
@@ -566,7 +567,10 @@ class PregelLoop(LoopProtocol):
         is_resuming = bool(self.checkpoint["channel_versions"]) and bool(
             configurable.get(
                 CONFIG_KEY_RESUMING,
-                self.input is None or isinstance(self.input, Command),
+                self.input is None
+                or isinstance(self.input, Command)
+                or self.config.get("metadata", {}).get("run_id")
+                == self.checkpoint_metadata.get("run_id", MISSING),
             )
         )
 
@@ -939,6 +943,8 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         self.prev_checkpoint_config = saved.parent_config
         self.checkpoint = saved.checkpoint
         self.checkpoint_metadata = saved.metadata
+        if self.config.get("metadata").get("run_id") == saved.metadata.get("run_id"):
+            self.resuming = True
         self.checkpoint_pending_writes = (
             [(str(tid), k, v) for tid, k, v in saved.pending_writes]
             if saved.pending_writes is not None
