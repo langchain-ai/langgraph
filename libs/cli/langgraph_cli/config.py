@@ -12,12 +12,18 @@ MIN_PYTHON_VERSION = "3.11"
 
 
 class IndexConfig(TypedDict, total=False):
-    """Configuration for indexing documents for semantic search in the store."""
+    """Configuration for indexing documents for semantic search in the store.
+
+    This governs how text is converted into embeddings and stored for vector-based lookups.
+    """
 
     dims: int
-    """Number of dimensions in the embedding vectors.
+    """Required. Dimensionality of the embedding vectors you will store.
     
-    Common embedding models have the following dimensions:
+    Must match the output dimension of your selected embedding model or custom embed function.
+    If mismatched, you will likely encounter shape/size errors when inserting or querying vectors.
+    
+    Common embedding model output dimensions:
         - openai:text-embedding-3-large: 3072
         - openai:text-embedding-3-small: 1536
         - openai:text-embedding-ada-002: 1536
@@ -28,55 +34,123 @@ class IndexConfig(TypedDict, total=False):
     """
 
     embed: str
-    """Model identifier to generate embeddings from text or path to model or function.
+    """Required. Identifier or reference to the embedding model or a custom embedding function.
     
-    Examples:
+    The format can vary:
+      - "<provider>:<model_name>" for recognized providers (e.g., "openai:text-embedding-3-large")
+      - "path/to/module.py:function_name" for your own local embedding function
+      - "my_custom_embed" if it's a known alias in your system
+
+     Examples:
         - "openai:text-embedding-3-large"
         - "cohere:embed-multilingual-v3.0"
         - "src/app.py:embeddings"
+    
+    Note: Must return embeddings of dimension `dims`.
     """
 
     fields: Optional[list[str]]
-    """Fields to extract text from for embedding generation.
+    """Optional. List of JSON fields to extract before generating embeddings.
     
-    Defaults to the root ["$"], which embeds the json object as a whole.
+    Defaults to ["$"], which means the entire JSON object is embedded as one piece of text.
+    If you provide multiple fields (e.g. ["title", "content"]), each is extracted and embedded separately,
+    often saving token usage if you only care about certain parts of the data.
+    
+    Example:
+        fields=["title", "abstract", "author.biography"]
     """
 
 
 class StoreConfig(TypedDict, total=False):
-    """Configuration for the long-term memory store that comes built-in to your deployment.
+    """Configuration for the built-in long-term memory store.
 
-    Contains configuration for adding semantic search to the BaseStore, including:
-    - index: Configuration for semantic search indexing with fields for embed, dims, and fields
+    This store can optionally perform semantic search. If you omit `index`,
+    the store will just handle traditional (non-embedded) data without vector lookups.
     """
 
     index: Optional[IndexConfig]
-    """Configuration for vector embeddings in store. Defines how documents are indexed and retrieved using vector embeddings."""
+    """Optional. Defines the vector-based semantic search configuration.
+    
+    If provided, the store will:
+      - Generate embeddings according to `index.embed`
+      - Enforce the embedding dimension given by `index.dims`
+      - Embed only specified JSON fields (if any) from `index.fields`
+    
+    If omitted, no vector index is initialized.
+    """
 
 
 class SecurityConfig(TypedDict, total=False):
-    """Configuration for managing the security section of your deployment's  openapi specification."""
+    """Configuration for OpenAPI security definitions and requirements.
+
+    Useful for specifying global or path-level authentication and authorization flows
+    (e.g., OAuth2, API key headers, etc.).
+    """
 
     securitySchemes: dict[str, dict[str, Any]]
-    """Security schemes for OpenAPI specification."""
+    """Required. Dict describing each security scheme recognized by your OpenAPI spec.
+    
+    Keys are scheme names (e.g. "OAuth2", "ApiKeyAuth") and values are their definitions.
+    Example:
+        {
+            "OAuth2": {
+                "type": "oauth2",
+                "flows": {
+                    "password": {
+                        "tokenUrl": "/token",
+                        "scopes": {"read": "Read data", "write": "Write data"}
+                    }
+                }
+            }
+        }
+    """
     security: list[dict[str, list[str]]]
-    """Security requirements for OpenAPI specification."""
+    """Optional. Global security requirements across all endpoints.
+    
+    Each element in the list maps a security scheme (e.g. "OAuth2") to a list of scopes (e.g. ["read", "write"]).
+    Example:
+        [
+            {"OAuth2": ["read", "write"]},
+            {"ApiKeyAuth": []}
+        ]
+    """
     # path => {method => security}
     paths: dict[str, dict[str, list[dict[str, list[str]]]]]
-    """Path-specific security requirements for OpenAPI specification."""
+    """Optional. Path-specific security overrides.
+    
+    Keys are path templates (e.g., "/items/{item_id}"), mapping to:
+      - Keys that are HTTP methods (e.g., "GET", "POST"),
+      - Values are lists of security definitions (just like `security`) for that method.
+    
+    Example:
+        {
+            "/private_data": {
+                "GET": [{"OAuth2": ["read"]}],
+                "POST": [{"OAuth2": ["write"]}]
+            }
+        }
+    """
 
 
 class AuthConfig(TypedDict, total=False):
-    """Configuration for custom authentication."""
+    """Configuration for custom authentication logic and how it integrates into the OpenAPI spec."""
 
     path: str
-    """Path to the authentication function in a Python file. Should be in the format 'path/to/file.py:auth_function'."""
+    """Required. Path to an instance of the Auth() class that implements custom authentication.
+    
+    Format: "path/to/file.py:my_auth"
+    """
     disable_studio_auth: bool
-    """Whether to disable authentication when connecting from the LangSmith Studio. Set to true to allow LangSmith Studio to connect without authentication."""
+    """Optional. Whether to disable LangSmith API-key authentication for requests originating the Studio. 
+    
+    Defaults to False, meaning that if a particular header is set, the server will verify the `x-api-key` header
+    value is a valid API key for the deployment's workspace. If True, all requests will go through your custom
+    authentication logic, regardless of origin of the request.
+    """
     openapi: SecurityConfig
-    """The schema to use for updating the openapi spec.
-
-    Example:
+    """Required. Detailed security configuration that merges into your deployment's OpenAPI spec.
+    
+    Example (OAuth2):
         {
             "securitySchemes": {
                 "OAuth2": {
@@ -84,109 +158,181 @@ class AuthConfig(TypedDict, total=False):
                     "flows": {
                         "password": {
                             "tokenUrl": "/token",
-                            "scopes": {
-                                "me": "Read information about the current user",
-                                "items": "Access to create and manage items"
-                            }
+                            "scopes": {"me": "Read user info", "items": "Manage items"}
                         }
                     }
                 }
             },
             "security": [
-                {"OAuth2": ["me"]}  # Default security requirement for all endpoints
+                {"OAuth2": ["me"]}
             ]
         }
     """
 
 
 class CorsConfig(TypedDict, total=False):
-    """Configure how CORS will be treated in your deployment."""
+    """Specifies Cross-Origin Resource Sharing (CORS) rules for your server.
+
+    If omitted, defaults are typically very restrictive (often no cross-origin requests).
+    Configure carefully if you want to allow usage from browsers hosted on other domains.
+    """
 
     allow_origins: list[str]
-    """List of origins that are allowed to make cross-origin requests."""
+    """Optional. List of allowed origins (e.g., "https://example.com").
+    
+    Default is often an empty list (no external origins). 
+    Use "*" only if you trust all origins, as that bypasses most restrictions.
+    """
     allow_methods: list[str]
-    """List of HTTP methods that are allowed for cross-origin requests."""
+    """Optional. HTTP methods permitted for cross-origin requests (e.g. ["GET", "POST"]).
+    
+    Default might be ["GET", "POST", "OPTIONS"] depending on your server framework.
+    """
     allow_headers: list[str]
-    """List of HTTP headers that are allowed for cross-origin requests."""
+    """Optional. HTTP headers that can be used in cross-origin requests (e.g. ["Content-Type", "Authorization"])."""
     allow_credentials: bool
-    """Whether to allow credentials (cookies, authorization headers, etc) to be included in cross-origin requests."""
+    """Optional. If True, cross-origin requests can include credentials (cookies, auth headers).
+    
+    Default False to avoid accidentally exposing secured endpoints to untrusted sites.
+    """
     allow_origin_regex: str
-    """Regex pattern for origins that are allowed to make cross-origin requests."""
+    """Optional. A regex pattern for matching allowed origins, used if you have dynamic subdomains.
+    
+    Example: "^https://.*\.mycompany\.com$"
+    """
     expose_headers: list[str]
-    """List of HTTP headers that browsers are allowed to access."""
+    """Optional. List of headers that browsers are allowed to read from the response in cross-origin contexts."""
     max_age: int
-    """Maximum number of seconds the results of a preflight request can be cached."""
+    """Optional. How many seconds the browser may cache preflight responses.
+    
+    Default might be 600 (10 minutes). Larger values reduce preflight requests but can cause stale configurations.
+    """
 
 
 class HttpConfig(TypedDict, total=False):
-    """Configuration for the HTTP server that comes built-in to your deployment."""
+    """Configuration for the built-in HTTP server that powers your deployment's routes and endpoints."""
 
     app: str
-    """Import path for a custom Starlette app to mount. Should be in the format 'path/to/file.py:app_attribute'."""
+    """Optional. Import path to a custom Starlette/FastAPI application to mount.
+    
+    Format: "path/to/module.py:app_var"
+    If provided, it can override or extend the default routes.
+    """
     disable_assistants: bool
-    """Disable /assistants routes."""
+    """Optional. If True, /assistants routes are removed from the server.
+    
+    Default is False (meaning /assistants is enabled).
+    """
     disable_threads: bool
-    """Disable /threads routes."""
+    """Optional. If True, /threads routes are removed.
+    
+    Default is False.
+    """
     disable_runs: bool
-    """Disable /runs routes."""
+    """Optional. If True, /runs routes are removed.
+    
+    Default is False.
+    """
     disable_store: bool
-    """Disable /store routes."""
+    """Optional. If True, /store routes are removed, disabling direct store interactions via HTTP.
+    
+    Default is False.
+    """
     disable_meta: bool
-    """Disable /ok, /info, /metrics, and /docs routes."""
+    """Optional. If True, all meta endpoints (/ok, /info, /metrics, /docs) are disabled.
+    
+    Default is False.
+    """
     cors: Optional[CorsConfig]
-    """Cross-Origin Resource Sharing (CORS) configuration."""
+    """Optional. Defines CORS restrictions. If omitted, no special rules are set and 
+    cross-origin behavior depends on default server settings.
+    """
 
 
 class Config(TypedDict, total=False):
-    """Configuration for langgraph-cli."""
+    """Top-level config for langgraph-cli or similar deployment tooling."""
 
     python_version: str
-    """Python version to use in 'major.minor' format (e.g., '3.11'). Minimum supported version is '3.11'."""
+    """Optional. Python version in 'major.minor' format (e.g. '3.11'). 
+    Must be at least 3.11 or greater for this deployment to function properly.
+    """
 
     node_version: Optional[str]
-    """Node.js version to use as major version only (e.g., '20'). Minimum supported version is '20'."""
+    """Optional. Node.js version as a major version (e.g. '20'), if your deployment needs Node.
+    Must be >= 20 if provided.
+    """
 
     pip_config_file: Optional[str]
-    """Path to a pip configuration file. Only applicable for Python projects."""
+    """Optional. Path to a pip config file (e.g., "/etc/pip.conf" or "pip.ini") for controlling
+    package installation (custom indices, credentials, etc.).
+    
+    Only relevant if Python dependencies are installed via pip. If omitted, default pip settings are used.
+    """
 
     dockerfile_lines: list[str]
-    """Additional lines to add to the Dockerfile."""
+    """Optional. Additional Docker instructions that will be appended to your base Dockerfile.
+    
+    Useful for installing OS packages, setting environment variables, etc. 
+    Example:
+        dockerfile_lines=[
+            "RUN apt-get update && apt-get install -y libmagic-dev",
+            "ENV MY_CUSTOM_VAR=hello_world"
+        ]
+    """
 
     dependencies: list[str]
-    """Python dependencies to install. Can include PyPI package names or local paths.
+    """List of Python dependencies to install, either from PyPI or local paths.
     
-    Dependencies can be one of the following:
-    1. "." - which will look for local Python packages
-    2. "./local_package" - which will look for pyproject.toml, setup.py or requirements.txt in the app directory
-    3. A package name - which will be installed from PyPI
+    Examples:
+      - "." or "./src" if you have a local Python package
+      - str (aka "anthropic") for a PyPI package
+      - "git+https://github.com/org/repo.git@main" for a Git-based package
+    Defaults to an empty list, meaning no additional packages installed beyond your base environment.
     """
 
     graphs: dict[str, str]
-    """Mapping of graph names to their definitions. Each definition should be in the format 'path/to/file.py:attribute_name'."""
+    """Optional. Named definitions of graphs, each pointing to a Python object.
+
+    
+    Graphs can be StateGraph, @entrypoint, or any other Pregel object OR they can point to (async) context
+    managers that accept a single configuration argument (of type RunnableConfig) and return a pregel object
+    (instance of Stategraph, etc.).
+    
+    Keys are graph names, values are "path/to/file.py:object_name".
+    Example:
+        {
+            "mygraph": "graphs/my_graph.py:graph_definition",
+            "anothergraph": "graphs/another.py:get_graph"
+        }
+    """
 
     env: Union[dict[str, str], str]
-    """Environment variables to set.
-
-    If a dictionary is provided, the keys are environment variable names
-    and the values are the corresponding environment variable values.
-
-    If a string is provided, it is interpreted as a path to a file containing
-    environment variables in the format KEY=VALUE, with one environment variable
-    per line.
+    """Optional. Environment variables to set for your deployment.
+    
+    - If given as a dict, keys are variable names and values are their values.
+    - If given as a string, it must be a path to a file containing lines in KEY=VALUE format.
+    
+    Example as a dict:
+        env={"API_TOKEN": "abc123", "DEBUG": "true"}
+    Example as a file path:
+        env=".env"
     """
 
     store: Optional[StoreConfig]
-    """Configuration for the long-term memory store that comes built-in to your deployment.
+    """Optional. Configuration for the built-in long-term memory store, including semantic search indexing.
     
-    Contains configuration for adding semantic search to the BaseStore, including:
-    - index: Configuration for semantic search indexing with fields for embed, dims, and fields
+    If omitted, no vector index is set up (the object store will still be present, however).
     """
 
     auth: Optional[AuthConfig]
-    """Configuration for authentication."""
+    """Optional. Custom authentication config, including the path to your Python auth logic and 
+    the OpenAPI security definitions it uses.
+    """
 
     http: Optional[HttpConfig]
-    """Configuration for HTTP server."""
+    """Optional. Configuration for the built-in HTTP server, controlling which custom routes are exposed
+    and how cross-origin requests are handled.
+    """
 
 
 def _parse_version(version_str: str) -> tuple[int, int]:
