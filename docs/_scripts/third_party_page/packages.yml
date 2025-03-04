@@ -24,3 +24,6 @@ packages:
   - name: "delve-taxonomy-generator"
     repo: "andrestorres123/delve"
     description: "A taxonomy generator for unstructured data"
+  - name: "langgraph-bigtool"
+    repo: "langchain-ai/langgraph-bigtool"
+    description: "Build LangGraph agents with large numbers of tools."
