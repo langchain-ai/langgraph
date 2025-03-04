@@ -569,8 +569,11 @@ class PregelLoop(LoopProtocol):
                 CONFIG_KEY_RESUMING,
                 self.input is None
                 or isinstance(self.input, Command)
-                or self.config.get("metadata", {}).get("run_id")
-                == self.checkpoint_metadata.get("run_id", MISSING),
+                or (
+                    not self.is_nested
+                    and self.config.get("metadata", {}).get("run_id")
+                    == self.checkpoint_metadata.get("run_id", MISSING)
+                ),
             )
         )
 
