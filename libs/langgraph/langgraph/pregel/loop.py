@@ -943,8 +943,6 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         self.prev_checkpoint_config = saved.parent_config
         self.checkpoint = saved.checkpoint
         self.checkpoint_metadata = saved.metadata
-        if self.config.get("metadata").get("run_id") == saved.metadata.get("run_id"):
-            self.resuming = True
         self.checkpoint_pending_writes = (
             [(str(tid), k, v) for tid, k, v in saved.pending_writes]
             if saved.pending_writes is not None
