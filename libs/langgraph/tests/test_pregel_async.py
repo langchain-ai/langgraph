@@ -6148,13 +6148,6 @@ async def test_parent_command(checkpointer_name: str) -> None:
                 "source": "loop",
                 "writes": {
                     "alice": {
-                        "messages": [
-                            _AnyIdHumanMessage(
-                                content="get user name",
-                                additional_kwargs={},
-                                response_metadata={},
-                            ),
-                        ],
                         "user_name": "Meow",
                     }
                 },
@@ -7607,3 +7600,100 @@ async def test_stream_messages_dedupe_state(checkpointer_name: str) -> None:
         assert len(chunks) == 1
         assert chunks[0][0] == AIMessage("bye again", id="2")
         assert chunks[0][1]["langgraph_node"] == "call_model"
+
+
+@NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_interrupt_subgraph_reenter_checkpointer_true(
+    checkpointer_name: str,
+) -> None:
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+
+        class SubgraphState(TypedDict):
+            foo: str
+            bar: str
+
+        class ParentState(TypedDict):
+            foo: str
+            counter: int
+
+        called = []
+        bar_values = []
+
+        async def subnode_1(state: SubgraphState):
+            called.append("subnode_1")
+            bar_values.append(state.get("bar"))
+            return {"foo": "subgraph_1"}
+
+        async def subnode_2(state: SubgraphState):
+            called.append("subnode_2")
+            value = interrupt("Provide value")
+            value += "baz"
+            return {"foo": "subgraph_2", "bar": value}
+
+        subgraph = (
+            StateGraph(SubgraphState)
+            .add_node(subnode_1)
+            .add_node(subnode_2)
+            .add_edge(START, "subnode_1")
+            .add_edge("subnode_1", "subnode_2")
+            .compile(checkpointer=True)
+        )
+
+        async def call_subgraph(state: ParentState):
+            called.append("call_subgraph")
+            return await subgraph.ainvoke(state)
+
+        async def node(state: ParentState):
+            called.append("parent")
+            if state["counter"] < 1:
+                return Command(
+                    goto="call_subgraph", update={"counter": state["counter"] + 1}
+                )
+
+            return {"foo": state["foo"] + "|" + "parent"}
+
+        parent = (
+            StateGraph(ParentState)
+            .add_node(call_subgraph)
+            .add_node(node)
+            .add_edge(START, "call_subgraph")
+            .add_edge("call_subgraph", "node")
+            .compile(checkpointer=checkpointer)
+        )
+
+        config = {"configurable": {"thread_id": "1"}}
+        assert await parent.ainvoke({"foo": "", "counter": 0}, config) == {
+            "foo": "",
+            "counter": 0,
+        }
+        assert await parent.ainvoke(Command(resume="bar"), config) == {
+            "foo": "subgraph_2",
+            "counter": 1,
+        }
+        assert await parent.ainvoke(Command(resume="qux"), config) == {
+            "foo": "subgraph_2|parent",
+            "counter": 1,
+        }
+        assert called == [
+            "call_subgraph",
+            "subnode_1",
+            "subnode_2",
+            "call_subgraph",
+            "subnode_2",
+            "parent",
+            "call_subgraph",
+            "subnode_1",
+            "subnode_2",
+            "call_subgraph",
+            "subnode_2",
+            "parent",
+        ]
+
+        # invoke parent again (new turn)
+        assert await parent.ainvoke({"foo": "meow", "counter": 0}, config) == {
+            "foo": "meow",
+            "counter": 0,
+        }
+        # confirm that we preserve the state values from the previous invocation
+        assert bar_values == [None, "barbaz", "quxbaz"]

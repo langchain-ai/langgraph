@@ -169,15 +169,15 @@ files = [
 
 [[package]]
 name = "anthropic"
-version = "0.45.2"
+version = "0.47.2"
 description = "The official Python library for the anthropic API"
 optional = false
 python-versions = ">=3.8"
 groups = ["test"]
 markers = "python_version <= \"3.11\" or python_version >= \"3.12\""
 files = [
-    {file = "anthropic-0.45.2-py3-none-any.whl", hash = "sha256:ecd746f7274451dfcb7e1180571ead624c7e1195d1d46cb7c70143d2aedb4d35"},
-    {file = "anthropic-0.45.2.tar.gz", hash = "sha256:32a18b9ecd12c91b2be4cae6ca2ab46a06937b5aa01b21308d97a6d29794fb5e"},
+    {file = "anthropic-0.47.2-py3-none-any.whl", hash = "sha256:61b712a56308fce69f04d92ba0230ab2bc187b5bce17811d400843a8976bb67f"},
+    {file = "anthropic-0.47.2.tar.gz", hash = "sha256:452f4ca0c56ffab8b6ce9928bf8470650f88106a7001b250895eb65c54cfa44c"},
 ]
 
 [package.dependencies]
@@ -1299,7 +1299,7 @@ version = "0.7.1"
 description = "XML bomb protection for Python stdlib modules"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
-groups = ["docs", "test"]
+groups = ["docs"]
 markers = "python_version <= \"3.11\" or python_version >= \"3.12\""
 files = [
     {file = "defusedxml-0.7.1-py2.py3-none-any.whl", hash = "sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61"},
@@ -3288,21 +3288,20 @@ together = ["langchain-together"]
 
 [[package]]
 name = "langchain-anthropic"
-version = "0.2.4"
+version = "0.3.8"
 description = "An integration package connecting AnthropicMessages and LangChain"
 optional = false
 python-versions = "<4.0,>=3.9"
 groups = ["test"]
 markers = "python_version <= \"3.11\" or python_version >= \"3.12\""
 files = [
-    {file = "langchain_anthropic-0.2.4-py3-none-any.whl", hash = "sha256:bcb6c2d0df4a67aff52816621079d6e743b260911caccf313a72b33b7edece6f"},
-    {file = "langchain_anthropic-0.2.4.tar.gz", hash = "sha256:0382d4c7b5236839b703f7b72b3e06de4bb5be99104b193f719adbe34c49562b"},
+    {file = "langchain_anthropic-0.3.8-py3-none-any.whl", hash = "sha256:05a70f51500d3c4e0f3e463730e193a25b6244e06b3bda3d7b2ec21d83d081ae"},
+    {file = "langchain_anthropic-0.3.8.tar.gz", hash = "sha256:1932977b8105744739ffdcb39861b041b73ae93846d0896a775fcea9a29e4b2b"},
 ]
 
 [package.dependencies]
-anthropic = ">=0.30.0,<1"
-defusedxml = ">=0.7.1,<0.8.0"
-langchain-core = ">=0.3.15,<0.4.0"
+anthropic = ">=0.47.0,<1"
+langchain-core = ">=0.3.39,<1.0.0"
 pydantic = ">=2.7.4,<3.0.0"
 
 [[package]]
@@ -3357,15 +3356,15 @@ tenacity = ">=8.1.0,<8.4.0 || >8.4.0,<10"
 
 [[package]]
 name = "langchain-core"
-version = "0.3.34"
+version = "0.3.40"
 description = "Building applications with LLMs through composability"
 optional = false
 python-versions = "<4.0,>=3.9"
 groups = ["docs", "test"]
 markers = "python_version <= \"3.11\" or python_version >= \"3.12\""
 files = [
-    {file = "langchain_core-0.3.34-py3-none-any.whl", hash = "sha256:a057ebeddd2158d3be14bde341b25640ddf958b6989bd6e47160396f5a8202ae"},
-    {file = "langchain_core-0.3.34.tar.gz", hash = "sha256:26504cf1e8e6c310adad907b890d4e3c147581cfa7434114f6dc1134fe4bc6d3"},
+    {file = "langchain_core-0.3.40-py3-none-any.whl", hash = "sha256:9f31358741f10a13db8531e8288b8a5ae91904018c5c2e6f739d6645a98fca03"},
+    {file = "langchain_core-0.3.40.tar.gz", hash = "sha256:893a238b38491967c804662c1ec7c3e6ebaf223d1125331249c3cf3862ff2746"},
 ]
 
 [package.dependencies]
@@ -3474,19 +3473,19 @@ ollama = ">=0.4.4,<1"
 
 [[package]]
 name = "langchain-openai"
-version = "0.3.4"
+version = "0.3.7"
 description = "An integration package connecting OpenAI and LangChain"
 optional = false
 python-versions = "<4.0,>=3.9"
 groups = ["test"]
 markers = "python_version <= \"3.11\" or python_version >= \"3.12\""
 files = [
-    {file = "langchain_openai-0.3.4-py3-none-any.whl", hash = "sha256:58d0c014620eb92f4f46ff9daf584c2a7794896b1379eb85ad7be8d9f3493b61"},
-    {file = "langchain_openai-0.3.4.tar.gz", hash = "sha256:c6645745a1d1bf19f21ea6fa473a746bd464053ff57ce563215e6165a0c4b9f1"},
+    {file = "langchain_openai-0.3.7-py3-none-any.whl", hash = "sha256:0aefc7bdf8e7398d41e09c4313cace816df6438f2aa93d34f79523487310f0da"},
+    {file = "langchain_openai-0.3.7.tar.gz", hash = "sha256:b8b51a3aaa1cc3bda060651ea41145f7728219e8a7150b5404fb1e8446de9cef"},
 ]
 
 [package.dependencies]
-langchain-core = ">=0.3.34,<1.0.0"
+langchain-core = ">=0.3.39,<1.0.0"
 openai = ">=1.58.1,<2.0.0"
 tiktoken = ">=0.7,<1"
 
@@ -3508,17 +3507,17 @@ langchain-core = ">=0.3.34,<1.0.0"
 
 [[package]]
 name = "langgraph"
-version = "0.2.71"
+version = "0.3.0"
 description = "Building stateful, multi-actor applications with LLMs"
 optional = false
 python-versions = ">=3.9.0,<4.0"
-groups = ["docs", "test"]
+groups = ["docs"]
 markers = "python_version <= \"3.11\" or python_version >= \"3.12\""
 files = []
 develop = true
 
 [package.dependencies]
-langchain-core = ">=0.2.43,<0.4.0,!=0.3.0,!=0.3.1,!=0.3.2,!=0.3.3,!=0.3.4,!=0.3.5,!=0.3.6,!=0.3.7,!=0.3.8,!=0.3.9,!=0.3.10,!=0.3.11,!=0.3.12,!=0.3.13,!=0.3.14,!=0.3.15,!=0.3.16,!=0.3.17,!=0.3.18,!=0.3.19,!=0.3.20,!=0.3.21,!=0.3.22"
+langchain-core = ">=0.1,<0.4"
 langgraph-checkpoint = "^2.0.10"
 langgraph-sdk = "^0.1.42"
 
@@ -3528,7 +3527,7 @@ url = "../libs/langgraph"
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.0.13"
+version = "2.0.16"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -3547,26 +3546,25 @@ url = "../libs/checkpoint"
 
 [[package]]
 name = "langgraph-checkpoint-mongodb"
-version = "0.1.0"
+version = "0.1.1"
 description = "Library with a MongoDB implementation of LangGraph checkpoint saver."
 optional = false
-python-versions = "<4.0.0,>=3.9.0"
+python-versions = ">=3.9"
 groups = ["test"]
 markers = "python_version <= \"3.11\" or python_version >= \"3.12\""
 files = [
-    {file = "langgraph_checkpoint_mongodb-0.1.0-py3-none-any.whl", hash = "sha256:52f20956b36e0275ff805a1eea1db4c1a7e5e0ffe0a1ade65969004fa1654703"},
-    {file = "langgraph_checkpoint_mongodb-0.1.0.tar.gz", hash = "sha256:3165c134ad5c82a3fe02fef04c81dcd48a3f5d031e07a9d1cb84457241f76793"},
+    {file = "langgraph_checkpoint_mongodb-0.1.1-py3-none-any.whl", hash = "sha256:1ff2c3cb2a9139c38ea9cf398659b8b32d6bbfcc4999713b62014431477c5ac5"},
+    {file = "langgraph_checkpoint_mongodb-0.1.1.tar.gz", hash = "sha256:350d347b0458fb7977231ac1295095bef512458ee0debe09fd394d913b8d89d3"},
 ]
 
 [package.dependencies]
-langgraph = ">=0.2.38,<0.3.0"
-langgraph-checkpoint = ">=2.0.0,<3.0.0"
+langgraph-checkpoint = ">=2.0.0"
 motor = ">3.5.0"
-pymongo = ">=4.9.0,<4.10.0"
+pymongo = ">=4.9,<4.12"
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
-version = "2.0.14"
+version = "2.0.15"
 description = "Library with a Postgres implementation of LangGraph checkpoint saver."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -3576,7 +3574,7 @@ files = []
 develop = true
 
 [package.dependencies]
-langgraph-checkpoint = "^2.0.10"
+langgraph-checkpoint = "^2.0.15"
 orjson = ">=3.10.1"
 psycopg = "^3.2.0"
 psycopg-pool = "^3.2.0"
@@ -3587,7 +3585,7 @@ url = "../libs/checkpoint-postgres"
 
 [[package]]
 name = "langgraph-checkpoint-sqlite"
-version = "2.0.4"
+version = "2.0.5"
 description = "Library with a SQLite implementation of LangGraph checkpoint saver."
 optional = false
 python-versions = "^3.9.0"
@@ -3597,20 +3595,40 @@ files = []
 develop = true
 
 [package.dependencies]
-aiosqlite = "^0.20.0"
-langgraph-checkpoint = "^2.0.10"
+aiosqlite = ">=0.20,<0.22"
+langgraph-checkpoint = "^2.0.15"
 
 [package.source]
 type = "directory"
 url = "../libs/checkpoint-sqlite"
 
 [[package]]
+name = "langgraph-prebuilt"
+version = "1.0.0"
+description = "Library with high-level APIs for creating and executing LangGraph agents and tools."
+optional = false
+python-versions = "^3.9.0,<4.0"
+groups = ["docs"]
+markers = "python_version <= \"3.11\" or python_version >= \"3.12\""
+files = []
+develop = true
+
+[package.dependencies]
+langchain-core = ">=0.2.43,<0.4.0,!=0.3.0,!=0.3.1,!=0.3.2,!=0.3.3,!=0.3.4,!=0.3.5,!=0.3.6,!=0.3.7,!=0.3.8,!=0.3.9,!=0.3.10,!=0.3.11,!=0.3.12,!=0.3.13,!=0.3.14,!=0.3.15,!=0.3.16,!=0.3.17,!=0.3.18,!=0.3.19,!=0.3.20,!=0.3.21,!=0.3.22"
+langgraph = ">=0.3,<0.4"
+langgraph-checkpoint = "^2.0.10"
+
+[package.source]
+type = "directory"
+url = "../libs/prebuilt"
+
+[[package]]
 name = "langgraph-sdk"
-version = "0.1.51"
+version = "0.1.53"
 description = "SDK for interacting with LangGraph API"
 optional = false
 python-versions = "^3.9.0,<4.0"
-groups = ["docs", "test"]
+groups = ["docs"]
 markers = "python_version <= \"3.11\" or python_version >= \"3.12\""
 files = []
 develop = true
@@ -5939,7 +5957,6 @@ python-versions = ">=3.8"
 groups = ["test"]
 markers = "python_version <= \"3.11\" or python_version >= \"3.12\""
 files = [
-    {file = "pyasn1-0.6.1-py3-none-any.whl", hash = "sha256:0d632f46f2ba09143da3a8afe9e33fb6f92fa2320ab7e886e2d0f7672af84629"},
     {file = "pyasn1-0.6.1.tar.gz", hash = "sha256:6f580d2bdd84365380830acf45550f2511469f673cb4a5ae3857a3170128b034"},
 ]
 
@@ -5952,7 +5969,6 @@ python-versions = ">=3.8"
 groups = ["test"]
 markers = "python_version <= \"3.11\" or python_version >= \"3.12\""
 files = [
-    {file = "pyasn1_modules-0.4.1-py3-none-any.whl", hash = "sha256:49bfa96b45a292b711e986f222502c1c9a5e1f4e568fc30e2574a6c7d07838fd"},
     {file = "pyasn1_modules-0.4.1.tar.gz", hash = "sha256:c28e2dbf9c06ad61c71a075c7e0f9fd0f1b0bb2d2ad4377f240d33ac2ab60a7c"},
 ]
 
@@ -8634,4 +8650,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "06debb82135affdb2baf1fdcc028c062c236121508d787588cd0de1db2da11e4"
+content-hash = "ac9af57c6abaddd1f181551a7bb8194ef3e4491391a0f2dc71417d68e85cb5b3"

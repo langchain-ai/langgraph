@@ -18,6 +18,7 @@ from typing import (
     Type,
     Union,
     cast,
+    get_type_hints,
     overload,
 )
 from uuid import UUID, uuid5
@@ -119,7 +120,7 @@ from langgraph.utils.config import (
     recast_checkpoint_ns,
 )
 from langgraph.utils.fields import get_enhanced_type_hints
-from langgraph.utils.pydantic import create_model
+from langgraph.utils.pydantic import create_model, is_supported_by_pydantic
 from langgraph.utils.queue import AsyncQueue, SyncQueue  # type: ignore[attr-defined]
 
 WriteValue = Union[Callable[[Input], Output], Any]
@@ -609,6 +610,36 @@ class Pregel(PregelProtocol):
             ]
         ]
 
+    def config_schema(
+        self, *, include: Optional[Sequence[str]] = None
+    ) -> Type[BaseModel]:
+        # If the config type is not set explicitly, we will try to infer it.
+        # If the config type is provided, but isn't directly supported by pydantic
+        # (e.g., vanilla python class), we will also delegate to the parent class,
+        # which handles cases where Pydantic doesn't support the type.
+        if self.config_type is None or not is_supported_by_pydantic(self.config_type):
+            return super().config_schema(include=include)
+
+        include = include or []
+        fields = {
+            "configurable": (self.config_type, None),
+            **{
+                field_name: (field_type, None)
+                for field_name, field_type in get_type_hints(RunnableConfig).items()
+                if field_name in [i for i in include if i != "configurable"]
+            },
+        }
+        return create_model(self.get_name("Config"), field_definitions=fields)
+
+    def get_config_jsonschema(
+        self, *, include: Optional[Sequence[str]] = None
+    ) -> Dict[str, Any]:
+        schema = self.config_schema(include=include)
+        if hasattr(schema, "model_json_schema"):
+            return schema.model_json_schema()
+        else:
+            return schema.schema()
+
     @property
     def InputType(self) -> Any:
         if isinstance(self.input_channels, str):
@@ -634,7 +665,7 @@ class Pregel(PregelProtocol):
 
     def get_input_jsonschema(
         self, config: Optional[RunnableConfig] = None
-    ) -> Dict[All, Any]:
+    ) -> Dict[str, Any]:
         schema = self.get_input_schema(config)
         if hasattr(schema, "model_json_schema"):
             return schema.model_json_schema()
@@ -666,7 +697,7 @@ class Pregel(PregelProtocol):
 
     def get_output_jsonschema(
         self, config: Optional[RunnableConfig] = None
-    ) -> Dict[All, Any]:
+    ) -> Dict[str, Any]:
         schema = self.get_output_schema(config)
         if hasattr(schema, "model_json_schema"):
             return schema.model_json_schema()
@@ -971,6 +1002,12 @@ class Pregel(PregelProtocol):
                 raise ValueError(f"Subgraph {recast} not found")
 
         config = merge_configs(self.config, config) if self.config else config
+        if self.checkpointer is True:
+            ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
+            config = merge_configs(
+                config, {CONF: {CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(ns)}}
+            )
+
         saved = checkpointer.get_tuple(config)
         return self._prepare_state_snapshot(
             config,
@@ -1004,6 +1041,12 @@ class Pregel(PregelProtocol):
                 raise ValueError(f"Subgraph {recast} not found")
 
         config = merge_configs(self.config, config) if self.config else config
+        if self.checkpointer is True:
+            ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
+            config = merge_configs(
+                config, {CONF: {CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(ns)}}
+            )
+
         saved = await checkpointer.aget_tuple(config)
         return await self._aprepare_state_snapshot(
             config,
@@ -1911,9 +1954,7 @@ class Pregel(PregelProtocol):
             # set up subgraph checkpointing
             if self.checkpointer is True:
                 ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
-                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = NS_SEP.join(
-                    part.split(NS_END)[0] for part in ns.split(NS_SEP)
-                )
+                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
@@ -2201,9 +2242,7 @@ class Pregel(PregelProtocol):
             # set up subgraph checkpointing
             if self.checkpointer is True:
                 ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
-                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = NS_SEP.join(
-                    part.split(NS_END)[0] for part in ns.split(NS_SEP)
-                )
+                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
