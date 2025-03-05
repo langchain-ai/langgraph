@@ -129,6 +129,12 @@ interface LoadExternalComponentProps
 
   /** Fallback to be rendered when the component is loading */
   fallback?: React.ReactNode;
+
+  /**
+   * Map of components that can be rendered directly without fetching the UI code
+   * from the server.
+   */
+  components?: Record<string, React.FunctionComponent | React.ComponentClass>;
 }
 
 function fetchComponent(
@@ -158,6 +164,7 @@ export function LoadExternalComponent({
   message,
   meta,
   fallback,
+  components,
   ...props
 }: LoadExternalComponentProps) {
   const ref = React.useRef<HTMLDivElement>(null);
@@ -170,7 +177,11 @@ export function LoadExternalComponent({
   );
   const state = React.useSyncExternalStore(store.subscribe, store.getSnapshot);
 
+  const clientComponent = components?.[message.name];
+  const hasClientComponent = clientComponent != null;
+
   React.useEffect(() => {
+    if (hasClientComponent) return;
     fetchComponent(apiUrl, assistantId, message.name).then((html) => {
       const dom = ref.current;
       if (!dom) return;
@@ -182,7 +193,11 @@ export function LoadExternalComponent({
         );
       root.appendChild(fragment);
     });
-  }, [apiUrl, assistantId, message.name, shadowRootId]);
+  }, [apiUrl, assistantId, message.name, shadowRootId, hasClientComponent]);
+
+  if (hasClientComponent) {
+    return React.createElement(clientComponent, message.content);
+  }
 
   return (
     <>
