@@ -1,0 +1,410 @@
+{
+  "$ref": "#/$defs/Config",
+  "$defs": {
+    "Config": {
+      "title": "Config",
+      "description": "Top-level config for langgraph-cli or similar deployment tooling.",
+      "type": "object",
+      "required": [],
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "python_version": {
+              "type": "string",
+              "description": "Optional. Python version in 'major.minor' format (e.g. '3.11').\nMust be at least 3.11 or greater for this deployment to function properly.\n",
+              "enum": [
+                "3.11",
+                "3.12"
+              ]
+            },
+            "pip_config_file": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Path to a pip config file (e.g., \"/etc/pip.conf\" or \"pip.ini\") for controlling\npackage installation (custom indices, credentials, etc.).\n\nOnly relevant if Python dependencies are installed via pip. If omitted, default pip settings are used.\n"
+            },
+            "auth": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AuthConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Custom authentication config, including the path to your Python auth logic and\nthe OpenAPI security definitions it uses.\n"
+            },
+            "dependencies": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "List of Python dependencies to install, either from PyPI or local paths.\n"
+            },
+            "dockerfile_lines": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Optional. Additional Docker instructions that will be appended to your base Dockerfile.\n\nUseful for installing OS packages, setting environment variables, etc."
+            },
+            "env": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "description": "Optional. Environment variables to set for your deployment.\n\n- If given as a dict, keys are variable names and values are their values.\n- If given as a string, it must be a path to a file containing lines in KEY=VALUE format.\n\nenv=\".env\n"
+            },
+            "graphs": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Optional. Named definitions of graphs, each pointing to a Python object.\n\n\nGraphs can be StateGraph, @entrypoint, or any other Pregel object OR they can point to (async) context\nmanagers that accept a single configuration argument (of type RunnableConfig) and return a pregel object\n(instance of Stategraph, etc.).\n"
+            },
+            "http": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/HttpConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Configuration for the built-in HTTP server, controlling which custom routes are exposed\nand how cross-origin requests are handled.\n"
+            },
+            "store": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/StoreConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Configuration for the built-in long-term memory store, including semantic search indexing.\n\nIf omitted, no vector index is set up (the object store will still be present, however).\n"
+            }
+          },
+          "required": [
+            "dependencies",
+            "graphs"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "node_version": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "20"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Node.js version as a major version (e.g. '20'), if your deployment needs Node.\nMust be >= 20 if provided.\n"
+            },
+            "auth": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AuthConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Custom authentication config, including the path to your Python auth logic and\nthe OpenAPI security definitions it uses.\n"
+            },
+            "dependencies": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "List of Python dependencies to install, either from PyPI or local paths.\n"
+            },
+            "dockerfile_lines": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Optional. Additional Docker instructions that will be appended to your base Dockerfile.\n\nUseful for installing OS packages, setting environment variables, etc."
+            },
+            "env": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "description": "Optional. Environment variables to set for your deployment.\n\n- If given as a dict, keys are variable names and values are their values.\n- If given as a string, it must be a path to a file containing lines in KEY=VALUE format.\n\nenv=\".env\n"
+            },
+            "graphs": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Optional. Named definitions of graphs, each pointing to a Python object.\n\n\nGraphs can be StateGraph, @entrypoint, or any other Pregel object OR they can point to (async) context\nmanagers that accept a single configuration argument (of type RunnableConfig) and return a pregel object\n(instance of Stategraph, etc.).\n"
+            },
+            "http": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/HttpConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Configuration for the built-in HTTP server, controlling which custom routes are exposed\nand how cross-origin requests are handled.\n"
+            },
+            "store": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/StoreConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Configuration for the built-in long-term memory store, including semantic search indexing.\n\nIf omitted, no vector index is set up (the object store will still be present, however).\n"
+            }
+          },
+          "required": [
+            "node_version",
+            "graphs"
+          ]
+        }
+      ]
+    },
+    "AuthConfig": {
+      "title": "AuthConfig",
+      "description": "Configuration for custom authentication logic and how it integrates into the OpenAPI spec.",
+      "type": "object",
+      "properties": {
+        "disable_studio_auth": {
+          "type": "boolean",
+          "description": "Optional. Whether to disable LangSmith API-key authentication for requests originating the Studio.\n\nDefaults to False, meaning that if a particular header is set, the server will verify the `x-api-key` header\nvalue is a valid API key for the deployment's workspace. If True, all requests will go through your custom\nauthentication logic, regardless of origin of the request.\n"
+        },
+        "openapi": {
+          "$ref": "#/$defs/SecurityConfig",
+          "description": "Required. Detailed security configuration that merges into your deployment's OpenAPI spec.\n\n{\n}\n}\n}\n},\n]\n}\n"
+        },
+        "path": {
+          "type": "string",
+          "description": "Required. Path to an instance of the Auth() class that implements custom authentication.\n"
+        }
+      },
+      "required": []
+    },
+    "SecurityConfig": {
+      "title": "SecurityConfig",
+      "description": "Configuration for OpenAPI security definitions and requirements.\n\nUseful for specifying global or path-level authentication and authorization flows\n(e.g., OAuth2, API key headers, etc.).",
+      "type": "object",
+      "properties": {
+        "paths": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "description": "Optional. Path-specific security overrides.\n\n- Keys that are HTTP methods (e.g., \"GET\", \"POST\"),\n- Values are lists of security definitions (just like `security`) for that method.\n"
+        },
+        "security": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "description": "Optional. Global security requirements across all endpoints.\n\nEach element in the list maps a security scheme (e.g. \"OAuth2\") to a list of scopes (e.g. [\"read\", \"write\"])."
+        },
+        "securitySchemes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object"
+          },
+          "description": "Required. Dict describing each security scheme recognized by your OpenAPI spec.\n\nKeys are scheme names (e.g. \"OAuth2\", \"ApiKeyAuth\") and values are their definitions."
+        }
+      },
+      "required": []
+    },
+    "HttpConfig": {
+      "title": "HttpConfig",
+      "description": "Configuration for the built-in HTTP server that powers your deployment's routes and endpoints.",
+      "type": "object",
+      "properties": {
+        "app": {
+          "type": "string",
+          "description": "Optional. Import path to a custom Starlette/FastAPI application to mount.\n"
+        },
+        "cors": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CorsConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional. Defines CORS restrictions. If omitted, no special rules are set and\ncross-origin behavior depends on default server settings.\n"
+        },
+        "disable_assistants": {
+          "type": "boolean",
+          "description": "Optional. If True, /assistants routes are removed from the server.\n\nDefault is False (meaning /assistants is enabled).\n"
+        },
+        "disable_meta": {
+          "type": "boolean",
+          "description": "Optional. If True, all meta endpoints (/ok, /info, /metrics, /docs) are disabled.\n\nDefault is False.\n"
+        },
+        "disable_runs": {
+          "type": "boolean",
+          "description": "Optional. If True, /runs routes are removed.\n\nDefault is False.\n"
+        },
+        "disable_store": {
+          "type": "boolean",
+          "description": "Optional. If True, /store routes are removed, disabling direct store interactions via HTTP.\n\nDefault is False.\n"
+        },
+        "disable_threads": {
+          "type": "boolean",
+          "description": "Optional. If True, /threads routes are removed.\n\nDefault is False.\n"
+        }
+      },
+      "required": []
+    },
+    "CorsConfig": {
+      "title": "CorsConfig",
+      "description": "Specifies Cross-Origin Resource Sharing (CORS) rules for your server.\n\nIf omitted, defaults are typically very restrictive (often no cross-origin requests).\nConfigure carefully if you want to allow usage from browsers hosted on other domains.",
+      "type": "object",
+      "properties": {
+        "allow_credentials": {
+          "type": "boolean",
+          "description": "Optional. If True, cross-origin requests can include credentials (cookies, auth headers).\n\nDefault False to avoid accidentally exposing secured endpoints to untrusted sites.\n"
+        },
+        "allow_headers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional. HTTP headers that can be used in cross-origin requests (e.g. [\"Content-Type\", \"Authorization\"])."
+        },
+        "allow_methods": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional. HTTP methods permitted for cross-origin requests (e.g. [\"GET\", \"POST\"]).\n\nDefault might be [\"GET\", \"POST\", \"OPTIONS\"] depending on your server framework.\n"
+        },
+        "allow_origin_regex": {
+          "type": "string",
+          "description": "Optional. A regex pattern for matching allowed origins, used if you have dynamic subdomains.\n"
+        },
+        "allow_origins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional. List of allowed origins (e.g., \"https://example.com\").\n\nDefault is often an empty list (no external origins).\nUse \"*\" only if you trust all origins, as that bypasses most restrictions.\n"
+        },
+        "expose_headers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional. List of headers that browsers are allowed to read from the response in cross-origin contexts."
+        },
+        "max_age": {
+          "type": "integer",
+          "description": "Optional. How many seconds the browser may cache preflight responses.\n\nDefault might be 600 (10 minutes). Larger values reduce preflight requests but can cause stale configurations.\n"
+        }
+      },
+      "required": []
+    },
+    "StoreConfig": {
+      "title": "StoreConfig",
+      "description": "Configuration for the built-in long-term memory store.\n\nThis store can optionally perform semantic search. If you omit `index`,\nthe store will just handle traditional (non-embedded) data without vector lookups.",
+      "type": "object",
+      "properties": {
+        "index": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IndexConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional. Defines the vector-based semantic search configuration.\n\n- Generate embeddings according to `index.embed`\n- Enforce the embedding dimension given by `index.dims`\n- Embed only specified JSON fields (if any) from `index.fields`\n\nIf omitted, no vector index is initialized.\n"
+        }
+      },
+      "required": []
+    },
+    "IndexConfig": {
+      "title": "IndexConfig",
+      "description": "Configuration for indexing documents for semantic search in the store.\n\nThis governs how text is converted into embeddings and stored for vector-based lookups.",
+      "type": "object",
+      "properties": {
+        "dims": {
+          "type": "integer",
+          "description": "Required. Dimensionality of the embedding vectors you will store.\n\nMust match the output dimension of your selected embedding model or custom embed function.\nIf mismatched, you will likely encounter shape/size errors when inserting or querying vectors.\n\n"
+        },
+        "embed": {
+          "type": "string",
+          "description": "Required. Identifier or reference to the embedding model or a custom embedding function.\n\n- \"my_custom_embed\" if it's a known alias in your system\n"
+        },
+        "fields": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional. List of JSON fields to extract before generating embeddings.\n\nDefaults to [\"$\"], which means the entire JSON object is embedded as one piece of text.\nIf you provide multiple fields (e.g. [\"title\", \"content\"]), each is extracted and embedded separately,\noften saving token usage if you only care about certain parts of the data.\n"
+        }
+      },
+      "required": []
+    }
+  },
+  "title": "LangGraph CLI Configuration",
+  "description": "Configuration schema for langgraph-cli",
+  "version": "v0"
+}

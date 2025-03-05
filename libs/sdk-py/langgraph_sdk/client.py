@@ -1737,8 +1737,8 @@ class RunsClient:
 
         Example Usage:
 
-            await client.runs.delete(
-                thread_id="thread_id_to_delete",
+            await client.runs.list(
+                thread_id="thread_id",
                 limit=5,
                 offset=5,
             )
@@ -2517,7 +2517,7 @@ def encode_json(json: Any) -> tuple[dict[str, str], bytes]:
 
 def decode_json(r: httpx.Response) -> Any:
     body = r.read()
-    return orjson.loads(body if body else None)
+    return orjson.loads(body) if body else None
 
 
 class SyncAssistantsClient:
@@ -3881,8 +3881,8 @@ class SyncRunsClient:
 
         Example Usage:
 
-            client.runs.delete(
-                thread_id="thread_id_to_delete",
+            client.runs.list(
+                thread_id="thread_id",
                 limit=5,
                 offset=5,
             )

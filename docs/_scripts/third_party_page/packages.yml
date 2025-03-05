@@ -27,3 +27,6 @@ packages:
   - name: "nodeology"
     repo: "xyin-anl/Nodeology"
     description: "Enable researcher to build scientific workflows easily with simplified interface."
+  - name: "langgraph-bigtool"
+    repo: "langchain-ai/langgraph-bigtool"
+    description: "Build LangGraph agents with large numbers of tools."
