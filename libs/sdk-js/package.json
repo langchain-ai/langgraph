@@ -81,14 +81,14 @@
       "import": "./react.js",
       "require": "./react.cjs"
     },
-    "./react-ui/client": {
+    "./react-ui": {
       "types": {
-        "import": "./react-ui/client.d.ts",
-        "require": "./react-ui/client.d.cts",
-        "default": "./react-ui/client.d.ts"
+        "import": "./react-ui.d.ts",
+        "require": "./react-ui.d.cts",
+        "default": "./react-ui.d.ts"
       },
-      "import": "./react-ui/client.js",
-      "require": "./react-ui/client.cjs"
+      "import": "./react-ui.js",
+      "require": "./react-ui.cjs"
     },
     "./react-ui/server": {
       "types": {
@@ -124,10 +124,10 @@
     "react.js",
     "react.d.ts",
     "react.d.cts",
-    "react-ui/client.cjs",
-    "react-ui/client.js",
-    "react-ui/client.d.ts",
-    "react-ui/client.d.cts",
+    "react-ui.cjs",
+    "react-ui.js",
+    "react-ui.d.ts",
+    "react-ui.d.cts",
     "react-ui/server.cjs",
     "react-ui/server.js",
     "react-ui/server.d.ts",
