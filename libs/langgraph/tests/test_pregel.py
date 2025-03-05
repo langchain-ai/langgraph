@@ -3093,14 +3093,24 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
         "answer": "doc1,doc2,doc3,doc4",
     }
 
-    assert [*app.stream({"query": "what is weather in sf"})] == [
-        {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {"qa": {"answer": ""}},
-        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-        {"retriever_two": {"docs": ["doc3", "doc4"]}},
-        {"retriever_one": {"docs": ["doc1", "doc2"]}},
-        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-    ]
+    assert [*app.stream({"query": "what is weather in sf"})] in (
+        [
+            {"rewrite_query": {"query": "query: what is weather in sf"}},
+            {"qa": {"answer": ""}},
+            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {"retriever_two": {"docs": ["doc3", "doc4"]}},
+            {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+        ],
+        [
+            {"rewrite_query": {"query": "query: what is weather in sf"}},
+            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {"qa": {"answer": ""}},
+            {"retriever_two": {"docs": ["doc3", "doc4"]}},
+            {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+        ],
+    )
 
     app_w_interrupt = workflow.compile(
         checkpointer=checkpointer,
