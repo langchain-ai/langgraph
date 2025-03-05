@@ -463,6 +463,13 @@ class PutOp(NamedTuple):
         ]
         ```
     """
+    ttl: Optional[float] = None
+    """Controls the TTL (time-to-live) for the item in minutes.
+
+    If provided, and if the store you are using supports this feature, the item
+    will expire this many minutes after it was last updated (or created). At that point,
+    it will be scheduled for deletion. Defaults to None (no expiration).
+    """
 
 
 Op = Union[GetOp, SearchOp, PutOp, ListNamespacesOp]
@@ -612,7 +619,14 @@ class BaseStore(ABC):
         by providing an `index` configuration at creation time. Without this
         configuration, semantic search is disabled and any `index` arguments
         to storage operations will have no effect.
+        
+        Similarly, TTL (time-to-live) support is disabled by default.
+        Subclasses must explicitly set `supports_ttl = True` to enable this feature.
     """
+
+    # Class attribute that determines if this store implementation supports TTL
+    # Subclasses must set this to True to enable TTL support
+    supports_ttl = False
 
     __slots__ = ("__weakref__",)
 
@@ -715,6 +729,7 @@ class BaseStore(ABC):
         key: str,
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
+        ttl: Optional[float] = None,
     ) -> None:
         """Store or update an item in the store.
 
@@ -735,11 +750,21 @@ class BaseStore(ABC):
                     - Nested fields: "metadata.title"
                     - Array access: "chapters[*].content" (each indexed separately)
                     - Specific indices: "authors[0].name"
+            ttl: Time to live in minutes. If specified, the item will expire after
+                this many minutes. None means no expiration.Note that TTL support
+                depends on the specific store implementation - implementations must
+                explicitly opt-in to support this parameter. If supported, the store
+                will make a best effort to clear the item after it expires. Expiration
+                is updated on any **write** event (creation and update). It is not updated
+                when the item is merely **read** (get() or search()).
 
         Note:
             Indexing support depends on your store implementation.
             If you do not initialize the store with indexing capabilities,
             the `index` parameter will be ignored.
+            
+            Similarly, TTL support depends on the specific store implementation.
+            Some implementations may not support expiration of items.
 
         ???+ example "Examples"
             Store item. Indexing depends on how you configure the store.
@@ -759,7 +784,12 @@ class BaseStore(ABC):
             ```
         """
         _validate_namespace(namespace)
-        self.batch([PutOp(namespace, key, value, index=index)])
+        if ttl is not None and not self.supports_ttl:
+            raise NotImplementedError(
+                f"TTL is not supported by {self.__class__.__name__}. "
+                f"Use a store implementation that supports TTL or set ttl=None."
+            )
+        self.batch([PutOp(namespace, key, value, index=index, ttl=ttl)])
 
     def delete(self, namespace: tuple[str, ...], key: str) -> None:
         """Delete an item.
@@ -768,7 +798,7 @@ class BaseStore(ABC):
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
         """
-        self.batch([PutOp(namespace, key, None)])
+        self.batch([PutOp(namespace, key, None, ttl=None)])
 
     def list_namespaces(
         self,
@@ -902,6 +932,7 @@ class BaseStore(ABC):
         key: str,
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
+        ttl: Optional[float] = None,
     ) -> None:
         """Asynchronously store or update an item in the store.
 
@@ -922,11 +953,21 @@ class BaseStore(ABC):
                     - Nested fields: "metadata.title"
                     - Array access: "chapters[*].content" (each indexed separately)
                     - Specific indices: "authors[0].name"
+            ttl: Time to live in minutes. If specified, the item will expire after
+                this many minutes. None means no expiration.Note that TTL support
+                depends on the specific store implementation - implementations must
+                explicitly opt-in to support this parameter. If supported, the store
+                will make a best effort to clear the item after it expires. Expiration
+                is updated on any **write** event (creation and update). It is not updated
+                when the item is merely **read** (get() or search()).
 
         Note:
             Indexing support depends on your store implementation.
             If you do not initialize the store with indexing capabilities,
             the `index` parameter will be ignored.
+            
+            Similarly, TTL support depends on the specific store implementation.
+            Some implementations may not support expiration of items.
 
         ???+ example "Examples"
             Store item. Indexing depends on how you configure the store.
@@ -954,7 +995,12 @@ class BaseStore(ABC):
             ```
         """
         _validate_namespace(namespace)
-        await self.abatch([PutOp(namespace, key, value, index=index)])
+        if ttl is not None and not self.supports_ttl:
+            raise NotImplementedError(
+                f"TTL is not supported by {self.__class__.__name__}. "
+                f"Use a store implementation that supports TTL or set ttl=None."
+            )
+        await self.abatch([PutOp(namespace, key, value, index=index, ttl=ttl)])
 
     async def adelete(self, namespace: tuple[str, ...], key: str) -> None:
         """Asynchronously delete an item.
