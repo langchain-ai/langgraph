@@ -1,13 +1,46 @@
-import type { useStream } from "../react/index.js";
+import { useStream } from "../react/index.js";
 import type { UIMessage } from "./types.js";
 
 import * as React from "react";
 import * as ReactDOM from "react-dom";
 import * as JsxRuntime from "react/jsx-runtime";
+import type { UseStream } from "../react/stream.js";
 
-const UseStreamContext = React.createContext<ReturnType<typeof useStream>>(
-  null!,
-);
+const UseStreamContext = React.createContext<{
+  stream: ReturnType<typeof useStream>;
+  meta: unknown;
+}>(null!);
+
+type BagTemplate = {
+  ConfigurableType?: Record<string, unknown>;
+  InterruptType?: unknown;
+  CustomEventType?: unknown;
+  UpdateType?: unknown;
+  MetaType?: unknown;
+};
+
+type GetMetaType<Bag extends BagTemplate> = Bag extends { MetaType: unknown }
+  ? Bag["MetaType"]
+  : unknown;
+
+type UseStreamContext<
+  StateType extends Record<string, unknown> = Record<string, unknown>,
+  Bag extends BagTemplate = BagTemplate,
+> = { stream: UseStream<StateType, Bag>; meta: GetMetaType<Bag> };
+
+export function useStreamContext<
+  StateType extends Record<string, unknown> = Record<string, unknown>,
+  Bag extends {
+    ConfigurableType?: Record<string, unknown>;
+    InterruptType?: unknown;
+    CustomEventType?: unknown;
+    UpdateType?: unknown;
+    MetaType?: unknown;
+  } = BagTemplate,
+>(): UseStreamContext<StateType, Bag> {
+  const ctx = React.useContext(UseStreamContext);
+  return ctx as UseStreamContext<StateType, Bag>;
+}
 
 interface ComponentTarget {
   comp: React.FunctionComponent | React.ComponentClass;
@@ -68,12 +101,14 @@ export function LoadExternalComponent({
   stream,
   message,
   className,
+  meta,
 }: {
   apiUrl?: string;
   assistantId: string;
   stream: ReturnType<typeof useStream>;
   message: UIMessage;
   className?: string;
+  meta?: unknown;
 }) {
   const ref = React.useRef<HTMLDivElement>(null);
   const id = React.useId();
@@ -105,7 +140,7 @@ export function LoadExternalComponent({
     <>
       <div id={shadowRootId} ref={ref} className={className} />
 
-      <UseStreamContext.Provider value={stream}>
+      <UseStreamContext.Provider value={{ stream, meta }}>
         {state?.target &&
           ReactDOM.createPortal(
             React.createElement(state.comp, message.content),
@@ -128,8 +163,9 @@ window[REQUIRE_SYMBOL] = (name: string) => {
   if (name === "react") return React;
   if (name === "react-dom") return ReactDOM;
   if (name === "react/jsx-runtime") return JsxRuntime;
-  if (name === "@langchain/langgraph-sdk/react") {
-    return { useStream: () => React.useContext(UseStreamContext) };
+  if (name === "@langchain/langgraph-sdk/react") return { useStream };
+  if (name === "@langchain/langgraph-sdk/react-ui/client") {
+    return { useStreamContext };
   }
 
   throw new Error(`Unknown module...: ${name}`);
