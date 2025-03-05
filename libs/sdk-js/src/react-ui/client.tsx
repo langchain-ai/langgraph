@@ -78,51 +78,88 @@ class ComponentStore {
   > = {};
 
   respond(
-    name: string,
+    shadowRootId: string,
     comp: React.FunctionComponent | React.ComponentClass,
     targetElement: HTMLElement,
   ) {
-    this.cache[name] = { comp, target: targetElement };
-    this.callbacks[name]?.forEach((c) => c(comp, targetElement));
+    this.cache[shadowRootId] = { comp, target: targetElement };
+    this.callbacks[shadowRootId]?.forEach((c) => c(comp, targetElement));
   }
 
-  getBoundStore(name: string) {
-    this.boundCache[name] ??= {
+  getBoundStore(shadowRootId: string) {
+    this.boundCache[shadowRootId] ??= {
       subscribe: (onStoreChange: () => void) => {
-        this.callbacks[name] ??= [];
-        this.callbacks[name].push(onStoreChange);
+        this.callbacks[shadowRootId] ??= [];
+        this.callbacks[shadowRootId].push(onStoreChange);
         return () => {
-          this.callbacks[name] = this.callbacks[name].filter(
+          this.callbacks[shadowRootId] = this.callbacks[shadowRootId].filter(
             (c) => c !== onStoreChange,
           );
         };
       },
-      getSnapshot: () => this.cache[name],
+      getSnapshot: () => this.cache[shadowRootId],
     };
 
-    return this.boundCache[name];
+    return this.boundCache[shadowRootId];
   }
 }
 
 const COMPONENT_STORE = new ComponentStore();
+const COMPONENT_PROMISE_CACHE: Record<string, Promise<string> | undefined> = {};
+
 const EXT_STORE_SYMBOL = Symbol.for("LGUI_EXT_STORE");
 const REQUIRE_SYMBOL = Symbol.for("LGUI_REQUIRE");
+
+interface LoadExternalComponentProps
+  extends Pick<React.HTMLAttributes<HTMLDivElement>, "style" | "className"> {
+  /** API URL of the LangGraph Platform */
+  apiUrl?: string;
+
+  /** ID of the assistant */
+  assistantId: string;
+
+  /** Stream of the assistant */
+  stream: ReturnType<typeof useStream>;
+
+  /** UI message to be rendered */
+  message: UIMessage;
+
+  /** Additional context to be passed to the child component */
+  meta?: unknown;
+
+  /** Fallback to be rendered when the component is loading */
+  fallback?: React.ReactNode;
+}
+
+function fetchComponent(
+  apiUrl: string,
+  assistantId: string,
+  agentName: string,
+): Promise<string> {
+  const cacheKey = `${apiUrl}-${assistantId}-${agentName}`;
+  if (COMPONENT_PROMISE_CACHE[cacheKey] != null) {
+    return COMPONENT_PROMISE_CACHE[cacheKey] as Promise<string>;
+  }
+
+  const request: Promise<string> = fetch(`${apiUrl}/ui/${assistantId}`, {
+    headers: { Accept: "text/html", "Content-Type": "application/json" },
+    method: "POST",
+    body: JSON.stringify({ name: agentName }),
+  }).then((a) => a.text());
+
+  COMPONENT_PROMISE_CACHE[cacheKey] = request;
+  return request;
+}
 
 export function LoadExternalComponent({
   apiUrl = "http://localhost:2024",
   assistantId,
   stream,
   message,
-  className,
   meta,
-}: {
-  apiUrl?: string;
-  assistantId: string;
-  stream: ReturnType<typeof useStream>;
-  message: UIMessage;
-  className?: string;
-  meta?: unknown;
-}) {
+  fallback,
+  ...props
+}: LoadExternalComponentProps) {
   const ref = React.useRef<HTMLDivElement>(null);
   const id = React.useId();
   const shadowRootId = `child-shadow-${id}`;
@@ -134,31 +171,30 @@ export function LoadExternalComponent({
   const state = React.useSyncExternalStore(store.subscribe, store.getSnapshot);
 
   React.useEffect(() => {
-    fetch(`${apiUrl}/ui/${assistantId}`, {
-      headers: { "Content-Type": "application/json" },
-      method: "POST",
-      body: JSON.stringify({ name: message.name, shadowRootId }),
-    })
-      .then((a) => a.text())
-      .then((html) => {
-        const dom = ref.current;
-        if (!dom) return;
-        const root = dom.shadowRoot ?? dom.attachShadow({ mode: "open" });
-        const fragment = document.createRange().createContextualFragment(html);
-        root.appendChild(fragment);
-      });
+    fetchComponent(apiUrl, assistantId, message.name).then((html) => {
+      const dom = ref.current;
+      if (!dom) return;
+      const root = dom.shadowRoot ?? dom.attachShadow({ mode: "open" });
+      const fragment = document
+        .createRange()
+        .createContextualFragment(
+          html.replace("{{shadowRootId}}", shadowRootId),
+        );
+      root.appendChild(fragment);
+    });
   }, [apiUrl, assistantId, message.name, shadowRootId]);
 
   return (
     <>
-      <div id={shadowRootId} ref={ref} className={className} />
+      <div id={shadowRootId} ref={ref} {...props} />
 
       <UseStreamContext.Provider value={{ stream, meta }}>
-        {state?.target &&
-          ReactDOM.createPortal(
-            React.createElement(state.comp, message.content),
-            state.target,
-          )}
+        {state?.target != null
+          ? ReactDOM.createPortal(
+              React.createElement(state.comp, message.content),
+              state.target,
+            )
+          : fallback}
       </UseStreamContext.Provider>
     </>
   );
