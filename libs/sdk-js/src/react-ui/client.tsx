@@ -164,8 +164,13 @@ window[REQUIRE_SYMBOL] = (name: string) => {
   if (name === "react-dom") return ReactDOM;
   if (name === "react/jsx-runtime") return JsxRuntime;
   if (name === "@langchain/langgraph-sdk/react") return { useStream };
-  if (name === "@langchain/langgraph-sdk/react-ui/client") {
-    return { useStreamContext };
+  if (name === "@langchain/langgraph-sdk/react-ui") {
+    return {
+      useStreamContext,
+      LoadExternalComponent: () => {
+        throw new Error("Nesting LoadExternalComponent is not supported");
+      },
+    };
   }
 
   throw new Error(`Unknown module...: ${name}`);
