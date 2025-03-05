@@ -158,20 +158,30 @@ declare global {
   }
 }
 
-window[EXT_STORE_SYMBOL] = COMPONENT_STORE;
-window[REQUIRE_SYMBOL] = (name: string) => {
-  if (name === "react") return React;
-  if (name === "react-dom") return ReactDOM;
-  if (name === "react/jsx-runtime") return JsxRuntime;
-  if (name === "@langchain/langgraph-sdk/react") return { useStream };
-  if (name === "@langchain/langgraph-sdk/react-ui") {
-    return {
-      useStreamContext,
-      LoadExternalComponent: () => {
-        throw new Error("Nesting LoadExternalComponent is not supported");
-      },
-    };
+export function bootstrapUiContext() {
+  if (typeof window === "undefined") {
+    console.warn(
+      "Attempting to bootstrap UI context outside of browser environment. " +
+        "Avoid importing from `@langchain/langgraph-sdk/react-ui` in server context.",
+    );
+    return;
   }
 
-  throw new Error(`Unknown module...: ${name}`);
-};
+  window[EXT_STORE_SYMBOL] = COMPONENT_STORE;
+  window[REQUIRE_SYMBOL] = (name: string) => {
+    if (name === "react") return React;
+    if (name === "react-dom") return ReactDOM;
+    if (name === "react/jsx-runtime") return JsxRuntime;
+    if (name === "@langchain/langgraph-sdk/react") return { useStream };
+    if (name === "@langchain/langgraph-sdk/react-ui") {
+      return {
+        useStreamContext,
+        LoadExternalComponent: () => {
+          throw new Error("Nesting LoadExternalComponent is not supported");
+        },
+      };
+    }
+
+    throw new Error(`Unknown module...: ${name}`);
+  };
+}
