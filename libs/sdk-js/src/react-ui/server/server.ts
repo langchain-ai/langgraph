@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import type { ComponentPropsWithoutRef, ElementType } from "react";
-import type { RemoveUIMessage, UIMessage } from "./types.js";
+import type { RemoveUIMessage, UIMessage } from "../types.js";
 
 export const typedUi = <Decl extends Record<string, ElementType>>(config: {
   writer?: (chunk: unknown) => void;

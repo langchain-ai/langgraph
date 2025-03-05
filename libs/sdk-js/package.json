@@ -99,15 +99,6 @@
       "import": "./react-ui/server.js",
       "require": "./react-ui/server.cjs"
     },
-    "./react-ui/types": {
-      "types": {
-        "import": "./react-ui/types.d.ts",
-        "require": "./react-ui/types.d.cts",
-        "default": "./react-ui/types.d.ts"
-      },
-      "import": "./react-ui/types.js",
-      "require": "./react-ui/types.cjs"
-    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -131,10 +122,6 @@
     "react-ui/server.cjs",
     "react-ui/server.js",
     "react-ui/server.d.ts",
-    "react-ui/server.d.cts",
-    "react-ui/types.cjs",
-    "react-ui/types.js",
-    "react-ui/types.d.ts",
-    "react-ui/types.d.cts"
+    "react-ui/server.d.cts"
   ]
 }

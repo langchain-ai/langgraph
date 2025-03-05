@@ -18,10 +18,6 @@ react-ui/server.cjs
 react-ui/server.js
 react-ui/server.d.ts
 react-ui/server.d.cts
-react-ui/types.cjs
-react-ui/types.js
-react-ui/types.d.ts
-react-ui/types.d.cts
 node_modules
 dist
 .yarn
