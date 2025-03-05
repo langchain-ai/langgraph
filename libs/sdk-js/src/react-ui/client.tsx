@@ -23,10 +23,12 @@ type GetMetaType<Bag extends BagTemplate> = Bag extends { MetaType: unknown }
   ? Bag["MetaType"]
   : unknown;
 
-type UseStreamContext<
+interface UseStreamContext<
   StateType extends Record<string, unknown> = Record<string, unknown>,
   Bag extends BagTemplate = BagTemplate,
-> = { stream: UseStream<StateType, Bag>; meta: GetMetaType<Bag> };
+> extends UseStream<StateType, Bag> {
+  meta?: GetMetaType<Bag>;
+}
 
 export function useStreamContext<
   StateType extends Record<string, unknown> = Record<string, unknown>,
@@ -39,7 +41,18 @@ export function useStreamContext<
   } = BagTemplate,
 >(): UseStreamContext<StateType, Bag> {
   const ctx = React.useContext(UseStreamContext);
-  return ctx as UseStreamContext<StateType, Bag>;
+  if (!ctx) {
+    throw new Error(
+      "useStreamContext must be used within a LoadExternalComponent",
+    );
+  }
+
+  return new Proxy(ctx, {
+    get(target, prop: keyof UseStreamContext<StateType, Bag>) {
+      if (prop === "meta") return target.meta;
+      return target.stream[prop];
+    },
+  }) as unknown as UseStreamContext<StateType, Bag>;
 }
 
 interface ComponentTarget {
