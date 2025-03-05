@@ -623,9 +623,12 @@ export function useStream<
   >([]);
 
   const trackStreamMode = useCallback(
-    (mode: Exclude<StreamMode, "debug" | "messages">) => {
-      if (!trackStreamModeRef.current.includes(mode))
-        trackStreamModeRef.current.push(mode);
+    (...mode: Exclude<StreamMode, "debug" | "messages">[]) => {
+      for (const m of mode) {
+        if (!trackStreamModeRef.current.includes(m)) {
+          trackStreamModeRef.current.push(m);
+        }
+      }
     },
     [],
   );
@@ -908,7 +911,7 @@ export function useStream<
     },
 
     get messages() {
-      trackStreamMode("messages-tuple");
+      trackStreamMode("messages-tuple", "values");
       return getMessages(values);
     },
 
@@ -916,7 +919,7 @@ export function useStream<
       message: Message,
       index?: number,
     ): MessageMetadata<StateType> | undefined {
-      trackStreamMode("messages-tuple");
+      trackStreamMode("messages-tuple", "values");
       return messageMetadata?.find(
         (m) => m.messageId === (message.id ?? index),
       );
