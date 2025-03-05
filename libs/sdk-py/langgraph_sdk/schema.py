@@ -169,6 +169,8 @@ class AssistantBase(TypedDict):
     """The assistant metadata."""
     version: int
     """The version of the assistant"""
+    name: str
+    """The name of the assistant"""
 
 
 class AssistantVersion(AssistantBase):
@@ -182,8 +184,6 @@ class Assistant(AssistantBase):
 
     updated_at: datetime
     """The last time the assistant was updated."""
-    name: str
-    """The name of the assistant"""
 
 
 class Interrupt(TypedDict, total=False):
