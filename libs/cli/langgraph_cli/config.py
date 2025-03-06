@@ -334,6 +334,10 @@ class Config(TypedDict, total=False):
     and how cross-origin requests are handled.
     """
 
+    ui: Optional[dict[str, str]]
+    """Optional. Named definitions of UI components emitted by the agent, each pointing to a JS/TS file.
+    """
+
 
 def _parse_version(version_str: str) -> tuple[int, int]:
     """Parse a version string into a tuple of (major, minor)."""
@@ -369,6 +373,7 @@ def validate_config(config: Config) -> Config:
             "store": config.get("store"),
             "auth": config.get("auth"),
             "http": config.get("http"),
+            "ui": config.get("ui"),
         }
         if config.get("node_version")
         else {
@@ -381,6 +386,7 @@ def validate_config(config: Config) -> Config:
             "store": config.get("store"),
             "auth": config.get("auth"),
             "http": config.get("http"),
+            "ui": config.get("ui"),
         }
     )
 
@@ -1029,6 +1035,7 @@ ADD . {faux_path}
 RUN cd {faux_path} && {install_cmd}
 {env_additional_config}
 ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
+{f"ENV LANGGRAPH_UI='{json.dumps(config['ui'])}'" if config.get("ui") else ""}
 
 WORKDIR {faux_path}
 
