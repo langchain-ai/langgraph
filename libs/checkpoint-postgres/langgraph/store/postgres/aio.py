@@ -20,7 +20,7 @@ from langgraph.store.base import (
 )
 from langgraph.store.base.batch import AsyncBatchedBaseStore
 from langgraph.store.postgres.base import (
-    _PLACEHOLDER,
+    PLACEHOLDER,
     BasePostgresStore,
     PoolConfig,
     PostgresIndexConfig,
@@ -360,7 +360,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
             for (idx, _), vector in zip(embedding_requests, vectors):
                 _paramslist = queries[idx][1]
                 for i in range(len(_paramslist)):
-                    if _paramslist[i] is _PLACEHOLDER:
+                    if _paramslist[i] is PLACEHOLDER:
                         _paramslist[i] = vector
 
         for (idx, _), (query, params) in zip(search_ops, queries):
