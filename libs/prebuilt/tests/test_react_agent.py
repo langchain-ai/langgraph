@@ -1382,5 +1382,10 @@ def test_get_model() -> None:
     seq = model | RunnableLambda(lambda message: message)
     assert _get_model(seq) == model
 
+    seq_with_tools = model.bind_tools([some_tool]) | RunnableLambda(
+        lambda message: message
+    )
+    assert _get_model(seq_with_tools) == model
+
     with pytest.raises(TypeError):
         _get_model(RunnableLambda(lambda message: message))
