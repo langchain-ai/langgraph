@@ -23,6 +23,7 @@ from langchain_core.runnables import (
     Runnable,
     RunnableBinding,
     RunnableConfig,
+    RunnableSequence,
 )
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
@@ -33,7 +34,6 @@ from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
 from langgraph.managed import IsLastStep, RemainingSteps
-from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer, Send
@@ -74,13 +74,6 @@ StateSchema = TypeVar("StateSchema", bound=AgentState)
 StateSchemaType = Type[StateSchema]
 
 PROMPT_RUNNABLE_NAME = "Prompt"
-
-MessagesModifier = Union[
-    SystemMessage,
-    str,
-    Callable[[Sequence[BaseMessage]], LanguageModelInput],
-    Runnable[Sequence[BaseMessage], LanguageModelInput],
-]
 
 Prompt = Union[
     SystemMessage,
@@ -126,43 +119,20 @@ def _get_prompt_runnable(prompt: Optional[Prompt]) -> Runnable:
     return prompt_runnable
 
 
-def _convert_messages_modifier_to_prompt(
-    messages_modifier: MessagesModifier,
-) -> Prompt:
-    prompt: Prompt
-    if isinstance(messages_modifier, (str, SystemMessage)):
-        return messages_modifier
-    elif callable(messages_modifier):
-
-        def prompt(state: AgentState) -> Sequence[BaseMessage]:
-            return messages_modifier(state["messages"])
-
-        return prompt
-    elif isinstance(messages_modifier, Runnable):
-        prompt = (lambda state: state["messages"]) | messages_modifier
-        return prompt
-    raise ValueError(
-        f"Got unexpected type for `messages_modifier`: {type(messages_modifier)}"
-    )
-
-
 def _convert_modifier_to_prompt(func: F) -> F:
-    """Decorator that converts state_modifier/messages_modifier kwargs to prompt kwarg."""
+    """Decorator that converts state_modifier kwarg to prompt kwarg."""
 
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         prompt = kwargs.get("prompt")
         state_modifier = kwargs.pop("state_modifier", None)
-        messages_modifier = kwargs.pop("messages_modifier", None)
-        if sum(p is not None for p in (prompt, state_modifier, messages_modifier)) > 1:
+        if sum(p is not None for p in (prompt, state_modifier)) > 1:
             raise ValueError(
-                "Expected only one of prompt, state_modifier, or messages_modifier, got multiple values"
+                "Expected only one of (prompt, state_modifier), got multiple values"
             )
 
         if state_modifier is not None:
             prompt = state_modifier
-        elif messages_modifier is not None:
-            prompt = _convert_messages_modifier_to_prompt(messages_modifier)
 
         kwargs["prompt"] = prompt
         return func(*args, **kwargs)
@@ -171,6 +141,16 @@ def _convert_modifier_to_prompt(func: F) -> F:
 
 
 def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> bool:
+    if isinstance(model, RunnableSequence):
+        model = next(
+            (
+                step
+                for step in model.steps
+                if isinstance(step, (RunnableBinding, BaseChatModel))
+            ),
+            model,
+        )
+
     if not isinstance(model, RunnableBinding):
         return True
 
@@ -206,6 +186,16 @@ def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> b
 
 def _get_model(model: LanguageModelLike) -> BaseChatModel:
     """Get the underlying model from a RunnableBinding or return the model itself."""
+    if isinstance(model, RunnableSequence):
+        model = next(
+            (
+                step
+                for step in model.steps
+                if isinstance(step, (RunnableBinding, BaseChatModel))
+            ),
+            model,
+        )
+
     if isinstance(model, RunnableBinding):
         model = model.bound
 
@@ -251,7 +241,7 @@ def _validate_chat_history(
 @_convert_modifier_to_prompt
 def create_react_agent(
     model: Union[str, LanguageModelLike],
-    tools: Union[ToolExecutor, Sequence[BaseTool], ToolNode],
+    tools: Union[Sequence[BaseTool], ToolNode],
     *,
     prompt: Optional[Prompt] = None,
     response_format: Optional[
@@ -271,7 +261,7 @@ def create_react_agent(
 
     Args:
         model: The `LangChain` chat model that supports tool calling.
-        tools: A list of tools, a ToolExecutor, or a ToolNode instance.
+        tools: A list of tools or a ToolNode instance.
             If an empty list is provided, the agent will consist of a single LLM node without tool calling.
         prompt: An optional prompt for the LLM. Can take a few different forms:
 
@@ -280,8 +270,6 @@ def create_react_agent(
             - Callable: This function should take in full graph state and the output is then passed to the language model.
             - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
 
-            !!! Note
-                Prior to `v0.2.68`, the prompt was set using `state_modifier` / `messages_modifier` parameters.
         response_format: An optional schema for the final agent output.
 
             If provided, output will be formatted to match the given schema and returned in the 'structured_response' state key.
@@ -625,10 +613,7 @@ def create_react_agent(
             else MessagesState
         )
 
-    if isinstance(tools, ToolExecutor):
-        tool_classes: Sequence[BaseTool] = tools.tools
-        tool_node = ToolNode(tool_classes)
-    elif isinstance(tools, ToolNode):
+    if isinstance(tools, ToolNode):
         tool_classes = list(tools.tools_by_name.values())
         tool_node = tools
     else:

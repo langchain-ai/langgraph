@@ -370,7 +370,7 @@ class BasePostgresStore(Generic[C]):
             if op.query and self.index_config:
                 embedding_requests.append((idx, op.query))
 
-                score_operator, post_operator = _get_distance_operator(self)
+                score_operator, post_operator = get_distance_operator(self)
                 vector_type = (
                     cast(PostgresIndexConfig, self.index_config)
                     .get("ann_index_config", {})
@@ -430,10 +430,10 @@ class BasePostgresStore(Generic[C]):
                     OFFSET %s
                 """
                 params = [
-                    _PLACEHOLDER,  # Vector placeholder
+                    PLACEHOLDER,  # Vector placeholder
                     *ns_args,
                     *filter_params,
-                    _PLACEHOLDER,
+                    PLACEHOLDER,
                     expanded_limit,
                     op.limit,
                     op.offset,
@@ -828,7 +828,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
             for (idx, _), embedding in zip(embedding_requests, embeddings):
                 _paramslist = queries[idx][1]
                 for i in range(len(_paramslist)):
-                    if _paramslist[i] is _PLACEHOLDER:
+                    if _paramslist[i] is PLACEHOLDER:
                         _paramslist[i] = embedding
 
         for (idx, _), (query, params) in zip(search_ops, queries):
@@ -1055,7 +1055,7 @@ def _decode_ns_bytes(namespace: Union[str, bytes, list]) -> tuple[str, ...]:
     return tuple(namespace.split("."))
 
 
-def _get_distance_operator(store: Any) -> tuple[str, str]:
+def get_distance_operator(store: Any) -> tuple[str, str]:
     """Get the distance operator and score expression based on config."""
     # Note: Today, we are not using ANN indices due to restrictions
     # on PGVector's support for mixing vector and non-vector filters
@@ -1121,4 +1121,4 @@ def _ensure_index_config(
     return embeddings, index_config
 
 
-_PLACEHOLDER = object()
+PLACEHOLDER = object()

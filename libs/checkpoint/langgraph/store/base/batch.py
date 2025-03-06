@@ -65,13 +65,11 @@ class AsyncBatchedBaseStore(BaseStore):
             pass
 
     async def aget(
-        self,
-        namespace: tuple[str, ...],
-        key: str,
+        self, namespace: tuple[str, ...], key: str, *, refresh_ttl: bool = True
     ) -> Optional[Item]:
         assert not self._task.done()
         fut = self._loop.create_future()
-        self._aqueue.put_nowait((fut, GetOp(namespace, key)))
+        self._aqueue.put_nowait((fut, GetOp(namespace, key, refresh_ttl=refresh_ttl)))
         return await fut
 
     async def asearch(
@@ -83,11 +81,22 @@ class AsyncBatchedBaseStore(BaseStore):
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
+        refresh_ttl: bool = True,
     ) -> list[SearchItem]:
         assert not self._task.done()
         fut = self._loop.create_future()
         self._aqueue.put_nowait(
-            (fut, SearchOp(namespace_prefix, filter, limit, offset, query))
+            (
+                fut,
+                SearchOp(
+                    namespace_prefix,
+                    filter,
+                    limit,
+                    offset,
+                    query,
+                    refresh_ttl=refresh_ttl,
+                ),
+            )
         )
         return await fut
 
@@ -97,11 +106,13 @@ class AsyncBatchedBaseStore(BaseStore):
         key: str,
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
+        *,
+        ttl: Optional[float] = None,
     ) -> None:
         assert not self._task.done()
         _validate_namespace(namespace)
         fut = self._loop.create_future()
-        self._aqueue.put_nowait((fut, PutOp(namespace, key, value, index)))
+        self._aqueue.put_nowait((fut, PutOp(namespace, key, value, index, ttl=ttl)))
         return await fut
 
     async def adelete(
@@ -146,12 +157,10 @@ class AsyncBatchedBaseStore(BaseStore):
 
     @_check_loop
     def get(
-        self,
-        namespace: tuple[str, ...],
-        key: str,
+        self, namespace: tuple[str, ...], key: str, *, refresh_ttl: bool = True
     ) -> Optional[Item]:
         return asyncio.run_coroutine_threadsafe(
-            self.aget(namespace, key=key), self._loop
+            self.aget(namespace, key=key, refresh_ttl=refresh_ttl), self._loop
         ).result()
 
     @_check_loop
@@ -164,10 +173,16 @@ class AsyncBatchedBaseStore(BaseStore):
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
+        refresh_ttl: bool = True,
     ) -> list[SearchItem]:
         return asyncio.run_coroutine_threadsafe(
             self.asearch(
-                namespace_prefix, query=query, filter=filter, limit=limit, offset=offset
+                namespace_prefix,
+                query=query,
+                filter=filter,
+                limit=limit,
+                offset=offset,
+                refresh_ttl=refresh_ttl,
             ),
             self._loop,
         ).result()
@@ -179,10 +194,12 @@ class AsyncBatchedBaseStore(BaseStore):
         key: str,
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
+        *,
+        ttl: Optional[float] = None,
     ) -> None:
         _validate_namespace(namespace)
         asyncio.run_coroutine_threadsafe(
-            self.aput(namespace, key=key, value=value, index=index), self._loop
+            self.aput(namespace, key=key, value=value, index=index, ttl=ttl), self._loop
         ).result()
 
     @_check_loop

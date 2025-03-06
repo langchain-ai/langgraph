@@ -2,7 +2,6 @@ import asyncio
 import concurrent.futures
 from collections import defaultdict, deque
 from contextlib import AsyncExitStack, ExitStack
-from dataclasses import replace
 from inspect import signature
 from types import TracebackType
 from typing import (
@@ -55,6 +54,7 @@ from langgraph.constants import (
     ERROR,
     INPUT,
     INTERRUPT,
+    MISSING,
     NS_SEP,
     NULL_TASK_ID,
     PUSH,
@@ -67,7 +67,6 @@ from langgraph.errors import (
     EmptyInputError,
     GraphDelegate,
     GraphInterrupt,
-    ParentCommand,
 )
 from langgraph.managed.base import (
     ManagedValueMapping,
@@ -403,6 +402,7 @@ class PregelLoop(LoopProtocol):
             self.status = "interrupt_before"
             raise GraphInterrupt()
         elif all(task.writes for task in self.tasks.values()):
+            # finish superstep
             writes = [w for t in self.tasks.values() for w in t.writes]
             # debug flag
             if self.debug:
@@ -451,6 +451,9 @@ class PregelLoop(LoopProtocol):
             ):
                 self.status = "interrupt_after"
                 raise GraphInterrupt()
+
+            # unset resuming flag
+            self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
         else:
             return False
 
@@ -562,7 +565,13 @@ class PregelLoop(LoopProtocol):
         is_resuming = bool(self.checkpoint["channel_versions"]) and bool(
             configurable.get(
                 CONFIG_KEY_RESUMING,
-                self.input is None or isinstance(self.input, Command),
+                self.input is None
+                or isinstance(self.input, Command)
+                or (
+                    not self.is_nested
+                    and self.config.get("metadata", {}).get("run_id")
+                    == self.checkpoint_metadata.get("run_id", MISSING)
+                ),
             )
         )
 
@@ -738,15 +747,6 @@ class PregelLoop(LoopProtocol):
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
-        # add current state to parent command
-        if isinstance(exc_value, ParentCommand):
-            cmd = exc_value.args[0]
-            state = (
-                [(self.output_keys, read_channels(self.channels, self.output_keys))]
-                if isinstance(self.output_keys, str)
-                else list(read_channels(self.channels, self.output_keys).items())
-            )
-            exc_value.args = (replace(cmd, update=[*state, *cmd._update_as_tuples()]),)
         # suppress interrupt
         suppress = isinstance(exc_value, GraphInterrupt) and not self.is_nested
         if suppress:

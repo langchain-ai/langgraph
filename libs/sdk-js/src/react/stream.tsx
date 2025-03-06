@@ -366,11 +366,11 @@ const useControllableThreadId = (options?: {
     onThreadIdRef.current?.(threadId);
   }, []);
 
-  if (typeof options?.threadId === "undefined") {
+  if (!options || !("threadId" in options)) {
     return [localThreadId, onThreadId];
   }
 
-  return [options.threadId, onThreadId];
+  return [options.threadId ?? null, onThreadId];
 };
 
 type BagTemplate = {
@@ -425,6 +425,16 @@ interface UseStreamOptions<
   apiKey?: ClientConfig["apiKey"];
 
   /**
+   * Custom call options, such as custom fetch implementation.
+   */
+  callerOptions?: ClientConfig["callerOptions"];
+
+  /**
+   * Default headers to send with requests.
+   */
+  defaultHeaders?: ClientConfig["defaultHeaders"];
+
+  /**
    * Specify the key within the state that contains messages.
    * Defaults to "messages".
    *
@@ -472,7 +482,7 @@ interface UseStreamOptions<
   onThreadId?: (threadId: string) => void;
 }
 
-interface UseStream<
+export interface UseStream<
   StateType extends Record<string, unknown> = Record<string, unknown>,
   Bag extends BagTemplate = BagTemplate,
 > {
@@ -603,8 +613,19 @@ export function useStream<
   messagesKey ??= "messages";
 
   const client = useMemo(
-    () => new Client({ apiUrl: options.apiUrl, apiKey: options.apiKey }),
-    [options.apiKey, options.apiUrl],
+    () =>
+      new Client({
+        apiUrl: options.apiUrl,
+        apiKey: options.apiKey,
+        callerOptions: options.callerOptions,
+        defaultHeaders: options.defaultHeaders,
+      }),
+    [
+      options.apiKey,
+      options.apiUrl,
+      options.callerOptions,
+      options.defaultHeaders,
+    ],
   );
   const [threadId, onThreadId] = useControllableThreadId(options);
 
@@ -620,12 +641,15 @@ export function useStream<
 
   const trackStreamModeRef = useRef<
     Array<"values" | "updates" | "events" | "custom" | "messages-tuple">
-  >(["values"]);
+  >([]);
 
   const trackStreamMode = useCallback(
-    (mode: Exclude<StreamMode, "debug" | "messages">) => {
-      if (!trackStreamModeRef.current.includes(mode))
-        trackStreamModeRef.current.push(mode);
+    (...mode: Exclude<StreamMode, "debug" | "messages">[]) => {
+      for (const m of mode) {
+        if (!trackStreamModeRef.current.includes(m)) {
+          trackStreamModeRef.current.push(m);
+        }
+      }
     },
     [],
   );
@@ -896,14 +920,19 @@ export function useStream<
       if (isLoading) return undefined;
 
       const interrupts = threadHead?.tasks?.at(-1)?.interrupts;
-      if (interrupts == null || interrupts.length === 0) return undefined;
+      if (interrupts == null || interrupts.length === 0) {
+        // check if there's a next task present
+        const next = threadHead?.next ?? [];
+        if (!next.length || error != null) return undefined;
+        return { when: "breakpoint" };
+      }
 
       // Return only the current interrupt
       return interrupts.at(-1) as Interrupt<InterruptType> | undefined;
     },
 
     get messages() {
-      trackStreamMode("messages-tuple");
+      trackStreamMode("messages-tuple", "values");
       return getMessages(values);
     },
 
@@ -911,7 +940,7 @@ export function useStream<
       message: Message,
       index?: number,
     ): MessageMetadata<StateType> | undefined {
-      trackStreamMode("messages-tuple");
+      trackStreamMode("messages-tuple", "values");
       return messageMetadata?.find(
         (m) => m.messageId === (message.id ?? index),
       );

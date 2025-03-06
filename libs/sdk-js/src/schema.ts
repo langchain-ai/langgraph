@@ -110,6 +110,9 @@ export interface AssistantBase {
 
   /** The version of the assistant. */
   version: number;
+
+  /** The name of the assistant */
+  name: string;
 }
 
 export interface AssistantVersion extends AssistantBase {}
@@ -117,9 +120,6 @@ export interface AssistantVersion extends AssistantBase {}
 export interface Assistant extends AssistantBase {
   /** The last time the assistant was updated. */
   updated_at: string;
-
-  /** The name of the assistant */
-  name: string;
 }
 
 export interface AssistantGraph {
@@ -142,9 +142,9 @@ export interface AssistantGraph {
  * An interrupt thrown inside a thread.
  */
 export interface Interrupt<TValue = unknown> {
-  value: TValue;
-  when: "during";
-  resumable: boolean;
+  value?: TValue;
+  when: "during" | (string & {});
+  resumable?: boolean;
   ns?: string[];
 }
 

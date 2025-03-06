@@ -388,7 +388,9 @@ class AssistantsClient:
                 'created_at': '2024-06-25T17:10:33.109781+00:00',
                 'updated_at': '2024-06-25T17:10:33.109781+00:00',
                 'config': {},
-                'metadata': {'created_by': 'system'}
+                'metadata': {'created_by': 'system'},
+                'version': 1,
+                'name': 'my_assistant'
             }
 
         """  # noqa: E501
@@ -742,7 +744,7 @@ class AssistantsClient:
             offset: The number of versions to skip.
 
         Returns:
-            list[Assistant]: A list of assistants.
+            list[AssistantVersion]: A list of assistant versions.
 
         Example Usage:
 
@@ -1737,8 +1739,8 @@ class RunsClient:
 
         Example Usage:
 
-            await client.runs.delete(
-                thread_id="thread_id_to_delete",
+            await client.runs.list(
+                thread_id="thread_id",
                 limit=5,
                 offset=5,
             )
@@ -2517,7 +2519,7 @@ def encode_json(json: Any) -> tuple[dict[str, str], bytes]:
 
 def decode_json(r: httpx.Response) -> Any:
     body = r.read()
-    return orjson.loads(body if body else None)
+    return orjson.loads(body) if body else None
 
 
 class SyncAssistantsClient:
@@ -3881,8 +3883,8 @@ class SyncRunsClient:
 
         Example Usage:
 
-            client.runs.delete(
-                thread_id="thread_id_to_delete",
+            client.runs.list(
+                thread_id="thread_id",
                 limit=5,
                 offset=5,
             )
