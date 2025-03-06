@@ -22,6 +22,7 @@ from langchain_core.runnables import (
     Runnable,
     RunnableBinding,
     RunnableConfig,
+    RunnableSequence,
 )
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
@@ -133,6 +134,16 @@ def _convert_modifier_to_prompt(func: F) -> F:
 
 
 def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> bool:
+    if isinstance(model, RunnableSequence):
+        model = next(
+            (
+                step
+                for step in model.steps
+                if isinstance(step, (RunnableBinding, BaseChatModel))
+            ),
+            model,
+        )
+
     if not isinstance(model, RunnableBinding):
         return True
 
@@ -168,6 +179,16 @@ def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> b
 
 def _get_model(model: LanguageModelLike) -> BaseChatModel:
     """Get the underlying model from a RunnableBinding or return the model itself."""
+    if isinstance(model, RunnableSequence):
+        model = next(
+            (
+                step
+                for step in model.steps
+                if isinstance(step, (RunnableBinding, BaseChatModel))
+            ),
+            model,
+        )
+
     if isinstance(model, RunnableBinding):
         model = model.bound
 
