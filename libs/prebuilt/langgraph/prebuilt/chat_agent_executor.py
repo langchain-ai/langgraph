@@ -141,7 +141,7 @@ def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> b
                 for step in model.steps
                 if isinstance(step, (RunnableBinding, BaseChatModel))
             ),
-            None,
+            model,
         )
 
     if not isinstance(model, RunnableBinding):
@@ -186,7 +186,7 @@ def _get_model(model: LanguageModelLike) -> BaseChatModel:
                 for step in model.steps
                 if isinstance(step, (RunnableBinding, BaseChatModel))
             ),
-            None,
+            model,
         )
 
     if isinstance(model, RunnableBinding):
