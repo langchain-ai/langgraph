@@ -388,7 +388,9 @@ class AssistantsClient:
                 'created_at': '2024-06-25T17:10:33.109781+00:00',
                 'updated_at': '2024-06-25T17:10:33.109781+00:00',
                 'config': {},
-                'metadata': {'created_by': 'system'}
+                'metadata': {'created_by': 'system'},
+                'version': 1,
+                'name': 'my_assistant'
             }
 
         """  # noqa: E501
@@ -742,7 +744,7 @@ class AssistantsClient:
             offset: The number of versions to skip.
 
         Returns:
-            list[Assistant]: A list of assistants.
+            list[AssistantVersion]: A list of assistant versions.
 
         Example Usage:
 
