@@ -59,12 +59,10 @@ LangGraph makes it easy to manage conversation [memory](../concepts/memory.md) i
 [Human-in-the-loop](../concepts/human_in_the_loop.md) functionality allows
 you to involve humans in the decision-making process of your graph. These how-to guides show how to implement human-in-the-loop workflows in your graph.
 
-
 Key workflows:
 
 - [How to wait for user input](human_in_the_loop/wait-user-input.ipynb): A basic example that shows how to implement a human-in-the-loop workflow in your graph using the `interrupt` function.
 - [How to review tool calls](human_in_the_loop/review-tool-calls.ipynb): Incorporate human-in-the-loop for reviewing/editing/accepting tool call requests before they executed using the `interrupt` function.
- 
 
 Other methods:
 
@@ -290,10 +288,9 @@ Graph execution can take a while, and sometimes users may change their mind abou
 
 LangGraph Studio is a built-in UI for visualizing, testing, and debugging your agents.
 
-- [How to connect to a LangGraph Cloud deployment](../cloud/how-tos/test_deployment.md)
+- [How to connect to a LangGraph Platform deployment](../cloud/how-tos/test_deployment.md)
 - [How to connect to a local dev server](../how-tos/local-studio.md)
 - [How to connect to a local deployment (Docker)](../cloud/how-tos/test_local_deployment.md)
-- [How to test your graph in LangGraph Studio (MacOS only)](../cloud/how-tos/invoke_studio.md)
 - [How to interact with threads in LangGraph Studio](../cloud/how-tos/threads_studio.md)
 - [How to add nodes as dataset examples in LangGraph Studio](../cloud/how-tos/datasets_studio.md)
 - [How to engineer prompts in LangGraph Studio](../cloud/how-tos/iterate_graph_studio.md)
