@@ -10,7 +10,6 @@ from typing import (
     TypeVar,
     Union,
     cast,
-    get_type_hints,
 )
 
 from langchain_core.language_models import (
@@ -30,7 +29,7 @@ from pydantic import BaseModel
 from typing_extensions import Annotated, TypedDict
 
 from langgraph.errors import ErrorCode, create_error_message
-from langgraph.graph import END, MessagesState, StateGraph
+from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
 from langgraph.managed import IsLastStep, RemainingSteps
@@ -58,19 +57,27 @@ class AgentState(TypedDict):
     remaining_steps: RemainingSteps
 
 
+class AgentStatePydantic(BaseModel):
+    """The state of the agent."""
+
+    messages: Annotated[Sequence[BaseMessage], add_messages]
+
+    remaining_steps: RemainingSteps = 25
+
+
 class AgentStateWithStructuredResponse(AgentState):
     """The state of the agent with a structured response."""
 
     structured_response: StructuredResponse
 
 
-class MessagesStateWithStructuredResponse(MessagesState):
+class AgentStateWithStructuredResponsePydantic(BaseModel):
     """The state of the agent with a structured response."""
 
     structured_response: StructuredResponse
 
 
-StateSchema = TypeVar("StateSchema", bound=AgentState)
+StateSchema = TypeVar("StateSchema", bound=AgentState | AgentStatePydantic)
 StateSchemaType = Type[StateSchema]
 
 PROMPT_RUNNABLE_NAME = "Prompt"
@@ -83,21 +90,29 @@ Prompt = Union[
 ]
 
 
+def _get_state_value(state: StateSchema, key: str, default: Any = None) -> Any:
+    return (
+        state.get(key, default)
+        if isinstance(state, dict)
+        else getattr(state, key, default)
+    )
+
+
 def _get_prompt_runnable(prompt: Optional[Prompt]) -> Runnable:
     prompt_runnable: Runnable
     if prompt is None:
         prompt_runnable = RunnableCallable(
-            lambda state: state["messages"], name=PROMPT_RUNNABLE_NAME
+            lambda state: _get_state_value(state, "messages"), name=PROMPT_RUNNABLE_NAME
         )
     elif isinstance(prompt, str):
         _system_message: BaseMessage = SystemMessage(content=prompt)
         prompt_runnable = RunnableCallable(
-            lambda state: [_system_message] + state["messages"],
+            lambda state: [_system_message] + _get_state_value(state, "messages"),
             name=PROMPT_RUNNABLE_NAME,
         )
     elif isinstance(prompt, SystemMessage):
         prompt_runnable = RunnableCallable(
-            lambda state: [prompt] + state["messages"],
+            lambda state: [prompt] + _get_state_value(state, "messages"),
             name=PROMPT_RUNNABLE_NAME,
         )
     elif inspect.iscoroutinefunction(prompt):
@@ -290,7 +305,8 @@ def create_react_agent(
                 The graph will make a separate call to the LLM to generate the structured response after the agent loop is finished.
                 This is not the only strategy to get structured responses, see more options in [this guide](https://langchain-ai.github.io/langgraph/how-tos/react-agent-structured-output/).
         state_schema: An optional state schema that defines graph state.
-            Must have `messages` key. Defaults to `MessagesState` that defines it.
+            Must have `messages` and `remaining_steps` keys.
+            Defaults to `AgentState` that defines those two keys.
         config_schema: An optional schema for configuration.
             Use this to expose configurable parameters via agent.config_specs.
         checkpointer: An optional checkpoint saver object. This is used for persisting
@@ -597,20 +613,27 @@ def create_react_agent(
         )
 
     if state_schema is not None:
-        required_keys = {"messages"}
+        required_keys = {"messages", "remaining_steps"}
         if response_format is not None:
             required_keys.add("structured_response")
 
-        state_keys = set(get_type_hints(state_schema).keys())
+        # Pydantic v2
+        if hasattr(state_schema, "model_fields"):
+            schema_keys = set(state_schema.model_fields)
+        # Pydantic v1
+        elif hasattr(state_schema, "__fields__"):
+            schema_keys = set(state_schema.__fields__)
+        else:
+            schema_keys = set(state_schema.__annotations__)
 
-        if missing_keys := required_keys - state_keys:
+        if missing_keys := required_keys - set(schema_keys):
             raise ValueError(f"Missing required key(s) {missing_keys} in state_schema")
 
     if state_schema is None:
         state_schema = (
-            MessagesStateWithStructuredResponse
+            AgentStateWithStructuredResponse
             if response_format is not None
-            else MessagesState
+            else AgentState
         )
 
     if isinstance(tools, ToolNode):
@@ -644,35 +667,34 @@ def create_react_agent(
     # our graph needs to check if these were called
     should_return_direct = {t.name for t in tool_classes if t.return_direct}
 
-    # Define the function that calls the model
-    def call_model(state: AgentState, config: RunnableConfig) -> MessagesState:
-        _validate_chat_history(state["messages"])
-        response = cast(AIMessage, model_runnable.invoke(state, config))
-        # add agent name to the AIMessage
-        response.name = name
+    def _are_more_steps_needed(state: StateSchema, response: BaseMessage) -> bool:
         has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
         all_tools_return_direct = (
             all(call["name"] in should_return_direct for call in response.tool_calls)
             if isinstance(response, AIMessage)
             else False
         )
-        if (
-            (
-                "remaining_steps" not in state
-                and state.get("is_last_step", False)
-                and has_tool_calls
-            )
+        remaining_steps = _get_state_value(state, "remaining_steps", None)
+        is_last_step = _get_state_value(state, "is_last_step", False)
+        return (
+            (remaining_steps is None and is_last_step and has_tool_calls)
             or (
-                "remaining_steps" in state
-                and state["remaining_steps"] < 1
+                remaining_steps is not None
+                and remaining_steps < 1
                 and all_tools_return_direct
             )
-            or (
-                "remaining_steps" in state
-                and state["remaining_steps"] < 2
-                and has_tool_calls
-            )
-        ):
+            or (remaining_steps is not None and remaining_steps < 2 and has_tool_calls)
+        )
+
+    # Define the function that calls the model
+    def call_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
+        messages = _get_state_value(state, "messages")
+        _validate_chat_history(messages)
+        response = cast(AIMessage, model_runnable.invoke(state, config))
+        # add agent name to the AIMessage
+        response.name = name
+
+        if _are_more_steps_needed(state, response):
             return {
                 "messages": [
                     AIMessage(
@@ -684,34 +706,13 @@ def create_react_agent(
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
-    async def acall_model(state: AgentState, config: RunnableConfig) -> MessagesState:
-        _validate_chat_history(state["messages"])
+    async def acall_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
+        messages = _get_state_value(state, "messages")
+        _validate_chat_history(messages)
         response = cast(AIMessage, await model_runnable.ainvoke(state, config))
         # add agent name to the AIMessage
         response.name = name
-        has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
-        all_tools_return_direct = (
-            all(call["name"] in should_return_direct for call in response.tool_calls)
-            if isinstance(response, AIMessage)
-            else False
-        )
-        if (
-            (
-                "remaining_steps" not in state
-                and state.get("is_last_step", False)
-                and has_tool_calls
-            )
-            or (
-                "remaining_steps" in state
-                and state["remaining_steps"] < 1
-                and all_tools_return_direct
-            )
-            or (
-                "remaining_steps" in state
-                and state["remaining_steps"] < 2
-                and has_tool_calls
-            )
-        ):
+        if _are_more_steps_needed(state, response):
             return {
                 "messages": [
                     AIMessage(
@@ -724,11 +725,11 @@ def create_react_agent(
         return {"messages": [response]}
 
     def generate_structured_response(
-        state: AgentState, config: RunnableConfig
-    ) -> MessagesStateWithStructuredResponse:
+        state: StateSchema, config: RunnableConfig
+    ) -> StateSchema:
         # NOTE: we exclude the last message because there is enough information
         # for the LLM to generate the structured response
-        messages = state["messages"][:-1]
+        messages = _get_state_value(state, "messages")[:-1]
         structured_response_schema = response_format
         if isinstance(response_format, tuple):
             system_prompt, structured_response_schema = response_format
@@ -741,11 +742,11 @@ def create_react_agent(
         return {"structured_response": response}
 
     async def agenerate_structured_response(
-        state: AgentState, config: RunnableConfig
-    ) -> MessagesStateWithStructuredResponse:
+        state: StateSchema, config: RunnableConfig
+    ) -> StateSchema:
         # NOTE: we exclude the last message because there is enough information
         # for the LLM to generate the structured response
-        messages = state["messages"][:-1]
+        messages = _get_state_value(state, "messages")[:-1]
         structured_response_schema = response_format
         if isinstance(response_format, tuple):
             system_prompt, structured_response_schema = response_format
@@ -781,10 +782,8 @@ def create_react_agent(
         )
 
     # Define the function that determines whether to continue or not
-    def should_continue(state: AgentState) -> Union[str, list]:
-        messages = (
-            state["messages"] if isinstance(state, dict) else getattr(state, "messages")
-        )
+    def should_continue(state: StateSchema) -> Union[str, list]:
+        messages = _get_state_value(state, "messages")
         last_message = messages[-1]
         # If there is no function call, then we finish
         if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
@@ -801,12 +800,10 @@ def create_react_agent(
                 return [Send("tools", [tool_call]) for tool_call in tool_calls]
 
     # Define a new graph
-    workflow = StateGraph(state_schema, config_schema=config_schema)
+    workflow = StateGraph(state_schema or AgentState, config_schema=config_schema)
 
     # Define the two nodes we will cycle between
-    workflow.add_node(
-        "agent", RunnableCallable(call_model, acall_model), input=AgentState
-    )
+    workflow.add_node("agent", RunnableCallable(call_model, acall_model))
     workflow.add_node("tools", tool_node)
 
     # Set the entrypoint as `agent`
@@ -826,23 +823,18 @@ def create_react_agent(
     else:
         should_continue_destinations = ["tools", END]
 
-    if version == "v2":
-        # Dummy node to get the full state_schema
-        workflow.add_node("get_state", lambda _: None, input=state_schema)
-        workflow.add_edge("agent", "get_state")
-
     # We now add a conditional edge
     workflow.add_conditional_edges(
         # First, we define the start node. We use `agent`.
         # This means these are the edges taken after the `agent` node is called.
-        "get_state" if version == "v2" else "agent",
+        "agent",
         # Next, we pass in the function that will determine which node is called next.
         should_continue,
         path_map=should_continue_destinations,
     )
 
-    def route_tool_responses(state: AgentState) -> Literal["agent", "__end__"]:
-        for m in reversed(state["messages"]):
+    def route_tool_responses(state: StateSchema) -> Literal["agent", "__end__"]:
+        for m in reversed(_get_state_value(state, "messages")):
             if not isinstance(m, ToolMessage):
                 break
             if m.name in should_return_direct:

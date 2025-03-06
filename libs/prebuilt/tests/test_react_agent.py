@@ -35,6 +35,7 @@ from langgraph.prebuilt import (
 )
 from langgraph.prebuilt.chat_agent_executor import (
     AgentState,
+    AgentStatePydantic,
     _get_model,
     _should_bind_tools,
     _validate_chat_history,
@@ -684,6 +685,40 @@ def test_react_agent_parallel_tool_calls(
         assert get_weather_execution_count == 1
 
 
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_create_react_agent_pydantic_state(version: str) -> None:
+    class AgentExtraState(AgentStatePydantic):
+        foo: int
+
+    def tool1(some_val: int, state: Annotated[AgentExtraState, InjectedState]):
+        """Tool 1 docstring."""
+        return some_val + state.foo
+
+    tool_call = {
+        "name": "tool1",
+        "args": {"some_val": 1},
+        "id": "some 0",
+        "type": "tool_call",
+    }
+    model = FakeToolCallingModel(tool_calls=[[tool_call], []])
+    agent = create_react_agent(
+        model,
+        [tool1],
+        state_schema=AgentExtraState,
+        version=version,
+    )
+    input_message = HumanMessage("hi")
+    result = agent.invoke({"messages": [input_message], "foo": 2})
+
+    assert result["messages"] == [
+        input_message,
+        AIMessage(content="hi", tool_calls=[tool_call], id="0"),
+        _AnyIdToolMessage(content="3", name="tool1", tool_call_id="some 0"),
+        AIMessage("hi-hi-3", id="1"),
+    ]
+    assert result["foo"] == 2
+
+
 class _InjectStateSchema(TypedDict):
     messages: list
     foo: str
@@ -841,44 +876,6 @@ def test_create_react_agent_inject_vars(version: str) -> None:
         AIMessage(content="hi", tool_calls=[tool_call], id="0"),
         _AnyIdToolMessage(content="6", name="tool1", tool_call_id="some 0"),
         AIMessage("hi-hi-6", id="1"),
-    ]
-    assert result["foo"] == 2
-
-
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_create_react_agent_pydantic_state(version: str) -> None:
-    class AgentBaseState(BaseModel):
-        messages: Annotated[Sequence[BaseMessage], add_messages]
-
-    class AgentExtraState(AgentBaseState):
-        foo: int
-
-    def tool1(some_val: int, state: Annotated[AgentExtraState, InjectedState]):
-        """Tool 1 docstring."""
-        return some_val + state.foo
-
-    tool_call = {
-        "name": "tool1",
-        "args": {"some_val": 1},
-        "id": "some 0",
-        "type": "tool_call",
-    }
-    model = FakeToolCallingModel(tool_calls=[[tool_call], []])
-    agent = create_react_agent(
-        model,
-        [tool1],
-        state_schema=AgentExtraState,
-        version=version,
-    )
-    input_message = HumanMessage("hi")
-    result = agent.invoke({"messages": [input_message], "foo": 2})
-    print(result)
-
-    assert result["messages"] == [
-        input_message,
-        AIMessage(content="hi", tool_calls=[tool_call], id="0"),
-        _AnyIdToolMessage(content="3", name="tool1", tool_call_id="some 0"),
-        AIMessage("hi-hi-3", id="1"),
     ]
     assert result["foo"] == 2
 
