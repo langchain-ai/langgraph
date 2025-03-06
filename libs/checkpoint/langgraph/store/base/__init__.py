@@ -774,7 +774,7 @@ class BaseStore(ABC):
                     - Nested fields: "metadata.title"
                     - Array access: "chapters[*].content" (each indexed separately)
                     - Specific indices: "authors[0].name"
-             ttl: Time to live in minutes. Support for this argument depends on your store adapter.
+            ttl: Time to live in minutes. Support for this argument depends on your store adapter.
                 If specified, the item will expire after this many minutes from when it was last accessed.
                 None means no expiration. Expired runs will be deleted opportunistically.
                 By default, the expiration timer refreshes on both read operations (get/search)
