@@ -10,6 +10,7 @@ from typing import (
     TypeVar,
     Union,
     cast,
+    get_type_hints,
 )
 
 from langchain_core.language_models import (
@@ -617,15 +618,7 @@ def create_react_agent(
         if response_format is not None:
             required_keys.add("structured_response")
 
-        # Pydantic v2
-        if hasattr(state_schema, "model_fields"):
-            schema_keys = set(state_schema.model_fields)
-        # Pydantic v1
-        elif hasattr(state_schema, "__fields__"):
-            schema_keys = set(state_schema.__fields__)
-        else:
-            schema_keys = set(state_schema.__annotations__)
-
+        schema_keys = set(get_type_hints(state_schema))
         if missing_keys := required_keys - set(schema_keys):
             raise ValueError(f"Missing required key(s) {missing_keys} in state_schema")
 
