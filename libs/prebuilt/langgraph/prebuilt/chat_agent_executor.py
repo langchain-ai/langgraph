@@ -71,7 +71,7 @@ class AgentStateWithStructuredResponse(AgentState):
     structured_response: StructuredResponse
 
 
-class AgentStateWithStructuredResponsePydantic(BaseModel):
+class AgentStateWithStructuredResponsePydantic(AgentStatePydantic):
     """The state of the agent with a structured response."""
 
     structured_response: StructuredResponse
