@@ -94,21 +94,35 @@ def _get_node_name(node: RunnableLike) -> str:
         raise TypeError(f"Unsupported node type: {type(node)}")
 
 
-def _get_branch_path_input_schema(path: Runnable) -> Optional[Type[Any]]:
+def _get_branch_path_input_schema(
+    path: Union[
+        Callable[..., Union[Hashable, list[Hashable]]],
+        Callable[..., Awaitable[Union[Hashable, list[Hashable]]]],
+        Runnable[Any, Union[Hashable, list[Hashable]]],
+    ],
+) -> Optional[Type[Any]]:
     input = None
     # detect input schema annotation in the branch callable
     try:
-        callable_ = None
+        callable_: Optional[
+            Union[
+                Callable[..., Union[Hashable, list[Hashable]]],
+                Callable[..., Awaitable[Union[Hashable, list[Hashable]]]],
+            ]
+        ] = None
         if isinstance(path, (RunnableCallable, RunnableLambda)):
-            if isfunction(path.func):
+            if isfunction(path.func) or ismethod(path.func):
                 callable_ = path.func
             elif (callable_method := getattr(path.func, "__call__", None)) and ismethod(
                 callable_method
             ):
                 callable_ = callable_method
-        elif callable(path):
-            callable_ = path
-
+            elif isfunction(path.afunc) or ismethod(path.afunc):
+                callable_ = path.afunc
+            elif (
+                callable_method := getattr(path.afunc, "__call__", None)
+            ) and ismethod(callable_method):
+                callable_ = callable_method
         if callable_ is not None and (hints := get_type_hints(callable_)):
             first_parameter_name = next(
                 iter(inspect.signature(cast(FunctionType, callable_)).parameters.keys())
