@@ -773,7 +773,7 @@ def create_react_agent(
         )
 
     # Define the function that determines whether to continue or not
-    def should_continue(state: state_schema) -> Union[str, list]:
+    def should_continue(state: StateSchema) -> Union[str, list]:
         messages = state["messages"]
         last_message = messages[-1]
         # If there is no function call, then we finish
