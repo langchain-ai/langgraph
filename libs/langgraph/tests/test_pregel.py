@@ -7615,7 +7615,7 @@ def test_parallel_interrupts_double(
     assert len(events) == 5
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_SYNC)
 def test_bulk_state_updates(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:

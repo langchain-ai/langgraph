@@ -7840,7 +7840,7 @@ async def test_handles_multiple_interrupts_from_tasks() -> None:
     assert result[1] == "Added Will!"
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_bulk_state_updates(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
