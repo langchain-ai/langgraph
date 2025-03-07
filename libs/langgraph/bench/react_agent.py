@@ -26,7 +26,7 @@ def react_agent(n_tools: int, checkpointer: Optional[BaseCheckpointSaver]) -> Pr
             run_manager: Optional[CallbackManagerForLLMRun] = None,
             **kwargs: Any,
         ) -> ChatResult:
-            response = self.responses[self.i].copy()
+            response = self.responses[self.i].model_copy()
             if self.i < len(self.responses) - 1:
                 self.i += 1
             else:

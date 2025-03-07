@@ -55,7 +55,7 @@ class FakeTracer(BaseTracer):
             new_dotted_order = ".".join(processed_levels)
         else:
             new_dotted_order = None
-        return run.copy(
+        return run.model_copy(
             update={
                 "id": self._replace_uuid(run.id),
                 "parent_run_id": (
