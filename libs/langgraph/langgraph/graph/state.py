@@ -123,6 +123,9 @@ def _get_branch_path_input_schema(
                 callable_method := getattr(path.afunc, "__call__", None)
             ) and ismethod(callable_method):
                 callable_ = callable_method
+        elif callable(path):
+            callable_ = path
+
         if callable_ is not None and (hints := get_type_hints(callable_)):
             first_parameter_name = next(
                 iter(inspect.signature(cast(FunctionType, callable_)).parameters.keys())
