@@ -2,6 +2,7 @@
 
 from langgraph.types import (
     All,
+    BulkUpdate,
     CachePolicy,
     PregelExecutableTask,
     PregelTask,
@@ -14,6 +15,7 @@ from langgraph.types import (
 
 __all__ = [
     "All",
+    "BulkUpdate",
     "CachePolicy",
     "PregelExecutableTask",
     "PregelTask",
