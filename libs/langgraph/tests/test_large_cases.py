@@ -2827,7 +2827,7 @@ def test_state_graph_packets(
         }
 
     # Define decision-making logic
-    def should_continue(data: AgentState) -> str:
+    def should_continue(data: dict) -> str:
         assert isinstance(data["session"], httpx.Client)
         assert (
             data["something_extra"] == "hi there"

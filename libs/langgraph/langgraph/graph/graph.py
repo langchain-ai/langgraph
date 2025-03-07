@@ -54,6 +54,7 @@ class Branch(NamedTuple):
     path: Runnable[Any, Union[Hashable, list[Hashable]]]
     ends: Optional[dict[Hashable, str]]
     then: Optional[str] = None
+    allow_extra_keys: bool = True
 
     def run(
         self,
@@ -87,7 +88,11 @@ class Branch(NamedTuple):
             value = reader(config)
             # passthrough additional keys from node to branch
             # only doable when using dict states
-            if isinstance(value, dict) and isinstance(input, dict):
+            if (
+                isinstance(value, dict)
+                and isinstance(input, dict)
+                and self.allow_extra_keys
+            ):
                 value = {**input, **value}
         else:
             value = input
@@ -108,7 +113,11 @@ class Branch(NamedTuple):
             value = await asyncio.to_thread(reader, config)
             # passthrough additional keys from node to branch
             # only doable when using dict states
-            if isinstance(value, dict) and isinstance(input, dict):
+            if (
+                isinstance(value, dict)
+                and isinstance(input, dict)
+                and self.allow_extra_keys
+            ):
                 value = {**input, **value}
         else:
             value = input
