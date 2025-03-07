@@ -1,0 +1,36 @@
+[tool.poetry]
+name = "langgraph-cli-install"
+version = "0.0.1-rc1"
+description = "Simple installer for langgraph-cli"
+authors = []
+license = "MIT"
+readme = "README.md"
+repository = "https://www.github.com/langchain-ai/langgraph"
+packages = [{ include = "langgraph_cli_install" }]
+
+[tool.poetry.scripts]
+langgraph-cli-install = "langgraph_cli_install.main:main"
+
+[tool.poetry.dependencies]
+python = "^3.8.0,<4.0"
+packaging = "^23.0"
+uv = "^0.1.24"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+lint.select = [
+  # pycodestyle
+  "E",
+  # Pyflakes
+  "F",
+  # pyupgrade
+  "UP",
+  # flake8-bugbear
+  "B",
+  # isort
+  "I",
+]
+lint.ignore = ["E501", "B008"]
