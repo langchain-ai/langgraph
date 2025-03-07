@@ -77,7 +77,7 @@ class AgentStateWithStructuredResponsePydantic(BaseModel):
     structured_response: StructuredResponse
 
 
-StateSchema = TypeVar("StateSchema", bound=AgentState | AgentStatePydantic)
+StateSchema = TypeVar("StateSchema", bound=Union[AgentState, AgentStatePydantic])
 StateSchemaType = Type[StateSchema]
 
 PROMPT_RUNNABLE_NAME = "Prompt"
