@@ -12,9 +12,9 @@ packages = [{ include = "langgraph_cli_install" }]
 langgraph-cli-install = "langgraph_cli_install.main:main"
 
 [tool.poetry.dependencies]
-python = "^3.8.0,<4.0"
-packaging = "^23.0"
-uv = "^0.1.24"
+python = "^3.9.0,<4.0"
+packaging = ">=23.0"
+uv = ">=0.6.0"
 
 [build-system]
 requires = ["poetry-core"]

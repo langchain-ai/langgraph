@@ -13,7 +13,7 @@ import uv
 
 def main():
     """Install langgraph-cli using uv in an isolated environment."""
-    print("Installing LangGraph CLI in an isolated environment...")
+    print("Installing LangGraph CLI...")
 
     try:
         uv_bin = uv.find_uv_bin()
@@ -51,8 +51,8 @@ def main():
 
 def get_latest_python_version() -> str:
     """Get the latest compatible Python version for installation."""
-    # Try to use Python 3.12 if possible, otherwise fall back to the current version
-    target_version = "3.12"
+    # Try to use Python 3.13 if possible, otherwise fall back to the current version
+    target_version = "3.13"
     try:
         # Check if this version is available through uv
         uv_bin = uv.find_uv_bin()
@@ -62,7 +62,7 @@ def get_latest_python_version() -> str:
             text=True,
             check=False,
         )
-        if "3.12" in result.stdout:
+        if target_version in result.stdout:
             return f"python{target_version}"
     except Exception:
         pass
