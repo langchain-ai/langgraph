@@ -134,7 +134,7 @@ class Interrupt:
 
 
 class BulkUpdate(NamedTuple):
-    values: dict[str, Any] | None
+    values: Optional[dict[str, Any]]
     as_node: Optional[str] = None
 
 
