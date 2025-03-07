@@ -1369,7 +1369,7 @@ class Pregel(PregelProtocol):
                     next_tasks[tid].writes.append((k, v))
                 if tasks := [t for t in next_tasks.values() if t.writes]:
                     apply_writes(checkpoint, channels, tasks, None)
-            valid_updates: list[tuple[Optional[dict[str, Any]], str]] = []
+            valid_updates: list[tuple[str, Optional[dict[str, Any]]]] = []
             if len(updates) == 1:
                 values, as_node = updates[0]
 
@@ -1402,7 +1402,7 @@ class Pregel(PregelProtocol):
                 if as_node not in self.nodes:
                     raise InvalidUpdateError(f"Node {as_node} does not exist")
 
-                valid_updates.append((values, as_node))
+                valid_updates.append((as_node, values))
             else:
                 for values, as_node in updates:
                     if as_node is None:
@@ -1413,10 +1413,12 @@ class Pregel(PregelProtocol):
                     if as_node not in self.nodes:
                         raise InvalidUpdateError(f"Node {as_node} does not exist")
 
-                    valid_updates.append((values, as_node))
+                    valid_updates.append((as_node, values))
 
-            run_tasks: list[tuple[str, PregelTaskWrites]] = []
-            for values, as_node in valid_updates:
+            run_tasks: list[PregelTaskWrites] = []
+            run_task_ids: list[str] = []
+
+            for as_node, values in valid_updates:
                 # create task to run all writers of the chosen node
                 writers = self.nodes[as_node].flat_writers
                 if not writers:
@@ -1424,9 +1426,10 @@ class Pregel(PregelProtocol):
                 writes: deque[tuple[str, Any]] = deque()
                 task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
                 task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
-                run_tasks.append((task_id, task))
+                run_tasks.append(task)
+                run_task_ids.append(task_id)
 
-            for _, task in run_tasks:
+            for task in run_tasks:
                 run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
                 # execute task
                 run.invoke(
@@ -1455,7 +1458,7 @@ class Pregel(PregelProtocol):
                 )
 
             # save task writes
-            for _, task in run_tasks:
+            for task in run_tasks:
                 channel_writes = [w for w in task.writes if w[0] != PUSH]
 
                 # channel writes are saved to current checkpoint
@@ -1464,10 +1467,7 @@ class Pregel(PregelProtocol):
 
             # apply to checkpoint and save
             mv_writes = apply_writes(
-                checkpoint,
-                channels,
-                [t for _, t in run_tasks],
-                checkpointer.get_next_version,
+                checkpoint, channels, run_tasks, checkpointer.get_next_version
             )
 
             assert not mv_writes, "Can't write to SharedValues from update_state"
@@ -1488,7 +1488,8 @@ class Pregel(PregelProtocol):
                 ),
             )
 
-            for task_id, task in run_tasks:
+            for task_id, task in zip(run_task_ids, run_tasks):
+                # save push writes
                 if push_writes := [w for w in task.writes if w[0] == PUSH]:
                     checkpointer.put_writes(next_config, push_writes, task_id)
 
@@ -1706,7 +1707,7 @@ class Pregel(PregelProtocol):
                     next_tasks[tid].writes.append((k, v))
                 if tasks := [t for t in next_tasks.values() if t.writes]:
                     apply_writes(checkpoint, channels, tasks, None)
-            valid_updates: list[tuple[Optional[dict[str, Any]], str]] = []
+            valid_updates: list[tuple[str, Optional[dict[str, Any]]]] = []
 
             if len(updates) == 1:
                 values, as_node = updates[0]
@@ -1737,7 +1738,7 @@ class Pregel(PregelProtocol):
                 if as_node not in self.nodes:
                     raise InvalidUpdateError(f"Node {as_node} does not exist")
 
-                valid_updates.append((values, as_node))
+                valid_updates.append((as_node, values))
             else:
                 for values, as_node in updates:
                     if as_node is None:
@@ -1748,11 +1749,12 @@ class Pregel(PregelProtocol):
                     if as_node not in self.nodes:
                         raise InvalidUpdateError(f"Node {as_node} does not exist")
 
-                    valid_updates.append((values, as_node))
+                    valid_updates.append((as_node, values))
 
-            run_tasks: list[tuple[str, PregelTaskWrites]] = []
+            run_tasks: list[PregelTaskWrites] = []
+            run_task_ids: list[str] = []
 
-            for values, as_node in valid_updates:
+            for as_node, values in valid_updates:
                 # create task to run all writers of the chosen node
                 writers = self.nodes[as_node].flat_writers
                 if not writers:
@@ -1760,9 +1762,10 @@ class Pregel(PregelProtocol):
                 writes: deque[tuple[str, Any]] = deque()
                 task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
                 task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
-                run_tasks.append((task_id, task))
+                run_tasks.append(task)
+                run_task_ids.append(task_id)
 
-            for _, task in run_tasks:
+            for task in run_tasks:
                 run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
                 # execute task
                 await run.ainvoke(
@@ -1791,7 +1794,7 @@ class Pregel(PregelProtocol):
                 )
 
             # save task writes
-            for _, task in run_tasks:
+            for task in run_tasks:
                 # channel writes are saved to current checkpoint
                 channel_writes = [w for w in task.writes if w[0] != PUSH]
                 if saved and channel_writes:
@@ -1801,10 +1804,7 @@ class Pregel(PregelProtocol):
 
             # apply to checkpoint and save
             mv_writes = apply_writes(
-                checkpoint,
-                channels,
-                [t for _, t in run_tasks],
-                checkpointer.get_next_version,
+                checkpoint, channels, run_tasks, checkpointer.get_next_version
             )
             assert not mv_writes, "Can't write to SharedValues from update_state"
             checkpoint = create_checkpoint(checkpoint, channels, step + 1)
@@ -1824,7 +1824,7 @@ class Pregel(PregelProtocol):
                 ),
             )
 
-            for task_id, task in run_tasks:
+            for task_id, task in zip(run_task_ids, run_tasks):
                 # save push writes
                 if push_writes := [w for w in task.writes if w[0] == PUSH]:
                     await checkpointer.aput_writes(next_config, push_writes, task_id)
