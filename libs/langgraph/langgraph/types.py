@@ -135,7 +135,7 @@ class Interrupt:
 
 class BulkUpdate(NamedTuple):
     values: dict[str, Any] | None
-    as_node: Optional[str]
+    as_node: Optional[str] = None
 
 
 class PregelTask(NamedTuple):

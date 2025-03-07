@@ -7838,3 +7838,70 @@ async def test_handles_multiple_interrupts_from_tasks() -> None:
     assert len(result) == 2
     assert result[0] == "Added James!"
     assert result[1] == "Added Will!"
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_bulk_state_updates(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class State(TypedDict):
+        foo: str
+        baz: str
+
+    def node_a(state: State) -> State:
+        return {"foo": "bar"}
+
+    def node_b(state: State) -> State:
+        return {"baz": "qux"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "node_b")
+        .compile(checkpointer=checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # First update with node_a
+    await graph.abulk_update_state(config, [({"foo": "bar"}, "node_a")])
+
+    # Then bulk update with both nodes
+    await graph.abulk_update_state(
+        config,
+        [
+            ({"foo": "updated"}, "node_a"),
+            ({"baz": "new"}, "node_b"),
+        ],
+    )
+
+    state = await graph.aget_state(config)
+    assert state.values == {"foo": "updated", "baz": "new"}
+
+    # Check if there are only two checkpoints
+    checkpoints = list(checkpointer.list({"configurable": {"thread_id": "1"}}))
+    assert len(checkpoints) == 2
+    assert checkpoints[0].metadata["writes"] == {
+        "node_a": {"foo": "updated"},
+        "node_b": {"baz": "new"},
+    }
+    assert checkpoints[1].metadata["writes"] == {"node_a": {"foo": "bar"}}
+
+    # Should raise error if updating without as_node
+    with pytest.raises(InvalidUpdateError):
+        await graph.abulk_update_state(
+            config,
+            [({"foo": "error"}, None), ({"bar": "error"}, None)],
+        )
+
+    # Should raise if no updates are provided
+    with pytest.raises(ValueError, match="No updates provided"):
+        await graph.abulk_update_state(config, [])
+
+    # Should raise if __end__ or __copy__ update is applied in bulk
+    with pytest.raises(InvalidUpdateError):
+        await graph.abulk_update_state(config, [(None, "__end__"), (None, "__copy__")])
