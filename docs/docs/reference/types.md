@@ -13,3 +13,5 @@
         - PregelExecutableTask
         - StateSnapshot
         - Send
+        - Command
+        - interrupt

@@ -18,6 +18,7 @@ from typing import (
     Dict,
     Iterator,
     List,
+    Literal,
     Optional,
     Sequence,
     Union,
@@ -25,7 +26,6 @@ from typing import (
 )
 
 import httpx
-import httpx_sse
 import orjson
 from httpx._types import QueryParamTypes
 
@@ -50,6 +50,7 @@ from langgraph_sdk.schema import (
     OnConflictBehavior,
     Run,
     RunCreate,
+    RunStatus,
     SearchItemsResponse,
     StreamMode,
     StreamPart,
@@ -59,6 +60,7 @@ from langgraph_sdk.schema import (
     ThreadStatus,
     ThreadUpdateStateResponse,
 )
+from langgraph_sdk.sse import SSEDecoder, aiter_lines_raw, iter_lines_raw
 
 logger = logging.getLogger(__name__)
 
@@ -145,15 +147,21 @@ def get_client(
         # example usage: client.<model>.<method_name>()
         assistants = await client.assistants.get(assistant_id="some_uuid")
     """
+
     transport: Optional[httpx.AsyncBaseTransport] = None
     if url is None:
-        try:
-            from langgraph_api.server import app  # type: ignore
-
+        if os.environ.get("__LANGGRAPH_DEFER_LOOPBACK_TRANSPORT") == "true":
+            transport = httpx.ASGITransport(app=None, root_path="/noauth")
+            _registered_transports.append(transport)
             url = "http://api"
-            transport = httpx.ASGITransport(app, root_path="/noauth")
-        except Exception:
-            url = "http://localhost:8123"
+        else:
+            try:
+                from langgraph_api.server import app  # type: ignore
+
+                url = "http://api"
+                transport = httpx.ASGITransport(app, root_path="/noauth")
+            except Exception:
+                url = "http://localhost:8123"
 
     if transport is None:
         transport = httpx.AsyncHTTPTransport(retries=5)
@@ -188,7 +196,7 @@ class LangGraphClient:
 
 
 class HttpClient:
-    """Hancle async requests to the LangGraph API.
+    """Handle async requests to the LangGraph API.
 
     Adds additional error messaging & content handling above the
     provided httpx client.
@@ -276,29 +284,49 @@ class HttpClient:
             raise e
 
     async def stream(
-        self, path: str, method: str, *, json: Optional[dict] = None
+        self,
+        path: str,
+        method: str,
+        *,
+        json: Optional[dict] = None,
+        params: Optional[QueryParamTypes] = None,
     ) -> AsyncIterator[StreamPart]:
         """Stream results using SSE."""
         headers, content = await aencode_json(json)
-        async with httpx_sse.aconnect_sse(
-            self.client, method, path, headers=headers, content=content
-        ) as sse:
+        headers["Accept"] = "text/event-stream"
+        headers["Cache-Control"] = "no-store"
+
+        async with self.client.stream(
+            method, path, headers=headers, content=content, params=params
+        ) as res:
+            # check status
             try:
-                sse.response.raise_for_status()
+                res.raise_for_status()
             except httpx.HTTPStatusError as e:
-                body = (await sse.response.aread()).decode()
+                body = (await res.aread()).decode()
                 if sys.version_info >= (3, 11):
                     e.add_note(body)
                 else:
                     logger.error(f"Error from langgraph-api: {body}", exc_info=e)
                 raise e
-            async for event in sse.aiter_sse():
-                yield StreamPart(
-                    event.event, orjson.loads(event.data) if event.data else None
+            # check content type
+            content_type = res.headers.get("content-type", "").partition(";")[0]
+            if "text/event-stream" not in content_type:
+                raise httpx.TransportError(
+                    "Expected response header Content-Type to contain 'text/event-stream', "
+                    f"got {content_type!r}"
                 )
+            # parse SSE
+            decoder = SSEDecoder()
+            async for line in aiter_lines_raw(res):
+                sse = decoder.decode(line=line.rstrip(b"\n"))
+                if sse is not None:
+                    yield sse
 
 
 async def aencode_json(json: Any) -> tuple[dict[str, str], bytes]:
+    if json is None:
+        return {}, None
     body = await asyncio.get_running_loop().run_in_executor(
         None,
         orjson.dumps,
@@ -360,7 +388,9 @@ class AssistantsClient:
                 'created_at': '2024-06-25T17:10:33.109781+00:00',
                 'updated_at': '2024-06-25T17:10:33.109781+00:00',
                 'config': {},
-                'metadata': {'created_by': 'system'}
+                'metadata': {'created_by': 'system'},
+                'version': 1,
+                'name': 'my_assistant'
             }
 
         """  # noqa: E501
@@ -714,7 +744,7 @@ class AssistantsClient:
             offset: The number of versions to skip.
 
         Returns:
-            list[Assistant]: A list of assistants.
+            list[AssistantVersion]: A list of assistant versions.
 
         Example Usage:
 
@@ -1296,7 +1326,9 @@ class RunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": command,
+            "command": (
+                {k: v for k, v in command.items() if v is not None} if command else None
+            ),
             "config": config,
             "metadata": metadata,
             "stream_mode": stream_mode,
@@ -1481,7 +1513,9 @@ class RunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": command,
+            "command": (
+                {k: v for k, v in command.items() if v is not None} if command else None
+            ),
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
             "config": config,
@@ -1650,7 +1684,9 @@ class RunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
-            "command": command,
+            "command": (
+                {k: v for k, v in command.items() if v is not None} if command else None
+            ),
             "config": config,
             "metadata": metadata,
             "assistant_id": assistant_id,
@@ -1683,7 +1719,12 @@ class RunsClient:
         return response
 
     async def list(
-        self, thread_id: str, *, limit: int = 10, offset: int = 0
+        self,
+        thread_id: str,
+        *,
+        limit: int = 10,
+        offset: int = 0,
+        status: Optional[RunStatus] = None,
     ) -> List[Run]:
         """List runs.
 
@@ -1691,22 +1732,27 @@ class RunsClient:
             thread_id: The thread ID to list runs for.
             limit: The maximum number of results to return.
             offset: The number of results to skip.
+            status: The status of the run to filter by.
 
         Returns:
             List[Run]: The runs for the thread.
 
         Example Usage:
 
-            await client.runs.delete(
-                thread_id="thread_id_to_delete",
+            await client.runs.list(
+                thread_id="thread_id",
                 limit=5,
                 offset=5,
             )
 
         """  # noqa: E501
-        return await self.http.get(
-            f"/threads/{thread_id}/runs?limit={limit}&offset={offset}"
-        )
+        params = {
+            "limit": limit,
+            "offset": offset,
+        }
+        if status is not None:
+            params["status"] = status
+        return await self.http.get(f"/threads/{thread_id}/runs", params=params)
 
     async def get(self, thread_id: str, run_id: str) -> Run:
         """Get a run.
@@ -1741,7 +1787,7 @@ class RunsClient:
 
         Args:
             thread_id: The thread ID to cancel.
-            run_id: The run ID to cancek.
+            run_id: The run ID to cancel.
             wait: Whether to wait until run has completed.
             action: Action to take when cancelling the run. Possible values
                 are `interrupt` or `rollback`. Default is `interrupt`.
@@ -1784,7 +1830,9 @@ class RunsClient:
         """  # noqa: E501
         return await self.http.get(f"/threads/{thread_id}/runs/{run_id}/join")
 
-    def join_stream(self, thread_id: str, run_id: str) -> AsyncIterator[StreamPart]:
+    def join_stream(
+        self, thread_id: str, run_id: str, *, cancel_on_disconnect: bool = False
+    ) -> AsyncIterator[StreamPart]:
         """Stream output from a run in real-time, until the run is done.
         Output is not buffered, so any output produced before this call will
         not be received here.
@@ -1792,6 +1840,7 @@ class RunsClient:
         Args:
             thread_id: The thread ID to join.
             run_id: The run ID to join.
+            cancel_on_disconnect: Whether to cancel the run when the stream is disconnected.
 
         Returns:
             None
@@ -1804,7 +1853,11 @@ class RunsClient:
             )
 
         """  # noqa: E501
-        return self.http.stream(f"/threads/{thread_id}/runs/{run_id}/stream", "GET")
+        return self.http.stream(
+            f"/threads/{thread_id}/runs/{run_id}/stream",
+            "GET",
+            params={"cancel_on_disconnect": cancel_on_disconnect},
+        )
 
     async def delete(self, thread_id: str, run_id: str) -> None:
         """Delete a run.
@@ -1946,7 +1999,7 @@ class CronClient:
 
         Example Usage:
 
-            cron_run = await client.crons.create(
+            cron_run = client.crons.create(
                 assistant_id="agent",
                 schedule="27 15 * * *",
                 input={"messages": [{"role": "user", "content": "hello!"}]},
@@ -2070,7 +2123,13 @@ class StoreClient:
         self.http = http
 
     async def put_item(
-        self, namespace: Sequence[str], /, key: str, value: dict[str, Any]
+        self,
+        namespace: Sequence[str],
+        /,
+        key: str,
+        value: dict[str, Any],
+        index: Optional[Union[Literal[False], list[str]]] = None,
+        ttl: Optional[int] = None,
     ) -> None:
         """Store or update an item.
 
@@ -2078,6 +2137,8 @@ class StoreClient:
             namespace: A list of strings representing the namespace path.
             key: The unique identifier for the item within the namespace.
             value: A dictionary containing the item's data.
+            index: Controls search indexing - None (use defaults), False (disable), or list of field paths to index.
+            ttl: Optional time-to-live in minutes for the item, or None for no expiration.
 
         Returns:
             None
@@ -2099,15 +2160,25 @@ class StoreClient:
             "namespace": namespace,
             "key": key,
             "value": value,
+            "index": index,
+            "ttl": ttl,
         }
         await self.http.put("/store/items", json=payload)
 
-    async def get_item(self, namespace: Sequence[str], /, key: str) -> Item:
+    async def get_item(
+        self,
+        namespace: Sequence[str],
+        /,
+        key: str,
+        *,
+        refresh_ttl: Optional[bool] = None,
+    ) -> Item:
         """Retrieve a single item.
 
         Args:
             key: The unique identifier for the item.
             namespace: Optional list of strings representing the namespace path.
+            refresh_ttl: Whether to refresh the TTL on this read operation. If None, uses the store's default behavior.
 
         Returns:
             Item: The retrieved item.
@@ -2135,9 +2206,10 @@ class StoreClient:
                 raise ValueError(
                     f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
                 )
-        return await self.http.get(
-            "/store/items", params={"namespace": ".".join(namespace), "key": key}
-        )
+        params = {"namespace": ".".join(namespace), "key": key}
+        if refresh_ttl is not None:
+            params["refresh_ttl"] = refresh_ttl
+        return await self.http.get("/store/items", params=params)
 
     async def delete_item(self, namespace: Sequence[str], /, key: str) -> None:
         """Delete an item.
@@ -2167,6 +2239,8 @@ class StoreClient:
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
+        query: Optional[str] = None,
+        refresh_ttl: Optional[bool] = None,
     ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
 
@@ -2175,6 +2249,8 @@ class StoreClient:
             filter: Optional dictionary of key-value pairs to filter results.
             limit: Maximum number of items to return (default is 10).
             offset: Number of items to skip before returning results (default is 0).
+            query: Optional query for natural language search.
+            refresh_ttl: Whether to refresh the TTL on items returned by this search. If None, uses the store's default behavior.
 
         Returns:
             List[Item]: A list of items matching the search criteria.
@@ -2212,6 +2288,8 @@ class StoreClient:
             "filter": filter,
             "limit": limit,
             "offset": offset,
+            "query": query,
+            "refresh_ttl": refresh_ttl,
         }
 
         return await self.http.post("/store/items/search", json=_provided_vals(payload))
@@ -2410,26 +2488,41 @@ class SyncHttpClient:
             raise e
 
     def stream(
-        self, path: str, method: str, *, json: Optional[dict] = None
+        self,
+        path: str,
+        method: str,
+        *,
+        json: Optional[dict] = None,
+        params: Optional[QueryParamTypes] = None,
     ) -> Iterator[StreamPart]:
         """Stream the results of a request using SSE."""
         headers, content = encode_json(json)
-        with httpx_sse.connect_sse(
-            self.client, method, path, headers=headers, content=content
-        ) as sse:
+        with self.client.stream(
+            method, path, headers=headers, content=content, params=params
+        ) as res:
+            # check status
             try:
-                sse.response.raise_for_status()
+                res.raise_for_status()
             except httpx.HTTPStatusError as e:
-                body = sse.response.read().decode()
+                body = (res.read()).decode()
                 if sys.version_info >= (3, 11):
                     e.add_note(body)
                 else:
                     logger.error(f"Error from langgraph-api: {body}", exc_info=e)
                 raise e
-            for event in sse.iter_sse():
-                yield StreamPart(
-                    event.event, orjson.loads(event.data) if event.data else None
+            # check content type
+            content_type = res.headers.get("content-type", "").partition(";")[0]
+            if "text/event-stream" not in content_type:
+                raise httpx.TransportError(
+                    "Expected response header Content-Type to contain 'text/event-stream', "
+                    f"got {content_type!r}"
                 )
+            # parse SSE
+            decoder = SSEDecoder()
+            for line in iter_lines_raw(res):
+                sse = decoder.decode(line.rstrip(b"\n"))
+                if sse is not None:
+                    yield sse
 
 
 def encode_json(json: Any) -> tuple[dict[str, str], bytes]:
@@ -2446,7 +2539,7 @@ def encode_json(json: Any) -> tuple[dict[str, str], bytes]:
 
 def decode_json(r: httpx.Response) -> Any:
     body = r.read()
-    return orjson.loads(body if body else None)
+    return orjson.loads(body) if body else None
 
 
 class SyncAssistantsClient:
@@ -3297,6 +3390,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3320,6 +3414,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3340,6 +3435,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3364,6 +3460,7 @@ class SyncRunsClient:
             assistant_id: The assistant ID or graph name to stream from.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
+            command: The command to execute.
             stream_mode: The stream mode(s) to use.
             stream_subgraphs: Whether to stream output from subgraphs.
             metadata: Metadata to assign to the run.
@@ -3414,6 +3511,9 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
+            "command": (
+                {k: v for k, v in command.items() if v is not None} if command else None
+            ),
             "config": config,
             "metadata": metadata,
             "stream_mode": stream_mode,
@@ -3447,6 +3547,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3466,6 +3567,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3486,6 +3588,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
@@ -3508,6 +3611,7 @@ class SyncRunsClient:
             assistant_id: The assistant ID or graph name to stream from.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
+            command: The command to execute.
             stream_mode: The stream mode(s) to use.
             stream_subgraphs: Whether to stream output from subgraphs.
             metadata: Metadata to assign to the run.
@@ -3594,6 +3698,9 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
+            "command": (
+                {k: v for k, v in command.items() if v is not None} if command else None
+            ),
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
             "config": config,
@@ -3631,6 +3738,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
@@ -3651,6 +3759,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
@@ -3668,6 +3777,7 @@ class SyncRunsClient:
         assistant_id: str,
         *,
         input: Optional[dict] = None,
+        command: Optional[Command] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
@@ -3689,6 +3799,7 @@ class SyncRunsClient:
             assistant_id: The assistant ID or graph name to run.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
+            command: The command to execute.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             checkpoint: The checkpoint to resume from.
@@ -3755,6 +3866,9 @@ class SyncRunsClient:
         """  # noqa: E501
         payload = {
             "input": input,
+            "command": (
+                {k: v for k, v in command.items() if v is not None} if command else None
+            ),
             "config": config,
             "metadata": metadata,
             "assistant_id": assistant_id,
@@ -3789,8 +3903,8 @@ class SyncRunsClient:
 
         Example Usage:
 
-            client.runs.delete(
-                thread_id="thread_id_to_delete",
+            client.runs.list(
+                thread_id="thread_id",
                 limit=5,
                 offset=5,
             )
@@ -3831,7 +3945,7 @@ class SyncRunsClient:
 
         Args:
             thread_id: The thread ID to cancel.
-            run_id: The run ID to cancek.
+            run_id: The run ID to cancel.
             wait: Whether to wait until run has completed.
             action: Action to take when cancelling the run. Possible values
                 are `interrupt` or `rollback`. Default is `interrupt`.
@@ -4154,7 +4268,13 @@ class SyncStoreClient:
         self.http = http
 
     def put_item(
-        self, namespace: Sequence[str], /, key: str, value: dict[str, Any]
+        self,
+        namespace: Sequence[str],
+        /,
+        key: str,
+        value: dict[str, Any],
+        index: Optional[Union[Literal[False], list[str]]] = None,
+        ttl: Optional[int] = None,
     ) -> None:
         """Store or update an item.
 
@@ -4162,7 +4282,8 @@ class SyncStoreClient:
             namespace: A list of strings representing the namespace path.
             key: The unique identifier for the item within the namespace.
             value: A dictionary containing the item's data.
-
+            index: Controls search indexing - None (use defaults), False (disable), or list of field paths to index.
+            ttl: Optional time-to-live in minutes for the item, or None for no expiration.
         Returns:
             None
 
@@ -4183,15 +4304,25 @@ class SyncStoreClient:
             "namespace": namespace,
             "key": key,
             "value": value,
+            "index": index,
+            "ttl": ttl,
         }
         self.http.put("/store/items", json=payload)
 
-    def get_item(self, namespace: Sequence[str], /, key: str) -> Item:
+    def get_item(
+        self,
+        namespace: Sequence[str],
+        /,
+        key: str,
+        *,
+        refresh_ttl: Optional[bool] = None,
+    ) -> Item:
         """Retrieve a single item.
 
         Args:
             key: The unique identifier for the item.
             namespace: Optional list of strings representing the namespace path.
+            refresh_ttl: Whether to refresh the TTL on this read operation. If None, uses the store's default behavior.
 
         Returns:
             Item: The retrieved item.
@@ -4220,9 +4351,10 @@ class SyncStoreClient:
                     f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
                 )
 
-        return self.http.get(
-            "/store/items", params={"key": key, "namespace": ".".join(namespace)}
-        )
+        params = {"key": key, "namespace": ".".join(namespace)}
+        if refresh_ttl is not None:
+            params["refresh_ttl"] = refresh_ttl
+        return self.http.get("/store/items", params=params)
 
     def delete_item(self, namespace: Sequence[str], /, key: str) -> None:
         """Delete an item.
@@ -4250,6 +4382,8 @@ class SyncStoreClient:
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
+        query: Optional[str] = None,
+        refresh_ttl: Optional[bool] = None,
     ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
 
@@ -4258,6 +4392,8 @@ class SyncStoreClient:
             filter: Optional dictionary of key-value pairs to filter results.
             limit: Maximum number of items to return (default is 10).
             offset: Number of items to skip before returning results (default is 0).
+            query: Optional query for natural language search.
+            refresh_ttl: Whether to refresh the TTL on items returned by this search. If None, uses the store's default behavior.
 
         Returns:
             List[Item]: A list of items matching the search criteria.
@@ -4295,6 +4431,8 @@ class SyncStoreClient:
             "filter": filter,
             "limit": limit,
             "offset": offset,
+            "query": query,
+            "refresh_ttl": refresh_ttl,
         }
         return self.http.post("/store/items/search", json=_provided_vals(payload))
 
@@ -4348,3 +4486,12 @@ class SyncStoreClient:
 
 def _provided_vals(d: dict):
     return {k: v for k, v in d.items() if v is not None}
+
+
+_registered_transports: list[httpx.ASGITransport] = []
+
+
+# Do not move; this is used in the server.
+def configure_loopback_transports(app: Any) -> None:
+    for transport in _registered_transports:
+        transport.app = app

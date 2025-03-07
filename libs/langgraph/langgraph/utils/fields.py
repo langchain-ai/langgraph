@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Any, Optional, Type, Union
+from typing import Any, Generator, Optional, Type, Union, get_type_hints
 
 from typing_extensions import Annotated, NotRequired, ReadOnly, Required, get_origin
 
@@ -106,3 +106,44 @@ def get_field_default(name: str, type_: Any, schema: Type[Any]) -> Any:
     if _is_optional_type(type_):
         return None
     return ...
+
+
+def get_enhanced_type_hints(
+    type: Type[Any],
+) -> Generator[tuple[str, Any, Any, Optional[str]], None, None]:
+    """Attempt to extract default values and descriptions from provided type, used for config schema."""
+    for name, typ in get_type_hints(type).items():
+        default = None
+        description = None
+
+        # Pydantic models
+        try:
+            if hasattr(type, "__fields__") and name in type.__fields__:
+                field = type.__fields__[name]
+
+                if hasattr(field, "description") and field.description is not None:
+                    description = field.description
+
+                if hasattr(field, "default") and field.default is not None:
+                    default = field.default
+                    if (
+                        hasattr(default, "__class__")
+                        and getattr(default.__class__, "__name__", "")
+                        == "PydanticUndefinedType"
+                    ):
+                        default = None
+
+        except (AttributeError, KeyError, TypeError):
+            pass
+
+        # TypedDict, dataclass
+        try:
+            if hasattr(type, "__dict__"):
+                type_dict = getattr(type, "__dict__")
+
+                if name in type_dict:
+                    default = type_dict[name]
+        except (AttributeError, KeyError, TypeError):
+            pass
+
+        yield name, typ, default, description

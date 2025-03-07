@@ -147,28 +147,25 @@ In our example, the output of `get_state_history` will look like this:
 
 ### Replay
 
-It's also possible to play-back a prior graph execution. If we `invoking` a graph with a `thread_id` and a `checkpoint_id`, then we will *re-play* the graph from a checkpoint that corresponds to the `checkpoint_id`.
+It's also possible to play-back a prior graph execution. If we `invoke` a graph with a `thread_id` and a `checkpoint_id`, then we will *re-play* the previously executed steps _before_ a checkpoint that corresponds to the `checkpoint_id`, and only execute the steps _after_ the checkpoint.
 
-* `thread_id` is simply the ID of a thread. This is always required.
-* `checkpoint_id` This identifier refers to a specific checkpoint within a thread. 
+* `thread_id` is the ID of a thread.
+* `checkpoint_id` is an identifier that refers to a specific checkpoint within a thread.
 
 You must pass these when invoking the graph as part of the `configurable` portion of the config:
 
 ```python
-# {"configurable": {"thread_id": "1"}}  # valid config
-# {"configurable": {"thread_id": "1", "checkpoint_id": "0c62ca34-ac19-445d-bbb0-5b4984975b2a"}}  # also valid config
-
-config = {"configurable": {"thread_id": "1"}}
+config = {"configurable": {"thread_id": "1", "checkpoint_id": "0c62ca34-ac19-445d-bbb0-5b4984975b2a"}}
 graph.invoke(None, config=config)
 ```
 
-Importantly, LangGraph knows whether a particular checkpoint has been executed previously. If it has, LangGraph simply *re-plays* that particular step in the graph and does not re-execute the step. See this [how to guide on time-travel to learn more about replaying](../how-tos/human_in_the_loop/time-travel.ipynb).
+Importantly, LangGraph knows whether a particular step has been executed previously. If it has, LangGraph simply *re-plays* that particular step in the graph and does not re-execute the step, but only for the steps _before_ the provided `checkpoint_id`. All of the steps _after_ `checkpoint_id` will be executed (i.e., a new fork), even if they have been executed previously. See this [how to guide on time-travel to learn more about replaying](../how-tos/human_in_the_loop/time-travel.ipynb).
 
-![Replay](img/persistence/re_play.jpg)
+![Replay](img/persistence/re_play.png)
 
 ### Update state
 
-In addition to re-playing the graph from specific `checkpoints`, we can also *edit* the graph state. We do this using `graph.update_state()`. This method three different arguments:
+In addition to re-playing the graph from specific `checkpoints`, we can also *edit* the graph state. We do this using `graph.update_state()`. This method accepts three different arguments:
 
 #### `config`
 
@@ -218,13 +215,16 @@ The final thing you can optionally specify when calling `update_state` is `as_no
 
 ## Memory Store
 
-![Update](img/persistence/shared_state.png)
+![Model of shared state](img/persistence/shared_state.png)
 
 A [state schema](low_level.md#schema) specifies a set of keys that are populated as a graph is executed. As discussed above, state can be written by a checkpointer to a thread at each graph step, enabling state persistence.
 
-But, what if we want to retrain some information *across threads*? Consider the case of a chatbot where we want to retain specific information about the user across *all* chat conversations (e.g., threads) with that user!
+But, what if we want to retain some information *across threads*? Consider the case of a chatbot where we want to retain specific information about the user across *all* chat conversations (e.g., threads) with that user!
 
-With checkpointers alone, we cannot share information across threads. This motivates the need for the `Store` interface. As an illustration, we can define an `InMemoryStore` to store information about a user across threads. We simply compile our graph with a checkpointer, as before, and will our new `in_memory_store`.
+With checkpointers alone, we cannot share information across threads. This motivates the need for the [`Store`](../reference/store.md#langgraph.store.base.BaseStore) interface. As an illustration, we can define an `InMemoryStore` to store information about a user across threads. We simply compile our graph with a checkpointer, as before, and with our new `in_memory_store` variable.
+
+### Basic Usage
+
 First, let's showcase this in isolation without using LangGraph.
 
 ```python
@@ -239,7 +239,7 @@ user_id = "1"
 namespace_for_memory = (user_id, "memories")
 ```
 
-We use the `store.put` to save memories to our namespace in the store. When we do this, we specify the namespace, as defined above, and a key-value pair for the memory: the key is simply a unique identifier for the memory (`memory_id`) and the value (a dictionary) is the memory itself.
+We use the `store.put` method to save memories to our namespace in the store. When we do this, we specify the namespace, as defined above, and a key-value pair for the memory: the key is simply a unique identifier for the memory (`memory_id`) and the value (a dictionary) is the memory itself.
 
 ```python
 memory_id = str(uuid.uuid4())
@@ -247,7 +247,7 @@ memory = {"food_preference" : "I like pizza"}
 in_memory_store.put(namespace_for_memory, memory_id, memory)
 ```
 
-We can read out memories in our namespace using `store.search`, which will return all memories for a given user as a list. The most recent memory is the last in the list.
+We can read out memories in our namespace using the `store.search` method, which will return all memories for a given user as a list. The most recent memory is the last in the list.
 
 ```python
 memories = in_memory_store.search(namespace_for_memory)
@@ -259,16 +259,69 @@ memories[-1].dict()
  'updated_at': '2024-10-02T17:22:31.590605+00:00'}
 ```
 
-Each memory type is a Python class with certain attributes. We can access it as a dictionary by converting via `.dict` as above.
+Each memory type is a Python class ([`Item`](https://langchain-ai.github.io/langgraph/reference/store/#langgraph.store.base.Item)) with certain attributes. We can access it as a dictionary by converting via `.dict` as above.
 The attributes it has are:
 
 - `value`: The value (itself a dictionary) of this memory
-- `key`: The UUID for this memory in this namespace
+- `key`: A unique key for this memory in this namespace
 - `namespace`: A list of strings, the namespace of this memory type
 - `created_at`: Timestamp for when this memory was created
 - `updated_at`: Timestamp for when this memory was updated
 
-With this all in place, we use the `in_memory_store` in LangGraph. The `in_memory_store` works hand-in-hand with the checkpointer: the checkpointer saves state to threads, as discussed above, and the the `in_memory_store` allows us to store arbitrary information for access *across* threads. We compile the graph with both the checkpointer and the `in_memory_store` as follows. 
+### Semantic Search
+
+Beyond simple retrieval, the store also supports semantic search, allowing you to find memories based on meaning rather than exact matches. To enable this, configure the store with an embedding model:
+
+```python
+from langchain.embeddings import init_embeddings
+
+store = InMemoryStore(
+    index={
+        "embed": init_embeddings("openai:text-embedding-3-small"),  # Embedding provider
+        "dims": 1536,                              # Embedding dimensions
+        "fields": ["food_preference", "$"]              # Fields to embed
+    }
+)
+```
+
+Now when searching, you can use natural language queries to find relevant memories:
+
+```python
+# Find memories about food preferences
+# (This can be done after putting memories into the store)
+memories = store.search(
+    namespace_for_memory,
+    query="What does the user like to eat?",
+    limit=3  # Return top 3 matches
+)
+```
+
+You can control which parts of your memories get embedded by configuring the `fields` parameter or by specifying the `index` parameter when storing memories:
+
+```python
+# Store with specific fields to embed
+store.put(
+    namespace_for_memory,
+    str(uuid.uuid4()),
+    {
+        "food_preference": "I love Italian cuisine",
+        "context": "Discussing dinner plans"
+    },
+    index=["food_preference"]  # Only embed "food_preferences" field
+)
+
+# Store without embedding (still retrievable, but not searchable)
+store.put(
+    namespace_for_memory,
+    str(uuid.uuid4()),
+    {"system_info": "Last updated: 2024-01-01"},
+    index=False
+)
+```
+
+### Using in LangGraph
+
+With this all in place, we use the `in_memory_store` in LangGraph. The `in_memory_store` works hand-in-hand with the checkpointer: the checkpointer saves state to threads, as discussed above, and the `in_memory_store` allows us to store arbitrary information for access *across* threads. We compile the graph with both the checkpointer and the `in_memory_store` as follows. 
 
 ```python
 from langgraph.checkpoint.memory import MemorySaver
@@ -296,7 +349,7 @@ for update in graph.stream(
     print(update)
 ```
 
-We can access the `in_memory_store` and the `user_id` in *any node* by passing `store: BaseStore` and `config: RunnableConfig` as node arguments. Just as we saw above, simply use the `put` method to save memories to the store.
+We can access the `in_memory_store` and the `user_id` in *any node* by passing `store: BaseStore` and `config: RunnableConfig` as node arguments. Here's how we might use semantic search in a node to find relevant memories:
 
 ```python
 def update_memory(state: MessagesState, config: RunnableConfig, *, store: BaseStore):
@@ -317,7 +370,7 @@ def update_memory(state: MessagesState, config: RunnableConfig, *, store: BaseSt
 
 ```
 
-As we showed above, we can also access the store in any node and use `search` to get memories. Recall the the memories are returned as a list of objects that can be converted to a dictionary.
+As we showed above, we can also access the store in any node and use the `store.search` method to get memories. Recall the the memories are returned as a list of objects that can be converted to a dictionary.
 
 ```python
 memories[-1].dict()
@@ -332,12 +385,15 @@ We can access the memories and use them in our model call.
 
 ```python
 def call_model(state: MessagesState, config: RunnableConfig, *, store: BaseStore):
-    
     # Get the user id from the config
     user_id = config["configurable"]["user_id"]
     
-    # Get the memories for the user from the store
-    memories = store.search(("memories", user_id))
+    # Search based on the most recent message
+    memories = store.search(
+        namespace,
+        query=state["messages"][-1].content,
+        limit=3
+    )
     info = "\n".join([d.value["memory"] for d in memories])
     
     # ... Use memories in the model call
@@ -356,13 +412,28 @@ for update in graph.stream(
     print(update)
 ```
 
-When we use the LangGraph API, either locally (e.g., in LangGraph Studio) or with LangGraph Cloud, the memory store is available to use by default and does not need to be specified during graph compilation.
+When we use the LangGraph Platform, either locally (e.g., in LangGraph Studio) or with LangGraph Cloud, the base store is available to use by default and does not need to be specified during graph compilation. To enable semantic search, however, you **do** need to configure the indexing settings in your `langgraph.json` file. For example:
+
+```json
+{
+    ...
+    "store": {
+        "index": {
+            "embed": "openai:text-embeddings-3-small",
+            "dims": 1536,
+            "fields": ["$"]
+        }
+    }
+}
+```
+
+See the [deployment guide](../cloud/deployment/semantic_search.md) for more details and configuration options.
 
 ## Checkpointer libraries
 
 Under the hood, checkpointing is powered by checkpointer objects that conform to [BaseCheckpointSaver][langgraph.checkpoint.base.BaseCheckpointSaver] interface. LangGraph provides several checkpointer implementations, all implemented via standalone, installable libraries:
 
-* `langgraph-checkpoint`: The base interface for checkpointer savers ([BaseCheckpointSaver][langgraph.checkpoint.base.BaseCheckpointSaver]) and serialization/deserialization interface ([SerializerProtocol][langgraph.checkpoint.serde.base.SerializerProtocol]). Includes in-memory checkpointer implementation ([MemorySaver][langgraph.checkpoint.memory.MemorySaver]) for experimentation. LangGraph comes with `langgraph-checkpoint` included.
+* `langgraph-checkpoint`: The base interface for checkpointer savers ([BaseCheckpointSaver][langgraph.checkpoint.base.BaseCheckpointSaver]) and serialization/deserialization interface ([SerializerProtocol][langgraph.checkpoint.serde.base.SerializerProtocol]). Includes in-memory checkpointer implementation ([InMemorySaver][langgraph.checkpoint.memory.InMemorySaver]) for experimentation. LangGraph comes with `langgraph-checkpoint` included.
 * `langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database ([SqliteSaver][langgraph.checkpoint.sqlite.SqliteSaver] / [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver]). Ideal for experimentation and local workflows. Needs to be installed separately.
 * `langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database ([PostgresSaver][langgraph.checkpoint.postgres.PostgresSaver] / [AsyncPostgresSaver][langgraph.checkpoint.postgres.aio.AsyncPostgresSaver]), used in LangGraph Cloud. Ideal for using in production. Needs to be installed separately.
 
@@ -397,7 +468,7 @@ Second, checkpointers allow for ["memory"](agentic_concepts.md#memory) between i
 
 ### Time Travel
 
-Third, checkpointers allow for ["time travel"](../how-tos/human_in_the_loop/time-travel.ipynb), allowing users to replay prior graph executions to review and / or debug specific graph steps. In addition, checkpointers make it possible to fork the graph state at arbitrary checkpoints to explore alternative trajectories.
+Third, checkpointers allow for ["time travel"](time-travel.md), allowing users to replay prior graph executions to review and / or debug specific graph steps. In addition, checkpointers make it possible to fork the graph state at arbitrary checkpoints to explore alternative trajectories.
 
 ### Fault-tolerance
 

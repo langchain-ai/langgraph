@@ -171,7 +171,7 @@ trim_messages(
 
 ## Long-term memory
 
-Long-term memory in LangGraph allows systems to retain information across different conversations or sessions. Unlike short-term memory, which is thread-scoped, long-term memory is saved within custom "namespaces."
+Long-term memory in LangGraph allows systems to retain information across different conversations or sessions. Unlike short-term memory, which is **thread-scoped**, long-term memory is saved within custom "namespaces."
 
 ### Storing memories
 
@@ -180,16 +180,34 @@ LangGraph stores long-term memories as JSON documents in a [store](persistence.m
 ```python
 from langgraph.store.memory import InMemoryStore
 
+
+def embed(texts: list[str]) -> list[list[float]]:
+    # Replace with an actual embedding function or LangChain embeddings object
+    return [[1.0, 2.0] * len(texts)]
+
+
 # InMemoryStore saves data to an in-memory dictionary. Use a DB-backed store in production use.
-store = InMemoryStore()
+store = InMemoryStore(index={"embed": embed, "dims": 2})
 user_id = "my-user"
 application_context = "chitchat"
 namespace = (user_id, application_context)
-store.put(namespace, "a-memory", {"rules": ["User likes short, direct language", "User only speaks English & python"], "my-key": "my-value"})
+store.put(
+    namespace,
+    "a-memory",
+    {
+        "rules": [
+            "User likes short, direct language",
+            "User only speaks English & python",
+        ],
+        "my-key": "my-value",
+    },
+)
 # get the "memory" by ID
 item = store.get(namespace, "a-memory")
-# list "memories" within this namespace, filtering on content equivalence
-items = store.search(namespace, filter={"my-key": "my-value"})
+# search for "memories" within this namespace, filtering on content equivalence, sorted by vector similarity
+items = store.search(
+    namespace, filter={"my-key": "my-value"}, query="language preferences"
+)
 ```
 
 ### Framework for thinking about long-term memory
@@ -218,6 +236,9 @@ Different applications require various types of memory. Although the analogy isn
 
 [Semantic memory](https://en.wikipedia.org/wiki/Semantic_memory), both in humans and AI agents, involves the retention of specific facts and concepts. In humans, it can include information learned in school and the understanding of concepts and their relationships. For AI agents, semantic memory is often used to personalize applications by remembering facts or concepts from past interactions. 
 
+> Note: Not to be confused with "semantic search" which is a technique for finding similar content using "meaning" (usually as embeddings). Semantic memory is a term from psychology, referring to storing facts and knowledge, while semantic search is a method for retrieving information based on meaning rather than exact matches.
+
+
 #### Profile
 
 Semantic memories can be managed in different ways. For example, memories can be a single, continuously updated "profile" of well-scoped and specific information about a user, organization, or other entity (including the agent itself). A profile is generally just a JSON document with various key-value pairs you've selected to represent your domain. 
@@ -232,7 +253,7 @@ Alternatively, memories can be a collection of documents that are continuously u
 
 However, this shifts some complexity memory updating. The model must now _delete_ or _update_ existing items in the list, which can be tricky. In addition, some models may default to over-inserting and others may default to over-updating. See the [Trustcall](https://github.com/hinthornw/trustcall) package for one way to manage this and consider evaluation (e.g., with a tool like [LangSmith](https://docs.smith.langchain.com/tutorials/Developers/evaluation)) to help you tune the behavior.
 
-Working with document collections also shifts complexity to memory **search** over the list. The `Store` currently supports [filtering by metadata](https://langchain-ai.github.io/langgraph/reference/store/#storage) and will soon add [semantic search shortly](https://python.langchain.com/docs/concepts/vectorstores/), but selecting the most relevant documents can be tricky as the list grows.
+Working with document collections also shifts complexity to memory **search** over the list. The `Store` currently supports both [semantic search](https://langchain-ai.github.io/langgraph/reference/store/#langgraph.store.base.SearchOp.query) and [filtering by content](https://langchain-ai.github.io/langgraph/reference/store/#langgraph.store.base.SearchOp.filter).
 
 Finally, using a collection of memories can make it challenging to provide comprehensive context to the model. While individual memories may follow a specific schema, this structure might not capture the full context or relationships between memories. As a result, when using these memories to generate responses, the model may lack important contextual information that would be more readily available in a unified profile approach.
 

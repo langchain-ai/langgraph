@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph-sdk"
-version = "0.1.36"
+version = "0.1.55"
 description = "SDK for interacting with LangGraph API"
 authors = []
 license = "MIT"
@@ -11,7 +11,6 @@ packages = [{ include = "langgraph_sdk" }]
 [tool.poetry.dependencies]
 python = "^3.9.0,<4.0"
 httpx = ">=0.25.2"
-httpx-sse = ">=0.4.0"
 orjson = ">=3.10.1"
 
 [tool.poetry.group.dev.dependencies]

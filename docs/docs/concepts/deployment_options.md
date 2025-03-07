@@ -28,6 +28,10 @@ The guide below will explain the differences between the deployment options.
 
     The Self-Hosted Enterprise version is only available for the **Enterprise** plan.
 
+!!! warning "Note"
+
+    The LangGraph Platform Deployments view is optionally available for Self-Hosted Enterprise LangGraph deployments. With one click, self-hosted LangGraph deployments can be deployed in the same Kubernetes cluster where a self-hosted LangSmith instance is deployed.
+
 With a Self-Hosted Enterprise deployment, you are responsible for managing the infrastructure, including setting up and maintaining required databases and Redis instances.
 
 You’ll build a Docker image using the [LangGraph CLI](./langgraph_cli.md), which can then be deployed on your own infrastructure.
@@ -43,12 +47,17 @@ For more information, please see:
 
     The Self-Hosted Lite version is available for all plans.
 
-The Self-Hosted Lite deployment option is a free (up to 1 million nodes executed), limited version of LangGraph Platform that you can run locally or in a self-hosted manner.
+!!! warning "Note"
+
+    The LangGraph Platform Deployments view is optionally available for Self-Hosted Lite LangGraph deployments. With one click, self-hosted LangGraph deployments can be deployed in the same Kubernetes cluster where a self-hosted LangSmith instance is deployed.
+
+The Self-Hosted Lite deployment option is a free (up to 1 million nodes executed per year), limited version of LangGraph Platform that you can run locally or in a self-hosted manner.
 
 With a Self-Hosted Lite deployment, you are responsible for managing the infrastructure, including setting up and maintaining required databases and Redis instances.
 
 You’ll build a Docker image using the [LangGraph CLI](./langgraph_cli.md), which can then be deployed on your own infrastructure.
 
+[Cron jobs](../cloud/how-tos/cron_jobs.md) are not available for Self-Hosted Lite deployments.
 
 For more information, please see:
 
@@ -61,12 +70,11 @@ For more information, please see:
 
     The Cloud SaaS version of LangGraph Platform is only available for **Plus** and **Enterprise** plans.
 
-
 The [Cloud SaaS](./langgraph_cloud.md) version of LangGraph Platform is hosted as part of [LangSmith](https://smith.langchain.com/).
 
 The Cloud SaaS version of LangGraph Platform provides a simple way to deploy and manage your LangGraph applications.
 
-This deployment option provides an integration with GitHub, allowing you to deploy code from any of your repositories on GitHub.
+This deployment option provides access to the LangGraph Platform UI (within LangSmith) and an integration with GitHub, allowing you to deploy code from any of your repositories on GitHub.
 
 For more information, please see:
 
@@ -81,7 +89,7 @@ For more information, please see:
     The Bring Your Own Cloud version of LangGraph Platform is only available for **Enterprise** plans.
 
 
-This combines the best of both worlds for Cloud and Self-Hosted. We manage the infrastructure, so you don't have to, but the infrastructure all runs within your cloud. This is currently only available on AWS.
+This combines the best of both worlds for Cloud and Self-Hosted. Create your deployments through the LangGraph Platform UI (within LangSmith) and we manage the infrastructure so you don't have to. The infrastructure all runs within your cloud. This is currently only available on AWS.
 
 For more information please see:
 

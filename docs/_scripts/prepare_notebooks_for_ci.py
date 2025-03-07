@@ -7,7 +7,7 @@ import click
 import nbformat
 
 logger = logging.getLogger(__name__)
-NOTEBOOK_DIRS = ("docs/docs/how-tos","docs/docs/tutorials")
+NOTEBOOK_DIRS = ("docs/how-tos","docs/tutorials")
 DOCS_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CASSETTES_PATH = os.path.join(DOCS_PATH, "cassettes")
 
@@ -19,31 +19,37 @@ BLOCKLIST_COMMANDS = (
 )
 
 NOTEBOOKS_NO_CASSETTES = (
-    "docs/docs/how-tos/visualization.ipynb",
-    "docs/docs/how-tos/many-tools.ipynb"
+    "docs/how-tos/visualization.ipynb",
+    "docs/how-tos/many-tools.ipynb"
 )
 
 NOTEBOOKS_NO_EXECUTION = [
     # this uses a user provided project name for langsmith
-    "docs/docs/tutorials/tnt-llm/tnt-llm.ipynb",
+    "docs/tutorials/tnt-llm/tnt-llm.ipynb",
     # this uses langsmith datasets
-    "docs/docs/tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb",
+    "docs/tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb",
     # this uses browser APIs
-    "docs/docs/tutorials/web-navigation/web_voyager.ipynb",
+    "docs/tutorials/web-navigation/web_voyager.ipynb",
     # these RAG guides use an ollama model
-    "docs/docs/tutorials/rag/langgraph_adaptive_rag_local.ipynb",
-    "docs/docs/tutorials/rag/langgraph_crag_local.ipynb",
-    "docs/docs/tutorials/rag/langgraph_self_rag_local.ipynb",
+    "docs/tutorials/rag/langgraph_adaptive_rag_local.ipynb",
+    "docs/tutorials/rag/langgraph_crag_local.ipynb",
+    "docs/tutorials/rag/langgraph_self_rag_local.ipynb",
     # this loads a massive dataset from gcp
-    "docs/docs/tutorials/usaco/usaco.ipynb",
+    "docs/tutorials/usaco/usaco.ipynb",
     # TODO: figure out why autogen notebook is not runnable (they are just hanging. possible due to code execution?)
-    "docs/docs/how-tos/autogen-integration.ipynb",
+    "docs/how-tos/autogen-integration.ipynb",
+    "docs/how-tos/autogen-integration-functional.ipynb",
     # TODO: need to update these notebooks to make sure they are runnable in CI
-    "docs/docs/tutorials/storm/storm.ipynb",  # issues only when running with VCR
-    "docs/docs/tutorials/lats/lats.ipynb",  # issues only when running with VCR
-    "docs/docs/tutorials/rag/langgraph_crag.ipynb",  # flakiness from tavily
-    "docs/docs/tutorials/rag/langgraph_adaptive_rag.ipynb",  # Cannot create a consistent method resolution error from VCR
-    "docs/docs/how-tos/map-reduce.ipynb"  # flakiness from structured output, only when running with VCR
+    "docs/tutorials/storm/storm.ipynb",  # issues only when running with VCR
+    "docs/tutorials/lats/lats.ipynb",  # issues only when running with VCR
+    "docs/tutorials/rag/langgraph_crag.ipynb",  # flakiness from tavily
+    "docs/tutorials/rag/langgraph_adaptive_rag.ipynb",  # flakiness only when running in GHA 
+    "docs/tutorials/rag/langgraph_self_rag.ipynb",  # flakiness only when running in GHA
+    "docs/tutorials/rag/langgraph_agentic_rag.ipynb",  # flakiness only when running in GHA
+    "docs/how-tos/map-reduce.ipynb",  # flakiness from structured output, only when running with VCR
+    "docs/tutorials/tot/tot.ipynb",
+    "docs/how-tos/visualization.ipynb",
+    "docs/tutorials/llm-compiler/LLMCompiler.ipynb"
 ]
 
 
@@ -86,6 +92,7 @@ def add_vcr_to_notebook(
 ) -> nbformat.NotebookNode:
     """Inject `with vcr.cassette` into each code cell of the notebook."""
 
+    uses_langsmith = False
     # Inject VCR context manager into each code cell
     for idx, cell in enumerate(notebook.cells):
         if cell.cell_type != "code":
@@ -120,8 +127,22 @@ def add_vcr_to_notebook(
             f"    {line}" for line in lines
         )
 
+        if any("hub.pull" in line or "from langsmith import" in line for line in lines):
+            uses_langsmith = True
+
     # Add import statement
-    vcr_import_lines = [
+    vcr_import_lines = []
+    if uses_langsmith:
+        vcr_import_lines.extend([
+            # patch urllib3 to handle vcr errors, see more here:
+            # https://github.com/langchain-ai/langsmith-sdk/blob/main/python/langsmith/_internal/_patch.py
+            "import sys",
+            f"sys.path.insert(0, '{os.path.join(DOCS_PATH, '_scripts')}')",
+            "import _patch as patch_urllib3",
+            "patch_urllib3.patch_urllib3()",
+        ])
+
+    vcr_import_lines.extend([
         "import nest_asyncio",
         "nest_asyncio.apply()",
         "import vcr",
@@ -151,7 +172,8 @@ def add_vcr_to_notebook(
         "",
         "custom_vcr.register_serializer('advanced_compressed', AdvancedCompressedSerializer())",
         "custom_vcr.serializer = 'advanced_compressed'",
-    ]
+    ])
+
     import_cell = nbformat.v4.new_code_cell(source="\n".join(vcr_import_lines))
     import_cell.pop("id", None)
     notebook.cells.insert(0, import_cell)
@@ -195,7 +217,7 @@ def process_notebooks(should_comment_install_cells: bool) -> None:
                 except Exception as e:
                     logger.error(f"Error processing {notebook_path}: {e}")
     
-    with open(os.path.join(DOCS_PATH, "notebooks_no_execution.json"), "w") as f:
+    with open("notebooks_no_execution.json", "w") as f:
         json.dump(NOTEBOOKS_NO_EXECUTION, f)
 
 

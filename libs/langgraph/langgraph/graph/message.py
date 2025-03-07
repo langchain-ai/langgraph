@@ -1,21 +1,59 @@
 import uuid
-from typing import Annotated, TypedDict, Union, cast
+import warnings
+from functools import partial
+from typing import (
+    Annotated,
+    Any,
+    Callable,
+    Literal,
+    Optional,
+    Sequence,
+    Union,
+    cast,
+)
 
 from langchain_core.messages import (
     AnyMessage,
+    BaseMessage,
     BaseMessageChunk,
     MessageLikeRepresentation,
     RemoveMessage,
     convert_to_messages,
     message_chunk_to_message,
 )
+from typing_extensions import TypedDict
 
 from langgraph.graph.state import StateGraph
 
 Messages = Union[list[MessageLikeRepresentation], MessageLikeRepresentation]
 
 
-def add_messages(left: Messages, right: Messages) -> Messages:
+def _add_messages_wrapper(func: Callable) -> Callable[[Messages, Messages], Messages]:
+    def _add_messages(
+        left: Optional[Messages] = None, right: Optional[Messages] = None, **kwargs: Any
+    ) -> Union[Messages, Callable[[Messages, Messages], Messages]]:
+        if left is not None and right is not None:
+            return func(left, right, **kwargs)
+        elif left is not None or right is not None:
+            msg = (
+                f"Must specify non-null arguments for both 'left' and 'right'. Only "
+                f"received: '{'left' if left else 'right'}'."
+            )
+            raise ValueError(msg)
+        else:
+            return partial(func, **kwargs)
+
+    _add_messages.__doc__ = func.__doc__
+    return cast(Callable[[Messages, Messages], Messages], _add_messages)
+
+
+@_add_messages_wrapper
+def add_messages(
+    left: Messages,
+    right: Messages,
+    *,
+    format: Optional[Literal["langchain-openai"]] = None,
+) -> Messages:
     """Merges two lists of messages, updating existing messages by ID.
 
     By default, this ensures the state is "append-only", unless the
@@ -25,6 +63,14 @@ def add_messages(left: Messages, right: Messages) -> Messages:
         left: The base list of messages.
         right: The list of messages (or single message) to merge
             into the base list.
+        format: The format to return messages in. If None then messages will be
+            returned as is. If 'langchain-openai' then messages will be returned as
+            BaseMessage objects with their contents formatted to match OpenAI message
+            format, meaning contents can be string, 'text' blocks, or 'image_url' blocks
+            and tool responses are returned as their own ToolMessages.
+
+            **REQUIREMENT**: Must have ``langchain-core>=0.3.11`` installed to use this
+            feature.
 
     Returns:
         A new list of messages with the messages from `right` merged into `left`.
@@ -58,8 +104,59 @@ def add_messages(left: Messages, right: Messages) -> Messages:
         >>> graph = builder.compile()
         >>> graph.invoke({})
         {'messages': [AIMessage(content='Hello', id=...)]}
+
+        >>> from typing import Annotated
+        >>> from typing_extensions import TypedDict
+        >>> from langgraph.graph import StateGraph, add_messages
+        >>>
+        >>> class State(TypedDict):
+        ...     messages: Annotated[list, add_messages(format='langchain-openai')]
+        ...
+        >>> def chatbot_node(state: State) -> list:
+        ...     return {"messages": [
+        ...         {
+        ...             "role": "user",
+        ...             "content": [
+        ...                 {
+        ...                     "type": "text",
+        ...                     "text": "Here's an image:",
+        ...                     "cache_control": {"type": "ephemeral"},
+        ...                 },
+        ...                 {
+        ...                     "type": "image",
+        ...                     "source": {
+        ...                         "type": "base64",
+        ...                         "media_type": "image/jpeg",
+        ...                         "data": "1234",
+        ...                     },
+        ...                 },
+        ...             ]
+        ...         },
+        ...     ]}
+        >>> builder = StateGraph(State)
+        >>> builder.add_node("chatbot", chatbot_node)
+        >>> builder.set_entry_point("chatbot")
+        >>> builder.set_finish_point("chatbot")
+        >>> graph = builder.compile()
+        >>> graph.invoke({"messages": []})
+        {
+            'messages': [
+                HumanMessage(
+                    content=[
+                        {"type": "text", "text": "Here's an image:"},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "data:image/jpeg;base64,1234"},
+                        },
+                    ],
+                ),
+            ]
+        }
         ```
 
+    ..versionchanged:: 0.2.61
+
+        Support for 'format="langchain-openai"' flag added.
     """
     # coerce to list
     if not isinstance(left, list):
@@ -83,14 +180,15 @@ def add_messages(left: Messages, right: Messages) -> Messages:
         if m.id is None:
             m.id = str(uuid.uuid4())
     # merge
-    left_idx_by_id = {m.id: i for i, m in enumerate(left)}
     merged = left.copy()
+    merged_by_id = {m.id: i for i, m in enumerate(merged)}
     ids_to_remove = set()
     for m in right:
-        if (existing_idx := left_idx_by_id.get(m.id)) is not None:
+        if (existing_idx := merged_by_id.get(m.id)) is not None:
             if isinstance(m, RemoveMessage):
                 ids_to_remove.add(m.id)
             else:
+                ids_to_remove.discard(m.id)
                 merged[existing_idx] = m
         else:
             if isinstance(m, RemoveMessage):
@@ -98,8 +196,18 @@ def add_messages(left: Messages, right: Messages) -> Messages:
                     f"Attempting to delete a message with an ID that doesn't exist ('{m.id}')"
                 )
 
+            merged_by_id[m.id] = len(merged)
             merged.append(m)
     merged = [m for m in merged if m.id not in ids_to_remove]
+
+    if format == "langchain-openai":
+        merged = _format_messages(merged)
+    elif format:
+        msg = f"Unrecognized {format=}. Expected one of 'langchain-openai', None."
+        raise ValueError(msg)
+    else:
+        pass
+
     return merged
 
 
@@ -156,3 +264,19 @@ class MessageGraph(StateGraph):
 
 class MessagesState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
+
+
+def _format_messages(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
+    try:
+        from langchain_core.messages import convert_to_openai_messages
+    except ImportError:
+        msg = (
+            "Must have langchain-core>=0.3.11 installed to use automatic message "
+            "formatting (format='langchain-openai'). Please update your langchain-core "
+            "version or remove the 'format' flag. Returning un-formatted "
+            "messages."
+        )
+        warnings.warn(msg)
+        return list(messages)
+    else:
+        return convert_to_messages(convert_to_openai_messages(messages))

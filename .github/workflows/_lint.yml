@@ -42,7 +42,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           poetry-version: ${{ env.POETRY_VERSION }}
-          working-directory: ${{ inputs.working-directory }}
           cache-key: lint-${{ inputs.working-directory }}
 
       - name: Check Poetry File

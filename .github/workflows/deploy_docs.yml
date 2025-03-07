@@ -21,6 +21,10 @@ concurrency:
   group: "pages"
   cancel-in-progress: false
 
+defaults:
+  run:
+    working-directory: docs
+
 jobs:
   get-changed-files:
     runs-on: ubuntu-latest
@@ -44,6 +48,7 @@ jobs:
   deploy:
     # needs: run-changed-notebooks
     runs-on: ubuntu-latest
+    timeout-minutes: 10 # Job will be cancelled if it runs for more than 10 minutes
     env:
       GITHUB_TOKEN: ${{ secrets.MKDOCS_GITHUB_TOKEN }}
     steps:
@@ -58,26 +63,50 @@ jobs:
           poetry-version: ${{ env.POETRY_VERSION }}
           cache-key: docs
 
+      - name: Use Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "22"
+          cache: "yarn"
+          cache-dependency-path: docs/yarn.lock
+
       - name: Install dependencies
         run: |
-          poetry install --with test --no-root
+          yarn
+          poetry install --with test --with docs --no-root
           poetry run pip install -U \
             pytest \
             pytest-check-links \
-            langsmith \
-            langchain \
             GitPython \
-            "git+https://${GITHUB_TOKEN}@github.com/langchain-ai/mkdocs-material-insiders.git"
+            "git+https://github.com/benjamincburns/markdown-exec.git@cc0d39d737e5ffd4b83d23cd8729d7ea16e363c8"
 
+          # we run this installation only for internal PRs
+          # as GITHUB_TOKEN is not available for PRs from outside contributors
+          if [ -n "${GITHUB_TOKEN}" ]; then
+            poetry run pip install "git+https://${GITHUB_TOKEN}@github.com/langchain-ai/mkdocs-material-insiders.git"
+          fi
+
+          poetry run jupyter kernelspec list
+          poetry run python3 -m ipykernel install --user --name=python3
+          npm install -g tslab
+          poetry run tslab install --python=python3
+          poetry run jupyter kernelspec list
+
+      - name: Run unit tests
+        # Run unit tests on the docs build pipeline
+        run: make tests
       - name: Lint Docs
         # This step lints the docs using the existing linting set up.
         # It should be very fast and should not require any external services.
         run: make lint-docs
+      - name: Build llms-text
+        run: make llms-text
       - name: Build site
         run: make build-docs
         env:
           MKDOCS_GIT_COMMITTERS_APIKEY: ${{ secrets.MKDOCS_GIT_COMMITTERS_APIKEY }}
-
+          OPENAI_API_KEY: sf-proj-1234567890 # fake placeholder, shouldn't actually be used
+          ANTHROPIC_API_KEY: sk-ant-api03-1234567890 # fake placeholder, shouldn't actually be used
       - name: Check links in notebooks
         env:
           LANGCHAIN_API_KEY: test
@@ -86,27 +115,36 @@ jobs:
             echo "Running link check on all HTML files matching notebooks in docs directory..."
             poetry run pytest -v \
               --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
+              --check-links-ignore "https://academy\.langchain\.com/.*" \
               --check-links-ignore "https://x.com/.*" \
+              --check-links-ignore "https://twitter.com/.*" \
               --check-links-ignore "https://github\.com/.*" \
               --check-links-ignore "http://localhost:8123/.*" \
+              --check-links-ignore "http://localhost:2024.*" \
+              --check-links-ignore "http://127.0.0.1:.*" \
               --check-links-ignore "/.*\.(ipynb|html)$" \
               --check-links-ignore "https://python\.langchain\.com/.*" \
               --check-links-ignore "https://openai\.com/.*" \
+              --check-links-ignore "https://www\.uber\.com/.*" \
               --check-links-ignore "https://pepy\.tech/.*" \
-              --check-links $(find docs/site -name "index.html" | grep -v 'storm/index.html') 
+              --check-links $(find site -name "index.html" | grep -v 'storm/index.html')
               
           else
             echo "Fetching changes from origin/main..."
             git fetch origin main
             echo "Checking for changed notebook files..."
-            CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/main | grep 'docs/docs/.*\.ipynb$' | grep -v 'storm.ipynb' | sed -E 's|^docs/docs/|docs/site/|; s/\.ipynb$/\/index.html/' || true)
+            CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/main | grep 'docs/docs/.*\.ipynb$' | grep -v 'storm.ipynb' | sed -E 's|^docs/docs/|site/|; s/\.ipynb$/\/index.html/' || true)
             echo "Changed files: ${CHANGED_FILES}"
             if [ -n "${CHANGED_FILES}" ]; then
               echo "Running link check on HTML files matching changed notebook files..."
               poetry run pytest -v \
                 --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
+                --check-links-ignore "https://academy\.langchain\.com/.*" \
                 --check-links-ignore "http://localhost:8123/.*" \
+                --check-links-ignore "http://localhost:2024.*" \
+                --check-links-ignore "http://127.0.0.1:.*" \
                 --check-links-ignore "https://x.com/.*" \
+                --check-links-ignore "https://twitter.com/.*" \
                 --check-links-ignore "https://github\.com/.*" \
                 --check-links-ignore "/.*\.(ipynb|html)$" \
                 --check-links ${CHANGED_FILES} \
@@ -121,7 +159,7 @@ jobs:
         uses: actions/configure-pages@v4
 
       - name: Upload Pages Artifact
-        if: github.ref == 'refs/heads/main'
+        # if: github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./docs/site/

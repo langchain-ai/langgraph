@@ -5,6 +5,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    ClassVar,
     Generic,
     Hashable,
     Literal,
@@ -15,6 +16,7 @@ from typing import (
     TypeVar,
     Union,
     cast,
+    get_type_hints,
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
@@ -23,24 +25,37 @@ from typing_extensions import Self
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 
 if TYPE_CHECKING:
+    from langgraph.pregel.protocol import PregelProtocol
     from langgraph.store.base import BaseStore
+
+
+try:
+    from langchain_core.messages.tool import ToolOutputMixin
+except ImportError:
+
+    class ToolOutputMixin:  # type: ignore[no-redef]
+        pass
+
 
 All = Literal["*"]
 """Special value to indicate that graph should interrupt on all nodes."""
 
-Checkpointer = Union[None, Literal[False], BaseCheckpointSaver]
-"""Type of the checkpointer to use for a subgraph. False disables checkpointing,
-even if the parent graph has a checkpointer. None inherits checkpointer."""
+Checkpointer = Union[None, bool, BaseCheckpointSaver]
+"""Type of the checkpointer to use for a subgraph.
+- True enables persistent checkpointing for this subgraph.
+- False disables checkpointing, even if the parent graph has a checkpointer.
+- None inherits checkpointer from the parent graph."""
 
 StreamMode = Literal["values", "updates", "debug", "messages", "custom"]
 """How the stream method should emit outputs.
 
-- 'values': Emit all values of the state for each step.
-- 'updates': Emit only the node name(s) and updates
-    that were returned by the node(s) **after** each step.
-- 'debug': Emit debug events for each step.
-- 'messages': Emit LLM messages token-by-token.
-- 'custom': Emit custom output `write: StreamWriter` kwarg of each node.
+- `"values"`: Emit all values in the state after each step.
+    When used with functional API, values are emitted once at the end of the workflow.
+- `"updates"`: Emit only the node or task names and updates returned by the nodes or tasks after each step.
+    If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
+- `"custom"`: Emit custom data using from inside nodes or tasks using `StreamWriter`.
+- `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
+- `"debug"`: Emit debug events with as much information as possible for each step.
 """
 
 StreamWriter = Callable[[Any], None]
@@ -140,6 +155,8 @@ class PregelExecutableTask(NamedTuple):
     id: str
     path: tuple[Union[str, int, tuple], ...]
     scheduled: bool = False
+    writers: Sequence[Runnable] = ()
+    subgraphs: Sequence["PregelProtocol"] = ()
 
 
 class StateSnapshot(NamedTuple):
@@ -236,12 +253,28 @@ N = TypeVar("N", bound=Hashable)
 
 
 @dataclasses.dataclass(**_DC_KWARGS)
-class Command(Generic[N]):
-    """One or more commands to update the graph's state and send messages to nodes."""
+class Command(Generic[N], ToolOutputMixin):
+    """One or more commands to update the graph's state and send messages to nodes.
 
-    update: Optional[dict[str, Any]] = None
-    send: Union[Send, Sequence[Send]] = ()
+    Args:
+        graph: graph to send the command to. Supported values are:
+
+            - None: the current graph (default)
+            - Command.PARENT: closest parent graph
+        update: update to apply to the graph's state.
+        resume: value to resume execution with. To be used together with [`interrupt()`][langgraph.types.interrupt].
+        goto: can be one of the following:
+
+            - name of the node to navigate to next (any node that belongs to the specified `graph`)
+            - sequence of node names to navigate to next
+            - `Send` object (to execute a node with the input provided)
+            - sequence of `Send` objects
+    """
+
+    graph: Optional[str] = None
+    update: Optional[Any] = None
     resume: Optional[Union[Any, dict[str, Any]]] = None
+    goto: Union[Send, Sequence[Union[Send, str]], str] = ()
 
     def __repr__(self) -> str:
         # get all non-None values
@@ -251,6 +284,23 @@ class Command(Generic[N]):
             if value
         )
         return f"Command({contents})"
+
+    def _update_as_tuples(self) -> Sequence[tuple[str, Any]]:
+        if isinstance(self.update, dict):
+            return list(self.update.items())
+        elif isinstance(self.update, (list, tuple)) and all(
+            isinstance(t, tuple) and len(t) == 2 and isinstance(t[0], str)
+            for t in self.update
+        ):
+            return self.update
+        elif hints := get_type_hints(type(self.update)):
+            return [(k, getattr(self.update, k)) for k in hints]
+        elif self.update is not None:
+            return [("__root__", self.update)]
+        else:
+            return []
+
+    PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
 
 
 StreamChunk = tuple[tuple[str, ...], str, Any]
@@ -295,26 +345,154 @@ class LoopProtocol:
         self.stop = stop
 
 
+@dataclasses.dataclass(**{**_DC_KWARGS, "frozen": False})
+class PregelScratchpad:
+    # call
+    call_counter: Callable[[], int]
+    # interrupt
+    interrupt_counter: Callable[[], int]
+    resume: list[Any]
+    null_resume: Optional[Any]
+    _consume_null_resume: Callable[[], None]
+    # subgraph
+    subgraph_counter: Callable[[], int]
+
+    def consume_null_resume(self) -> Any:
+        if self.null_resume is not None:
+            value = self.null_resume
+            self._consume_null_resume()
+            self.null_resume = None
+            return value
+        raise ValueError("No null resume to consume")
+
+
 def interrupt(value: Any) -> Any:
+    """Interrupt the graph with a resumable exception from within a node.
+
+    The `interrupt` function enables human-in-the-loop workflows by pausing graph
+    execution and surfacing a value to the client. This value can communicate context
+    or request input required to resume execution.
+
+    In a given node, the first invocation of this function raises a `GraphInterrupt`
+    exception, halting execution. The provided `value` is included with the exception
+    and sent to the client executing the graph.
+
+    A client resuming the graph must use the [`Command`][langgraph.types.Command]
+    primitive to specify a value for the interrupt and continue execution.
+    The graph resumes from the start of the node, **re-executing** all logic.
+
+    If a node contains multiple `interrupt` calls, LangGraph matches resume values
+    to interrupts based on their order in the node. This list of resume values
+    is scoped to the specific task executing the node and is not shared across tasks.
+
+    To use an `interrupt`, you must enable a checkpointer, as the feature relies
+    on persisting the graph state.
+
+    Example:
+        ```python
+        import uuid
+        from typing import Optional
+        from typing_extensions import TypedDict
+
+        from langgraph.checkpoint.memory import MemorySaver
+        from langgraph.constants import START
+        from langgraph.graph import StateGraph
+        from langgraph.types import interrupt
+
+
+        class State(TypedDict):
+            \"\"\"The graph state.\"\"\"
+
+            foo: str
+            human_value: Optional[str]
+            \"\"\"Human value will be updated using an interrupt.\"\"\"
+
+
+        def node(state: State):
+            answer = interrupt(
+                # This value will be sent to the client
+                # as part of the interrupt information.
+                \"what is your age?\"
+            )
+            print(f\"> Received an input from the interrupt: {answer}\")
+            return {\"human_value\": answer}
+
+
+        builder = StateGraph(State)
+        builder.add_node(\"node\", node)
+        builder.add_edge(START, \"node\")
+
+        # A checkpointer must be enabled for interrupts to work!
+        checkpointer = MemorySaver()
+        graph = builder.compile(checkpointer=checkpointer)
+
+        config = {
+            \"configurable\": {
+                \"thread_id\": uuid.uuid4(),
+            }
+        }
+
+        for chunk in graph.stream({\"foo\": \"abc\"}, config):
+            print(chunk)
+        ```
+
+        ```pycon
+        {'__interrupt__': (Interrupt(value='what is your age?', resumable=True, ns=['node:62e598fa-8653-9d6d-2046-a70203020e37'], when='during'),)}
+        ```
+
+        ```python
+        command = Command(resume=\"some input from a human!!!\")
+
+        for chunk in graph.stream(Command(resume=\"some input from a human!!!\"), config):
+            print(chunk)
+        ```
+
+        ```pycon
+        Received an input from the interrupt: some input from a human!!!
+        {'node': {'human_value': 'some input from a human!!!'}}
+        ```
+
+    Args:
+        value: The value to surface to the client when the graph is interrupted.
+
+    Returns:
+        Any: On subsequent invocations within the same node (same task to be precise), returns the value provided during the first invocation
+
+    Raises:
+        GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
+    """
     from langgraph.constants import (
         CONFIG_KEY_CHECKPOINT_NS,
-        CONFIG_KEY_RESUME_VALUE,
-        MISSING,
+        CONFIG_KEY_SCRATCHPAD,
+        CONFIG_KEY_SEND,
         NS_SEP,
+        RESUME,
     )
     from langgraph.errors import GraphInterrupt
-    from langgraph.utils.config import get_configurable
+    from langgraph.utils.config import get_config
 
-    conf = get_configurable()
-    if (resume := conf.get(CONFIG_KEY_RESUME_VALUE, MISSING)) and resume is not MISSING:
-        return resume
-    else:
-        raise GraphInterrupt(
-            (
-                Interrupt(
-                    value=value,
-                    resumable=True,
-                    ns=cast(str, conf[CONFIG_KEY_CHECKPOINT_NS]).split(NS_SEP),
-                ),
-            )
+    conf = get_config()["configurable"]
+    # track interrupt index
+    scratchpad: PregelScratchpad = conf[CONFIG_KEY_SCRATCHPAD]
+    idx = scratchpad.interrupt_counter()
+    # find previous resume values
+    if scratchpad.resume:
+        if idx < len(scratchpad.resume):
+            return scratchpad.resume[idx]
+    # find current resume value
+    if scratchpad.null_resume is not None:
+        assert len(scratchpad.resume) == idx, (scratchpad.resume, idx)
+        v = scratchpad.consume_null_resume()
+        scratchpad.resume.append(v)
+        conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
+        return v
+    # no resume value found
+    raise GraphInterrupt(
+        (
+            Interrupt(
+                value=value,
+                resumable=True,
+                ns=cast(str, conf[CONFIG_KEY_CHECKPOINT_NS]).split(NS_SEP),
+            ),
         )
+    )

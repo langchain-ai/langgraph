@@ -19,7 +19,6 @@ from typing import (
 )
 
 from langchain_core.runnables import Runnable
-from langchain_core.runnables.base import RunnableLike
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import Graph as DrawableGraph
 from langchain_core.runnables.graph import Node as DrawableNode
@@ -40,7 +39,7 @@ from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.types import All, Checkpointer
-from langgraph.utils.runnable import RunnableCallable, coerce_to_runnable
+from langgraph.utils.runnable import RunnableCallable, RunnableLike, coerce_to_runnable
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +47,7 @@ logger = logging.getLogger(__name__)
 class NodeSpec(NamedTuple):
     runnable: Runnable
     metadata: Optional[dict[str, Any]] = None
-    ends: Optional[tuple[str, ...]] = EMPTY_SEQ
+    ends: Optional[Union[tuple[str, ...], dict[str, str]]] = EMPTY_SEQ
 
 
 class Branch(NamedTuple):
@@ -257,7 +256,7 @@ class Graph:
                 selected by `path`.
 
         Returns:
-            None
+            Self: The instance of the graph, allowing for method chaining.
 
         Note: Without typehints on the `path` function's return value (e.g., `-> Literal["foo", "__end__"]:`)
             or a path_map, the graph visualization assumes the edge could transition to any node in the graph.
@@ -308,7 +307,7 @@ class Graph:
             key (str): The key of the node to set as the entry point.
 
         Returns:
-            None
+            Self: The instance of the graph, allowing for method chaining.
         """
         return self.add_edge(START, key)
 
@@ -334,7 +333,7 @@ class Graph:
                 selected by `path`.
 
         Returns:
-            None
+            Self: The instance of the graph, allowing for method chaining.
         """
         return self.add_conditional_edges(START, path, path_map, then)
 
@@ -347,7 +346,7 @@ class Graph:
             key (str): The key of the node to set as the finish point.
 
         Returns:
-            None
+            Self: The instance of the graph, allowing for method chaining.
         """
         return self.add_edge(key, END)
 
@@ -374,6 +373,11 @@ class Graph:
             if source not in self.nodes and source != START:
                 raise ValueError(f"Found edge starting at unknown node '{source}'")
 
+        if START not in all_sources:
+            raise ValueError(
+                "Graph must have an entrypoint: add at least one edge from START to another node"
+            )
+
         # assemble targets
         all_targets = {end for _, end in self._all_edges}
         for start, branches in self.branches.items():
@@ -395,10 +399,6 @@ class Graph:
         for name, spec in self.nodes.items():
             if spec.ends:
                 all_targets.update(spec.ends)
-        # validate targets
-        for node in self.nodes:
-            if node not in all_targets:
-                raise ValueError(f"Node `{node}` is not reachable")
         for target in all_targets:
             if target not in self.nodes and target != END:
                 raise ValueError(f"Found edge ending at unknown node `{target}`")
@@ -417,6 +417,7 @@ class Graph:
         interrupt_before: Optional[Union[All, list[str]]] = None,
         interrupt_after: Optional[Union[All, list[str]]] = None,
         debug: bool = False,
+        name: Optional[str] = None,
     ) -> "CompiledGraph":
         # assign default values
         interrupt_before = interrupt_before or []
@@ -445,6 +446,7 @@ class Graph:
             interrupt_after_nodes=interrupt_after,
             auto_validate=False,
             debug=debug,
+            name=name or "LangGraph",
         )
 
         # attach nodes, edges, and branches
@@ -623,8 +625,18 @@ class CompiledGraph(Pregel):
                     if branch.then is not None:
                         add_edge(end, branch.then)
         for key, n in self.builder.nodes.items():
-            if n.ends:
+            if isinstance(n.ends, dict):
+                for end, label in n.ends.items():
+                    add_edge(key, end, label, conditional=True)
+            elif isinstance(n.ends, tuple):
                 for end in n.ends:
                     add_edge(key, end, conditional=True)
 
         return graph
+
+    def _repr_mimebundle_(self, **kwargs: Any) -> dict[str, Any]:
+        """Mime bundle used by Jupyter to display the graph"""
+        return {
+            "text/plain": repr(self),
+            "image/png": self.get_graph().draw_mermaid_png(),
+        }

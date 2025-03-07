@@ -1,6 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
+import langchain_core
 import pytest
 from langchain_core.messages import (
     AIMessage,
@@ -8,15 +9,19 @@ from langchain_core.messages import (
     HumanMessage,
     RemoveMessage,
     SystemMessage,
+    ToolMessage,
 )
 from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
+from typing_extensions import TypedDict
 
 from langgraph.graph import add_messages
 from langgraph.graph.message import MessagesState
 from langgraph.graph.state import END, START, StateGraph
 from tests.conftest import IS_LANGCHAIN_CORE_030_OR_GREATER
 from tests.messages import _AnyIdHumanMessage
+
+_, CORE_MINOR, CORE_PATCH = (int(v) for v in langchain_core.__version__.split("."))
 
 
 def test_add_single_message():
@@ -59,6 +64,31 @@ def test_missing_ids():
     result = add_messages(left, right)
     assert len(result) == 2
     assert all(isinstance(m.id, str) and UUID(m.id, version=4) for m in result)
+
+
+def test_duplicates_in_input():
+    left = []
+    right = [
+        AIMessage(id="1", content="Hi there!"),
+        AIMessage(id="1", content="Hi there again!"),
+    ]
+    result = add_messages(left, right)
+    assert len(result) == 1
+    assert result[0].id == "1"
+    assert result[0].content == "Hi there again!"
+
+
+def test_duplicates_in_input_with_remove():
+    left = [AIMessage(id="1", content="Hello!")]
+    right = [
+        RemoveMessage(id="1"),
+        AIMessage(id="1", content="Hi there!"),
+        AIMessage(id="1", content="Hi there again!"),
+    ]
+    result = add_messages(left, right)
+    assert len(result) == 1
+    assert result[0].id == "1"
+    assert result[0].content == "Hi there again!"
 
 
 def test_remove_message():
@@ -178,3 +208,108 @@ def test_messages_state(state_schema):
             _AnyIdHumanMessage(content="foo"),
         ]
     }
+
+
+@pytest.mark.skipif(
+    condition=not ((CORE_MINOR == 3 and CORE_PATCH >= 11) or CORE_MINOR > 3),
+    reason="Requires langchain_core>=0.3.11.",
+)
+def test_messages_state_format_openai():
+    class State(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages(format="langchain-openai")]
+
+    def foo(state):
+        messages = [
+            HumanMessage(
+                content=[
+                    {
+                        "type": "text",
+                        "text": "Here's an image:",
+                        "cache_control": {"type": "ephemeral"},
+                    },
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/jpeg",
+                            "data": "1234",
+                        },
+                    },
+                ]
+            ),
+            AIMessage(
+                content=[
+                    {
+                        "type": "tool_use",
+                        "name": "foo",
+                        "input": {"bar": "baz"},
+                        "id": "1",
+                    }
+                ]
+            ),
+            HumanMessage(
+                content=[
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "1",
+                        "is_error": False,
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": "1234",
+                                },
+                            },
+                        ],
+                    }
+                ]
+            ),
+        ]
+        return {"messages": messages}
+
+    expected = [
+        HumanMessage(content="meow"),
+        HumanMessage(
+            content=[
+                {"type": "text", "text": "Here's an image:"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/jpeg;base64,1234"},
+                },
+            ],
+        ),
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "foo",
+                    "type": "tool_calls",
+                    "args": {"bar": "baz"},
+                    "id": "1",
+                }
+            ],
+        ),
+        ToolMessage(
+            content=[
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/jpeg;base64,1234"},
+                }
+            ],
+            tool_call_id="1",
+        ),
+    ]
+
+    graph = StateGraph(State)
+    graph.add_edge(START, "foo")
+    graph.add_edge("foo", END)
+    graph.add_node(foo)
+
+    app = graph.compile()
+
+    result = app.invoke({"messages": [("user", "meow")]})
+    for m in result["messages"]:
+        m.id = None
+    assert result == {"messages": expected}

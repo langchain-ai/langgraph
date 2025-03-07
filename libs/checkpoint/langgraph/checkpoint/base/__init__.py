@@ -1,16 +1,13 @@
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from datetime import datetime, timezone
-from typing import (
+from typing import (  # noqa: UP035
     Any,
-    AsyncIterator,
     Dict,
     Generic,
-    Iterator,
     List,
     Literal,
-    Mapping,
     NamedTuple,
     Optional,
-    Sequence,
     Tuple,
     TypedDict,
     TypeVar,
@@ -305,6 +302,7 @@ class BaseCheckpointSaver(Generic[V]):
         config: RunnableConfig,
         writes: Sequence[Tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Store intermediate writes linked to a checkpoint.
 
@@ -312,6 +310,7 @@ class BaseCheckpointSaver(Generic[V]):
             config (RunnableConfig): Configuration of the related checkpoint.
             writes (List[Tuple[str, Any]]): List of writes to store.
             task_id (str): Identifier for the task creating the writes.
+            task_path (str): Path of the task creating the writes.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
@@ -397,6 +396,7 @@ class BaseCheckpointSaver(Generic[V]):
         config: RunnableConfig,
         writes: Sequence[Tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Asynchronously store intermediate writes linked to a checkpoint.
 
@@ -404,6 +404,7 @@ class BaseCheckpointSaver(Generic[V]):
             config (RunnableConfig): Configuration of the related checkpoint.
             writes (List[Tuple[str, Any]]): List of writes to store.
             task_id (str): Identifier for the task creating the writes.
+            task_path (str): Path of the task creating the writes.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
@@ -445,6 +446,23 @@ def get_checkpoint_id(config: RunnableConfig) -> Optional[str]:
     )
 
 
+def get_checkpoint_metadata(
+    config: RunnableConfig, metadata: CheckpointMetadata
+) -> CheckpointMetadata:
+    """Get checkpoint metadata in a backwards-compatible manner."""
+    metadata = metadata.copy()
+    for obj in (config.get("metadata"), config.get("configurable")):
+        if not obj:
+            continue
+        for key in obj:
+            if key in metadata or key in EXCLUDED_METADATA_KEYS or key.startswith("__"):
+                continue
+            v = obj[key]
+            if isinstance(v, (str, int, bool, float)):
+                metadata[key] = v  # type: ignore[literal-required]
+    return metadata
+
+
 """
 Mapping from error type to error index.
 Regular writes just map to their index in the list of writes being saved.
@@ -453,3 +471,9 @@ conflicting with regular writes.
 Each Checkpointer implementation should use this mapping in put_writes.
 """
 WRITES_IDX_MAP = {ERROR: -1, SCHEDULED: -2, INTERRUPT: -3, RESUME: -4}
+
+EXCLUDED_METADATA_KEYS = {
+    "checkpoint_id",
+    "checkpoint_ns",
+    "checkpoint_map",
+}

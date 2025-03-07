@@ -1,14 +1,13 @@
-import asyncio
 import logging
 import os
 import pickle
 import random
 import shutil
 from collections import defaultdict
+from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
-from functools import partial
 from types import TracebackType
-from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple, Type
+from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
 
@@ -21,13 +20,14 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     SerializerProtocol,
     get_checkpoint_id,
+    get_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.types import TASKS, ChannelProtocol
 
 logger = logging.getLogger(__name__)
 
 
-class MemorySaver(
+class InMemorySaver(
     BaseCheckpointSaver[str], AbstractContextManager, AbstractAsyncContextManager
 ):
     """An in-memory checkpoint saver.
@@ -35,7 +35,7 @@ class MemorySaver(
     This checkpoint saver stores checkpoints in memory using a defaultdict.
 
     Note:
-        Only use `MemorySaver` for debugging or testing purposes.
+        Only use `InMemorySaver` for debugging or testing purposes.
         For production use cases we recommend installing [langgraph-checkpoint-postgres](https://pypi.org/project/langgraph-checkpoint-postgres/) and using `PostgresSaver` / `AsyncPostgresSaver`.
 
     Args:
@@ -45,7 +45,7 @@ class MemorySaver(
 
             import asyncio
 
-            from langgraph.checkpoint.memory import MemorySaver
+            from langgraph.checkpoint.memory import InMemorySaver
             from langgraph.graph import StateGraph
 
             builder = StateGraph(int)
@@ -53,7 +53,7 @@ class MemorySaver(
             builder.set_entry_point("add_one")
             builder.set_finish_point("add_one")
 
-            memory = MemorySaver()
+            memory = InMemorySaver()
             graph = builder.compile(checkpointer=memory)
             coro = graph.ainvoke(1, {"configurable": {"thread_id": "thread-1"}})
             asyncio.run(coro)  # Output: 2
@@ -67,14 +67,15 @@ class MemorySaver(
         ],
     ]
     writes: defaultdict[
-        tuple[str, str, str], dict[tuple[str, int], tuple[str, str, tuple[str, bytes]]]
+        tuple[str, str, str],
+        dict[tuple[str, int], tuple[str, str, tuple[str, bytes], str]],
     ]
 
     def __init__(
         self,
         *,
         serde: Optional[SerializerProtocol] = None,
-        factory: Type[defaultdict] = defaultdict,
+        factory: type[defaultdict] = defaultdict,
     ) -> None:
         super().__init__(serde=serde)
         self.storage = factory(lambda: defaultdict(dict))
@@ -84,7 +85,7 @@ class MemorySaver(
             self.stack.enter_context(self.storage)  # type: ignore[arg-type]
             self.stack.enter_context(self.writes)  # type: ignore[arg-type]
 
-    def __enter__(self) -> "MemorySaver":
+    def __enter__(self) -> "InMemorySaver":
         return self.stack.__enter__()
 
     def __exit__(
@@ -95,7 +96,7 @@ class MemorySaver(
     ) -> Optional[bool]:
         return self.stack.__exit__(exc_type, exc_value, traceback)
 
-    async def __aenter__(self) -> "MemorySaver":
+    async def __aenter__(self) -> "InMemorySaver":
         return self.stack.__enter__()
 
     async def __aexit__(
@@ -127,34 +128,39 @@ class MemorySaver(
                 checkpoint, metadata, parent_checkpoint_id = saved
                 writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
                 if parent_checkpoint_id:
-                    sends = [
-                        w[2]
-                        for w in self.writes[
-                            (thread_id, checkpoint_ns, parent_checkpoint_id)
-                        ].values()
-                        if w[1] == TASKS
-                    ]
+                    sends = sorted(
+                        (
+                            (*w, k[1])
+                            for k, w in self.writes[
+                                (thread_id, checkpoint_ns, parent_checkpoint_id)
+                            ].items()
+                            if w[1] == TASKS
+                        ),
+                        key=lambda w: (w[3], w[0], w[4]),
+                    )
                 else:
                     sends = []
                 return CheckpointTuple(
                     config=config,
                     checkpoint={
                         **self.serde.loads_typed(checkpoint),
-                        "pending_sends": [self.serde.loads_typed(s) for s in sends],
+                        "pending_sends": [self.serde.loads_typed(s[2]) for s in sends],
                     },
                     metadata=self.serde.loads_typed(metadata),
                     pending_writes=[
-                        (id, c, self.serde.loads_typed(v)) for id, c, v in writes
+                        (id, c, self.serde.loads_typed(v)) for id, c, v, _ in writes
                     ],
-                    parent_config={
-                        "configurable": {
-                            "thread_id": thread_id,
-                            "checkpoint_ns": checkpoint_ns,
-                            "checkpoint_id": parent_checkpoint_id,
+                    parent_config=(
+                        {
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "checkpoint_ns": checkpoint_ns,
+                                "checkpoint_id": parent_checkpoint_id,
+                            }
                         }
-                    }
-                    if parent_checkpoint_id
-                    else None,
+                        if parent_checkpoint_id
+                        else None
+                    ),
                 )
         else:
             if checkpoints := self.storage[thread_id][checkpoint_ns]:
@@ -162,13 +168,16 @@ class MemorySaver(
                 checkpoint, metadata, parent_checkpoint_id = checkpoints[checkpoint_id]
                 writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
                 if parent_checkpoint_id:
-                    sends = [
-                        w[2]
-                        for w in self.writes[
-                            (thread_id, checkpoint_ns, parent_checkpoint_id)
-                        ].values()
-                        if w[1] == TASKS
-                    ]
+                    sends = sorted(
+                        (
+                            (*w, k[1])
+                            for k, w in self.writes[
+                                (thread_id, checkpoint_ns, parent_checkpoint_id)
+                            ].items()
+                            if w[1] == TASKS
+                        ),
+                        key=lambda w: (w[3], w[0], w[4]),
+                    )
                 else:
                     sends = []
                 return CheckpointTuple(
@@ -181,28 +190,30 @@ class MemorySaver(
                     },
                     checkpoint={
                         **self.serde.loads_typed(checkpoint),
-                        "pending_sends": [self.serde.loads_typed(s) for s in sends],
+                        "pending_sends": [self.serde.loads_typed(s[2]) for s in sends],
                     },
                     metadata=self.serde.loads_typed(metadata),
                     pending_writes=[
-                        (id, c, self.serde.loads_typed(v)) for id, c, v in writes
+                        (id, c, self.serde.loads_typed(v)) for id, c, v, _ in writes
                     ],
-                    parent_config={
-                        "configurable": {
-                            "thread_id": thread_id,
-                            "checkpoint_ns": checkpoint_ns,
-                            "checkpoint_id": parent_checkpoint_id,
+                    parent_config=(
+                        {
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "checkpoint_ns": checkpoint_ns,
+                                "checkpoint_id": parent_checkpoint_id,
+                            }
                         }
-                    }
-                    if parent_checkpoint_id
-                    else None,
+                        if parent_checkpoint_id
+                        else None
+                    ),
                 )
 
     def list(
         self,
         config: Optional[RunnableConfig],
         *,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[CheckpointTuple]:
@@ -273,13 +284,16 @@ class MemorySaver(
                     ].values()
 
                     if parent_checkpoint_id:
-                        sends = [
-                            w[2]
-                            for w in self.writes[
-                                (thread_id, checkpoint_ns, parent_checkpoint_id)
-                            ].values()
-                            if w[1] == TASKS
-                        ]
+                        sends = sorted(
+                            (
+                                (*w, k[1])
+                                for k, w in self.writes[
+                                    (thread_id, checkpoint_ns, parent_checkpoint_id)
+                                ].items()
+                                if w[1] == TASKS
+                            ),
+                            key=lambda w: (w[3], w[0], w[4]),
+                        )
                     else:
                         sends = []
 
@@ -293,20 +307,24 @@ class MemorySaver(
                         },
                         checkpoint={
                             **self.serde.loads_typed(checkpoint),
-                            "pending_sends": [self.serde.loads_typed(s) for s in sends],
+                            "pending_sends": [
+                                self.serde.loads_typed(s[2]) for s in sends
+                            ],
                         },
                         metadata=metadata,
-                        parent_config={
-                            "configurable": {
-                                "thread_id": thread_id,
-                                "checkpoint_ns": checkpoint_ns,
-                                "checkpoint_id": parent_checkpoint_id,
+                        parent_config=(
+                            {
+                                "configurable": {
+                                    "thread_id": thread_id,
+                                    "checkpoint_ns": checkpoint_ns,
+                                    "checkpoint_id": parent_checkpoint_id,
+                                }
                             }
-                        }
-                        if parent_checkpoint_id
-                        else None,
+                            if parent_checkpoint_id
+                            else None
+                        ),
                         pending_writes=[
-                            (id, c, self.serde.loads_typed(v)) for id, c, v in writes
+                            (id, c, self.serde.loads_typed(v)) for id, c, v, _ in writes
                         ],
                     )
 
@@ -339,7 +357,7 @@ class MemorySaver(
             {
                 checkpoint["id"]: (
                     self.serde.dumps_typed(c),
-                    self.serde.dumps_typed(metadata),
+                    self.serde.dumps_typed(get_checkpoint_metadata(config, metadata)),
                     config["configurable"].get("checkpoint_id"),  # parent
                 )
             }
@@ -355,8 +373,9 @@ class MemorySaver(
     def put_writes(
         self,
         config: RunnableConfig,
-        writes: Sequence[Tuple[str, Any]],
+        writes: Sequence[tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Save a list of writes to the in-memory storage.
 
@@ -367,6 +386,7 @@ class MemorySaver(
             config (RunnableConfig): The config to associate with the writes.
             writes (list[tuple[str, Any]]): The writes to save.
             task_id (str): Identifier for the task creating the writes.
+            task_path (str): Path of the task creating the writes.
 
         Returns:
             RunnableConfig: The updated config containing the saved writes' timestamp.
@@ -381,7 +401,12 @@ class MemorySaver(
             if inner_key[1] >= 0 and outer_writes_ and inner_key in outer_writes_:
                 continue
 
-            self.writes[outer_key][inner_key] = (task_id, c, self.serde.dumps_typed(v))
+            self.writes[outer_key][inner_key] = (
+                task_id,
+                c,
+                self.serde.dumps_typed(v),
+                task_path,
+            )
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Asynchronous version of get_tuple.
@@ -395,15 +420,13 @@ class MemorySaver(
         Returns:
             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
-        return await asyncio.get_running_loop().run_in_executor(
-            None, self.get_tuple, config
-        )
+        return self.get_tuple(config)
 
     async def alist(
         self,
         config: Optional[RunnableConfig],
         *,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> AsyncIterator[CheckpointTuple]:
@@ -418,24 +441,8 @@ class MemorySaver(
         Yields:
             AsyncIterator[CheckpointTuple]: An asynchronous iterator of checkpoint tuples.
         """
-        loop = asyncio.get_running_loop()
-        iter = await loop.run_in_executor(
-            None,
-            partial(
-                self.list,
-                before=before,
-                limit=limit,
-                filter=filter,
-            ),
-            config,
-        )
-        while True:
-            # handling StopIteration exception inside coroutine won't work
-            # as expected, so using next() with default value to break the loop
-            if item := await loop.run_in_executor(None, next, iter, None):
-                yield item
-            else:
-                break
+        for item in self.list(config, filter=filter, before=before, limit=limit):
+            yield item
 
     async def aput(
         self,
@@ -455,15 +462,14 @@ class MemorySaver(
         Returns:
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
         """
-        return await asyncio.get_running_loop().run_in_executor(
-            None, self.put, config, checkpoint, metadata, new_versions
-        )
+        return self.put(config, checkpoint, metadata, new_versions)
 
     async def aput_writes(
         self,
         config: RunnableConfig,
-        writes: Sequence[Tuple[str, Any]],
+        writes: Sequence[tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Asynchronous version of put_writes.
 
@@ -474,10 +480,12 @@ class MemorySaver(
             config (RunnableConfig): The config to associate with the writes.
             writes (List[Tuple[str, Any]]): The writes to save, each as a (channel, value) pair.
             task_id (str): Identifier for the task creating the writes.
+            task_path (str): Path of the task creating the writes.
+
+        Returns:
+            None
         """
-        return await asyncio.get_running_loop().run_in_executor(
-            None, self.put_writes, config, writes, task_id
-        )
+        return self.put_writes(config, writes, task_id, task_path)
 
     def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
         if current is None:
@@ -489,6 +497,9 @@ class MemorySaver(
         next_v = current_v + 1
         next_h = random.random()
         return f"{next_v:032}.{next_h:016}"
+
+
+MemorySaver = InMemorySaver  # Kept for backwards compatibility
 
 
 class PersistentDict(defaultdict):

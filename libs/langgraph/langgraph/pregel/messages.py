@@ -76,11 +76,15 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         chunk: Optional[ChatGenerationChunk] = None,
         run_id: UUID,
         parent_run_id: Optional[UUID] = None,
+        tags: Optional[list[str]] = None,
         **kwargs: Any,
     ) -> Any:
         if not isinstance(chunk, ChatGenerationChunk):
             return
         if meta := self.metadata.get(run_id):
+            filtered_tags = [t for t in (tags or []) if not t.startswith("seq:step")]
+            if filtered_tags:
+                meta[1]["tags"] = filtered_tags
             self._emit(meta, chunk.message)
 
     def on_llm_end(
@@ -123,6 +127,16 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
                 tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP)),
                 metadata,
             )
+            if isinstance(inputs, dict):
+                for key, value in inputs.items():
+                    if isinstance(value, BaseMessage):
+                        if value.id is not None:
+                            self.seen.add(value.id)
+                    elif isinstance(value, Sequence) and not isinstance(value, str):
+                        for item in value:
+                            if isinstance(item, BaseMessage):
+                                if item.id is not None:
+                                    self.seen.add(item.id)
 
     def on_chain_end(
         self,

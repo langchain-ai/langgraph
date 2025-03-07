@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph-checkpoint-sqlite"
-version = "2.0.1"
+version = "2.0.5"
 description = "Library with a SQLite implementation of LangGraph checkpoint saver."
 authors = []
 license = "MIT"
@@ -10,8 +10,8 @@ packages = [{ include = "langgraph" }]
 
 [tool.poetry.dependencies]
 python = "^3.9.0"
-langgraph-checkpoint = "^2.0.2"
-aiosqlite = "^0.20.0"
+langgraph-checkpoint = "^2.0.15"
+aiosqlite = ">=0.20,<0.22"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.6.2"

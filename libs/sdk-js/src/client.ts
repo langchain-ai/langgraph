@@ -7,6 +7,7 @@ import {
   GraphSchema,
   Metadata,
   Run,
+  RunStatus,
   Thread,
   ThreadState,
   Cron,
@@ -17,14 +18,12 @@ import {
   ListNamespaceResponse,
   Item,
   ThreadStatus,
+  CronCreateResponse,
+  CronCreateForThreadResponse,
 } from "./schema.js";
 import { AsyncCaller, AsyncCallerParams } from "./utils/async_caller.js";
-import {
-  EventSourceParser,
-  createParser,
-} from "./utils/eventsource-parser/index.js";
 import { IterableReadableStream } from "./utils/stream.js";
-import {
+import type {
   RunsCreatePayload,
   RunsStreamPayload,
   RunsWaitPayload,
@@ -33,7 +32,10 @@ import {
   OnConflictBehavior,
 } from "./types.js";
 import { mergeSignals } from "./utils/signals.js";
-
+import { getEnvironmentVariable } from "./utils/env.js";
+import { _getFetchImplementation } from "./singletons/fetch.js";
+import type { TypedAsyncGenerator, StreamMode } from "./types.stream.js";
+import { BytesLineDecoder, SSEDecoder } from "./utils/sse.js";
 /**
  * Get the API key from the environment.
  * Precedence:
@@ -53,7 +55,7 @@ export function getApiKey(apiKey?: string): string | undefined {
   const prefixes = ["LANGGRAPH", "LANGSMITH", "LANGCHAIN"];
 
   for (const prefix of prefixes) {
-    const envKey = process.env[`${prefix}_API_KEY`];
+    const envKey = getEnvironmentVariable(`${prefix}_API_KEY`);
     if (envKey) {
       // Remove surrounding quotes
       return envKey.trim().replace(/^["']|["']$/g, "");
@@ -63,7 +65,7 @@ export function getApiKey(apiKey?: string): string | undefined {
   return undefined;
 }
 
-interface ClientConfig {
+export interface ClientConfig {
   apiUrl?: string;
   apiKey?: string;
   callerOptions?: AsyncCallerParams;
@@ -74,7 +76,7 @@ interface ClientConfig {
 class BaseClient {
   protected asyncCaller: AsyncCaller;
 
-  protected timeoutMs: number;
+  protected timeoutMs: number | undefined;
 
   protected apiUrl: string;
 
@@ -87,7 +89,7 @@ class BaseClient {
       ...config?.callerOptions,
     });
 
-    this.timeoutMs = config?.timeoutMs || 12_000;
+    this.timeoutMs = config?.timeoutMs;
 
     // default limit being capped by Chrome
     // https://github.com/nodejs/undici/issues/1373
@@ -127,7 +129,7 @@ class BaseClient {
       if (options.timeoutMs != null) {
         timeoutSignal = AbortSignal.timeout(options.timeoutMs);
       }
-    } else {
+    } else if (this.timeoutMs != null) {
       timeoutSignal = AbortSignal.timeout(this.timeoutMs);
     }
 
@@ -182,7 +184,7 @@ export class CronsClient extends BaseClient {
     threadId: string,
     assistantId: string,
     payload?: CronsCreatePayload,
-  ): Promise<Run> {
+  ): Promise<CronCreateForThreadResponse> {
     const json: Record<string, any> = {
       schedule: payload?.schedule,
       input: payload?.input,
@@ -195,10 +197,13 @@ export class CronsClient extends BaseClient {
       multitask_strategy: payload?.multitaskStrategy,
       if_not_exists: payload?.ifNotExists,
     };
-    return this.fetch<Run>(`/threads/${threadId}/runs/crons`, {
-      method: "POST",
-      json,
-    });
+    return this.fetch<CronCreateForThreadResponse>(
+      `/threads/${threadId}/runs/crons`,
+      {
+        method: "POST",
+        json,
+      },
+    );
   }
 
   /**
@@ -210,7 +215,7 @@ export class CronsClient extends BaseClient {
   async create(
     assistantId: string,
     payload?: CronsCreatePayload,
-  ): Promise<Run> {
+  ): Promise<CronCreateResponse> {
     const json: Record<string, any> = {
       schedule: payload?.schedule,
       input: payload?.input,
@@ -223,7 +228,7 @@ export class CronsClient extends BaseClient {
       multitask_strategy: payload?.multitaskStrategy,
       if_not_exists: payload?.ifNotExists,
     };
-    return this.fetch<Run>(`/runs/crons`, {
+    return this.fetch<CronCreateResponse>(`/runs/crons`, {
       method: "POST",
       json,
     });
@@ -449,15 +454,20 @@ export class AssistantsClient extends BaseClient {
   }
 }
 
-export class ThreadsClient extends BaseClient {
+export class ThreadsClient<
+  TStateType = DefaultValues,
+  TUpdateType = TStateType,
+> extends BaseClient {
   /**
    * Get a thread by ID.
    *
    * @param threadId ID of the thread.
    * @returns The thread.
    */
-  async get(threadId: string): Promise<Thread> {
-    return this.fetch<Thread>(`/threads/${threadId}`);
+  async get<ValuesType = TStateType>(
+    threadId: string,
+  ): Promise<Thread<ValuesType>> {
+    return this.fetch<Thread<ValuesType>>(`/threads/${threadId}`);
   }
 
   /**
@@ -473,8 +483,8 @@ export class ThreadsClient extends BaseClient {
     metadata?: Metadata;
     threadId?: string;
     ifExists?: OnConflictBehavior;
-  }): Promise<Thread> {
-    return this.fetch<Thread>(`/threads`, {
+  }): Promise<Thread<TStateType>> {
+    return this.fetch<Thread<TStateType>>(`/threads`, {
       method: "POST",
       json: {
         metadata: payload?.metadata,
@@ -489,8 +499,8 @@ export class ThreadsClient extends BaseClient {
    * @param threadId ID of the thread to be copied
    * @returns Newly copied thread
    */
-  async copy(threadId: string): Promise<Thread> {
-    return this.fetch<Thread>(`/threads/${threadId}/copy`, {
+  async copy(threadId: string): Promise<Thread<TStateType>> {
+    return this.fetch<Thread<TStateType>>(`/threads/${threadId}/copy`, {
       method: "POST",
     });
   }
@@ -534,7 +544,7 @@ export class ThreadsClient extends BaseClient {
    * @param query Query options
    * @returns List of threads
    */
-  async search(query?: {
+  async search<ValuesType = TStateType>(query?: {
     /**
      * Metadata to filter threads by.
      */
@@ -553,8 +563,8 @@ export class ThreadsClient extends BaseClient {
      * Must be one of 'idle', 'busy', 'interrupted' or 'error'.
      */
     status?: ThreadStatus;
-  }): Promise<Thread[]> {
-    return this.fetch<Thread[]>("/threads/search", {
+  }): Promise<Thread<ValuesType>[]> {
+    return this.fetch<Thread<ValuesType>[]>("/threads/search", {
       method: "POST",
       json: {
         metadata: query?.metadata ?? undefined,
@@ -571,7 +581,7 @@ export class ThreadsClient extends BaseClient {
    * @param threadId ID of the thread.
    * @returns Thread state.
    */
-  async getState<ValuesType = DefaultValues>(
+  async getState<ValuesType = TStateType>(
     threadId: string,
     checkpoint?: Checkpoint | string,
     options?: { subgraphs?: boolean },
@@ -605,7 +615,7 @@ export class ThreadsClient extends BaseClient {
    * @param threadId The ID of the thread.
    * @returns
    */
-  async updateState<ValuesType = DefaultValues>(
+  async updateState<ValuesType = TUpdateType>(
     threadId: string,
     options: {
       values: ValuesType;
@@ -641,7 +651,7 @@ export class ThreadsClient extends BaseClient {
     let threadId: string;
 
     if (typeof threadIdOrConfig !== "string") {
-      if (typeof threadIdOrConfig.configurable.thread_id !== "string") {
+      if (typeof threadIdOrConfig.configurable?.thread_id !== "string") {
         throw new Error(
           "Thread ID is required when updating state with a config.",
         );
@@ -664,7 +674,7 @@ export class ThreadsClient extends BaseClient {
    * @param options Additional options.
    * @returns List of thread states.
    */
-  async getHistory<ValuesType = DefaultValues>(
+  async getHistory<ValuesType = TStateType>(
     threadId: string,
     options?: {
       limit?: number;
@@ -688,24 +698,43 @@ export class ThreadsClient extends BaseClient {
   }
 }
 
-export class RunsClient extends BaseClient {
-  stream(
+export class RunsClient<
+  TStateType = DefaultValues,
+  TUpdateType = TStateType,
+  TCustomEventType = unknown,
+> extends BaseClient {
+  stream<
+    TStreamMode extends StreamMode | StreamMode[] = StreamMode,
+    TSubgraphs extends boolean = false,
+  >(
     threadId: null,
     assistantId: string,
-    payload?: Omit<RunsStreamPayload, "multitaskStrategy" | "onCompletion">,
-  ): AsyncGenerator<{
-    event: StreamEvent;
-    data: any;
-  }>;
+    payload?: Omit<
+      RunsStreamPayload<TStreamMode, TSubgraphs>,
+      "multitaskStrategy" | "onCompletion"
+    >,
+  ): TypedAsyncGenerator<
+    TStreamMode,
+    TSubgraphs,
+    TStateType,
+    TUpdateType,
+    TCustomEventType
+  >;
 
-  stream(
+  stream<
+    TStreamMode extends StreamMode | StreamMode[] = StreamMode,
+    TSubgraphs extends boolean = false,
+  >(
     threadId: string,
     assistantId: string,
-    payload?: RunsStreamPayload,
-  ): AsyncGenerator<{
-    event: StreamEvent;
-    data: any;
-  }>;
+    payload?: RunsStreamPayload<TStreamMode, TSubgraphs>,
+  ): TypedAsyncGenerator<
+    TStreamMode,
+    TSubgraphs,
+    TStateType,
+    TUpdateType,
+    TCustomEventType
+  >;
 
   /**
    * Create a run and stream the results.
@@ -714,14 +743,20 @@ export class RunsClient extends BaseClient {
    * @param assistantId Assistant ID to use for this run.
    * @param payload Payload for creating a run.
    */
-  async *stream(
+  async *stream<
+    TStreamMode extends StreamMode | StreamMode[] = StreamMode,
+    TSubgraphs extends boolean = false,
+  >(
     threadId: string | null,
     assistantId: string,
-    payload?: RunsStreamPayload,
-  ): AsyncGenerator<{
-    event: StreamEvent;
-    data: any;
-  }> {
+    payload?: RunsStreamPayload<TStreamMode, TSubgraphs>,
+  ): TypedAsyncGenerator<
+    TStreamMode,
+    TSubgraphs,
+    TStateType,
+    TUpdateType,
+    TCustomEventType
+  > {
     const json: Record<string, any> = {
       input: payload?.input,
       command: payload?.command,
@@ -754,45 +789,11 @@ export class RunsClient extends BaseClient {
       }),
     );
 
-    let parser: EventSourceParser;
-    let onEndEvent: () => void;
-    const textDecoder = new TextDecoder();
-
-    const stream: ReadableStream<{ event: string; data: any }> = (
+    const stream: ReadableStream<{ event: any; data: any }> = (
       response.body || new ReadableStream({ start: (ctrl) => ctrl.close() })
-    ).pipeThrough(
-      new TransformStream({
-        async start(ctrl) {
-          parser = createParser((event) => {
-            if (
-              (payload?.signal && payload.signal.aborted) ||
-              (event.type === "event" && event.data === "[DONE]")
-            ) {
-              ctrl.terminate();
-              return;
-            }
-
-            if ("data" in event) {
-              ctrl.enqueue({
-                event: event.event ?? "message",
-                data: JSON.parse(event.data),
-              });
-            }
-          });
-          onEndEvent = () => {
-            ctrl.enqueue({ event: "end", data: undefined });
-          };
-        },
-        async transform(chunk) {
-          const payload = textDecoder.decode(chunk);
-          parser.feed(payload);
-
-          // eventsource-parser will ignore events
-          // that are not terminated by a newline
-          if (payload.trim() === "event: end") onEndEvent();
-        },
-      }),
-    );
+    )
+      .pipeThrough(new BytesLineDecoder())
+      .pipeThrough(new SSEDecoder());
 
     yield* IterableReadableStream.fromReadableStream(stream);
   }
@@ -815,6 +816,8 @@ export class RunsClient extends BaseClient {
       command: payload?.command,
       config: payload?.config,
       metadata: payload?.metadata,
+      stream_mode: payload?.streamMode,
+      stream_subgraphs: payload?.streamSubgraphs,
       assistant_id: assistantId,
       interrupt_before: payload?.interruptBefore,
       interrupt_after: payload?.interruptAfter,
@@ -943,12 +946,18 @@ export class RunsClient extends BaseClient {
        * Defaults to 0.
        */
       offset?: number;
+
+      /**
+       * Status of the run to filter by.
+       */
+      status?: RunStatus;
     },
   ): Promise<Run[]> {
     return this.fetch<Run[]>(`/threads/${threadId}/runs`, {
       params: {
         limit: options?.limit ?? 10,
         offset: options?.offset ?? 0,
+        status: options?.status ?? undefined,
       },
     });
   }
@@ -1013,61 +1022,36 @@ export class RunsClient extends BaseClient {
    *
    * @param threadId The ID of the thread.
    * @param runId The ID of the run.
-   * @param signal An optional abort signal.
    * @returns An async generator yielding stream parts.
    */
   async *joinStream(
     threadId: string,
     runId: string,
-    signal?: AbortSignal,
+    options?:
+      | { signal?: AbortSignal; cancelOnDisconnect?: boolean }
+      | AbortSignal,
   ): AsyncGenerator<{ event: StreamEvent; data: any }> {
+    const opts =
+      typeof options === "object" &&
+      options != null &&
+      options instanceof AbortSignal
+        ? { signal: options }
+        : options;
+
     const response = await this.asyncCaller.fetch(
       ...this.prepareFetchOptions(`/threads/${threadId}/runs/${runId}/stream`, {
         method: "GET",
         timeoutMs: null,
-        signal,
+        signal: opts?.signal,
+        params: { cancel_on_disconnect: opts?.cancelOnDisconnect ? "1" : "0" },
       }),
     );
-
-    let parser: EventSourceParser;
-    let onEndEvent: () => void;
-    const textDecoder = new TextDecoder();
 
     const stream: ReadableStream<{ event: string; data: any }> = (
       response.body || new ReadableStream({ start: (ctrl) => ctrl.close() })
-    ).pipeThrough(
-      new TransformStream({
-        async start(ctrl) {
-          parser = createParser((event) => {
-            if (
-              (signal && signal.aborted) ||
-              (event.type === "event" && event.data === "[DONE]")
-            ) {
-              ctrl.terminate();
-              return;
-            }
-
-            if ("data" in event) {
-              ctrl.enqueue({
-                event: event.event ?? "message",
-                data: JSON.parse(event.data),
-              });
-            }
-          });
-          onEndEvent = () => {
-            ctrl.enqueue({ event: "end", data: undefined });
-          };
-        },
-        async transform(chunk) {
-          const payload = textDecoder.decode(chunk);
-          parser.feed(payload);
-
-          // eventsource-parser will ignore events
-          // that are not terminated by a newline
-          if (payload.trim() === "event: end") onEndEvent();
-        },
-      }),
-    );
+    )
+      .pipeThrough(new BytesLineDecoder())
+      .pipeThrough(new SSEDecoder());
 
     yield* IterableReadableStream.fromReadableStream(stream);
   }
@@ -1104,12 +1088,28 @@ export class StoreClient extends BaseClient {
    * @param namespace A list of strings representing the namespace path.
    * @param key The unique identifier for the item within the namespace.
    * @param value A dictionary containing the item's data.
+   * @param options.index Controls search indexing - null (use defaults), false (disable), or list of field paths to index.
+   * @param options.ttl Optional time-to-live in minutes for the item, or null for no expiration.
    * @returns Promise<void>
+   *
+   * @example
+   * ```typescript
+   * await client.store.putItem(
+   *   ["documents", "user123"],
+   *   "item456",
+   *   { title: "My Document", content: "Hello World" },
+   *   { ttl: 60 } // expires in 60 minutes
+   * );
+   * ```
    */
   async putItem(
     namespace: string[],
     key: string,
     value: Record<string, any>,
+    options?: {
+      index?: false | string[] | null;
+      ttl?: number | null;
+    },
   ): Promise<void> {
     namespace.forEach((label) => {
       if (label.includes(".")) {
@@ -1123,6 +1123,8 @@ export class StoreClient extends BaseClient {
       namespace,
       key,
       value,
+      index: options?.index,
+      ttl: options?.ttl,
     };
 
     return this.fetch<void>("/store/items", {
@@ -1136,9 +1138,33 @@ export class StoreClient extends BaseClient {
    *
    * @param namespace A list of strings representing the namespace path.
    * @param key The unique identifier for the item.
+   * @param options.refreshTtl Whether to refresh the TTL on this read operation. If null, uses the store's default behavior.
    * @returns Promise<Item>
+   *
+   * @example
+   * ```typescript
+   * const item = await client.store.getItem(
+   *   ["documents", "user123"],
+   *   "item456",
+   *   { refreshTtl: true }
+   * );
+   * console.log(item);
+   * // {
+   * //   namespace: ["documents", "user123"],
+   * //   key: "item456",
+   * //   value: { title: "My Document", content: "Hello World" },
+   * //   createdAt: "2024-07-30T12:00:00Z",
+   * //   updatedAt: "2024-07-30T12:00:00Z"
+   * // }
+   * ```
    */
-  async getItem(namespace: string[], key: string): Promise<Item | null> {
+  async getItem(
+    namespace: string[],
+    key: string,
+    options?: {
+      refreshTtl?: boolean | null;
+    },
+  ): Promise<Item | null> {
     namespace.forEach((label) => {
       if (label.includes(".")) {
         throw new Error(
@@ -1147,8 +1173,17 @@ export class StoreClient extends BaseClient {
       }
     });
 
+    const params: Record<string, any> = {
+      namespace: namespace.join("."),
+      key,
+    };
+
+    if (options?.refreshTtl !== undefined) {
+      params.refresh_ttl = options.refreshTtl;
+    }
+
     const response = await this.fetch<APIItem>("/store/items", {
-      params: { namespace: namespace.join("."), key },
+      params,
     });
 
     return response
@@ -1189,7 +1224,34 @@ export class StoreClient extends BaseClient {
    * @param options.filter Optional dictionary of key-value pairs to filter results.
    * @param options.limit Maximum number of items to return (default is 10).
    * @param options.offset Number of items to skip before returning results (default is 0).
+   * @param options.query Optional search query.
+   * @param options.refreshTtl Whether to refresh the TTL on items returned by this search. If null, uses the store's default behavior.
    * @returns Promise<SearchItemsResponse>
+   *
+   * @example
+   * ```typescript
+   * const results = await client.store.searchItems(
+   *   ["documents"],
+   *   {
+   *     filter: { author: "John Doe" },
+   *     limit: 5,
+   *     refreshTtl: true
+   *   }
+   * );
+   * console.log(results);
+   * // {
+   * //   items: [
+   * //     {
+   * //       namespace: ["documents", "user123"],
+   * //       key: "item789",
+   * //       value: { title: "Another Document", author: "John Doe" },
+   * //       createdAt: "2024-07-30T12:00:00Z",
+   * //       updatedAt: "2024-07-30T12:00:00Z"
+   * //     },
+   * //     // ... additional items ...
+   * //   ]
+   * // }
+   * ```
    */
   async searchItems(
     namespacePrefix: string[],
@@ -1197,6 +1259,8 @@ export class StoreClient extends BaseClient {
       filter?: Record<string, any>;
       limit?: number;
       offset?: number;
+      query?: string;
+      refreshTtl?: boolean | null;
     },
   ): Promise<SearchItemsResponse> {
     const payload = {
@@ -1204,6 +1268,8 @@ export class StoreClient extends BaseClient {
       filter: options?.filter,
       limit: options?.limit ?? 10,
       offset: options?.offset ?? 0,
+      query: options?.query,
+      refresh_ttl: options?.refreshTtl,
     };
 
     const response = await this.fetch<APISearchItemsResponse>(
@@ -1254,7 +1320,11 @@ export class StoreClient extends BaseClient {
   }
 }
 
-export class Client {
+export class Client<
+  TStateType = DefaultValues,
+  TUpdateType = TStateType,
+  TCustomEventType = unknown,
+> {
   /**
    * The client for interacting with assistants.
    */
@@ -1263,12 +1333,12 @@ export class Client {
   /**
    * The client for interacting with threads.
    */
-  public threads: ThreadsClient;
+  public threads: ThreadsClient<TStateType, TUpdateType>;
 
   /**
    * The client for interacting with runs.
    */
-  public runs: RunsClient;
+  public runs: RunsClient<TStateType, TUpdateType, TCustomEventType>;
 
   /**
    * The client for interacting with cron runs.

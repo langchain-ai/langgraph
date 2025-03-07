@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Generic, Optional, Sequence, Type, TypeVar
+from typing import Any, Generic, Optional, Sequence, TypeVar
 
 from typing_extensions import Self
 
@@ -13,7 +13,7 @@ C = TypeVar("C")
 class BaseChannel(Generic[Value, Update, C], ABC):
     __slots__ = ("key", "typ")
 
-    def __init__(self, typ: Type[Any], key: str = "") -> None:
+    def __init__(self, typ: Any, key: str = "") -> None:
         self.typ = typ
         self.key = key
 

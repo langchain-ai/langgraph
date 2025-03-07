@@ -4,7 +4,7 @@
     - [LangGraph Platform](./langgraph_platform.md)
     - [LangGraph Server](./langgraph_server.md)
 
-The LangGraph CLI is a multi-platform command-line tool for building and running the [LangGraph API server](./langgraph_server.md) locally. This offers an alternative to the [LangGraph Studio desktop app](./langgraph_studio.md) for developing and testing agents across all major operating systems (Linux, Windows, MacOS). The resulting server includes all API endpoints for your graph's runs, threads, assistants, etc. as well as the other services required to run your agent, including a managed database for checkpointing and storage.
+The LangGraph CLI is a multi-platform command-line tool for building and running the [LangGraph API server](./langgraph_server.md) locally. The resulting server includes all API endpoints for your graph's runs, threads, assistants, etc. as well as the other services required to run your agent, including a managed database for checkpointing and storage.
 
 ## Installation
 
@@ -33,6 +33,11 @@ The `langgraph build` command builds a Docker image for the [LangGraph API serve
 !!! note "New in version 0.1.55"
     The `langgraph dev` command was introduced in langgraph-cli version 0.1.55.
 
+!!! note "Python only"
+
+    Currently, the CLI only supports Python >= 3.11.
+    JS support is coming soon.
+
 The `langgraph dev` command starts a lightweight development server that requires no Docker installation. This server is ideal for rapid development and testing, with features like:
 
 - Hot reloading: Changes to your code are automatically detected and reloaded
@@ -56,6 +61,9 @@ The server includes all API endpoints for your graph's runs, threads, assistants
 ### `dockerfile`
 
 The `langgraph dockerfile` command generates a [Dockerfile](https://docs.docker.com/reference/dockerfile/) that can be used to build images for and deploy instances of the [LangGraph API server](./langgraph_server.md). This is useful if you want to further customize the dockerfile or deploy in a more custom way.
+
+??? note "Updating your langgraph.json file"
+    The `langgraph dockerfile` command translates all the configuration in your `langgraph.json` file into Dockerfile commands. When using this command, you will have to re-run it whenever you update your `langgraph.json` file. Otherwise, your changes will not be reflected when you build or run the dockerfile.
 
 ## Related
 

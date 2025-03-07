@@ -36,21 +36,20 @@ Dependencies can optionally be specified in one of the following files: `pyproje
 The dependencies below will be included in the image, you can also use them in your code, as long as with a compatible version range:
 
 ```
-langgraph>=0.2.30,<0.3.0
-langgraph-checkpoint>=1.0.14
+langgraph>=0.2.56,<0.4.0
+langgraph-sdk>=0.1.53
+langgraph-checkpoint>=2.0.15,<3.0
 langchain-core>=0.2.38,<0.4.0
 langsmith>=0.1.63
 orjson>=3.9.7
 httpx>=0.25.0
 tenacity>=8.0.0
 uvicorn>=0.26.0
-sse-starlette>=2.1.0
+sse-starlette>=2.1.0,<2.2.0
 uvloop>=0.18.0
 httptools>=0.5.0
-jsonschema-rs>=0.16.3
-croniter>=1.0.1
+jsonschema-rs>=0.20.0
 structlog>=23.1.0
-redis>=5.0.0,<6.0.0
 ```
 
 Example `requirements.txt` file:

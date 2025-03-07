@@ -80,8 +80,16 @@ def test_state_schema_with_type_hint():
     def pre_foo(_) -> FooState:
         return {"foo": "bar"}
 
+    def pre_bar(_) -> FooState:
+        return {"foo": "bar"}
+
     class Foo:
         def __call__(self, state: FooState) -> OutputState:
+            assert state.pop("foo") == "bar"
+            return {"input_state": state}
+
+    class Bar:
+        def my_node(self, state: FooState) -> OutputState:
             assert state.pop("foo") == "bar"
             return {"input_state": state}
 
@@ -93,6 +101,8 @@ def test_state_schema_with_type_hint():
         miss_all_hint,
         pre_foo,
         Foo(),
+        pre_bar,
+        Bar().my_node,
     ]
 
     for action in actions:
@@ -113,7 +123,7 @@ def test_state_schema_with_type_hint():
     foo_state = FooState(foo="bar")
     for i, c in enumerate(graph.stream(input_state, stream_mode="updates")):
         node_name = get_name(actions[i])
-        if node_name == get_name(pre_foo):
+        if node_name in {"pre_foo", "pre_bar"}:
             assert c[node_name] == foo_state
         else:
             assert c[node_name] == output_state

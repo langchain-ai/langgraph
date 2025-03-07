@@ -1,15 +1,16 @@
-# Quick Start: Launch Local LangGraph Server
+# Quickstart: Launch Local LangGraph Server
 
 This is a quick start guide to help you get a LangGraph app up and running locally.
 
 !!! info "Requirements"
 
+    - Python >= 3.11
     - [LangGraph CLI](https://langchain-ai.github.io/langgraph/cloud/reference/cli/): Requires langchain-cli[inmem] >= 0.1.58
 
 ## Install the LangGraph CLI
 
 ```bash
-pip install "langgraph-cli[inmem]==0.1.58" python-dot-env
+pip install --upgrade "langgraph-cli[inmem]"
 ```
 
 ## 🌱 Create a LangGraph App
@@ -32,6 +33,14 @@ Create a new app from the `react-agent` template. This template is a simple agen
 
     If you use `langgraph new` without specifying a template, you will be presented with an interactive menu that will allow you to choose from a list of available templates.
 
+## Install Dependencies
+
+In the root of your new LangGraph app, install the dependencies in `edit` mode so your local changes are used by the server:
+
+```shell
+pip install -e .
+```
+
 ## Create a `.env` file
 
 You will find a `.env.example` in the root of your new LangGraph app. Create
@@ -44,21 +53,12 @@ ANTHROPIC_API_KEY=sk-
 OPENAI_API_KEY=sk-...
 ```
 
-<details><summary>Get API Keys</summary>
-    <ul>
-        <li> <b>LANGSMITH_API_KEY</b>: Go to the <a href="https://smith.langchain.com/settings">LangSmith Settings page</a>. Then clck <b>Create API Key</b>.
-        </li>
-        <li>
-            <b>ANTHROPIC_API_KEY</b>: Get an API key from <a href="https://console.anthropic.com/">Anthropic</a>.
-        </li>
-        <li>
-            <b>OPENAI_API_KEY</b>: Get an API key from <a href="https://openai.com/">OpenAI</a>.
-        </li>
-        <li>
-            <b>TAVILY_API_KEY</b>: Get an API key on the <a href="https://app.tavily.com/">Tavily website</a>.
-        </li>
-    </ul>
-</details>
+??? note "Get API Keys"
+
+    - **LANGSMITH_API_KEY**: Go to the [LangSmith Settings page](https://smith.langchain.com/settings). Then clck **Create API Key**.
+    - **ANTHROPIC_API_KEY**: Get an API key from [Anthropic](https://console.anthropic.com/).
+    - **OPENAI_API_KEY**: Get an API key from [OpenAI](https://openai.com/).
+    - **TAVILY_API_KEY**: Get an API key on the [Tavily website](https://app.tavily.com/).
 
 ## 🚀 Launch LangGraph Server
 
@@ -70,11 +70,11 @@ This will start up the LangGraph API server locally. If this runs successfully, 
 
 >    Ready!
 > 
->    - API: [http://localhost:8123](http://localhost:8123/)
+>    - API: [http://localhost:2024](http://localhost:2024/)
 >     
->    - Docs: http://localhost:8123/docs
+>    - Docs: http://localhost:2024/docs
 >     
->    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:8123
+>    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
 
 
 !!! note "In-Memory Mode"
@@ -86,9 +86,18 @@ This will start up the LangGraph API server locally. If this runs successfully, 
 
 ## LangGraph Studio Web UI
 
-Test your graph in the LangGraph Studio Web UI by visiting the URL provided in the output of the `langgraph up` command.
+LangGraph Studio Web is a specialized UI that you can connect to LangGraph API server to enable visualization, interaction, and debugging of your application locally. Test your graph in the LangGraph Studio Web UI by visiting the URL provided in the output of the `langgraph dev` command.
 
->    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:8123
+>    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
+
+!!! info "Connecting to a server with a custom host/port"
+
+    If you are running the LangGraph API server with a custom host / port, you can point the Studio Web UI at it by changing the `baseUrl` URL param. For example, if you are running your server on port 8000, you can change the above URL to the following:
+
+    ```
+    https://smith.langchain.com/studio/baseUrl=http://127.0.0.1:8000
+    ```
+
 
 !!! warning "Safari Compatibility"
     
@@ -109,7 +118,7 @@ Test your graph in the LangGraph Studio Web UI by visiting the URL provided in t
     ```python
     from langgraph_sdk import get_client
 
-    client = get_client(url="http://localhost:8123")
+    client = get_client(url="http://localhost:2024")
 
     async for chunk in client.runs.stream(
         None,  # Threadless run
@@ -140,7 +149,7 @@ Test your graph in the LangGraph Studio Web UI by visiting the URL provided in t
     ```python
     from langgraph_sdk import get_sync_client
 
-    client = get_sync_client(url="http://localhost:8123")
+    client = get_sync_client(url="http://localhost:2024")
 
     for chunk in client.runs.stream(
         None,  # Threadless run
@@ -171,8 +180,8 @@ Test your graph in the LangGraph Studio Web UI by visiting the URL provided in t
     ```js
     const { Client } = await import("@langchain/langgraph-sdk");
 
-    // only set the apiUrl if you changed the default port when calling langgraph up
-    const client = new Client({ apiUrl: "http://localhost:8123"});
+    // only set the apiUrl if you changed the default port when calling langgraph dev
+    const client = new Client({ apiUrl: "http://localhost:2024"});
 
     const streamResponse = client.runs.stream(
         null, // Threadless run
@@ -198,7 +207,7 @@ Test your graph in the LangGraph Studio Web UI by visiting the URL provided in t
 
     ```bash
     curl -s --request POST \
-        --url "http://localhost:8123/runs/stream" \
+        --url "http://localhost:2024/runs/stream" \
         --header 'Content-Type: application/json' \
         --data "{
             \"assistant_id\": \"agent\",
@@ -226,7 +235,7 @@ Now that you have a LangGraph app running locally, take your journey further by 
 
 ### 🌐 Deploy to LangGraph Cloud
 
-- **[LangGraph Cloud QuickStart](../../cloud/quick_start.md)**: Deploy your LangGraph app using LangGraph Cloud.
+- **[LangGraph Cloud Quickstart](../../cloud/quick_start.md)**: Deploy your LangGraph app using LangGraph Cloud.
 
 ### 📚 Learn More about LangGraph Platform
 
@@ -241,4 +250,4 @@ Access detailed documentation for development and API usage:
 
 - **[LangGraph Server API Reference](../../cloud/reference/api/api_ref.html)**: Explore the LangGraph Server API documentation.  
 - **[Python SDK Reference](../../cloud/reference/sdk/python_sdk_ref.md)**: Explore the Python SDK API Reference.
-- **[JS/TS SDK Reference](../../cloud/reference/sdk/js_ts_sdk_ref.md)**: Explore the Python SDK API Reference.
+- **[JS/TS SDK Reference](../../cloud/reference/sdk/js_ts_sdk_ref.md)**: Explore the JS/TS SDK API Reference.

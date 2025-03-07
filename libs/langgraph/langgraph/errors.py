@@ -2,7 +2,7 @@ from enum import Enum
 from typing import Any, Sequence
 
 from langgraph.checkpoint.base import EmptyChannelError  # noqa: F401
-from langgraph.types import Interrupt
+from langgraph.types import Command, Interrupt
 
 # EmptyChannelError re-exported for backwards compatibility
 
@@ -58,7 +58,11 @@ class InvalidUpdateError(Exception):
     pass
 
 
-class GraphInterrupt(Exception):
+class GraphBubbleUp(Exception):
+    pass
+
+
+class GraphInterrupt(GraphBubbleUp):
     """Raised when a subgraph is interrupted, suppressed by the root graph.
     Never raised directly, or surfaced to the user."""
 
@@ -73,11 +77,18 @@ class NodeInterrupt(GraphInterrupt):
         super().__init__([Interrupt(value=value)])
 
 
-class GraphDelegate(Exception):
+class GraphDelegate(GraphBubbleUp):
     """Raised when a graph is delegated (for distributed mode)."""
 
     def __init__(self, *args: dict[str, Any]) -> None:
         super().__init__(*args)
+
+
+class ParentCommand(GraphBubbleUp):
+    args: tuple[Command]
+
+    def __init__(self, command: Command) -> None:
+        super().__init__(command)
 
 
 class EmptyInputError(Exception):
@@ -96,18 +107,3 @@ class CheckpointNotLatest(Exception):
     """Raised when the checkpoint is not the latest version (for distributed mode)."""
 
     pass
-
-
-class MultipleSubgraphsError(Exception):
-    """Raised when multiple subgraphs are called inside the same node.
-
-    Troubleshooting guides:
-
-    - [MULTIPLE_SUBGRAPHS](https://python.langchain.com/docs/troubleshooting/errors/MULTIPLE_SUBGRAPHS)
-    """
-
-    pass
-
-
-_SEEN_CHECKPOINT_NS: set[str] = set()
-"""Used for subgraph detection."""

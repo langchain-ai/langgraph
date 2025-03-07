@@ -10,10 +10,17 @@ function abs(relativePath) {
 }
 
 export const config = {
-  internals: [],
-  entrypoints: { index: "index", client: "client" },
+  internals: [/react/],
+  entrypoints: {
+    index: "index",
+    client: "client",
+    react: "react/index",
+    "react-ui": "react-ui/index",
+    "react-ui/server": "react-ui/server/index",
+  },
   tsConfigPath: resolve("./tsconfig.json"),
   cjsSource: "./dist-cjs",
   cjsDestination: "./dist",
+  additionalGitignorePaths: ["docs"],
   abs,
 };
