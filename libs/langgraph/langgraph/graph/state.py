@@ -855,7 +855,11 @@ class CompiledStateGraph(CompiledGraph):
         except (TypeError, StopIteration):
             pass
 
-        schema = input or self.builder.schema
+        schema = input or (
+            self.builder.nodes[start].input
+            if start in self.builder.nodes
+            else self.builder.schema
+        )
         # attach branch publisher
         self.nodes[start] |= branch.run(
             branch_writer,
