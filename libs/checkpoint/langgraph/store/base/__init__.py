@@ -166,6 +166,13 @@ class GetOp(NamedTuple):
         "doc456"  # For a document
         ```
     """
+    refresh_ttl: bool = True
+    """Whether to refresh TTLs for the returned item.
+
+    If no TTL was specified for the original item(s),
+    or if TTL support is not enabled for your adapter,
+    this argument is ignored.
+    """
 
 
 class SearchOp(NamedTuple):
@@ -259,6 +266,13 @@ class SearchOp(NamedTuple):
     ???+ example "Examples"
         - "technical documentation about REST APIs"
         - "machine learning papers from 2023"
+    """
+    refresh_ttl: bool = True
+    """Whether to refresh TTLs for the returned item.
+
+    If no TTL was specified for the original item(s),
+    or if TTL support is not enabled for your adapter,
+    this argument is ignored.
     """
 
 
@@ -463,6 +477,15 @@ class PutOp(NamedTuple):
         ]
         ```
     """
+    ttl: Optional[float] = None
+    """Controls the TTL (time-to-live) for the item in minutes.
+
+    If provided, and if the store you are using supports this feature, the item
+    will expire this many minutes after it was last accessed. The expiration timer
+    refreshes on both read operations (get/search) and write operations (put/update).
+    When the TTL expires, the item will be scheduled for deletion on a best-effort basis.
+    Defaults to None (no expiration).
+    """
 
 
 Op = Union[GetOp, SearchOp, PutOp, ListNamespacesOp]
@@ -612,7 +635,12 @@ class BaseStore(ABC):
         by providing an `index` configuration at creation time. Without this
         configuration, semantic search is disabled and any `index` arguments
         to storage operations will have no effect.
+
+        Similarly, TTL (time-to-live) support is disabled by default.
+        Subclasses must explicitly set `supports_ttl = True` to enable this feature.
     """
+
+    supports_ttl = False
 
     __slots__ = ("__weakref__",)
 
@@ -640,17 +668,21 @@ class BaseStore(ABC):
             The order of results matches the order of input operations.
         """
 
-    def get(self, namespace: tuple[str, ...], key: str) -> Optional[Item]:
+    def get(
+        self, namespace: tuple[str, ...], key: str, *, refresh_ttl: bool = True
+    ) -> Optional[Item]:
         """Retrieve a single item.
 
         Args:
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
+            refresh_ttl: Whether to refresh TTLs for the returned item.
+                If no TTL is specified, this argument is ignored.
 
         Returns:
             The retrieved item or None if not found.
         """
-        return self.batch([GetOp(namespace, key)])[0]
+        return self.batch([GetOp(namespace, key, refresh_ttl)])[0]
 
     def search(
         self,
@@ -661,6 +693,7 @@ class BaseStore(ABC):
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
+        refresh_ttl: bool = True,
     ) -> list[SearchItem]:
         """Search for items within a namespace prefix.
 
@@ -670,6 +703,8 @@ class BaseStore(ABC):
             filter: Key-value pairs to filter results.
             limit: Maximum number of items to return.
             offset: Number of items to skip before returning results.
+            refresh_ttl: Whether to refresh TTLs for the returned items.
+                If no TTL is specified, this argument is ignored.
 
         Returns:
             List of items matching the search criteria.
@@ -707,7 +742,9 @@ class BaseStore(ABC):
             Note: Natural language search support depends on your store implementation
             and requires proper embedding configuration.
         """
-        return self.batch([SearchOp(namespace_prefix, filter, limit, offset, query)])[0]
+        return self.batch(
+            [SearchOp(namespace_prefix, filter, limit, offset, query, refresh_ttl)]
+        )[0]
 
     def put(
         self,
@@ -715,6 +752,8 @@ class BaseStore(ABC):
         key: str,
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
+        *,
+        ttl: Optional[float] = None,
     ) -> None:
         """Store or update an item in the store.
 
@@ -735,11 +774,19 @@ class BaseStore(ABC):
                     - Nested fields: "metadata.title"
                     - Array access: "chapters[*].content" (each indexed separately)
                     - Specific indices: "authors[0].name"
+            ttl: Time to live in minutes. Support for this argument depends on your store adapter.
+                If specified, the item will expire after this many minutes from when it was last accessed.
+                None means no expiration. Expired runs will be deleted opportunistically.
+                By default, the expiration timer refreshes on both read operations (get/search)
+                and write operations (put/update), whenever the item is included in the operation.
 
         Note:
             Indexing support depends on your store implementation.
             If you do not initialize the store with indexing capabilities,
             the `index` parameter will be ignored.
+
+            Similarly, TTL support depends on the specific store implementation.
+            Some implementations may not support expiration of items.
 
         ???+ example "Examples"
             Store item. Indexing depends on how you configure the store.
@@ -759,7 +806,12 @@ class BaseStore(ABC):
             ```
         """
         _validate_namespace(namespace)
-        self.batch([PutOp(namespace, key, value, index=index)])
+        if ttl is not None and not self.supports_ttl:
+            raise NotImplementedError(
+                f"TTL is not supported by {self.__class__.__name__}. "
+                f"Use a store implementation that supports TTL or set ttl=None."
+            )
+        self.batch([PutOp(namespace, key, value, index=index, ttl=ttl)])
 
     def delete(self, namespace: tuple[str, ...], key: str) -> None:
         """Delete an item.
@@ -768,7 +820,7 @@ class BaseStore(ABC):
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
         """
-        self.batch([PutOp(namespace, key, None)])
+        self.batch([PutOp(namespace, key, None, ttl=None)])
 
     def list_namespaces(
         self,
@@ -823,7 +875,9 @@ class BaseStore(ABC):
         )
         return self.batch([op])[0]
 
-    async def aget(self, namespace: tuple[str, ...], key: str) -> Optional[Item]:
+    async def aget(
+        self, namespace: tuple[str, ...], key: str, *, refresh_ttl: bool = True
+    ) -> Optional[Item]:
         """Asynchronously retrieve a single item.
 
         Args:
@@ -833,7 +887,7 @@ class BaseStore(ABC):
         Returns:
             The retrieved item or None if not found.
         """
-        return (await self.abatch([GetOp(namespace, key)]))[0]
+        return (await self.abatch([GetOp(namespace, key, refresh_ttl)]))[0]
 
     async def asearch(
         self,
@@ -844,6 +898,7 @@ class BaseStore(ABC):
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
+        refresh_ttl: bool = True,
     ) -> list[SearchItem]:
         """Asynchronously search for items within a namespace prefix.
 
@@ -853,6 +908,9 @@ class BaseStore(ABC):
             filter: Key-value pairs to filter results.
             limit: Maximum number of items to return.
             offset: Number of items to skip before returning results.
+            refresh_ttl: Whether to refresh TTLs for the returned items.
+                Defaults to True. If no TTL is specified, this argument
+                is ignored.
 
         Returns:
             List of items matching the search criteria.
@@ -892,7 +950,7 @@ class BaseStore(ABC):
         """
         return (
             await self.abatch(
-                [SearchOp(namespace_prefix, filter, limit, offset, query)]
+                [SearchOp(namespace_prefix, filter, limit, offset, query, refresh_ttl)]
             )
         )[0]
 
@@ -902,6 +960,8 @@ class BaseStore(ABC):
         key: str,
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
+        *,
+        ttl: Optional[float] = None,
     ) -> None:
         """Asynchronously store or update an item in the store.
 
@@ -922,11 +982,19 @@ class BaseStore(ABC):
                     - Nested fields: "metadata.title"
                     - Array access: "chapters[*].content" (each indexed separately)
                     - Specific indices: "authors[0].name"
+            ttl: Time to live in minutes. Support for this argument depends on your store adapter.
+                If specified, the item will expire after this many minutes from when it was last accessed.
+                None means no expiration. Expired runs will be deleted opportunistically.
+                By default, the expiration timer refreshes on both read operations (get/search)
+                and write operations (put/update), whenever the item is included in the operation.
 
         Note:
             Indexing support depends on your store implementation.
             If you do not initialize the store with indexing capabilities,
             the `index` parameter will be ignored.
+
+            Similarly, TTL support depends on the specific store implementation.
+            Some implementations may not support expiration of items.
 
         ???+ example "Examples"
             Store item. Indexing depends on how you configure the store.
@@ -954,7 +1022,12 @@ class BaseStore(ABC):
             ```
         """
         _validate_namespace(namespace)
-        await self.abatch([PutOp(namespace, key, value, index=index)])
+        if ttl is not None and not self.supports_ttl:
+            raise NotImplementedError(
+                f"TTL is not supported by {self.__class__.__name__}. "
+                f"Use a store implementation that supports TTL or set ttl=None."
+            )
+        await self.abatch([PutOp(namespace, key, value, index=index, ttl=ttl)])
 
     async def adelete(self, namespace: tuple[str, ...], key: str) -> None:
         """Asynchronously delete an item.

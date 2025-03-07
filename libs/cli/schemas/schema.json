@@ -96,6 +96,20 @@
                 }
               ],
               "description": "Optional. Configuration for the built-in long-term memory store, including semantic search indexing.\n\nIf omitted, no vector index is set up (the object store will still be present, however).\n"
+            },
+            "ui": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Named definitions of UI components emitted by the agent, each pointing to a JS/TS file.\n"
             }
           },
           "required": [
@@ -187,6 +201,20 @@
                 }
               ],
               "description": "Optional. Configuration for the built-in long-term memory store, including semantic search indexing.\n\nIf omitted, no vector index is set up (the object store will still be present, however).\n"
+            },
+            "ui": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Named definitions of UI components emitted by the agent, each pointing to a JS/TS file.\n"
             }
           },
           "required": [

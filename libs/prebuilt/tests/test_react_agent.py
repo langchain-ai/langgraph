@@ -35,6 +35,8 @@ from langgraph.prebuilt import (
 )
 from langgraph.prebuilt.chat_agent_executor import (
     AgentState,
+    _get_model,
+    _should_bind_tools,
     _validate_chat_history,
 )
 from langgraph.prebuilt.tool_node import (
@@ -1324,3 +1326,66 @@ def test_tool_node_node_interrupt(
             ns=[AnyStr("tools:")],
         ),
     )
+
+
+@pytest.mark.parametrize("tool_style", ["openai", "anthropic"])
+def test_should_bind_tools(tool_style: str) -> None:
+    @dec_tool
+    def some_tool(some_val: int) -> str:
+        """Tool docstring."""
+        return "meow"
+
+    @dec_tool
+    def some_other_tool(some_val: int) -> str:
+        """Tool docstring."""
+        return "meow"
+
+    model = FakeToolCallingModel(tool_style=tool_style)
+    # should bind when a regular model
+    assert _should_bind_tools(model, [])
+    assert _should_bind_tools(model, [some_tool])
+
+    # should bind when a seq
+    seq = model | RunnableLambda(lambda message: message)
+    assert _should_bind_tools(seq, [])
+    assert _should_bind_tools(seq, [some_tool])
+
+    # should not bind when a model with tools
+    assert not _should_bind_tools(model.bind_tools([some_tool]), [some_tool])
+    # should not bind when a seq with tools
+    seq_with_tools = model.bind_tools([some_tool]) | RunnableLambda(
+        lambda message: message
+    )
+    assert not _should_bind_tools(seq_with_tools, [some_tool])
+
+    # should raise on invalid inputs
+    with pytest.raises(ValueError):
+        _should_bind_tools(model.bind_tools([some_tool]), [])
+    with pytest.raises(ValueError):
+        _should_bind_tools(model.bind_tools([some_tool]), [some_other_tool])
+    with pytest.raises(ValueError):
+        _should_bind_tools(model.bind_tools([some_tool]), [some_tool, some_other_tool])
+
+
+def test_get_model() -> None:
+    model = FakeToolCallingModel(tool_calls=[])
+    assert _get_model(model) == model
+
+    @dec_tool
+    def some_tool(some_val: int) -> str:
+        """Tool docstring."""
+        return "meow"
+
+    model_with_tools = model.bind_tools([some_tool])
+    assert _get_model(model_with_tools) == model
+
+    seq = model | RunnableLambda(lambda message: message)
+    assert _get_model(seq) == model
+
+    seq_with_tools = model.bind_tools([some_tool]) | RunnableLambda(
+        lambda message: message
+    )
+    assert _get_model(seq_with_tools) == model
+
+    with pytest.raises(TypeError):
+        _get_model(RunnableLambda(lambda message: message))

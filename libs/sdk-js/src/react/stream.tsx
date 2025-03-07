@@ -482,7 +482,7 @@ interface UseStreamOptions<
   onThreadId?: (threadId: string) => void;
 }
 
-interface UseStream<
+export interface UseStream<
   StateType extends Record<string, unknown> = Record<string, unknown>,
   Bag extends BagTemplate = BagTemplate,
 > {

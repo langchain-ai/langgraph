@@ -148,8 +148,8 @@ async def test_async_batch_store(mocker: MockerFixture) -> None:
     assert abatch.call_count == 1
     assert [tuple(c.args[0]) for c in abatch.call_args_list] == [
         (
-            GetOp(("a",), "b"),
-            GetOp(("c",), "d"),
+            GetOp(("a",), "b", refresh_ttl=True),
+            GetOp(("c",), "d", refresh_ttl=True),
         ),
     ]
 
@@ -467,8 +467,8 @@ async def test_async_batch_store_deduplication(mocker: MockerFixture) -> None:
     assert len(abatch.call_args_list) == 1
     ops = list(abatch.call_args_list[0].args[1])
     assert len(ops) == 2
-    assert GetOp(("test",), "same") in ops
-    assert GetOp(("test",), "different") in ops
+    assert GetOp(("test",), "same", refresh_ttl=True) in ops
+    assert GetOp(("test",), "different", refresh_ttl=True) in ops
 
     abatch.reset_mock()
 
