@@ -133,6 +133,11 @@ class Interrupt:
     when: Literal["during"] = dataclasses.field(default="during", repr=False)
 
 
+class BulkUpdate(NamedTuple):
+    values: dict[str, Any] | None
+    as_node: Optional[str]
+
+
 class PregelTask(NamedTuple):
     id: str
     name: str
