@@ -345,12 +345,13 @@ def test_input_schema_conditional_edge():
         return {"foo": 1, "baz": "bar"}
 
     def node_2(state: PrivateState):
-        return {"foo": 1, "bar": state["baz"]}
+        return {"foo": 1, "bar": state["baz"], "something_else": "meow"}
 
     def node_3(state: OverallState):
         return {"foo": 1}
 
     def router(state: OverallState):
+        assert state == {"foo": 2, "bar": "bar"}
         if state["foo"] == 2:
             return "node_3"
         else:
@@ -371,7 +372,11 @@ def test_private_input_schema_conditional_edge():
         foo: Annotated[int, operator.add]
         bar: str
 
-    class PrivateState(TypedDict):
+    class RouterState(TypedDict):
+        baz: str
+
+    class Node2State(TypedDict):
+        foo: Annotated[int, operator.add]
         baz: str
 
     builder = StateGraph(OverallState)
@@ -379,10 +384,11 @@ def test_private_input_schema_conditional_edge():
     def node_1(state: OverallState):
         return {"foo": 1, "baz": "meow"}
 
-    def node_2(state: PrivateState):
+    def node_2(state: Node2State):
         return {"foo": 1, "bar": state["baz"]}
 
-    def router(state: PrivateState):
+    def router(state: RouterState):
+        assert state == {"baz": "meow"}
         if state["baz"] == "meow":
             return "node_2"
         else:

@@ -7,6 +7,7 @@ from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
 from typing import (
     Any,
+    Awaitable,
     Callable,
     Literal,
     NamedTuple,
@@ -21,7 +22,7 @@ from typing import (
     overload,
 )
 
-from langchain_core.runnables import Runnable, RunnableConfig
+from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
 from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import Self
@@ -40,7 +41,15 @@ from langgraph.errors import (
     ParentCommand,
     create_error_message,
 )
-from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph, Send
+from langgraph.graph.graph import (
+    END,
+    START,
+    Branch,
+    CompiledGraph,
+    Graph,
+    Hashable,
+    Send,
+)
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
     ChannelTypePlaceholder,
@@ -83,6 +92,34 @@ def _get_node_name(node: RunnableLike) -> str:
         return getattr(node, "__name__", node.__class__.__name__)
     else:
         raise TypeError(f"Unsupported node type: {type(node)}")
+
+
+def _get_branch_path_input_schema(path: Runnable) -> Optional[Type[Any]]:
+    input = None
+    # detect input schema annotation in the branch callable
+    try:
+        callable_ = None
+        if isinstance(path, (RunnableCallable, RunnableLambda)):
+            if isfunction(path.func):
+                callable_ = path.func
+            elif (callable_method := getattr(path.func, "__call__", None)) and ismethod(
+                callable_method
+            ):
+                callable_ = callable_method
+        elif callable(path):
+            callable_ = path
+
+        if callable_ is not None and (hints := get_type_hints(callable_)):
+            first_parameter_name = next(
+                iter(inspect.signature(cast(FunctionType, callable_)).parameters.keys())
+            )
+            if input_hint := hints.get(first_parameter_name):
+                if isinstance(input_hint, type) and get_type_hints(input_hint):
+                    input = input_hint
+    except (TypeError, StopIteration):
+        pass
+
+    return input
 
 
 class StateNodeSpec(NamedTuple):
@@ -461,6 +498,46 @@ class StateGraph(Graph):
         self.waiting_edges.add((tuple(start_key), end_key))
         return self
 
+    def add_conditional_edges(
+        self,
+        source: str,
+        path: Union[
+            Callable[..., Union[Hashable, list[Hashable]]],
+            Callable[..., Awaitable[Union[Hashable, list[Hashable]]]],
+            Runnable[Any, Union[Hashable, list[Hashable]]],
+        ],
+        path_map: Optional[Union[dict[Hashable, str], list[str]]] = None,
+        then: Optional[str] = None,
+    ) -> Self:
+        """Add a conditional edge from the starting node to any number of destination nodes.
+
+        Args:
+            source (str): The starting node. This conditional edge will run when
+                exiting this node.
+            path (Union[Callable, Runnable]): The callable that determines the next
+                node or nodes. If not specifying `path_map` it should return one or
+                more nodes. If it returns END, the graph will stop execution.
+            path_map (Optional[dict[Hashable, str]]): Optional mapping of paths to node
+                names. If omitted the paths returned by `path` should be node names.
+            then (Optional[str]): The name of a node to execute after the nodes
+                selected by `path`.
+
+        Returns:
+            Self: The instance of the graph, allowing for method chaining.
+
+        Note: Without typehints on the `path` function's return value (e.g., `-> Literal["foo", "__end__"]:`)
+            or a path_map, the graph visualization assumes the edge could transition to any node in the graph.
+
+        """  # noqa: E501
+        super().add_conditional_edges(source, path, path_map, then)
+        input = _get_branch_path_input_schema(path)
+        # add branch input schema so that a completely separate private state
+        # schema can be used in a branch
+        if input:
+            self._add_schema(input)
+
+        return self
+
     def add_sequence(
         self,
         nodes: Sequence[Union[RunnableLike, tuple[str, RunnableLike]]],
@@ -827,33 +904,11 @@ class CompiledStateGraph(CompiledGraph):
                 )
 
         # detect branch input schema
-        input = None
-
-        # detect input schema annotation in the branch callable
-        try:
-            if (
-                isinstance(branch.path, RunnableCallable)
-                and (
-                    isfunction(branch.path.func)
-                    or ismethod(getattr(branch.path.func, "__call__", None))
-                )
-                and (
-                    hints := get_type_hints(getattr(branch.path.func, "__call__"))
-                    or get_type_hints(branch.path.func)
-                )
-            ):
-                first_parameter_name = next(
-                    iter(
-                        inspect.signature(
-                            cast(FunctionType, branch.path.func)
-                        ).parameters.keys()
-                    )
-                )
-                if input_hint := hints.get(first_parameter_name):
-                    if isinstance(input_hint, type) and get_type_hints(input_hint):
-                        input = input_hint
-        except (TypeError, StopIteration):
-            pass
+        input = _get_branch_path_input_schema(branch.path)
+        if input:
+            # don't allow passing extra keys from node to branch
+            # if an explicit schema is provided
+            branch = branch._replace(allow_extra_keys=False)
 
         schema = input or (
             self.builder.nodes[start].input
