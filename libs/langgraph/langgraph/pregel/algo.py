@@ -436,9 +436,10 @@ def prepare_single_task(
     checkpoint_id = UUID(checkpoint["id"]).bytes
     configurable = config.get(CONF, {})
     parent_ns = configurable.get(CONFIG_KEY_CHECKPOINT_NS, "")
+    task_type = task_path[0]
 
-    if task_path[0] == PUSH and isinstance(task_path[-1], Call):
-        # (PUSH, parent task path, idx of PUSH write, id of parent task, Call)
+    def _handle_push_call() -> Union[None, PregelTask, PregelExecutableTask]:
+        """(PUSH, parent task path, idx of PUSH write, id of parent task, Call)"""
         task_path_t = cast(tuple[str, tuple, int, str, Call], task_path)
         call = task_path_t[-1]
         proc_ = get_runnable_for_task(call.func)
@@ -467,93 +468,94 @@ def prepare_single_task(
         }
         if task_id_checksum is not None:
             assert task_id == task_id_checksum, f"{task_id} != {task_id_checksum}"
-        if for_execution:
-            writes: deque[tuple[str, Any]] = deque()
-            return PregelExecutableTask(
-                name,
-                call.input,
-                proc_,
-                writes,
-                patch_config(
-                    merge_configs(config, {"metadata": metadata}),
-                    run_name=name,
-                    callbacks=call.callbacks
-                    or (manager.get_child(f"graph:step:{step}") if manager else None),
-                    configurable={
-                        CONFIG_KEY_TASK_ID: task_id,
-                        # deque.extend is thread-safe
-                        CONFIG_KEY_SEND: partial(
-                            local_write,
-                            writes.extend,
-                            processes.keys(),
-                        ),
-                        CONFIG_KEY_READ: partial(
-                            local_read,
-                            step,
-                            checkpoint,
-                            channels,
-                            managed,
-                            PregelTaskWrites(task_path[:3], name, writes, triggers),
-                            config,
-                        ),
-                        CONFIG_KEY_STORE: (store or configurable.get(CONFIG_KEY_STORE)),
-                        CONFIG_KEY_CHECKPOINTER: (
-                            checkpointer or configurable.get(CONFIG_KEY_CHECKPOINTER)
-                        ),
-                        CONFIG_KEY_CHECKPOINT_MAP: {
-                            **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
-                            parent_ns: checkpoint["id"],
-                        },
-                        CONFIG_KEY_CHECKPOINT_ID: None,
-                        CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
-                        CONFIG_KEY_SCRATCHPAD: _scratchpad(
-                            pending_writes,
-                            task_id,
-                        ),
-                    },
-                ),
-                triggers,
-                call.retry,
-                None,
-                task_id,
-                task_path[:3],
-            )
-        else:
+        if not for_execution:
             return PregelTask(task_id, name, task_path[:3])
-    elif task_path[0] == PUSH:
-        if len(task_path) == 2:
-            # SEND tasks, executed in superstep n+1
-            # (PUSH, idx of pending send)
-            idx = cast(int, task_path[1])
-            if idx >= len(checkpoint["pending_sends"]):
-                return
-            packet = checkpoint["pending_sends"][idx]
-            if not isinstance(packet, Send):
-                logger.warning(
-                    f"Ignoring invalid packet type {type(packet)} in pending sends"
-                )
-                return
-            if packet.node not in processes:
-                logger.warning(
-                    f"Ignoring unknown node name {packet.node} in pending sends"
-                )
-                return
-            # create task id
-            triggers = [PUSH]
-            checkpoint_ns = (
-                f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
-            )
-            task_id = _uuid5_str(
-                checkpoint_id,
-                checkpoint_ns,
-                str(step),
-                packet.node,
-                PUSH,
-                str(idx),
-            )
-        else:
+
+        writes: deque[tuple[str, Any]] = deque()
+        new_config = patch_config(
+            merge_configs(config, {"metadata": metadata}),
+            run_name=name,
+            callbacks=call.callbacks
+            or (manager.get_child(f"graph:step:{step}") if manager else None),
+            configurable={
+                CONFIG_KEY_TASK_ID: task_id,
+                # deque.extend is thread-safe
+                CONFIG_KEY_SEND: partial(
+                    local_write,
+                    writes.extend,
+                    processes.keys(),
+                ),
+                CONFIG_KEY_READ: partial(
+                    local_read,
+                    step,
+                    checkpoint,
+                    channels,
+                    managed,
+                    PregelTaskWrites(task_path[:3], name, writes, triggers),
+                    config,
+                ),
+                CONFIG_KEY_STORE: (store or configurable.get(CONFIG_KEY_STORE)),
+                CONFIG_KEY_CHECKPOINTER: (
+                    checkpointer or configurable.get(CONFIG_KEY_CHECKPOINTER)
+                ),
+                CONFIG_KEY_CHECKPOINT_MAP: {
+                    **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
+                    parent_ns: checkpoint["id"],
+                },
+                CONFIG_KEY_CHECKPOINT_ID: None,
+                CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
+                CONFIG_KEY_SCRATCHPAD: _scratchpad(
+                    pending_writes,
+                    task_id,
+                ),
+            },
+        )
+        return PregelExecutableTask(
+            name,
+            call.input,
+            proc_,
+            writes,
+            new_config,
+            triggers,
+            call.retry,
+            None,
+            task_id,
+            task_path[:3],
+        )
+
+    def _handle_push_send() -> Union[None, PregelTask, PregelExecutableTask]:
+        if len(task_path) != 2:
             logger.warning(f"Ignoring invalid PUSH task path {task_path}")
             return
+
+        # SEND tasks, executed in superstep n+1
+        # (PUSH, idx of pending send)
+        idx = cast(int, task_path[1])
+        if idx >= len(checkpoint["pending_sends"]):
+            return
+        packet = checkpoint["pending_sends"][idx]
+        if not isinstance(packet, Send):
+            logger.warning(
+                f"Ignoring invalid packet type {type(packet)} in pending sends"
+            )
+            return
+        if packet.node not in processes:
+            logger.warning(f"Ignoring unknown node name {packet.node} in pending sends")
+            return
+        # create task id
+        triggers = [PUSH]
+        checkpoint_ns = (
+            f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
+        )
+        task_id = _uuid5_str(
+            checkpoint_id,
+            checkpoint_ns,
+            str(step),
+            packet.node,
+            PUSH,
+            str(idx),
+        )
+
         task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
         metadata = {
             "langgraph_step": step,
@@ -564,78 +566,71 @@ def prepare_single_task(
         }
         if task_id_checksum is not None:
             assert task_id == task_id_checksum, f"{task_id} != {task_id_checksum}"
-        if for_execution:
-            proc = processes[packet.node]
-            if node := proc.node:
-                if proc.metadata:
-                    metadata.update(proc.metadata)
-                writes = deque()
-                return PregelExecutableTask(
-                    packet.node,
-                    packet.arg,
-                    node,
-                    writes,
-                    patch_config(
-                        merge_configs(
-                            config, {"metadata": metadata, "tags": proc.tags}
-                        ),
-                        run_name=packet.node,
-                        callbacks=(
-                            manager.get_child(f"graph:step:{step}") if manager else None
-                        ),
-                        configurable={
-                            CONFIG_KEY_TASK_ID: task_id,
-                            # deque.extend is thread-safe
-                            CONFIG_KEY_SEND: partial(
-                                local_write,
-                                writes.extend,
-                                processes.keys(),
-                            ),
-                            CONFIG_KEY_READ: partial(
-                                local_read,
-                                step,
-                                checkpoint,
-                                channels,
-                                managed,
-                                PregelTaskWrites(
-                                    task_path[:3], packet.node, writes, triggers
-                                ),
-                                config,
-                            ),
-                            CONFIG_KEY_STORE: (
-                                store or configurable.get(CONFIG_KEY_STORE)
-                            ),
-                            CONFIG_KEY_CHECKPOINTER: (
-                                checkpointer
-                                or configurable.get(CONFIG_KEY_CHECKPOINTER)
-                            ),
-                            CONFIG_KEY_CHECKPOINT_MAP: {
-                                **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
-                                parent_ns: checkpoint["id"],
-                            },
-                            CONFIG_KEY_CHECKPOINT_ID: None,
-                            CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
-                            CONFIG_KEY_SCRATCHPAD: _scratchpad(
-                                pending_writes,
-                                task_id,
-                            ),
-                            CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
-                                PREVIOUS, None
-                            ),
-                        },
-                    ),
-                    triggers,
-                    proc.retry_policy,
-                    None,
-                    task_id,
-                    task_path[:3],
-                    writers=proc.flat_writers,
-                    subgraphs=proc.subgraphs,
-                )
-        else:
+        if not for_execution:
             return PregelTask(task_id, packet.node, task_path[:3])
-    elif task_path[0] == PULL:
-        # (PULL, node name)
+        proc = processes[packet.node]
+        node = proc.node
+        if not node:
+            return None
+
+        if proc.metadata:
+            metadata.update(proc.metadata)
+        writes = deque()
+        new_config = patch_config(
+            merge_configs(config, {"metadata": metadata, "tags": proc.tags}),
+            run_name=packet.node,
+            callbacks=(manager.get_child(f"graph:step:{step}") if manager else None),
+            configurable={
+                CONFIG_KEY_TASK_ID: task_id,
+                # deque.extend is thread-safe
+                CONFIG_KEY_SEND: partial(
+                    local_write,
+                    writes.extend,
+                    processes.keys(),
+                ),
+                CONFIG_KEY_READ: partial(
+                    local_read,
+                    step,
+                    checkpoint,
+                    channels,
+                    managed,
+                    PregelTaskWrites(task_path[:3], packet.node, writes, triggers),
+                    config,
+                ),
+                CONFIG_KEY_STORE: (store or configurable.get(CONFIG_KEY_STORE)),
+                CONFIG_KEY_CHECKPOINTER: (
+                    checkpointer or configurable.get(CONFIG_KEY_CHECKPOINTER)
+                ),
+                CONFIG_KEY_CHECKPOINT_MAP: {
+                    **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
+                    parent_ns: checkpoint["id"],
+                },
+                CONFIG_KEY_CHECKPOINT_ID: None,
+                CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
+                CONFIG_KEY_SCRATCHPAD: _scratchpad(
+                    pending_writes,
+                    task_id,
+                ),
+                CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(PREVIOUS, None),
+            },
+        )
+        return PregelExecutableTask(
+            packet.node,
+            packet.arg,
+            node,
+            writes,
+            new_config,
+            triggers,
+            proc.retry_policy,
+            None,
+            task_id,
+            task_path[:3],
+            writers=proc.flat_writers,
+            subgraphs=proc.subgraphs,
+        )
+
+    def _handle_pull() -> Union[None, PregelTask, PregelExecutableTask]:
+        """(PULL, node name)"""
         name = cast(str, task_path[1])
         if name not in processes:
             return
@@ -688,77 +683,79 @@ def prepare_single_task(
             }
             if task_id_checksum is not None:
                 assert task_id == task_id_checksum, f"{task_id} != {task_id_checksum}"
-            if for_execution:
-                if node := proc.node:
-                    if proc.metadata:
-                        metadata.update(proc.metadata)
-                    writes = deque()
-                    return PregelExecutableTask(
-                        name,
-                        val,
-                        node,
-                        writes,
-                        patch_config(
-                            merge_configs(
-                                config, {"metadata": metadata, "tags": proc.tags}
-                            ),
-                            run_name=name,
-                            callbacks=(
-                                manager.get_child(f"graph:step:{step}")
-                                if manager
-                                else None
-                            ),
-                            configurable={
-                                CONFIG_KEY_TASK_ID: task_id,
-                                # deque.extend is thread-safe
-                                CONFIG_KEY_SEND: partial(
-                                    local_write,
-                                    writes.extend,
-                                    processes.keys(),
-                                ),
-                                CONFIG_KEY_READ: partial(
-                                    local_read,
-                                    step,
-                                    checkpoint,
-                                    channels,
-                                    managed,
-                                    PregelTaskWrites(
-                                        task_path[:3], name, writes, triggers
-                                    ),
-                                    config,
-                                ),
-                                CONFIG_KEY_STORE: (
-                                    store or configurable.get(CONFIG_KEY_STORE)
-                                ),
-                                CONFIG_KEY_CHECKPOINTER: (
-                                    checkpointer
-                                    or configurable.get(CONFIG_KEY_CHECKPOINTER)
-                                ),
-                                CONFIG_KEY_CHECKPOINT_MAP: {
-                                    **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
-                                    parent_ns: checkpoint["id"],
-                                },
-                                CONFIG_KEY_CHECKPOINT_ID: None,
-                                CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
-                                CONFIG_KEY_SCRATCHPAD: _scratchpad(
-                                    pending_writes,
-                                    task_id,
-                                ),
-                                CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
-                                    PREVIOUS, None
-                                ),
-                            },
-                        ),
-                        triggers,
-                        proc.retry_policy,
-                        None,
-                        task_id,
-                        task_path[:3],
-                        writers=proc.flat_writers,
-                        subgraphs=proc.subgraphs,
-                    )
-            else:
+            if not for_execution:
                 return PregelTask(task_id, name, task_path[:3])
+            node = proc.node
+            if not node:
+                return None
+            if proc.metadata:
+                metadata.update(proc.metadata)
+            writes = deque()
+            new_config = patch_config(
+                merge_configs(config, {"metadata": metadata, "tags": proc.tags}),
+                run_name=name,
+                callbacks=(
+                    manager.get_child(f"graph:step:{step}") if manager else None
+                ),
+                configurable={
+                    CONFIG_KEY_TASK_ID: task_id,
+                    # deque.extend is thread-safe
+                    CONFIG_KEY_SEND: partial(
+                        local_write,
+                        writes.extend,
+                        processes.keys(),
+                    ),
+                    CONFIG_KEY_READ: partial(
+                        local_read,
+                        step,
+                        checkpoint,
+                        channels,
+                        managed,
+                        PregelTaskWrites(task_path[:3], name, writes, triggers),
+                        config,
+                    ),
+                    CONFIG_KEY_STORE: (store or configurable.get(CONFIG_KEY_STORE)),
+                    CONFIG_KEY_CHECKPOINTER: (
+                        checkpointer or configurable.get(CONFIG_KEY_CHECKPOINTER)
+                    ),
+                    CONFIG_KEY_CHECKPOINT_MAP: {
+                        **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
+                        parent_ns: checkpoint["id"],
+                    },
+                    CONFIG_KEY_CHECKPOINT_ID: None,
+                    CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
+                    CONFIG_KEY_SCRATCHPAD: _scratchpad(
+                        pending_writes,
+                        task_id,
+                    ),
+                    CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
+                        PREVIOUS, None
+                    ),
+                },
+            )
+            return PregelExecutableTask(
+                name,
+                val,
+                node,
+                writes,
+                new_config,
+                triggers,
+                proc.retry_policy,
+                None,
+                task_id,
+                task_path[:3],
+                writers=proc.flat_writers,
+                subgraphs=proc.subgraphs,
+            )
+
+    if task_type == PUSH:
+        if isinstance(task_path[-1], Call):
+            return _handle_push_call()
+        else:
+            return _handle_push_send()
+    elif task_type == PULL:
+        return _handle_pull()
+    return None
 
 
 def _scratchpad(
