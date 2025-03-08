@@ -1,5 +1,8 @@
 #A list of third-party packages to surface on the third-party page.
 packages:
+  - name: "ads4gpts-langgraph-agent"
+    repo: "ADS4GPTs/ads4gpts-langgraph-agent"
+    description: "ADS4GPTs LangGraph agent. Integrate Ads into AI Agents for application monetization."
   - name: "trustcall"
     repo: "hinthornw/trustcall"
     description: "Tenacious tool calling built on LangGraph."
