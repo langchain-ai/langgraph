@@ -198,7 +198,7 @@ class CorsConfig(TypedDict, total=False):
     allow_origin_regex: str
     """Optional. A regex pattern for matching allowed origins, used if you have dynamic subdomains.
     
-    Example: "^https://.*\.mycompany\.com$"
+    Example: "^https://\\.*\\.mycompany\\.com$"
     """
     expose_headers: list[str]
     """Optional. List of headers that browsers are allowed to read from the response in cross-origin contexts."""
