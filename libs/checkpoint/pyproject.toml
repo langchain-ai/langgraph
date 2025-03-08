@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph-checkpoint"
-version = "2.0.17"
+version = "2.0.18"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 authors = []
 license = "MIT"
