@@ -464,6 +464,11 @@ interface UseStreamOptions<
    */
   onCustomEvent?: (
     data: CustomStreamEvent<GetCustomEventType<Bag>>["data"],
+    options: {
+      mutate: (
+        update: Partial<StateType> | ((prev: StateType) => Partial<StateType>),
+      ) => void;
+    },
   ) => void;
 
   /**
@@ -834,7 +839,18 @@ export function useStream<
         }
 
         if (event === "updates") options.onUpdateEvent?.(data);
-        if (event === "custom") options.onCustomEvent?.(data);
+        if (event === "custom")
+          options.onCustomEvent?.(data, {
+            mutate: (update) =>
+              setStreamValues((prev) => {
+                // should not happen
+                if (prev == null) return prev;
+                return {
+                  ...prev,
+                  ...(typeof update === "function" ? update(prev) : update),
+                };
+              }),
+          });
         if (event === "metadata") options.onMetadataEvent?.(data);
 
         if (event === "values") setStreamValues(data);

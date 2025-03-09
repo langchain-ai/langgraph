@@ -6,6 +6,7 @@ export interface UIMessage {
   content: Record<string, unknown>;
   additional_kwargs: {
     run_id: string;
+    message_id?: string;
     [key: string]: unknown;
   };
 }
