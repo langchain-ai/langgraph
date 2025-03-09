@@ -33,6 +33,7 @@ def test_validate_config():
         "store": None,
         "auth": None,
         "http": None,
+        "ui": None,
         **expected_config,
     }
     actual_config = validate_config(expected_config)
@@ -52,6 +53,7 @@ def test_validate_config():
         "store": None,
         "auth": None,
         "http": None,
+        "ui": None,
     }
     actual_config = validate_config(expected_config)
     assert actual_config == expected_config
@@ -467,6 +469,7 @@ def test_config_to_docker_nodejs():
                 "node_version": "20",
                 "graphs": graphs,
                 "dockerfile_lines": ["ARG meow", "ARG foo"],
+                "ui": {"agent": "./graphs/agent.ui.jsx"},
             }
         ),
         "langchain/langgraphjs-api",
@@ -477,6 +480,7 @@ ARG foo
 ADD . /deps/unit_tests
 RUN cd /deps/unit_tests && npm i
 ENV LANGSERVE_GRAPHS='{"agent": "./graphs/agent.js:graph"}'
+ENV LANGGRAPH_UI='{"agent": "./graphs/agent.ui.jsx"}'
 WORKDIR /deps/unit_tests
 RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts"""
 

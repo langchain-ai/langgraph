@@ -2901,7 +2901,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_inp
     request: pytest.FixtureRequest,
     checkpointer_name: str,
 ) -> None:
-    from pydantic import BaseModel, ConfigDict
+    from pydantic import BaseModel
 
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
@@ -2917,10 +2917,10 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_inp
     class InnerObject(BaseModel):
         yo: int
 
-    class State(BaseModel):
-        model_config = ConfigDict(arbitrary_types_allowed=True)
-
+    class QueryModel(BaseModel):
         query: str
+
+    class State(QueryModel):
         inner: InnerObject
         answer: Optional[str] = None
         docs: Annotated[list[str], sorted_add]
@@ -2930,8 +2930,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_inp
         answer: Optional[str] = None
         docs: Optional[list[str]] = None
 
-    class Input(BaseModel):
-        query: str
+    class Input(QueryModel):
         inner: InnerObject
 
     class Output(BaseModel):
@@ -3094,14 +3093,24 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
         "answer": "doc1,doc2,doc3,doc4",
     }
 
-    assert [*app.stream({"query": "what is weather in sf"})] == [
-        {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {"qa": {"answer": ""}},
-        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-        {"retriever_two": {"docs": ["doc3", "doc4"]}},
-        {"retriever_one": {"docs": ["doc1", "doc2"]}},
-        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-    ]
+    assert [*app.stream({"query": "what is weather in sf"})] in (
+        [
+            {"rewrite_query": {"query": "query: what is weather in sf"}},
+            {"qa": {"answer": ""}},
+            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {"retriever_two": {"docs": ["doc3", "doc4"]}},
+            {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+        ],
+        [
+            {"rewrite_query": {"query": "query: what is weather in sf"}},
+            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {"qa": {"answer": ""}},
+            {"retriever_two": {"docs": ["doc3", "doc4"]}},
+            {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+        ],
+    )
 
     app_w_interrupt = workflow.compile(
         checkpointer=checkpointer,

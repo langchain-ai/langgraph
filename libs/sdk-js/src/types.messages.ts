@@ -26,7 +26,7 @@ export type AIMessage = {
   tool_calls?:
     | {
         name: string;
-        args: { [x: string]: { [x: string]: any } };
+        args: { [x: string]: any };
         id?: string | undefined;
         type?: "tool_call" | undefined;
       }[]

@@ -388,7 +388,9 @@ class AssistantsClient:
                 'created_at': '2024-06-25T17:10:33.109781+00:00',
                 'updated_at': '2024-06-25T17:10:33.109781+00:00',
                 'config': {},
-                'metadata': {'created_by': 'system'}
+                'metadata': {'created_by': 'system'},
+                'version': 1,
+                'name': 'my_assistant'
             }
 
         """  # noqa: E501
@@ -742,7 +744,7 @@ class AssistantsClient:
             offset: The number of versions to skip.
 
         Returns:
-            list[Assistant]: A list of assistants.
+            list[AssistantVersion]: A list of assistant versions.
 
         Example Usage:
 
@@ -2127,6 +2129,7 @@ class StoreClient:
         key: str,
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
+        ttl: Optional[int] = None,
     ) -> None:
         """Store or update an item.
 
@@ -2135,6 +2138,7 @@ class StoreClient:
             key: The unique identifier for the item within the namespace.
             value: A dictionary containing the item's data.
             index: Controls search indexing - None (use defaults), False (disable), or list of field paths to index.
+            ttl: Optional time-to-live in minutes for the item, or None for no expiration.
 
         Returns:
             None
@@ -2152,15 +2156,29 @@ class StoreClient:
                 raise ValueError(
                     f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
                 )
-        payload = {"namespace": namespace, "key": key, "value": value, "index": index}
+        payload = {
+            "namespace": namespace,
+            "key": key,
+            "value": value,
+            "index": index,
+            "ttl": ttl,
+        }
         await self.http.put("/store/items", json=payload)
 
-    async def get_item(self, namespace: Sequence[str], /, key: str) -> Item:
+    async def get_item(
+        self,
+        namespace: Sequence[str],
+        /,
+        key: str,
+        *,
+        refresh_ttl: Optional[bool] = None,
+    ) -> Item:
         """Retrieve a single item.
 
         Args:
             key: The unique identifier for the item.
             namespace: Optional list of strings representing the namespace path.
+            refresh_ttl: Whether to refresh the TTL on this read operation. If None, uses the store's default behavior.
 
         Returns:
             Item: The retrieved item.
@@ -2188,9 +2206,10 @@ class StoreClient:
                 raise ValueError(
                     f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
                 )
-        return await self.http.get(
-            "/store/items", params={"namespace": ".".join(namespace), "key": key}
-        )
+        params = {"namespace": ".".join(namespace), "key": key}
+        if refresh_ttl is not None:
+            params["refresh_ttl"] = refresh_ttl
+        return await self.http.get("/store/items", params=params)
 
     async def delete_item(self, namespace: Sequence[str], /, key: str) -> None:
         """Delete an item.
@@ -2221,6 +2240,7 @@ class StoreClient:
         limit: int = 10,
         offset: int = 0,
         query: Optional[str] = None,
+        refresh_ttl: Optional[bool] = None,
     ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
 
@@ -2230,6 +2250,7 @@ class StoreClient:
             limit: Maximum number of items to return (default is 10).
             offset: Number of items to skip before returning results (default is 0).
             query: Optional query for natural language search.
+            refresh_ttl: Whether to refresh the TTL on items returned by this search. If None, uses the store's default behavior.
 
         Returns:
             List[Item]: A list of items matching the search criteria.
@@ -2268,6 +2289,7 @@ class StoreClient:
             "limit": limit,
             "offset": offset,
             "query": query,
+            "refresh_ttl": refresh_ttl,
         }
 
         return await self.http.post("/store/items/search", json=_provided_vals(payload))
@@ -4252,6 +4274,7 @@ class SyncStoreClient:
         key: str,
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
+        ttl: Optional[int] = None,
     ) -> None:
         """Store or update an item.
 
@@ -4260,7 +4283,7 @@ class SyncStoreClient:
             key: The unique identifier for the item within the namespace.
             value: A dictionary containing the item's data.
             index: Controls search indexing - None (use defaults), False (disable), or list of field paths to index.
-
+            ttl: Optional time-to-live in minutes for the item, or None for no expiration.
         Returns:
             None
 
@@ -4282,15 +4305,24 @@ class SyncStoreClient:
             "key": key,
             "value": value,
             "index": index,
+            "ttl": ttl,
         }
         self.http.put("/store/items", json=payload)
 
-    def get_item(self, namespace: Sequence[str], /, key: str) -> Item:
+    def get_item(
+        self,
+        namespace: Sequence[str],
+        /,
+        key: str,
+        *,
+        refresh_ttl: Optional[bool] = None,
+    ) -> Item:
         """Retrieve a single item.
 
         Args:
             key: The unique identifier for the item.
             namespace: Optional list of strings representing the namespace path.
+            refresh_ttl: Whether to refresh the TTL on this read operation. If None, uses the store's default behavior.
 
         Returns:
             Item: The retrieved item.
@@ -4319,9 +4351,10 @@ class SyncStoreClient:
                     f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
                 )
 
-        return self.http.get(
-            "/store/items", params={"key": key, "namespace": ".".join(namespace)}
-        )
+        params = {"key": key, "namespace": ".".join(namespace)}
+        if refresh_ttl is not None:
+            params["refresh_ttl"] = refresh_ttl
+        return self.http.get("/store/items", params=params)
 
     def delete_item(self, namespace: Sequence[str], /, key: str) -> None:
         """Delete an item.
@@ -4350,6 +4383,7 @@ class SyncStoreClient:
         limit: int = 10,
         offset: int = 0,
         query: Optional[str] = None,
+        refresh_ttl: Optional[bool] = None,
     ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
 
@@ -4359,6 +4393,7 @@ class SyncStoreClient:
             limit: Maximum number of items to return (default is 10).
             offset: Number of items to skip before returning results (default is 0).
             query: Optional query for natural language search.
+            refresh_ttl: Whether to refresh the TTL on items returned by this search. If None, uses the store's default behavior.
 
         Returns:
             List[Item]: A list of items matching the search criteria.
@@ -4397,6 +4432,7 @@ class SyncStoreClient:
             "limit": limit,
             "offset": offset,
             "query": query,
+            "refresh_ttl": refresh_ttl,
         }
         return self.http.post("/store/items/search", json=_provided_vals(payload))
 
