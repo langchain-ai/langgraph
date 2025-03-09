@@ -59,7 +59,7 @@ class Item:
             else created_at
         )
         self.updated_at = (
-            datetime.fromisoformat(cast(str, created_at))
+            datetime.fromisoformat(cast(str, updated_at))
             if isinstance(updated_at, str)
             else updated_at
         )
