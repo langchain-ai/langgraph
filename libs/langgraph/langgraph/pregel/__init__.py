@@ -106,10 +106,10 @@ from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
-    BulkUpdate,
     Checkpointer,
     LoopProtocol,
     StateSnapshot,
+    StateUpdate,
     StreamChunk,
     StreamMode,
 )
@@ -1166,7 +1166,7 @@ class Pregel(PregelProtocol):
     def bulk_update_state(
         self,
         config: RunnableConfig,
-        updates: list[BulkUpdate],
+        updates: list[StateUpdate],
     ) -> RunnableConfig:
         """Apply updates to the graph state in bulk. Requires a checkpointer to be set."""
 
@@ -1500,7 +1500,7 @@ class Pregel(PregelProtocol):
     async def abulk_update_state(
         self,
         config: RunnableConfig,
-        updates: list[BulkUpdate],
+        updates: list[StateUpdate],
     ) -> RunnableConfig:
         """Apply updates to the graph state in bulk. Requires a checkpointer to be set."""
 
@@ -1845,7 +1845,7 @@ class Pregel(PregelProtocol):
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
-        return self.bulk_update_state(config, [BulkUpdate(values, as_node)])
+        return self.bulk_update_state(config, [StateUpdate(values, as_node)])
 
     async def aupdate_state(
         self,
@@ -1857,7 +1857,7 @@ class Pregel(PregelProtocol):
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
-        return await self.abulk_update_state(config, [BulkUpdate(values, as_node)])
+        return await self.abulk_update_state(config, [StateUpdate(values, as_node)])
 
     def _defaults(
         self,

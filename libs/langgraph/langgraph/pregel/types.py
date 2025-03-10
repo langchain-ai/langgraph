@@ -2,12 +2,12 @@
 
 from langgraph.types import (
     All,
-    BulkUpdate,
     CachePolicy,
     PregelExecutableTask,
     PregelTask,
     RetryPolicy,
     StateSnapshot,
+    StateUpdate,
     StreamMode,
     StreamWriter,
     default_retry_on,
@@ -15,7 +15,7 @@ from langgraph.types import (
 
 __all__ = [
     "All",
-    "BulkUpdate",
+    "StateUpdate",
     "CachePolicy",
     "PregelExecutableTask",
     "PregelTask",

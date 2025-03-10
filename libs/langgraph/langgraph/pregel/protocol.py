@@ -12,7 +12,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.graph import Graph as DrawableGraph
 from typing_extensions import Self
 
-from langgraph.pregel.types import All, BulkUpdate, StateSnapshot, StreamMode
+from langgraph.pregel.types import All, StateSnapshot, StateUpdate, StreamMode
 
 
 class PregelProtocol(
@@ -73,14 +73,14 @@ class PregelProtocol(
     def bulk_update_state(
         self,
         config: RunnableConfig,
-        updates: Sequence[BulkUpdate],
+        updates: Sequence[StateUpdate],
     ) -> RunnableConfig: ...
 
     @abstractmethod
     async def abulk_update_state(
         self,
         config: RunnableConfig,
-        updates: Sequence[BulkUpdate],
+        updates: Sequence[StateUpdate],
     ) -> RunnableConfig: ...
 
     @abstractmethod
