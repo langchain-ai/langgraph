@@ -7841,10 +7841,9 @@ async def test_handles_multiple_interrupts_from_tasks() -> None:
 
 
 @pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
-async def test_bulk_state_updates(
-    request: pytest.FixtureRequest, checkpointer_name: str
-) -> None:
+async def test_bulk_state_updates(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
+
         class State(TypedDict):
             foo: str
             baz: str
@@ -7882,7 +7881,9 @@ async def test_bulk_state_updates(
         assert state.values == {"foo": "updated", "baz": "new"}
 
         # Check if there are only two checkpoints
-        checkpoints = list(checkpointer.list({"configurable": {"thread_id": "1"}}))
+        checkpoints = [
+            c async for c in checkpointer.alist({"configurable": {"thread_id": "1"}})
+        ]
         assert len(checkpoints) == 2
         assert checkpoints[0].metadata["writes"] == {
             "node_a": {"foo": "updated"},
