@@ -1482,7 +1482,7 @@ class Pregel(PregelProtocol):
                     **checkpoint_metadata,
                     "source": "update",
                     "step": step + 1,
-                    "writes": {k: v for k, v in valid_updates},
+                    "writes": {as_node: values for as_node, values in valid_updates},
                     "parents": saved.metadata.get("parents", {}) if saved else {},
                 },
                 get_new_channel_versions(
@@ -1820,7 +1820,7 @@ class Pregel(PregelProtocol):
                     **checkpoint_metadata,
                     "source": "update",
                     "step": step + 1,
-                    "writes": {k: v for k, v in valid_updates},
+                    "writes": {as_node: values for as_node, values in valid_updates},
                     "parents": saved.metadata.get("parents", {}) if saved else {},
                 },
                 get_new_channel_versions(
