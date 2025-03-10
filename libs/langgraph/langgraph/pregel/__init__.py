@@ -1168,7 +1168,19 @@ class Pregel(PregelProtocol):
         config: RunnableConfig,
         updates: list[StateUpdate],
     ) -> RunnableConfig:
-        """Apply updates to the graph state in bulk. Requires a checkpointer to be set."""
+        """Apply updates to the graph state in bulk. Requires a checkpointer to be set.
+
+        Args:
+            config: The config to apply the updates to.
+            updates: A list of updates to apply to the graph state. Each update is a tuple of the form `(values, as_node)`.
+
+        Raises:
+            ValueError: If no checkpointer is set or no updates are provided.
+            InvalidUpdateError: If an invalid update is provided.
+
+        Returns:
+            RunnableConfig: The updated config.
+        """
 
         checkpointer: Optional[BaseCheckpointSaver] = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
@@ -1502,12 +1514,20 @@ class Pregel(PregelProtocol):
         config: RunnableConfig,
         updates: list[StateUpdate],
     ) -> RunnableConfig:
-        """Apply updates to the graph state in bulk. Requires a checkpointer to be set."""
+        """Apply updates to the graph state in bulk. Requires a checkpointer to be set.
 
-        """Update the state of the graph asynchronously with the given values, as if they came from
-        node `as_node`. If `as_node` is not provided, it will be set to the last node
-        that updated the state, if not ambiguous.
+        Args:
+            config: The config to apply the updates to.
+            updates: A list of updates to apply to the graph state. Each update is a tuple of the form `(values, as_node)`.
+
+        Raises:
+            ValueError: If no checkpointer is set or no updates are provided.
+            InvalidUpdateError: If an invalid update is provided.
+
+        Returns:
+            RunnableConfig: The updated config.
         """
+
         checkpointer: Optional[BaseCheckpointSaver] = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
