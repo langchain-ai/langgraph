@@ -1472,7 +1472,7 @@ class Pregel(PregelProtocol):
                 )
 
             # save task writes
-            for task in run_tasks:
+            for task_id, task in zip(run_task_ids, run_tasks):
                 channel_writes = [w for w in task.writes if w[0] != PUSH]
 
                 # channel writes are saved to current checkpoint
@@ -1818,7 +1818,7 @@ class Pregel(PregelProtocol):
                 )
 
             # save task writes
-            for task in run_tasks:
+            for task_id, task in zip(run_task_ids, run_tasks):
                 # channel writes are saved to current checkpoint
                 channel_writes = [w for w in task.writes if w[0] != PUSH]
                 if saved and channel_writes:
