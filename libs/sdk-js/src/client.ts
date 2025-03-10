@@ -1320,6 +1320,40 @@ export class StoreClient extends BaseClient {
   }
 }
 
+class UiClient extends BaseClient {
+  private static promiseCache: Record<string, Promise<unknown> | undefined> =
+    {};
+
+  private static getOrCached<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    if (UiClient.promiseCache[key] != null) {
+      return UiClient.promiseCache[key] as Promise<T>;
+    }
+
+    const promise = fn();
+    UiClient.promiseCache[key] = promise;
+    return promise;
+  }
+
+  async getComponent(assistantId: string, agentName: string): Promise<string> {
+    return UiClient["getOrCached"](
+      `${this.apiUrl}-${assistantId}-${agentName}`,
+      async () => {
+        const response = await this.asyncCaller.fetch(
+          ...this.prepareFetchOptions(`/ui/${assistantId}`, {
+            headers: {
+              Accept: "text/html",
+              "Content-Type": "application/json",
+            },
+            method: "POST",
+            json: { name: agentName },
+          }),
+        );
+        return response.text();
+      },
+    );
+  }
+}
+
 export class Client<
   TStateType = DefaultValues,
   TUpdateType = TStateType,
@@ -1350,11 +1384,18 @@ export class Client<
    */
   public store: StoreClient;
 
+  /**
+   * The client for interacting with the UI.
+   * @internal Used by LoadExternalComponent and the API might change in the future.
+   */
+  public "~ui": UiClient;
+
   constructor(config?: ClientConfig) {
     this.assistants = new AssistantsClient(config);
     this.threads = new ThreadsClient(config);
     this.runs = new RunsClient(config);
     this.crons = new CronsClient(config);
     this.store = new StoreClient(config);
+    this["~ui"] = new UiClient(config);
   }
 }

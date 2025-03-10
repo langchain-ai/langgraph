@@ -563,6 +563,16 @@ export interface UseStream<
     message: Message,
     index?: number,
   ) => MessageMetadata<StateType> | undefined;
+
+  /**
+   * LangGraph SDK client used to send request and receive responses.
+   */
+  client: Client;
+
+  /**
+   * The ID of the assistant to use.
+   */
+  assistantId: string;
 }
 
 type ConfigWithConfigurable<ConfigurableType extends Record<string, unknown>> =
@@ -632,6 +642,7 @@ export function useStream<
       options.defaultHeaders,
     ],
   );
+
   const [threadId, onThreadId] = useControllableThreadId(options);
 
   const [branch, setBranch] = useState<string>("");
@@ -918,6 +929,9 @@ export function useStream<
       trackStreamMode("values");
       return values;
     },
+
+    client,
+    assistantId,
 
     error,
     isLoading,
