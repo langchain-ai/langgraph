@@ -13,8 +13,7 @@ class WaitForNames(NamedTuple):
 class DynamicBarrierValue(
     Generic[Value], BaseChannel[Value, Union[Value, WaitForNames], set[Value]]
 ):
-    """A channel that switches between two states
-
+    """A channel that switches between two states:
     - in the "priming" state it can't be read from.
         - if it receives a WaitForNames update, it switches to the "waiting" state.
     - in the "waiting" state it collects named values until all are received.
