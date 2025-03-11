@@ -6,9 +6,12 @@
     - [LangGraph Server](../../concepts/langgraph_server.md)
     - [`useStream()` React Hook](./use_stream_react.md)
 
-Generative user interfaces (Generative UI) is a powerful pattern that allows AI agents to go beyond text and generate rich user interfaces. This enables creating more interactive and context-aware applications where the UI adapts based on the conversation flow and AI responses.
+Generative user interfaces (Generative UI) allows agents to go beyond text and generate rich user interfaces. This enables creating more interactive and context-aware applications where the UI adapts based on the conversation flow and AI responses.
 
-LangGraph Platform supports colocating your UI React components with your graph code. This allows you to focus on building specific UI components for your graph while easily plugging into existing chat interfaces such as [Agent Chat](https://agentchat.vercel.app) and loading the code only when actually needed.
+LangGraph Platform supports colocating your React components with your graph code. This allows you to focus on building specific UI components for your graph while easily plugging into existing chat interfaces such as [Agent Chat](https://agentchat.vercel.app) and loading the code only when actually needed.
+
+!!! warning "LangGraph.js only"
+    Currently only LangGraph.js supports Generative UI. Support for Python is coming soon.
 
 ## Quickstart
 
