@@ -30,8 +30,8 @@ export const typedUi = <Decl extends Record<string, ElementType>>(config: {
     message: {
       id?: string;
       name: K;
-      content: PropMap[K];
-      additional_kwargs?: Record<string, unknown>;
+      props: PropMap[K];
+      metadata?: Record<string, unknown>;
     },
     options?: { message?: MessageLike },
   ): UIMessage => {
@@ -39,10 +39,10 @@ export const typedUi = <Decl extends Record<string, ElementType>>(config: {
       type: "ui" as const,
       id: message?.id ?? uuidv4(),
       name: message?.name,
-      content: message?.content,
-      additional_kwargs: {
+      props: message?.props,
+      metadata: {
         ...metadata,
-        ...message?.additional_kwargs,
+        ...message?.metadata,
         ...(options?.message ? { message_id: options.message.id } : null),
       },
     };

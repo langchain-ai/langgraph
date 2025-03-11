@@ -175,7 +175,7 @@ export function LoadExternalComponent({
   ]);
 
   if (hasClientComponent) {
-    return React.createElement(clientComponent, message.content);
+    return React.createElement(clientComponent, message.props);
   }
 
   return (
@@ -185,7 +185,7 @@ export function LoadExternalComponent({
       <UseStreamContext.Provider value={{ stream, meta }}>
         {state?.target != null
           ? ReactDOM.createPortal(
-              React.createElement(state.comp, message.content),
+              React.createElement(state.comp, message.props),
               state.target,
             )
           : fallback}
