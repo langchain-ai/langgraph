@@ -472,7 +472,7 @@ class CompiledGraph(Pregel):
                 )
                 subgraph.trim_first_node()
                 subgraph.trim_last_node()
-                if len(subgraph.nodes) > 1:
+                if len(subgraph.nodes) >= 1:
                     e, s = graph.extend(subgraph, prefix=key)
                     if e is None:
                         raise ValueError(
