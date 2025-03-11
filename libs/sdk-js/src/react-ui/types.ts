@@ -3,8 +3,8 @@ export interface UIMessage {
 
   id: string;
   name: string;
-  content: Record<string, unknown>;
-  additional_kwargs: {
+  props: Record<string, unknown>;
+  metadata: {
     run_id: string;
     message_id?: string;
     [key: string]: unknown;
