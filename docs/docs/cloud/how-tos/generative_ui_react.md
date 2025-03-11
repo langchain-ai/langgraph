@@ -132,6 +132,8 @@ export default function Page() {
 }
 ```
 
+Behind the scenes, `LoadExternalComponent` will fetch the JS and CSS for the UI components from LangGraph Platform and render them in a shadow DOM, thus ensuring style isolation from the rest of your application.
+
 ## Configuration options
 
 ### Show loading UI when components are loading
@@ -228,6 +230,21 @@ const { thread, submit } = useStream({
     });
   },
 });
+```
+
+### Remove UI messages from state
+
+Similar to how messages can be removed from the state by appending a RemoveMessage you can remove an UI message from the state by calling `ui.delete` with the ID of the UI message.
+
+```typescript
+// pushed message
+const message = ui.push({ name: "weather", props: { city: "London" } });
+
+// remove said message
+ui.delete(message.id);
+
+// return new state to persist changes
+return { ui: ui.items };
 ```
 
 ## Learn more
