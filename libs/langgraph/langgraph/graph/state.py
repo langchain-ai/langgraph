@@ -7,7 +7,9 @@ from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
 from typing import (
     Any,
+    Awaitable,
     Callable,
+    Hashable,
     Literal,
     NamedTuple,
     Optional,
@@ -40,7 +42,14 @@ from langgraph.errors import (
     ParentCommand,
     create_error_message,
 )
-from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph, Send
+from langgraph.graph.branch import Branch
+from langgraph.graph.graph import (
+    END,
+    START,
+    CompiledGraph,
+    Graph,
+    Send,
+)
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
     ChannelTypePlaceholder,
@@ -461,6 +470,57 @@ class StateGraph(Graph):
         self.waiting_edges.add((tuple(start_key), end_key))
         return self
 
+    def add_conditional_edges(
+        self,
+        source: str,
+        path: Union[
+            Callable[..., Union[Hashable, list[Hashable]]],
+            Callable[..., Awaitable[Union[Hashable, list[Hashable]]]],
+            Runnable[Any, Union[Hashable, list[Hashable]]],
+        ],
+        path_map: Optional[Union[dict[Hashable, str], list[str]]] = None,
+        then: Optional[str] = None,
+    ) -> Self:
+        """Add a conditional edge from the starting node to any number of destination nodes.
+
+        Args:
+            source (str): The starting node. This conditional edge will run when
+                exiting this node.
+            path (Union[Callable, Runnable]): The callable that determines the next
+                node or nodes. If not specifying `path_map` it should return one or
+                more nodes. If it returns END, the graph will stop execution.
+            path_map (Optional[dict[Hashable, str]]): Optional mapping of paths to node
+                names. If omitted the paths returned by `path` should be node names.
+            then (Optional[str]): The name of a node to execute after the nodes
+                selected by `path`.
+
+        Returns:
+            Self: The instance of the graph, allowing for method chaining.
+
+        Note: Without typehints on the `path` function's return value (e.g., `-> Literal["foo", "__end__"]:`)
+            or a path_map, the graph visualization assumes the edge could transition to any node in the graph.
+
+        """  # noqa: E501
+        if self.compiled:
+            logger.warning(
+                "Adding an edge to a graph that has already been compiled. This will "
+                "not be reflected in the compiled graph."
+            )
+
+        # find a name for the condition
+        path = coerce_to_runnable(path, name=None, trace=True)
+        name = path.name or "condition"
+        # validate the condition
+        if name in self.branches[source]:
+            raise ValueError(
+                f"Branch with name `{path.name}` already exists for node " f"`{source}`"
+            )
+        # save it
+        self.branches[source][name] = Branch.from_path(path, path_map, then, True)
+        if schema := self.branches[source][name].input_schema:
+            self._add_schema(schema)
+        return self
+
     def add_sequence(
         self,
         nodes: Sequence[Union[RunnableLike, tuple[str, RunnableLike]]],
@@ -826,12 +886,12 @@ class CompiledStateGraph(CompiledGraph):
                     config, cast(Sequence[Union[Send, ChannelWriteEntry]], writes)
                 )
 
-        # attach branch publisher
-        schema = (
+        schema = branch.input_schema or (
             self.builder.nodes[start].input
             if start in self.builder.nodes
             else self.builder.schema
         )
+        # attach branch publisher
         self.nodes[start] |= branch.run(
             branch_writer,
             _get_state_reader(self.builder, schema) if with_reader else None,

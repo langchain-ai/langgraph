@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from collections import defaultdict
 from typing import (
@@ -6,15 +5,11 @@ from typing import (
     Awaitable,
     Callable,
     Hashable,
-    Literal,
     NamedTuple,
     Optional,
     Sequence,
     Union,
     cast,
-    get_args,
-    get_origin,
-    get_type_hints,
     overload,
 )
 
@@ -34,12 +29,12 @@ from langgraph.constants import (
     TAG_HIDDEN,
     Send,
 )
-from langgraph.errors import InvalidUpdateError
+from langgraph.graph.branch import Branch
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.types import All, Checkpointer
-from langgraph.utils.runnable import RunnableCallable, RunnableLike, coerce_to_runnable
+from langgraph.utils.runnable import RunnableLike, coerce_to_runnable
 
 logger = logging.getLogger(__name__)
 
@@ -48,95 +43,6 @@ class NodeSpec(NamedTuple):
     runnable: Runnable
     metadata: Optional[dict[str, Any]] = None
     ends: Optional[Union[tuple[str, ...], dict[str, str]]] = EMPTY_SEQ
-
-
-class Branch(NamedTuple):
-    path: Runnable[Any, Union[Hashable, list[Hashable]]]
-    ends: Optional[dict[Hashable, str]]
-    then: Optional[str] = None
-
-    def run(
-        self,
-        writer: Callable[
-            [Sequence[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
-        ],
-        reader: Optional[Callable[[RunnableConfig], Any]] = None,
-    ) -> RunnableCallable:
-        return ChannelWrite.register_writer(
-            RunnableCallable(
-                func=self._route,
-                afunc=self._aroute,
-                writer=writer,
-                reader=reader,
-                name=None,
-                trace=False,
-            )
-        )
-
-    def _route(
-        self,
-        input: Any,
-        config: RunnableConfig,
-        *,
-        reader: Optional[Callable[[RunnableConfig], Any]],
-        writer: Callable[
-            [Sequence[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
-        ],
-    ) -> Runnable:
-        if reader:
-            value = reader(config)
-            # passthrough additional keys from node to branch
-            # only doable when using dict states
-            if isinstance(value, dict) and isinstance(input, dict):
-                value = {**input, **value}
-        else:
-            value = input
-        result = self.path.invoke(value, config)
-        return self._finish(writer, input, result, config)
-
-    async def _aroute(
-        self,
-        input: Any,
-        config: RunnableConfig,
-        *,
-        reader: Optional[Callable[[RunnableConfig], Any]],
-        writer: Callable[
-            [Sequence[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
-        ],
-    ) -> Runnable:
-        if reader:
-            value = await asyncio.to_thread(reader, config)
-            # passthrough additional keys from node to branch
-            # only doable when using dict states
-            if isinstance(value, dict) and isinstance(input, dict):
-                value = {**input, **value}
-        else:
-            value = input
-        result = await self.path.ainvoke(value, config)
-        return self._finish(writer, input, result, config)
-
-    def _finish(
-        self,
-        writer: Callable[
-            [Sequence[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
-        ],
-        input: Any,
-        result: Any,
-        config: RunnableConfig,
-    ) -> Union[Runnable, Any]:
-        if not isinstance(result, (list, tuple)):
-            result = [result]
-        if self.ends:
-            destinations: Sequence[Union[Send, str]] = [
-                r if isinstance(r, Send) else self.ends[r] for r in result
-            ]
-        else:
-            destinations = cast(Sequence[Union[Send, str]], result)
-        if any(dest is None or dest == START for dest in destinations):
-            raise ValueError("Branch did not return a valid destination")
-        if any(p.node == END for p in destinations if isinstance(p, Send)):
-            raise InvalidUpdateError("Cannot send a packet to the END node")
-        return writer(destinations, config) or input
 
 
 class Graph:
@@ -267,25 +173,7 @@ class Graph:
                 "Adding an edge to a graph that has already been compiled. This will "
                 "not be reflected in the compiled graph."
             )
-        # coerce path_map to a dictionary
-        try:
-            if isinstance(path_map, dict):
-                path_map_ = path_map.copy()
-            elif isinstance(path_map, list):
-                path_map_ = {name: name for name in path_map}
-            elif isinstance(path, Runnable):
-                path_map_ = None
-            elif rtn_type := get_type_hints(path.__call__).get(  # type: ignore[operator]
-                "return"
-            ) or get_type_hints(path).get("return"):
-                if get_origin(rtn_type) is Literal:
-                    path_map_ = {name: name for name in get_args(rtn_type)}
-                else:
-                    path_map_ = None
-            else:
-                path_map_ = None
-        except Exception:
-            path_map_ = None
+
         # find a name for the condition
         path = coerce_to_runnable(path, name=None, trace=True)
         name = path.name or "condition"
@@ -295,7 +183,7 @@ class Graph:
                 f"Branch with name `{path.name}` already exists for node " f"`{source}`"
             )
         # save it
-        self.branches[source][name] = Branch(path, path_map_, then)
+        self.branches[source][name] = Branch.from_path(path, path_map, then, False)
         return self
 
     def set_entry_point(self, key: str) -> Self:
