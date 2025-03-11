@@ -16,6 +16,7 @@ from langgraph.store.base import (
     Result,
     SearchItem,
     SearchOp,
+    _ensure_refresh,
     _validate_namespace,
 )
 
@@ -65,11 +66,24 @@ class AsyncBatchedBaseStore(BaseStore):
             pass
 
     async def aget(
-        self, namespace: tuple[str, ...], key: str, *, refresh_ttl: bool = True
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+        *,
+        refresh_ttl: Optional[bool] = None,
     ) -> Optional[Item]:
         assert not self._task.done()
         fut = self._loop.create_future()
-        self._aqueue.put_nowait((fut, GetOp(namespace, key, refresh_ttl=refresh_ttl)))
+        self._aqueue.put_nowait(
+            (
+                fut,
+                GetOp(
+                    namespace,
+                    key,
+                    refresh_ttl=_ensure_refresh(self.ttl_config, refresh_ttl),
+                ),
+            )
+        )
         return await fut
 
     async def asearch(
@@ -81,7 +95,7 @@ class AsyncBatchedBaseStore(BaseStore):
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
-        refresh_ttl: bool = True,
+        refresh_ttl: Optional[bool] = None,
     ) -> list[SearchItem]:
         assert not self._task.done()
         fut = self._loop.create_future()
@@ -94,7 +108,7 @@ class AsyncBatchedBaseStore(BaseStore):
                     limit,
                     offset,
                     query,
-                    refresh_ttl=refresh_ttl,
+                    refresh_ttl=_ensure_refresh(self.ttl_config, refresh_ttl),
                 ),
             )
         )
@@ -157,7 +171,11 @@ class AsyncBatchedBaseStore(BaseStore):
 
     @_check_loop
     def get(
-        self, namespace: tuple[str, ...], key: str, *, refresh_ttl: bool = True
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+        *,
+        refresh_ttl: Optional[bool] = None,
     ) -> Optional[Item]:
         return asyncio.run_coroutine_threadsafe(
             self.aget(namespace, key=key, refresh_ttl=refresh_ttl), self._loop
@@ -173,7 +191,7 @@ class AsyncBatchedBaseStore(BaseStore):
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
-        refresh_ttl: bool = True,
+        refresh_ttl: Optional[bool] = None,
     ) -> list[SearchItem]:
         return asyncio.run_coroutine_threadsafe(
             self.asearch(

@@ -39,6 +39,7 @@ from langgraph.store.base import (
     Result,
     SearchItem,
     SearchOp,
+    TTLConfig,
     ensure_embeddings,
     get_text_at_path,
     tokenize_path,
@@ -622,6 +623,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
             Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]
         ] = None,
         index: Optional[PostgresIndexConfig] = None,
+        ttl: Optional[TTLConfig] = None,
     ) -> None:
         super().__init__()
         self._deserializer = deserializer
@@ -634,6 +636,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
             self.embeddings, self.index_config = _ensure_index_config(self.index_config)
         else:
             self.embeddings = None
+        self.ttl_config = ttl
 
     @classmethod
     @contextmanager
