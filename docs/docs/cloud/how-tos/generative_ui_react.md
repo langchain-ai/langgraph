@@ -11,7 +11,7 @@ Generative user interfaces (Generative UI) allows agents to go beyond text and g
 LangGraph Platform supports colocating your React components with your graph code. This allows you to focus on building specific UI components for your graph while easily plugging into existing chat interfaces such as [Agent Chat](https://agentchat.vercel.app) and loading the code only when actually needed.
 
 !!! warning "LangGraph.js only"
-    Currently only LangGraph.js supports Generative UI. Support for Python is coming soon.
+Currently only LangGraph.js supports Generative UI. Support for Python is coming soon.
 
 ## Quickstart
 
@@ -52,53 +52,52 @@ Use the `typedUi` utility to emit UI elements from your agent nodes:
 
 ```typescript
 // src/agent/index.ts
-import type ComponentMap from "./ui";
+import type ComponentMap from "./ui.js";
 import {
   typedUi,
   uiMessageReducer,
 } from "@langchain/langgraph-sdk/react-ui/server";
 
+import { ChatOpenAI } from "@langchain/openai";
+import { v4 as uuidv4 } from "uuid";
+import { z } from "zod";
+
 import {
   Annotation,
   MessagesAnnotation,
+  StateGraph,
   type LangGraphRunnableConfig,
 } from "@langchain/langgraph";
 
-import { v4 as uuidv4 } from "uuid";
-import { ChatOpenAI } from "@langchain/openai";
-import { z } from "zod";
-
 const AgentState = Annotation.Root({
   ...MessagesAnnotation.spec,
-  ui: Annotation({ default: () => [], reducer: uiMessageReducer }),
+  ui: Annotation({ reducer: uiMessageReducer, default: () => [] }),
 });
 
-export async function getWeather(
-  state: typeof AgentState,
-  config: LangGraphRunnableConfig
-) {
-  // Provide the type of the component map to ensure
-  // type safety of `ui.push()` calls.
-  const ui = typedUi<typeof ComponentMap>(config);
+export const graph = new StateGraph(AgentState)
+  .addNode("weather", async (state, config) => {
+    // Provide the type of the component map to ensure
+    // type safety of `ui.push()` calls.
+    const ui = typedUi<typeof ComponentMap>(config);
 
-  const weather = await new ChatOpenAI({ model: "gpt-4o-mini" })
-    .withStructuredOutput(z.object({ city: z.string() }))
-    .invoke(state.messages);
+    const weather = await new ChatOpenAI({ model: "gpt-4o-mini" })
+      .withStructuredOutput(z.object({ city: z.string() }))
+      .withConfig({ tags: ["langsmith:nostream"] })
+      .invoke(state.messages);
 
-  const response = {
-    id: uuidv4(),
-    type: "ai",
-    content: `Here's the weather for ${weather.city}`,
-  };
+    const response = {
+      id: uuidv4(),
+      type: "ai",
+      content: `Here's the weather for ${weather.city}`,
+    };
 
-  // Emit UI elements with associated AI message
-  ui.push({ name: "weather", props: weather }, { message: ai });
+    // Emit UI elements with associated AI message
+    ui.push({ name: "weather", props: weather }, { message: response });
 
-  return {
-    messages: [response],
-    ui: ui.items,
-  };
-}
+    return { messages: [response], ui: ui.items };
+  })
+  .addEdge("__start__", "weather")
+  .compile();
 ```
 
 ### 3. Handle UI elements in your React application
@@ -110,7 +109,7 @@ On the client side, you can use `useStream()` and `LoadExternalComponent` to dis
 "use client";
 
 import { useStream } from "@langchain/langgraph-sdk/react";
-import { LoadExternalComponent } from "@langchain/langgraph-sdk/react-ui/client";
+import { LoadExternalComponent } from "@langchain/langgraph-sdk/react-ui";
 
 export default function Page() {
   const { thread, values } = useStream({
@@ -172,6 +171,8 @@ const clientComponents = {
 You can access the thread state from the UI component by using the `useStreamContext` hook.
 
 ```tsx
+import { useStreamContext } from "@langchain/langgraph-sdk/react-ui";
+
 const WeatherComponent = (props: { city: string }) => {
   const { thread, submit } = useStreamContext();
   return (
