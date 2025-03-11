@@ -9,6 +9,7 @@ from typing import (
     Any,
     Awaitable,
     Callable,
+    Hashable,
     Literal,
     NamedTuple,
     Optional,
@@ -22,7 +23,7 @@ from typing import (
     overload,
 )
 
-from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
+from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import Self
@@ -41,13 +42,12 @@ from langgraph.errors import (
     ParentCommand,
     create_error_message,
 )
+from langgraph.graph.branch import Branch
 from langgraph.graph.graph import (
     END,
     START,
-    Branch,
     CompiledGraph,
     Graph,
-    Hashable,
     Send,
 )
 from langgraph.managed.base import (
@@ -92,51 +92,6 @@ def _get_node_name(node: RunnableLike) -> str:
         return getattr(node, "__name__", node.__class__.__name__)
     else:
         raise TypeError(f"Unsupported node type: {type(node)}")
-
-
-def _get_branch_path_input_schema(
-    path: Union[
-        Callable[..., Union[Hashable, list[Hashable]]],
-        Callable[..., Awaitable[Union[Hashable, list[Hashable]]]],
-        Runnable[Any, Union[Hashable, list[Hashable]]],
-    ],
-) -> Optional[Type[Any]]:
-    input = None
-    # detect input schema annotation in the branch callable
-    try:
-        callable_: Optional[
-            Union[
-                Callable[..., Union[Hashable, list[Hashable]]],
-                Callable[..., Awaitable[Union[Hashable, list[Hashable]]]],
-            ]
-        ] = None
-        if isinstance(path, (RunnableCallable, RunnableLambda)):
-            if isfunction(path.func) or ismethod(path.func):
-                callable_ = path.func
-            elif (callable_method := getattr(path.func, "__call__", None)) and ismethod(
-                callable_method
-            ):
-                callable_ = callable_method
-            elif isfunction(path.afunc) or ismethod(path.afunc):
-                callable_ = path.afunc
-            elif (
-                callable_method := getattr(path.afunc, "__call__", None)
-            ) and ismethod(callable_method):
-                callable_ = callable_method
-        elif callable(path):
-            callable_ = path
-
-        if callable_ is not None and (hints := get_type_hints(callable_)):
-            first_parameter_name = next(
-                iter(inspect.signature(cast(FunctionType, callable_)).parameters.keys())
-            )
-            if input_hint := hints.get(first_parameter_name):
-                if isinstance(input_hint, type) and get_type_hints(input_hint):
-                    input = input_hint
-    except (TypeError, StopIteration):
-        pass
-
-    return input
 
 
 class StateNodeSpec(NamedTuple):
@@ -546,13 +501,24 @@ class StateGraph(Graph):
             or a path_map, the graph visualization assumes the edge could transition to any node in the graph.
 
         """  # noqa: E501
-        super().add_conditional_edges(source, path, path_map, then)
-        input = _get_branch_path_input_schema(path)
-        # add branch input schema so that a completely separate private state
-        # schema can be used in a branch
-        if input:
-            self._add_schema(input)
+        if self.compiled:
+            logger.warning(
+                "Adding an edge to a graph that has already been compiled. This will "
+                "not be reflected in the compiled graph."
+            )
 
+        # find a name for the condition
+        path = coerce_to_runnable(path, name=None, trace=True)
+        name = path.name or "condition"
+        # validate the condition
+        if name in self.branches[source]:
+            raise ValueError(
+                f"Branch with name `{path.name}` already exists for node " f"`{source}`"
+            )
+        # save it
+        self.branches[source][name] = Branch.from_path(path, path_map, then, True)
+        if schema := self.branches[source][name].input_schema:
+            self._add_schema(schema)
         return self
 
     def add_sequence(
@@ -920,14 +886,7 @@ class CompiledStateGraph(CompiledGraph):
                     config, cast(Sequence[Union[Send, ChannelWriteEntry]], writes)
                 )
 
-        # detect branch input schema
-        input = _get_branch_path_input_schema(branch.path)
-        if input:
-            # don't allow passing extra keys from node to branch
-            # if an explicit schema is provided
-            branch = branch._replace(allow_extra_keys=False)
-
-        schema = input or (
+        schema = branch.input_schema or (
             self.builder.nodes[start].input
             if start in self.builder.nodes
             else self.builder.schema
