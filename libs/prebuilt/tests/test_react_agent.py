@@ -5,6 +5,7 @@ from functools import partial
 from typing import (
     Annotated,
     List,
+    Optional,
     Type,
     TypeVar,
     Union,
@@ -35,6 +36,8 @@ from langgraph.prebuilt import (
 )
 from langgraph.prebuilt.chat_agent_executor import (
     AgentState,
+    AgentStatePydantic,
+    StateSchemaType,
     _get_model,
     _should_bind_tools,
     _validate_chat_history,
@@ -528,21 +531,30 @@ def test_react_agent_with_structured_response(version: str) -> None:
         assert response["messages"][-2].content == "The weather is sunny and 75°F."
 
 
+class CustomState(AgentState):
+    user_name: str
+
+
+class CustomStatePydantic(AgentStatePydantic):
+    user_name: Optional[str] = None
+
+
 @pytest.mark.skipif(
     not IS_LANGCHAIN_CORE_030_OR_GREATER,
     reason="Langchain core 0.3.0 or greater is required",
 )
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+@pytest.mark.parametrize("state_schema", [CustomState, CustomStatePydantic])
 def test_react_agent_update_state(
-    request: pytest.FixtureRequest, checkpointer_name: str, version: str
+    request: pytest.FixtureRequest,
+    checkpointer_name: str,
+    version: str,
+    state_schema: StateSchemaType,
 ) -> None:
     checkpointer: BaseCheckpointSaver = request.getfixturevalue(
         "checkpointer_" + checkpointer_name
     )
-
-    class State(AgentState):
-        user_name: str
 
     @dec_tool
     def get_user_name(tool_call_id: Annotated[str, InjectedToolCallId]):
@@ -559,20 +571,31 @@ def test_react_agent_update_state(
             }
         )
 
-    def prompt(state: State):
-        user_name = state.get("user_name")
-        if user_name is None:
-            return state["messages"]
+    if issubclass(state_schema, AgentStatePydantic):
 
-        system_msg = f"User name is {user_name}"
-        return [{"role": "system", "content": system_msg}] + state["messages"]
+        def prompt(state: CustomStatePydantic):
+            user_name = state.user_name
+            if user_name is None:
+                return state.messages
+
+            system_msg = f"User name is {user_name}"
+            return [{"role": "system", "content": system_msg}] + state.messages
+    else:
+
+        def prompt(state: CustomState):
+            user_name = state.get("user_name")
+            if user_name is None:
+                return state["messages"]
+
+            system_msg = f"User name is {user_name}"
+            return [{"role": "system", "content": system_msg}] + state["messages"]
 
     tool_calls = [[{"args": {}, "id": "1", "name": "get_user_name"}]]
     model = FakeToolCallingModel(tool_calls=tool_calls)
     agent = create_react_agent(
         model,
         [get_user_name],
-        state_schema=State,
+        state_schema=state_schema,
         prompt=prompt,
         checkpointer=checkpointer,
         version=version,
@@ -802,23 +825,45 @@ def test_tool_node_inject_state(schema_: Type[T]) -> None:
     assert tool_message.content == "hi?"
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_create_react_agent_inject_vars(version: str) -> None:
-    class AgentStateExtraKey(AgentState):
-        foo: int
+class AgentStateExtraKey(AgentState):
+    foo: int
 
+
+class AgentStateExtraKeyPydantic(AgentStatePydantic):
+    foo: int
+
+
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+@pytest.mark.parametrize(
+    "state_schema", [AgentStateExtraKey, AgentStateExtraKeyPydantic]
+)
+def test_create_react_agent_inject_vars(
+    version: str, state_schema: StateSchemaType
+) -> None:
     store = InMemoryStore()
     namespace = ("test",)
     store.put(namespace, "test_key", {"bar": 3})
 
-    def tool1(
-        some_val: int,
-        state: Annotated[dict, InjectedState],
-        store: Annotated[BaseStore, InjectedStore()],
-    ) -> str:
-        """Tool 1 docstring."""
-        store_val = store.get(namespace, "test_key").value["bar"]
-        return some_val + state["foo"] + store_val
+    if issubclass(state_schema, AgentStatePydantic):
+
+        def tool1(
+            some_val: int,
+            state: Annotated[AgentStateExtraKeyPydantic, InjectedState],
+            store: Annotated[BaseStore, InjectedStore()],
+        ) -> str:
+            """Tool 1 docstring."""
+            store_val = store.get(namespace, "test_key").value["bar"]
+            return some_val + state.foo + store_val
+    else:
+
+        def tool1(
+            some_val: int,
+            state: Annotated[dict, InjectedState],
+            store: Annotated[BaseStore, InjectedStore()],
+        ) -> str:
+            """Tool 1 docstring."""
+            store_val = store.get(namespace, "test_key").value["bar"]
+            return some_val + state["foo"] + store_val
 
     tool_call = {
         "name": "tool1",
@@ -830,7 +875,7 @@ def test_create_react_agent_inject_vars(version: str) -> None:
     agent = create_react_agent(
         model,
         [tool1],
-        state_schema=AgentStateExtraKey,
+        state_schema=state_schema,
         store=store,
         version=version,
     )

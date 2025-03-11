@@ -530,6 +530,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                     for idx, (channel, value) in enumerate(writes)
                 ],
             )
+            await self.conn.commit()
 
     def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
         """Generate the next version ID for a channel.

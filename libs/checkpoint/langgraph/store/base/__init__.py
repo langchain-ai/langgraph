@@ -59,7 +59,7 @@ class Item:
             else created_at
         )
         self.updated_at = (
-            datetime.fromisoformat(cast(str, created_at))
+            datetime.fromisoformat(cast(str, updated_at))
             if isinstance(updated_at, str)
             else updated_at
         )
@@ -682,7 +682,7 @@ class BaseStore(ABC):
         Returns:
             The retrieved item or None if not found.
         """
-        return self.batch([GetOp(namespace, key, refresh_ttl)])[0]
+        return self.batch([GetOp(namespace, str(key), refresh_ttl)])[0]
 
     def search(
         self,
@@ -811,7 +811,7 @@ class BaseStore(ABC):
                 f"TTL is not supported by {self.__class__.__name__}. "
                 f"Use a store implementation that supports TTL or set ttl=None."
             )
-        self.batch([PutOp(namespace, key, value, index=index, ttl=ttl)])
+        self.batch([PutOp(namespace, str(key), value, index=index, ttl=ttl)])
 
     def delete(self, namespace: tuple[str, ...], key: str) -> None:
         """Delete an item.
@@ -820,7 +820,7 @@ class BaseStore(ABC):
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
         """
-        self.batch([PutOp(namespace, key, None, ttl=None)])
+        self.batch([PutOp(namespace, str(key), None, ttl=None)])
 
     def list_namespaces(
         self,
@@ -887,7 +887,7 @@ class BaseStore(ABC):
         Returns:
             The retrieved item or None if not found.
         """
-        return (await self.abatch([GetOp(namespace, key, refresh_ttl)]))[0]
+        return (await self.abatch([GetOp(namespace, str(key), refresh_ttl)]))[0]
 
     async def asearch(
         self,
@@ -1027,7 +1027,7 @@ class BaseStore(ABC):
                 f"TTL is not supported by {self.__class__.__name__}. "
                 f"Use a store implementation that supports TTL or set ttl=None."
             )
-        await self.abatch([PutOp(namespace, key, value, index=index, ttl=ttl)])
+        await self.abatch([PutOp(namespace, str(key), value, index=index, ttl=ttl)])
 
     async def adelete(self, namespace: tuple[str, ...], key: str) -> None:
         """Asynchronously delete an item.
@@ -1036,7 +1036,7 @@ class BaseStore(ABC):
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
         """
-        await self.abatch([PutOp(namespace, key, None)])
+        await self.abatch([PutOp(namespace, str(key), None)])
 
     async def alist_namespaces(
         self,
