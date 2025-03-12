@@ -6658,6 +6658,23 @@ def test_pydantic_none_state_update() -> None:
     assert graph.invoke({"foo": ""}) == {"foo": None}
 
 
+def test_pydantic_state_mutation() -> None:
+    from pydantic import BaseModel
+
+    class Inner(BaseModel):
+        a: int = 0
+
+    class State(BaseModel):
+        inner: Inner = Inner()
+
+    def my_node(state: State) -> State:
+        state.inner.a = 5
+        return state
+
+    graph = StateGraph(State).add_node(my_node).add_edge(START, "my_node").compile()
+    assert graph.invoke({"inner": {}}) == {"inner": Inner(a=5)}
+
+
 def test_get_stream_writer() -> None:
     class State(TypedDict):
         foo: str
