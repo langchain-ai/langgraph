@@ -949,13 +949,43 @@ def _pick_mapper(
     return partial(_coerce_state, schema)
 
 
-def _coerce_state_pydantic(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
+def _coerce_state_pydantic(
+    schema: Type[BaseModel], input: dict[str, Any], *, __depth__: int = 3
+) -> dict[str, Any]:
+    if __depth__ > 0:
+        for key in input:
+            field = schema.model_fields.get(key)
+            if field is None:
+                continue
+            if (
+                isclass(field.annotation)
+                and issubclass(field.annotation, BaseModel)
+                and not isinstance(input[key], field.annotation)
+                and input[key] is not None
+            ):
+                input[key] = _coerce_state_pydantic(
+                    field.annotation, input[key], __depth__=__depth__ - 1
+                )
     return schema.model_construct(**input)
 
 
 def _coerce_state_pydantic_v1(
-    schema: Type[Any], input: dict[str, Any]
+    schema: Type[BaseModelV1], input: dict[str, Any], *, __depth__: int = 3
 ) -> dict[str, Any]:
+    if __depth__ > 0:
+        for key in input:
+            field = schema.__fields__.get(key)
+            if field is None:
+                continue
+            if (
+                isclass(field.annotation)
+                and issubclass(field.annotation, BaseModelV1)
+                and not isinstance(input[key], field.annotation)
+                and input[key] is not None
+            ):
+                input[key] = _coerce_state_pydantic_v1(
+                    field.annotation, input[key], __depth__=__depth__ - 1
+                )
     return schema.construct(**input)
 
 

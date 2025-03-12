@@ -2626,6 +2626,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
         docs: Optional[list[str]] = None
 
     def rewrite_query(data: State) -> State:
+        assert isinstance(data.inner, InnerObject)
         return {"query": f"query: {data.query}"}
 
     def analyzer_one(data: State) -> State:
@@ -2794,6 +2795,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
         docs: list[str]
 
     def rewrite_query(data: State) -> State:
+        assert isinstance(data.inner, InnerObject)
         return {"query": f"query: {data.query}"}
 
     def analyzer_one(data: State) -> State:
