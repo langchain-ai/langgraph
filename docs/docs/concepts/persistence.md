@@ -32,7 +32,7 @@ from typing_extensions import TypedDict
 from operator import add
 
 class State(TypedDict):
-    foo: int
+    foo: str
     bar: Annotated[list[str], add]
 
 def node_a(state: State):
