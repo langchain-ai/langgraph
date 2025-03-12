@@ -26,7 +26,7 @@ from typing import (
 from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
-from typing_extensions import Self
+from typing_extensions import Annotated, Self
 
 from langgraph._api.deprecation import LangGraphDeprecationWarning
 from langgraph.channels.base import BaseChannel
@@ -626,11 +626,13 @@ class StateGraph(Graph):
         compiled = CompiledStateGraph(
             builder=self,
             config_type=self.config_schema,
-            input_model=self.input
-            if len(self.channels) > 1
-            and isclass(self.input)
-            and issubclass(self.input, (BaseModel, BaseModelV1))
-            else None,
+            input_model=(
+                self.input
+                if len(self.channels) > 1
+                and isclass(self.input)
+                and issubclass(self.input, (BaseModel, BaseModelV1))
+                else None
+            ),
             nodes={},
             channels={
                 **self.channels,
@@ -940,23 +942,142 @@ def _pick_mapper(
 ) -> Optional[Callable[[Any], Any]]:
     if state_keys == ["__root__"]:
         return None
-    if issubclass(schema, dict):
-        return None
-    if issubclass(schema, BaseModel):
-        return partial(_coerce_state_pydantic, schema)
-    if issubclass(schema, BaseModelV1):
-        return partial(_coerce_state_pydantic_v1, schema)
+    if isclass(schema):
+        if issubclass(schema, dict):
+            return None
+        if issubclass(schema, BaseModel):
+            return partial(_coerce_state_pydantic, schema)
+        if issubclass(schema, BaseModelV1):
+            return partial(_coerce_state_pydantic_v1, schema)
     return partial(_coerce_state, schema)
 
 
-def _coerce_state_pydantic(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
-    return schema.model_construct(**input)
+def _coerce_state_pydantic(
+    schema: Type[Any], input_data: dict[str, Any], *, __depth__: int = 5
+) -> Any:
+    if not isinstance(input_data, dict) or __depth__ <= 0:
+        return input_data
+
+    processed_input = {}
+    for field_name, field_value in input_data.items():
+        if field_name not in schema.model_fields:
+            processed_input[field_name] = field_value
+            continue
+
+        field_info = schema.model_fields[field_name]
+        field_type = field_info.annotation
+        processed_input[field_name] = _process_field_value(
+            field_type, field_value, __depth__ - 1
+        )
+
+    return schema.model_construct(**processed_input)
 
 
 def _coerce_state_pydantic_v1(
-    schema: Type[Any], input: dict[str, Any]
-) -> dict[str, Any]:
-    return schema.construct(**input)
+    schema: Type[Any], input_data: dict[str, Any], *, __depth__: int = 5
+) -> Any:
+    if not isinstance(input_data, dict) or __depth__ <= 0:
+        return input_data
+
+    processed_input = {}
+    for field_name, field_value in input_data.items():
+        if field_name not in schema.__fields__:
+            processed_input[field_name] = field_value
+            continue
+
+        field_info = schema.__fields__[field_name]
+        field_type = field_info.annotation
+        processed_input[field_name] = _process_field_value(
+            field_type, field_value, __depth__ - 1
+        )
+
+    return schema.construct(**processed_input)
+
+
+def _process_field_value(
+    field_type: Type[Any], field_value: Any, __depth__: int
+) -> Any:
+    if __depth__ <= 0 or field_value is None:
+        return field_value
+    origin = get_origin(field_type)
+
+    if origin is Annotated:
+        real_type, *_ = get_args(field_type)
+        res = _process_field_value(real_type, field_value, __depth__)
+        return res
+
+    if isclass(field_type):
+        is_class_ = True
+        try:
+            is_model = issubclass(field_type, BaseModel)
+        except TypeError:
+            is_class_ = False
+            is_model = False
+        if is_model:
+            if isinstance(field_value, dict):
+                return _coerce_state_pydantic(
+                    field_type, field_value, __depth__=__depth__
+                )
+            return field_value
+        if is_class_ and issubclass(field_type, BaseModelV1):
+            if isinstance(field_value, dict):
+                return _coerce_state_pydantic_v1(
+                    field_type, field_value, __depth__=__depth__
+                )
+            return field_value
+
+    if origin is list or field_type is list:
+        if not isinstance(field_value, (list, tuple)):
+            raise TypeError(
+                f"Expected a list/tuple for {field_type}, got {type(field_value)}."
+            )
+        (item_type,) = get_args(field_type)
+        return [
+            _process_field_value(item_type, item, __depth__ - 1) for item in field_value
+        ]
+
+    if origin is dict or field_type is dict:
+        if not isinstance(field_value, dict):
+            raise TypeError(
+                f"Expected a dict for {field_type}, got {type(field_value)}."
+            )
+        key_type, val_type = get_args(field_type)
+        return {
+            _process_field_value(key_type, k, __depth__ - 1): _process_field_value(
+                val_type, v, __depth__ - 1
+            )
+            for k, v in field_value.items()
+        }
+
+    if origin is tuple:
+        if not isinstance(field_value, (list, tuple)):
+            raise TypeError(
+                f"Expected a tuple/list for {field_type}, got {type(field_value)}."
+            )
+        args = get_args(field_type)
+        # Handle tuple[type1, type2, ...] with fixed length and different types
+        result = []
+        for i, arg in enumerate(args):
+            if i < len(field_value):
+                result.append(_process_field_value(arg, field_value[i], __depth__ - 1))
+            else:
+                # If field_value is shorter than expected, use None for remaining positions
+                result.append(None)
+        # If field_value is longer than expected, truncate it
+        return tuple(result)
+
+    if origin is Union:
+        for arg in get_args(field_type):
+            if arg is type(None):
+                # e.g. Optional
+                continue
+            try:
+                result = _process_field_value(arg, field_value, __depth__ - 1)
+                return result
+            except Exception:
+                pass  # Fall back to the next union argument
+
+    return field_value
 
 
 def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
