@@ -466,5 +466,5 @@
   },
   "title": "LangGraph CLI Configuration",
   "description": "Configuration schema for langgraph-cli",
-  "version": "v1"
+  "version": "v0"
 }

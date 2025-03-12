@@ -866,7 +866,7 @@ class BaseStore(ABC):
             ```
         """
         _validate_namespace(namespace)
-        if ttl is not None and not self.supports_ttl:
+        if ttl not in (NOT_PROVIDED, None) and not self.supports_ttl:
             raise NotImplementedError(
                 f"TTL is not supported by {self.__class__.__name__}. "
                 f"Use a store implementation that supports TTL or set ttl=None."
@@ -1115,7 +1115,7 @@ class BaseStore(ABC):
             ```
         """
         _validate_namespace(namespace)
-        if ttl is not None and not self.supports_ttl:
+        if ttl not in (NOT_PROVIDED, None) and not self.supports_ttl:
             raise NotImplementedError(
                 f"TTL is not supported by {self.__class__.__name__}. "
                 f"Use a store implementation that supports TTL or set ttl=None."
