@@ -687,6 +687,8 @@ class PregelLoop(LoopProtocol):
                 self.input = INPUT_DONE
         elif CONFIG_KEY_RESUMING not in configurable:
             raise EmptyInputError(f"Received no input for {input_keys}")
+        else:
+            self.input = INPUT_DONE
         # update config
         if not self.is_nested:
             self.config = patch_configurable(
