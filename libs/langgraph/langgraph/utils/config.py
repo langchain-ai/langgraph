@@ -1,4 +1,5 @@
 from collections import ChainMap
+from os import getenv
 from typing import Any, Optional, Sequence, cast
 
 from langchain_core.callbacks import (
@@ -11,7 +12,6 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import (
     CONFIG_KEYS,
     COPIABLE_KEYS,
-    DEFAULT_RECURSION_LIMIT,
     var_child_runnable_config,
 )
 
@@ -25,6 +25,8 @@ from langgraph.constants import (
     NS_END,
     NS_SEP,
 )
+
+DEFAULT_RECURSION_LIMIT = int(getenv("LG_DEFAULT_RECURSION_LIMIT", "25"))
 
 
 def recast_checkpoint_ns(ns: str) -> str:
