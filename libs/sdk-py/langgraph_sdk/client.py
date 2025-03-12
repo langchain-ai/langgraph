@@ -2163,7 +2163,7 @@ class StoreClient:
             "index": index,
             "ttl": ttl,
         }
-        await self.http.put("/store/items", json=payload)
+        await self.http.put("/store/items", json=_provided_vals(payload))
 
     async def get_item(
         self,
@@ -4307,7 +4307,7 @@ class SyncStoreClient:
             "index": index,
             "ttl": ttl,
         }
-        self.http.put("/store/items", json=payload)
+        self.http.put("/store/items", json=_provided_vals(payload))
 
     def get_item(
         self,
