@@ -936,7 +936,7 @@ def _get_state_reader(
 
 def _pick_mapper(
     state_keys: Sequence[str], schema: Type[Any]
-) -> Optional[Callable[[Type[Any], dict[str, Any]], dict[str, Any]]]:
+) -> Optional[Callable[[Any], Any]]:
     if state_keys == ["__root__"]:
         return None
     if issubclass(schema, dict):

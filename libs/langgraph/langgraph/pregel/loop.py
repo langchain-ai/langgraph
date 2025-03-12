@@ -141,7 +141,7 @@ def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
 
 class PregelLoop(LoopProtocol):
     input: Optional[Any]
-    input_model: Optional[BaseModel]
+    input_model: Optional[Type[BaseModel]]
     checkpointer: Optional[BaseCheckpointSaver]
     nodes: Mapping[str, PregelNode]
     specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]]
@@ -205,7 +205,7 @@ class PregelLoop(LoopProtocol):
         interrupt_after: Union[All, Sequence[str]] = EMPTY_SEQ,
         interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
-        input_model: Optional[BaseModel] = None,
+        input_model: Optional[Type[BaseModel]] = None,
         debug: bool = False,
     ) -> None:
         super().__init__(
@@ -434,7 +434,9 @@ class PregelLoop(LoopProtocol):
             if self.input is INPUT_SHOULD_VALIDATE:
                 self.input = INPUT_DONE
                 # validate
-                self.input_model(**read_channels(self.channels, self.stream_keys))
+                cast(Type[BaseModel], self.input_model)(
+                    **read_channels(self.channels, self.stream_keys)
+                )
             # produce values output
             self._emit(
                 "values", map_output_values, self.output_keys, writes, self.channels
@@ -859,7 +861,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
         output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
-        input_model: Optional[BaseModel] = None,
+        input_model: Optional[Type[BaseModel]] = None,
         debug: bool = False,
     ) -> None:
         super().__init__(
@@ -1000,7 +1002,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
         output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
-        input_model: Optional[BaseModel] = None,
+        input_model: Optional[Type[BaseModel]] = None,
         debug: bool = False,
     ) -> None:
         super().__init__(
