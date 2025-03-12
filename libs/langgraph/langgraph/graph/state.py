@@ -626,6 +626,11 @@ class StateGraph(Graph):
         compiled = CompiledStateGraph(
             builder=self,
             config_type=self.config_schema,
+            input_model=self.input
+            if len(self.channels) > 1
+            and isclass(self.input)
+            and issubclass(self.input, (BaseModel, BaseModelV1))
+            else None,
             nodes={},
             channels={
                 **self.channels,
@@ -812,11 +817,7 @@ class CompiledStateGraph(CompiledGraph):
                 # read state keys and managed values
                 channels=(list(input_values) if is_single_input else input_values),
                 # coerce state dict to schema class (eg. pydantic model)
-                mapper=(
-                    None
-                    if is_single_input or issubclass(input_schema, dict)
-                    else partial(_coerce_state, input_schema)
-                ),
+                mapper=_pick_mapper(list(input_values), input_schema),
                 writers=[
                     # publish to this channel and state keys
                     ChannelWrite(
@@ -931,12 +932,32 @@ def _get_state_reader(
         select=select[0] if select == ["__root__"] else select,
         fresh=True,
         # coerce state dict to schema class (eg. pydantic model)
-        mapper=(
-            None
-            if state_keys == ["__root__"] or issubclass(schema, dict)
-            else partial(_coerce_state, schema)
-        ),
+        mapper=_pick_mapper(state_keys, schema),
     )
+
+
+def _pick_mapper(
+    state_keys: Sequence[str], schema: Type[Any]
+) -> Optional[Callable[[Any], Any]]:
+    if state_keys == ["__root__"]:
+        return None
+    if issubclass(schema, dict):
+        return None
+    if issubclass(schema, BaseModel):
+        return partial(_coerce_state_pydantic, schema)
+    if issubclass(schema, BaseModelV1):
+        return partial(_coerce_state_pydantic_v1, schema)
+    return partial(_coerce_state, schema)
+
+
+def _coerce_state_pydantic(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
+    return schema.model_construct(**input)
+
+
+def _coerce_state_pydantic_v1(
+    schema: Type[Any], input: dict[str, Any]
+) -> dict[str, Any]:
+    return schema.construct(**input)
 
 
 def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
