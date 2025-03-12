@@ -5,18 +5,21 @@ from collections.abc import Iterable
 from typing import Any, Callable, Literal, Optional, TypeVar, Union
 
 from langgraph.store.base import (
+    NOT_PROVIDED,
     BaseStore,
     GetOp,
     Item,
     ListNamespacesOp,
     MatchCondition,
     NamespacePath,
+    NotProvided,
     Op,
     PutOp,
     Result,
     SearchItem,
     SearchOp,
     _ensure_refresh,
+    _ensure_ttl,
     _validate_namespace,
 )
 
@@ -121,12 +124,19 @@ class AsyncBatchedBaseStore(BaseStore):
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
         *,
-        ttl: Optional[float] = None,
+        ttl: Union[Optional[float], "NotProvided"] = NOT_PROVIDED,
     ) -> None:
         assert not self._task.done()
         _validate_namespace(namespace)
         fut = self._loop.create_future()
-        self._aqueue.put_nowait((fut, PutOp(namespace, key, value, index, ttl=ttl)))
+        self._aqueue.put_nowait(
+            (
+                fut,
+                PutOp(
+                    namespace, key, value, index, ttl=_ensure_ttl(self.ttl_config, ttl)
+                ),
+            )
+        )
         return await fut
 
     async def adelete(
@@ -213,11 +223,18 @@ class AsyncBatchedBaseStore(BaseStore):
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
         *,
-        ttl: Optional[float] = None,
+        ttl: Union[Optional[float], "NotProvided"] = NOT_PROVIDED,
     ) -> None:
         _validate_namespace(namespace)
         asyncio.run_coroutine_threadsafe(
-            self.aput(namespace, key=key, value=value, index=index, ttl=ttl), self._loop
+            self.aput(
+                namespace,
+                key=key,
+                value=value,
+                index=index,
+                ttl=_ensure_ttl(self.ttl_config, ttl),
+            ),
+            self._loop,
         ).result()
 
     @_check_loop

@@ -11,9 +11,19 @@ Core types:
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Iterable, Literal, NamedTuple, Optional, TypedDict, Union, cast
+from typing import (
+    Any,
+    Iterable,
+    Literal,
+    NamedTuple,
+    Optional,
+    TypedDict,
+    Union,
+    cast,
+)
 
 from langchain_core.embeddings import Embeddings
+from typing_extensions import override
 
 from langgraph.store.base.embed import (
     AEmbeddingsFunc,
@@ -22,6 +32,20 @@ from langgraph.store.base.embed import (
     get_text_at_path,
     tokenize_path,
 )
+
+
+class NotProvided:
+    """Sentinel singleton."""
+
+    def __bool__(self) -> Literal[False]:
+        return False
+
+    @override
+    def __repr__(self) -> str:
+        return "NOT_GIVEN"
+
+
+NOT_PROVIDED = NotProvided()
 
 
 class Item:
@@ -506,6 +530,13 @@ class TTLConfig(TypedDict, total=False):
     This can be overridden per-operation by explicitly setting refresh_ttl.
     Defaults to True if not configured.
     """
+    default_ttl: Optional[float]
+    """Default TTL (time-to-live) in minutes for new items.
+    
+    If provided, new items will expire after this many minutes after their last access.
+    The expiration timer refreshes on both read and write operations.
+    Defaults to None (no expiration).
+    """
 
 
 class IndexConfig(TypedDict, total=False):
@@ -782,7 +813,7 @@ class BaseStore(ABC):
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
         *,
-        ttl: Optional[float] = None,
+        ttl: Union[Optional[float], "NotProvided"] = NOT_PROVIDED,
     ) -> None:
         """Store or update an item in the store.
 
@@ -840,7 +871,17 @@ class BaseStore(ABC):
                 f"TTL is not supported by {self.__class__.__name__}. "
                 f"Use a store implementation that supports TTL or set ttl=None."
             )
-        self.batch([PutOp(namespace, str(key), value, index=index, ttl=ttl)])
+        self.batch(
+            [
+                PutOp(
+                    namespace,
+                    str(key),
+                    value,
+                    index=index,
+                    ttl=_ensure_ttl(self.ttl_config, ttl),
+                )
+            ]
+        )
 
     def delete(self, namespace: tuple[str, ...], key: str) -> None:
         """Delete an item.
@@ -1013,7 +1054,7 @@ class BaseStore(ABC):
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
         *,
-        ttl: Optional[float] = None,
+        ttl: Union[Optional[float], "NotProvided"] = NOT_PROVIDED,
     ) -> None:
         """Asynchronously store or update an item in the store.
 
@@ -1079,7 +1120,17 @@ class BaseStore(ABC):
                 f"TTL is not supported by {self.__class__.__name__}. "
                 f"Use a store implementation that supports TTL or set ttl=None."
             )
-        await self.abatch([PutOp(namespace, str(key), value, index=index, ttl=ttl)])
+        await self.abatch(
+            [
+                PutOp(
+                    namespace,
+                    str(key),
+                    value,
+                    index=index,
+                    ttl=_ensure_ttl(self.ttl_config, ttl),
+                )
+            ]
+        )
 
     async def adelete(self, namespace: tuple[str, ...], key: str) -> None:
         """Asynchronously delete an item.
@@ -1176,6 +1227,17 @@ def _ensure_refresh(
     if ttl_config is not None:
         return ttl_config.get("refresh_on_read", True)
     return True
+
+
+def _ensure_ttl(
+    ttl_config: Optional[TTLConfig],
+    ttl: Union[Optional[float], "NotProvided"] = NOT_PROVIDED,
+) -> Optional[float]:
+    if ttl is NOT_PROVIDED:
+        if ttl_config:
+            return ttl_config.get("default_ttl")
+        return None
+    return ttl
 
 
 __all__ = [
