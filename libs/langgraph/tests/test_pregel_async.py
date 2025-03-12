@@ -7697,3 +7697,56 @@ async def test_interrupt_subgraph_reenter_checkpointer_true(
         }
         # confirm that we preserve the state values from the previous invocation
         assert bar_values == [None, "barbaz", "quxbaz"]
+
+
+@NEEDS_CONTEXTVARS
+async def test_handles_multiple_interrupts_from_tasks() -> None:
+    @task
+    async def add_participant(name: str) -> str:
+        feedback = interrupt(f"Hey do you want to add {name}?")
+
+        if feedback is False:
+            return f"The user changed their mind and doesn't want to add {name}!"
+
+        if feedback is True:
+            return f"Added {name}!"
+
+        raise ValueError("Invalid feedback")
+
+    @entrypoint(checkpointer=MemorySaver())
+    async def program(_state: Any) -> list[str]:
+        first = await add_participant("James")
+        second = await add_participant("Will")
+        return [first, second]
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await program.ainvoke("this is ignored", config=config)
+    assert result is None
+
+    state = await program.aget_state(config=config)
+    assert len(state.tasks[0].interrupts) == 1
+    task_interrupt = state.tasks[0].interrupts[0]
+    assert task_interrupt.resumable is True
+    assert len(task_interrupt.ns) == 2
+    assert task_interrupt.ns[0].startswith("program:")
+    assert task_interrupt.ns[1].startswith("add_participant:")
+    assert task_interrupt.value == "Hey do you want to add James?"
+
+    result = await program.ainvoke(Command(resume=True), config=config)
+    assert result is None
+
+    state = await program.aget_state(config=config)
+    assert len(state.tasks[0].interrupts) == 1
+    task_interrupt = state.tasks[0].interrupts[0]
+    assert task_interrupt.resumable is True
+    assert len(task_interrupt.ns) == 2
+    assert task_interrupt.ns[0].startswith("program:")
+    assert task_interrupt.ns[1].startswith("add_participant:")
+    assert task_interrupt.value == "Hey do you want to add Will?"
+
+    result = await program.ainvoke(Command(resume=True), config=config)
+    assert result is not None
+    assert len(result) == 2
+    assert result[0] == "Added James!"
+    assert result[1] == "Added Will!"
