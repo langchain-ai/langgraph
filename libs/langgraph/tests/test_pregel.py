@@ -6658,6 +6658,40 @@ def test_pydantic_none_state_update() -> None:
     assert graph.invoke({"foo": ""}) == {"foo": None}
 
 
+def test_pydantic_state_mutation() -> None:
+    from pydantic import BaseModel, Field
+
+    class Inner(BaseModel):
+        a: int = 0
+
+    class State(BaseModel):
+        inner: Inner = Inner()
+        outer: int = 0
+
+    def my_node(state: State) -> State:
+        state.inner.a = 5
+        state.outer = 10
+        return state
+
+    graph = StateGraph(State).add_node(my_node).add_edge(START, "my_node").compile()
+
+    assert graph.invoke({"outer": 1}) == {"outer": 10, "inner": Inner(a=5)}
+
+    # test w/ default_factory
+    class State(BaseModel):
+        inner: Inner = Field(default_factory=Inner)
+        outer: int = 0
+
+    def my_node(state: State) -> State:
+        state.inner.a = 5
+        state.outer = 10
+        return state
+
+    graph = StateGraph(State).add_node(my_node).add_edge(START, "my_node").compile()
+
+    assert graph.invoke({"outer": 1}) == {"outer": 10, "inner": Inner(a=5)}
+
+
 def test_get_stream_writer() -> None:
     class State(TypedDict):
         foo: str
