@@ -26,7 +26,7 @@ from langgraph.constants import (
     NS_SEP,
 )
 
-DEFAULT_RECURSION_LIMIT = int(getenv("LG_DEFAULT_RECURSION_LIMIT", "25"))
+DEFAULT_RECURSION_LIMIT = int(getenv("LANGGRAPH_DEFAULT_RECURSION_LIMIT", "25"))
 
 
 def recast_checkpoint_ns(ns: str) -> str:
