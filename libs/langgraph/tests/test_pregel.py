@@ -6666,13 +6666,16 @@ def test_pydantic_state_mutation() -> None:
 
     class State(BaseModel):
         inner: Inner = Inner()
+        outer: int = 0
 
     def my_node(state: State) -> State:
         state.inner.a = 5
+        state.outer = 10
         return state
 
     graph = StateGraph(State).add_node(my_node).add_edge(START, "my_node").compile()
-    assert graph.invoke({"inner": {}}) == {"inner": Inner(a=5)}
+
+    assert graph.invoke({"outer": 1}) == {"outer": 10, "inner": Inner(a=5)}
 
 
 def test_get_stream_writer() -> None:
