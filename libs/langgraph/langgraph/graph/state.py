@@ -627,7 +627,9 @@ class StateGraph(Graph):
             builder=self,
             config_type=self.config_schema,
             input_model=self.input
-            if isclass(self.input) and issubclass(self.input, (BaseModel, BaseModelV1))
+            if len(self.channels) > 1
+            and isclass(self.input)
+            and issubclass(self.input, (BaseModel, BaseModelV1))
             else None,
             nodes={},
             channels={
