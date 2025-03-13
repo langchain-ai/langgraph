@@ -10,7 +10,15 @@ build-prebuilt:
 	# Use to create an update to date prebuilt page.
 	# Looks up download stats for each of the prebuilt packages and
 	# generates the final prebuilt page.
-	poetry run python -m _scripts.third_party_page.get_download_stats stats.yml
+	@if [ "$(DOWNLOAD_STATS)" = "true" ]; then \
+		set -x; \
+		poetry run python -m _scripts.third_party_page.get_download_stats stats.yml; \
+		set +x; \
+	else \
+		set -x; \
+		poetry run python -m _scripts.third_party_page.get_download_stats --fake stats.yml; \
+		set +x; \
+	fi
 	poetry run python -m _scripts.third_party_page.create_third_party_page stats.yml docs/prebuilt.md --language python
 
 build-docs: build-typedoc build-prebuilt
