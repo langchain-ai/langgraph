@@ -1,3 +1,5 @@
+"use client";
+
 import { useStream } from "../react/index.js";
 import type { UIMessage } from "./types.js";
 
@@ -105,21 +107,16 @@ class ComponentStore {
 }
 
 const COMPONENT_STORE = new ComponentStore();
-const COMPONENT_PROMISE_CACHE: Record<string, Promise<string> | undefined> = {};
-
 const EXT_STORE_SYMBOL = Symbol.for("LGUI_EXT_STORE");
 const REQUIRE_SYMBOL = Symbol.for("LGUI_REQUIRE");
 
 interface LoadExternalComponentProps
   extends Pick<React.HTMLAttributes<HTMLDivElement>, "style" | "className"> {
-  /** API URL of the LangGraph Platform */
-  apiUrl?: string;
-
-  /** ID of the assistant */
-  assistantId: string;
-
   /** Stream of the assistant */
   stream: ReturnType<typeof useStream>;
+
+  /** Namespace of UI components. Defaults to assistant ID. */
+  namespace?: string;
 
   /** UI message to be rendered */
   message: UIMessage;
@@ -137,30 +134,9 @@ interface LoadExternalComponentProps
   components?: Record<string, React.FunctionComponent | React.ComponentClass>;
 }
 
-function fetchComponent(
-  apiUrl: string,
-  assistantId: string,
-  agentName: string,
-): Promise<string> {
-  const cacheKey = `${apiUrl}-${assistantId}-${agentName}`;
-  if (COMPONENT_PROMISE_CACHE[cacheKey] != null) {
-    return COMPONENT_PROMISE_CACHE[cacheKey] as Promise<string>;
-  }
-
-  const request: Promise<string> = fetch(`${apiUrl}/ui/${assistantId}`, {
-    headers: { Accept: "text/html", "Content-Type": "application/json" },
-    method: "POST",
-    body: JSON.stringify({ name: agentName }),
-  }).then((a) => a.text());
-
-  COMPONENT_PROMISE_CACHE[cacheKey] = request;
-  return request;
-}
-
 export function LoadExternalComponent({
-  apiUrl = "http://localhost:2024",
-  assistantId,
   stream,
+  namespace,
   message,
   meta,
   fallback,
@@ -180,9 +156,11 @@ export function LoadExternalComponent({
   const clientComponent = components?.[message.name];
   const hasClientComponent = clientComponent != null;
 
+  const uiNamespace = namespace ?? stream.assistantId;
+  const uiClient = stream.client["~ui"];
   React.useEffect(() => {
     if (hasClientComponent) return;
-    fetchComponent(apiUrl, assistantId, message.name).then((html) => {
+    uiClient.getComponent(uiNamespace, message.name).then((html) => {
       const dom = ref.current;
       if (!dom) return;
       const root = dom.shadowRoot ?? dom.attachShadow({ mode: "open" });
@@ -193,10 +171,10 @@ export function LoadExternalComponent({
         );
       root.appendChild(fragment);
     });
-  }, [apiUrl, assistantId, message.name, shadowRootId, hasClientComponent]);
+  }, [uiClient, uiNamespace, message.name, shadowRootId, hasClientComponent]);
 
   if (hasClientComponent) {
-    return React.createElement(clientComponent, message.content);
+    return React.createElement(clientComponent, message.props);
   }
 
   return (
@@ -206,7 +184,7 @@ export function LoadExternalComponent({
       <UseStreamContext.Provider value={{ stream, meta }}>
         {state?.target != null
           ? ReactDOM.createPortal(
-              React.createElement(state.comp, message.content),
+              React.createElement(state.comp, message.props),
               state.target,
             )
           : fallback}

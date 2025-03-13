@@ -11,6 +11,24 @@ MIN_NODE_VERSION = "20"
 MIN_PYTHON_VERSION = "3.11"
 
 
+class TTLConfig(TypedDict, total=False):
+    """Configuration for TTL (time-to-live) behavior in the store."""
+
+    refresh_on_read: bool
+    """Default behavior for refreshing TTLs on read operations (GET and SEARCH).
+    
+    If True, TTLs will be refreshed on read operations (get/search) by default.
+    This can be overridden per-operation by explicitly setting refresh_ttl.
+    Defaults to True if not configured.
+    """
+    default_ttl: Optional[float]
+    """Optional. Default TTL (time-to-live) in minutes for new items.
+    
+    If provided, all new items will have this TTL unless explicitly overridden.
+    If omitted, items will have no TTL by default.
+    """
+
+
 class IndexConfig(TypedDict, total=False):
     """Configuration for indexing documents for semantic search in the store.
 
@@ -77,6 +95,13 @@ class StoreConfig(TypedDict, total=False):
       - Embed only specified JSON fields (if any) from `index.fields`
     
     If omitted, no vector index is initialized.
+    """
+
+    ttl: Optional[TTLConfig]
+    """Optional. Defines the TTL (time-to-live) behavior configuration.
+    
+    If provided, the store will apply TTL settings according to the configuration.
+    If omitted, no TTL behavior is configured.
     """
 
 

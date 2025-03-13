@@ -85,7 +85,7 @@ plugins:
 
 nav:
   - Home:
-    - Introduction: index.md
+    - index.md
     - Get started:
       - Learn the basics: tutorials/introduction.ipynb
       - Deployment:
@@ -231,6 +231,7 @@ nav:
                 - cloud/how-tos/stream_debug.md
                 - cloud/how-tos/stream_multiple.md
                 - cloud/how-tos/use_stream_react.md
+                - cloud/how-tos/generative_ui_react.md
             - Human-in-the-loop:
                 - Human-in-the-loop: how-tos#human-in-the-loop_1
                 - cloud/how-tos/human_in_the_loop_breakpoint.md

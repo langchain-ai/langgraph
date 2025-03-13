@@ -257,7 +257,7 @@ def _validate_chat_history(
 @_convert_modifier_to_prompt
 def create_react_agent(
     model: Union[str, LanguageModelLike],
-    tools: Union[Sequence[BaseTool], ToolNode],
+    tools: Union[Sequence[Union[BaseTool, Callable]], ToolNode],
     *,
     prompt: Optional[Prompt] = None,
     response_format: Optional[
@@ -382,12 +382,11 @@ def create_react_agent(
         Use with a simple tool:
 
         ```pycon
-        >>> from datetime import datetime
         >>> from langchain_openai import ChatOpenAI
         >>> from langgraph.prebuilt import create_react_agent
 
 
-        ... def check_weather(location: str, at_time: datetime | None = None) -> str:
+        ... def check_weather(location: str) -> str:
         ...     '''Return the weather forecast for the specified location.'''
         ...     return f"It's always sunny in {location}"
         >>>
@@ -595,7 +594,7 @@ def create_react_agent(
 
         ```pycon
         >>> import time
-        ... def check_weather(location: str, at_time: datetime | None = None) -> float:
+        ... def check_weather(location: str) -> str:
         ...     '''Return the weather forecast for the specified location.'''
         ...     time.sleep(2)
         ...     return f"It's always sunny in {location}"
@@ -859,4 +858,7 @@ __all__ = [
     "create_react_agent",
     "create_tool_calling_executor",
     "AgentState",
+    "AgentStatePydantic",
+    "AgentStateWithStructuredResponse",
+    "AgentStateWithStructuredResponsePydantic",
 ]

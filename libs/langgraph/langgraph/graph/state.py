@@ -7,7 +7,9 @@ from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
 from typing import (
     Any,
+    Awaitable,
     Callable,
+    Hashable,
     Literal,
     NamedTuple,
     Optional,
@@ -40,7 +42,15 @@ from langgraph.errors import (
     ParentCommand,
     create_error_message,
 )
-from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph, Send
+from langgraph.graph.branch import Branch
+from langgraph.graph.graph import (
+    END,
+    START,
+    CompiledGraph,
+    Graph,
+    Send,
+)
+from langgraph.graph.schema_utils import SchemaCoercionMapper
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
     ChannelTypePlaceholder,
@@ -461,6 +471,57 @@ class StateGraph(Graph):
         self.waiting_edges.add((tuple(start_key), end_key))
         return self
 
+    def add_conditional_edges(
+        self,
+        source: str,
+        path: Union[
+            Callable[..., Union[Hashable, list[Hashable]]],
+            Callable[..., Awaitable[Union[Hashable, list[Hashable]]]],
+            Runnable[Any, Union[Hashable, list[Hashable]]],
+        ],
+        path_map: Optional[Union[dict[Hashable, str], list[str]]] = None,
+        then: Optional[str] = None,
+    ) -> Self:
+        """Add a conditional edge from the starting node to any number of destination nodes.
+
+        Args:
+            source (str): The starting node. This conditional edge will run when
+                exiting this node.
+            path (Union[Callable, Runnable]): The callable that determines the next
+                node or nodes. If not specifying `path_map` it should return one or
+                more nodes. If it returns END, the graph will stop execution.
+            path_map (Optional[dict[Hashable, str]]): Optional mapping of paths to node
+                names. If omitted the paths returned by `path` should be node names.
+            then (Optional[str]): The name of a node to execute after the nodes
+                selected by `path`.
+
+        Returns:
+            Self: The instance of the graph, allowing for method chaining.
+
+        Note: Without typehints on the `path` function's return value (e.g., `-> Literal["foo", "__end__"]:`)
+            or a path_map, the graph visualization assumes the edge could transition to any node in the graph.
+
+        """  # noqa: E501
+        if self.compiled:
+            logger.warning(
+                "Adding an edge to a graph that has already been compiled. This will "
+                "not be reflected in the compiled graph."
+            )
+
+        # find a name for the condition
+        path = coerce_to_runnable(path, name=None, trace=True)
+        name = path.name or "condition"
+        # validate the condition
+        if name in self.branches[source]:
+            raise ValueError(
+                f"Branch with name `{path.name}` already exists for node " f"`{source}`"
+            )
+        # save it
+        self.branches[source][name] = Branch.from_path(path, path_map, then, True)
+        if schema := self.branches[source][name].input_schema:
+            self._add_schema(schema)
+        return self
+
     def add_sequence(
         self,
         nodes: Sequence[Union[RunnableLike, tuple[str, RunnableLike]]],
@@ -566,6 +627,13 @@ class StateGraph(Graph):
         compiled = CompiledStateGraph(
             builder=self,
             config_type=self.config_schema,
+            input_model=(
+                self.input
+                if len(self.channels) > 1
+                and isclass(self.input)
+                and issubclass(self.input, (BaseModel, BaseModelV1))
+                else None
+            ),
             nodes={},
             channels={
                 **self.channels,
@@ -695,23 +763,22 @@ class CompiledStateGraph(CompiledGraph):
                         updates.extend(_get_updates(i) or ())
                 return updates
             elif get_type_hints(type(input)):
-                # if input is a Pydantic model, only update values
-                # for the keys that have been explicitly set by the users
-                # (this is needed to avoid sending updates for fields with None defaults)
-                output_keys_ = output_keys
                 # Pydantic v2
-                if hasattr(input, "model_fields_set"):
-                    output_keys_ = [
-                        k for k in output_keys if k in input.model_fields_set
-                    ]
+                if hasattr(input, "model_fields"):
+                    defaults = {k: v.default for k, v in input.model_fields.items()}
                 # Pydantic v1
-                elif hasattr(input, "__fields_set__"):
-                    output_keys_ = [k for k in output_keys if k in input.__fields_set__]
+                elif hasattr(input, "__fields__"):
+                    defaults = {k: v.default for k, v in input.__fields__.items()}
+                else:
+                    defaults = {}
 
+                # if input is a Pydantic model, only update values
+                # that are different from the default values
                 return [
-                    (k, getattr(input, k))
-                    for k in output_keys_
-                    if getattr(input, k, MISSING) is not MISSING
+                    (k, value)
+                    for k in output_keys
+                    if (value := getattr(input, k, MISSING)) is not MISSING
+                    and value != defaults.get(k)
                 ]
             else:
                 msg = create_error_message(
@@ -752,11 +819,7 @@ class CompiledStateGraph(CompiledGraph):
                 # read state keys and managed values
                 channels=(list(input_values) if is_single_input else input_values),
                 # coerce state dict to schema class (eg. pydantic model)
-                mapper=(
-                    None
-                    if is_single_input or issubclass(input_schema, dict)
-                    else partial(_coerce_state, input_schema)
-                ),
+                mapper=_pick_mapper(list(input_values), input_schema),
                 writers=[
                     # publish to this channel and state keys
                     ChannelWrite(
@@ -826,12 +889,12 @@ class CompiledStateGraph(CompiledGraph):
                     config, cast(Sequence[Union[Send, ChannelWriteEntry]], writes)
                 )
 
-        # attach branch publisher
-        schema = (
+        schema = branch.input_schema or (
             self.builder.nodes[start].input
             if start in self.builder.nodes
             else self.builder.schema
         )
+        # attach branch publisher
         self.nodes[start] |= branch.run(
             branch_writer,
             _get_state_reader(self.builder, schema) if with_reader else None,
@@ -871,12 +934,21 @@ def _get_state_reader(
         select=select[0] if select == ["__root__"] else select,
         fresh=True,
         # coerce state dict to schema class (eg. pydantic model)
-        mapper=(
-            None
-            if state_keys == ["__root__"] or issubclass(schema, dict)
-            else partial(_coerce_state, schema)
-        ),
+        mapper=_pick_mapper(state_keys, schema),
     )
+
+
+def _pick_mapper(
+    state_keys: Sequence[str], schema: Type[Any]
+) -> Optional[Callable[[Any], Any]]:
+    if state_keys == ["__root__"]:
+        return None
+    if isclass(schema):
+        if issubclass(schema, dict):
+            return None
+        if issubclass(schema, (BaseModel, BaseModelV1)):
+            return SchemaCoercionMapper(schema)
+    return partial(_coerce_state, schema)
 
 
 def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:

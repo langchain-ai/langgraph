@@ -11,9 +11,19 @@ Core types:
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Iterable, Literal, NamedTuple, Optional, TypedDict, Union, cast
+from typing import (
+    Any,
+    Iterable,
+    Literal,
+    NamedTuple,
+    Optional,
+    TypedDict,
+    Union,
+    cast,
+)
 
 from langchain_core.embeddings import Embeddings
+from typing_extensions import override
 
 from langgraph.store.base.embed import (
     AEmbeddingsFunc,
@@ -22,6 +32,20 @@ from langgraph.store.base.embed import (
     get_text_at_path,
     tokenize_path,
 )
+
+
+class NotProvided:
+    """Sentinel singleton."""
+
+    def __bool__(self) -> Literal[False]:
+        return False
+
+    @override
+    def __repr__(self) -> str:
+        return "NOT_GIVEN"
+
+
+NOT_PROVIDED = NotProvided()
 
 
 class Item:
@@ -59,7 +83,7 @@ class Item:
             else created_at
         )
         self.updated_at = (
-            datetime.fromisoformat(cast(str, created_at))
+            datetime.fromisoformat(cast(str, updated_at))
             if isinstance(updated_at, str)
             else updated_at
         )
@@ -496,6 +520,25 @@ class InvalidNamespaceError(ValueError):
     """Provided namespace is invalid."""
 
 
+class TTLConfig(TypedDict, total=False):
+    """Configuration for TTL (time-to-live) behavior in the store."""
+
+    refresh_on_read: bool
+    """Default behavior for refreshing TTLs on read operations (GET and SEARCH).
+    
+    If True, TTLs will be refreshed on read operations (get/search) by default.
+    This can be overridden per-operation by explicitly setting refresh_ttl.
+    Defaults to True if not configured.
+    """
+    default_ttl: Optional[float]
+    """Default TTL (time-to-live) in minutes for new items.
+    
+    If provided, new items will expire after this many minutes after their last access.
+    The expiration timer refreshes on both read and write operations.
+    Defaults to None (no expiration).
+    """
+
+
 class IndexConfig(TypedDict, total=False):
     """Configuration for indexing documents for semantic search in the store.
 
@@ -640,7 +683,8 @@ class BaseStore(ABC):
         Subclasses must explicitly set `supports_ttl = True` to enable this feature.
     """
 
-    supports_ttl = False
+    supports_ttl: bool = False
+    ttl_config: Optional[TTLConfig] = None
 
     __slots__ = ("__weakref__",)
 
@@ -669,7 +713,11 @@ class BaseStore(ABC):
         """
 
     def get(
-        self, namespace: tuple[str, ...], key: str, *, refresh_ttl: bool = True
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+        *,
+        refresh_ttl: Optional[bool] = None,
     ) -> Optional[Item]:
         """Retrieve a single item.
 
@@ -677,12 +725,15 @@ class BaseStore(ABC):
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
             refresh_ttl: Whether to refresh TTLs for the returned item.
+                If None (default), uses the store's default refresh_ttl setting.
                 If no TTL is specified, this argument is ignored.
 
         Returns:
             The retrieved item or None if not found.
         """
-        return self.batch([GetOp(namespace, str(key), refresh_ttl)])[0]
+        return self.batch(
+            [GetOp(namespace, str(key), _ensure_refresh(self.ttl_config, refresh_ttl))]
+        )[0]
 
     def search(
         self,
@@ -693,7 +744,7 @@ class BaseStore(ABC):
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
-        refresh_ttl: bool = True,
+        refresh_ttl: Optional[bool] = None,
     ) -> list[SearchItem]:
         """Search for items within a namespace prefix.
 
@@ -743,7 +794,16 @@ class BaseStore(ABC):
             and requires proper embedding configuration.
         """
         return self.batch(
-            [SearchOp(namespace_prefix, filter, limit, offset, query, refresh_ttl)]
+            [
+                SearchOp(
+                    namespace_prefix,
+                    filter,
+                    limit,
+                    offset,
+                    query,
+                    _ensure_refresh(self.ttl_config, refresh_ttl),
+                )
+            ]
         )[0]
 
     def put(
@@ -753,7 +813,7 @@ class BaseStore(ABC):
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
         *,
-        ttl: Optional[float] = None,
+        ttl: Union[Optional[float], "NotProvided"] = NOT_PROVIDED,
     ) -> None:
         """Store or update an item in the store.
 
@@ -806,12 +866,22 @@ class BaseStore(ABC):
             ```
         """
         _validate_namespace(namespace)
-        if ttl is not None and not self.supports_ttl:
+        if ttl not in (NOT_PROVIDED, None) and not self.supports_ttl:
             raise NotImplementedError(
                 f"TTL is not supported by {self.__class__.__name__}. "
                 f"Use a store implementation that supports TTL or set ttl=None."
             )
-        self.batch([PutOp(namespace, str(key), value, index=index, ttl=ttl)])
+        self.batch(
+            [
+                PutOp(
+                    namespace,
+                    str(key),
+                    value,
+                    index=index,
+                    ttl=_ensure_ttl(self.ttl_config, ttl),
+                )
+            ]
+        )
 
     def delete(self, namespace: tuple[str, ...], key: str) -> None:
         """Delete an item.
@@ -876,7 +946,11 @@ class BaseStore(ABC):
         return self.batch([op])[0]
 
     async def aget(
-        self, namespace: tuple[str, ...], key: str, *, refresh_ttl: bool = True
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+        *,
+        refresh_ttl: Optional[bool] = None,
     ) -> Optional[Item]:
         """Asynchronously retrieve a single item.
 
@@ -887,7 +961,17 @@ class BaseStore(ABC):
         Returns:
             The retrieved item or None if not found.
         """
-        return (await self.abatch([GetOp(namespace, str(key), refresh_ttl)]))[0]
+        return (
+            await self.abatch(
+                [
+                    GetOp(
+                        namespace,
+                        str(key),
+                        _ensure_refresh(self.ttl_config, refresh_ttl),
+                    )
+                ]
+            )
+        )[0]
 
     async def asearch(
         self,
@@ -898,7 +982,7 @@ class BaseStore(ABC):
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
-        refresh_ttl: bool = True,
+        refresh_ttl: Optional[bool] = None,
     ) -> list[SearchItem]:
         """Asynchronously search for items within a namespace prefix.
 
@@ -909,8 +993,8 @@ class BaseStore(ABC):
             limit: Maximum number of items to return.
             offset: Number of items to skip before returning results.
             refresh_ttl: Whether to refresh TTLs for the returned items.
-                Defaults to True. If no TTL is specified, this argument
-                is ignored.
+                If None (default), uses the store's TTLConfig.refresh_default setting.
+                If TTLConfig is not provided or no TTL is specified, this argument is ignored.
 
         Returns:
             List of items matching the search criteria.
@@ -950,7 +1034,16 @@ class BaseStore(ABC):
         """
         return (
             await self.abatch(
-                [SearchOp(namespace_prefix, filter, limit, offset, query, refresh_ttl)]
+                [
+                    SearchOp(
+                        namespace_prefix,
+                        filter,
+                        limit,
+                        offset,
+                        query,
+                        _ensure_refresh(self.ttl_config, refresh_ttl),
+                    )
+                ]
             )
         )[0]
 
@@ -961,7 +1054,7 @@ class BaseStore(ABC):
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
         *,
-        ttl: Optional[float] = None,
+        ttl: Union[Optional[float], "NotProvided"] = NOT_PROVIDED,
     ) -> None:
         """Asynchronously store or update an item in the store.
 
@@ -1022,12 +1115,22 @@ class BaseStore(ABC):
             ```
         """
         _validate_namespace(namespace)
-        if ttl is not None and not self.supports_ttl:
+        if ttl not in (NOT_PROVIDED, None) and not self.supports_ttl:
             raise NotImplementedError(
                 f"TTL is not supported by {self.__class__.__name__}. "
                 f"Use a store implementation that supports TTL or set ttl=None."
             )
-        await self.abatch([PutOp(namespace, str(key), value, index=index, ttl=ttl)])
+        await self.abatch(
+            [
+                PutOp(
+                    namespace,
+                    str(key),
+                    value,
+                    index=index,
+                    ttl=_ensure_ttl(self.ttl_config, ttl),
+                )
+            ]
+        )
 
     async def adelete(self, namespace: tuple[str, ...], key: str) -> None:
         """Asynchronously delete an item.
@@ -1114,6 +1217,27 @@ def _validate_namespace(namespace: tuple[str, ...]) -> None:
         raise InvalidNamespaceError(
             f'Root label for namespace cannot be "langgraph". Got: {namespace}'
         )
+
+
+def _ensure_refresh(
+    ttl_config: Optional[TTLConfig], refresh_ttl: Optional[bool] = None
+) -> bool:
+    if refresh_ttl is not None:
+        return refresh_ttl
+    if ttl_config is not None:
+        return ttl_config.get("refresh_on_read", True)
+    return True
+
+
+def _ensure_ttl(
+    ttl_config: Optional[TTLConfig],
+    ttl: Union[Optional[float], "NotProvided"] = NOT_PROVIDED,
+) -> Optional[float]:
+    if ttl is NOT_PROVIDED:
+        if ttl_config:
+            return ttl_config.get("default_ttl")
+        return None
+    return ttl
 
 
 __all__ = [
