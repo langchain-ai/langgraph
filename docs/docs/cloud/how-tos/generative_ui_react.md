@@ -217,7 +217,7 @@ By default `LoadExternalComponent` will use the `assistantId` from `useStream()`
 
 ### Access and interact with the thread state from the UI component
 
-You can access the thread state from the UI component by using the `useStreamContext` hook.
+You can access the thread state inside the UI component by using the `useStreamContext` hook.
 
 ```tsx
 import { useStreamContext } from "@langchain/langgraph-sdk/react-ui";
@@ -256,8 +256,14 @@ You can pass additional context to the client components by providing a `meta` p
 Then, you can access the `meta` prop in the UI component by using the `useStreamContext` hook.
 
 ```tsx
+import { useStreamContext } from "@langchain/langgraph-sdk/react-ui";
+
 const WeatherComponent = (props: { city: string }) => {
-  const { meta } = useStreamContext();
+  const { meta } = useStreamContext<
+    { city: string },
+    { MetaType: { userId?: string } }
+  >();
+
   return (
     <div>
       Weather for {props.city} (user: {meta?.userId})
