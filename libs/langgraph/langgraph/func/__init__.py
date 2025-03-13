@@ -36,23 +36,31 @@ from langgraph.types import _DC_KWARGS, RetryPolicy, StreamMode
 
 @overload
 def task(
-    *, name: Optional[str] = None, retry: Optional[RetryPolicy] = None
-) -> Callable[[Callable[P, T]], Callable[P, SyncAsyncFuture[T]]]: ...
+    *,
+    name: Optional[str] = None,
+    retry: Optional[RetryPolicy] = None,
+) -> Callable[
+    [Union[Callable[P, Awaitable[T]], Callable[P, T]]],
+    Callable[P, SyncAsyncFuture[T]],
+]: ...
 
 
 @overload
 def task(
-    __func_or_none__: Callable[P, T],
+    __func_or_none__: Union[Callable[P, Awaitable[T]], Callable[P, T]],
 ) -> Callable[P, SyncAsyncFuture[T]]: ...
 
 
 def task(
-    __func_or_none__: Optional[Union[Callable[P, T], Callable[P, Awaitable[T]]]] = None,
+    __func_or_none__: Optional[Union[Callable[P, Awaitable[T]], Callable[P, T]]] = None,
     *,
     name: Optional[str] = None,
     retry: Optional[RetryPolicy] = None,
 ) -> Union[
-    Callable[[Callable[P, T]], Callable[P, SyncAsyncFuture[T]]],
+    Callable[
+        [Union[Callable[P, Awaitable[T]], Callable[P, T]]],
+        Callable[P, SyncAsyncFuture[T]],
+    ],
     Callable[P, SyncAsyncFuture[T]],
 ]:
     """Define a LangGraph task using the `task` decorator.
@@ -345,7 +353,7 @@ class entrypoint:
         value: R
         """Value to return. A value will always be returned even if it is None."""
         save: S
-        """The value for the state for the next checkpoint. 
+        """The value for the state for the next checkpoint.
 
         A value will always be saved even if it is None.
         """

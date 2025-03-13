@@ -487,7 +487,12 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             except Exception:
                 return cls.construct(**tup[2])
         except Exception:
-            return
+            # for pydantic objects we can't find/reconstruct
+            # let's return the kwargs dict instead
+            try:
+                return tup[2]
+            except NameError:
+                return
     elif code == EXT_PYDANTIC_V2:
         try:
             tup = msgpack.unpackb(
@@ -500,7 +505,12 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             except Exception:
                 return cls.model_construct(**tup[2])
         except Exception:
-            return
+            # for pydantic objects we can't find/reconstruct
+            # let's return the kwargs dict instead
+            try:
+                return tup[2]
+            except NameError:
+                return
 
 
 def _msgpack_enc(data: Any) -> bytes:

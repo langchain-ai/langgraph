@@ -6148,13 +6148,6 @@ async def test_parent_command(checkpointer_name: str) -> None:
                 "source": "loop",
                 "writes": {
                     "alice": {
-                        "messages": [
-                            _AnyIdHumanMessage(
-                                content="get user name",
-                                additional_kwargs={},
-                                response_metadata={},
-                            ),
-                        ],
                         "user_name": "Meow",
                     }
                 },
@@ -7282,9 +7275,7 @@ async def test_multiple_subgraphs_mixed_state_graph(
 
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_multiple_subgraphs_checkpointer(
-    request: pytest.FixtureRequest, checkpointer_name: str
-) -> None:
+async def test_multiple_subgraphs_checkpointer(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
 
         class SubgraphState(TypedDict):
@@ -7513,3 +7504,249 @@ async def test_tags_stream_mode_messages() -> None:
             },
         )
     ]
+
+
+async def test_stream_messages_dedupe_inputs() -> None:
+    from langchain_core.messages import AIMessage
+
+    async def call_model(state):
+        return {"messages": AIMessage("hi", id="1")}
+
+    async def route(state):
+        return Command(goto="node_2", graph=Command.PARENT)
+
+    subgraph = (
+        StateGraph(MessagesState)
+        .add_node(call_model)
+        .add_node(route)
+        .add_edge(START, "call_model")
+        .add_edge("call_model", "route")
+        .compile()
+    )
+
+    graph = (
+        StateGraph(MessagesState)
+        .add_node("node_1", subgraph)
+        .add_node("node_2", lambda state: state)
+        .add_edge(START, "node_1")
+        .compile()
+    )
+
+    chunks = [
+        chunk
+        async for ns, chunk in graph.astream(
+            {"messages": "hi"}, stream_mode="messages", subgraphs=True
+        )
+    ]
+
+    assert len(chunks) == 1
+    assert chunks[0][0] == AIMessage("hi", id="1")
+    assert chunks[0][1]["langgraph_node"] == "call_model"
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_stream_messages_dedupe_state(checkpointer_name: str) -> None:
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        from langchain_core.messages import AIMessage
+
+        to_emit = [AIMessage("bye", id="1"), AIMessage("bye again", id="2")]
+
+        async def call_model(state):
+            return {"messages": to_emit.pop(0)}
+
+        async def route(state):
+            return Command(goto="node_2", graph=Command.PARENT)
+
+        subgraph = (
+            StateGraph(MessagesState)
+            .add_node(call_model)
+            .add_node(route)
+            .add_edge(START, "call_model")
+            .add_edge("call_model", "route")
+            .compile()
+        )
+
+        graph = (
+            StateGraph(MessagesState)
+            .add_node("node_1", subgraph)
+            .add_node("node_2", lambda state: state)
+            .add_edge(START, "node_1")
+            .compile(checkpointer=checkpointer)
+        )
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+
+        chunks = [
+            chunk
+            async for ns, chunk in graph.astream(
+                {"messages": "hi"}, thread1, stream_mode="messages", subgraphs=True
+            )
+        ]
+
+        assert len(chunks) == 1
+        assert chunks[0][0] == AIMessage("bye", id="1")
+        assert chunks[0][1]["langgraph_node"] == "call_model"
+
+        chunks = [
+            chunk
+            async for ns, chunk in graph.astream(
+                {"messages": "hi again"},
+                thread1,
+                stream_mode="messages",
+                subgraphs=True,
+            )
+        ]
+
+        assert len(chunks) == 1
+        assert chunks[0][0] == AIMessage("bye again", id="2")
+        assert chunks[0][1]["langgraph_node"] == "call_model"
+
+
+@NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_interrupt_subgraph_reenter_checkpointer_true(
+    checkpointer_name: str,
+) -> None:
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+
+        class SubgraphState(TypedDict):
+            foo: str
+            bar: str
+
+        class ParentState(TypedDict):
+            foo: str
+            counter: int
+
+        called = []
+        bar_values = []
+
+        async def subnode_1(state: SubgraphState):
+            called.append("subnode_1")
+            bar_values.append(state.get("bar"))
+            return {"foo": "subgraph_1"}
+
+        async def subnode_2(state: SubgraphState):
+            called.append("subnode_2")
+            value = interrupt("Provide value")
+            value += "baz"
+            return {"foo": "subgraph_2", "bar": value}
+
+        subgraph = (
+            StateGraph(SubgraphState)
+            .add_node(subnode_1)
+            .add_node(subnode_2)
+            .add_edge(START, "subnode_1")
+            .add_edge("subnode_1", "subnode_2")
+            .compile(checkpointer=True)
+        )
+
+        async def call_subgraph(state: ParentState):
+            called.append("call_subgraph")
+            return await subgraph.ainvoke(state)
+
+        async def node(state: ParentState):
+            called.append("parent")
+            if state["counter"] < 1:
+                return Command(
+                    goto="call_subgraph", update={"counter": state["counter"] + 1}
+                )
+
+            return {"foo": state["foo"] + "|" + "parent"}
+
+        parent = (
+            StateGraph(ParentState)
+            .add_node(call_subgraph)
+            .add_node(node)
+            .add_edge(START, "call_subgraph")
+            .add_edge("call_subgraph", "node")
+            .compile(checkpointer=checkpointer)
+        )
+
+        config = {"configurable": {"thread_id": "1"}}
+        assert await parent.ainvoke({"foo": "", "counter": 0}, config) == {
+            "foo": "",
+            "counter": 0,
+        }
+        assert await parent.ainvoke(Command(resume="bar"), config) == {
+            "foo": "subgraph_2",
+            "counter": 1,
+        }
+        assert await parent.ainvoke(Command(resume="qux"), config) == {
+            "foo": "subgraph_2|parent",
+            "counter": 1,
+        }
+        assert called == [
+            "call_subgraph",
+            "subnode_1",
+            "subnode_2",
+            "call_subgraph",
+            "subnode_2",
+            "parent",
+            "call_subgraph",
+            "subnode_1",
+            "subnode_2",
+            "call_subgraph",
+            "subnode_2",
+            "parent",
+        ]
+
+        # invoke parent again (new turn)
+        assert await parent.ainvoke({"foo": "meow", "counter": 0}, config) == {
+            "foo": "meow",
+            "counter": 0,
+        }
+        # confirm that we preserve the state values from the previous invocation
+        assert bar_values == [None, "barbaz", "quxbaz"]
+
+
+@NEEDS_CONTEXTVARS
+async def test_handles_multiple_interrupts_from_tasks() -> None:
+    @task
+    async def add_participant(name: str) -> str:
+        feedback = interrupt(f"Hey do you want to add {name}?")
+
+        if feedback is False:
+            return f"The user changed their mind and doesn't want to add {name}!"
+
+        if feedback is True:
+            return f"Added {name}!"
+
+        raise ValueError("Invalid feedback")
+
+    @entrypoint(checkpointer=MemorySaver())
+    async def program(_state: Any) -> list[str]:
+        first = await add_participant("James")
+        second = await add_participant("Will")
+        return [first, second]
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await program.ainvoke("this is ignored", config=config)
+    assert result is None
+
+    state = await program.aget_state(config=config)
+    assert len(state.tasks[0].interrupts) == 1
+    task_interrupt = state.tasks[0].interrupts[0]
+    assert task_interrupt.resumable is True
+    assert len(task_interrupt.ns) == 2
+    assert task_interrupt.ns[0].startswith("program:")
+    assert task_interrupt.ns[1].startswith("add_participant:")
+    assert task_interrupt.value == "Hey do you want to add James?"
+
+    result = await program.ainvoke(Command(resume=True), config=config)
+    assert result is None
+
+    state = await program.aget_state(config=config)
+    assert len(state.tasks[0].interrupts) == 1
+    task_interrupt = state.tasks[0].interrupts[0]
+    assert task_interrupt.resumable is True
+    assert len(task_interrupt.ns) == 2
+    assert task_interrupt.ns[0].startswith("program:")
+    assert task_interrupt.ns[1].startswith("add_participant:")
+    assert task_interrupt.value == "Hey do you want to add Will?"
+
+    result = await program.ainvoke(Command(resume=True), config=config)
+    assert result is not None
+    assert len(result) == 2
+    assert result[0] == "Added James!"
+    assert result[1] == "Added Will!"

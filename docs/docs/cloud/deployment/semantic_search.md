@@ -17,7 +17,7 @@ This guide explains how to add semantic search to your LangGraph deployment's cr
     ...
     "store": {
         "index": {
-            "embed": "openai:text-embeddings-3-small",
+            "embed": "openai:text-embedding-3-small",
             "dims": 1536,
             "fields": ["$"]
         }
@@ -27,7 +27,7 @@ This guide explains how to add semantic search to your LangGraph deployment's cr
 
 This configuration:
 
-- Uses OpenAI's text-embeddings-3-small model for generating embeddings
+- Uses OpenAI's text-embedding-3-small model for generating embeddings
 - Sets the embedding dimension to 1536 (matching the model's output)
 - Indexes all fields in your stored data (`["$"]` means index everything, or specify specific fields like `["text", "metadata.title"]`)
 

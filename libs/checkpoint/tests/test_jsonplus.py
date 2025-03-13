@@ -130,7 +130,7 @@ def test_serde_jsonplus() -> None:
             key="my-key",
             namespace=("a", "name", " "),
             created_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
-            updated_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
+            updated_at=datetime(2024, 9, 24, 17, 29, 11, 128397),
         ),
     }
 

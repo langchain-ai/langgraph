@@ -127,6 +127,16 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
                 tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP)),
                 metadata,
             )
+            if isinstance(inputs, dict):
+                for key, value in inputs.items():
+                    if isinstance(value, BaseMessage):
+                        if value.id is not None:
+                            self.seen.add(value.id)
+                    elif isinstance(value, Sequence) and not isinstance(value, str):
+                        for item in value:
+                            if isinstance(item, BaseMessage):
+                                if item.id is not None:
+                                    self.seen.add(item.id)
 
     def on_chain_end(
         self,

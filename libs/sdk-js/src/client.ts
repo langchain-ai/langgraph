@@ -1096,12 +1096,28 @@ export class StoreClient extends BaseClient {
    * @param namespace A list of strings representing the namespace path.
    * @param key The unique identifier for the item within the namespace.
    * @param value A dictionary containing the item's data.
+   * @param options.index Controls search indexing - null (use defaults), false (disable), or list of field paths to index.
+   * @param options.ttl Optional time-to-live in minutes for the item, or null for no expiration.
    * @returns Promise<void>
+   *
+   * @example
+   * ```typescript
+   * await client.store.putItem(
+   *   ["documents", "user123"],
+   *   "item456",
+   *   { title: "My Document", content: "Hello World" },
+   *   { ttl: 60 } // expires in 60 minutes
+   * );
+   * ```
    */
   async putItem(
     namespace: string[],
     key: string,
     value: Record<string, any>,
+    options?: {
+      index?: false | string[] | null;
+      ttl?: number | null;
+    },
   ): Promise<void> {
     namespace.forEach((label) => {
       if (label.includes(".")) {
@@ -1115,6 +1131,8 @@ export class StoreClient extends BaseClient {
       namespace,
       key,
       value,
+      index: options?.index,
+      ttl: options?.ttl,
     };
 
     return this.fetch<void>("/store/items", {
@@ -1128,9 +1146,33 @@ export class StoreClient extends BaseClient {
    *
    * @param namespace A list of strings representing the namespace path.
    * @param key The unique identifier for the item.
+   * @param options.refreshTtl Whether to refresh the TTL on this read operation. If null, uses the store's default behavior.
    * @returns Promise<Item>
+   *
+   * @example
+   * ```typescript
+   * const item = await client.store.getItem(
+   *   ["documents", "user123"],
+   *   "item456",
+   *   { refreshTtl: true }
+   * );
+   * console.log(item);
+   * // {
+   * //   namespace: ["documents", "user123"],
+   * //   key: "item456",
+   * //   value: { title: "My Document", content: "Hello World" },
+   * //   createdAt: "2024-07-30T12:00:00Z",
+   * //   updatedAt: "2024-07-30T12:00:00Z"
+   * // }
+   * ```
    */
-  async getItem(namespace: string[], key: string): Promise<Item | null> {
+  async getItem(
+    namespace: string[],
+    key: string,
+    options?: {
+      refreshTtl?: boolean | null;
+    },
+  ): Promise<Item | null> {
     namespace.forEach((label) => {
       if (label.includes(".")) {
         throw new Error(
@@ -1139,8 +1181,17 @@ export class StoreClient extends BaseClient {
       }
     });
 
+    const params: Record<string, any> = {
+      namespace: namespace.join("."),
+      key,
+    };
+
+    if (options?.refreshTtl !== undefined) {
+      params.refresh_ttl = options.refreshTtl;
+    }
+
     const response = await this.fetch<APIItem>("/store/items", {
-      params: { namespace: namespace.join("."), key },
+      params,
     });
 
     return response
@@ -1182,7 +1233,33 @@ export class StoreClient extends BaseClient {
    * @param options.limit Maximum number of items to return (default is 10).
    * @param options.offset Number of items to skip before returning results (default is 0).
    * @param options.query Optional search query.
+   * @param options.refreshTtl Whether to refresh the TTL on items returned by this search. If null, uses the store's default behavior.
    * @returns Promise<SearchItemsResponse>
+   *
+   * @example
+   * ```typescript
+   * const results = await client.store.searchItems(
+   *   ["documents"],
+   *   {
+   *     filter: { author: "John Doe" },
+   *     limit: 5,
+   *     refreshTtl: true
+   *   }
+   * );
+   * console.log(results);
+   * // {
+   * //   items: [
+   * //     {
+   * //       namespace: ["documents", "user123"],
+   * //       key: "item789",
+   * //       value: { title: "Another Document", author: "John Doe" },
+   * //       createdAt: "2024-07-30T12:00:00Z",
+   * //       updatedAt: "2024-07-30T12:00:00Z"
+   * //     },
+   * //     // ... additional items ...
+   * //   ]
+   * // }
+   * ```
    */
   async searchItems(
     namespacePrefix: string[],
@@ -1191,6 +1268,7 @@ export class StoreClient extends BaseClient {
       limit?: number;
       offset?: number;
       query?: string;
+      refreshTtl?: boolean | null;
     },
   ): Promise<SearchItemsResponse> {
     const payload = {
@@ -1199,6 +1277,7 @@ export class StoreClient extends BaseClient {
       limit: options?.limit ?? 10,
       offset: options?.offset ?? 0,
       query: options?.query,
+      refresh_ttl: options?.refreshTtl,
     };
 
     const response = await this.fetch<APISearchItemsResponse>(
@@ -1249,6 +1328,40 @@ export class StoreClient extends BaseClient {
   }
 }
 
+class UiClient extends BaseClient {
+  private static promiseCache: Record<string, Promise<unknown> | undefined> =
+    {};
+
+  private static getOrCached<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    if (UiClient.promiseCache[key] != null) {
+      return UiClient.promiseCache[key] as Promise<T>;
+    }
+
+    const promise = fn();
+    UiClient.promiseCache[key] = promise;
+    return promise;
+  }
+
+  async getComponent(assistantId: string, agentName: string): Promise<string> {
+    return UiClient["getOrCached"](
+      `${this.apiUrl}-${assistantId}-${agentName}`,
+      async () => {
+        const response = await this.asyncCaller.fetch(
+          ...this.prepareFetchOptions(`/ui/${assistantId}`, {
+            headers: {
+              Accept: "text/html",
+              "Content-Type": "application/json",
+            },
+            method: "POST",
+            json: { name: agentName },
+          }),
+        );
+        return response.text();
+      },
+    );
+  }
+}
+
 export class Client<
   TStateType = DefaultValues,
   TUpdateType = TStateType,
@@ -1279,11 +1392,18 @@ export class Client<
    */
   public store: StoreClient;
 
+  /**
+   * The client for interacting with the UI.
+   * @internal Used by LoadExternalComponent and the API might change in the future.
+   */
+  public "~ui": UiClient;
+
   constructor(config?: ClientConfig) {
     this.assistants = new AssistantsClient(config);
     this.threads = new ThreadsClient(config);
     this.runs = new RunsClient(config);
     this.crons = new CronsClient(config);
     this.store = new StoreClient(config);
+    this["~ui"] = new UiClient(config);
   }
 }

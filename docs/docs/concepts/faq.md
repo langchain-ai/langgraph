@@ -36,7 +36,7 @@ LangGraph is a stateful, orchestration framework that brings added control to ag
 | Concurrency Control | Simple threading                                          | Supports double-texting                                                                                |
 | Scheduling          | None                                                      | Cron scheduling                                                                                        |
 | Monitoring          | None                                                      | Integrated with LangSmith for observability                                                            |
-| IDE integration     | LangGraph Studio for Desktop                              | LangGraph Studio for Desktop & Cloud                                                                   |
+| IDE integration     | LangGraph Studio                                          | LangGraph Studio                                                                                       |
 
 ## What are my deployment options for LangGraph Platform?
 
@@ -62,3 +62,9 @@ Yes! You can use LangGraph with any LLMs. The main reason we use LLMs that suppo
 ## Does LangGraph work with OSS LLMs?
 
 Yes! LangGraph is totally ambivalent to what LLMs are used under the hood. The main reason we use closed LLMs in most of the tutorials is that they seamlessly support tool calling, while OSS LLMs often don't. But tool calling is not necessary (see [this section](#does-langgraph-work-with-llms-that-dont-support-tool-calling)) so you can totally use LangGraph with OSS LLMs.
+
+## Can I use LangGraph Studio without logging to LangSmith
+
+Yes! You can use the [development version of LangGraph Server](../tutorials/langgraph-platform/local-server.md) to run the backend locally.
+This will connect to the studio frontend hosted as part of LangSmith.
+If you set an environment variable of `LANGSMITH_TRACING=false` then no traces will be sent to LangSmith.

@@ -39,6 +39,12 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_RO_TOKEN }}
 
+      - name: Check Lock
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          poetry check --lock
+
       - name: Install dependencies
         shell: bash
         working-directory: ${{ inputs.working-directory }}

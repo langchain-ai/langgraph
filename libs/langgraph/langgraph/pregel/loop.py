@@ -2,7 +2,6 @@ import asyncio
 import concurrent.futures
 from collections import defaultdict, deque
 from contextlib import AsyncExitStack, ExitStack
-from dataclasses import replace
 from inspect import signature
 from types import TracebackType
 from typing import (
@@ -24,6 +23,7 @@ from typing import (
 
 from langchain_core.callbacks import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables import RunnableConfig
+from pydantic import BaseModel
 from typing_extensions import ParamSpec, Self
 
 from langgraph.channels.base import BaseChannel
@@ -55,6 +55,7 @@ from langgraph.constants import (
     ERROR,
     INPUT,
     INTERRUPT,
+    MISSING,
     NS_SEP,
     NULL_TASK_ID,
     PUSH,
@@ -67,7 +68,6 @@ from langgraph.errors import (
     EmptyInputError,
     GraphDelegate,
     GraphInterrupt,
-    ParentCommand,
 )
 from langgraph.managed.base import (
     ManagedValueMapping,
@@ -126,6 +126,7 @@ P = ParamSpec("P")
 
 INPUT_DONE = object()
 INPUT_RESUMING = object()
+INPUT_SHOULD_VALIDATE = object()
 SPECIAL_CHANNELS = (ERROR, INTERRUPT, SCHEDULED)
 
 
@@ -140,6 +141,7 @@ def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
 
 class PregelLoop(LoopProtocol):
     input: Optional[Any]
+    input_model: Optional[Type[BaseModel]]
     checkpointer: Optional[BaseCheckpointSaver]
     nodes: Mapping[str, PregelNode]
     specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]]
@@ -203,6 +205,7 @@ class PregelLoop(LoopProtocol):
         interrupt_after: Union[All, Sequence[str]] = EMPTY_SEQ,
         interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
+        input_model: Optional[Type[BaseModel]] = None,
         debug: bool = False,
     ) -> None:
         super().__init__(
@@ -213,6 +216,7 @@ class PregelLoop(LoopProtocol):
             store=store,
         )
         self.input = input
+        self.input_model = input_model
         self.checkpointer = checkpointer
         self.nodes = nodes
         self.specs = specs
@@ -396,13 +400,14 @@ class PregelLoop(LoopProtocol):
         if self.status != "pending":
             raise RuntimeError("Cannot tick when status is no longer 'pending'")
 
-        if self.input not in (INPUT_DONE, INPUT_RESUMING):
+        if self.input not in (INPUT_DONE, INPUT_RESUMING, INPUT_SHOULD_VALIDATE):
             self._first(input_keys=input_keys)
         elif self.to_interrupt:
             # if we need to interrupt, do so
             self.status = "interrupt_before"
             raise GraphInterrupt()
         elif all(task.writes for task in self.tasks.values()):
+            # finish superstep
             writes = [w for t in self.tasks.values() for w in t.writes]
             # debug flag
             if self.debug:
@@ -425,6 +430,13 @@ class PregelLoop(LoopProtocol):
             # apply writes to managed values
             for key, values in mv_writes.items():
                 self._update_mv(key, values)
+            # validate input if requested
+            if self.input is INPUT_SHOULD_VALIDATE:
+                self.input = INPUT_DONE
+                # validate
+                cast(Type[BaseModel], self.input_model)(
+                    **read_channels(self.channels, self.stream_keys)
+                )
             # produce values output
             self._emit(
                 "values", map_output_values, self.output_keys, writes, self.channels
@@ -451,6 +463,9 @@ class PregelLoop(LoopProtocol):
             ):
                 self.status = "interrupt_after"
                 raise GraphInterrupt()
+
+            # unset resuming flag
+            self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
         else:
             return False
 
@@ -562,7 +577,13 @@ class PregelLoop(LoopProtocol):
         is_resuming = bool(self.checkpoint["channel_versions"]) and bool(
             configurable.get(
                 CONFIG_KEY_RESUMING,
-                self.input is None or isinstance(self.input, Command),
+                self.input is None
+                or isinstance(self.input, Command)
+                or (
+                    not self.is_nested
+                    and self.config.get("metadata", {}).get("run_id")
+                    == self.checkpoint_metadata.get("run_id", MISSING)
+                ),
             )
         )
 
@@ -613,6 +634,8 @@ class PregelLoop(LoopProtocol):
             self._emit(
                 "values", map_output_values, self.output_keys, True, self.channels
             )
+            # set flag
+            self.input = INPUT_RESUMING
         # map inputs to channel updates
         elif input_writes := deque(map_input(input_keys, self.input)):
             # TODO shouldn't these writes be passed to put_writes too?
@@ -653,10 +676,19 @@ class PregelLoop(LoopProtocol):
             assert not mv_writes, "Can't write to SharedValues in graph input"
             # save input checkpoint
             self._put_checkpoint({"source": "input", "writes": dict(input_writes)})
+            # set flag
+            if (
+                self.input_model is not None
+                and not isinstance(self.input, self.input_model)
+                and not isinstance(self.stream_keys, str)
+            ):
+                self.input = INPUT_SHOULD_VALIDATE
+            else:
+                self.input = INPUT_DONE
         elif CONFIG_KEY_RESUMING not in configurable:
             raise EmptyInputError(f"Received no input for {input_keys}")
-        # done with input
-        self.input = INPUT_RESUMING if is_resuming else INPUT_DONE
+        else:
+            self.input = INPUT_DONE
         # update config
         if not self.is_nested:
             self.config = patch_configurable(
@@ -738,15 +770,6 @@ class PregelLoop(LoopProtocol):
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
-        # add current state to parent command
-        if isinstance(exc_value, ParentCommand):
-            cmd = exc_value.args[0]
-            state = (
-                [(self.output_keys, read_channels(self.channels, self.output_keys))]
-                if isinstance(self.output_keys, str)
-                else list(read_channels(self.channels, self.output_keys).items())
-            )
-            exc_value.args = (replace(cmd, update=[*state, *cmd._update_as_tuples()]),)
         # suppress interrupt
         suppress = isinstance(exc_value, GraphInterrupt) and not self.is_nested
         if suppress:
@@ -840,10 +863,12 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
         output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
+        input_model: Optional[Type[BaseModel]] = None,
         debug: bool = False,
     ) -> None:
         super().__init__(
             input,
+            input_model=input_model,
             stream=stream,
             config=config,
             checkpointer=checkpointer,
@@ -979,10 +1004,12 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
         output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
+        input_model: Optional[Type[BaseModel]] = None,
         debug: bool = False,
     ) -> None:
         super().__init__(
             input,
+            input_model=input_model,
             stream=stream,
             config=config,
             checkpointer=checkpointer,

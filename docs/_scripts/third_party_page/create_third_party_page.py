@@ -83,14 +83,18 @@ def generate_markdown(resolved_packages: List[ResolvedPackage], language: str) -
         resolved_packages, key=lambda p: p["weekly_downloads"] or 0, reverse=True
     )
     rows = [
-        "| Name | GitHub URL | Description | Weekly Downloads |",
-        "| --- | --- | --- | --- |",
+        "| Name | GitHub URL | Description | Weekly Downloads | Stars |",
+        "| --- | --- | --- | --- | --- |",
     ]
     for package in sorted_packages:
         name = f"**{package['name']}**"
         repo_url = f"[{package['repo']}](https://github.com/{package['repo']})"
+        stars_badge = (
+            f"https://img.shields.io/github/stars/{package['repo']}?style=social"
+        )
+        stars = f"![GitHub stars]({stars_badge})"
         downloads = package["weekly_downloads"] or "-"
-        row = f"| {name} | {repo_url} | {package['description']} | {downloads} |"
+        row = f"| {name} | {repo_url} | {package['description']} | {downloads} | {stars}"
         rows.append(row)
     markdown_content = MARKDOWN.format(
         library_list="\n".join(rows), langgraph_url=langgraph_url
