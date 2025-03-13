@@ -1831,7 +1831,12 @@ class RunsClient:
         return await self.http.get(f"/threads/{thread_id}/runs/{run_id}/join")
 
     def join_stream(
-        self, thread_id: str, run_id: str, *, cancel_on_disconnect: bool = False
+        self,
+        thread_id: str,
+        run_id: str,
+        *,
+        cancel_on_disconnect: bool = False,
+        stream_mode: Optional[Union[StreamMode, Sequence[StreamMode]]] = None,
     ) -> AsyncIterator[StreamPart]:
         """Stream output from a run in real-time, until the run is done.
         Output is not buffered, so any output produced before this call will
@@ -1841,6 +1846,9 @@ class RunsClient:
             thread_id: The thread ID to join.
             run_id: The run ID to join.
             cancel_on_disconnect: Whether to cancel the run when the stream is disconnected.
+            stream_mode: The stream mode(s) to use. Must be a subset of the stream modes passed
+                when creating the run. Background runs default to having the union of all
+                stream modes.
 
         Returns:
             None
@@ -1849,14 +1857,18 @@ class RunsClient:
 
             await client.runs.join_stream(
                 thread_id="thread_id_to_join",
-                run_id="run_id_to_join"
+                run_id="run_id_to_join",
+                stream_mode=["values", "debug"]
             )
 
         """  # noqa: E501
         return self.http.stream(
             f"/threads/{thread_id}/runs/{run_id}/stream",
             "GET",
-            params={"cancel_on_disconnect": cancel_on_disconnect},
+            params={
+                "cancel_on_disconnect": cancel_on_disconnect,
+                "stream_mode": stream_mode,
+            },
         )
 
     async def delete(self, thread_id: str, run_id: str) -> None:
@@ -2163,7 +2175,7 @@ class StoreClient:
             "index": index,
             "ttl": ttl,
         }
-        await self.http.put("/store/items", json=payload)
+        await self.http.put("/store/items", json=_provided_vals(payload))
 
     async def get_item(
         self,
@@ -3988,7 +4000,14 @@ class SyncRunsClient:
         """  # noqa: E501
         return self.http.get(f"/threads/{thread_id}/runs/{run_id}/join")
 
-    def join_stream(self, thread_id: str, run_id: str) -> Iterator[StreamPart]:
+    def join_stream(
+        self,
+        thread_id: str,
+        run_id: str,
+        *,
+        stream_mode: Optional[Union[StreamMode, Sequence[StreamMode]]] = None,
+        cancel_on_disconnect: bool = False,
+    ) -> Iterator[StreamPart]:
         """Stream output from a run in real-time, until the run is done.
         Output is not buffered, so any output produced before this call will
         not be received here.
@@ -3996,6 +4015,10 @@ class SyncRunsClient:
         Args:
             thread_id: The thread ID to join.
             run_id: The run ID to join.
+            stream_mode: The stream mode(s) to use. Must be a subset of the stream modes passed
+                when creating the run. Background runs default to having the union of all
+                stream modes.
+            cancel_on_disconnect: Whether to cancel the run when the stream is disconnected.
 
         Returns:
             None
@@ -4004,11 +4027,19 @@ class SyncRunsClient:
 
             client.runs.join_stream(
                 thread_id="thread_id_to_join",
-                run_id="run_id_to_join"
+                run_id="run_id_to_join",
+                stream_mode=["values", "debug"]
             )
 
         """  # noqa: E501
-        return self.http.stream(f"/threads/{thread_id}/runs/{run_id}/stream", "GET")
+        return self.http.stream(
+            f"/threads/{thread_id}/runs/{run_id}/stream",
+            "GET",
+            params={
+                "stream_mode": stream_mode,
+                "cancel_on_disconnect": cancel_on_disconnect,
+            },
+        )
 
     def delete(self, thread_id: str, run_id: str) -> None:
         """Delete a run.
@@ -4307,7 +4338,7 @@ class SyncStoreClient:
             "index": index,
             "ttl": ttl,
         }
-        self.http.put("/store/items", json=payload)
+        self.http.put("/store/items", json=_provided_vals(payload))
 
     def get_item(
         self,

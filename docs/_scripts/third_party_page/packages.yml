@@ -30,3 +30,6 @@ packages:
   - name: "langgraph-bigtool"
     repo: "langchain-ai/langgraph-bigtool"
     description: "Build LangGraph agents with large numbers of tools."
+  - name: "langgraph-reflection"
+    repo: "langchain-ai/langgraph-reflection"
+    description: "LangGraph agent that runs a reflection step."

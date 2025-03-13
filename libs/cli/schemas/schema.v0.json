@@ -397,6 +397,17 @@
             }
           ],
           "description": "Optional. Defines the vector-based semantic search configuration.\n\n- Generate embeddings according to `index.embed`\n- Enforce the embedding dimension given by `index.dims`\n- Embed only specified JSON fields (if any) from `index.fields`\n\nIf omitted, no vector index is initialized.\n"
+        },
+        "ttl": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TTLConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional. Defines the TTL (time-to-live) behavior configuration.\n\nIf provided, the store will apply TTL settings according to the configuration.\nIf omitted, no TTL behavior is configured.\n"
         }
       },
       "required": []
@@ -427,6 +438,27 @@
             }
           ],
           "description": "Optional. List of JSON fields to extract before generating embeddings.\n\nDefaults to [\"$\"], which means the entire JSON object is embedded as one piece of text.\nIf you provide multiple fields (e.g. [\"title\", \"content\"]), each is extracted and embedded separately,\noften saving token usage if you only care about certain parts of the data.\n"
+        }
+      },
+      "required": []
+    },
+    "TTLConfig": {
+      "title": "TTLConfig",
+      "description": "Configuration for TTL (time-to-live) behavior in the store.",
+      "type": "object",
+      "properties": {
+        "default_ttl": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "refresh_on_read": {
+          "type": "boolean"
         }
       },
       "required": []

@@ -50,6 +50,7 @@ from langgraph.graph.graph import (
     Graph,
     Send,
 )
+from langgraph.graph.schema_utils import SchemaCoercionMapper
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
     ChannelTypePlaceholder,
@@ -626,6 +627,13 @@ class StateGraph(Graph):
         compiled = CompiledStateGraph(
             builder=self,
             config_type=self.config_schema,
+            input_model=(
+                self.input
+                if len(self.channels) > 1
+                and isclass(self.input)
+                and issubclass(self.input, (BaseModel, BaseModelV1))
+                else None
+            ),
             nodes={},
             channels={
                 **self.channels,
@@ -755,23 +763,22 @@ class CompiledStateGraph(CompiledGraph):
                         updates.extend(_get_updates(i) or ())
                 return updates
             elif get_type_hints(type(input)):
-                # if input is a Pydantic model, only update values
-                # for the keys that have been explicitly set by the users
-                # (this is needed to avoid sending updates for fields with None defaults)
-                output_keys_ = output_keys
                 # Pydantic v2
-                if hasattr(input, "model_fields_set"):
-                    output_keys_ = [
-                        k for k in output_keys if k in input.model_fields_set
-                    ]
+                if hasattr(input, "model_fields"):
+                    defaults = {k: v.default for k, v in input.model_fields.items()}
                 # Pydantic v1
-                elif hasattr(input, "__fields_set__"):
-                    output_keys_ = [k for k in output_keys if k in input.__fields_set__]
+                elif hasattr(input, "__fields__"):
+                    defaults = {k: v.default for k, v in input.__fields__.items()}
+                else:
+                    defaults = {}
 
+                # if input is a Pydantic model, only update values
+                # that are different from the default values
                 return [
-                    (k, getattr(input, k))
-                    for k in output_keys_
-                    if getattr(input, k, MISSING) is not MISSING
+                    (k, value)
+                    for k in output_keys
+                    if (value := getattr(input, k, MISSING)) is not MISSING
+                    and value != defaults.get(k)
                 ]
             else:
                 msg = create_error_message(
@@ -812,11 +819,7 @@ class CompiledStateGraph(CompiledGraph):
                 # read state keys and managed values
                 channels=(list(input_values) if is_single_input else input_values),
                 # coerce state dict to schema class (eg. pydantic model)
-                mapper=(
-                    None
-                    if is_single_input or issubclass(input_schema, dict)
-                    else partial(_coerce_state, input_schema)
-                ),
+                mapper=_pick_mapper(list(input_values), input_schema),
                 writers=[
                     # publish to this channel and state keys
                     ChannelWrite(
@@ -931,12 +934,21 @@ def _get_state_reader(
         select=select[0] if select == ["__root__"] else select,
         fresh=True,
         # coerce state dict to schema class (eg. pydantic model)
-        mapper=(
-            None
-            if state_keys == ["__root__"] or issubclass(schema, dict)
-            else partial(_coerce_state, schema)
-        ),
+        mapper=_pick_mapper(state_keys, schema),
     )
+
+
+def _pick_mapper(
+    state_keys: Sequence[str], schema: Type[Any]
+) -> Optional[Callable[[Any], Any]]:
+    if state_keys == ["__root__"]:
+        return None
+    if isclass(schema):
+        if issubclass(schema, dict):
+            return None
+        if issubclass(schema, (BaseModel, BaseModelV1)):
+            return SchemaCoercionMapper(schema)
+    return partial(_coerce_state, schema)
 
 
 def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
