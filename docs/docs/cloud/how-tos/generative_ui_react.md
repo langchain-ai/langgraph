@@ -103,7 +103,8 @@ const AgentState = Annotation.Root({
 export const graph = new StateGraph(AgentState)
   .addNode("weather", async (state, config) => {
     // Provide the type of the component map to ensure
-    // type safety of `ui.push()` calls.
+    // type safety of `ui.push()` calls as well as
+    // pushing the messages to the `ui` and sending a custom event as well.
     const ui = typedUi<typeof ComponentMap>(config);
 
     const weather = await new ChatOpenAI({ model: "gpt-4o-mini" })
@@ -120,7 +121,7 @@ export const graph = new StateGraph(AgentState)
     // Emit UI elements with associated AI message
     ui.push({ name: "weather", props: weather }, { message: response });
 
-    return { messages: [response], ui: ui.items };
+    return { messages: [response] };
   })
   .addEdge("__start__", "weather")
   .compile();

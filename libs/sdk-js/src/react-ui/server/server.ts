@@ -6,15 +6,34 @@ interface MessageLike {
   id?: string;
 }
 
-export const typedUi = <Decl extends Record<string, ElementType>>(config: {
-  writer?: (chunk: unknown) => void;
-  runId?: string;
-  metadata?: Record<string, unknown>;
-  tags?: string[];
-  runName?: string;
-}) => {
+/**
+ * Helper to send and persist UI messages. Accepts a map of component names to React components
+ * as type argument to provide type safety. Will also write to the `options?.stateKey` state.
+ *
+ * @param config LangGraphRunnableConfig
+ * @param options
+ * @returns
+ */
+export const typedUi = <Decl extends Record<string, ElementType>>(
+  config: {
+    writer?: (chunk: unknown) => void;
+    runId?: string;
+    metadata?: Record<string, unknown>;
+    tags?: string[];
+    runName?: string;
+    configurable?: {
+      __pregel_send?: (writes_: [string, unknown][]) => void;
+      [key: string]: unknown;
+    };
+  },
+  options?: {
+    /** The key to write the UI messages to. Defaults to `ui`. */
+    stateKey?: string;
+  },
+) => {
   type PropMap = { [K in keyof Decl]: ComponentPropsWithoutRef<Decl[K]> };
   let items: (UIMessage | RemoveUIMessage)[] = [];
+  const stateKey = options?.stateKey ?? "ui";
 
   const runId = (config.metadata?.run_id as string | undefined) ?? config.runId;
   if (!runId) throw new Error("run_id is required");
@@ -48,6 +67,7 @@ export const typedUi = <Decl extends Record<string, ElementType>>(config: {
     };
     items.push(evt);
     config.writer?.(evt);
+    config.configurable?.__pregel_send?.([[stateKey, evt]]);
     return evt;
   };
 
@@ -55,6 +75,7 @@ export const typedUi = <Decl extends Record<string, ElementType>>(config: {
     const evt: RemoveUIMessage = { type: "remove-ui", id };
     items.push(evt);
     config.writer?.(evt);
+    config.configurable?.__pregel_send?.([[stateKey, evt]]);
     return evt;
   };
 
