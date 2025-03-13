@@ -4652,8 +4652,11 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
                 teardown()
 
     def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
+        x: list[str], y: Union[list[str], list[tuple[str, str]], None]
     ) -> list[str]:
+        if y is None:
+            return x
+
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -4733,7 +4736,13 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
     async with assert_ctx_once():
         assert [c async for c in app.astream({"query": "what is weather in sf"})] == [
             {"rewrite_query": {"query": "query: what is weather in sf"}},
-            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {
+                "analyzer_one": {
+                    "query": "analyzed: query: what is weather in sf",
+                    "answer": None,
+                    "docs": None,
+                }
+            },
             {"retriever_two": {"docs": ["doc3", "doc4"]}},
             {"retriever_one": {"docs": ["doc1", "doc2"]}},
             {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
@@ -4754,7 +4763,13 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
                 )
             ] == [
                 {"rewrite_query": {"query": "query: what is weather in sf"}},
-                {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+                {
+                    "analyzer_one": {
+                        "query": "analyzed: query: what is weather in sf",
+                        "answer": None,
+                        "docs": None,
+                    }
+                },
                 {"retriever_two": {"docs": ["doc3", "doc4"]}},
                 {"retriever_one": {"docs": ["doc1", "doc2"]}},
                 {"__interrupt__": ()},
@@ -4820,8 +4835,11 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydant
     from pydantic import BaseModel, ValidationError
 
     def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
+        x: list[str], y: Union[list[str], list[tuple[str, str]], None]
     ) -> list[str]:
+        if y is None:
+            return x
+
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -4905,7 +4923,13 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydant
         )
     ] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {
+            "analyzer_one": {
+                "query": "analyzed: query: what is weather in sf",
+                "answer": None,
+                "docs": None,
+            }
+        },
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
@@ -4925,7 +4949,13 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydant
             )
         ] == [
             {"rewrite_query": {"query": "query: what is weather in sf"}},
-            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {
+                "analyzer_one": {
+                    "query": "analyzed: query: what is weather in sf",
+                    "answer": None,
+                    "docs": None,
+                }
+            },
             {"retriever_two": {"docs": ["doc3", "doc4"]}},
             {"retriever_one": {"docs": ["doc1", "doc2"]}},
             {"__interrupt__": ()},
