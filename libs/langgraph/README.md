@@ -1,7 +1,7 @@
 <picture class="github-only">
-  <source media="(prefers-color-scheme: light)" srcset="static/wordmark_dark.svg">
-  <source media="(prefers-color-scheme: dark)" srcset="static/wordmark_light.svg">
-  <img alt="LangGraph Logo" src="static/wordmark_dark.svg" width="80%">
+  <source media="(prefers-color-scheme: light)" srcset="docs/docs/static/wordmark_dark.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/docs/static/wordmark_light.svg">
+  <img alt="LangGraph Logo" src="docs/docs/static/wordmark_dark.svg" width="80%">
 </picture>
 
 [![Version](https://img.shields.io/pypi/v/langgraph.svg)](https://pypi.org/project/langgraph/)
