@@ -85,7 +85,7 @@ plugins:
 
 nav:
   - Home:
-    - Introduction: index.md
+    - index.md
     - Get started:
       - Learn the basics: tutorials/introduction.ipynb
       - Deployment:
