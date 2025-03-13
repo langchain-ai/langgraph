@@ -44,7 +44,31 @@ Next, define your UI components in your `langgraph.json` configuration:
 }
 ```
 
-The `ui` section points to the UI components that will be used by the respective graph. LangGraph Platform supports React 18.x and above, as well as Tailwind 4.x. Dependencies will be bundled and served from the LangGraph Platform.
+The `ui` section points to the UI components that will be used by graphs. By default, we recommend using the same key as the graph name, but you can split out the components however you like.
+
+LangGraph Platform will automatically bundle your UI components code and styles and serve them as external assets that can be loaded by the `LoadExternalComponent` component. Some dependencies such as `react` and `react-dom` will be automatically excluded from the bundle.
+
+CSS and Tailwind 4.x is also supported out of the box, so you can freely use Tailwind classes as well as `shadcn/ui` in your UI components.
+
+=== "src/agent/ui.tsx"
+
+    ```tsx
+    import "./styles.css";
+
+    const WeatherComponent = (props: { city: string }) => {
+      return <div className="bg-red-500">Weather for {props.city}</div>;
+    };
+
+    export default {
+      weather: WeatherComponent,
+    };
+    ```
+
+=== "src/agent/styles.css"
+
+    ```css
+    @import "tailwindcss";
+    ```
 
 ### 2. Send the UI components in your graph
 
