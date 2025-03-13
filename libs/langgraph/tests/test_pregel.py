@@ -3069,7 +3069,7 @@ def test_nested_pydantic_models(version: str) -> None:
         # Basic nested model tests
         top_level: str
         nested: NestedModel
-        optional_nested: Optional[NestedModel] = None
+        optional_nested: Annotated[Optional[NestedModel], lambda x, y: y, "Foo"]
         dict_nested: dict[str, NestedModel]
         list_nested: Annotated[
             Union[dict, list[dict[str, NestedModel]]], lambda x, y: (x or []) + [y]
@@ -3126,8 +3126,10 @@ def test_nested_pydantic_models(version: str) -> None:
 
     update = {"top_level": "updated", "nested": {"value": 100, "name": "updated"}}
 
+    expected = State(**inputs)
+
     def node_fn(state: State) -> dict:
-        assert state == State(**inputs)
+        assert state == expected
         return update
 
     builder = StateGraph(State)
@@ -3139,6 +3141,11 @@ def test_nested_pydantic_models(version: str) -> None:
     result = graph.invoke(inputs.copy())
 
     assert result == {**inputs, **update}
+
+    new_inputs = inputs.copy()
+    new_inputs["list_nested"] = {"foo": "bar"}
+    expected = State(**new_inputs)
+    assert {**new_inputs, **update} == graph.invoke(new_inputs.copy())
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
