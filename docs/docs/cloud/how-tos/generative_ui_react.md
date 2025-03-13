@@ -77,7 +77,6 @@ CSS and Tailwind 4.x is also supported out of the box, so you can freely use Tai
 Use the `typedUi` utility to emit UI elements from your agent nodes:
 
 ```typescript title="src/agent/index.ts"
-import type ComponentMap from "./ui.js";
 import {
   typedUi,
   uiMessageReducer,
@@ -86,6 +85,8 @@ import {
 import { ChatOpenAI } from "@langchain/openai";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
+
+import type ComponentMap from "./ui.js";
 
 import {
   Annotation,
