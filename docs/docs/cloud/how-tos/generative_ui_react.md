@@ -8,10 +8,13 @@
 
 Generative user interfaces (Generative UI) allows agents to go beyond text and generate rich user interfaces. This enables creating more interactive and context-aware applications where the UI adapts based on the conversation flow and AI responses.
 
+![Generative UI Sample](./img/generative_ui_sample.png)
+
 LangGraph Platform supports colocating your React components with your graph code. This allows you to focus on building specific UI components for your graph while easily plugging into existing chat interfaces such as [Agent Chat](https://agentchat.vercel.app) and loading the code only when actually needed.
 
 !!! warning "LangGraph.js only"
-Currently only LangGraph.js supports Generative UI. Support for Python is coming soon.
+
+    Currently only LangGraph.js supports Generative UI. Support for Python is coming soon.
 
 ## Quickstart
 
@@ -19,8 +22,7 @@ Currently only LangGraph.js supports Generative UI. Support for Python is coming
 
 First, create your first UI component. For each component you need to provide an unique identifier that will be used to reference the component in your graph code.
 
-```tsx
-// src/agent/ui.tsx
+```tsx title="src/agent/ui.tsx"
 const WeatherComponent = (props: { city: string }) => {
   return <div>Weather for {props.city}</div>;
 };
@@ -44,13 +46,13 @@ Next, define your UI components in your `langgraph.json` configuration:
 }
 ```
 
-The `ui` section points to the UI components that will be used by graphs. By default, we recommend using the same key as the graph name, but you can split out the components however you like.
+The `ui` section points to the UI components that will be used by graphs. By default, we recommend using the same key as the graph name, but you can split out the components however you like, see [Customise the namespace of UI components](#customise-the-namespace-of-ui-components) for more details.
 
 LangGraph Platform will automatically bundle your UI components code and styles and serve them as external assets that can be loaded by the `LoadExternalComponent` component. Some dependencies such as `react` and `react-dom` will be automatically excluded from the bundle.
 
 CSS and Tailwind 4.x is also supported out of the box, so you can freely use Tailwind classes as well as `shadcn/ui` in your UI components.
 
-=== "src/agent/ui.tsx"
+=== "`src/agent/ui.tsx`"
 
     ```tsx
     import "./styles.css";
@@ -64,7 +66,7 @@ CSS and Tailwind 4.x is also supported out of the box, so you can freely use Tai
     };
     ```
 
-=== "src/agent/styles.css"
+=== "`src/agent/styles.css`"
 
     ```css
     @import "tailwindcss";
@@ -74,8 +76,7 @@ CSS and Tailwind 4.x is also supported out of the box, so you can freely use Tai
 
 Use the `typedUi` utility to emit UI elements from your agent nodes:
 
-```typescript
-// src/agent/index.ts
+```typescript title="src/agent/index.ts"
 import type ComponentMap from "./ui.js";
 import {
   typedUi,
@@ -128,8 +129,7 @@ export const graph = new StateGraph(AgentState)
 
 On the client side, you can use `useStream()` and `LoadExternalComponent` to display the UI elements.
 
-```tsx
-// src/app/page.tsx
+```tsx title="src/app/page.tsx"
 "use client";
 
 import { useStream } from "@langchain/langgraph-sdk/react";
@@ -160,7 +160,7 @@ export default function Page() {
 
 Behind the scenes, `LoadExternalComponent` will fetch the JS and CSS for the UI components from LangGraph Platform and render them in a shadow DOM, thus ensuring style isolation from the rest of your application.
 
-## Configuration options
+## How-to guides
 
 ### Show loading UI when components are loading
 
@@ -189,6 +189,30 @@ const clientComponents = {
   components={clientComponents}
 />;
 ```
+
+### Customise the namespace of UI components.
+
+By default `LoadExternalComponent` will use the `assistantId` from `useStream()` hook to fetch the code for UI components. You can customise this by providing a `namespace` prop to the `LoadExternalComponent` component.
+
+=== "`src/app/page.tsx`"
+
+    ```tsx
+    <LoadExternalComponent
+      stream={thread}
+      message={ui}
+      namespace="custom-namespace"
+    />
+    ```
+
+=== "`langgraph.json`"
+
+    ```json
+    {
+      "ui": {
+        "custom-namespace": "./src/agent/ui.tsx"
+      }
+    }
+    ```
 
 ### Access the thread state from the UI component
 
@@ -264,7 +288,7 @@ const { thread, submit } = useStream({
 
 Similar to how messages can be removed from the state by appending a RemoveMessage you can remove an UI message from the state by calling `ui.delete` with the ID of the UI message.
 
-```typescript
+```tsx
 // pushed message
 const message = ui.push({ name: "weather", props: { city: "London" } });
 
