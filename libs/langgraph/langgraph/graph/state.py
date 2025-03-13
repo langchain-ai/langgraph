@@ -763,22 +763,12 @@ class CompiledStateGraph(CompiledGraph):
                         updates.extend(_get_updates(i) or ())
                 return updates
             elif get_type_hints(type(input)):
-                # Pydantic v2
-                if hasattr(input, "model_fields"):
-                    defaults = {k: v.default for k, v in input.model_fields.items()}
-                # Pydantic v1
-                elif hasattr(input, "__fields__"):
-                    defaults = {k: v.default for k, v in input.__fields__.items()}
-                else:
-                    defaults = {}
-
                 # if input is a Pydantic model, only update values
                 # that are different from the default values
                 return [
                     (k, value)
                     for k in output_keys
                     if (value := getattr(input, k, MISSING)) is not MISSING
-                    and value != defaults.get(k)
                 ]
             else:
                 msg = create_error_message(

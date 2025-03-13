@@ -2591,8 +2591,11 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
                 teardown()
 
     def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
+        x: list[str], y: Union[list[str], list[tuple[str, str]], None]
     ) -> list[str]:
+        if y is None:
+            return x
+
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -2684,7 +2687,13 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
             *app.stream({"query": "what is weather in sf", "inner": {"yo": 1}})
         ] == [
             {"rewrite_query": {"query": "query: what is weather in sf"}},
-            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {
+                "analyzer_one": {
+                    "query": "analyzed: query: what is weather in sf",
+                    "answer": None,
+                    "docs": None,
+                }
+            },
             {"retriever_two": {"docs": ["doc3", "doc4"]}},
             {"retriever_one": {"docs": ["doc1", "doc2"]}},
             {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
@@ -2704,7 +2713,13 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
             )
         ] == [
             {"rewrite_query": {"query": "query: what is weather in sf"}},
-            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {
+                "analyzer_one": {
+                    "query": "analyzed: query: what is weather in sf",
+                    "answer": None,
+                    "docs": None,
+                }
+            },
             {"retriever_two": {"docs": ["doc3", "doc4"]}},
             {"retriever_one": {"docs": ["doc1", "doc2"]}},
             {"__interrupt__": ()},
@@ -2762,8 +2777,11 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
                 teardown()
 
     def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
+        x: list[str], y: Union[list[str], list[tuple[str, str]], None]
     ) -> list[str]:
+        if y is None:
+            return x
+
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -2855,7 +2873,13 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
             *app.stream({"query": "what is weather in sf", "inner": {"yo": 1}})
         ] == [
             {"rewrite_query": {"query": "query: what is weather in sf"}},
-            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {
+                "analyzer_one": {
+                    "query": "analyzed: query: what is weather in sf",
+                    "answer": None,
+                    "docs": None,
+                }
+            },
             {"retriever_two": {"docs": ["doc3", "doc4"]}},
             {"retriever_one": {"docs": ["doc1", "doc2"]}},
             {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
@@ -2875,7 +2899,13 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
             )
         ] == [
             {"rewrite_query": {"query": "query: what is weather in sf"}},
-            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {
+                "analyzer_one": {
+                    "query": "analyzed: query: what is weather in sf",
+                    "answer": None,
+                    "docs": None,
+                }
+            },
             {"retriever_two": {"docs": ["doc3", "doc4"]}},
             {"retriever_one": {"docs": ["doc1", "doc2"]}},
             {"__interrupt__": ()},
@@ -2910,8 +2940,11 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_inp
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
+        x: list[str], y: Union[list[str], list[tuple[str, str]], None]
     ) -> list[str]:
+        if y is None:
+            return x
+
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -2991,7 +3024,13 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_inp
         *app.stream(Input(query="what is weather in sf", inner=InnerObject(yo=1)))
     ] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {
+            "analyzer_one": {
+                "query": "analyzed: query: what is weather in sf",
+                "answer": None,
+                "docs": None,
+            }
+        },
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
@@ -3010,7 +3049,13 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_inp
         )
     ] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {
+            "analyzer_one": {
+                "query": "analyzed: query: what is weather in sf",
+                "answer": None,
+                "docs": None,
+            }
+        },
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"__interrupt__": ()},
