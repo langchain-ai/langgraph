@@ -257,7 +257,7 @@ def _validate_chat_history(
 @_convert_modifier_to_prompt
 def create_react_agent(
     model: Union[str, LanguageModelLike],
-    tools: Union[Sequence[BaseTool], ToolNode],
+    tools: Union[Sequence[Union[BaseTool, Callable]], ToolNode],
     *,
     prompt: Optional[Prompt] = None,
     response_format: Optional[
