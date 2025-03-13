@@ -198,8 +198,6 @@ Learn how to set up your app for deployment to LangGraph Platform:
 - [How to test locally](../cloud/deployment/test_locally.md)
 - [How to rebuild graph at runtime](../cloud/deployment/graph_rebuild.md)
 - [How to use LangGraph Platform to deploy CrewAI, AutoGen, and other frameworks](autogen-langgraph-platform.ipynb)
-- [How to integrate LangGraph into your React application](../cloud/how-tos/use_stream_react.md)
-- [How to implement Generative User Interfaces with LangGraph](../cloud/how-tos/generative_ui_react.md)
 
 ### Deployment
 
@@ -257,6 +255,13 @@ Streaming the results of your LLM application is vital for ensuring a good user 
 - [How to stream events](../cloud/how-tos/stream_events.md)
 - [How to stream in debug mode](../cloud/how-tos/stream_debug.md)
 - [How to stream multiple modes](../cloud/how-tos/stream_multiple.md)
+
+### Frontend and Generative UI
+
+With LangGraph Platform you can integrate LangGraph agents into your React applications and colocate UI components with your agent code. 
+
+- [How to integrate LangGraph into your React application](../cloud/how-tos/use_stream_react.md)
+- [How to implement Generative User Interfaces with LangGraph](../cloud/how-tos/generative_ui_react.md)
 
 ### Human-in-the-loop
 
