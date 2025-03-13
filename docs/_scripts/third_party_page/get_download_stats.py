@@ -30,9 +30,22 @@ PACKAGES_FILE = HERE / "packages.yml"
 PACKAGES = yaml.safe_load(PACKAGES_FILE.read_text())['packages']
 
 
-def _get_weekly_downloads(packages: list[Package]) -> list[ResolvedPackage]:
+def _get_weekly_downloads(packages: list[Package], fake: bool) -> list[ResolvedPackage]:
     """Retrieve the monthly download count for a list of packages from PyPIStats."""
     resolved_packages: list[ResolvedPackage] = []
+
+    if fake:
+        # To avoid making network requests during testing, return fake download counts
+        for package in packages:
+            resolved_packages.append(
+                {
+                    "name": package["name"],
+                    "repo": package["repo"],
+                    "weekly_downloads": -12345,
+                    "description": package["description"],
+                }
+            )
+        return resolved_packages
 
     for package in packages:
         # First check if package exists on PyPI
@@ -88,13 +101,13 @@ def _get_weekly_downloads(packages: list[Package]) -> list[ResolvedPackage]:
 
 
 
-def main(output_file: str) -> None:
+def main(output_file: str, fake: bool) -> None:
     """Main function to generate package download information.
 
     Args:
         output_file: Path to the output YAML file.
     """
-    resolved_packages: list[ResolvedPackage] = _get_weekly_downloads(PACKAGES)
+    resolved_packages: list[ResolvedPackage] = _get_weekly_downloads(PACKAGES, fake)
 
     if not output_file.endswith(".yml"):
         raise ValueError("Output file must have a .yml extension")
@@ -115,6 +128,15 @@ if __name__ == "__main__":
             "downloads.yml"
         ),
     )
+    parser.add_argument(
+        "--fake",
+        default=False,
+        action="store_true",
+        help=(
+            "Generate fake download counts for testing purposes. "
+            "This option will not make any network requests."
+        ),
+    )
     args = parser.parse_args()
 
-    main(args.output_file)
+    main(args.output_file, args.fake)

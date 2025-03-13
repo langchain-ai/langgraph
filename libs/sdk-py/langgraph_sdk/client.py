@@ -388,7 +388,9 @@ class AssistantsClient:
                 'created_at': '2024-06-25T17:10:33.109781+00:00',
                 'updated_at': '2024-06-25T17:10:33.109781+00:00',
                 'config': {},
-                'metadata': {'created_by': 'system'}
+                'metadata': {'created_by': 'system'},
+                'version': 1,
+                'name': 'my_assistant'
             }
 
         """  # noqa: E501
@@ -742,7 +744,7 @@ class AssistantsClient:
             offset: The number of versions to skip.
 
         Returns:
-            list[Assistant]: A list of assistants.
+            list[AssistantVersion]: A list of assistant versions.
 
         Example Usage:
 
@@ -1829,7 +1831,12 @@ class RunsClient:
         return await self.http.get(f"/threads/{thread_id}/runs/{run_id}/join")
 
     def join_stream(
-        self, thread_id: str, run_id: str, *, cancel_on_disconnect: bool = False
+        self,
+        thread_id: str,
+        run_id: str,
+        *,
+        cancel_on_disconnect: bool = False,
+        stream_mode: Optional[Union[StreamMode, Sequence[StreamMode]]] = None,
     ) -> AsyncIterator[StreamPart]:
         """Stream output from a run in real-time, until the run is done.
         Output is not buffered, so any output produced before this call will
@@ -1839,6 +1846,9 @@ class RunsClient:
             thread_id: The thread ID to join.
             run_id: The run ID to join.
             cancel_on_disconnect: Whether to cancel the run when the stream is disconnected.
+            stream_mode: The stream mode(s) to use. Must be a subset of the stream modes passed
+                when creating the run. Background runs default to having the union of all
+                stream modes.
 
         Returns:
             None
@@ -1847,14 +1857,18 @@ class RunsClient:
 
             await client.runs.join_stream(
                 thread_id="thread_id_to_join",
-                run_id="run_id_to_join"
+                run_id="run_id_to_join",
+                stream_mode=["values", "debug"]
             )
 
         """  # noqa: E501
         return self.http.stream(
             f"/threads/{thread_id}/runs/{run_id}/stream",
             "GET",
-            params={"cancel_on_disconnect": cancel_on_disconnect},
+            params={
+                "cancel_on_disconnect": cancel_on_disconnect,
+                "stream_mode": stream_mode,
+            },
         )
 
     async def delete(self, thread_id: str, run_id: str) -> None:
@@ -2127,6 +2141,7 @@ class StoreClient:
         key: str,
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
+        ttl: Optional[int] = None,
     ) -> None:
         """Store or update an item.
 
@@ -2135,6 +2150,7 @@ class StoreClient:
             key: The unique identifier for the item within the namespace.
             value: A dictionary containing the item's data.
             index: Controls search indexing - None (use defaults), False (disable), or list of field paths to index.
+            ttl: Optional time-to-live in minutes for the item, or None for no expiration.
 
         Returns:
             None
@@ -2152,15 +2168,29 @@ class StoreClient:
                 raise ValueError(
                     f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
                 )
-        payload = {"namespace": namespace, "key": key, "value": value, "index": index}
-        await self.http.put("/store/items", json=payload)
+        payload = {
+            "namespace": namespace,
+            "key": key,
+            "value": value,
+            "index": index,
+            "ttl": ttl,
+        }
+        await self.http.put("/store/items", json=_provided_vals(payload))
 
-    async def get_item(self, namespace: Sequence[str], /, key: str) -> Item:
+    async def get_item(
+        self,
+        namespace: Sequence[str],
+        /,
+        key: str,
+        *,
+        refresh_ttl: Optional[bool] = None,
+    ) -> Item:
         """Retrieve a single item.
 
         Args:
             key: The unique identifier for the item.
             namespace: Optional list of strings representing the namespace path.
+            refresh_ttl: Whether to refresh the TTL on this read operation. If None, uses the store's default behavior.
 
         Returns:
             Item: The retrieved item.
@@ -2188,9 +2218,10 @@ class StoreClient:
                 raise ValueError(
                     f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
                 )
-        return await self.http.get(
-            "/store/items", params={"namespace": ".".join(namespace), "key": key}
-        )
+        params = {"namespace": ".".join(namespace), "key": key}
+        if refresh_ttl is not None:
+            params["refresh_ttl"] = refresh_ttl
+        return await self.http.get("/store/items", params=params)
 
     async def delete_item(self, namespace: Sequence[str], /, key: str) -> None:
         """Delete an item.
@@ -2221,6 +2252,7 @@ class StoreClient:
         limit: int = 10,
         offset: int = 0,
         query: Optional[str] = None,
+        refresh_ttl: Optional[bool] = None,
     ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
 
@@ -2230,6 +2262,7 @@ class StoreClient:
             limit: Maximum number of items to return (default is 10).
             offset: Number of items to skip before returning results (default is 0).
             query: Optional query for natural language search.
+            refresh_ttl: Whether to refresh the TTL on items returned by this search. If None, uses the store's default behavior.
 
         Returns:
             List[Item]: A list of items matching the search criteria.
@@ -2268,6 +2301,7 @@ class StoreClient:
             "limit": limit,
             "offset": offset,
             "query": query,
+            "refresh_ttl": refresh_ttl,
         }
 
         return await self.http.post("/store/items/search", json=_provided_vals(payload))
@@ -3966,7 +4000,14 @@ class SyncRunsClient:
         """  # noqa: E501
         return self.http.get(f"/threads/{thread_id}/runs/{run_id}/join")
 
-    def join_stream(self, thread_id: str, run_id: str) -> Iterator[StreamPart]:
+    def join_stream(
+        self,
+        thread_id: str,
+        run_id: str,
+        *,
+        stream_mode: Optional[Union[StreamMode, Sequence[StreamMode]]] = None,
+        cancel_on_disconnect: bool = False,
+    ) -> Iterator[StreamPart]:
         """Stream output from a run in real-time, until the run is done.
         Output is not buffered, so any output produced before this call will
         not be received here.
@@ -3974,6 +4015,10 @@ class SyncRunsClient:
         Args:
             thread_id: The thread ID to join.
             run_id: The run ID to join.
+            stream_mode: The stream mode(s) to use. Must be a subset of the stream modes passed
+                when creating the run. Background runs default to having the union of all
+                stream modes.
+            cancel_on_disconnect: Whether to cancel the run when the stream is disconnected.
 
         Returns:
             None
@@ -3982,11 +4027,19 @@ class SyncRunsClient:
 
             client.runs.join_stream(
                 thread_id="thread_id_to_join",
-                run_id="run_id_to_join"
+                run_id="run_id_to_join",
+                stream_mode=["values", "debug"]
             )
 
         """  # noqa: E501
-        return self.http.stream(f"/threads/{thread_id}/runs/{run_id}/stream", "GET")
+        return self.http.stream(
+            f"/threads/{thread_id}/runs/{run_id}/stream",
+            "GET",
+            params={
+                "stream_mode": stream_mode,
+                "cancel_on_disconnect": cancel_on_disconnect,
+            },
+        )
 
     def delete(self, thread_id: str, run_id: str) -> None:
         """Delete a run.
@@ -4252,6 +4305,7 @@ class SyncStoreClient:
         key: str,
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
+        ttl: Optional[int] = None,
     ) -> None:
         """Store or update an item.
 
@@ -4260,7 +4314,7 @@ class SyncStoreClient:
             key: The unique identifier for the item within the namespace.
             value: A dictionary containing the item's data.
             index: Controls search indexing - None (use defaults), False (disable), or list of field paths to index.
-
+            ttl: Optional time-to-live in minutes for the item, or None for no expiration.
         Returns:
             None
 
@@ -4282,15 +4336,24 @@ class SyncStoreClient:
             "key": key,
             "value": value,
             "index": index,
+            "ttl": ttl,
         }
-        self.http.put("/store/items", json=payload)
+        self.http.put("/store/items", json=_provided_vals(payload))
 
-    def get_item(self, namespace: Sequence[str], /, key: str) -> Item:
+    def get_item(
+        self,
+        namespace: Sequence[str],
+        /,
+        key: str,
+        *,
+        refresh_ttl: Optional[bool] = None,
+    ) -> Item:
         """Retrieve a single item.
 
         Args:
             key: The unique identifier for the item.
             namespace: Optional list of strings representing the namespace path.
+            refresh_ttl: Whether to refresh the TTL on this read operation. If None, uses the store's default behavior.
 
         Returns:
             Item: The retrieved item.
@@ -4319,9 +4382,10 @@ class SyncStoreClient:
                     f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
                 )
 
-        return self.http.get(
-            "/store/items", params={"key": key, "namespace": ".".join(namespace)}
-        )
+        params = {"key": key, "namespace": ".".join(namespace)}
+        if refresh_ttl is not None:
+            params["refresh_ttl"] = refresh_ttl
+        return self.http.get("/store/items", params=params)
 
     def delete_item(self, namespace: Sequence[str], /, key: str) -> None:
         """Delete an item.
@@ -4350,6 +4414,7 @@ class SyncStoreClient:
         limit: int = 10,
         offset: int = 0,
         query: Optional[str] = None,
+        refresh_ttl: Optional[bool] = None,
     ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
 
@@ -4359,6 +4424,7 @@ class SyncStoreClient:
             limit: Maximum number of items to return (default is 10).
             offset: Number of items to skip before returning results (default is 0).
             query: Optional query for natural language search.
+            refresh_ttl: Whether to refresh the TTL on items returned by this search. If None, uses the store's default behavior.
 
         Returns:
             List[Item]: A list of items matching the search criteria.
@@ -4397,6 +4463,7 @@ class SyncStoreClient:
             "limit": limit,
             "offset": offset,
             "query": query,
+            "refresh_ttl": refresh_ttl,
         }
         return self.http.post("/store/items/search", json=_provided_vals(payload))
 
