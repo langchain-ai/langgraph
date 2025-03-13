@@ -2,6 +2,7 @@ import inspect
 import logging
 import typing
 import warnings
+import weakref
 from functools import partial
 from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
@@ -951,14 +952,18 @@ def _pick_mapper(
 
 
 class _SchemaCoercionMapper:
-    _cache: dict[tuple[Type[Any], int], "_SchemaCoercionMapper"] = {}
+    _cache: weakref.WeakKeyDictionary[Type[Any], dict[int, "_SchemaCoercionMapper"]] = (
+        weakref.WeakKeyDictionary()
+    )
 
     def __new__(cls, schema: Type[Any], max_depth: int = 5) -> "_SchemaCoercionMapper":
-        key = (schema, max_depth)
-        if key in cls._cache:
-            return cls._cache[key]
+        if schema not in cls._cache:
+            cls._cache[schema] = {}
+        if max_depth in cls._cache[schema]:
+            return cls._cache[schema][max_depth]
+
         inst = super().__new__(cls)
-        cls._cache[key] = inst
+        cls._cache[schema][max_depth] = inst
         return inst
 
     def __init__(self, schema: Type[Any], max_depth: int = 5):
