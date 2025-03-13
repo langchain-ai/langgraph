@@ -115,6 +115,9 @@ interface LoadExternalComponentProps
   /** Stream of the assistant */
   stream: ReturnType<typeof useStream>;
 
+  /** Namespace of UI components. Defaults to assistant ID. */
+  namespace?: string;
+
   /** UI message to be rendered */
   message: UIMessage;
 
@@ -133,6 +136,7 @@ interface LoadExternalComponentProps
 
 export function LoadExternalComponent({
   stream,
+  namespace,
   message,
   meta,
   fallback,
@@ -152,10 +156,11 @@ export function LoadExternalComponent({
   const clientComponent = components?.[message.name];
   const hasClientComponent = clientComponent != null;
 
+  const uiNamespace = namespace ?? stream.assistantId;
   const uiClient = stream.client["~ui"];
   React.useEffect(() => {
     if (hasClientComponent) return;
-    uiClient.getComponent(stream.assistantId, message.name).then((html) => {
+    uiClient.getComponent(uiNamespace, message.name).then((html) => {
       const dom = ref.current;
       if (!dom) return;
       const root = dom.shadowRoot ?? dom.attachShadow({ mode: "open" });
@@ -166,13 +171,7 @@ export function LoadExternalComponent({
         );
       root.appendChild(fragment);
     });
-  }, [
-    uiClient,
-    stream.assistantId,
-    message.name,
-    shadowRootId,
-    hasClientComponent,
-  ]);
+  }, [uiClient, uiNamespace, message.name, shadowRootId, hasClientComponent]);
 
   if (hasClientComponent) {
     return React.createElement(clientComponent, message.props);
