@@ -1022,7 +1022,12 @@ export class RunsClient<
    *
    * @param threadId The ID of the thread.
    * @param runId The ID of the run.
-   * @param options Additional options like signal, cancelOnDisconnect, and streamMode
+   * @param options Additional options for controlling the stream behavior:
+   *   - signal: An AbortSignal that can be used to cancel the stream request
+   *   - cancelOnDisconnect: When true, automatically cancels the run if the client disconnects from the stream
+   *   - streamMode: Controls what types of events to receive from the stream (can be a single mode or array of modes)
+   *        Must be a subset of the stream modes passed when creating the run. Background runs default to having the union of all
+   *        stream modes enabled.
    * @returns An async generator yielding stream parts.
    */
   async *joinStream(
