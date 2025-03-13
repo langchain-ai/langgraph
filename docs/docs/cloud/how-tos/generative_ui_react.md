@@ -16,7 +16,7 @@ LangGraph Platform supports colocating your React components with your graph cod
 
     Currently only LangGraph.js supports Generative UI. Support for Python is coming soon.
 
-## Quickstart
+## Tutorial
 
 ### 1. Define and configure UI components
 
@@ -214,7 +214,7 @@ By default `LoadExternalComponent` will use the `assistantId` from `useStream()`
     }
     ```
 
-### Access the thread state from the UI component
+### Access and interact with the thread state from the UI component
 
 You can access the thread state from the UI component by using the `useStreamContext` hook.
 
