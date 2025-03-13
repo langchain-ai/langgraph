@@ -102,7 +102,14 @@ jobs:
       - name: Build llms-text
         run: make llms-text
       - name: Build site
-        run: make build-docs
+        run: |
+          # If this is main branch, then we want to download stats. we do this 
+          # with the env variable DOWNLOAD_STATS=true
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            DOWNLOAD_STATS=true make build-docs
+          else
+            make build-docs
+          fi
         env:
           MKDOCS_GIT_COMMITTERS_APIKEY: ${{ secrets.MKDOCS_GIT_COMMITTERS_APIKEY }}
           OPENAI_API_KEY: sf-proj-1234567890 # fake placeholder, shouldn't actually be used
@@ -127,6 +134,7 @@ jobs:
               --check-links-ignore "https://openai\.com/.*" \
               --check-links-ignore "https://www\.uber\.com/.*" \
               --check-links-ignore "https://pepy\.tech/.*" \
+              --check-links-ignore "docs/docs/static/wordmark_*" \
               --check-links $(find site -name "index.html" | grep -v 'storm/index.html')
               
           else
@@ -147,6 +155,7 @@ jobs:
                 --check-links-ignore "https://twitter.com/.*" \
                 --check-links-ignore "https://github\.com/.*" \
                 --check-links-ignore "/.*\.(ipynb|html)$" \
+                --check-links-ignore "docs/docs/static/wordmark_*" \
                 --check-links ${CHANGED_FILES} \
                 || ([ $? = 5 ] && exit 0 || exit $?)
             else

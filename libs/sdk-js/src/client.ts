@@ -1022,13 +1022,23 @@ export class RunsClient<
    *
    * @param threadId The ID of the thread.
    * @param runId The ID of the run.
+   * @param options Additional options for controlling the stream behavior:
+   *   - signal: An AbortSignal that can be used to cancel the stream request
+   *   - cancelOnDisconnect: When true, automatically cancels the run if the client disconnects from the stream
+   *   - streamMode: Controls what types of events to receive from the stream (can be a single mode or array of modes)
+   *        Must be a subset of the stream modes passed when creating the run. Background runs default to having the union of all
+   *        stream modes enabled.
    * @returns An async generator yielding stream parts.
    */
   async *joinStream(
     threadId: string,
     runId: string,
     options?:
-      | { signal?: AbortSignal; cancelOnDisconnect?: boolean }
+      | {
+          signal?: AbortSignal;
+          cancelOnDisconnect?: boolean;
+          streamMode?: StreamMode | StreamMode[];
+        }
       | AbortSignal,
   ): AsyncGenerator<{ event: StreamEvent; data: any }> {
     const opts =
@@ -1043,7 +1053,10 @@ export class RunsClient<
         method: "GET",
         timeoutMs: null,
         signal: opts?.signal,
-        params: { cancel_on_disconnect: opts?.cancelOnDisconnect ? "1" : "0" },
+        params: {
+          cancel_on_disconnect: opts?.cancelOnDisconnect ? "1" : "0",
+          stream_mode: opts?.streamMode,
+        },
       }),
     );
 
