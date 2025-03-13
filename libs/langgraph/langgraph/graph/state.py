@@ -50,6 +50,7 @@ from langgraph.graph.graph import (
     Graph,
     Send,
 )
+from langgraph.graph.schema_utils import SchemaCoercionMapper
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
     ChannelTypePlaceholder,
@@ -626,11 +627,13 @@ class StateGraph(Graph):
         compiled = CompiledStateGraph(
             builder=self,
             config_type=self.config_schema,
-            input_model=self.input
-            if len(self.channels) > 1
-            and isclass(self.input)
-            and issubclass(self.input, (BaseModel, BaseModelV1))
-            else None,
+            input_model=(
+                self.input
+                if len(self.channels) > 1
+                and isclass(self.input)
+                and issubclass(self.input, (BaseModel, BaseModelV1))
+                else None
+            ),
             nodes={},
             channels={
                 **self.channels,
@@ -940,23 +943,12 @@ def _pick_mapper(
 ) -> Optional[Callable[[Any], Any]]:
     if state_keys == ["__root__"]:
         return None
-    if issubclass(schema, dict):
-        return None
-    if issubclass(schema, BaseModel):
-        return partial(_coerce_state_pydantic, schema)
-    if issubclass(schema, BaseModelV1):
-        return partial(_coerce_state_pydantic_v1, schema)
+    if isclass(schema):
+        if issubclass(schema, dict):
+            return None
+        if issubclass(schema, (BaseModel, BaseModelV1)):
+            return SchemaCoercionMapper(schema)
     return partial(_coerce_state, schema)
-
-
-def _coerce_state_pydantic(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
-    return schema.model_construct(**input)
-
-
-def _coerce_state_pydantic_v1(
-    schema: Type[Any], input: dict[str, Any]
-) -> dict[str, Any]:
-    return schema.construct(**input)
 
 
 def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:

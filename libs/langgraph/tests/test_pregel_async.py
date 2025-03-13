@@ -4511,6 +4511,116 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
         ]
 
 
+@pytest.mark.parametrize("version", ["v1", "v2"])
+async def test_nested_pydantic_models(version: str) -> None:
+    """Test that nested Pydantic models are properly constructed from leaf nodes up."""
+
+    # Define nested Pydantic models
+    if version == "v1":
+        from pydantic.v1 import BaseModel, Field
+    else:
+        from pydantic import BaseModel, Field
+
+    class NestedModel(BaseModel):
+        value: int
+        name: str
+
+    # Forward reference model
+    class RecursiveModel(BaseModel):
+        value: str
+        child: Optional["RecursiveModel"] = None
+
+    # Discriminated union models
+    class Cat(BaseModel):
+        pet_type: Literal["cat"]
+        meow: str
+
+    class Dog(BaseModel):
+        pet_type: Literal["dog"]
+        bark: str
+
+    # Cyclic reference model
+    class Person(BaseModel):
+        id: str
+        name: str
+        friends: list[str] = Field(default_factory=list)  # IDs of friends
+
+    class State(BaseModel):
+        # Basic nested model tests
+        top_level: str
+        nested: NestedModel
+        optional_nested: Optional[NestedModel] = None
+        dict_nested: dict[str, NestedModel]
+        list_nested: Annotated[
+            Union[dict, list[dict[str, NestedModel]]], lambda x, y: (x or []) + [y]
+        ]
+        tuple_nested: tuple[str, NestedModel]
+        tuple_list_nested: list[tuple[int, NestedModel]]
+        complex_tuple: tuple[str, dict[str, tuple[int, NestedModel]]]
+
+        # Forward reference test
+        recursive: RecursiveModel
+
+        # Discriminated union test
+        pet: Union[Cat, Dog]
+
+        # Cyclic reference test
+        people: dict[str, Person]  # Map of ID -> Person
+
+    inputs = {
+        # Basic nested models
+        "top_level": "initial",
+        "nested": {"value": 42, "name": "test"},
+        "optional_nested": {"value": 10, "name": "optional"},
+        "dict_nested": {"a": {"value": 5, "name": "a"}},
+        "list_nested": [{"a": {"value": 6, "name": "b"}}],
+        "tuple_nested": ["tuple-key", {"value": 7, "name": "tuple-value"}],
+        "tuple_list_nested": [[1, {"value": 8, "name": "tuple-in-list"}]],
+        "complex_tuple": [
+            "complex",
+            {"nested": [9, {"value": 10, "name": "deep"}]},
+        ],
+        # Forward reference
+        "recursive": {"value": "parent", "child": {"value": "child", "child": None}},
+        # Discriminated union (using a cat in this case)
+        "pet": {"pet_type": "cat", "meow": "meow!"},
+        # Cyclic references
+        "people": {
+            "1": {
+                "id": "1",
+                "name": "Alice",
+                "friends": ["2", "3"],  # Alice is friends with Bob and Charlie
+            },
+            "2": {
+                "id": "2",
+                "name": "Bob",
+                "friends": ["1"],  # Bob is friends with Alice
+            },
+            "3": {
+                "id": "3",
+                "name": "Charlie",
+                "friends": ["1", "2"],  # Charlie is friends with Alice and Bob
+            },
+        },
+    }
+
+    update = {"top_level": "updated", "nested": {"value": 100, "name": "updated"}}
+
+    async def node_fn(state: State) -> dict:
+        assert state == State(**inputs)
+        return update
+
+    builder = StateGraph(State)
+    builder.add_node("process", node_fn)
+    builder.set_entry_point("process")
+    builder.set_finish_point("process")
+    graph = builder.compile()
+
+    result = await graph.ainvoke(inputs.copy())
+
+    assert result == {**inputs, **update}
+
+
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
     snapshot: SnapshotAssertion, mocker: MockerFixture, checkpointer_name: str

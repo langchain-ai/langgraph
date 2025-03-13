@@ -103,7 +103,8 @@ const AgentState = Annotation.Root({
 export const graph = new StateGraph(AgentState)
   .addNode("weather", async (state, config) => {
     // Provide the type of the component map to ensure
-    // type safety of `ui.push()` calls.
+    // type safety of `ui.push()` calls as well as
+    // pushing the messages to the `ui` and sending a custom event as well.
     const ui = typedUi<typeof ComponentMap>(config);
 
     const weather = await new ChatOpenAI({ model: "gpt-4o-mini" })
@@ -120,7 +121,7 @@ export const graph = new StateGraph(AgentState)
     // Emit UI elements with associated AI message
     ui.push({ name: "weather", props: weather }, { message: response });
 
-    return { messages: [response], ui: ui.items };
+    return { messages: [response] };
   })
   .addEdge("__start__", "weather")
   .compile();
@@ -217,7 +218,7 @@ By default `LoadExternalComponent` will use the `assistantId` from `useStream()`
 
 ### Access and interact with the thread state from the UI component
 
-You can access the thread state from the UI component by using the `useStreamContext` hook.
+You can access the thread state inside the UI component by using the `useStreamContext` hook.
 
 ```tsx
 import { useStreamContext } from "@langchain/langgraph-sdk/react-ui";
@@ -256,8 +257,14 @@ You can pass additional context to the client components by providing a `meta` p
 Then, you can access the `meta` prop in the UI component by using the `useStreamContext` hook.
 
 ```tsx
+import { useStreamContext } from "@langchain/langgraph-sdk/react-ui";
+
 const WeatherComponent = (props: { city: string }) => {
-  const { meta } = useStreamContext();
+  const { meta } = useStreamContext<
+    { city: string },
+    { MetaType: { userId?: string } }
+  >();
+
   return (
     <div>
       Weather for {props.city} (user: {meta?.userId})
