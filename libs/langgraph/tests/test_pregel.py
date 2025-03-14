@@ -2563,7 +2563,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
     request: pytest.FixtureRequest,
     checkpointer_name: str,
 ) -> None:
-    from pydantic.v1 import BaseModel, Field, ValidationError
+    from pydantic.v1 import BaseModel, ValidationError
 
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
     setup = mocker.Mock()
@@ -2626,7 +2626,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
         docs: Optional[list[str]] = None
 
     class UpdateDocs34(BaseModel):
-        docs: list[str] = Field(default_factory=lambda: ["doc3", "doc4"])
+        docs: list[str] = ["doc3", "doc4"]
 
     def rewrite_query(data: State) -> State:
         assert isinstance(data.inner, InnerObject)
@@ -5917,8 +5917,267 @@ def test_falsy_return_from_task(
         interrupt("test")
 
     configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
-    graph.invoke({"a": 5}, configurable)
-    graph.invoke(Command(resume="123"), configurable)
+    assert [
+        chunk for chunk in graph.stream({"a": 5}, configurable, stream_mode="debug")
+    ] == [
+        {
+            "payload": {
+                "config": {
+                    "callbacks": None,
+                    "configurable": {
+                        "checkpoint_id": AnyStr(),
+                        "checkpoint_ns": "",
+                        "thread_id": AnyStr(),
+                    },
+                    "metadata": configurable["configurable"],
+                    "recursion_limit": 25,
+                    "tags": [],
+                },
+                "metadata": {
+                    "parents": {},
+                    "source": "input",
+                    "step": -1,
+                    "thread_id": AnyStr(),
+                    "writes": {
+                        "__start__": {
+                            "a": 5,
+                        },
+                    },
+                },
+                "next": [
+                    "graph",
+                ],
+                "parent_config": None,
+                "tasks": [
+                    {
+                        "id": AnyStr(),
+                        "interrupts": (),
+                        "name": "graph",
+                        "state": None,
+                    },
+                ],
+                "values": None,
+            },
+            "step": -1,
+            "timestamp": AnyStr(),
+            "type": "checkpoint",
+        },
+        {
+            "payload": {
+                "id": AnyStr(),
+                "input": {
+                    "a": 5,
+                },
+                "name": "graph",
+                "triggers": [
+                    "__start__",
+                ],
+            },
+            "step": 0,
+            "timestamp": AnyStr(),
+            "type": "task",
+        },
+        {
+            "payload": {
+                "id": AnyStr(),
+                "input": (
+                    (),
+                    {},
+                ),
+                "name": "falsy_task",
+                "triggers": [
+                    "__pregel_push",
+                ],
+            },
+            "step": 0,
+            "timestamp": AnyStr(),
+            "type": "task",
+        },
+        {
+            "payload": {
+                "error": None,
+                "id": AnyStr(),
+                "interrupts": [],
+                "name": "falsy_task",
+                "result": [
+                    (
+                        "__return__",
+                        False,
+                    ),
+                ],
+            },
+            "step": 0,
+            "timestamp": AnyStr(),
+            "type": "task_result",
+        },
+        {
+            "payload": {
+                "error": None,
+                "id": AnyStr(),
+                "interrupts": [
+                    {
+                        "ns": [
+                            AnyStr(),
+                        ],
+                        "resumable": True,
+                        "value": "test",
+                        "when": "during",
+                    },
+                ],
+                "name": "graph",
+                "result": [],
+            },
+            "step": 0,
+            "timestamp": AnyStr(),
+            "type": "task_result",
+        },
+    ]
+    assert [
+        c
+        for c in graph.stream(Command(resume="123"), configurable, stream_mode="debug")
+    ] == [
+        {
+            "payload": {
+                "config": {
+                    "callbacks": None,
+                    "configurable": {
+                        "checkpoint_id": AnyStr(),
+                        "checkpoint_ns": "",
+                        "thread_id": AnyStr(),
+                    },
+                    "metadata": configurable["configurable"],
+                    "recursion_limit": 25,
+                    "tags": [],
+                },
+                "metadata": {
+                    "parents": {},
+                    "source": "input",
+                    "step": -1,
+                    "thread_id": AnyStr(),
+                    "writes": {
+                        "__start__": {
+                            "a": 5,
+                        },
+                    },
+                },
+                "next": [
+                    "graph",
+                ],
+                "parent_config": None,
+                "tasks": [
+                    {
+                        "id": AnyStr(),
+                        "interrupts": (
+                            {
+                                "ns": [
+                                    AnyStr(),
+                                ],
+                                "resumable": True,
+                                "value": "test",
+                                "when": "during",
+                            },
+                        ),
+                        "name": "graph",
+                        "state": None,
+                    },
+                ],
+                "values": None,
+            },
+            "step": -1,
+            "timestamp": AnyStr(),
+            "type": "checkpoint",
+        },
+        {
+            "payload": {
+                "id": AnyStr(),
+                "input": {
+                    "a": 5,
+                },
+                "name": "graph",
+                "triggers": [
+                    "__start__",
+                ],
+            },
+            "step": 0,
+            "timestamp": AnyStr(),
+            "type": "task",
+        },
+        {
+            "payload": {
+                "id": AnyStr(),
+                "input": (
+                    (),
+                    {},
+                ),
+                "name": "falsy_task",
+                "triggers": [
+                    "__pregel_push",
+                ],
+            },
+            "step": 0,
+            "timestamp": AnyStr(),
+            "type": "task",
+        },
+        {
+            "payload": {
+                "error": None,
+                "id": AnyStr(),
+                "interrupts": [],
+                "name": "graph",
+                "result": [
+                    (
+                        "__end__",
+                        None,
+                    ),
+                ],
+            },
+            "step": 0,
+            "timestamp": AnyStr(),
+            "type": "task_result",
+        },
+        {
+            "payload": {
+                "config": {
+                    "callbacks": None,
+                    "configurable": {
+                        "checkpoint_id": AnyStr(),
+                        "checkpoint_ns": "",
+                        "thread_id": AnyStr(),
+                    },
+                    "metadata": configurable["configurable"],
+                    "recursion_limit": 25,
+                    "tags": [],
+                },
+                "metadata": {
+                    "parents": {},
+                    "source": "loop",
+                    "step": 0,
+                    "thread_id": AnyStr(),
+                    "writes": {
+                        "falsy_task": False,
+                        "graph": None,
+                    },
+                },
+                "next": [],
+                "parent_config": {
+                    "callbacks": None,
+                    "configurable": {
+                        "checkpoint_id": AnyStr(),
+                        "checkpoint_ns": "",
+                        "thread_id": AnyStr(),
+                    },
+                    "metadata": configurable["configurable"],
+                    "recursion_limit": 25,
+                    "tags": [],
+                },
+                "tasks": [],
+                "values": None,
+            },
+            "step": 0,
+            "timestamp": AnyStr(),
+            "type": "checkpoint",
+        },
+    ]
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)

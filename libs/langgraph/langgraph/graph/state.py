@@ -766,7 +766,7 @@ class CompiledStateGraph(CompiledGraph):
                 # Pydantic v2
                 if isinstance(input, BaseModel):
                     keep: Optional[set[str]] = input.model_fields_set
-                    defaults = {k: v.default for k, v in t.model_fields.items()}
+                    defaults = {k: v.default for k, v in input.model_fields.items()}
                 # Pydantic v1
                 elif isinstance(input, BaseModelV1):
                     keep = input.__fields_set__
@@ -783,7 +783,11 @@ class CompiledStateGraph(CompiledGraph):
                     (k, value)
                     for k in output_keys
                     if (value := getattr(input, k, MISSING)) is not MISSING
-                    and (value != defaults.get(k) or (keep is not None and k in keep))
+                    and (
+                        value is not None
+                        or defaults.get(k, MISSING) is not None
+                        or (keep is not None and k in keep)
+                    )
                 ]
             else:
                 msg = create_error_message(
