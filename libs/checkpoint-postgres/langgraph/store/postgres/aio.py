@@ -115,7 +115,9 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         "supports_pipeline",
         "index_config",
         "embeddings",
+        "supports_ttl",
     )
+    supports_ttl: bool = True
 
     def __init__(
         self,
@@ -255,6 +257,49 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                     await cur.execute(
                         "INSERT INTO vector_migrations (v) VALUES (%s)", (v,)
                     )
+
+    async def sweep_ttl(self) -> int:
+        """Delete expired store items based on TTL.
+
+        Returns:
+            int: The number of deleted items.
+        """
+        async with self._cursor() as cur:
+            await cur.execute(
+                """
+                DELETE FROM store
+                WHERE expires_at IS NOT NULL AND expires_at < NOW()
+                """
+            )
+            deleted_count = cur.rowcount
+            return deleted_count
+
+    async def start_ttl_sweeper(
+        self, sweep_interval_minutes: Optional[int] = None
+    ) -> None:
+        """Periodically delete expired store items based on TTL."""
+        if not self.ttl_config:
+            return
+        sweep_interval_minutes_ = float(
+            cast(
+                float,
+                sweep_interval_minutes
+                or self.ttl_config.get("sweep_interval_minutes")
+                or 5,
+            )
+        )
+        logger.info(
+            f"Starting store TTL sweeper with interval {sweep_interval_minutes_} minutes",
+        )
+
+        while True:
+            await asyncio.sleep(sweep_interval_minutes_ * 60)
+            try:
+                expired_items = await self.sweep_ttl()
+                if expired_items > 0:
+                    logger.info(f"Store swept {expired_items} expired items")
+            except Exception as exc:
+                logger.exception("Store TTL sweep iteration failed", exc_info=exc)
 
     async def _execute_batch(
         self,
