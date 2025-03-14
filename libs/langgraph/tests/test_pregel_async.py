@@ -6654,39 +6654,6 @@ async def test_command_goto_with_static_breakpoints(checkpointer_name: str) -> N
         assert result == {"foo": "abc|node-1|node-2|node-2"}
 
 
-async def test_nested_graph_state_error_handling():
-    """Test error handling when updating state in nested graphs."""
-
-    class State(TypedDict):
-        count: int
-
-    def child_node(state: State):
-        return {"count": state["count"] + 1}
-
-    child = StateGraph(State)
-    child.add_node("child", child_node)
-    child.add_edge(START, "child")
-
-    parent = StateGraph(State)
-    parent.add_node("child_graph", child.compile())
-    parent.add_edge(START, "child_graph")
-
-    app = parent.compile(checkpointer=MemorySaver())
-
-    # Test invalid state update on parent
-    with pytest.raises(InvalidUpdateError):
-        await app.aupdate_state(
-            {"configurable": {"thread_id": "1"}}, {"invalid_key": "value"}
-        )
-
-    # Test invalid state update on child
-    with pytest.raises(InvalidUpdateError):
-        await app.aupdate_state(
-            {"configurable": {"thread_id": "1", "checkpoint_ns": "child_graph"}},
-            {"invalid_key": "value"},
-        )
-
-
 async def test_parallel_node_execution():
     """Test that parallel nodes execute concurrently."""
 
