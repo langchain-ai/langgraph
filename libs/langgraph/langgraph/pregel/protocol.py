@@ -73,14 +73,14 @@ class PregelProtocol(
     def bulk_update_state(
         self,
         config: RunnableConfig,
-        updates: Sequence[StateUpdate],
+        updates: Sequence[Sequence[StateUpdate]],
     ) -> RunnableConfig: ...
 
     @abstractmethod
     async def abulk_update_state(
         self,
         config: RunnableConfig,
-        updates: Sequence[StateUpdate],
+        updates: Sequence[Sequence[StateUpdate]],
     ) -> RunnableConfig: ...
 
     @abstractmethod
