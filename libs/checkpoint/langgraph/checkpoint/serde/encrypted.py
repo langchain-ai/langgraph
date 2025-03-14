@@ -17,7 +17,7 @@ class EncryptedSerializer(JsonPlusSerializer):
         # serialize data
         typ, data = super().dumps_typed(obj)
         # encrypt data
-        encrypted_data = self.cipher.encrypt(data, self.key)
+        encrypted_data = self.cipher.encrypt(data)
         # add cipher name to type
         return f"{typ}+{self.cipher.name}", encrypted_data
 
@@ -33,7 +33,7 @@ class EncryptedSerializer(JsonPlusSerializer):
                 f"Cipher mismatch: expected {self.cipher.name}, got {cipher_name}"
             )
         # decrypt data
-        decrypted_data = self.cipher.decrypt(enc_data, self.key)
+        decrypted_data = self.cipher.decrypt(enc_data)
         # deserialize data
         return super().loads_typed((typ, decrypted_data))
 
@@ -51,7 +51,7 @@ class EncryptedSerializer(JsonPlusSerializer):
         if "key" in kwargs:
             key = kwargs.pop("key")
         else:
-            key = os.getenvb("LANGGRAPH_AES_KEY")
+            key = os.getenvb(b"LANGGRAPH_AES_KEY")
             if key is None:
                 raise ValueError("LANGGRAPH_AES_KEY environment variable is not set.")
             if len(key) not in (16, 24, 32):
