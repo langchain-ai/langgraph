@@ -25,23 +25,19 @@ class EncryptedSerializer(SerializerProtocol):
         # serialize data
         typ, data = self.serde.dumps_typed(obj)
         # encrypt data
-        encrypted_data = self.cipher.encrypt(data)
+        ciphername, ciphertext = self.cipher.encrypt(data)
         # add cipher name to type
-        return f"{typ}+{self.cipher.name}", encrypted_data
+        return f"{typ}+{ciphername}", ciphertext
 
     def loads_typed(self, data: tuple[str, bytes]) -> Any:
-        enc_typ, enc_data = data
+        enc_cipher, ciphertext = data
         # unencrypted data
-        if "+" not in enc_typ:
+        if "+" not in enc_cipher:
             return self.serde.loads_typed(data)
-        # verify cipher name
-        typ, cipher_name = enc_typ.split("+", 1)
-        if cipher_name != self.cipher.name:
-            raise ValueError(
-                f"Cipher mismatch: expected {self.cipher.name}, got {cipher_name}"
-            )
+        # extract cipher name
+        typ, ciphername = enc_cipher.split("+", 1)
         # decrypt data
-        decrypted_data = self.cipher.decrypt(enc_data)
+        decrypted_data = self.cipher.decrypt(ciphername, ciphertext)
         # deserialize data
         return self.serde.loads_typed((typ, decrypted_data))
 
@@ -59,11 +55,12 @@ class EncryptedSerializer(SerializerProtocol):
 
         # check if AES key is provided
         if "key" in kwargs:
-            key = kwargs.pop("key")
+            key: bytes = kwargs.pop("key")
         else:
-            key = os.getenvb(b"LANGGRAPH_AES_KEY")
-            if key is None:
+            key_str = os.getenv("LANGGRAPH_AES_KEY")
+            if key_str is None:
                 raise ValueError("LANGGRAPH_AES_KEY environment variable is not set.")
+            key = key_str.encode()
             if len(key) not in (16, 24, 32):
                 raise ValueError("LANGGRAPH_AES_KEY must be 16, 24, or 32 bytes long.")
 
@@ -72,14 +69,13 @@ class EncryptedSerializer(SerializerProtocol):
             kwargs["mode"] = AES.MODE_EAX
 
         class PycryptodomeAesCipher(CipherProtocol):
-            name: str = "aes"
-
-            def encrypt(self, plaintext: bytes) -> bytes:
+            def encrypt(self, plaintext: bytes) -> tuple[str, bytes]:
                 cipher = AES.new(key, **kwargs)
                 ciphertext, tag = cipher.encrypt_and_digest(plaintext)
-                return cipher.nonce + tag + ciphertext
+                return "aes", cipher.nonce + tag + ciphertext
 
-            def decrypt(self, ciphertext: bytes) -> bytes:
+            def decrypt(self, ciphername: str, ciphertext: bytes) -> bytes:
+                assert ciphername == "aes", f"Unsupported cipher: {ciphername}"
                 nonce = ciphertext[:16]
                 tag = ciphertext[16:32]
                 actual_ciphertext = ciphertext[32:]

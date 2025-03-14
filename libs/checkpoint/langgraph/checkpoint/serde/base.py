@@ -51,16 +51,12 @@ class CipherProtocol(Protocol):
     """Protocol for encryption and decryption of data.
     - `encrypt`: Encrypt plaintext.
     - `decrypt`: Decrypt ciphertext.
-    - `name`: Name of the cipher.
     """
 
-    name: str
-    """Name of the cipher."""
-
-    def encrypt(self, plaintext: bytes) -> bytes:
-        """Encrypt plaintext."""
+    def encrypt(self, plaintext: bytes) -> tuple[str, bytes]:
+        """Encrypt plaintext. Returns a tuple (cipher name, ciphertext)."""
         ...
 
-    def decrypt(self, ciphertext: bytes) -> bytes:
-        """Decrypt ciphertext."""
+    def decrypt(self, ciphername: str, ciphertext: bytes) -> bytes:
+        """Decrypt ciphertext. Returns the plaintext."""
         ...
