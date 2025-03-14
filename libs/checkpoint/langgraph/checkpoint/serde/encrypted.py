@@ -1,21 +1,29 @@
 import os
 from typing import Any
 
-from langgraph.checkpoint.serde.base import CipherProtocol
+from langgraph.checkpoint.serde.base import CipherProtocol, SerializerProtocol
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 
-class EncryptedSerializer(JsonPlusSerializer):
+class EncryptedSerializer(SerializerProtocol):
     """Serializer that encrypts and decrypts data using an encryption protocol."""
 
-    def __init__(self, cipher: CipherProtocol) -> None:
-        super().__init__()
+    def __init__(
+        self, cipher: CipherProtocol, serde: SerializerProtocol = JsonPlusSerializer()
+    ) -> None:
         self.cipher = cipher
+        self.serde = serde
+
+    def dumps(self, obj: Any) -> bytes:
+        return self.serde.dumps(obj)
+
+    def loads(self, data: bytes) -> Any:
+        return self.serde.loads(data)
 
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
         """Serialize an object to a tuple (type, bytes) and encrypt the bytes."""
         # serialize data
-        typ, data = super().dumps_typed(obj)
+        typ, data = self.serde.dumps_typed(obj)
         # encrypt data
         encrypted_data = self.cipher.encrypt(data)
         # add cipher name to type
@@ -25,7 +33,7 @@ class EncryptedSerializer(JsonPlusSerializer):
         enc_typ, enc_data = data
         # unencrypted data
         if "+" not in enc_typ:
-            return super().loads_typed(data)
+            return self.serde.loads_typed(data)
         # verify cipher name
         typ, cipher_name = enc_typ.split("+", 1)
         if cipher_name != self.cipher.name:
@@ -35,10 +43,12 @@ class EncryptedSerializer(JsonPlusSerializer):
         # decrypt data
         decrypted_data = self.cipher.decrypt(enc_data)
         # deserialize data
-        return super().loads_typed((typ, decrypted_data))
+        return self.serde.loads_typed((typ, decrypted_data))
 
     @classmethod
-    def from_pycryptodome_aes(cls, **kwargs: Any) -> "EncryptedSerializer":
+    def from_pycryptodome_aes(
+        cls, serde: SerializerProtocol = JsonPlusSerializer(), **kwargs: Any
+    ) -> "EncryptedSerializer":
         """Create an EncryptedSerializer using AES encryption."""
         try:
             from Crypto.Cipher import AES  # type: ignore
@@ -77,4 +87,4 @@ class EncryptedSerializer(JsonPlusSerializer):
                 cipher = AES.new(key, **kwargs, nonce=nonce)
                 return cipher.decrypt_and_verify(actual_ciphertext, tag)
 
-        return cls(PycryptodomeAesCipher())
+        return cls(PycryptodomeAesCipher(), serde)
