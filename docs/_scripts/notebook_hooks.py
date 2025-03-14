@@ -186,7 +186,7 @@ def _on_page_markdown_with_config(
 
     if remove_base64_images:
         # Remove base64 encoded images from markdown
-        markdown = re.sub(r"!\[.*?\]\(data:image/+;base64,[^\)]+\)", "", markdown)
+        markdown = re.sub(r"!\[.*?\]\(data:image/[^;]+;base64,[^)]+\)", "", markdown)
 
     return markdown
 
