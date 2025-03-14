@@ -27,6 +27,12 @@ class TTLConfig(TypedDict, total=False):
     If provided, all new items will have this TTL unless explicitly overridden.
     If omitted, items will have no TTL by default.
     """
+    sweep_interval_minutes: Optional[int]
+    """Optional. Interval in minutes between TTL sweep iterations.
+    
+    If provided, the store will periodically delete expired items based on the TTL.
+    If omitted, no automatic sweeping will occur.
+    """
 
 
 class IndexConfig(TypedDict, total=False):

@@ -1,8 +1,8 @@
 import asyncio
+import concurrent.futures
 import json
 import logging
 import threading
-import time
 from collections import defaultdict
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
@@ -81,7 +81,8 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS store_prefix_idx ON store USING btree (p
 ALTER TABLE store
 ADD COLUMN expires_at TIMESTAMP WITH TIME ZONE,
 ADD COLUMN ttl_minutes INT;
-
+""",
+    """
 -- Add indexes for efficient TTL sweeping
 CREATE INDEX idx_store_expires_at ON store (expires_at)
 WHERE expires_at IS NOT NULL;
@@ -253,7 +254,7 @@ class BasePostgresStore(Generic[C]):
 
         results = []
         for namespace, items in namespace_groups.items():
-            _, keys = zip(*items, strict=True)
+            _, keys = zip(*items)
             this_refresh_ttls = refresh_ttls[namespace]
 
             query = """
@@ -292,7 +293,7 @@ class BasePostgresStore(Generic[C]):
         put_ops: Sequence[tuple[int, PutOp]],
     ) -> tuple[
         list[tuple[str, Sequence]],
-        tuple[str, Sequence[tuple[str, str, str, str]]] | None,
+        Optional[tuple[str, Sequence[tuple[str, str, str, str]]]],
     ]:
         dedupped_ops: dict[tuple[tuple[str, ...], str], PutOp] = {}
         for _, op in put_ops:
@@ -319,7 +320,9 @@ class BasePostgresStore(Generic[C]):
                 )
                 params = (_namespace_to_text(namespace), *keys)
                 queries.append((query, params))
-        embedding_request: tuple[str, Sequence[tuple[str, str, str, str]]] | None = None
+        embedding_request: Optional[tuple[str, Sequence[tuple[str, str, str, str]]]] = (
+            None
+        )
         if inserts:
             values = []
             insertion_params = []
@@ -400,7 +403,7 @@ class BasePostgresStore(Generic[C]):
         self,
         search_ops: Sequence[tuple[int, SearchOp]],
     ) -> tuple[
-        list[tuple[str, list[None | str | list[float]]]],  # queries, params
+        list[tuple[str, list[Union[None, str, list[float]]]]],  # queries, params
         list[tuple[int, str]],  # idx, query_text pairs to embed
     ]:
         """
@@ -412,7 +415,6 @@ class BasePostgresStore(Generic[C]):
 
         queries = []
         embedding_requests = []
-
         for idx, (_, op) in enumerate(search_ops):
             filter_params = []
             filter_clauses = []
@@ -430,7 +432,7 @@ class BasePostgresStore(Generic[C]):
                         filter_params.extend([key, orjson.dumps(value).decode("utf-8")])
 
             ns_condition = "TRUE"
-            ns_param: Sequence[str] | None = None
+            ns_param: Optional[Sequence[Union[str]]] = None
             if op.namespace_prefix:
                 ns_condition = "store.prefix LIKE %s"
                 ns_param = (f"{_namespace_to_text(op.namespace_prefix)}%",)
@@ -512,7 +514,7 @@ class BasePostgresStore(Generic[C]):
 
             else:
                 base_query = f"""
-                        SELECT store.prefix, store.key, store.value, store.created_at, store.updated_at, 0 AS score
+                        SELECT store.prefix, store.key, store.value, store.created_at, store.updated_at, NULL AS score
                         FROM store
                         WHERE {ns_condition} {extra_filters}
                         ORDER BY store.updated_at DESC
@@ -625,7 +627,7 @@ class BasePostgresStore(Generic[C]):
 
 
 class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
-    """Postgres-backed store with optional vector search using pgvector.
+    """Postgres-backed store with oktional vector search using pgvector.
 
     !!! example "Examples"
         Basic setup and usage:
@@ -694,6 +696,11 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         Make sure to call `setup()` before first use to create necessary tables and indexes.
         The pgvector extension must be available to use vector search.
 
+    Note:
+        If you provide a TTL configuration, you must explicitly call `start_ttl_sweeper()` to begin
+        the background thread that removes expired items. Call `stop_ttl_sweeper()` to properly
+        clean up resources when you're done with the store.
+
     """
 
     __slots__ = (
@@ -703,7 +710,8 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         "supports_pipeline",
         "index_config",
         "embeddings",
-        "supports_ttl",
+        "_ttl_sweeper_thread",
+        "_ttl_stop_event",
     )
     supports_ttl: bool = True
 
@@ -730,6 +738,8 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         else:
             self.embeddings = None
         self.ttl_config = ttl
+        self._ttl_sweeper_thread: Optional[threading.Thread] = None
+        self._ttl_stop_event = threading.Event()
 
     @classmethod
     @contextmanager
@@ -740,6 +750,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         pipeline: bool = False,
         pool_config: Optional[PoolConfig] = None,
         index: Optional[PostgresIndexConfig] = None,
+        ttl: Optional[TTLConfig] = None,
     ) -> Iterator["PostgresStore"]:
         """Create a new PostgresStore instance from a connection string.
 
@@ -771,16 +782,16 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                     **cast(dict, pc),
                 ),
             ) as pool:
-                yield cls(conn=pool, index=index)
+                yield cls(conn=pool, index=index, ttl=ttl)
         else:
             with Connection.connect(
                 conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
             ) as conn:
                 if pipeline:
                     with conn.pipeline() as pipe:
-                        yield cls(conn, pipe=pipe, index=index)
+                        yield cls(conn, pipe=pipe, index=index, ttl=ttl)
                 else:
-                    yield cls(conn, index=index)
+                    yield cls(conn, index=index, ttl=ttl)
 
     def sweep_ttl(self) -> int:
         """Delete expired store items based on TTL.
@@ -798,30 +809,96 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
             deleted_count = cur.rowcount
             return deleted_count
 
-    def start_ttl_sweeper(self, sweep_interval_minutes: Optional[int] = None) -> None:
-        """Periodically delete expired store items based on TTL."""
-        if not self.ttl_config:
-            return
-        sweep_interval_minutes_ = float(
-            cast(
-                float,
-                sweep_interval_minutes
-                or self.ttl_config.get("sweep_interval_minutes")
-                or 5,
-            )
-        )
-        logger.info(
-            f"Starting store TTL sweeper with interval {sweep_interval_minutes_} minutes",
-        )
+    def start_ttl_sweeper(
+        self, sweep_interval_minutes: Optional[int] = None
+    ) -> concurrent.futures.Future[None]:
+        """Periodically delete expired store items based on TTL.
 
-        while True:
-            time.sleep(sweep_interval_minutes_ * 60)
+        Returns:
+            Future that can be waited on or cancelled.
+        """
+        if not self.ttl_config:
+            future: concurrent.futures.Future[None] = concurrent.futures.Future()
+            future.set_result(None)
+            return future
+
+        if self._ttl_sweeper_thread and self._ttl_sweeper_thread.is_alive():
+            logger.info("TTL sweeper thread is already running")
+            # Return a future that can be used to cancel the existing thread
+            future = concurrent.futures.Future()
+            future.add_done_callback(
+                lambda f: self._ttl_stop_event.set() if f.cancelled() else None
+            )
+            return future
+
+        self._ttl_stop_event.clear()
+
+        interval = float(
+            sweep_interval_minutes or self.ttl_config.get("sweep_interval_minutes") or 5
+        )
+        logger.info(f"Starting store TTL sweeper with interval {interval} minutes")
+
+        future = concurrent.futures.Future()
+
+        def _sweep_loop() -> None:
             try:
-                expired_items = self.sweep_ttl()
-                if expired_items > 0:
-                    logger.info(f"Store swept {expired_items} expired items")
+                while not self._ttl_stop_event.is_set():
+                    if self._ttl_stop_event.wait(interval * 60):
+                        break
+
+                    try:
+                        expired_items = self.sweep_ttl()
+                        if expired_items > 0:
+                            logger.info(f"Store swept {expired_items} expired items")
+                    except Exception as exc:
+                        logger.exception(
+                            "Store TTL sweep iteration failed", exc_info=exc
+                        )
+                future.set_result(None)
             except Exception as exc:
-                logger.exception("Store TTL sweep iteration failed", exc_info=exc)
+                future.set_exception(exc)
+
+        thread = threading.Thread(target=_sweep_loop, daemon=True, name="ttl-sweeper")
+        self._ttl_sweeper_thread = thread
+        thread.start()
+
+        future.add_done_callback(
+            lambda f: self._ttl_stop_event.set() if f.cancelled() else None
+        )
+        return future
+
+    def stop_ttl_sweeper(self, timeout: Optional[float] = None) -> bool:
+        """Stop the TTL sweeper thread if it's running.
+
+        Args:
+            timeout: Maximum time to wait for the thread to stop, in seconds.
+                If None, wait indefinitely.
+
+        Returns:
+            bool: True if the thread was successfully stopped or wasn't running,
+                False if the timeout was reached before the thread stopped.
+        """
+        if not self._ttl_sweeper_thread or not self._ttl_sweeper_thread.is_alive():
+            return True
+
+        logger.info("Stopping TTL sweeper thread")
+        self._ttl_stop_event.set()
+
+        self._ttl_sweeper_thread.join(timeout)
+        success = not self._ttl_sweeper_thread.is_alive()
+
+        if success:
+            self._ttl_sweeper_thread = None
+            logger.info("TTL sweeper thread stopped")
+        else:
+            logger.warning("Timed out waiting for TTL sweeper thread to stop")
+
+        return success
+
+    def __del__(self) -> None:
+        """Ensure the TTL sweeper thread is stopped when the object is garbage collected."""
+        if hasattr(self, "_ttl_stop_event") and hasattr(self, "_ttl_sweeper_thread"):
+            self.stop_ttl_sweeper(timeout=0.1)
 
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
@@ -1020,8 +1097,14 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         with self._cursor() as cur:
             version = _get_version(cur, table="store_migrations")
             for v, sql in enumerate(self.MIGRATIONS[version + 1 :], start=version + 1):
-                cur.execute(sql)
-                cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
+                try:
+                    cur.execute(sql)
+                    cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
+                except Exception as e:
+                    logger.error(
+                        f"Failed to apply migration {v}.\nSql={sql}\nError={e}"
+                    )
+                    raise
 
             if self.index_config:
                 version = _get_version(cur, table="vector_migrations")

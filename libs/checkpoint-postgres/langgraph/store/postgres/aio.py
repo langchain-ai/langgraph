@@ -2,6 +2,7 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator, Iterable, Sequence
 from contextlib import asynccontextmanager
+from types import TracebackType
 from typing import Any, Callable, Optional, Union, cast
 
 import orjson
@@ -25,6 +26,7 @@ from langgraph.store.postgres.base import (
     PoolConfig,
     PostgresIndexConfig,
     Row,
+    TTLConfig,
     _decode_ns_bytes,
     _ensure_index_config,
     _group_ops,
@@ -106,6 +108,11 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         Semantic search is disabled by default. You can enable it by providing an `index` configuration
         when creating the store. Without this configuration, all `index` arguments passed to
         `put` or `aput` will have no effect.
+
+    Note:
+        If you provide a TTL configuration, you must explicitly call `start_ttl_sweeper()` to begin
+        the background task that removes expired items. Call `stop_ttl_sweeper()` to properly
+        clean up resources when you're done with the store.
     """
 
     __slots__ = (
@@ -115,7 +122,9 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         "supports_pipeline",
         "index_config",
         "embeddings",
-        "supports_ttl",
+        "ttl_config",
+        "_ttl_sweeper_task",
+        "_ttl_stop_event",
     )
     supports_ttl: bool = True
 
@@ -128,6 +137,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
             Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]
         ] = None,
         index: Optional[PostgresIndexConfig] = None,
+        ttl: Optional[TTLConfig] = None,
     ) -> None:
         if isinstance(conn, AsyncConnectionPool) and pipe is not None:
             raise ValueError(
@@ -143,9 +153,12 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         self.index_config = index
         if self.index_config:
             self.embeddings, self.index_config = _ensure_index_config(self.index_config)
-
         else:
             self.embeddings = None
+
+        self.ttl_config = ttl
+        self._ttl_sweeper_task: Optional[asyncio.Task[None]] = None
+        self._ttl_stop_event = asyncio.Event()
 
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:
         grouped_ops, num_ops = _group_ops(ops)
@@ -169,6 +182,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         pipeline: bool = False,
         pool_config: Optional[PoolConfig] = None,
         index: Optional[PostgresIndexConfig] = None,
+        ttl: Optional[TTLConfig] = None,
     ) -> AsyncIterator["AsyncPostgresStore"]:
         """Create a new AsyncPostgresStore instance from a connection string.
 
@@ -200,16 +214,16 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                     **cast(dict, pc),
                 ),
             ) as pool:
-                yield cls(conn=pool, index=index)
+                yield cls(conn=pool, index=index, ttl=ttl)
         else:
             async with await AsyncConnection.connect(
                 conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
             ) as conn:
                 if pipeline:
                     async with conn.pipeline() as pipe:
-                        yield cls(conn=conn, pipe=pipe, index=index)
+                        yield cls(conn=conn, pipe=pipe, index=index, ttl=ttl)
                 else:
-                    yield cls(conn=conn, index=index)
+                    yield cls(conn=conn, index=index, ttl=ttl)
 
     async def setup(self) -> None:
         """Set up the store database asynchronously.
@@ -276,30 +290,100 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
 
     async def start_ttl_sweeper(
         self, sweep_interval_minutes: Optional[int] = None
-    ) -> None:
-        """Periodically delete expired store items based on TTL."""
-        if not self.ttl_config:
-            return
-        sweep_interval_minutes_ = float(
-            cast(
-                float,
-                sweep_interval_minutes
-                or self.ttl_config.get("sweep_interval_minutes")
-                or 5,
-            )
-        )
-        logger.info(
-            f"Starting store TTL sweeper with interval {sweep_interval_minutes_} minutes",
-        )
+    ) -> asyncio.Task[None]:
+        """Periodically delete expired store items based on TTL.
 
-        while True:
-            await asyncio.sleep(sweep_interval_minutes_ * 60)
+        Returns:
+            Task that can be awaited or cancelled.
+        """
+        if not self.ttl_config:
+            return asyncio.create_task(asyncio.sleep(0))
+
+        if self._ttl_sweeper_task is not None and not self._ttl_sweeper_task.done():
+            return self._ttl_sweeper_task
+
+        self._ttl_stop_event.clear()
+
+        interval = float(
+            sweep_interval_minutes or self.ttl_config.get("sweep_interval_minutes") or 5
+        )
+        logger.info(f"Starting store TTL sweeper with interval {interval} minutes")
+
+        async def _sweep_loop() -> None:
+            while not self._ttl_stop_event.is_set():
+                try:
+                    try:
+                        await asyncio.wait_for(
+                            self._ttl_stop_event.wait(),
+                            timeout=interval * 60,
+                        )
+                        break
+                    except asyncio.TimeoutError:
+                        pass
+
+                    expired_items = await self.sweep_ttl()
+                    if expired_items > 0:
+                        logger.info(f"Store swept {expired_items} expired items")
+                except asyncio.CancelledError:
+                    break
+                except Exception as exc:
+                    logger.exception("Store TTL sweep iteration failed", exc_info=exc)
+
+        task = asyncio.create_task(_sweep_loop())
+        task.set_name("ttl_sweeper")
+        self._ttl_sweeper_task = task
+        return task
+
+    async def stop_ttl_sweeper(self, timeout: Optional[float] = None) -> bool:
+        """Stop the TTL sweeper task if it's running.
+
+        Args:
+            timeout: Maximum time to wait for the task to stop, in seconds.
+                If None, wait indefinitely.
+
+        Returns:
+            bool: True if the task was successfully stopped or wasn't running,
+                False if the timeout was reached before the task stopped.
+        """
+        if self._ttl_sweeper_task is None or self._ttl_sweeper_task.done():
+            return True
+
+        logger.info("Stopping TTL sweeper task")
+        self._ttl_stop_event.set()
+
+        if timeout is not None:
             try:
-                expired_items = await self.sweep_ttl()
-                if expired_items > 0:
-                    logger.info(f"Store swept {expired_items} expired items")
-            except Exception as exc:
-                logger.exception("Store TTL sweep iteration failed", exc_info=exc)
+                await asyncio.wait_for(self._ttl_sweeper_task, timeout=timeout)
+                success = True
+            except asyncio.TimeoutError:
+                success = False
+        else:
+            await self._ttl_sweeper_task
+            success = True
+
+        if success:
+            self._ttl_sweeper_task = None
+            logger.info("TTL sweeper task stopped")
+        else:
+            logger.warning("Timed out waiting for TTL sweeper task to stop")
+
+        return success
+
+    async def __aenter__(self) -> "AsyncPostgresStore":
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional["TracebackType"],
+    ) -> None:
+        # Ensure the TTL sweeper task is stopped when exiting the context
+        if hasattr(self, "_ttl_sweeper_task") and self._ttl_sweeper_task is not None:
+            # Set the event to signal the task to stop
+            self._ttl_stop_event.set()
+            # We don't wait for the task to complete here to avoid blocking
+            # The task will clean up itself gracefully
 
     async def _execute_batch(
         self,
