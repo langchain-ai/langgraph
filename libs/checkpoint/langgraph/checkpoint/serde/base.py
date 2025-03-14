@@ -45,3 +45,18 @@ def maybe_add_typed_methods(serde: SerializerProtocol) -> SerializerProtocol:
         return SerializerCompat(serde)
 
     return serde
+
+
+class CipherProtocol(Protocol):
+    """Protocol for encryption and decryption of data.
+    - `encrypt`: Encrypt plaintext.
+    - `decrypt`: Decrypt ciphertext.
+    """
+
+    def encrypt(self, plaintext: bytes) -> tuple[str, bytes]:
+        """Encrypt plaintext. Returns a tuple (cipher name, ciphertext)."""
+        ...
+
+    def decrypt(self, ciphername: str, ciphertext: bytes) -> bytes:
+        """Decrypt ciphertext. Returns the plaintext."""
+        ...
