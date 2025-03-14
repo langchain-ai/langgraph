@@ -443,7 +443,6 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
                 ),
             ),
         )
-
     else:
         raise TypeError(f"Object of type {obj.__class__.__name__} is not serializable")
 
