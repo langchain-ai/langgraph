@@ -762,23 +762,28 @@ class CompiledStateGraph(CompiledGraph):
                     else:
                         updates.extend(_get_updates(i) or ())
                 return updates
-            elif get_type_hints(type(input)):
+            elif (t := type(input)) and get_type_hints(t):
                 # Pydantic v2
-                if hasattr(input, "model_fields"):
-                    defaults = {k: v.default for k, v in input.model_fields.items()}
+                if isinstance(input, BaseModel):
+                    keep: Optional[set[str]] = input.model_fields_set
+                    defaults = {k: v.default for k, v in t.model_fields.items()}
                 # Pydantic v1
-                elif hasattr(input, "__fields__"):
-                    defaults = {k: v.default for k, v in input.__fields__.items()}
+                elif isinstance(input, BaseModelV1):
+                    keep = input.__fields_set__
+                    defaults = {k: v.default for k, v in t.__fields__.items()}
                 else:
+                    keep = None
                     defaults = {}
 
+                # NOTE: This behavior for Pydantic is somewhat inelegant,
+                # but we keep around for backwards compatibility
                 # if input is a Pydantic model, only update values
-                # that are different from the default values
+                # that are different from the default values or in the keep set
                 return [
                     (k, value)
                     for k in output_keys
                     if (value := getattr(input, k, MISSING)) is not MISSING
-                    and value != defaults.get(k)
+                    and (value != defaults.get(k) or (keep is not None and k in keep))
                 ]
             else:
                 msg = create_error_message(
@@ -804,7 +809,6 @@ class CompiledStateGraph(CompiledGraph):
                     ChannelWrite(
                         write_entries,
                         tags=[TAG_HIDDEN],
-                        require_at_least_one_of=output_keys,
                     ),
                 ],
             )

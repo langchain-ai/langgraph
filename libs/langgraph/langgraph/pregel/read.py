@@ -201,7 +201,6 @@ class PregelNode(Runnable):
             writers[-2] = ChannelWrite(
                 writes=writers[-2].writes + writers[-1].writes,
                 tags=writers[-2].tags,
-                require_at_least_one_of=writers[-2].require_at_least_one_of,
             )
             writers.pop()
         return writers

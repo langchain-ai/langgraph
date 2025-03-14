@@ -25,8 +25,10 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_NS,
     ERROR,
     INTERRUPT,
+    MISSING,
     NS_END,
     NS_SEP,
+    RETURN,
     TAG_HIDDEN,
 )
 from langgraph.pregel.io import read_channels
@@ -132,7 +134,9 @@ def map_debug_task_results(
             "id": task.id,
             "name": task.name,
             "error": next((w[1] for w in writes if w[0] == ERROR), None),
-            "result": [w for w in writes if w[0] in stream_channels_list],
+            "result": [
+                w for w in writes if w[0] in stream_channels_list or w[0] == RETURN
+            ],
             "interrupts": [asdict(w[1]) for w in writes if w[0] == INTERRUPT],
         },
     }
@@ -264,49 +268,63 @@ def tasks_w_writes(
 ) -> tuple[PregelTask, ...]:
     """Apply writes / subgraph states to tasks to be returned in a StateSnapshot."""
     pending_writes = pending_writes or []
-    return tuple(
-        PregelTask(
-            task.id,
-            task.name,
-            task.path,
-            next(
-                (
-                    exc
-                    for tid, n, exc in pending_writes
-                    if tid == task.id and n == ERROR
-                ),
-                None,
-            ),
-            tuple(
-                v for tid, n, v in pending_writes if tid == task.id and n == INTERRUPT
-            ),
-            states.get(task.id) if states else None,
+    out: list[PregelTask] = []
+    for task in tasks:
+        rtn = next(
             (
+                val
+                for tid, chan, val in pending_writes
+                if tid == task.id and chan == RETURN
+            ),
+            MISSING,
+        )
+        out.append(
+            PregelTask(
+                task.id,
+                task.name,
+                task.path,
                 next(
                     (
-                        val
-                        for tid, chan, val in pending_writes
-                        if tid == task.id and chan == output_keys
+                        exc
+                        for tid, n, exc in pending_writes
+                        if tid == task.id and n == ERROR
                     ),
                     None,
-                )
-                if isinstance(output_keys, str)
-                else {
-                    chan: val
-                    for tid, chan, val in pending_writes
-                    if tid == task.id
-                    and (
-                        chan == output_keys
-                        if isinstance(output_keys, str)
-                        else chan in output_keys
+                ),
+                tuple(
+                    v
+                    for tid, n, v in pending_writes
+                    if tid == task.id and n == INTERRUPT
+                ),
+                states.get(task.id) if states else None,
+                (
+                    rtn
+                    if rtn is not MISSING
+                    else next(
+                        (
+                            val
+                            for tid, chan, val in pending_writes
+                            if tid == task.id and chan == output_keys
+                        ),
+                        None,
                     )
-                }
+                    if isinstance(output_keys, str)
+                    else {
+                        chan: val
+                        for tid, chan, val in pending_writes
+                        if tid == task.id
+                        and (
+                            chan == output_keys
+                            if isinstance(output_keys, str)
+                            else chan in output_keys
+                        )
+                    }
+                )
+                if any(
+                    w[0] == task.id and w[1] not in (ERROR, INTERRUPT)
+                    for w in pending_writes
+                )
+                else None,
             )
-            if any(
-                w[0] == task.id and w[1] not in (ERROR, INTERRUPT)
-                for w in pending_writes
-            )
-            else None,
         )
-        for task in tasks
-    )
+    return tuple(out)
