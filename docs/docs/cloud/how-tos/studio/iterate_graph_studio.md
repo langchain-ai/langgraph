@@ -8,9 +8,10 @@ A central aspect of agent development is prompt engineering. LangGraph Studio ma
 
 The first step is to define your [configuration](https://langchain-ai.github.io/langgraph/how-tos/configuration/) such that LangGraph Studio is aware of the prompts you want to iterate on and which nodes they are associated with.
 
-For example, if you have a node called `call_model` whose system prompt you want to iterate on, you can define a configuration like the following:
+For example, if you have a node called `call_model` whose system prompt you want to iterate on, you can define a configuration like the following.
 
 ```python
+## Using Pydantic
 from pydantic import BaseModel, Field
 from typing import Annotated, Literal
 
@@ -43,6 +44,31 @@ class Configuration(BaseModel):
         "Should be in the form: provider/model-name.",
         json_schema_extra={"langgraph_nodes": ["call_model"]},
     )
+ ## Using Dataclasses
+ from dataclasses import dataclass, field
+
+@dataclass(kw_only=True)
+class Configuration:
+    """The configuration for the agent."""
+
+    system_prompt: str = field(
+        default="You are a helpful AI assistant.",
+        metadata={
+            "description": "The system prompt to use for the agent's interactions. "
+            "This prompt sets the context and behavior for the agent.",
+            "json_schema_extra": {"langgraph_nodes": ["call_model"]},
+        },
+    )
+
+    model: Annotated[str, {"__template_metadata__": {"kind": "llm"}}] = field(
+        default="anthropic/claude-3-5-sonnet-20240620",
+        metadata={
+            "description": "The name of the language model to use for the agent's main interactions. "
+            "Should be in the form: provider/model-name.",
+            "json_schema_extra": {"langgraph_nodes": ["call_model"]},
+        },
+    )
+
 ```
 
 Specifically, note that the `json_schema_extra` field where `"langgraph_nodes": ["call_model"]` indicates that the `system_prompt` and `model` fields will be used to configure the `call_model` node and that the `"langgraph_type": "prompt"` indicates that the `system_prompt` field is a prompt.
