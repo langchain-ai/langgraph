@@ -627,7 +627,7 @@ class BasePostgresStore(Generic[C]):
 
 
 class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
-    """Postgres-backed store with oktional vector search using pgvector.
+    """Postgres-backed store with optional vector search using pgvector.
 
     !!! example "Examples"
         Basic setup and usage:
