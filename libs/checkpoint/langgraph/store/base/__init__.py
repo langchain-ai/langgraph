@@ -537,6 +537,12 @@ class TTLConfig(TypedDict, total=False):
     The expiration timer refreshes on both read and write operations.
     Defaults to None (no expiration).
     """
+    sweep_interval_minutes: Optional[int]
+    """Interval in minutes between TTL sweep operations.
+    
+    If provided, the store will periodically delete expired items based on TTL.
+    Defaults to None (no sweeping).
+    """
 
 
 class IndexConfig(TypedDict, total=False):
