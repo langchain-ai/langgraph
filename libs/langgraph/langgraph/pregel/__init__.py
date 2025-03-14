@@ -1166,13 +1166,14 @@ class Pregel(PregelProtocol):
     def bulk_update_state(
         self,
         config: RunnableConfig,
-        updates: list[StateUpdate],
+        supersteps: Sequence[Sequence[StateUpdate]],
     ) -> RunnableConfig:
         """Apply updates to the graph state in bulk. Requires a checkpointer to be set.
 
         Args:
             config: The config to apply the updates to.
-            updates: A list of updates to apply to the graph state. Each update is a tuple of the form `(values, as_node)`.
+            supersteps: A list of supersteps, each including a list of updates to apply sequentially to a graph state.
+                        Each update is a tuple of the form `(values, as_node)`.
 
         Raises:
             ValueError: If no checkpointer is set or no updates are provided.
@@ -1188,7 +1189,10 @@ class Pregel(PregelProtocol):
         if not checkpointer:
             raise ValueError("No checkpointer set")
 
-        if len(updates) == 0:
+        if len(supersteps) == 0:
+            raise ValueError("No supersteps provided")
+
+        if any(len(u) == 0 for u in supersteps):
             raise ValueError("No updates provided")
 
         # delegate to subgraph
@@ -1201,47 +1205,170 @@ class Pregel(PregelProtocol):
             for _, pregel in self.get_subgraphs(namespace=recast, recurse=True):
                 return pregel.bulk_update_state(
                     patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
-                    updates,
+                    supersteps,
                 )
             else:
                 raise ValueError(f"Subgraph {recast} not found")
 
-        # get last checkpoint
-        config = ensure_config(self.config, config)
-        saved = checkpointer.get_tuple(config)
-        checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
-        checkpoint_previous_versions = (
-            saved.checkpoint["channel_versions"].copy() if saved else {}
-        )
-        step = saved.metadata.get("step", -1) if saved else -1
-        # merge configurable fields with previous checkpoint config
-        checkpoint_config = patch_configurable(
-            config,
-            {CONFIG_KEY_CHECKPOINT_NS: config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")},
-        )
-        checkpoint_metadata = config["metadata"]
-        if saved:
-            checkpoint_config = patch_configurable(config, saved.config[CONF])
-            checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}
-        with ChannelsManager(
-            self.channels,
-            checkpoint,
-            LoopProtocol(config=config, step=step + 1, stop=step + 2),
-        ) as (channels, managed):
-            values, as_node = updates[0]
-
-            # no values as END, just clear all tasks
-            if values is None and as_node == END:
-                if len(updates) > 1:
-                    raise InvalidUpdateError(
-                        "Cannot apply multiple updates when clearing state"
+        def perform_superstep(
+            input_config: RunnableConfig, updates: Sequence[StateUpdate]
+        ) -> RunnableConfig:
+            # get last checkpoint
+            config = ensure_config(self.config, input_config)
+            saved = checkpointer.get_tuple(config)
+            checkpoint = (
+                copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
+            )
+            checkpoint_previous_versions = (
+                saved.checkpoint["channel_versions"].copy() if saved else {}
+            )
+            step = saved.metadata.get("step", -1) if saved else -1
+            # merge configurable fields with previous checkpoint config
+            checkpoint_config = patch_configurable(
+                config,
+                {
+                    CONFIG_KEY_CHECKPOINT_NS: config[CONF].get(
+                        CONFIG_KEY_CHECKPOINT_NS, ""
                     )
+                },
+            )
+            checkpoint_metadata = config["metadata"]
+            if saved:
+                checkpoint_config = patch_configurable(config, saved.config[CONF])
+                checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}
+            with ChannelsManager(
+                self.channels,
+                checkpoint,
+                LoopProtocol(config=config, step=step + 1, stop=step + 2),
+            ) as (channels, managed):
+                values, as_node = updates[0]
 
-                if saved is not None:
+                # no values as END, just clear all tasks
+                if values is None and as_node == END:
+                    if len(updates) > 1:
+                        raise InvalidUpdateError(
+                            "Cannot apply multiple updates when clearing state"
+                        )
+
+                    if saved is not None:
+                        # tasks for this checkpoint
+                        next_tasks = prepare_next_tasks(
+                            checkpoint,
+                            saved.pending_writes or [],
+                            self.nodes,
+                            channels,
+                            managed,
+                            saved.config,
+                            saved.metadata.get("step", -1) + 1,
+                            for_execution=True,
+                            store=self.store,
+                            checkpointer=self.checkpointer
+                            if isinstance(self.checkpointer, BaseCheckpointSaver)
+                            else None,
+                            manager=None,
+                        )
+                        # apply null writes
+                        if null_writes := [
+                            w[1:]
+                            for w in saved.pending_writes or []
+                            if w[0] == NULL_TASK_ID
+                        ]:
+                            apply_writes(
+                                saved.checkpoint,
+                                channels,
+                                [PregelTaskWrites((), INPUT, null_writes, [])],
+                                None,
+                            )
+                        # apply writes from tasks that already ran
+                        for tid, k, v in saved.pending_writes or []:
+                            if k in (ERROR, INTERRUPT, SCHEDULED):
+                                continue
+                            if tid not in next_tasks:
+                                continue
+                            next_tasks[tid].writes.append((k, v))
+                        # clear all current tasks
+                        apply_writes(checkpoint, channels, next_tasks.values(), None)
+                    # save checkpoint
+                    next_config = checkpointer.put(
+                        checkpoint_config,
+                        create_checkpoint(checkpoint, None, step),
+                        {
+                            **checkpoint_metadata,
+                            "source": "update",
+                            "step": step + 1,
+                            "writes": {},
+                            "parents": saved.metadata.get("parents", {})
+                            if saved
+                            else {},
+                        },
+                        {},
+                    )
+                    return patch_checkpoint_map(
+                        next_config, saved.metadata if saved else None
+                    )
+                # no values, empty checkpoint
+                if values is None and as_node is None:
+                    if len(updates) > 1:
+                        raise InvalidUpdateError(
+                            "Cannot create empty checkpoint with multiple updates"
+                        )
+
+                    next_checkpoint = create_checkpoint(checkpoint, None, step)
+                    # copy checkpoint
+                    next_config = checkpointer.put(
+                        checkpoint_config,
+                        next_checkpoint,
+                        {
+                            **checkpoint_metadata,
+                            "source": "update",
+                            "step": step + 1,
+                            "writes": {},
+                            "parents": saved.metadata.get("parents", {})
+                            if saved
+                            else {},
+                        },
+                        {},
+                    )
+                    return patch_checkpoint_map(
+                        next_config, saved.metadata if saved else None
+                    )
+                # no values, copy checkpoint
+                if values is None and as_node == "__copy__":
+                    if len(updates) > 1:
+                        raise InvalidUpdateError(
+                            "Cannot copy checkpoint with multiple updates"
+                        )
+
+                    next_checkpoint = create_checkpoint(checkpoint, None, step)
+                    # copy checkpoint
+                    next_config = checkpointer.put(
+                        saved.parent_config or saved.config
+                        if saved
+                        else checkpoint_config,
+                        next_checkpoint,
+                        {
+                            **checkpoint_metadata,
+                            "source": "fork",
+                            "step": step + 1,
+                            "parents": saved.metadata.get("parents", {})
+                            if saved
+                            else {},
+                        },
+                        {},
+                    )
+                    return patch_checkpoint_map(
+                        next_config, saved.metadata if saved else None
+                    )
+                # apply pending writes, if not on specific checkpoint
+                if (
+                    CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
+                    and saved is not None
+                    and saved.pending_writes
+                ):
                     # tasks for this checkpoint
                     next_tasks = prepare_next_tasks(
                         checkpoint,
-                        saved.pending_writes or [],
+                        saved.pending_writes,
                         self.nodes,
                         channels,
                         managed,
@@ -1268,37 +1395,18 @@ class Pregel(PregelProtocol):
                             [PregelTaskWrites((), INPUT, null_writes, [])],
                             None,
                         )
-                    # apply writes from tasks that already ran
-                    for tid, k, v in saved.pending_writes or []:
+                    # apply writes
+                    for tid, k, v in saved.pending_writes:
                         if k in (ERROR, INTERRUPT, SCHEDULED):
                             continue
                         if tid not in next_tasks:
                             continue
                         next_tasks[tid].writes.append((k, v))
-                    # clear all current tasks
-                    apply_writes(checkpoint, channels, next_tasks.values(), None)
-                # save checkpoint
-                next_config = checkpointer.put(
-                    checkpoint_config,
-                    create_checkpoint(checkpoint, None, step),
-                    {
-                        **checkpoint_metadata,
-                        "source": "update",
-                        "step": step + 1,
-                        "writes": {},
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
-                    },
-                    {},
-                )
-                return patch_checkpoint_map(
-                    next_config, saved.metadata if saved else None
-                )
-            # no values, empty checkpoint
-            if values is None and as_node is None:
-                if len(updates) > 1:
-                    raise InvalidUpdateError(
-                        "Cannot create empty checkpoint with multiple updates"
-                    )
+                    if tasks := [t for t in next_tasks.values() if t.writes]:
+                        apply_writes(checkpoint, channels, tasks, None)
+                valid_updates: list[tuple[str, Optional[dict[str, Any]]]] = []
+                if len(updates) == 1:
+                    values, as_node = updates[0]
 
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
                 # copy checkpoint
@@ -1397,128 +1505,144 @@ class Pregel(PregelProtocol):
                         isinstance(self.input_channels, str)
                         and self.input_channels in self.nodes
                     ):
-                        as_node = self.input_channels
-                elif as_node is None:
-                    last_seen_by_node = sorted(
-                        (v, n)
-                        for n, seen in checkpoint["versions_seen"].items()
-                        if n in self.nodes
-                        for v in seen.values()
-                    )
-                    # if two nodes updated the state at the same time, it's ambiguous
-                    if last_seen_by_node:
-                        if len(last_seen_by_node) == 1:
-                            as_node = last_seen_by_node[0][1]
-                        elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
-                            as_node = last_seen_by_node[-1][1]
-                if as_node is None:
-                    raise InvalidUpdateError("Ambiguous update, specify as_node")
-                if as_node not in self.nodes:
-                    raise InvalidUpdateError(f"Node {as_node} does not exist")
-
-                valid_updates.append((as_node, values))
-            else:
-                for values, as_node in updates:
-                    if as_node is None:
-                        raise InvalidUpdateError(
-                            "as_node is required when applying multiple updates"
+                        if (
+                            isinstance(self.input_channels, str)
+                            and self.input_channels in self.nodes
+                        ):
+                            as_node = self.input_channels
+                    elif as_node is None:
+                        last_seen_by_node = sorted(
+                            (v, n)
+                            for n, seen in checkpoint["versions_seen"].items()
+                            if n in self.nodes
+                            for v in seen.values()
                         )
-
+                        # if two nodes updated the state at the same time, it's ambiguous
+                        if last_seen_by_node:
+                            if len(last_seen_by_node) == 1:
+                                as_node = last_seen_by_node[0][1]
+                            elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
+                                as_node = last_seen_by_node[-1][1]
+                    if as_node is None:
+                        raise InvalidUpdateError("Ambiguous update, specify as_node")
                     if as_node not in self.nodes:
                         raise InvalidUpdateError(f"Node {as_node} does not exist")
 
                     valid_updates.append((as_node, values))
+                else:
+                    for values, as_node in updates:
+                        if as_node is None:
+                            raise InvalidUpdateError(
+                                "as_node is required when applying multiple updates"
+                            )
 
-            run_tasks: list[PregelTaskWrites] = []
-            run_task_ids: list[str] = []
+                        if as_node not in self.nodes:
+                            raise InvalidUpdateError(f"Node {as_node} does not exist")
 
-            for as_node, values in valid_updates:
-                # create task to run all writers of the chosen node
-                writers = self.nodes[as_node].flat_writers
-                if not writers:
-                    raise InvalidUpdateError(f"Node {as_node} has no writers")
-                writes: deque[tuple[str, Any]] = deque()
-                task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
-                task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
-                run_tasks.append(task)
-                run_task_ids.append(task_id)
+                        valid_updates.append((as_node, values))
 
-                run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
+                run_tasks: list[PregelTaskWrites] = []
+                run_task_ids: list[str] = []
 
-                # execute task
-                run.invoke(
-                    values,
-                    patch_config(
-                        config,
-                        run_name=self.name + "UpdateState",
-                        configurable={
-                            # deque.extend is thread-safe
-                            CONFIG_KEY_SEND: partial(
-                                local_write,
-                                writes.extend,
-                                self.nodes.keys(),
-                            ),
-                            CONFIG_KEY_READ: partial(
-                                local_read,
-                                step + 1,
-                                checkpoint,
-                                channels,
-                                managed,
-                                task,
-                                config,
-                            ),
+                for as_node, values in valid_updates:
+                    # create task to run all writers of the chosen node
+                    writers = self.nodes[as_node].flat_writers
+                    if not writers:
+                        raise InvalidUpdateError(f"Node {as_node} has no writers")
+                    writes: deque[tuple[str, Any]] = deque()
+                    task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
+                    task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
+                    run_tasks.append(task)
+                    run_task_ids.append(task_id)
+
+                    run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
+
+                    # execute task
+                    run.invoke(
+                        values,
+                        patch_config(
+                            config,
+                            run_name=self.name + "UpdateState",
+                            configurable={
+                                # deque.extend is thread-safe
+                                CONFIG_KEY_SEND: partial(
+                                    local_write,
+                                    writes.extend,
+                                    self.nodes.keys(),
+                                ),
+                                CONFIG_KEY_READ: partial(
+                                    local_read,
+                                    step + 1,
+                                    checkpoint,
+                                    channels,
+                                    managed,
+                                    task,
+                                    config,
+                                ),
+                            },
+                        ),
+                    )
+
+                # save task writes
+                for task_id, task in zip(run_task_ids, run_tasks):
+                    channel_writes = [w for w in task.writes if w[0] != PUSH]
+
+                    # channel writes are saved to current checkpoint
+                    if saved and channel_writes:
+                        checkpointer.put_writes(
+                            checkpoint_config, channel_writes, task_id
+                        )
+
+                # apply to checkpoint and save
+                mv_writes = apply_writes(
+                    checkpoint, channels, run_tasks, checkpointer.get_next_version
+                )
+
+                assert not mv_writes, "Can't write to SharedValues from update_state"
+
+                checkpoint = create_checkpoint(checkpoint, channels, step + 1)
+                next_config = checkpointer.put(
+                    checkpoint_config,
+                    checkpoint,
+                    {
+                        **checkpoint_metadata,
+                        "source": "update",
+                        "step": step + 1,
+                        "writes": {
+                            as_node: values for as_node, values in valid_updates
                         },
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    get_new_channel_versions(
+                        checkpoint_previous_versions, checkpoint["channel_versions"]
                     ),
                 )
 
-            # save task writes
-            for task_id, task in zip(run_task_ids, run_tasks):
-                channel_writes = [w for w in task.writes if w[0] != PUSH]
+                for task_id, task in zip(run_task_ids, run_tasks):
+                    # save push writes
+                    if push_writes := [w for w in task.writes if w[0] == PUSH]:
+                        checkpointer.put_writes(next_config, push_writes, task_id)
 
-                # channel writes are saved to current checkpoint
-                if saved and channel_writes:
-                    checkpointer.put_writes(checkpoint_config, channel_writes, task_id)
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
 
-            # apply to checkpoint and save
-            mv_writes = apply_writes(
-                checkpoint, channels, run_tasks, checkpointer.get_next_version
-            )
-
-            assert not mv_writes, "Can't write to SharedValues from update_state"
-
-            checkpoint = create_checkpoint(checkpoint, channels, step + 1)
-            next_config = checkpointer.put(
-                checkpoint_config,
-                checkpoint,
-                {
-                    **checkpoint_metadata,
-                    "source": "update",
-                    "step": step + 1,
-                    "writes": {as_node: values for as_node, values in valid_updates},
-                    "parents": saved.metadata.get("parents", {}) if saved else {},
-                },
-                get_new_channel_versions(
-                    checkpoint_previous_versions, checkpoint["channel_versions"]
-                ),
-            )
-
-            for task_id, task in zip(run_task_ids, run_tasks):
-                # save push writes
-                if push_writes := [w for w in task.writes if w[0] == PUSH]:
-                    checkpointer.put_writes(next_config, push_writes, task_id)
-
-            return patch_checkpoint_map(next_config, saved.metadata if saved else None)
+        current_config = config
+        for superstep in supersteps:
+            current_config = perform_superstep(current_config, superstep)
+        return current_config
 
     async def abulk_update_state(
         self,
         config: RunnableConfig,
-        updates: list[StateUpdate],
+        supersteps: Sequence[Sequence[StateUpdate]],
     ) -> RunnableConfig:
         """Apply updates to the graph state in bulk. Requires a checkpointer to be set.
 
         Args:
             config: The config to apply the updates to.
-            updates: A list of updates to apply to the graph state. Each update is a tuple of the form `(values, as_node)`.
+            supersteps: A list of supersteps, each including a list of updates to apply sequentially to a graph state.
+                        Each update is a tuple of the form `(values, as_node)`.
 
         Raises:
             ValueError: If no checkpointer is set or no updates are provided.
@@ -1534,7 +1658,10 @@ class Pregel(PregelProtocol):
         if not checkpointer:
             raise ValueError("No checkpointer set")
 
-        if len(updates) == 0:
+        if len(supersteps) == 0:
+            raise ValueError("No supersteps provided")
+
+        if any(len(u) == 0 for u in supersteps):
             raise ValueError("No updates provided")
 
         # delegate to subgraph
@@ -1547,50 +1674,173 @@ class Pregel(PregelProtocol):
             async for _, pregel in self.aget_subgraphs(namespace=recast, recurse=True):
                 return await pregel.abulk_update_state(
                     patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
-                    updates,
+                    supersteps,
                 )
             else:
                 raise ValueError(f"Subgraph {recast} not found")
 
-        # get last checkpoint
-        config = ensure_config(self.config, config)
-        saved = await checkpointer.aget_tuple(config)
-        checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
-        checkpoint_previous_versions = (
-            saved.checkpoint["channel_versions"].copy() if saved else {}
-        )
-        step = saved.metadata.get("step", -1) if saved else -1
-        # merge configurable fields with previous checkpoint config
-        checkpoint_config = patch_configurable(
-            config,
-            {CONFIG_KEY_CHECKPOINT_NS: config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")},
-        )
-        checkpoint_metadata = config["metadata"]
-        if saved:
-            checkpoint_config = patch_configurable(config, saved.config[CONF])
-            checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}
-        async with AsyncChannelsManager(
-            self.channels,
-            checkpoint,
-            LoopProtocol(config=config, step=step + 1, stop=step + 2),
-        ) as (
-            channels,
-            managed,
-        ):
-            values, as_node = updates[0]
-
-            # no values, just clear all tasks
-            if values is None and as_node == END:
-                if len(updates) > 1:
-                    raise InvalidUpdateError(
-                        "Cannot apply multiple updates when clearing state"
+        async def aperform_superstep(
+            input_config: RunnableConfig, updates: Sequence[StateUpdate]
+        ) -> RunnableConfig:
+            # get last checkpoint
+            config = ensure_config(self.config, input_config)
+            saved = await checkpointer.aget_tuple(config)
+            checkpoint = (
+                copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
+            )
+            checkpoint_previous_versions = (
+                saved.checkpoint["channel_versions"].copy() if saved else {}
+            )
+            step = saved.metadata.get("step", -1) if saved else -1
+            # merge configurable fields with previous checkpoint config
+            checkpoint_config = patch_configurable(
+                config,
+                {
+                    CONFIG_KEY_CHECKPOINT_NS: config[CONF].get(
+                        CONFIG_KEY_CHECKPOINT_NS, ""
                     )
+                },
+            )
+            checkpoint_metadata = config["metadata"]
+            if saved:
+                checkpoint_config = patch_configurable(config, saved.config[CONF])
+                checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}
+            async with AsyncChannelsManager(
+                self.channels,
+                checkpoint,
+                LoopProtocol(config=config, step=step + 1, stop=step + 2),
+            ) as (
+                channels,
+                managed,
+            ):
+                values, as_node = updates[0]
 
-                if saved is not None:
+                # no values, just clear all tasks
+                if values is None and as_node == END:
+                    if len(updates) > 1:
+                        raise InvalidUpdateError(
+                            "Cannot apply multiple updates when clearing state"
+                        )
+
+                    if saved is not None:
+                        # tasks for this checkpoint
+                        next_tasks = prepare_next_tasks(
+                            checkpoint,
+                            saved.pending_writes or [],
+                            self.nodes,
+                            channels,
+                            managed,
+                            saved.config,
+                            saved.metadata.get("step", -1) + 1,
+                            for_execution=True,
+                            store=self.store,
+                            checkpointer=self.checkpointer
+                            if isinstance(self.checkpointer, BaseCheckpointSaver)
+                            else None,
+                            manager=None,
+                        )
+                        # apply null writes
+                        if null_writes := [
+                            w[1:]
+                            for w in saved.pending_writes or []
+                            if w[0] == NULL_TASK_ID
+                        ]:
+                            apply_writes(
+                                saved.checkpoint,
+                                channels,
+                                [PregelTaskWrites((), INPUT, null_writes, [])],
+                                None,
+                            )
+                        # apply writes from tasks that already ran
+                        for tid, k, v in saved.pending_writes or []:
+                            if k in (ERROR, INTERRUPT, SCHEDULED):
+                                continue
+                            if tid not in next_tasks:
+                                continue
+                            next_tasks[tid].writes.append((k, v))
+                        # clear all current tasks
+                        apply_writes(checkpoint, channels, next_tasks.values(), None)
+                    # save checkpoint
+                    next_config = await checkpointer.aput(
+                        checkpoint_config,
+                        create_checkpoint(checkpoint, None, step),
+                        {
+                            **checkpoint_metadata,
+                            "source": "update",
+                            "step": step + 1,
+                            "writes": {},
+                            "parents": saved.metadata.get("parents", {})
+                            if saved
+                            else {},
+                        },
+                        {},
+                    )
+                    return patch_checkpoint_map(
+                        next_config, saved.metadata if saved else None
+                    )
+                # no values, empty checkpoint
+                if values is None and as_node is None:
+                    if len(updates) > 1:
+                        raise InvalidUpdateError(
+                            "Cannot create empty checkpoint with multiple updates"
+                        )
+
+                    next_checkpoint = create_checkpoint(checkpoint, None, step)
+                    # copy checkpoint
+                    next_config = await checkpointer.aput(
+                        checkpoint_config,
+                        next_checkpoint,
+                        {
+                            **checkpoint_metadata,
+                            "source": "update",
+                            "step": step + 1,
+                            "writes": {},
+                            "parents": saved.metadata.get("parents", {})
+                            if saved
+                            else {},
+                        },
+                        {},
+                    )
+                    return patch_checkpoint_map(
+                        next_config, saved.metadata if saved else None
+                    )
+                # no values, copy checkpoint
+                if values is None and as_node == "__copy__":
+                    if len(updates) > 1:
+                        raise InvalidUpdateError(
+                            "Cannot copy checkpoint with multiple updates"
+                        )
+
+                    next_checkpoint = create_checkpoint(checkpoint, None, step)
+                    # copy checkpoint
+                    next_config = await checkpointer.aput(
+                        saved.parent_config or saved.config
+                        if saved
+                        else checkpoint_config,
+                        next_checkpoint,
+                        {
+                            **checkpoint_metadata,
+                            "source": "fork",
+                            "step": step + 1,
+                            "parents": saved.metadata.get("parents", {})
+                            if saved
+                            else {},
+                        },
+                        {},
+                    )
+                    return patch_checkpoint_map(
+                        next_config, saved.metadata if saved else None
+                    )
+                # apply pending writes, if not on specific checkpoint
+                if (
+                    CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
+                    and saved is not None
+                    and saved.pending_writes
+                ):
                     # tasks for this checkpoint
                     next_tasks = prepare_next_tasks(
                         checkpoint,
-                        saved.pending_writes or [],
+                        saved.pending_writes,
                         self.nodes,
                         channels,
                         managed,
@@ -1617,61 +1867,18 @@ class Pregel(PregelProtocol):
                             [PregelTaskWrites((), INPUT, null_writes, [])],
                             None,
                         )
-                    # apply writes from tasks that already ran
-                    for tid, k, v in saved.pending_writes or []:
+                    for tid, k, v in saved.pending_writes:
                         if k in (ERROR, INTERRUPT, SCHEDULED):
                             continue
                         if tid not in next_tasks:
                             continue
                         next_tasks[tid].writes.append((k, v))
-                    # clear all current tasks
-                    apply_writes(checkpoint, channels, next_tasks.values(), None)
-                # save checkpoint
-                next_config = await checkpointer.aput(
-                    checkpoint_config,
-                    create_checkpoint(checkpoint, None, step),
-                    {
-                        **checkpoint_metadata,
-                        "source": "update",
-                        "step": step + 1,
-                        "writes": {},
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
-                    },
-                    {},
-                )
-                return patch_checkpoint_map(
-                    next_config, saved.metadata if saved else None
-                )
-            # no values, empty checkpoint
-            if values is None and as_node is None:
-                if len(updates) > 1:
-                    raise InvalidUpdateError(
-                        "Cannot create empty checkpoint with multiple updates"
-                    )
+                    if tasks := [t for t in next_tasks.values() if t.writes]:
+                        apply_writes(checkpoint, channels, tasks, None)
+                valid_updates: list[tuple[str, Optional[dict[str, Any]]]] = []
 
-                next_checkpoint = create_checkpoint(checkpoint, None, step)
-                # copy checkpoint
-                next_config = await checkpointer.aput(
-                    checkpoint_config,
-                    next_checkpoint,
-                    {
-                        **checkpoint_metadata,
-                        "source": "update",
-                        "step": step + 1,
-                        "writes": {},
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
-                    },
-                    {},
-                )
-                return patch_checkpoint_map(
-                    next_config, saved.metadata if saved else None
-                )
-            # no values, copy checkpoint
-            if values is None and as_node == "__copy__":
-                if len(updates) > 1:
-                    raise InvalidUpdateError(
-                        "Cannot copy checkpoint with multiple updates"
-                    )
+                if len(updates) == 1:
+                    values, as_node = updates[0]
 
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
                 # copy checkpoint
@@ -1769,91 +1976,121 @@ class Pregel(PregelProtocol):
                         raise InvalidUpdateError(
                             "as_node is required when applying multiple updates"
                         )
+                        # if two nodes updated the state at the same time, it's ambiguous
+                        if last_seen_by_node:
+                            if len(last_seen_by_node) == 1:
+                                as_node = last_seen_by_node[0][1]
+                            elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
+                                as_node = last_seen_by_node[-1][1]
+                    if as_node is None:
+                        raise InvalidUpdateError("Ambiguous update, specify as_node")
 
                     if as_node not in self.nodes:
                         raise InvalidUpdateError(f"Node {as_node} does not exist")
 
                     valid_updates.append((as_node, values))
+                else:
+                    for values, as_node in updates:
+                        if as_node is None:
+                            raise InvalidUpdateError(
+                                "as_node is required when applying multiple updates"
+                            )
 
-            run_tasks: list[PregelTaskWrites] = []
-            run_task_ids: list[str] = []
+                        if as_node not in self.nodes:
+                            raise InvalidUpdateError(f"Node {as_node} does not exist")
 
-            for as_node, values in valid_updates:
-                # create task to run all writers of the chosen node
-                writers = self.nodes[as_node].flat_writers
-                if not writers:
-                    raise InvalidUpdateError(f"Node {as_node} has no writers")
-                writes: deque[tuple[str, Any]] = deque()
-                task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
-                task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
-                run_tasks.append(task)
-                run_task_ids.append(task_id)
+                        valid_updates.append((as_node, values))
 
-                run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
+                run_tasks: list[PregelTaskWrites] = []
+                run_task_ids: list[str] = []
 
-                # execute task
-                await run.ainvoke(
-                    values,
-                    patch_config(
-                        config,
-                        run_name=self.name + "UpdateState",
-                        configurable={
-                            # deque.extend is thread-safe
-                            CONFIG_KEY_SEND: partial(
-                                local_write,
-                                writes.extend,
-                                self.nodes.keys(),
-                            ),
-                            CONFIG_KEY_READ: partial(
-                                local_read,
-                                step + 1,
-                                checkpoint,
-                                channels,
-                                managed,
-                                task,
-                                config,
-                            ),
+                for as_node, values in valid_updates:
+                    # create task to run all writers of the chosen node
+                    writers = self.nodes[as_node].flat_writers
+                    if not writers:
+                        raise InvalidUpdateError(f"Node {as_node} has no writers")
+                    writes: deque[tuple[str, Any]] = deque()
+                    task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
+                    task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
+                    run_tasks.append(task)
+                    run_task_ids.append(task_id)
+
+                    run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
+
+                    # execute task
+                    await run.ainvoke(
+                        values,
+                        patch_config(
+                            config,
+                            run_name=self.name + "UpdateState",
+                            configurable={
+                                # deque.extend is thread-safe
+                                CONFIG_KEY_SEND: partial(
+                                    local_write,
+                                    writes.extend,
+                                    self.nodes.keys(),
+                                ),
+                                CONFIG_KEY_READ: partial(
+                                    local_read,
+                                    step + 1,
+                                    checkpoint,
+                                    channels,
+                                    managed,
+                                    task,
+                                    config,
+                                ),
+                            },
+                        ),
+                    )
+
+                # save task writes
+                for task_id, task in zip(run_task_ids, run_tasks):
+                    # channel writes are saved to current checkpoint
+                    channel_writes = [w for w in task.writes if w[0] != PUSH]
+                    if saved and channel_writes:
+                        await checkpointer.aput_writes(
+                            checkpoint_config, channel_writes, task_id
+                        )
+
+                # apply to checkpoint and save
+                mv_writes = apply_writes(
+                    checkpoint, channels, run_tasks, checkpointer.get_next_version
+                )
+                assert not mv_writes, "Can't write to SharedValues from update_state"
+                checkpoint = create_checkpoint(checkpoint, channels, step + 1)
+                # save checkpoint, after applying writes
+                next_config = await checkpointer.aput(
+                    checkpoint_config,
+                    checkpoint,
+                    {
+                        **checkpoint_metadata,
+                        "source": "update",
+                        "step": step + 1,
+                        "writes": {
+                            as_node: values for as_node, values in valid_updates
                         },
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    get_new_channel_versions(
+                        checkpoint_previous_versions, checkpoint["channel_versions"]
                     ),
                 )
 
-            # save task writes
-            for task_id, task in zip(run_task_ids, run_tasks):
-                # channel writes are saved to current checkpoint
-                channel_writes = [w for w in task.writes if w[0] != PUSH]
-                if saved and channel_writes:
-                    await checkpointer.aput_writes(
-                        checkpoint_config, channel_writes, task_id
-                    )
+                for task_id, task in zip(run_task_ids, run_tasks):
+                    # save push writes
+                    if push_writes := [w for w in task.writes if w[0] == PUSH]:
+                        await checkpointer.aput_writes(
+                            next_config, push_writes, task_id
+                        )
 
-            # apply to checkpoint and save
-            mv_writes = apply_writes(
-                checkpoint, channels, run_tasks, checkpointer.get_next_version
-            )
-            assert not mv_writes, "Can't write to SharedValues from update_state"
-            checkpoint = create_checkpoint(checkpoint, channels, step + 1)
-            # save checkpoint, after applying writes
-            next_config = await checkpointer.aput(
-                checkpoint_config,
-                checkpoint,
-                {
-                    **checkpoint_metadata,
-                    "source": "update",
-                    "step": step + 1,
-                    "writes": {as_node: values for as_node, values in valid_updates},
-                    "parents": saved.metadata.get("parents", {}) if saved else {},
-                },
-                get_new_channel_versions(
-                    checkpoint_previous_versions, checkpoint["channel_versions"]
-                ),
-            )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
 
-            for task_id, task in zip(run_task_ids, run_tasks):
-                # save push writes
-                if push_writes := [w for w in task.writes if w[0] == PUSH]:
-                    await checkpointer.aput_writes(next_config, push_writes, task_id)
-
-            return patch_checkpoint_map(next_config, saved.metadata if saved else None)
+        current_config = config
+        for superstep in supersteps:
+            current_config = await aperform_superstep(current_config, superstep)
+        return current_config
 
     def update_state(
         self,
@@ -1865,7 +2102,7 @@ class Pregel(PregelProtocol):
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
-        return self.bulk_update_state(config, [StateUpdate(values, as_node)])
+        return self.bulk_update_state(config, [[StateUpdate(values, as_node)]])
 
     async def aupdate_state(
         self,
@@ -1877,7 +2114,7 @@ class Pregel(PregelProtocol):
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
-        return await self.abulk_update_state(config, [StateUpdate(values, as_node)])
+        return await self.abulk_update_state(config, [[StateUpdate(values, as_node)]])
 
     def _defaults(
         self,

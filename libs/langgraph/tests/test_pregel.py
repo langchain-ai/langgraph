@@ -69,6 +69,7 @@ from langgraph.types import (
     Interrupt,
     PregelTask,
     Send,
+    StateUpdate,
     StreamWriter,
     interrupt,
 )
@@ -7643,14 +7644,23 @@ def test_bulk_state_updates(
     config = {"configurable": {"thread_id": "1"}}
 
     # First update with node_a
-    graph.bulk_update_state(config, [({"foo": "bar"}, "node_a")])
+    graph.bulk_update_state(
+        config,
+        [
+            [
+                StateUpdate(values={"foo": "bar"}, as_node="node_a"),
+            ]
+        ],
+    )
 
     # Then bulk update with both nodes
     graph.bulk_update_state(
         config,
         [
-            ({"foo": "updated"}, "node_a"),
-            ({"baz": "new"}, "node_b"),
+            [
+                StateUpdate(values={"foo": "updated"}, as_node="node_a"),
+                StateUpdate(values={"baz": "new"}, as_node="node_b"),
+            ]
         ],
     )
 
@@ -7658,7 +7668,34 @@ def test_bulk_state_updates(
     assert state.values == {"foo": "updated", "baz": "new"}
 
     # Check if there are only two checkpoints
-    checkpoints = list(checkpointer.list({"configurable": {"thread_id": "1"}}))
+    checkpoints = list(checkpointer.list(config))
+    assert len(checkpoints) == 2
+    assert checkpoints[0].metadata["writes"] == {
+        "node_a": {"foo": "updated"},
+        "node_b": {"baz": "new"},
+    }
+    assert checkpoints[1].metadata["writes"] == {"node_a": {"foo": "bar"}}
+
+    # perform multiple steps at the same time
+    config = {"configurable": {"thread_id": "2"}}
+
+    graph.bulk_update_state(
+        config,
+        [
+            [
+                StateUpdate(values={"foo": "bar"}, as_node="node_a"),
+            ],
+            [
+                StateUpdate(values={"foo": "updated"}, as_node="node_a"),
+                StateUpdate(values={"baz": "new"}, as_node="node_b"),
+            ],
+        ],
+    )
+
+    state = graph.get_state(config)
+    assert state.values == {"foo": "updated", "baz": "new"}
+
+    checkpoints = list(checkpointer.list(config))
     assert len(checkpoints) == 2
     assert checkpoints[0].metadata["writes"] == {
         "node_a": {"foo": "updated"},
@@ -7670,13 +7707,30 @@ def test_bulk_state_updates(
     with pytest.raises(InvalidUpdateError):
         graph.bulk_update_state(
             config,
-            [({"foo": "error"}, None), ({"bar": "error"}, None)],
+            [
+                [
+                    StateUpdate(values={"foo": "error"}, as_node=None),
+                    StateUpdate(values={"bar": "error"}, as_node=None),
+                ]
+            ],
         )
 
     # Should raise if no updates are provided
-    with pytest.raises(ValueError, match="No updates provided"):
+    with pytest.raises(ValueError, match="No supersteps provided"):
         graph.bulk_update_state(config, [])
+
+    # Should raise if no updates are provided
+    with pytest.raises(ValueError, match="No updates provided"):
+        graph.bulk_update_state(config, [[], []])
 
     # Should raise if __end__ or __copy__ update is applied in bulk
     with pytest.raises(InvalidUpdateError):
-        graph.bulk_update_state(config, [(None, "__end__"), (None, "__copy__")])
+        graph.bulk_update_state(
+            config,
+            [
+                [
+                    StateUpdate(values=None, as_node="__end__"),
+                    StateUpdate(values=None, as_node="__copy__"),
+                ],
+            ],
+        )

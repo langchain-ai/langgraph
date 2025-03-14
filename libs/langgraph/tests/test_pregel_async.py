@@ -59,6 +59,7 @@ from langgraph.types import (
     Interrupt,
     PregelTask,
     Send,
+    StateUpdate,
     StreamWriter,
     interrupt,
 )
@@ -7866,14 +7867,23 @@ async def test_bulk_state_updates(checkpointer_name: str) -> None:
         config = {"configurable": {"thread_id": "1"}}
 
         # First update with node_a
-        await graph.abulk_update_state(config, [({"foo": "bar"}, "node_a")])
+        await graph.abulk_update_state(
+            config,
+            [
+                [
+                    StateUpdate({"foo": "bar"}, "node_a"),
+                ]
+            ],
+        )
 
         # Then bulk update with both nodes
         await graph.abulk_update_state(
             config,
             [
-                ({"foo": "updated"}, "node_a"),
-                ({"baz": "new"}, "node_b"),
+                [
+                    StateUpdate({"foo": "updated"}, "node_a"),
+                    StateUpdate({"baz": "new"}, "node_b"),
+                ]
             ],
         )
 
@@ -7891,19 +7901,63 @@ async def test_bulk_state_updates(checkpointer_name: str) -> None:
         }
         assert checkpoints[1].metadata["writes"] == {"node_a": {"foo": "bar"}}
 
+        # perform multiple steps at the same time
+        config = {"configurable": {"thread_id": "2"}}
+
+        await graph.abulk_update_state(
+            config,
+            [
+                [
+                    StateUpdate({"foo": "bar"}, "node_a"),
+                ],
+                [
+                    StateUpdate({"foo": "updated"}, "node_a"),
+                    StateUpdate({"baz": "new"}, "node_b"),
+                ],
+            ],
+        )
+
+        state = await graph.aget_state(config)
+        assert state.values == {"foo": "updated", "baz": "new"}
+
+        checkpoints = [
+            c async for c in checkpointer.alist({"configurable": {"thread_id": "1"}})
+        ]
+        assert len(checkpoints) == 2
+        assert checkpoints[0].metadata["writes"] == {
+            "node_a": {"foo": "updated"},
+            "node_b": {"baz": "new"},
+        }
+        assert checkpoints[1].metadata["writes"] == {"node_a": {"foo": "bar"}}
+
         # Should raise error if updating without as_node
         with pytest.raises(InvalidUpdateError):
             await graph.abulk_update_state(
                 config,
-                [({"foo": "error"}, None), ({"bar": "error"}, None)],
+                [
+                    [
+                        StateUpdate(values={"foo": "error"}, as_node=None),
+                        StateUpdate(values={"bar": "error"}, as_node=None),
+                    ]
+                ],
             )
 
         # Should raise if no updates are provided
-        with pytest.raises(ValueError, match="No updates provided"):
+        with pytest.raises(ValueError, match="No supersteps provided"):
             await graph.abulk_update_state(config, [])
+
+        # Should raise if no updates are provided
+        with pytest.raises(ValueError, match="No updates provided"):
+            await graph.abulk_update_state(config, [[], []])
 
         # Should raise if __end__ or __copy__ update is applied in bulk
         with pytest.raises(InvalidUpdateError):
             await graph.abulk_update_state(
-                config, [(None, "__end__"), (None, "__copy__")]
+                config,
+                [
+                    [
+                        StateUpdate(values=None, as_node="__end__"),
+                        StateUpdate(values=None, as_node="__copy__"),
+                    ],
+                ],
             )
