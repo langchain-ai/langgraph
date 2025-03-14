@@ -5,6 +5,7 @@ import json
 import pathlib
 import re
 from collections import deque
+from pandas import DataFrame
 from collections.abc import Sequence
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
@@ -429,9 +430,20 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
                 ),
             ),
         )
-
     elif isinstance(obj, BaseException):
         return repr(obj)
+    elif isinstance(obj, DataFrame):
+        return msgpack.ExtType(
+            EXT_CONSTRUCTOR_POS_ARGS,
+            _msgpack_enc(
+                (
+                    obj.__class__.__module__,
+                    obj.__class__.__name__,
+                    (obj.to_dict(),),
+                ),
+            ),
+        )
+
     else:
         raise TypeError(f"Object of type {obj.__class__.__name__} is not serializable")
 
