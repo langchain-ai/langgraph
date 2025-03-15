@@ -10,8 +10,8 @@ from langchain_core.messages import (
 
 from langgraph.prebuilt.memory_handler import (
     SUMMARIES_NS,
-    SummarizationMemoryHandler,
     count_tokens_approximately,
+    summarize_messages,
 )
 from langgraph.store.memory import InMemoryStore
 
@@ -98,10 +98,6 @@ def test_not_enough_messages():
     thread_id = "test_thread_id"
     config = {"configurable": {"thread_id": thread_id}}
 
-    summarizer = SummarizationMemoryHandler(
-        model=model, store=store, token_counter=len, max_tokens=4, max_summary_tokens=0
-    )
-
     # Create a few messages (not enough to trigger summarization)
     messages = [
         HumanMessage(content="Hello"),
@@ -110,7 +106,15 @@ def test_not_enough_messages():
     ]
 
     # Call the summarizer
-    result = summarizer.invoke(messages, config)
+    result = summarize_messages(
+        messages,
+        model=model,
+        store=store,
+        config=config,
+        token_counter=len,
+        max_tokens=4,
+        max_summary_tokens=0,
+    )
 
     # Should return the original messages unchanged
     assert result == messages
@@ -125,9 +129,6 @@ def test_summarize_first_time():
     config = {"configurable": {"thread_id": thread_id}}
 
     model = MockChatModel(responses=["This is a summary of the conversation."])
-    summarizer = SummarizationMemoryHandler(
-        model=model, store=store, token_counter=len, max_tokens=6, max_summary_tokens=0
-    )
 
     # Create enough messages to trigger summarization
     messages = [
@@ -145,7 +146,15 @@ def test_summarize_first_time():
     ]
 
     # Call the summarizer
-    result = summarizer.invoke(messages, config)
+    result = summarize_messages(
+        messages,
+        model=model,
+        store=store,
+        config=config,
+        token_counter=len,
+        max_tokens=6,
+        max_summary_tokens=0,
+    )
 
     # Check that model was called
     assert len(model.invoke_calls) == 1
@@ -168,7 +177,15 @@ def test_summarize_first_time():
     )  # All messages except the latest
 
     # Test subsequent invocation
-    result = summarizer.invoke(messages, config)
+    result = summarize_messages(
+        messages,
+        model=model,
+        store=store,
+        config=config,
+        token_counter=len,
+        max_tokens=6,
+        max_summary_tokens=0,
+    )
     assert len(result) == 4
     assert result[0].type == "system"
     assert (
@@ -185,9 +202,6 @@ def test_with_system_message():
     config = {"configurable": {"thread_id": thread_id}}
 
     model = MockChatModel(responses=["Summary with system message present."])
-    summarizer = SummarizationMemoryHandler(
-        model=model, store=store, token_counter=len, max_tokens=5, max_summary_tokens=0
-    )
 
     # Create messages with a system message
     messages = [
@@ -207,7 +221,15 @@ def test_with_system_message():
     ]
 
     # Call the summarizer
-    result = summarizer.invoke(messages, config)
+    result = summarize_messages(
+        messages,
+        model=model,
+        store=store,
+        config=config,
+        token_counter=len,
+        max_tokens=5,
+        max_summary_tokens=0,
+    )
 
     # Check that model was called
     assert len(model.invoke_calls) == 1
@@ -238,9 +260,6 @@ def test_subsequent_summarization():
             "Updated summary including new messages.",
         ]
     )
-    summarizer = SummarizationMemoryHandler(
-        model=model, store=store, token_counter=len, max_tokens=6, max_summary_tokens=0
-    )
 
     # First batch of messages
     messages1 = [
@@ -254,7 +273,15 @@ def test_subsequent_summarization():
     ]
 
     # First summarization
-    result1 = summarizer.invoke(messages1, config)
+    summarize_messages(
+        messages1,
+        model=model,
+        store=store,
+        config=config,
+        token_counter=len,
+        max_tokens=6,
+        max_summary_tokens=0,
+    )
 
     # Add more messages to trigger another summarization
     # We need to add at least max_messages (4) new messages
@@ -273,7 +300,15 @@ def test_subsequent_summarization():
     assert summary_value["summary"] == "First summary of the conversation."
 
     # Second summarization
-    result2 = summarizer.invoke(messages2, config)
+    result2 = summarize_messages(
+        messages2,
+        model=model,
+        store=store,
+        config=config,
+        token_counter=len,
+        max_tokens=6,
+        max_summary_tokens=0,
+    )
 
     # Check that model was called twice
     assert len(model.invoke_calls) == 2
@@ -301,21 +336,30 @@ def test_no_thread_id():
     model = MockChatModel()
     store = InMemoryStore()
 
-    summarizer = SummarizationMemoryHandler(
-        model=model, store=store, max_tokens=10, max_summary_tokens=0
-    )
     config_without_thread_id = {"configurable": {}}
 
     with pytest.raises(ValueError, match="requires a thread ID"):
-        summarizer.invoke([], config_without_thread_id)
+        summarize_messages(
+            [],
+            model=model,
+            store=store,
+            config=config_without_thread_id,
+            max_tokens=10,
+            max_summary_tokens=0,
+        )
 
 
 def test_no_store():
     """Test that an error is raised when no store is provided."""
     model = MockChatModel()
     with pytest.raises(ValueError, match="must be compiled with a store"):
-        SummarizationMemoryHandler(
-            model=model, store=None, max_tokens=10, max_summary_tokens=0
+        summarize_messages(
+            [],
+            model=model,
+            store=None,
+            config={},
+            max_tokens=10,
+            max_summary_tokens=0,
         )
 
 
@@ -328,14 +372,6 @@ def test_with_empty_messages():
 
     def count_non_empty_messages(messages: list[BaseMessage]) -> int:
         return sum(1 for msg in messages if msg.content)
-
-    summarizer = SummarizationMemoryHandler(
-        model=model,
-        store=store,
-        token_counter=count_non_empty_messages,
-        max_tokens=6,
-        max_summary_tokens=0,
-    )
 
     # Create messages with some empty content
     messages = [
@@ -351,7 +387,15 @@ def test_with_empty_messages():
     ]
 
     # Call the summarizer
-    result = summarizer.invoke(messages, config)
+    result = summarize_messages(
+        messages,
+        model=model,
+        store=store,
+        config=config,
+        token_counter=count_non_empty_messages,
+        max_tokens=6,
+        max_summary_tokens=0,
+    )
 
     # Check that summarization still works with empty messages
     assert len(result) == 2
@@ -366,10 +410,6 @@ def test_large_number_of_messages():
     thread_id = "test_thread_id"
     config = {"configurable": {"thread_id": thread_id}}
 
-    summarizer = SummarizationMemoryHandler(
-        model=model, store=store, token_counter=len, max_tokens=22, max_summary_tokens=0
-    )
-
     # Create a large number of messages
     messages = []
     for i in range(20):  # 20 pairs of messages = 40 messages total
@@ -380,7 +420,15 @@ def test_large_number_of_messages():
     messages.append(HumanMessage(content="Final message"))
 
     # Call the summarizer
-    result = summarizer.invoke(messages, config)
+    result = summarize_messages(
+        messages,
+        model=model,
+        store=store,
+        config=config,
+        token_counter=len,
+        max_tokens=22,
+        max_summary_tokens=0,
+    )
 
     # Check that summarization works with many messages
     assert (
@@ -406,10 +454,6 @@ def test_only_summarize_new_messages():
     thread_id = "test_thread_id"
     config = {"configurable": {"thread_id": thread_id}}
 
-    summarizer = SummarizationMemoryHandler(
-        model=model, store=store, token_counter=len, max_tokens=6, max_summary_tokens=0
-    )
-
     # First batch of messages
     messages1 = [
         # first 18 tokens will be summarized
@@ -424,7 +468,15 @@ def test_only_summarize_new_messages():
     ]
 
     # First summarization
-    result1 = summarizer.invoke(messages1, config)
+    summarize_messages(
+        messages1,
+        model=model,
+        store=store,
+        config=config,
+        token_counter=len,
+        max_tokens=6,
+        max_summary_tokens=0,
+    )
 
     # Verify the first summarization happened
     assert len(model.invoke_calls) == 1
@@ -455,7 +507,15 @@ def test_only_summarize_new_messages():
     messages2.extend(new_messages)
 
     # Second summarization
-    result2 = summarizer.invoke(messages2, config)
+    summarize_messages(
+        messages2,
+        model=model,
+        store=store,
+        config=config,
+        token_counter=len,
+        max_tokens=6,
+        max_summary_tokens=0,
+    )
 
     # Check that model was called twice
     assert len(model.invoke_calls) == 2

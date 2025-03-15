@@ -1,26 +1,23 @@
 import json
 import math
-from typing import Callable
+from typing import Callable, cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-from langchain_core.messages.utils import _get_message_openai_role, trim_messages
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages.utils import (
+    _get_message_openai_role,
+)
+from langchain_core.messages.utils import (
+    trim_messages as trim_messages_core,
+)
 from langchain_core.prompts.chat import ChatPromptTemplate, ChatPromptValue
-from langchain_core.runnables import Runnable, RunnableConfig
+from langchain_core.runnables import RunnableConfig
 
 from langgraph.store.base import BaseStore
 
 SUMMARIES_NS = ("summaries",)
 
 TokenCounter = Callable[[list[BaseMessage]], int]
-
-
-# TODO: does this need to be a Runnable?
-class BaseMemoryHandler(Runnable):
-    def invoke(
-        self, messages: list[BaseMessage], config: RunnableConfig
-    ) -> list[BaseMessage]:
-        raise NotImplementedError("Subclasses must implement this method")
 
 
 DEFAULT_INITIAL_SUMMARY_PROMPT = ChatPromptTemplate.from_messages(
@@ -98,182 +95,171 @@ def count_tokens_approximately(
     return token_count
 
 
-class TrimmingMemoryHandler(BaseMemoryHandler):
-    def __init__(
-        self,
-        *,
-        max_tokens: int,
-        token_counter: TokenCounter = count_tokens_approximately,
-    ) -> None:
-        self.max_tokens = max_tokens
-        self.token_counter = token_counter
+def trim_messages(
+    messages: list[BaseMessage],
+    *,
+    max_tokens: int,
+    token_counter: TokenCounter = count_tokens_approximately,
+) -> list[BaseMessage]:
+    return trim_messages_core(
+        messages,
+        max_tokens=max_tokens,
+        token_counter=token_counter,
+        start_on="human",
+        end_on=("human", "tool"),
+        include_system=True,
+    )
 
-    def invoke(
-        self, messages: list[BaseMessage], config: RunnableConfig
-    ) -> list[BaseMessage]:
-        return trim_messages(
-            messages,
-            max_tokens=self.max_tokens,
-            token_counter=self.token_counter,
-            start_on="human",
-            end_on=("human", "tool"),
-            include_system=True,
+
+def summarize_messages(
+    messages: list[BaseMessage],
+    *,
+    max_tokens: int,
+    model: BaseChatModel,
+    store: BaseStore,
+    config: RunnableConfig,
+    max_summary_tokens: int = 256,
+    token_counter: TokenCounter = count_tokens_approximately,
+    initial_summary_prompt: ChatPromptTemplate = DEFAULT_INITIAL_SUMMARY_PROMPT,
+    existing_summary_prompt: ChatPromptTemplate = DEFAULT_EXISTING_SUMMARY_PROMPT,
+    final_prompt: ChatPromptTemplate = DEFAULT_FINAL_SUMMARY_PROMPT,
+) -> list[BaseMessage]:
+    """A memory handler that summarizes messages when they exceed a token limit and replaces summarized messages with a single summary message.
+
+    Args:
+        messages: The list of messages to process.
+        max_tokens: Maximum number of tokens to return.
+        model: The language model to use for generating summaries.
+        store: Storage backend for persisting summaries between runs.
+        config: Configuration that should contain a "configurable" key with a "thread_id" value.
+        max_summary_tokens: Maximum number of tokens to return from the summarization LLM.
+        token_counter: Function to count tokens in a message. Defaults to approximate counting.
+        initial_summary_prompt: Prompt template for generating the first summary.
+        existing_summary_prompt: Prompt template for updating an existing summary.
+        final_prompt: Prompt template that combines summary with the remaining messages before returning.
+    """
+    if store is None:
+        raise ValueError(
+            "Cannot initialize SummarizationMemoryHandler with empty store. "
+            "If you're using this inside a graph, it must be compiled with a store, e.g. `graph = builder.compile(store=store)`"
         )
 
+    model = model.bind(max_tokens=max_summary_tokens)
 
-class SummarizationMemoryHandler(BaseMemoryHandler):
-    def __init__(
-        self,
-        *,
-        max_tokens: int,
-        model: BaseChatModel,
-        store: BaseStore,
-        max_summary_tokens: int = 256,
-        token_counter: TokenCounter = count_tokens_approximately,
-        initial_summary_prompt: ChatPromptTemplate = DEFAULT_INITIAL_SUMMARY_PROMPT,
-        existing_summary_prompt: ChatPromptTemplate = DEFAULT_EXISTING_SUMMARY_PROMPT,
-        final_prompt: ChatPromptTemplate = DEFAULT_FINAL_SUMMARY_PROMPT,
-    ) -> None:
-        """A memory handler that summarizes messages when they exceed a token limit and replaces summarized messages with a single summary message.
+    if max_summary_tokens >= max_tokens:
+        raise ValueError("`max_summary_tokens` must be less than `max_tokens`.")
 
-        Args:
-            max_tokens: Maximum number of tokens to return.
-            model: The language model to use for generating summaries.
-            store: Storage backend for persisting summaries between runs.
-            max_summary_tokens: Maximum number of tokens to return from the summarization LLM.
-            token_counter: Function to count tokens in a message. Defaults to approximate counting.
-            initial_summary_prompt: Prompt template for generating the first summary.
-            existing_summary_prompt: Prompt template for updating an existing summary.
-            final_prompt: Prompt template that combines summary with the remaining messages before returning.
-        """
-        if store is None:
-            raise ValueError(
-                "Cannot initialize SummarizationMemoryHandler with empty store. "
-                "If you're using this inside a graph, it must be compiled with a store, e.g. `graph = builder.compile(store=store)`"
-            )
+    thread_id = config.get("configurable", {}).get("thread_id")
 
-        self.model = model.bind(max_tokens=max_summary_tokens)
-        self.store = store
-
-        if max_summary_tokens >= max_tokens:
-            raise ValueError("`max_summary_tokens` must be less than `max_tokens`.")
-
-        self.max_tokens = max_tokens
-        self.max_summary_tokens = max_summary_tokens
-        self.token_counter = token_counter
-        self.initial_summary_prompt = initial_summary_prompt
-        self.existing_summary_prompt = existing_summary_prompt
-        self.final_prompt = final_prompt
-
-    def invoke(
-        self, messages: list[BaseMessage], config: RunnableConfig
-    ) -> list[BaseMessage]:
-        thread_id = config.get("configurable", {}).get("thread_id")
-
-        # it's possible for someone to need summarization in a long-running loop
-        # instead of multi-turn conversation (i.e., in a single-turn conversation, without need for thread IDs / checkpointer).
-        # however, there is an issue of using `store` in this case:
-        # summaries will persist across invocations, which is definitely not desirable.
-        # for now raising an error here, but could need a more elegant solution for this
-        # (or a different one altogether)
-        if not thread_id:
-            raise ValueError(
-                "SummarizationMemoryHandler requires a thread ID / checkpointer."
-            )
-
-        # First handle system message if present
-        max_tokens = self.max_tokens
-        if messages and messages[0].type == "system":
-            existing_system_message = messages[0]
-            # remove the system message from the list of messages to summarize
-            messages = messages[1:]
-            # adjust the token budget to account for the system message to be added
-            max_tokens -= self.token_counter([existing_system_message])
-        else:
-            existing_system_message = None
-
-        if not messages:
-            return (
-                messages
-                if existing_system_message is None
-                else [existing_system_message] + messages
-            )
-
-        # Check if we have a stored summary for this thread
-        summary_item = self.store.get(SUMMARIES_NS, thread_id)
-        summary_value = summary_item.value if summary_item else None
-        total_summarized_messages = (
-            summary_value["total_summarized_messages"] if summary_value else 0
+    # it's possible for someone to need summarization in a long-running loop
+    # instead of multi-turn conversation (i.e., in a single-turn conversation, without need for thread IDs / checkpointer).
+    # however, there is an issue of using `store` in this case:
+    # summaries will persist across invocations, which is definitely not desirable.
+    # for now raising an error here, but could need a more elegant solution for this
+    # (or a different one altogether)
+    if not thread_id:
+        raise ValueError(
+            "SummarizationMemoryHandler requires a thread ID / checkpointer."
         )
 
-        # Single pass through messages to count tokens and find cutoff point
-        n_tokens = 0
-        idx = max(0, total_summarized_messages - 1)
-        # we need to output messages that fit within max_tokens.
-        # assuming that the summarization LLM also needs at most max_tokens
-        # that will be turned into at most max_summary_tokens, you can try
-        # to process at most max_tokens * 2 - max_summary_tokens
-        max_total_tokens = self.max_tokens * 2 - self.max_summary_tokens
-        for i in range(total_summarized_messages, len(messages)):
-            n_tokens += self.token_counter([messages[i]])
+    # First handle system message if present
+    if messages and isinstance(messages[0], SystemMessage):
+        existing_system_message = messages[0]
+        # remove the system message from the list of messages to summarize
+        messages = messages[1:]
+        # adjust the token budget to account for the system message to be added
+        max_tokens -= token_counter([existing_system_message])
+    else:
+        existing_system_message = None
 
-            # If we're still under max_tokens, update the potential cutoff point
-            if n_tokens <= max_tokens:
-                idx = i
+    if not messages:
+        return (
+            messages
+            if existing_system_message is None
+            else [existing_system_message] + messages
+        )
 
-            # Check if we've exceeded the absolute maximum
-            if n_tokens >= max_total_tokens:
-                raise ValueError(
-                    f"SummarizationMemoryHandler cannot handle more than {max_total_tokens} tokens. "
-                    "Please increase the `max_tokens` or decrease the input size."
-                )
+    # Check if we have a stored summary for this thread
+    summary_item = store.get(SUMMARIES_NS, thread_id)
+    summary_value = summary_item.value if summary_item else None
+    total_summarized_messages = (
+        summary_value["total_summarized_messages"] if summary_value else 0
+    )
 
-        # If we haven't exceeded max_tokens, return original messages
+    # Single pass through messages to count tokens and find cutoff point
+    n_tokens = 0
+    idx = max(0, total_summarized_messages - 1)
+    # we need to output messages that fit within max_tokens.
+    # assuming that the summarization LLM also needs at most max_tokens
+    # that will be turned into at most max_summary_tokens, you can try
+    # to process at most max_tokens * 2 - max_summary_tokens
+    max_total_tokens = max_tokens * 2 - max_summary_tokens
+    for i in range(total_summarized_messages, len(messages)):
+        n_tokens += token_counter([messages[i]])
+
+        # If we're still under max_tokens, update the potential cutoff point
         if n_tokens <= max_tokens:
-            # we don't need to summarize, but we might still need to include the existing summary
-            messages_to_summarize = None
-        else:
-            messages_to_summarize = messages[total_summarized_messages : idx + 1]
+            idx = i
 
-        # If the last message is:
-        # (1) an AI message with tool calls - remove it
-        #   to avoid issues w/ the LLM provider (as it will lack a corresponding tool message)
-        # (2) a human message - remove it,
-        #   since it is a user input and it doesn't make sense to summarize it without a corresponding AI message
-        while messages_to_summarize and (
-            (
-                isinstance(messages_to_summarize[-1], AIMessage)
-                and messages_to_summarize[-1].tool_calls
+        # Check if we've exceeded the absolute maximum
+        if n_tokens >= max_total_tokens:
+            raise ValueError(
+                f"SummarizationMemoryHandler cannot handle more than {max_total_tokens} tokens. "
+                "Please increase the `max_tokens` or decrease the input size."
             )
-            or isinstance(messages_to_summarize[-1], HumanMessage)
-        ):
-            messages_to_summarize.pop()
 
-        if messages_to_summarize:
-            if summary_value:
-                summary_messages: ChatPromptValue = self.existing_summary_prompt.invoke(
+    # If we haven't exceeded max_tokens, return original messages
+    if n_tokens <= max_tokens:
+        # we don't need to summarize, but we might still need to include the existing summary
+        messages_to_summarize = None
+    else:
+        messages_to_summarize = messages[total_summarized_messages : idx + 1]
+
+    # If the last message is:
+    # (1) an AI message with tool calls - remove it
+    #   to avoid issues w/ the LLM provider (as it will lack a corresponding tool message)
+    # (2) a human message - remove it,
+    #   since it is a user input and it doesn't make sense to summarize it without a corresponding AI message
+    while messages_to_summarize and (
+        (
+            isinstance(messages_to_summarize[-1], AIMessage)
+            and messages_to_summarize[-1].tool_calls
+        )
+        or isinstance(messages_to_summarize[-1], HumanMessage)
+    ):
+        messages_to_summarize.pop()
+
+    if messages_to_summarize:
+        if summary_value:
+            summary_messages = cast(
+                ChatPromptValue,
+                existing_summary_prompt.invoke(
                     {
                         "messages": messages_to_summarize,
                         "existing_summary": summary_value["summary"],
                     }
-                )
-            else:
-                summary_messages: ChatPromptValue = self.initial_summary_prompt.invoke(
-                    {"messages": messages_to_summarize}
-                )
+                ),
+            )
+        else:
+            summary_messages = cast(
+                ChatPromptValue,
+                initial_summary_prompt.invoke({"messages": messages_to_summarize}),
+            )
 
-            summary_message_response = self.model.invoke(summary_messages.messages)
-            total_summarized_messages += len(messages_to_summarize)
-            summary_value = {
-                "summary": summary_message_response.content,
-                "summarized_messages": messages_to_summarize,
-                "total_summarized_messages": total_summarized_messages,
-            }
-            # Store the summary
-            self.store.put(SUMMARIES_NS, thread_id, summary_value)
+        summary_message_response = model.invoke(summary_messages.messages)
+        total_summarized_messages += len(messages_to_summarize)
+        summary_value = {
+            "summary": summary_message_response.content,
+            "summarized_messages": messages_to_summarize,
+            "total_summarized_messages": total_summarized_messages,
+        }
+        # Store the summary
+        store.put(SUMMARIES_NS, thread_id, summary_value)
 
-        if summary_value:
-            updated_messages: ChatPromptValue = self.final_prompt.invoke(
+    if summary_value:
+        updated_messages = cast(
+            ChatPromptValue,
+            final_prompt.invoke(
                 {
                     "system_message": [existing_system_message]
                     if existing_system_message
@@ -281,12 +267,13 @@ class SummarizationMemoryHandler(BaseMemoryHandler):
                     "summary": summary_value["summary"],
                     "messages": messages[total_summarized_messages:],
                 }
-            )
-            return updated_messages.messages
-        else:
-            # no changes are needed
-            return (
-                messages
-                if existing_system_message is None
-                else [existing_system_message] + messages
-            )
+            ),
+        )
+        return updated_messages.messages
+    else:
+        # no changes are needed
+        return (
+            messages
+            if existing_system_message is None
+            else [existing_system_message] + messages
+        )
