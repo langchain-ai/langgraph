@@ -56,7 +56,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         >>> builder.add_node("add_one", lambda x: x + 1)
         >>> builder.set_entry_point("add_one")
         >>> builder.set_finish_point("add_one")
-        >>> conn = sqlite3.connect("checkpoints.sqlite")
+        >>> conn = sqlite3.connect("checkpoints.sqlite", check_same_thread=False)
         >>> memory = SqliteSaver(conn)
         >>> graph = builder.compile(checkpointer=memory)
         >>> config = {"configurable": {"thread_id": "1"}}
