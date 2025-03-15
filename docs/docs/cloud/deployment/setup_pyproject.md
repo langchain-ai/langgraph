@@ -64,7 +64,7 @@ license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.9.0,<3.13"
+python = ">=3.9"
 langgraph = "^0.2.0"
 langchain-fireworks = "^0.1.3"
 
