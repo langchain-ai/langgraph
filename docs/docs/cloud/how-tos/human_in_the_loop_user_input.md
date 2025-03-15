@@ -63,7 +63,7 @@ Now, let's invoke our graph by interrupting before `ask_human` node:
         "messages": [
             {
                 "role": "user",
-                "content": "Use the search tool to ask the user where they are, then look up the weather there",
+                "content": "Ask the user where they are, then look up the weather there",
             }
         ]
     }
@@ -85,8 +85,7 @@ Now, let's invoke our graph by interrupting before `ask_human` node:
       messages: [
         {
           role: "human",
-          content: "Use the search tool to ask the user where they are, then look up the weather there"
-        }
+          content: "Ask the user where they are, then look up the weather there" }
       ]
     };
 
@@ -115,7 +114,7 @@ Now, let's invoke our graph by interrupting before `ask_human` node:
      --header 'Content-Type: application/json' \
      --data "{
        \"assistant_id\": \"agent\",
-       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"Use the search tool to ask the user where they are, then look up the weather there\"}]},
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"Ask the user where they are, then look up the weather there\"}]},
        \"interrupt_before\": [\"ask_human\"],
        \"stream_mode\": [
          \"updates\"
