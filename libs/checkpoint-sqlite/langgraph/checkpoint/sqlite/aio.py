@@ -70,15 +70,18 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         >>> from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
         >>> from langgraph.graph import StateGraph
         >>>
-        >>> builder = StateGraph(int)
-        >>> builder.add_node("add_one", lambda x: x + 1)
-        >>> builder.set_entry_point("add_one")
-        >>> builder.set_finish_point("add_one")
-        >>> async with AsyncSqliteSaver.from_conn_string("checkpoints.db") as memory:
-        >>>     graph = builder.compile(checkpointer=memory)
-        >>>     coro = graph.ainvoke(1, {"configurable": {"thread_id": "thread-1"}})
-        >>>     print(asyncio.run(coro))
-        Output: 2
+        >>> async def main():
+        >>>     builder = StateGraph(int)
+        >>>     builder.add_node("add_one", lambda x: x + 1)
+        >>>     builder.set_entry_point("add_one")
+        >>>     builder.set_finish_point("add_one")
+        >>>     async with AsyncSqliteSaver.from_conn_string("checkpoints.db") as memory:
+        >>>         graph = builder.compile(checkpointer=memory)
+        >>>         coro = graph.ainvoke(1, {"configurable": {"thread_id": "thread-1"}})
+        >>>         print(await asyncio.gather(coro))
+        >>>
+        >>> asyncio.run(main())
+        Output: [2]
         ```
         Raw usage:
 
@@ -90,12 +93,12 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         >>> async def main():
         >>>     async with aiosqlite.connect("checkpoints.db") as conn:
         ...         saver = AsyncSqliteSaver(conn)
-        ...         config = {"configurable": {"thread_id": "1"}}
-        ...         checkpoint = {"ts": "2023-05-03T10:00:00Z", "data": {"key": "value"}}
+        ...         config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
+        ...         checkpoint = {"ts": "2023-05-03T10:00:00Z", "data": {"key": "value"}, "id": "0c62ca34-ac19-445d-bbb0-5b4984975b2a"}
         ...         saved_config = await saver.aput(config, checkpoint, {}, {})
         ...         print(saved_config)
         >>> asyncio.run(main())
-        {"configurable": {"thread_id": "1", "checkpoint_id": "0c62ca34-ac19-445d-bbb0-5b4984975b2a"}}
+        {'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '0c62ca34-ac19-445d-bbb0-5b4984975b2a'}}
         ```
     """
 
