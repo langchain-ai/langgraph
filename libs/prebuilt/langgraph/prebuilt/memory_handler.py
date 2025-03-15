@@ -1,9 +1,9 @@
 import json
 import math
-from typing import Callable
+from typing import Callable, cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.messages.utils import _get_message_openai_role, trim_messages
 from langchain_core.prompts.chat import ChatPromptTemplate, ChatPromptValue
 from langchain_core.runnables import Runnable, RunnableConfig
@@ -17,8 +17,10 @@ TokenCounter = Callable[[list[BaseMessage]], int]
 
 # TODO: does this need to be a Runnable?
 class BaseMemoryHandler(Runnable):
-    def invoke(
-        self, messages: list[BaseMessage], config: RunnableConfig
+    def invoke(  # type: ignore
+        self,
+        messages: list[BaseMessage],
+        config: RunnableConfig,
     ) -> list[BaseMessage]:
         raise NotImplementedError("Subclasses must implement this method")
 
@@ -108,8 +110,10 @@ class TrimmingMemoryHandler(BaseMemoryHandler):
         self.max_tokens = max_tokens
         self.token_counter = token_counter
 
-    def invoke(
-        self, messages: list[BaseMessage], config: RunnableConfig
+    def invoke(  # type: ignore
+        self,
+        messages: list[BaseMessage],
+        config: RunnableConfig,
     ) -> list[BaseMessage]:
         return trim_messages(
             messages,
@@ -165,8 +169,10 @@ class SummarizationMemoryHandler(BaseMemoryHandler):
         self.existing_summary_prompt = existing_summary_prompt
         self.final_prompt = final_prompt
 
-    def invoke(
-        self, messages: list[BaseMessage], config: RunnableConfig
+    def invoke(  # type: ignore
+        self,
+        messages: list[BaseMessage],
+        config: RunnableConfig,
     ) -> list[BaseMessage]:
         thread_id = config.get("configurable", {}).get("thread_id")
 
@@ -183,7 +189,7 @@ class SummarizationMemoryHandler(BaseMemoryHandler):
 
         # First handle system message if present
         max_tokens = self.max_tokens
-        if messages and messages[0].type == "system":
+        if messages and isinstance(messages[0], SystemMessage):
             existing_system_message = messages[0]
             # remove the system message from the list of messages to summarize
             messages = messages[1:]
@@ -251,15 +257,21 @@ class SummarizationMemoryHandler(BaseMemoryHandler):
 
         if messages_to_summarize:
             if summary_value:
-                summary_messages: ChatPromptValue = self.existing_summary_prompt.invoke(
-                    {
-                        "messages": messages_to_summarize,
-                        "existing_summary": summary_value["summary"],
-                    }
+                summary_messages = cast(
+                    ChatPromptValue,
+                    self.existing_summary_prompt.invoke(
+                        {
+                            "messages": messages_to_summarize,
+                            "existing_summary": summary_value["summary"],
+                        }
+                    ),
                 )
             else:
-                summary_messages: ChatPromptValue = self.initial_summary_prompt.invoke(
-                    {"messages": messages_to_summarize}
+                summary_messages = cast(
+                    ChatPromptValue,
+                    self.initial_summary_prompt.invoke(
+                        {"messages": messages_to_summarize}
+                    ),
                 )
 
             summary_message_response = self.model.invoke(summary_messages.messages)
@@ -273,14 +285,17 @@ class SummarizationMemoryHandler(BaseMemoryHandler):
             self.store.put(SUMMARIES_NS, thread_id, summary_value)
 
         if summary_value:
-            updated_messages: ChatPromptValue = self.final_prompt.invoke(
-                {
-                    "system_message": [existing_system_message]
-                    if existing_system_message
-                    else [],
-                    "summary": summary_value["summary"],
-                    "messages": messages[total_summarized_messages:],
-                }
+            updated_messages = cast(
+                ChatPromptValue,
+                self.final_prompt.invoke(
+                    {
+                        "system_message": [existing_system_message]
+                        if existing_system_message
+                        else [],
+                        "summary": summary_value["summary"],
+                        "messages": messages[total_summarized_messages:],
+                    }
+                ),
             )
             return updated_messages.messages
         else:

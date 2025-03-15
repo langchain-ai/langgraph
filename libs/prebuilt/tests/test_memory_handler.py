@@ -254,7 +254,7 @@ def test_subsequent_summarization():
     ]
 
     # First summarization
-    result1 = summarizer.invoke(messages1, config)
+    summarizer.invoke(messages1, config)
 
     # Add more messages to trigger another summarization
     # We need to add at least max_messages (4) new messages
@@ -424,7 +424,7 @@ def test_only_summarize_new_messages():
     ]
 
     # First summarization
-    result1 = summarizer.invoke(messages1, config)
+    summarizer.invoke(messages1, config)
 
     # Verify the first summarization happened
     assert len(model.invoke_calls) == 1
@@ -455,7 +455,7 @@ def test_only_summarize_new_messages():
     messages2.extend(new_messages)
 
     # Second summarization
-    result2 = summarizer.invoke(messages2, config)
+    summarizer.invoke(messages2, config)
 
     # Check that model was called twice
     assert len(model.invoke_calls) == 2
