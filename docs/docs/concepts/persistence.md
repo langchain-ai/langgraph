@@ -232,7 +232,7 @@ from langgraph.store.memory import InMemoryStore
 in_memory_store = InMemoryStore()
 ```
 
-Memories are namespaced by a `tuple`, which in this specific example will be `(<user_id>, "memories")`. The namespace can be any length and represent anything, does not have be user specific.
+Memories are namespaced by a `tuple`, which in this specific example will be `(<user_id>, "memories")`. The namespace can be any length and represent anything, does not have to be user specific.
 
 ```python 
 user_id = "1"
@@ -387,6 +387,9 @@ We can access the memories and use them in our model call.
 def call_model(state: MessagesState, config: RunnableConfig, *, store: BaseStore):
     # Get the user id from the config
     user_id = config["configurable"]["user_id"]
+
+    # Namespace the memory
+    namespace = (user_id, "memories")
     
     # Search based on the most recent message
     memories = store.search(
