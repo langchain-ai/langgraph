@@ -16,6 +16,7 @@ from langgraph.checkpoint.postgres.aio import (
     AsyncPostgresSaver,
     AsyncShallowPostgresSaver,
 )
+from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.store.base import BaseStore
@@ -58,6 +59,15 @@ def checkpointer_memory():
 @pytest.fixture(scope="function")
 def checkpointer_sqlite():
     with SqliteSaver.from_conn_string(":memory:") as checkpointer:
+        yield checkpointer
+
+
+@pytest.fixture(scope="function")
+def checkpointer_sqlite_aes():
+    with SqliteSaver.from_conn_string(":memory:") as checkpointer:
+        checkpointer.serde = EncryptedSerializer.from_pycryptodome_aes(
+            key=b"1234567890123456"
+        )
         yield checkpointer
 
 
@@ -437,6 +447,7 @@ REGULAR_CHECKPOINTERS_SYNC = [
     "postgres",
     "postgres_pipe",
     "postgres_pool",
+    "sqlite_aes",
 ]
 ALL_CHECKPOINTERS_SYNC = [
     *REGULAR_CHECKPOINTERS_SYNC,

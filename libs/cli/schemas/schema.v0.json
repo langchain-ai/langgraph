@@ -459,6 +459,16 @@
         },
         "refresh_on_read": {
           "type": "boolean"
+        },
+        "sweep_interval_minutes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": []

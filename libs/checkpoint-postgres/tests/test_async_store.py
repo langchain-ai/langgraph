@@ -26,6 +26,9 @@ from tests.conftest import (
     CharacterEmbeddings,
 )
 
+TTL_SECONDS = 6
+TTL_MINUTES = TTL_SECONDS / 60
+
 
 @pytest.fixture(scope="function", params=["default", "pipe", "pool"])
 async def store(request) -> AsyncIterator[AsyncPostgresStore]:
@@ -42,28 +45,52 @@ async def store(request) -> AsyncIterator[AsyncPostgresStore]:
 
     conn_string = f"{uri_base}/{database}{query_params}"
     admin_conn_string = DEFAULT_URI
-
+    ttl_config = {
+        "default_ttl": TTL_MINUTES,
+        "refresh_on_read": True,
+        "sweep_interval_minutes": TTL_MINUTES / 2,
+    }
     async with await AsyncConnection.connect(
         admin_conn_string, autocommit=True
     ) as conn:
         await conn.execute(f"CREATE DATABASE {database}")
     try:
-        async with AsyncPostgresStore.from_conn_string(conn_string) as store:
+        async with AsyncPostgresStore.from_conn_string(
+            conn_string, ttl=ttl_config
+        ) as store:
+            store.MIGRATIONS = [
+                (
+                    mig.replace(
+                        "ADD COLUMN ttl_minutes INT;", "ADD COLUMN ttl_minutes FLOAT;"
+                    )
+                    if isinstance(mig, str)
+                    else mig
+                )
+                for mig in store.MIGRATIONS
+            ]
             await store.setup()
 
         if request.param == "pipe":
             async with AsyncPostgresStore.from_conn_string(
-                conn_string, pipeline=True
+                conn_string, pipeline=True, ttl=ttl_config
             ) as store:
+                await store.start_ttl_sweeper()
                 yield store
+                await store.stop_ttl_sweeper()
         elif request.param == "pool":
             async with AsyncPostgresStore.from_conn_string(
-                conn_string, pool_config={"min_size": 1, "max_size": 10}
+                conn_string, pool_config={"min_size": 1, "max_size": 10}, ttl=ttl_config
             ) as store:
+                await store.start_ttl_sweeper()
                 yield store
+                await store.stop_ttl_sweeper()
         else:  # default
-            async with AsyncPostgresStore.from_conn_string(conn_string) as store:
+            async with AsyncPostgresStore.from_conn_string(
+                conn_string, ttl=ttl_config
+            ) as store:
+                await store.start_ttl_sweeper()
                 yield store
+                await store.stop_ttl_sweeper()
     finally:
         async with await AsyncConnection.connect(
             admin_conn_string, autocommit=True
@@ -635,3 +662,28 @@ async def test_search_sorting(
         assert len(set(r.key for r in results)) == 10
         assert results[0].key == "M"
         assert results[0].score > results[1].score
+
+
+async def test_store_ttl(store):
+    # Assumes a TTL of 1 minute = 60 seconds
+    ns = ("foo",)
+    await store.start_ttl_sweeper()
+    await store.aput(
+        ns,
+        key="item1",
+        value={"foo": "bar"},
+        ttl=TTL_MINUTES,  # type: ignore
+    )
+    await asyncio.sleep(TTL_SECONDS - 2)
+    res = await store.aget(ns, key="item1", refresh_ttl=True)
+    assert res is not None
+    await asyncio.sleep(TTL_SECONDS - 2)
+    results = await store.asearch(ns, query="foo", refresh_ttl=True)
+    assert len(results) == 1
+    await asyncio.sleep(TTL_SECONDS - 2)
+    res = await store.aget(ns, key="item1", refresh_ttl=False)
+    assert res is not None
+    await asyncio.sleep(TTL_SECONDS - 1)
+    # Now has been (TTL_SECONDS-2)*2 > TTL_SECONDS + TTL_SECONDS/2
+    results = await store.asearch(ns, query="bar", refresh_ttl=False)
+    assert len(results) == 0
