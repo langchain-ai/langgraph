@@ -62,7 +62,7 @@ class SchemaCoercionMapper:
         processed = {}
         if self._field_coercers is None:
             self._field_coercers = {
-                n: self._build_coercer(t) for n, t in self._fields.items()
+                n: self._build_coercer(t, n) for n, t in self._fields.items()
             }
         for k, v in input_data.items():
             fn = self._field_coercers.get(k)
@@ -97,26 +97,20 @@ class SchemaCoercionMapper:
 
             def list_coercer(v: Any, d: Any) -> Any:
                 if not isinstance(v, (list, tuple)):
-                    raise TypeError(f"Expected list, got {type(v).__name__}")
+                    return v
                 return [sub(x, d - 1) for x in v]
 
             return list_coercer
         if origin is dict or field_type is dict:
             args = get_args(field_type)
             if len(args) != 2:
-
-                def plain_dict_coercer(v: Any, d: Any) -> Any:
-                    if not isinstance(v, dict):
-                        raise TypeError(f"Expected dict, got {type(v).__name__}")
-                    return v
-
-                return plain_dict_coercer
+                return self._passthrough
             k_sub = self._build_coercer(args[0])
             v_sub = self._build_coercer(args[1])
 
             def dict_coercer(v: Any, d: Any) -> Any:
                 if not isinstance(v, dict):
-                    raise TypeError(f"Expected dict, got {type(v).__name__}")
+                    return v
                 return {k_sub(k, d - 1): v_sub(val, d - 1) for k, val in v.items()}
 
             return dict_coercer
@@ -129,7 +123,7 @@ class SchemaCoercionMapper:
 
             def tuple_coercer(v: Any, d: Any) -> Any:
                 if not isinstance(v, (list, tuple)):
-                    raise TypeError(f"Expected tuple-like, got {type(v).__name__}")
+                    return v
                 out = []
                 for i, sp in enumerate(subs):
                     out.append(sp(v[i] if i < len(v) else None, d - 1))
@@ -159,4 +153,7 @@ class SchemaCoercionMapper:
                 return v
 
             return union_coercer
-        return lambda v, d: v
+        return self._passthrough
+
+    def _passthrough(self, v: Any, d: Any) -> Any:
+        return v
