@@ -62,7 +62,7 @@ class SchemaCoercionMapper:
         processed = {}
         if self._field_coercers is None:
             self._field_coercers = {
-                n: self._build_coercer(t, n) for n, t in self._fields.items()
+                n: self._build_coercer(t) for n, t in self._fields.items()
             }
         for k, v in input_data.items():
             fn = self._field_coercers.get(k)
