@@ -20,6 +20,7 @@ from langchain_core.messages import (
     ToolCall,
     ToolMessage,
 )
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableLambda
 from langchain_core.tools import InjectedToolCallId, ToolException
 from langchain_core.tools import tool as dec_tool
@@ -371,6 +372,41 @@ def test_model_with_tools(tool_style: str, version: str):
     # test missing bound tools
     with pytest.raises(ValueError):
         create_react_agent(model.bind_tools([tool1]), [tool2])
+
+
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_pydantic_sate_with_prompt_template(version: str):
+    prompt = ChatPromptTemplate(
+        messages=[("system", "You are an {{role}}."), MessagesPlaceholder("messages")],
+    )
+
+    class State(AgentStatePydantic):
+        role: str
+        data: int
+
+    @dec_tool
+    def tool1(param: int, injected_state: Annotated[State, InjectedState]) -> str:
+        """Tool 1 docstring."""
+        return f"Tool 1: {param} - {injected_state.data}"
+
+    model = FakeToolCallingModel()
+    tool_calls = [ToolCall(name="tool1", args={"param": 2}, id="call_id")]
+    model.tool_calls = [tool_calls]
+    agent = create_react_agent(
+        model, [tool1], prompt=prompt, state_schema=State, version=version
+    )
+    input_messages = [HumanMessage("hi?")]
+    input_state = State(messages=input_messages, role="admin", data=12)
+
+    response = agent.invoke(input_state)
+    expected_response = {
+        "messages": input_messages
+        + [
+            AIMessage(content="You are an admin.-hi?", id="0", tool_calls=tool_calls),
+            ToolMessage(content="Tool 1: 2 - 12", tool_call_id="call_id", name="tool1"),
+        ]
+    }
+    assert response == expected_response
 
 
 def test__validate_messages():
