@@ -376,22 +376,22 @@ def test_model_with_tools(tool_style: str, version: str):
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 def test_pydantic_sate_with_prompt_template(version: str):
-    prompt = ChatPromptTemplate(
-        messages=[("system", "You are an {{role}}."), MessagesPlaceholder("messages")],
-    )
 
     class State(AgentStatePydantic):
         role: str
         data: int
+
+    prompt = ChatPromptTemplate(
+        messages=[("system", "You are an {role}."), MessagesPlaceholder("messages")],
+    )
 
     @dec_tool
     def tool1(param: int, injected_state: Annotated[State, InjectedState]) -> str:
         """Tool 1 docstring."""
         return f"Tool 1: {param} - {injected_state.data}"
 
-    model = FakeToolCallingModel()
-    tool_calls = [ToolCall(name="tool1", args={"param": 2}, id="call_id")]
-    model.tool_calls = [tool_calls]
+    tool_calls = [{"name": "tool1", "args": {"param": 2}, "id": "call_id"}]
+    model = FakeToolCallingModel(tool_calls=[tool_calls, []])
     agent = create_react_agent(
         model, [tool1], prompt=prompt, state_schema=State, version=version
     )
@@ -399,14 +399,16 @@ def test_pydantic_sate_with_prompt_template(version: str):
     input_state = State(messages=input_messages, role="admin", data=12)
 
     response = agent.invoke(input_state)
-    expected_response = {
-        "messages": input_messages
-        + [
-            AIMessage(content="You are an admin.-hi?", id="0", tool_calls=tool_calls),
-            ToolMessage(content="Tool 1: 2 - 12", tool_call_id="call_id", name="tool1"),
-        ]
-    }
-    assert response == expected_response
+    expected_messages = input_messages + [
+        AIMessage(content="You are an admin.-hi?", id="0", tool_calls=tool_calls),
+        _AnyIdToolMessage(
+            content="Tool 1: 2 - 12", tool_call_id="call_id", name="tool1"
+        ),
+        AIMessage(
+            content="You are an admin.-hi?-You are an admin.-hi?-Tool 1: 2 - 12", id="1"
+        ),
+    ]
+    assert response["messages"] == expected_messages
 
 
 def test__validate_messages():
