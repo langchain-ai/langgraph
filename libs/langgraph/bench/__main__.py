@@ -6,6 +6,7 @@ from pyperf._runner import Runner
 from uvloop import new_event_loop
 
 from bench.fanout_to_subgraph import fanout_to_subgraph, fanout_to_subgraph_sync
+from bench.pydantic_state import pydantic_state
 from bench.react_agent import react_agent
 from bench.sequential import create_sequential
 from bench.wide_state import wide_state
@@ -227,6 +228,102 @@ benchmarks = (
         create_sequential(200).compile(),
         create_sequential(200).compile(),
         {"messages": []},  # Empty list of messages
+    ),
+    (
+        "pydantic_state_25x300",
+        pydantic_state(300).compile(checkpointer=None),
+        pydantic_state(300).compile(checkpointer=None),
+        {
+            "messages": [
+                {
+                    str(i) * 10: {
+                        str(j) * 10: ["hi?" * 10, True, 1, 6327816386138, None] * 5
+                        for j in range(5)
+                    }
+                    for i in range(5)
+                }
+            ]
+        },
+    ),
+    (
+        "pydantic_state_25x300_checkpoint",
+        pydantic_state(300).compile(checkpointer=MemorySaver()),
+        pydantic_state(300).compile(checkpointer=MemorySaver()),
+        {
+            "messages": [
+                {
+                    str(i) * 10: {
+                        str(j) * 10: ["hi?" * 10, True, 1, 6327816386138, None] * 5
+                        for j in range(5)
+                    }
+                    for i in range(5)
+                }
+            ]
+        },
+    ),
+    (
+        "pydantic_state_15x600",
+        pydantic_state(600).compile(checkpointer=None),
+        pydantic_state(600).compile(checkpointer=None),
+        {
+            "messages": [
+                {
+                    str(i) * 10: {
+                        str(j) * 10: ["hi?" * 10, True, 1, 6327816386138, None] * 5
+                        for j in range(5)
+                    }
+                    for i in range(3)
+                }
+            ]
+        },
+    ),
+    (
+        "pydantic_state_15x600_checkpoint",
+        pydantic_state(600).compile(checkpointer=MemorySaver()),
+        pydantic_state(600).compile(checkpointer=MemorySaver()),
+        {
+            "messages": [
+                {
+                    str(i) * 10: {
+                        str(j) * 10: ["hi?" * 10, True, 1, 6327816386138, None] * 5
+                        for j in range(5)
+                    }
+                    for i in range(3)
+                }
+            ]
+        },
+    ),
+    (
+        "pydantic_state_9x1200",
+        pydantic_state(1200).compile(checkpointer=None),
+        pydantic_state(1200).compile(checkpointer=None),
+        {
+            "messages": [
+                {
+                    str(i) * 10: {
+                        str(j) * 10: ["hi?" * 10, True, 1, 6327816386138, None] * 5
+                        for j in range(3)
+                    }
+                    for i in range(3)
+                }
+            ]
+        },
+    ),
+    (
+        "pydantic_state_9x1200_checkpoint",
+        pydantic_state(1200).compile(checkpointer=MemorySaver()),
+        pydantic_state(1200).compile(checkpointer=MemorySaver()),
+        {
+            "messages": [
+                {
+                    str(i) * 10: {
+                        str(j) * 10: ["hi?" * 10, True, 1, 6327816386138, None] * 5
+                        for j in range(3)
+                    }
+                    for i in range(3)
+                }
+            ]
+        },
     ),
 )
 
