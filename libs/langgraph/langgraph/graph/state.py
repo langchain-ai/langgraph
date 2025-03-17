@@ -416,7 +416,7 @@ class StateGraph(Graph):
                         and (vals := get_args(rargs[0]))
                     ):
                         ends = vals
-        except (TypeError, StopIteration):
+        except (NameError, TypeError, StopIteration):
             pass
 
         if destinations is not None:
