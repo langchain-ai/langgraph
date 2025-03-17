@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections import defaultdict
 from typing import (
@@ -31,7 +32,9 @@ from langgraph.constants import (
 )
 from langgraph.graph.branch import Branch
 from langgraph.pregel import Channel, Pregel
+from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.read import PregelNode
+from langgraph.pregel.remote import RemoteGraph
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.types import All, Checkpointer
 from langgraph.utils.runnable import RunnableLike, coerce_to_runnable
@@ -418,7 +421,36 @@ class CompiledGraph(Pregel):
         *,
         xray: Union[int, bool] = False,
     ) -> DrawableGraph:
-        return self.get_graph(config, xray=xray)
+        """Returns a drawable representation of the computation graph."""
+        # gather subgraphs
+        if xray:
+            subpregels: dict[str, PregelProtocol] = {
+                k: v
+                async for k, v in self.aget_subgraphs()
+                if isinstance(v, (CompiledGraph, RemoteGraph))
+            }
+            subgraphs = {
+                k: v
+                for k, v in zip(
+                    subpregels,
+                    await asyncio.gather(
+                        *(
+                            p.aget_graph(
+                                config,
+                                xray=xray - 1
+                                if isinstance(xray, int) and xray > 0
+                                else xray,
+                            )
+                            for p in subpregels.values()
+                        )
+                    ),
+                )
+            }
+        else:
+            subgraphs = {}
+
+        # draw the graph
+        return self._draw_graph(config, subgraphs=subgraphs)
 
     def get_graph(
         self,
@@ -427,17 +459,34 @@ class CompiledGraph(Pregel):
         xray: Union[int, bool] = False,
     ) -> DrawableGraph:
         """Returns a drawable representation of the computation graph."""
+        # gather subgraphs
+        if xray:
+            subgraphs = {
+                k: v.get_graph(
+                    config,
+                    xray=xray - 1 if isinstance(xray, int) and xray > 0 else xray,
+                )
+                for k, v in self.get_subgraphs()
+                if isinstance(v, (CompiledGraph, RemoteGraph))
+            }
+        else:
+            subgraphs = {}
+
+        # draw the graph
+        return self._draw_graph(config, subgraphs=subgraphs)
+
+    def _draw_graph(
+        self,
+        config: Optional[RunnableConfig] = None,
+        *,
+        subgraphs: dict[str, DrawableGraph] = {},
+    ) -> DrawableGraph:
+        # create the graph
         graph = DrawableGraph()
         start_nodes: dict[str, DrawableNode] = {
             START: graph.add_node(self.get_input_schema(config), START)
         }
         end_nodes: dict[str, DrawableNode] = {}
-        if xray:
-            subgraphs = {
-                k: v for k, v in self.get_subgraphs() if isinstance(v, CompiledGraph)
-            }
-        else:
-            subgraphs = {}
 
         def add_edge(
             start: str,
@@ -463,13 +512,8 @@ class CompiledGraph(Pregel):
                 metadata["__interrupt"] = "before"
             elif key in self.interrupt_after_nodes:
                 metadata["__interrupt"] = "after"
-            if xray and key in subgraphs:
-                subgraph = subgraphs[key].get_graph(
-                    config=config,
-                    xray=xray - 1
-                    if isinstance(xray, int) and not isinstance(xray, bool) and xray > 0
-                    else xray,
-                )
+            if key in subgraphs:
+                subgraph = subgraphs[key]
                 subgraph.trim_first_node()
                 subgraph.trim_last_node()
                 if len(subgraph.nodes) >= 1:
