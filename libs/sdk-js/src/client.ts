@@ -644,6 +644,7 @@ export class ThreadsClient<
   async bulkUpdateState(
     supersteps: Array<{ updates: Array<{ values: unknown; asNode: string }> }>,
     options?: {
+      graphId?: string;
       threadId?: string;
       metadata?: Metadata;
       ifExists?: OnConflictBehavior;
@@ -659,7 +660,10 @@ export class ThreadsClient<
           })),
         })),
         thread_id: options?.threadId,
-        metadata: options?.metadata,
+        metadata: {
+          ...options?.metadata,
+          graph_id: options?.graphId,
+        },
         if_exists: options?.ifExists,
       },
     });
