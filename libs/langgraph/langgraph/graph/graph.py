@@ -34,7 +34,6 @@ from langgraph.graph.branch import Branch
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.read import PregelNode
-from langgraph.pregel.remote import RemoteGraph
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.types import All, Checkpointer
 from langgraph.utils.runnable import RunnableLike, coerce_to_runnable
@@ -422,6 +421,8 @@ class CompiledGraph(Pregel):
         xray: Union[int, bool] = False,
     ) -> DrawableGraph:
         """Returns a drawable representation of the computation graph."""
+        from langgraph.pregel.remote import RemoteGraph
+
         # gather subgraphs
         if xray:
             subpregels: dict[str, PregelProtocol] = {
@@ -459,6 +460,8 @@ class CompiledGraph(Pregel):
         xray: Union[int, bool] = False,
     ) -> DrawableGraph:
         """Returns a drawable representation of the computation graph."""
+        from langgraph.pregel.remote import RemoteGraph
+
         # gather subgraphs
         if xray:
             subgraphs = {
