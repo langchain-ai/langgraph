@@ -438,9 +438,9 @@ class CompiledGraph(Pregel):
                         *(
                             p.aget_graph(
                                 config,
-                                xray=xray - 1
-                                if isinstance(xray, int) and xray > 0
-                                else xray,
+                                xray=xray
+                                if isinstance(xray, bool) or xray <= 0
+                                else xray - 1,
                             )
                             for p in subpregels.values()
                         )
@@ -467,7 +467,7 @@ class CompiledGraph(Pregel):
             subgraphs = {
                 k: v.get_graph(
                     config,
-                    xray=xray - 1 if isinstance(xray, int) and xray > 0 else xray,
+                    xray=xray if isinstance(xray, bool) or xray <= 0 else xray - 1,
                 )
                 for k, v in self.get_subgraphs()
                 if isinstance(v, (CompiledGraph, RemoteGraph))
