@@ -52,9 +52,7 @@ def store(request) -> PostgresStore:
         with PostgresStore.from_conn_string(conn_string, ttl=ttl_config) as store:
             store.MIGRATIONS = [
                 (
-                    mig.replace(
-                        "ADD COLUMN ttl_minutes INT;", "ADD COLUMN ttl_minutes FLOAT;"
-                    )
+                    mig.replace("ttl_minutes INT;", "ttl_minutes FLOAT;")
                     if isinstance(mig, str)
                     else mig
                 )
