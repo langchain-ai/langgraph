@@ -60,9 +60,7 @@ async def store(request) -> AsyncIterator[AsyncPostgresStore]:
         ) as store:
             store.MIGRATIONS = [
                 (
-                    mig.replace(
-                        "ADD COLUMN ttl_minutes INT;", "ADD COLUMN ttl_minutes FLOAT;"
-                    )
+                    mig.replace("ttl_minutes INT;", "ttl_minutes FLOAT;")
                     if isinstance(mig, str)
                     else mig
                 )
