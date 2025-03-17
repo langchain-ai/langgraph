@@ -639,6 +639,33 @@ export class ThreadsClient<
   }
 
   /**
+   * Create a new thread from a batch states.
+   */
+  async bulkUpdateState(
+    supersteps: Array<{ updates: Array<{ values: unknown; asNode: string }> }>,
+    options: {
+      threadId?: string;
+      metadata?: Metadata;
+      ifExists?: OnConflictBehavior;
+    },
+  ): Promise<Thread<TStateType>> {
+    return this.fetch<Thread<TStateType>>("/threads/state/batch", {
+      method: "POST",
+      json: {
+        supersteps: supersteps.map((s) => ({
+          updates: s.updates.map((u) => ({
+            values: u.values,
+            as_node: u.asNode,
+          })),
+        })),
+        thread_id: options.threadId,
+        metadata: options.metadata,
+        if_exists: options.ifExists,
+      },
+    });
+  }
+
+  /**
    * Patch the metadata of a thread.
    *
    * @param threadIdOrConfig Thread ID or config to patch the state of.
