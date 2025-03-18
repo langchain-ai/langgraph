@@ -38,14 +38,11 @@ def read_channel(
     chan: str,
     *,
     catch: bool = True,
-    return_exception: bool = False,
 ) -> Any:
     try:
         return channels[chan].get()
-    except EmptyChannelError as exc:
-        if return_exception:
-            return exc
-        elif catch:
+    except EmptyChannelError:
+        if catch:
             return None
         else:
             raise

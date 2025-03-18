@@ -3,6 +3,7 @@ from typing import Any, Generic, Optional, Sequence, TypeVar
 
 from typing_extensions import Self
 
+from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
 Value = TypeVar("Value")
@@ -63,6 +64,14 @@ class BaseChannel(Generic[Value, Update, C], ABC):
         channels that triggered a node. If the channel was updated, return True.
         """
         return False
+
+    def get_catch(self) -> Value:
+        """Return the current value of the channel, or MISSING if the channel
+        is empty. Subclasses can override to skip the EmptyChannelError check."""
+        try:
+            return self.get()
+        except EmptyChannelError:
+            return MISSING
 
 
 __all__ = [
