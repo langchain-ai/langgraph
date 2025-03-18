@@ -149,7 +149,7 @@ class PregelExecutableTask(NamedTuple):
     proc: Runnable
     writes: deque[tuple[str, Any]]
     config: RunnableConfig
-    triggers: list[str]
+    triggers: Sequence[str]
     retry_policy: Optional[RetryPolicy]
     cache_policy: Optional[CachePolicy]
     id: str
