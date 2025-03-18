@@ -130,7 +130,7 @@ class Interrupt:
     value: Any
     resumable: bool = False
     ns: Optional[Sequence[str]] = None
-    when: Literal["during"] = "during"
+    when: Literal["during"] = dataclasses.field(default="during", repr=False)
 
 
 class PregelTask(NamedTuple):

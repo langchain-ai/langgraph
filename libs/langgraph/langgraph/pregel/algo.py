@@ -506,6 +506,7 @@ def prepare_single_task(
                         CONFIG_KEY_CHECKPOINT_ID: None,
                         CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                         CONFIG_KEY_SCRATCHPAD: _scratchpad(
+                            config,
                             pending_writes,
                             task_id,
                         ),
@@ -615,6 +616,7 @@ def prepare_single_task(
                             CONFIG_KEY_CHECKPOINT_ID: None,
                             CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                             CONFIG_KEY_SCRATCHPAD: _scratchpad(
+                                config,
                                 pending_writes,
                                 task_id,
                             ),
@@ -740,6 +742,7 @@ def prepare_single_task(
                                 CONFIG_KEY_CHECKPOINT_ID: None,
                                 CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                                 CONFIG_KEY_SCRATCHPAD: _scratchpad(
+                                    config,
                                     pending_writes,
                                     task_id,
                                 ),
@@ -761,15 +764,23 @@ def prepare_single_task(
 
 
 def _scratchpad(
+    config: RunnableConfig,
     pending_writes: list[PendingWrite],
     task_id: str,
 ) -> PregelScratchpad:
+    # None cannot be used as a resume value, because it would be difficult to
+    # distinguish from missing when used over http
     null_resume_write = next(
         (w for w in pending_writes if w[0] == NULL_TASK_ID and w[1] == RESUME), None
+    )
+    parent_scratchpad: Optional[PregelScratchpad] = config[CONF].get(
+        CONFIG_KEY_SCRATCHPAD
     )
 
     def get_null_resume(consume: bool = False) -> Any:
         if null_resume_write is None:
+            if parent_scratchpad is not None:
+                return parent_scratchpad.get_null_resume(consume)
             return None
         if consume:
             try:
