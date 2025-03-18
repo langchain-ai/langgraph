@@ -48,7 +48,6 @@ from langgraph.constants import (
     EMPTY_SEQ,
     ERROR,
     INTERRUPT,
-    MISSING,
     NO_WRITES,
     NS_END,
     NS_SEP,
@@ -650,7 +649,7 @@ def prepare_single_task(
         if triggers := sorted(
             chan
             for chan in proc.triggers
-            if channels[chan].get_catch() is not MISSING
+            if channels[chan].is_available()
             and checkpoint["channel_versions"].get(chan, null_version)  # type: ignore[operator]
             > seen.get(chan, null_version)
         ):

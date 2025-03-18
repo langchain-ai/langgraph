@@ -59,5 +59,5 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
             raise EmptyChannelError()
         return self.value
 
-    def get_catch(self) -> Value:
-        return self.value
+    def is_available(self) -> bool:
+        return self.value is not MISSING
