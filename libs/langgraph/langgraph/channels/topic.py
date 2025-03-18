@@ -75,3 +75,6 @@ class Topic(
             return list(self.values)
         else:
             raise EmptyChannelError
+
+    def is_available(self) -> bool:
+        return bool(self.values)

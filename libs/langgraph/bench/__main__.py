@@ -7,6 +7,7 @@ from uvloop import new_event_loop
 
 from bench.fanout_to_subgraph import fanout_to_subgraph, fanout_to_subgraph_sync
 from bench.react_agent import react_agent
+from bench.sequential import create_sequential
 from bench.wide_state import wide_state
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.pregel import Pregel
@@ -202,6 +203,30 @@ benchmarks = (
                 }
             ]
         },
+    ),
+    (
+        "sequential_20",
+        create_sequential(20).compile(),
+        create_sequential(20).compile(),
+        {"messages": []},  # Empty list of messages
+    ),
+    (
+        "sequential_50",
+        create_sequential(50).compile(),
+        create_sequential(50).compile(),
+        {"messages": []},  # Empty list of messages
+    ),
+    (
+        "sequential_100",
+        create_sequential(100).compile(),
+        create_sequential(100).compile(),
+        {"messages": []},  # Empty list of messages
+    ),
+    (
+        "sequential_200",
+        create_sequential(200).compile(),
+        create_sequential(200).compile(),
+        {"messages": []},  # Empty list of messages
     ),
 )
 

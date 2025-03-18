@@ -79,12 +79,12 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS store_prefix_idx ON store USING btree (p
     """
 -- Add expires_at column to store table
 ALTER TABLE store
-ADD COLUMN expires_at TIMESTAMP WITH TIME ZONE,
-ADD COLUMN ttl_minutes INT;
+ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS ttl_minutes INT;
 """,
     """
 -- Add indexes for efficient TTL sweeping
-CREATE INDEX idx_store_expires_at ON store (expires_at)
+CREATE INDEX IF NOT EXISTS idx_store_expires_at ON store (expires_at)
 WHERE expires_at IS NOT NULL;
 """,
 ]
