@@ -64,6 +64,17 @@ class BaseChannel(Generic[Value, Update, C], ABC):
         """
         return False
 
+    def is_available(self) -> bool:
+        """Return True if the channel is available (not empty), False otherwise.
+        Subclasses should override this method to provide a more efficient
+        implementation than calling get() and catching EmptyChannelError.
+        """
+        try:
+            self.get()
+            return True
+        except EmptyChannelError:
+            return False
+
 
 __all__ = [
     "BaseChannel",
