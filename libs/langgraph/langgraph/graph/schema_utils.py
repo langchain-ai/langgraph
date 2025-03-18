@@ -9,6 +9,7 @@ from typing import (
     Union,
     get_args,
     get_origin,
+    get_type_hints,
 )
 
 from pydantic import BaseModel
@@ -18,34 +19,56 @@ from typing_extensions import Annotated
 logger = logging.getLogger(__name__)
 
 
-class SchemaCoercionMapper:
-    _cache: weakref.WeakKeyDictionary[Type[Any], dict[int, "SchemaCoercionMapper"]] = (
-        weakref.WeakKeyDictionary()
-    )
+_cache: weakref.WeakKeyDictionary[Type[Any], dict[int, "SchemaCoercionMapper"]] = (
+    weakref.WeakKeyDictionary()
+)
 
-    def __new__(cls, schema: Type[Any], max_depth: int = 5) -> "SchemaCoercionMapper":
-        if schema not in cls._cache:
-            cls._cache[schema] = {}
-        if max_depth in cls._cache[schema]:
-            return cls._cache[schema][max_depth]
+
+class SchemaCoercionMapper:
+    def __new__(
+        cls,
+        schema: Type[Any],
+        type_hints: Optional[dict[str, Any]] = None,
+        max_depth: int = 12,
+    ) -> "SchemaCoercionMapper":
+        if schema not in _cache:
+            _cache[schema] = {}
+        if max_depth in _cache[schema]:
+            return _cache[schema][max_depth]
 
         inst = super().__new__(cls)
-        cls._cache[schema][max_depth] = inst
+        _cache[schema][max_depth] = inst
         return inst
 
-    def __init__(self, schema: Type[Any], max_depth: int = 5):
+    def __init__(
+        self,
+        schema: Type[Any],
+        type_hints: Optional[dict[str, Any]] = None,
+        max_depth: int = 12,
+    ):
         if hasattr(self, "_inited"):
             return
         self._inited = True
         self.schema = schema
+        self.type_hints = (
+            type_hints
+            if type_hints is not None
+            else get_type_hints(schema, localns={schema.__name__: schema})
+        )
         self.max_depth = max_depth
-        if hasattr(schema, "model_fields") and hasattr(schema, "model_construct"):
-            self._fields = {n: f.annotation for n, f in schema.model_fields.items()}
-            self._construct = schema.model_construct
-        elif hasattr(schema, "__fields__") and callable(
-            getattr(schema, "construct", None)
-        ):
-            self._fields = {n: f.annotation for n, f in schema.__fields__.items()}
+
+        if issubclass(schema, BaseModel):
+            self._fields = {
+                n: self.type_hints.get(n, f.annotation)
+                for n, f in schema.model_fields.items()
+            }
+            self._construct: Callable[..., Any] = schema.model_construct
+
+        elif issubclass(schema, BaseModelV1):
+            self._fields = {
+                n: self.type_hints.get(n, f.annotation)
+                for n, f in schema.__fields__.items()
+            }
             self._construct = schema.construct
         else:
             raise TypeError("Schema is neither valid Pydantic v1 nor v2 model.")
@@ -75,6 +98,7 @@ class SchemaCoercionMapper:
         if depth == 0:
             return self._passthrough
         origin = get_origin(field_type)
+
         if origin is Annotated:
             real_type, *_ = get_args(field_type)
             sub = self._build_coercer(real_type, depth - 1)
@@ -88,10 +112,10 @@ class SchemaCoercionMapper:
                 is_base_model = False
 
             if is_base_model:
-                mapper = SchemaCoercionMapper(field_type, depth - 1)
+                mapper = SchemaCoercionMapper(field_type, max_depth=depth - 1)
                 return lambda v, d: mapper.coerce(v, d) if isinstance(v, dict) else v
             if is_class_ and issubclass(field_type, BaseModelV1):
-                mapper = SchemaCoercionMapper(field_type, depth - 1)
+                mapper = SchemaCoercionMapper(field_type, max_depth=depth - 1)
                 return lambda v, d: mapper.coerce(v, d) if isinstance(v, dict) else v
         if origin is list or field_type is list:
             args = get_args(field_type)
@@ -105,16 +129,27 @@ class SchemaCoercionMapper:
                 return [sub(x, d - 1) for x in v]
 
             return list_coercer
+        if origin is set or field_type is set:
+            args = get_args(field_type)
+            if len(args) != 1:
+                return lambda v, d: v
+            sub = self._build_coercer(args[0], depth - 1)
+
+            def set_coercer(v: Any, d: Any) -> Any:
+                if not isinstance(v, (list, tuple, set)):
+                    return v
+                return {sub(x, d - 1) for x in v}
+
+            return set_coercer
         if origin is dict or field_type is dict:
             args = get_args(field_type)
             if len(args) != 2:
-                if not throw:
-                    return self._passthrough
 
                 def dict_coercer(v: Any, d: Any) -> Any:
                     if not isinstance(v, dict):
-                        raise TypeError("Expected dict, got %s" % type(v))
-                    return {k_sub(k, d - 1): v_sub(val, d - 1) for k, val in v.items()}
+                        if throw:
+                            raise TypeError("Expected dict, got %s" % type(v))
+                    return v
 
                 return dict_coercer
             k_sub = self._build_coercer(args[0], depth - 1)
@@ -122,6 +157,8 @@ class SchemaCoercionMapper:
 
             def dict_coercer(v: Any, d: Any) -> Any:
                 if not isinstance(v, dict):
+                    if throw:
+                        raise TypeError("Expected dict, got %s" % type(v))
                     return v
                 return {k_sub(k, d - 1): v_sub(val, d - 1) for k, val in v.items()}
 
@@ -160,7 +197,7 @@ class SchemaCoercionMapper:
                 for sp in subs:
                     try:
                         return sp(v, d - 1)
-                    except Exception as e:
+                    except TypeError as e:
                         err = e
                 if err:
                     raise err

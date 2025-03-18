@@ -4578,7 +4578,7 @@ async def test_nested_pydantic_models(version: str) -> None:
         "top_level": "initial",
         "nested": {"value": 42, "name": "test"},
         "optional_nested": {"value": 10, "name": "optional"},
-        "my_set": [1, 2, 4.5],
+        "my_set": [1, 2, 7],
         "my_typed_dict": {"x": 1},
         "dict_nested": {"a": {"value": 5, "name": "a"}},
         "list_nested": [{"a": {"value": 6, "name": "b"}}],
