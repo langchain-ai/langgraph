@@ -1,4 +1,3 @@
-import functools
 import itertools
 import sys
 from collections import defaultdict, deque
@@ -768,6 +767,18 @@ def _scratchpad(
     null_resume_write = next(
         (w for w in pending_writes if w[0] == NULL_TASK_ID and w[1] == RESUME), None
     )
+
+    def get_null_resume(consume: bool = False) -> Any:
+        if null_resume_write is None:
+            return None
+        if consume:
+            try:
+                pending_writes.remove(null_resume_write)
+                return null_resume_write[2]
+            except ValueError:
+                return None
+        return null_resume_write[2]
+
     # using itertools.count as an atomic counter (+= 1 is not thread-safe)
     return PregelScratchpad(
         # call
@@ -777,10 +788,7 @@ def _scratchpad(
         resume=next(
             (w[2] for w in pending_writes if w[0] == task_id and w[1] == RESUME), []
         ),
-        null_resume=null_resume_write[2] if null_resume_write is not None else None,
-        _consume_null_resume=functools.partial(pending_writes.remove, null_resume_write)
-        if null_resume_write is not None
-        else lambda: None,
+        get_null_resume=get_null_resume,
         # subgraph
         subgraph_counter=itertools.count(0).__next__,
     )

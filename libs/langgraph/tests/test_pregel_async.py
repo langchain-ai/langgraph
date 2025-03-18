@@ -938,7 +938,7 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
             async for c in tool_two.astream(
                 {"my_key": "value ⛰️", "market": "DE"}, thread2
             )
-        ] == [
+        ] == UnsortedSequence(
             {
                 "__interrupt__": (
                     Interrupt(
@@ -951,7 +951,7 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
             {
                 "tool_one": {"my_key": " one"},
             },
-        ]
+        )
         # resume with answer
         assert [
             c async for c in tool_two.astream(Command(resume=" my answer"), thread2)
