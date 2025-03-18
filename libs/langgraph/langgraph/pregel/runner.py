@@ -25,12 +25,10 @@ from langgraph.constants import (
     CONF,
     CONFIG_KEY_CALL,
     CONFIG_KEY_SCRATCHPAD,
-    CONFIG_KEY_SEND,
     ERROR,
     INTERRUPT,
     MISSING,
     NO_WRITES,
-    PUSH,
     RESUME,
     RETURN,
     TAG_HIDDEN,
@@ -125,76 +123,6 @@ class PregelRunner:
         retry_policy: Optional[RetryPolicy] = None,
         get_waiter: Optional[Callable[[], concurrent.futures.Future[None]]] = None,
     ) -> Iterator[None]:
-        def writer(
-            task: PregelExecutableTask,
-            writes: Sequence[tuple[str, Any]],
-            *,
-            calls: Optional[Sequence[Call]] = None,
-        ) -> Sequence[Optional[concurrent.futures.Future]]:
-            if all(w[0] != PUSH for w in writes):
-                return task.config[CONF][CONFIG_KEY_SEND](writes)
-
-            # schedule PUSH tasks, collect futures
-            scratchpad: PregelScratchpad = task.config[CONF][CONFIG_KEY_SCRATCHPAD]
-            rtn: dict[int, Optional[concurrent.futures.Future]] = {}
-            for idx, w in enumerate(writes):
-                # bail if not a PUSH write
-                if w[0] != PUSH:
-                    continue
-                # schedule the next task, if the callback returns one
-                wcall = calls[idx] if calls else None
-                if next_task := self.schedule_task(
-                    task, scratchpad.call_counter(), wcall
-                ):
-                    if fut := next(
-                        (
-                            f
-                            for f, t in futures.items()
-                            if t is not None and t == next_task.id
-                        ),
-                        None,
-                    ):
-                        # if the parent task was retried,
-                        # the next task might already be running
-                        rtn[idx] = fut
-                    elif next_task.writes:
-                        # if it already ran, return the result
-                        fut = concurrent.futures.Future()
-                        ret = next(
-                            (v for c, v in next_task.writes if c == RETURN), MISSING
-                        )
-                        if ret is not MISSING:
-                            fut.set_result(ret)
-                        elif exc := next(
-                            (v for c, v in next_task.writes if c == ERROR), None
-                        ):
-                            fut.set_exception(
-                                exc
-                                if isinstance(exc, BaseException)
-                                else Exception(exc)
-                            )
-                        else:
-                            fut.set_result(None)
-                        rtn[idx] = fut
-                    else:
-                        # schedule the next task
-                        fut = self.submit(
-                            run_with_retry,
-                            next_task,
-                            retry_policy,
-                            configurable={
-                                CONFIG_KEY_SEND: partial(writer, next_task),
-                                CONFIG_KEY_CALL: partial(call, next_task),
-                            },
-                            __reraise_on_exit__=reraise,
-                            # starting a new task in the next tick ensures
-                            # updates from this tick are committed/streamed first
-                            __next_tick__=True,
-                        )
-                        futures[fut] = next_task
-                        rtn[idx] = fut
-            return [rtn.get(i) for i in range(len(writes))]
-
         def call(
             task: PregelExecutableTask,
             func: Callable[[Any], Union[Awaitable[Any], Any]],
@@ -205,12 +133,57 @@ class PregelRunner:
         ) -> concurrent.futures.Future[Any]:
             if asyncio.iscoroutinefunction(func):
                 raise RuntimeError("In an sync context async tasks cannot be called")
-            (fut,) = writer(
+
+            fut: Optional[concurrent.futures.Future] = None
+            # schedule PUSH tasks, collect futures
+            scratchpad: PregelScratchpad = task.config[CONF][CONFIG_KEY_SCRATCHPAD]
+            # schedule the next task, if the callback returns one
+            if next_task := self.schedule_task(
                 task,
-                [(PUSH, None)],
-                calls=[Call(func, input, retry=retry, callbacks=callbacks)],
-            )
-            assert fut is not None, "writer did not return a future for call"
+                scratchpad.call_counter(),
+                Call(func, input, retry=retry, callbacks=callbacks),
+            ):
+                if fut := next(
+                    (
+                        f
+                        for f, t in futures.items()
+                        if t is not None and t == next_task.id
+                    ),
+                    None,
+                ):
+                    # if the parent task was retried,
+                    # the next task might already be running
+                    pass
+                elif next_task.writes:
+                    # if it already ran, return the result
+                    fut = concurrent.futures.Future()
+                    ret = next((v for c, v in next_task.writes if c == RETURN), MISSING)
+                    if ret is not MISSING:
+                        fut.set_result(ret)
+                    elif exc := next(
+                        (v for c, v in next_task.writes if c == ERROR), None
+                    ):
+                        fut.set_exception(
+                            exc if isinstance(exc, BaseException) else Exception(exc)
+                        )
+                    else:
+                        fut.set_result(None)
+                else:
+                    # schedule the next task
+                    fut = self.submit(
+                        run_with_retry,
+                        next_task,
+                        retry_policy,
+                        configurable={
+                            CONFIG_KEY_CALL: partial(call, next_task),
+                        },
+                        __reraise_on_exit__=reraise,
+                        # starting a new task in the next tick ensures
+                        # updates from this tick are committed/streamed first
+                        __next_tick__=True,
+                    )
+                    futures[fut] = next_task
+
             # return a chained future to ensure commit() callback is called
             # before the returned future is resolved, to ensure stream order etc
             return chain_future(fut, concurrent.futures.Future())
@@ -231,7 +204,6 @@ class PregelRunner:
                     t,
                     retry_policy,
                     configurable={
-                        CONFIG_KEY_SEND: partial(writer, t),
                         CONFIG_KEY_CALL: partial(call, t),
                     },
                 )
@@ -260,7 +232,6 @@ class PregelRunner:
                     t,
                     retry_policy,
                     configurable={
-                        CONFIG_KEY_SEND: partial(writer, t),
                         CONFIG_KEY_CALL: partial(call, t),
                     },
                     __reraise_on_exit__=reraise,
@@ -313,84 +284,6 @@ class PregelRunner:
         retry_policy: Optional[RetryPolicy] = None,
         get_waiter: Optional[Callable[[], asyncio.Future[None]]] = None,
     ) -> AsyncIterator[None]:
-        def writer(
-            task: PregelExecutableTask,
-            writes: Sequence[tuple[str, Any]],
-            *,
-            calls: Optional[Sequence[Call]] = None,
-        ) -> Sequence[Optional[asyncio.Future]]:
-            if all(w[0] != PUSH for w in writes):
-                return task.config[CONF][CONFIG_KEY_SEND](writes)
-
-            # schedule PUSH tasks, collect futures
-            scratchpad: PregelScratchpad = task.config[CONF][CONFIG_KEY_SCRATCHPAD]
-            rtn: dict[int, Optional[asyncio.Future]] = {}
-            for idx, w in enumerate(writes):
-                # bail if not a PUSH write
-                if w[0] != PUSH:
-                    continue
-                # schedule the next task, if the callback returns one
-                wcall = calls[idx] if calls is not None else None
-                if next_task := self.schedule_task(
-                    task, scratchpad.call_counter(), wcall
-                ):
-                    # if the parent task was retried,
-                    # the next task might already be running
-                    if fut := next(
-                        (
-                            f
-                            for f, t in futures.items()
-                            if t is not None and t == next_task.id
-                        ),
-                        None,
-                    ):
-                        # if the parent task was retried,
-                        # the next task might already be running
-                        rtn[idx] = fut
-                    elif next_task.writes:
-                        # if it already ran, return the result
-                        fut = asyncio.Future(loop=loop)
-                        ret = next(
-                            (v for c, v in next_task.writes if c == RETURN), MISSING
-                        )
-                        if ret is not MISSING:
-                            fut.set_result(ret)
-                        elif exc := next(
-                            (v for c, v in next_task.writes if c == ERROR), None
-                        ):
-                            fut.set_exception(
-                                exc
-                                if isinstance(exc, BaseException)
-                                else Exception(exc)
-                            )
-                        else:
-                            fut.set_result(None)
-                        rtn[idx] = fut
-                    else:
-                        # schedule the next task
-                        fut = cast(
-                            asyncio.Future,
-                            self.submit(
-                                arun_with_retry,
-                                next_task,
-                                retry_policy,
-                                stream=self.use_astream,
-                                configurable={
-                                    CONFIG_KEY_SEND: partial(writer, next_task),
-                                    CONFIG_KEY_CALL: partial(call, next_task),
-                                },
-                                __name__=t.name,
-                                __cancel_on_exit__=True,
-                                __reraise_on_exit__=reraise,
-                                # starting a new task in the next tick ensures
-                                # updates from this tick are committed/streamed first
-                                __next_tick__=True,
-                            ),
-                        )
-                        futures[fut] = next_task
-                        rtn[idx] = fut
-            return [rtn.get(i) for i in range(len(writes))]
-
         def call(
             task: PregelExecutableTask,
             func: Callable[[Any], Union[Awaitable[Any], Any]],
@@ -399,12 +292,63 @@ class PregelRunner:
             retry: Optional[RetryPolicy] = None,
             callbacks: Callbacks = None,
         ) -> Union[asyncio.Future[Any], concurrent.futures.Future[Any]]:
-            (fut,) = writer(
+            fut: Optional[asyncio.Future] = None
+            # schedule PUSH tasks, collect futures
+            scratchpad: PregelScratchpad = task.config[CONF][CONFIG_KEY_SCRATCHPAD]
+            # schedule the next task, if the callback returns one
+            if next_task := self.schedule_task(
                 task,
-                [(PUSH, None)],
-                calls=[Call(func, input, retry=retry, callbacks=callbacks)],
-            )
-            assert fut is not None, "writer did not return a future for call"
+                scratchpad.call_counter(),
+                Call(func, input, retry=retry, callbacks=callbacks),
+            ):
+                # if the parent task was retried,
+                # the next task might already be running
+                if fut := next(
+                    (
+                        f
+                        for f, t in futures.items()
+                        if t is not None and t == next_task.id
+                    ),
+                    None,
+                ):
+                    # if the parent task was retried,
+                    # the next task might already be running
+                    pass
+                elif next_task.writes:
+                    # if it already ran, return the result
+                    fut = asyncio.Future(loop=loop)
+                    ret = next((v for c, v in next_task.writes if c == RETURN), MISSING)
+                    if ret is not MISSING:
+                        fut.set_result(ret)
+                    elif exc := next(
+                        (v for c, v in next_task.writes if c == ERROR), None
+                    ):
+                        fut.set_exception(
+                            exc if isinstance(exc, BaseException) else Exception(exc)
+                        )
+                    else:
+                        fut.set_result(None)
+                else:
+                    # schedule the next task
+                    fut = cast(
+                        asyncio.Future,
+                        self.submit(
+                            arun_with_retry,
+                            next_task,
+                            retry_policy,
+                            stream=self.use_astream,
+                            configurable={
+                                CONFIG_KEY_CALL: partial(call, next_task),
+                            },
+                            __name__=t.name,
+                            __cancel_on_exit__=True,
+                            __reraise_on_exit__=reraise,
+                            # starting a new task in the next tick ensures
+                            # updates from this tick are committed/streamed first
+                            __next_tick__=True,
+                        ),
+                    )
+                    futures[fut] = next_task
             # return a chained future to ensure commit() callback is called
             # before the returned future is resolved, to ensure stream order etc
             try:
@@ -446,7 +390,6 @@ class PregelRunner:
                     retry_policy,
                     stream=self.use_astream,
                     configurable={
-                        CONFIG_KEY_SEND: partial(writer, t),
                         CONFIG_KEY_CALL: partial(call, t),
                     },
                 )
@@ -478,7 +421,6 @@ class PregelRunner:
                         retry_policy,
                         stream=self.use_astream,
                         configurable={
-                            CONFIG_KEY_SEND: partial(writer, t),
                             CONFIG_KEY_CALL: partial(call, t),
                         },
                         __name__=t.name,
