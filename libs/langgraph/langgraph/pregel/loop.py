@@ -795,7 +795,7 @@ class PregelLoop(LoopProtocol):
                     self.channels,
                 )
             # emit INTERRUPT if exception is empty (otherwise emitted by put_writes)
-            if not exc_value.args or not exc_value.args[0]:
+            if exc_value is not None and not exc_value.args or not exc_value.args[0]:
                 self._emit(
                     "updates",
                     lambda: iter(
