@@ -8,6 +8,45 @@ A central aspect of agent development is prompt engineering. LangGraph Studio ma
 
 The first step is to define your [configuration](https://langchain-ai.github.io/langgraph/how-tos/configuration/) such that LangGraph Studio is aware of the prompts you want to iterate on and which nodes they are associated with.
 
+### Reference
+
+When defining your configuration, you can use special metadata keys to instruct LangGraph Studio how to handle different fields. Here's a reference for the available configuration options:
+
+#### `langgraph_nodes`
+
+- **Description**: Specifies which graph nodes a configuration field is associated with.
+- **Value Type**: Array of strings, where each string is the name of a node in your graph.
+- **Usage Context**: Include in the `json_schema_extra` dictionary for Pydantic models or the `metadata["json_schema_extra"]` dictionary for dataclasses.
+- **Required**: No, but necessary if you want a field to be editable for specific nodes in the UI.
+- **Example**:
+  ```python
+  system_prompt: str = Field(
+      default="You are a helpful AI assistant.",
+      json_schema_extra={"langgraph_nodes": ["call_model", "other_node"]},
+  )
+  ```
+
+#### `langgraph_type`
+
+- **Description**: Specifies the type of configuration field, which determines how it's handled in the UI.
+- **Value Type**: String
+- **Supported Values**:
+  - `"prompt"`: Indicates the field contains prompt text that should be treated specially in the UI.
+- **Usage Context**: Include in the `json_schema_extra` dictionary for Pydantic models or the `metadata["json_schema_extra"]` dictionary for dataclasses.
+- **Required**: No, but helpful for prompt fields to enable special handling.
+- **Example**:
+  ```python
+  system_prompt: str = Field(
+      default="You are a helpful AI assistant.",
+      json_schema_extra={
+          "langgraph_nodes": ["call_model"],
+          "langgraph_type": "prompt",
+      },
+  )
+  ```
+
+### Example
+
 For example, if you have a node called `call_model` whose system prompt you want to iterate on, you can define a configuration like the following.
 
 ```python
@@ -44,8 +83,9 @@ class Configuration(BaseModel):
         "Should be in the form: provider/model-name.",
         json_schema_extra={"langgraph_nodes": ["call_model"]},
     )
- ## Using Dataclasses
- from dataclasses import dataclass, field
+
+## Using Dataclasses
+from dataclasses import dataclass, field
 
 @dataclass(kw_only=True)
 class Configuration:
@@ -70,8 +110,6 @@ class Configuration:
     )
 
 ```
-
-Specifically, note that the `json_schema_extra` field where `"langgraph_nodes": ["call_model"]` indicates that the `system_prompt` and `model` fields will be used to configure the `call_model` node and that the `"langgraph_type": "prompt"` indicates that the `system_prompt` field is a prompt.
 
 ## Iterating on prompts
 
