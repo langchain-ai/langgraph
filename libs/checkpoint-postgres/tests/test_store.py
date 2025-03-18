@@ -52,9 +52,7 @@ def store(request) -> PostgresStore:
         with PostgresStore.from_conn_string(conn_string, ttl=ttl_config) as store:
             store.MIGRATIONS = [
                 (
-                    mig.replace(
-                        "ADD COLUMN ttl_minutes INT;", "ADD COLUMN ttl_minutes FLOAT;"
-                    )
+                    mig.replace("ttl_minutes INT;", "ttl_minutes FLOAT;")
                     if isinstance(mig, str)
                     else mig
                 )
@@ -415,6 +413,10 @@ def _create_vector_store(
             ttl={"default_ttl": 2, "refresh_on_read": True} if enable_ttl else None,
         ) as store:
             store.setup()
+            with store._cursor() as cur:
+                # drop the migration index
+                cur.execute("DROP TABLE IF EXISTS store_migrations")
+            store.setup()  # Will fail if migrations aren't idempotent
             yield store
     finally:
         with Connection.connect(admin_conn_string, autocommit=True) as conn:

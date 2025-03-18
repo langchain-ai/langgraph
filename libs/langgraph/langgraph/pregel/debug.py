@@ -137,7 +137,12 @@ def map_debug_task_results(
             "result": [
                 w for w in writes if w[0] in stream_channels_list or w[0] == RETURN
             ],
-            "interrupts": [asdict(w[1]) for w in writes if w[0] == INTERRUPT],
+            "interrupts": [
+                asdict(v)
+                for w in writes
+                if w[0] == INTERRUPT
+                for v in (w[1] if isinstance(w[1], Sequence) else [w[1]])
+            ],
         },
     }
 
@@ -293,8 +298,9 @@ def tasks_w_writes(
                 ),
                 tuple(
                     v
-                    for tid, n, v in pending_writes
+                    for tid, n, vv in pending_writes
                     if tid == task.id and n == INTERRUPT
+                    for v in (vv if isinstance(vv, Sequence) else [vv])
                 ),
                 states.get(task.id) if states else None,
                 (
