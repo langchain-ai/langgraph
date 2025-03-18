@@ -794,11 +794,14 @@ class PregelLoop(LoopProtocol):
                     [w for t in self.tasks.values() for w in t.writes],
                     self.channels,
                 )
-            # emit INTERRUPT event
-            self._emit(
-                "updates",
-                lambda: iter([{INTERRUPT: cast(GraphInterrupt, exc_value).args[0]}]),
-            )
+            # emit INTERRUPT if exception is empty (otherwise emitted by put_writes)
+            if exc_value is not None and (not exc_value.args or not exc_value.args[0]):
+                self._emit(
+                    "updates",
+                    lambda: iter(
+                        [{INTERRUPT: cast(GraphInterrupt, exc_value).args[0]}]
+                    ),
+                )
             # save final output
             self.output = read_channels(self.channels, self.output_keys)
             # suppress interrupt
@@ -829,7 +832,25 @@ class PregelLoop(LoopProtocol):
                 "tags", EMPTY_SEQ
             ):
                 return
-            if writes[0][0] != ERROR and writes[0][0] != INTERRUPT:
+            if writes[0][0] == INTERRUPT:
+                self._emit(
+                    "updates",
+                    lambda: iter(
+                        [
+                            {
+                                INTERRUPT: tuple(
+                                    v
+                                    for w in writes
+                                    if w[0] == INTERRUPT
+                                    for v in (
+                                        w[1] if isinstance(w[1], Sequence) else (w[1],)
+                                    )
+                                )
+                            }
+                        ]
+                    ),
+                )
+            elif writes[0][0] != ERROR:
                 self._emit(
                     "updates",
                     map_output_updates,
