@@ -27,11 +27,7 @@ from uuid import UUID
 import httpx
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
-from langchain_core.runnables import (
-    RunnableConfig,
-    RunnableLambda,
-    RunnablePassthrough,
-)
+from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePassthrough
 from langchain_core.utils.aiter import aclosing
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
@@ -4524,6 +4520,7 @@ async def test_nested_pydantic_models(version: str) -> None:
     class NestedModel(BaseModel):
         value: int
         name: str
+        something: Optional[str] = None
 
     # Forward reference model
     class RecursiveModel(BaseModel):
@@ -4545,18 +4542,27 @@ async def test_nested_pydantic_models(version: str) -> None:
         name: str
         friends: list[str] = Field(default_factory=list)  # IDs of friends
 
+    class MyTypedDict(TypedDict):
+        x: int
+
     class State(BaseModel):
         # Basic nested model tests
         top_level: str
         nested: NestedModel
         optional_nested: Optional[NestedModel] = None
         dict_nested: dict[str, NestedModel]
+        my_set: set[int]
         list_nested: Annotated[
             Union[dict, list[dict[str, NestedModel]]], lambda x, y: (x or []) + [y]
+        ]
+        list_nested_reversed: Annotated[
+            Union[list[dict[str, NestedModel]], NestedModel, dict, list],
+            lambda x, y: (x or []) + [y],
         ]
         tuple_nested: tuple[str, NestedModel]
         tuple_list_nested: list[tuple[int, NestedModel]]
         complex_tuple: tuple[str, dict[str, tuple[int, NestedModel]]]
+        my_typed_dict: MyTypedDict
 
         # Forward reference test
         recursive: RecursiveModel
@@ -4572,8 +4578,11 @@ async def test_nested_pydantic_models(version: str) -> None:
         "top_level": "initial",
         "nested": {"value": 42, "name": "test"},
         "optional_nested": {"value": 10, "name": "optional"},
+        "my_set": [1, 2, 4.5],
+        "my_typed_dict": {"x": 1},
         "dict_nested": {"a": {"value": 5, "name": "a"}},
         "list_nested": [{"a": {"value": 6, "name": "b"}}],
+        "list_nested_reversed": ["foo", "bar"],
         "tuple_nested": ["tuple-key", {"value": 7, "name": "tuple-value"}],
         "tuple_list_nested": [[1, {"value": 8, "name": "tuple-in-list"}]],
         "complex_tuple": [
@@ -5882,10 +5891,12 @@ async def test_store_injected_async(checkpointer_name: str, store_name: str) -> 
         ):
             assert isinstance(store, BaseStore)
             await store.aput(
-                namespace
-                if self.i is not None
-                and config["configurable"]["thread_id"] in (thread_1, thread_2)
-                else (f"foo_{self.i}", "bar"),
+                (
+                    namespace
+                    if self.i is not None
+                    and config["configurable"]["thread_id"] in (thread_1, thread_2)
+                    else (f"foo_{self.i}", "bar")
+                ),
                 doc_id,
                 {
                     **doc,

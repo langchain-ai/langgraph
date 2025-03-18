@@ -62,18 +62,22 @@ class SchemaCoercionMapper:
         processed = {}
         if self._field_coercers is None:
             self._field_coercers = {
-                n: self._build_coercer(t) for n, t in self._fields.items()
+                n: self._build_coercer(t, depth - 1) for n, t in self._fields.items()
             }
         for k, v in input_data.items():
             fn = self._field_coercers.get(k)
             processed[k] = fn(v, depth - 1) if fn else v
         return self._construct(**processed)
 
-    def _build_coercer(self, field_type: Any) -> Callable[[Any, Any], Any]:
+    def _build_coercer(
+        self, field_type: Any, depth: int, throw: bool = False
+    ) -> Callable[[Any, Any], Any]:
+        if depth == 0:
+            return self._passthrough
         origin = get_origin(field_type)
         if origin is Annotated:
             real_type, *_ = get_args(field_type)
-            sub = self._build_coercer(real_type)
+            sub = self._build_coercer(real_type, depth - 1)
             return lambda v, d: sub(v, d)
         if isclass(field_type):
             is_class_ = True
@@ -84,16 +88,16 @@ class SchemaCoercionMapper:
                 is_base_model = False
 
             if is_base_model:
-                mapper = SchemaCoercionMapper(field_type, self.max_depth)
+                mapper = SchemaCoercionMapper(field_type, depth - 1)
                 return lambda v, d: mapper.coerce(v, d) if isinstance(v, dict) else v
             if is_class_ and issubclass(field_type, BaseModelV1):
-                mapper = SchemaCoercionMapper(field_type, self.max_depth)
+                mapper = SchemaCoercionMapper(field_type, depth - 1)
                 return lambda v, d: mapper.coerce(v, d) if isinstance(v, dict) else v
         if origin is list or field_type is list:
             args = get_args(field_type)
             if len(args) != 1:
                 return lambda v, d: v
-            sub = self._build_coercer(args[0])
+            sub = self._build_coercer(args[0], depth - 1)
 
             def list_coercer(v: Any, d: Any) -> Any:
                 if not isinstance(v, (list, tuple)):
@@ -104,9 +108,17 @@ class SchemaCoercionMapper:
         if origin is dict or field_type is dict:
             args = get_args(field_type)
             if len(args) != 2:
-                return self._passthrough
-            k_sub = self._build_coercer(args[0])
-            v_sub = self._build_coercer(args[1])
+                if not throw:
+                    return self._passthrough
+
+                def dict_coercer(v: Any, d: Any) -> Any:
+                    if not isinstance(v, dict):
+                        raise TypeError("Expected dict, got %s" % type(v))
+                    return {k_sub(k, d - 1): v_sub(val, d - 1) for k, val in v.items()}
+
+                return dict_coercer
+            k_sub = self._build_coercer(args[0], depth - 1)
+            v_sub = self._build_coercer(args[1], depth - 1)
 
             def dict_coercer(v: Any, d: Any) -> Any:
                 if not isinstance(v, dict):
@@ -119,7 +131,7 @@ class SchemaCoercionMapper:
             targs = get_args(field_type)
             if not targs:
                 return lambda v, d: v
-            subs = [self._build_coercer(a) for a in targs]
+            subs = [self._build_coercer(a, depth - 1) for a in targs]
 
             def tuple_coercer(v: Any, d: Any) -> Any:
                 if not isinstance(v, (list, tuple)):
@@ -133,11 +145,13 @@ class SchemaCoercionMapper:
         if origin is Union:
             uargs = get_args(field_type)
             subs, none_in_union = [], False
-            for arg in uargs:
+            for ix, arg in enumerate(uargs):
                 if arg is type(None):
                     none_in_union = True
                 else:
-                    subs.append(self._build_coercer(arg))
+                    subs.append(
+                        self._build_coercer(arg, depth - 1, throw=ix < len(uargs) - 1)
+                    )
 
             def union_coercer(v: Any, d: Any) -> Any:
                 if v is None and none_in_union:
