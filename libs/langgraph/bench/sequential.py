@@ -25,6 +25,7 @@ def create_sequential(number_nodes) -> StateGraph:
 
 if __name__ == "__main__":
     import asyncio
+    import time
 
     import uvloop
 
@@ -36,4 +37,7 @@ if __name__ == "__main__":
         len([c async for c in graph.astream(input, config=config)])
 
     uvloop.install()
+    start = time.time()
     asyncio.run(run())
+    end = time.time()
+    print(f"Time taken: {end - start:.4f} seconds")
