@@ -421,6 +421,9 @@ def prepare_next_tasks(
     return {t.id: t for t in tasks}
 
 
+PUSH_TRIGGER = (PUSH,)
+
+
 def prepare_single_task(
     task_path: tuple[Any, ...],
     task_id_checksum: Optional[str],
@@ -453,7 +456,7 @@ def prepare_single_task(
         if name is None:
             raise ValueError("`call` functions must have a `__name__` attribute")
         # create task id
-        triggers = [PUSH]
+        triggers: Sequence[str] = PUSH_TRIGGER
         checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
         task_id = _uuid5_str(
             checkpoint_id_bytes,
@@ -547,7 +550,7 @@ def prepare_single_task(
                 )
                 return
             # create task id
-            triggers = [PUSH]
+            triggers = PUSH_TRIGGER
             checkpoint_ns = (
                 f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
             )
@@ -788,9 +791,9 @@ def _triggers(
                 return (chan,)
     else:
         for chan in proc.triggers:
-            if channels[chan].is_available() and versions.get(
+            if channels[chan].is_available() and versions.get(  # type: ignore[operator]
                 chan, null_version
-            ) > seen.get(chan, null_version):  # type: ignore[operator]
+            ) > seen.get(chan, null_version):
                 return (chan,)
     return EMPTY_SEQ
 
