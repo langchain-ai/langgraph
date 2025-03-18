@@ -351,19 +351,10 @@ class PregelScratchpad:
     call_counter: Callable[[], int]
     # interrupt
     interrupt_counter: Callable[[], int]
+    get_null_resume: Callable[[bool], Any]
     resume: list[Any]
-    null_resume: Optional[Any]
-    _consume_null_resume: Callable[[], None]
     # subgraph
     subgraph_counter: Callable[[], int]
-
-    def consume_null_resume(self) -> Any:
-        if self.null_resume is not None:
-            value = self.null_resume
-            self._consume_null_resume()
-            self.null_resume = None
-            return value
-        raise ValueError("No null resume to consume")
 
 
 def interrupt(value: Any) -> Any:
@@ -480,9 +471,9 @@ def interrupt(value: Any) -> Any:
         if idx < len(scratchpad.resume):
             return scratchpad.resume[idx]
     # find current resume value
-    if scratchpad.null_resume is not None:
+    v = scratchpad.get_null_resume(True)
+    if v is not None:
         assert len(scratchpad.resume) == idx, (scratchpad.resume, idx)
-        v = scratchpad.consume_null_resume()
         scratchpad.resume.append(v)
         conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
         return v
