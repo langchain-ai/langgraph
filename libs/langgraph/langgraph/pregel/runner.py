@@ -543,10 +543,11 @@ class PregelRunner:
         elif exception:
             if isinstance(exception, GraphInterrupt):
                 # save interrupt to checkpointer
-                if interrupts := [(INTERRUPT, i) for i in exception.args[0]]:
+                if exception.args[0]:
+                    writes = [(INTERRUPT, exception.args[0])]
                     if resumes := [w for w in task.writes if w[0] == RESUME]:
-                        interrupts.extend(resumes)
-                    self.put_writes(task.id, interrupts)
+                        writes.extend(resumes)
+                    self.put_writes(task.id, writes)
             elif isinstance(exception, GraphBubbleUp):
                 raise exception
             else:
@@ -608,6 +609,7 @@ def _panic_or_proceed(
             done.add(fut)
         else:
             inflight.add(fut)
+    interrupts: list[GraphInterrupt] = []
     while done:
         # if any task failed
         if exc := _exception(done.pop()):
@@ -616,7 +618,14 @@ def _panic_or_proceed(
                 inflight.pop().cancel()
             # raise the exception
             if panic:
-                raise exc
+                if isinstance(exc, GraphInterrupt):
+                    # collect interrupts
+                    interrupts.append(exc)
+                else:
+                    raise exc
+    # raise combined interrupts
+    if interrupts:
+        raise GraphInterrupt(tuple(i for exc in interrupts for i in exc.args[0]))
     if inflight:
         # if we got here means we timed out
         while inflight:

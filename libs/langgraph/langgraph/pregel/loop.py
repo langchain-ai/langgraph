@@ -1,4 +1,5 @@
 import asyncio
+import binascii
 import concurrent.futures
 from collections import defaultdict, deque
 from contextlib import AsyncExitStack, ExitStack
@@ -79,6 +80,7 @@ from langgraph.pregel.algo import (
     GetNextVersion,
     PregelTaskWrites,
     apply_writes,
+    checkpoint_null_version,
     increment,
     prepare_next_tasks,
     prepare_single_task,
@@ -347,12 +349,16 @@ class PregelLoop(LoopProtocol):
         ):
             self.to_interrupt.append(task)
             return
+        checkpoint_id_bytes = binascii.unhexlify(self.checkpoint["id"].replace("-", ""))
+        null_version = checkpoint_null_version(self.checkpoint)
         if pushed := cast(
             Optional[PregelExecutableTask],
             prepare_single_task(
                 (PUSH, task.path, write_idx, task.id, call),
                 None,
                 checkpoint=self.checkpoint,
+                checkpoint_id_bytes=checkpoint_id_bytes,
+                checkpoint_null_version=null_version,
                 pending_writes=self.checkpoint_pending_writes,
                 processes=self.nodes,
                 channels=self.channels,
@@ -587,15 +593,6 @@ class PregelLoop(LoopProtocol):
             )
         )
 
-        # take resume value from parent
-        if scratchpad := cast(
-            Optional[PregelScratchpad], configurable.get(CONFIG_KEY_SCRATCHPAD)
-        ):
-            if (
-                isinstance(scratchpad, PregelScratchpad)
-                and scratchpad.null_resume is not None
-            ):
-                self.put_writes(NULL_TASK_ID, [(RESUME, scratchpad.null_resume)])
         # map command to writes
         if isinstance(self.input, Command):
             if self.input.resume is not None and not self.checkpointer:
@@ -794,11 +791,14 @@ class PregelLoop(LoopProtocol):
                     [w for t in self.tasks.values() for w in t.writes],
                     self.channels,
                 )
-            # emit INTERRUPT event
-            self._emit(
-                "updates",
-                lambda: iter([{INTERRUPT: cast(GraphInterrupt, exc_value).args[0]}]),
-            )
+            # emit INTERRUPT if exception is empty (otherwise emitted by put_writes)
+            if exc_value is not None and (not exc_value.args or not exc_value.args[0]):
+                self._emit(
+                    "updates",
+                    lambda: iter(
+                        [{INTERRUPT: cast(GraphInterrupt, exc_value).args[0]}]
+                    ),
+                )
             # save final output
             self.output = read_channels(self.channels, self.output_keys)
             # suppress interrupt
@@ -829,7 +829,25 @@ class PregelLoop(LoopProtocol):
                 "tags", EMPTY_SEQ
             ):
                 return
-            if writes[0][0] != ERROR and writes[0][0] != INTERRUPT:
+            if writes[0][0] == INTERRUPT:
+                self._emit(
+                    "updates",
+                    lambda: iter(
+                        [
+                            {
+                                INTERRUPT: tuple(
+                                    v
+                                    for w in writes
+                                    if w[0] == INTERRUPT
+                                    for v in (
+                                        w[1] if isinstance(w[1], Sequence) else (w[1],)
+                                    )
+                                )
+                            }
+                        ]
+                    ),
+                )
+            elif writes[0][0] != ERROR:
                 self._emit(
                     "updates",
                     map_output_updates,

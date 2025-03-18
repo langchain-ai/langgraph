@@ -817,7 +817,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": AnyStr(),
                 "name": "one",
                 "input": 2,
-                "triggers": ["input"],
+                "triggers": ("input",),
             },
         },
         {
@@ -828,7 +828,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": AnyStr(),
                 "name": "two",
                 "input": [12],
-                "triggers": ["inbox"],
+                "triggers": ("inbox",),
             },
         },
         {
@@ -863,7 +863,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": AnyStr(),
                 "name": "two",
                 "input": [3],
-                "triggers": ["inbox"],
+                "triggers": ("inbox",),
             },
         },
         {
@@ -2625,6 +2625,9 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
         answer: Optional[str] = None
         docs: Optional[list[str]] = None
 
+    class UpdateDocs34(BaseModel):
+        docs: list[str] = ["doc3", "doc4"]
+
     def rewrite_query(data: State) -> State:
         assert isinstance(data.inner, InnerObject)
         return {"query": f"query: {data.query}"}
@@ -2638,7 +2641,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
 
     def retriever_two(data: State) -> State:
         time.sleep(0.1)
-        return {"docs": ["doc3", "doc4"]}
+        return UpdateDocs34()
 
     def qa(data: State) -> State:
         return {"answer": ",".join(data.docs)}
@@ -2734,7 +2737,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
     request: pytest.FixtureRequest,
     checkpointer_name: str,
 ) -> None:
-    from pydantic import BaseModel, ConfigDict, ValidationError
+    from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
     setup = mocker.Mock()
@@ -2787,6 +2790,9 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
         answer: Optional[str] = None
         docs: Optional[list[str]] = None
 
+    class UpdateDocs34(BaseModel):
+        docs: list[str] = Field(default_factory=lambda: ["doc3", "doc4"])
+
     class Input(BaseModel):
         query: str
         inner: InnerObject
@@ -2808,7 +2814,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
 
     def retriever_two(data: State) -> State:
         time.sleep(0.1)
-        return {"docs": ["doc3", "doc4"]}
+        return UpdateDocs34()
 
     def qa(data: State) -> State:
         return {"answer": ",".join(data.docs)}
@@ -3241,14 +3247,24 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
 
     assert [
         c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
-    ] == [
-        {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {"qa": {"answer": ""}},
-        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-        {"retriever_two": {"docs": ["doc3", "doc4"]}},
-        {"retriever_one": {"docs": ["doc1", "doc2"]}},
-        {"__interrupt__": ()},
-    ]
+    ] in (
+        [
+            {"rewrite_query": {"query": "query: what is weather in sf"}},
+            {"qa": {"answer": ""}},
+            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {"retriever_two": {"docs": ["doc3", "doc4"]}},
+            {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"__interrupt__": ()},
+        ],
+        [
+            {"rewrite_query": {"query": "query: what is weather in sf"}},
+            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {"qa": {"answer": ""}},
+            {"retriever_two": {"docs": ["doc3", "doc4"]}},
+            {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"__interrupt__": ()},
+        ],
+    )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
@@ -5671,37 +5687,6 @@ def test_command_goto_with_static_breakpoints(
     assert result == {"foo": "abc|node-1|node-2|node-2"}
 
 
-def test_nested_graph_state_error_handling():
-    """Test error handling when updating state in nested graphs."""
-
-    class State(TypedDict):
-        count: int
-
-    def child_node(state: State):
-        return {"count": state["count"] + 1}
-
-    child = StateGraph(State)
-    child.add_node("child", child_node)
-    child.add_edge(START, "child")
-
-    parent = StateGraph(State)
-    parent.add_node("child_graph", child.compile())
-    parent.add_edge(START, "child_graph")
-
-    app = parent.compile(checkpointer=MemorySaver())
-
-    # Test invalid state update on parent
-    with pytest.raises(InvalidUpdateError):
-        app.update_state({"configurable": {"thread_id": "1"}}, {"invalid_key": "value"})
-
-    # Test invalid state update on child
-    with pytest.raises(InvalidUpdateError):
-        app.update_state(
-            {"configurable": {"thread_id": "1", "checkpoint_ns": "child_graph"}},
-            {"invalid_key": "value"},
-        )
-
-
 def test_parallel_node_execution():
     """Test that parallel nodes execute concurrently."""
 
@@ -5942,8 +5927,259 @@ def test_falsy_return_from_task(
         interrupt("test")
 
     configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
-    graph.invoke({"a": 5}, configurable)
-    graph.invoke(Command(resume="123"), configurable)
+    assert [
+        chunk for chunk in graph.stream({"a": 5}, configurable, stream_mode="debug")
+    ] == [
+        {
+            "payload": {
+                "config": {
+                    "callbacks": None,
+                    "configurable": {
+                        "checkpoint_id": AnyStr(),
+                        "checkpoint_ns": "",
+                        "thread_id": AnyStr(),
+                    },
+                    "metadata": configurable["configurable"],
+                    "recursion_limit": 25,
+                    "tags": [],
+                },
+                "metadata": {
+                    "parents": {},
+                    "source": "input",
+                    "step": -1,
+                    "thread_id": AnyStr(),
+                    "writes": {
+                        "__start__": {
+                            "a": 5,
+                        },
+                    },
+                },
+                "next": [
+                    "graph",
+                ],
+                "parent_config": None,
+                "tasks": [
+                    {
+                        "id": AnyStr(),
+                        "interrupts": (),
+                        "name": "graph",
+                        "state": None,
+                    },
+                ],
+                "values": None,
+            },
+            "step": -1,
+            "timestamp": AnyStr(),
+            "type": "checkpoint",
+        },
+        {
+            "payload": {
+                "id": AnyStr(),
+                "input": {
+                    "a": 5,
+                },
+                "name": "graph",
+                "triggers": ("__start__",),
+            },
+            "step": 0,
+            "timestamp": AnyStr(),
+            "type": "task",
+        },
+        {
+            "payload": {
+                "id": AnyStr(),
+                "input": (
+                    (),
+                    {},
+                ),
+                "name": "falsy_task",
+                "triggers": ("__pregel_push",),
+            },
+            "step": 0,
+            "timestamp": AnyStr(),
+            "type": "task",
+        },
+        {
+            "payload": {
+                "error": None,
+                "id": AnyStr(),
+                "interrupts": [],
+                "name": "falsy_task",
+                "result": [
+                    (
+                        "__return__",
+                        False,
+                    ),
+                ],
+            },
+            "step": 0,
+            "timestamp": AnyStr(),
+            "type": "task_result",
+        },
+        {
+            "payload": {
+                "error": None,
+                "id": AnyStr(),
+                "interrupts": [
+                    {
+                        "ns": [
+                            AnyStr(),
+                        ],
+                        "resumable": True,
+                        "value": "test",
+                        "when": "during",
+                    },
+                ],
+                "name": "graph",
+                "result": [],
+            },
+            "step": 0,
+            "timestamp": AnyStr(),
+            "type": "task_result",
+        },
+    ]
+    assert [
+        c
+        for c in graph.stream(Command(resume="123"), configurable, stream_mode="debug")
+    ] == [
+        {
+            "payload": {
+                "config": {
+                    "callbacks": None,
+                    "configurable": {
+                        "checkpoint_id": AnyStr(),
+                        "checkpoint_ns": "",
+                        "thread_id": AnyStr(),
+                    },
+                    "metadata": configurable["configurable"],
+                    "recursion_limit": 25,
+                    "tags": [],
+                },
+                "metadata": {
+                    "parents": {},
+                    "source": "input",
+                    "step": -1,
+                    "thread_id": AnyStr(),
+                    "writes": {
+                        "__start__": {
+                            "a": 5,
+                        },
+                    },
+                },
+                "next": [
+                    "graph",
+                ],
+                "parent_config": None,
+                "tasks": [
+                    {
+                        "id": AnyStr(),
+                        "interrupts": (
+                            {
+                                "ns": [
+                                    AnyStr(),
+                                ],
+                                "resumable": True,
+                                "value": "test",
+                                "when": "during",
+                            },
+                        ),
+                        "name": "graph",
+                        "state": None,
+                    },
+                ],
+                "values": None,
+            },
+            "step": -1,
+            "timestamp": AnyStr(),
+            "type": "checkpoint",
+        },
+        {
+            "payload": {
+                "id": AnyStr(),
+                "input": {
+                    "a": 5,
+                },
+                "name": "graph",
+                "triggers": ("__start__",),
+            },
+            "step": 0,
+            "timestamp": AnyStr(),
+            "type": "task",
+        },
+        {
+            "payload": {
+                "id": AnyStr(),
+                "input": (
+                    (),
+                    {},
+                ),
+                "name": "falsy_task",
+                "triggers": ("__pregel_push",),
+            },
+            "step": 0,
+            "timestamp": AnyStr(),
+            "type": "task",
+        },
+        {
+            "payload": {
+                "error": None,
+                "id": AnyStr(),
+                "interrupts": [],
+                "name": "graph",
+                "result": [
+                    (
+                        "__end__",
+                        None,
+                    ),
+                ],
+            },
+            "step": 0,
+            "timestamp": AnyStr(),
+            "type": "task_result",
+        },
+        {
+            "payload": {
+                "config": {
+                    "callbacks": None,
+                    "configurable": {
+                        "checkpoint_id": AnyStr(),
+                        "checkpoint_ns": "",
+                        "thread_id": AnyStr(),
+                    },
+                    "metadata": configurable["configurable"],
+                    "recursion_limit": 25,
+                    "tags": [],
+                },
+                "metadata": {
+                    "parents": {},
+                    "source": "loop",
+                    "step": 0,
+                    "thread_id": AnyStr(),
+                    "writes": {
+                        "falsy_task": False,
+                        "graph": None,
+                    },
+                },
+                "next": [],
+                "parent_config": {
+                    "callbacks": None,
+                    "configurable": {
+                        "checkpoint_id": AnyStr(),
+                        "checkpoint_ns": "",
+                        "thread_id": AnyStr(),
+                    },
+                    "metadata": configurable["configurable"],
+                    "recursion_limit": 25,
+                    "tags": [],
+                },
+                "tasks": [],
+                "values": None,
+            },
+            "step": 0,
+            "timestamp": AnyStr(),
+            "type": "checkpoint",
+        },
+    ]
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
@@ -6689,7 +6925,7 @@ def test_tags_stream_mode_messages() -> None:
             {
                 "langgraph_step": 1,
                 "langgraph_node": "call_model",
-                "langgraph_triggers": ["start:call_model"],
+                "langgraph_triggers": ("start:call_model",),
                 "langgraph_path": ("__pregel_pull", "call_model"),
                 "langgraph_checkpoint_ns": AnyStr("call_model:"),
                 "checkpoint_ns": AnyStr("call_model:"),
@@ -7033,3 +7269,347 @@ def test_interrupt_subgraph_reenter_checkpointer_true(
     }
     # confirm that we preserve the state values from the previous invocation
     assert bar_values == [None, "barbaz", "quxbaz"]
+
+
+def test_empty_invoke() -> None:
+    from pydantic import BaseModel
+
+    def reducer_merge_dicts(
+        dict1: dict[Any, Any], dict2: dict[Any, Any]
+    ) -> dict[Any, Any]:
+        merged = {**dict1, **dict2}
+        return merged
+
+    class SimpleGraphState(BaseModel):
+        x1: Annotated[list[str], operator.add] = []
+        x2: Annotated[dict[str, Any], reducer_merge_dicts] = {}
+
+    def update_x1_1(state: SimpleGraphState):
+        print(state)
+        return {"x1": ["111"]}
+
+    def update_x1_2(state: SimpleGraphState):
+        print(state)
+        state.x1.append("222")
+        return {"x1": ["222"]}
+
+    def update_x2_1(state: SimpleGraphState):
+        print(state)
+        return {"x2": {"111": 111}}
+
+    def update_x2_2(state: SimpleGraphState):
+        print(state)
+        return {"x2": {"222": 222}}
+
+    graph = StateGraph(SimpleGraphState)
+    graph.add_node("x1_1_node", update_x1_1)
+    graph.add_node("x1_2_node", update_x1_2)
+    graph.add_node("x2_1_node", update_x2_1)
+    graph.add_node("x2_2_node", update_x2_2)
+    graph.add_edge("x1_1_node", "x1_2_node")
+    graph.add_edge("x1_2_node", "x2_1_node")
+    graph.add_edge("x2_1_node", "x2_2_node")
+
+    graph.add_edge(START, "x1_1_node")
+    graph.add_edge("x2_2_node", END)
+
+    compiled = graph.compile()
+
+    assert compiled.invoke(SimpleGraphState()).get("x2") == {
+        "111": 111,
+        "222": 222,
+    }
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_parallel_interrupts(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    from pydantic import BaseModel, Field
+
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    # --- CHILD GRAPH ---
+
+    class ChildState(BaseModel):
+        prompt: str = Field(..., description="What is going to be asked to the user?")
+        human_input: Optional[str] = Field(None, description="What the human said")
+        human_inputs: Annotated[List[str], operator.add] = Field(
+            default_factory=list, description="All of my messages"
+        )
+
+    def get_human_input(state: ChildState):
+        human_input = interrupt(state.prompt)
+
+        return dict(
+            human_input=human_input,  # update child state
+            human_inputs=[human_input],  # update parent state
+        )
+
+    child_graph_builder = StateGraph(ChildState)
+    child_graph_builder.add_node("get_human_input", get_human_input)
+    child_graph_builder.add_edge(START, "get_human_input")
+    child_graph_builder.add_edge("get_human_input", END)
+    child_graph = child_graph_builder.compile()
+
+    # --- PARENT GRAPH ---
+
+    class ParentState(BaseModel):
+        prompts: List[str] = Field(
+            ..., description="What is going to be asked to the user?"
+        )
+        human_inputs: Annotated[List[str], operator.add] = Field(
+            default_factory=list, description="All of my messages"
+        )
+
+    def assign_workers(state: ParentState):
+        return [
+            Send(
+                "child_graph",
+                dict(
+                    prompt=prompt,
+                ),
+            )
+            for prompt in state.prompts
+        ]
+
+    def cleanup(state: ParentState):
+        assert len(state.human_inputs) == len(state.prompts)
+
+    parent_graph_builder = StateGraph(ParentState)
+    parent_graph_builder.add_node("child_graph", child_graph)
+    parent_graph_builder.add_node("cleanup", cleanup)
+
+    parent_graph_builder.add_conditional_edges(START, assign_workers, ["child_graph"])
+    parent_graph_builder.add_edge("child_graph", "cleanup")
+    parent_graph_builder.add_edge("cleanup", END)
+
+    parent_graph = parent_graph_builder.compile(checkpointer=checkpointer)
+
+    # --- CLIENT INVOCATION ---
+
+    thread_config = dict(
+        configurable=dict(
+            thread_id=str(uuid.uuid4()),
+        )
+    )
+    current_input = dict(
+        prompts=["a", "b"],
+    )
+
+    invokes = 0
+    events: dict[int, list[dict]] = {}
+    while invokes < 10:
+        # reset interrupt
+        invokes += 1
+        events[invokes] = []
+        current_interrupts: list[Interrupt] = []
+
+        # start / resume the graph
+        for event in parent_graph.stream(
+            input=current_input,
+            config=thread_config,
+            stream_mode="updates",
+        ):
+            events[invokes].append(event)
+            # handle the interrupt
+            if "__interrupt__" in event:
+                current_interrupts.extend(event["__interrupt__"])
+                # assume that it breaks here, because it is an interrupt
+
+        # get human input and resume
+        if any(i.resumable for i in current_interrupts):
+            current_input = Command(resume=f"Resume #{invokes}")
+
+        # not more human input required, must be completed
+        else:
+            break
+    else:
+        assert False, "Detected infinite loop"
+
+    assert invokes == 3
+    assert len(events) == 3
+
+    assert events[1] == UnsortedSequence(
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="a",
+                    resumable=True,
+                    ns=[
+                        AnyStr("child_graph:"),
+                        AnyStr("get_human_input:"),
+                    ],
+                ),
+            )
+        },
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="b",
+                    resumable=True,
+                    ns=[
+                        AnyStr("child_graph:"),
+                        AnyStr("get_human_input:"),
+                    ],
+                ),
+            )
+        },
+    )
+    assert events[2] in (
+        UnsortedSequence(
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="a",
+                        resumable=True,
+                        ns=[
+                            AnyStr("child_graph:"),
+                            AnyStr("get_human_input:"),
+                        ],
+                    ),
+                )
+            },
+            {"child_graph": {"human_inputs": ["Resume #1"]}},
+        ),
+        UnsortedSequence(
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="b",
+                        resumable=True,
+                        ns=[
+                            AnyStr("child_graph:"),
+                            AnyStr("get_human_input:"),
+                        ],
+                    ),
+                )
+            },
+            {"child_graph": {"human_inputs": ["Resume #1"]}},
+        ),
+    )
+    assert events[3] == UnsortedSequence(
+        {
+            "child_graph": {"human_inputs": ["Resume #1"]},
+            "__metadata__": {"cached": True},
+        },
+        {"child_graph": {"human_inputs": ["Resume #2"]}},
+        {"cleanup": None},
+    )
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_parallel_interrupts_double(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    from pydantic import BaseModel, Field
+
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    # --- CHILD GRAPH ---
+
+    class ChildState(BaseModel):
+        prompt: str = Field(..., description="What is going to be asked to the user?")
+        human_input: Optional[str] = Field(None, description="What the human said")
+        human_inputs: Annotated[List[str], operator.add] = Field(
+            default_factory=list, description="All of my messages"
+        )
+
+    def get_human_input(state: ChildState):
+        human_input = interrupt(state.prompt)
+
+        return dict(
+            human_inputs=[human_input],  # update parent state
+        )
+
+    def get_dolphin_input(state: ChildState):
+        human_input = interrupt(state.prompt)
+
+        return dict(
+            human_inputs=[human_input],  # update parent state
+        )
+
+    child_graph_builder = StateGraph(ChildState)
+    child_graph_builder.add_node("get_human_input", get_human_input)
+    child_graph_builder.add_node("get_dolphin_input", get_dolphin_input)
+    child_graph_builder.add_edge(START, "get_human_input")
+    child_graph_builder.add_edge(START, "get_dolphin_input")
+    child_graph = child_graph_builder.compile()
+
+    # --- PARENT GRAPH ---
+
+    class ParentState(BaseModel):
+        prompts: List[str] = Field(
+            ..., description="What is going to be asked to the user?"
+        )
+        human_inputs: Annotated[List[str], operator.add] = Field(
+            default_factory=list, description="All of my messages"
+        )
+
+    def assign_workers(state: ParentState):
+        return [
+            Send(
+                "child_graph",
+                dict(
+                    prompt=prompt,
+                ),
+            )
+            for prompt in state.prompts
+        ]
+
+    def cleanup(state: ParentState):
+        assert len(state.human_inputs) == len(state.prompts) * 2
+
+    parent_graph_builder = StateGraph(ParentState)
+    parent_graph_builder.add_node("child_graph", child_graph)
+    parent_graph_builder.add_node("cleanup", cleanup)
+
+    parent_graph_builder.add_conditional_edges(START, assign_workers, ["child_graph"])
+    parent_graph_builder.add_edge("child_graph", "cleanup")
+    parent_graph_builder.add_edge("cleanup", END)
+
+    parent_graph = parent_graph_builder.compile(checkpointer=checkpointer)
+
+    # --- CLIENT INVOCATION ---
+
+    thread_config = dict(
+        configurable=dict(
+            thread_id=str(uuid.uuid4()),
+        )
+    )
+    current_input = dict(
+        prompts=["a", "b"],
+    )
+
+    invokes = 0
+    events: dict[int, list[dict]] = {}
+    while invokes < 10:
+        # reset interrupt
+        invokes += 1
+        events[invokes] = []
+        current_interrupts: list[Interrupt] = []
+
+        # start / resume the graph
+        for event in parent_graph.stream(
+            input=current_input,
+            config=thread_config,
+            stream_mode="updates",
+        ):
+            events[invokes].append(event)
+            # handle the interrupt
+            if "__interrupt__" in event:
+                current_interrupts.extend(event["__interrupt__"])
+                # assume that it breaks here, because it is an interrupt
+
+        # get human input and resume
+        if any(i.resumable for i in current_interrupts):
+            current_input = Command(resume=f"Resume #{invokes}")
+
+        # not more human input required, must be completed
+        else:
+            break
+    else:
+        assert False, "Detected infinite loop"
+
+    assert invokes == 5
+    assert len(events) == 5

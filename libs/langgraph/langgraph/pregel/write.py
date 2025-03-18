@@ -49,21 +49,18 @@ class ChannelWrite(RunnableCallable):
 
     writes: list[Union[ChannelWriteEntry, ChannelWriteTupleEntry, Send]]
     """Sequence of write entries or Send objects to write."""
-    require_at_least_one_of: Optional[Sequence[str]]
-    """If defined, at least one of these channels must be written to."""
 
     def __init__(
         self,
         writes: Sequence[Union[ChannelWriteEntry, ChannelWriteTupleEntry, Send]],
         *,
         tags: Optional[Sequence[str]] = None,
-        require_at_least_one_of: Optional[Sequence[str]] = None,
+        require_at_least_one_of: Optional[Sequence[str]] = None,  # ignored
     ):
         super().__init__(func=self._write, afunc=self._awrite, name=None, tags=tags)
         self.writes = cast(
             list[Union[ChannelWriteEntry, ChannelWriteTupleEntry, Send]], writes
         )
-        self.require_at_least_one_of = require_at_least_one_of
 
     def get_name(
         self, suffix: Optional[str] = None, *, name: Optional[str] = None
@@ -96,7 +93,6 @@ class ChannelWrite(RunnableCallable):
         self.do_write(
             config,
             writes,
-            self.require_at_least_one_of if input is not None else None,
         )
         return input
 
@@ -112,7 +108,6 @@ class ChannelWrite(RunnableCallable):
         self.do_write(
             config,
             writes,
-            self.require_at_least_one_of if input is not None else None,
         )
         return input
 
@@ -120,7 +115,7 @@ class ChannelWrite(RunnableCallable):
     def do_write(
         config: RunnableConfig,
         writes: Sequence[Union[ChannelWriteEntry, ChannelWriteTupleEntry, Send]],
-        require_at_least_one_of: Optional[Sequence[str]] = None,
+        require_at_least_one_of: Optional[Sequence[str]] = None,  # ignored
     ) -> None:
         # validate
         for w in writes:
@@ -151,12 +146,6 @@ class ChannelWrite(RunnableCallable):
                 tuples.append((w.channel, value))
             else:
                 raise ValueError(f"Invalid write entry: {w}")
-        # assert required channels
-        if require_at_least_one_of is not None:
-            if not {chan for chan, _ in tuples} & set(require_at_least_one_of):
-                raise InvalidUpdateError(
-                    f"Must write to at least one of {require_at_least_one_of}"
-                )
         write: TYPE_SEND = config[CONF][CONFIG_KEY_SEND]
         write(tuples)
 

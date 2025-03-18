@@ -27,11 +27,7 @@ from uuid import UUID
 import httpx
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
-from langchain_core.runnables import (
-    RunnableConfig,
-    RunnableLambda,
-    RunnablePassthrough,
-)
+from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePassthrough
 from langchain_core.utils.aiter import aclosing
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
@@ -938,10 +934,7 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
             async for c in tool_two.astream(
                 {"my_key": "value ⛰️", "market": "DE"}, thread2
             )
-        ] == [
-            {
-                "tool_one": {"my_key": " one"},
-            },
+        ] == UnsortedSequence(
             {
                 "__interrupt__": (
                     Interrupt(
@@ -951,7 +944,10 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
                     ),
                 )
             },
-        ]
+            {
+                "tool_one": {"my_key": " one"},
+            },
+        )
         # resume with answer
         assert [
             c async for c in tool_two.astream(Command(resume=" my answer"), thread2)
@@ -1672,7 +1668,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": AnyStr(),
                 "name": "one",
                 "input": 2,
-                "triggers": ["input"],
+                "triggers": ("input",),
             },
         },
         {
@@ -1683,7 +1679,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": AnyStr(),
                 "name": "two",
                 "input": [12],
-                "triggers": ["inbox"],
+                "triggers": ("inbox",),
             },
         },
         {
@@ -1718,7 +1714,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": AnyStr(),
                 "name": "two",
                 "input": [3],
-                "triggers": ["inbox"],
+                "triggers": ("inbox",),
             },
         },
         {
@@ -4524,6 +4520,7 @@ async def test_nested_pydantic_models(version: str) -> None:
     class NestedModel(BaseModel):
         value: int
         name: str
+        something: Optional[str] = None
 
     # Forward reference model
     class RecursiveModel(BaseModel):
@@ -4545,18 +4542,27 @@ async def test_nested_pydantic_models(version: str) -> None:
         name: str
         friends: list[str] = Field(default_factory=list)  # IDs of friends
 
+    class MyTypedDict(TypedDict):
+        x: int
+
     class State(BaseModel):
         # Basic nested model tests
         top_level: str
         nested: NestedModel
         optional_nested: Optional[NestedModel] = None
         dict_nested: dict[str, NestedModel]
+        my_set: set[int]
         list_nested: Annotated[
             Union[dict, list[dict[str, NestedModel]]], lambda x, y: (x or []) + [y]
+        ]
+        list_nested_reversed: Annotated[
+            Union[list[dict[str, NestedModel]], NestedModel, dict, list],
+            lambda x, y: (x or []) + [y],
         ]
         tuple_nested: tuple[str, NestedModel]
         tuple_list_nested: list[tuple[int, NestedModel]]
         complex_tuple: tuple[str, dict[str, tuple[int, NestedModel]]]
+        my_typed_dict: MyTypedDict
 
         # Forward reference test
         recursive: RecursiveModel
@@ -4572,8 +4578,11 @@ async def test_nested_pydantic_models(version: str) -> None:
         "top_level": "initial",
         "nested": {"value": 42, "name": "test"},
         "optional_nested": {"value": 10, "name": "optional"},
+        "my_set": [1, 2, 7],
+        "my_typed_dict": {"x": 1},
         "dict_nested": {"a": {"value": 5, "name": "a"}},
         "list_nested": [{"a": {"value": 6, "name": "b"}}],
+        "list_nested_reversed": ["foo", "bar"],
         "tuple_nested": ["tuple-key", {"value": 7, "name": "tuple-value"}],
         "tuple_list_nested": [[1, {"value": 8, "name": "tuple-in-list"}]],
         "complex_tuple": [
@@ -5882,10 +5891,12 @@ async def test_store_injected_async(checkpointer_name: str, store_name: str) -> 
         ):
             assert isinstance(store, BaseStore)
             await store.aput(
-                namespace
-                if self.i is not None
-                and config["configurable"]["thread_id"] in (thread_1, thread_2)
-                else (f"foo_{self.i}", "bar"),
+                (
+                    namespace
+                    if self.i is not None
+                    and config["configurable"]["thread_id"] in (thread_1, thread_2)
+                    else (f"foo_{self.i}", "bar")
+                ),
                 doc_id,
                 {
                     **doc,
@@ -6652,39 +6663,6 @@ async def test_command_goto_with_static_breakpoints(checkpointer_name: str) -> N
         await graph.ainvoke({"foo": "abc"}, config)
         result = await graph.ainvoke(Command(goto=["node2"]), config)
         assert result == {"foo": "abc|node-1|node-2|node-2"}
-
-
-async def test_nested_graph_state_error_handling():
-    """Test error handling when updating state in nested graphs."""
-
-    class State(TypedDict):
-        count: int
-
-    def child_node(state: State):
-        return {"count": state["count"] + 1}
-
-    child = StateGraph(State)
-    child.add_node("child", child_node)
-    child.add_edge(START, "child")
-
-    parent = StateGraph(State)
-    parent.add_node("child_graph", child.compile())
-    parent.add_edge(START, "child_graph")
-
-    app = parent.compile(checkpointer=MemorySaver())
-
-    # Test invalid state update on parent
-    with pytest.raises(InvalidUpdateError):
-        await app.aupdate_state(
-            {"configurable": {"thread_id": "1"}}, {"invalid_key": "value"}
-        )
-
-    # Test invalid state update on child
-    with pytest.raises(InvalidUpdateError):
-        await app.aupdate_state(
-            {"configurable": {"thread_id": "1", "checkpoint_ns": "child_graph"}},
-            {"invalid_key": "value"},
-        )
 
 
 async def test_parallel_node_execution():
@@ -7604,7 +7582,7 @@ async def test_tags_stream_mode_messages() -> None:
             {
                 "langgraph_step": 1,
                 "langgraph_node": "call_model",
-                "langgraph_triggers": ["start:call_model"],
+                "langgraph_triggers": ("start:call_model",),
                 "langgraph_path": ("__pregel_pull", "call_model"),
                 "langgraph_checkpoint_ns": AnyStr("call_model:"),
                 "checkpoint_ns": AnyStr("call_model:"),

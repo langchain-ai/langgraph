@@ -1,4 +1,5 @@
 import asyncio
+import concurrent.futures
 import json
 import logging
 import threading
@@ -74,6 +75,17 @@ CREATE TABLE IF NOT EXISTS store (
     """
 -- For faster lookups by prefix
 CREATE INDEX CONCURRENTLY IF NOT EXISTS store_prefix_idx ON store USING btree (prefix text_pattern_ops);
+""",
+    """
+-- Add expires_at column to store table
+ALTER TABLE store
+ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS ttl_minutes INT;
+""",
+    """
+-- Add indexes for efficient TTL sweeping
+CREATE INDEX IF NOT EXISTS idx_store_expires_at ON store (expires_at)
+WHERE expires_at IS NOT NULL;
 """,
 ]
 
@@ -225,20 +237,55 @@ class BasePostgresStore(Generic[C]):
         self,
         get_ops: Sequence[tuple[int, GetOp]],
     ) -> list[tuple[str, tuple, tuple[str, ...], list]]:
+        """
+        Build queries to fetch (and optionally refresh the TTL of) multiple keys per namespace.
+
+        Each returned element is a tuple of:
+        (sql_query_string, sql_params, namespace, items_for_this_namespace)
+
+        where items_for_this_namespace is the original list of (idx, key, refresh_ttl).
+        """
+
         namespace_groups = defaultdict(list)
+        refresh_ttls = defaultdict(list)
         for idx, op in get_ops:
             namespace_groups[op.namespace].append((idx, op.key))
+            refresh_ttls[op.namespace].append(op.refresh_ttl)
+
         results = []
         for namespace, items in namespace_groups.items():
             _, keys = zip(*items)
-            keys_to_query = ",".join(["%s"] * len(keys))
-            query = f"""
-                SELECT key, value, created_at, updated_at
-                FROM store
-                WHERE prefix = %s AND key IN ({keys_to_query})
+            this_refresh_ttls = refresh_ttls[namespace]
+
+            query = """
+                WITH passed_in AS (
+                    SELECT unnest(%s::text[]) AS key,
+                        unnest(%s::bool[])  AS do_refresh
+                ),
+                updated AS (
+                    UPDATE store s
+                    SET expires_at = NOW() + (s.ttl_minutes || ' minutes')::interval
+                    FROM passed_in p
+                    WHERE s.prefix = %s
+                    AND s.key    = p.key
+                    AND p.do_refresh = TRUE
+                    AND s.ttl_minutes IS NOT NULL
+                    RETURNING s.key
+                )
+                SELECT s.key, s.value, s.created_at, s.updated_at
+                FROM store s
+                JOIN passed_in p ON s.key = p.key
+                WHERE s.prefix = %s
             """
-            params = (_namespace_to_text(namespace), *keys)
+            ns_text = _namespace_to_text(namespace)
+            params = (
+                list(keys),  # -> unnest(%s::text[])
+                list(this_refresh_ttls),  # -> unnest(%s::bool[])
+                ns_text,  # -> prefix = %s (for UPDATE)
+                ns_text,  # -> prefix = %s (for final SELECT)
+            )
             results.append((query, params, namespace, items))
+
         return results
 
     def _prepare_batch_PUT_queries(
@@ -248,7 +295,6 @@ class BasePostgresStore(Generic[C]):
         list[tuple[str, Sequence]],
         Optional[tuple[str, Sequence[tuple[str, str, str, str]]]],
     ]:
-        # Last-write wins
         dedupped_ops: dict[tuple[tuple[str, ...], str], PutOp] = {}
         for _, op in put_ops:
             dedupped_ops[(op.namespace, op.key)] = op
@@ -282,15 +328,26 @@ class BasePostgresStore(Generic[C]):
             insertion_params = []
             vector_values = []
             embedding_request_params = []
+            # Handle TTL expiration
 
             # First handle main store insertions
             for op in inserts:
-                values.append("(%s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
+                if op.ttl is not None:
+                    expires_at_str = f"NOW() + INTERVAL '{op.ttl*60} seconds'"
+                    ttl_minutes = op.ttl
+                else:
+                    expires_at_str = "NULL"
+                    ttl_minutes = None
+
+                values.append(
+                    f"(%s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, {expires_at_str}, %s)"
+                )
                 insertion_params.extend(
                     [
                         _namespace_to_text(op.namespace),
                         op.key,
                         Jsonb(cast(dict, op.value)),
+                        ttl_minutes,
                     ]
                 )
 
@@ -304,7 +361,7 @@ class BasePostgresStore(Generic[C]):
                     k = op.key
 
                     if op.index is None:
-                        paths = self.index_config["__tokenized_fields"]
+                        paths = cast(dict, self.index_config)["__tokenized_fields"]
                     else:
                         paths = [(ix, tokenize_path(ix)) for ix in op.index]
 
@@ -319,11 +376,13 @@ class BasePostgresStore(Generic[C]):
 
             values_str = ",".join(values)
             query = f"""
-                INSERT INTO store (prefix, key, value, created_at, updated_at)
+                INSERT INTO store (prefix, key, value, created_at, updated_at, expires_at, ttl_minutes)
                 VALUES {values_str}
                 ON CONFLICT (prefix, key) DO UPDATE
                 SET value = EXCLUDED.value,
-                    updated_at = CURRENT_TIMESTAMP
+                    updated_at = CURRENT_TIMESTAMP,
+                    expires_at = EXCLUDED.expires_at,
+                    ttl_minutes = EXCLUDED.ttl_minutes
             """
             queries.append((query, insertion_params))
 
@@ -347,92 +406,105 @@ class BasePostgresStore(Generic[C]):
         list[tuple[str, list[Union[None, str, list[float]]]]],  # queries, params
         list[tuple[int, str]],  # idx, query_text pairs to embed
     ]:
+        """
+        Build per-SearchOp SQL queries (with optional TTL refresh) plus embedding requests.
+        Returns:
+        - queries: list of (SQL, param_list)
+        - embedding_requests: list of (original_index_in_search_ops, text_query)
+        """
+
         queries = []
         embedding_requests = []
-
         for idx, (_, op) in enumerate(search_ops):
-            # Build filter conditions first
             filter_params = []
-            filter_conditions = []
+            filter_clauses = []
             if op.filter:
                 for key, value in op.filter.items():
                     if isinstance(value, dict):
                         for op_name, val in value.items():
-                            condition, filter_params_ = self._get_filter_condition(
+                            condition, params_ = self._get_filter_condition(
                                 key, op_name, val
                             )
-                            filter_conditions.append(condition)
-                            filter_params.extend(filter_params_)
+                            filter_clauses.append(condition)
+                            filter_params.extend(params_)
                     else:
-                        filter_conditions.append("value->%s = %s::jsonb")
-                        filter_params.extend([key, json.dumps(value)])
+                        filter_clauses.append("value->%s = %s::jsonb")
+                        filter_params.extend([key, orjson.dumps(value).decode("utf-8")])
 
-            # Vector search branch
+            ns_condition = "TRUE"
+            ns_param: Optional[Sequence[Union[str]]] = None
+            if op.namespace_prefix:
+                ns_condition = "store.prefix LIKE %s"
+                ns_param = (f"{_namespace_to_text(op.namespace_prefix)}%",)
+            else:
+                ns_param = ()
+
+            extra_filters = (
+                " AND " + " AND ".join(filter_clauses) if filter_clauses else ""
+            )
+
             if op.query and self.index_config:
+                # We'll embed the text later, so record the request.
                 embedding_requests.append((idx, op.query))
 
                 score_operator, post_operator = get_distance_operator(self)
+                post_operator = post_operator.replace("scored", "uniq")
                 vector_type = (
                     cast(PostgresIndexConfig, self.index_config)
                     .get("ann_index_config", {})
                     .get("vector_type", "vector")
                 )
 
+                # For hamming bit vectors, or “regular” vectors
                 if (
                     vector_type == "bit"
-                    and self.index_config.get("distance_type") == "hamming"
+                    and cast(dict, self.index_config).get("distance_type") == "hamming"
                 ):
                     score_operator = score_operator % (
                         "%s",
-                        self.index_config["dims"],
+                        cast(dict, self.index_config)["dims"],
                     )
                 else:
-                    score_operator = score_operator % (
-                        "%s",
-                        vector_type,
-                    )
+                    score_operator = score_operator % ("%s", vector_type)
 
-                vectors_per_doc_estimate = self.index_config["__estimated_num_vectors"]
+                vectors_per_doc_estimate = cast(dict, self.index_config)[
+                    "__estimated_num_vectors"
+                ]
                 expanded_limit = (op.limit * vectors_per_doc_estimate * 2) + 1
 
-                # Vector search with CTE for proper score handling
-                filter_str = (
-                    ""
-                    if not filter_conditions
-                    else " AND " + " AND ".join(filter_conditions)
-                )
-                if op.namespace_prefix:
-                    prefix_filter_str = f"WHERE s.prefix LIKE %s {filter_str} "
-                    ns_args: Sequence = (f"{_namespace_to_text(op.namespace_prefix)}%",)
-                else:
-                    ns_args = ()
-                    if filter_str:
-                        prefix_filter_str = f"WHERE {filter_str} "
-                    else:
-                        prefix_filter_str = ""
-
-                base_query = f"""
-                    WITH scored AS (
-                        SELECT s.prefix, s.key, s.value, s.created_at, s.updated_at, {score_operator} AS neg_score
-                        FROM store s
-                        JOIN store_vectors sv ON s.prefix = sv.prefix AND s.key = sv.key
-                        {prefix_filter_str}
-                        ORDER BY {score_operator} ASC 
+                # “sub_scored” does the main vector search
+                # Then we do DISTINCT ON to drop duplicates if your store can have them
+                # Finally we limit & offset
+                vector_search_cte = f"""
+                        SELECT store.prefix, store.key, store.value, store.created_at, store.updated_at,
+                            {score_operator} AS neg_score
+                        FROM store
+                        JOIN store_vectors sv ON store.prefix = sv.prefix AND store.key = sv.key
+                        WHERE {ns_condition} {extra_filters}
+                        ORDER BY {score_operator} ASC
                         LIMIT %s
-                    )
-                    SELECT * FROM (
-                        SELECT DISTINCT ON (prefix, key) 
-                            prefix, key, value, created_at, updated_at, {post_operator} as score 
-                        FROM scored 
-                        ORDER BY prefix, key, score DESC
-                    ) AS unique_docs
-                    ORDER BY score DESC
-                    LIMIT %s
-                    OFFSET %s
-                """
-                params = [
-                    PLACEHOLDER,  # Vector placeholder
-                    *ns_args,
+                    """
+
+                search_results_sql = f"""
+                        WITH scored AS (
+                            {vector_search_cte}
+                        )
+                        SELECT uniq.prefix, uniq.key, uniq.value, uniq.created_at, uniq.updated_at,
+                            {post_operator} AS score
+                        FROM (
+                            SELECT DISTINCT ON (scored.prefix, scored.key)
+                                scored.prefix, scored.key, scored.value, scored.created_at, scored.updated_at, scored.neg_score
+                            FROM scored
+                            ORDER BY scored.prefix, scored.key, scored.neg_score ASC
+                        ) uniq
+                        ORDER BY score DESC
+                        LIMIT %s
+                        OFFSET %s
+                    """
+
+                search_results_params = [
+                    PLACEHOLDER,
+                    *ns_param,
                     *filter_params,
                     PLACEHOLDER,
                     expanded_limit,
@@ -440,24 +512,45 @@ class BasePostgresStore(Generic[C]):
                     op.offset,
                 ]
 
-            # Regular search branch
             else:
-                base_query = """
-                    SELECT prefix, key, value, created_at, updated_at
-                    FROM store
-                    WHERE prefix LIKE %s
-                """
-                params = [f"{_namespace_to_text(op.namespace_prefix)}%"]
+                base_query = f"""
+                        SELECT store.prefix, store.key, store.value, store.created_at, store.updated_at, NULL AS score
+                        FROM store
+                        WHERE {ns_condition} {extra_filters}
+                        ORDER BY store.updated_at DESC
+                        LIMIT %s
+                        OFFSET %s
+                    """
+                search_results_sql = base_query
+                search_results_params = [
+                    *ns_param,
+                    *filter_params,
+                    op.limit,
+                    op.offset,
+                ]
 
-                if filter_conditions:
-                    params.extend(filter_params)
-                    base_query += " AND " + " AND ".join(filter_conditions)
-
-                base_query += " ORDER BY updated_at DESC"
-                base_query += " LIMIT %s OFFSET %s"
-                params.extend([op.limit, op.offset])
-
-            queries.append((base_query, params))
+            if op.refresh_ttl:
+                # Wrap entire primary query in a CTE, then perform "update_at"
+                final_sql = f"""
+                        WITH search_results AS (
+                            {search_results_sql}
+                        ),
+                        updated AS (
+                            UPDATE store s
+                            SET expires_at = NOW() + (s.ttl_minutes || ' minutes')::interval
+                            FROM search_results sr
+                            WHERE s.prefix = sr.prefix
+                            AND s.key = sr.key
+                            AND s.ttl_minutes IS NOT NULL
+                        )
+                        SELECT sr.prefix, sr.key, sr.value, sr.created_at, sr.updated_at, sr.score
+                        FROM search_results sr
+                    """
+                final_params = search_results_params[:]  # copy
+            else:
+                final_sql = search_results_sql
+                final_params = search_results_params
+            queries.append((final_sql, final_params))
 
         return queries, embedding_requests
 
@@ -603,6 +696,11 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         Make sure to call `setup()` before first use to create necessary tables and indexes.
         The pgvector extension must be available to use vector search.
 
+    Note:
+        If you provide a TTL configuration, you must explicitly call `start_ttl_sweeper()` to begin
+        the background thread that removes expired items. Call `stop_ttl_sweeper()` to properly
+        clean up resources when you're done with the store.
+
     """
 
     __slots__ = (
@@ -612,7 +710,10 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         "supports_pipeline",
         "index_config",
         "embeddings",
+        "_ttl_sweeper_thread",
+        "_ttl_stop_event",
     )
+    supports_ttl: bool = True
 
     def __init__(
         self,
@@ -637,6 +738,8 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         else:
             self.embeddings = None
         self.ttl_config = ttl
+        self._ttl_sweeper_thread: Optional[threading.Thread] = None
+        self._ttl_stop_event = threading.Event()
 
     @classmethod
     @contextmanager
@@ -647,6 +750,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         pipeline: bool = False,
         pool_config: Optional[PoolConfig] = None,
         index: Optional[PostgresIndexConfig] = None,
+        ttl: Optional[TTLConfig] = None,
     ) -> Iterator["PostgresStore"]:
         """Create a new PostgresStore instance from a connection string.
 
@@ -678,16 +782,123 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                     **cast(dict, pc),
                 ),
             ) as pool:
-                yield cls(conn=pool, index=index)
+                yield cls(conn=pool, index=index, ttl=ttl)
         else:
             with Connection.connect(
                 conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
             ) as conn:
                 if pipeline:
                     with conn.pipeline() as pipe:
-                        yield cls(conn, pipe=pipe, index=index)
+                        yield cls(conn, pipe=pipe, index=index, ttl=ttl)
                 else:
-                    yield cls(conn, index=index)
+                    yield cls(conn, index=index, ttl=ttl)
+
+    def sweep_ttl(self) -> int:
+        """Delete expired store items based on TTL.
+
+        Returns:
+            int: The number of deleted items.
+        """
+        with self._cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM store
+                WHERE expires_at IS NOT NULL AND expires_at < NOW()
+                """
+            )
+            deleted_count = cur.rowcount
+            return deleted_count
+
+    def start_ttl_sweeper(
+        self, sweep_interval_minutes: Optional[int] = None
+    ) -> concurrent.futures.Future[None]:
+        """Periodically delete expired store items based on TTL.
+
+        Returns:
+            Future that can be waited on or cancelled.
+        """
+        if not self.ttl_config:
+            future: concurrent.futures.Future[None] = concurrent.futures.Future()
+            future.set_result(None)
+            return future
+
+        if self._ttl_sweeper_thread and self._ttl_sweeper_thread.is_alive():
+            logger.info("TTL sweeper thread is already running")
+            # Return a future that can be used to cancel the existing thread
+            future = concurrent.futures.Future()
+            future.add_done_callback(
+                lambda f: self._ttl_stop_event.set() if f.cancelled() else None
+            )
+            return future
+
+        self._ttl_stop_event.clear()
+
+        interval = float(
+            sweep_interval_minutes or self.ttl_config.get("sweep_interval_minutes") or 5
+        )
+        logger.info(f"Starting store TTL sweeper with interval {interval} minutes")
+
+        future = concurrent.futures.Future()
+
+        def _sweep_loop() -> None:
+            try:
+                while not self._ttl_stop_event.is_set():
+                    if self._ttl_stop_event.wait(interval * 60):
+                        break
+
+                    try:
+                        expired_items = self.sweep_ttl()
+                        if expired_items > 0:
+                            logger.info(f"Store swept {expired_items} expired items")
+                    except Exception as exc:
+                        logger.exception(
+                            "Store TTL sweep iteration failed", exc_info=exc
+                        )
+                future.set_result(None)
+            except Exception as exc:
+                future.set_exception(exc)
+
+        thread = threading.Thread(target=_sweep_loop, daemon=True, name="ttl-sweeper")
+        self._ttl_sweeper_thread = thread
+        thread.start()
+
+        future.add_done_callback(
+            lambda f: self._ttl_stop_event.set() if f.cancelled() else None
+        )
+        return future
+
+    def stop_ttl_sweeper(self, timeout: Optional[float] = None) -> bool:
+        """Stop the TTL sweeper thread if it's running.
+
+        Args:
+            timeout: Maximum time to wait for the thread to stop, in seconds.
+                If None, wait indefinitely.
+
+        Returns:
+            bool: True if the thread was successfully stopped or wasn't running,
+                False if the timeout was reached before the thread stopped.
+        """
+        if not self._ttl_sweeper_thread or not self._ttl_sweeper_thread.is_alive():
+            return True
+
+        logger.info("Stopping TTL sweeper thread")
+        self._ttl_stop_event.set()
+
+        self._ttl_sweeper_thread.join(timeout)
+        success = not self._ttl_sweeper_thread.is_alive()
+
+        if success:
+            self._ttl_sweeper_thread = None
+            logger.info("TTL sweeper thread stopped")
+        else:
+            logger.warning("Timed out waiting for TTL sweeper thread to stop")
+
+        return success
+
+    def __del__(self) -> None:
+        """Ensure the TTL sweeper thread is stopped when the object is garbage collected."""
+        if hasattr(self, "_ttl_stop_event") and hasattr(self, "_ttl_sweeper_thread"):
+            self.stop_ttl_sweeper(timeout=0.1)
 
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
@@ -886,8 +1097,14 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         with self._cursor() as cur:
             version = _get_version(cur, table="store_migrations")
             for v, sql in enumerate(self.MIGRATIONS[version + 1 :], start=version + 1):
-                cur.execute(sql)
-                cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
+                try:
+                    cur.execute(sql)
+                    cur.execute("INSERT INTO store_migrations (v) VALUES (%s)", (v,))
+                except Exception as e:
+                    logger.error(
+                        f"Failed to apply migration {v}.\nSql={sql}\nError={e}"
+                    )
+                    raise
 
             if self.index_config:
                 version = _get_version(cur, table="vector_migrations")

@@ -60,6 +60,9 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
             raise EmptyChannelError()
         return None
 
+    def is_available(self) -> bool:
+        return self.seen == self.names
+
     def consume(self) -> bool:
         if self.seen == self.names:
             self.seen = set()
