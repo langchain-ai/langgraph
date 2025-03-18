@@ -821,9 +821,11 @@ class CompiledStateGraph(CompiledGraph):
             input_values = {k: k for k in self.builder.schemas[input_schema]}
             is_single_input = len(input_values) == 1 and "__root__" in input_values
 
+            branch_channel = f"branch:to:{key}"
             self.channels[key] = EphemeralValue(Any, guard=False)
+            self.channels[branch_channel] = EphemeralValue(Any, guard=False)
             self.nodes[key] = PregelNode(
-                triggers=[],
+                triggers=[branch_channel],
                 # read state keys and managed values
                 channels=(list(input_values) if is_single_input else input_values),
                 # coerce state dict to schema class (eg. pydantic model)
@@ -878,7 +880,7 @@ class CompiledStateGraph(CompiledGraph):
             if filtered := [p for p in packets if p != END]:
                 writes = [
                     (
-                        ChannelWriteEntry(f"branch:{start}:{name}:{p}", start)
+                        ChannelWriteEntry(f"branch:to:{p}", start)
                         if not isinstance(p, Send)
                         else p
                     )
@@ -914,11 +916,6 @@ class CompiledStateGraph(CompiledGraph):
             if branch.ends
             else [node for node in self.builder.nodes if node != branch.then]
         )
-        for end in ends:
-            if end != END:
-                channel_name = f"branch:{start}:{name}:{end}"
-                self.channels[channel_name] = EphemeralValue(Any, guard=False)
-                self.nodes[end].triggers.append(channel_name)
 
         # attach then subscriber
         if branch.then and branch.then != END:

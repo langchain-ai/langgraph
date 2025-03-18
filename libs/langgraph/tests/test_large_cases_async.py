@@ -2317,7 +2317,7 @@ async def test_prebuilt_tool_chat() -> None:
             {
                 "langgraph_step": 2,
                 "langgraph_node": "tools",
-                "langgraph_triggers": ["branch:agent:should_continue:tools"],
+                "langgraph_triggers": ["branch:to:tools"],
                 "langgraph_path": ("__pregel_pull", "tools"),
                 "langgraph_checkpoint_ns": AnyStr("tools:"),
             },
@@ -2376,7 +2376,7 @@ async def test_prebuilt_tool_chat() -> None:
             {
                 "langgraph_step": 4,
                 "langgraph_node": "tools",
-                "langgraph_triggers": ["branch:agent:should_continue:tools"],
+                "langgraph_triggers": ["branch:to:tools"],
                 "langgraph_path": ("__pregel_pull", "tools"),
                 "langgraph_checkpoint_ns": AnyStr("tools:"),
             },
@@ -2390,7 +2390,7 @@ async def test_prebuilt_tool_chat() -> None:
             {
                 "langgraph_step": 4,
                 "langgraph_node": "tools",
-                "langgraph_triggers": ["branch:agent:should_continue:tools"],
+                "langgraph_triggers": ["branch:to:tools"],
                 "langgraph_path": ("__pregel_pull", "tools"),
                 "langgraph_checkpoint_ns": AnyStr("tools:"),
             },
@@ -4537,7 +4537,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                     "id": AnyStr(),
                     "name": "tool_two_slow",
                     "input": {"my_key": "value prepared", "market": "DE"},
-                    "triggers": ["branch:prepare:condition:tool_two_slow"],
+                    "triggers": ["branch:to:tool_two_slow"],
                 },
             },
             {
@@ -7231,9 +7231,7 @@ async def test_weather_subgraph(
                             "langgraph_node": "weather_graph",
                             "langgraph_path": [PULL, "weather_graph"],
                             "langgraph_step": 2,
-                            "langgraph_triggers": [
-                                "branch:router_node:route_after_prediction:weather_graph"
-                            ],
+                            "langgraph_triggers": ["branch:to:weather_graph"],
                             "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
                         },
                         created_at=AnyStr(),
@@ -7347,9 +7345,7 @@ async def test_weather_subgraph(
                             "langgraph_node": "weather_graph",
                             "langgraph_path": [PULL, "weather_graph"],
                             "langgraph_step": 2,
-                            "langgraph_triggers": [
-                                "branch:router_node:route_after_prediction:weather_graph"
-                            ],
+                            "langgraph_triggers": ["branch:to:weather_graph"],
                             "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
                         },
                         created_at=AnyStr(),
