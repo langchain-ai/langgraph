@@ -1,4 +1,5 @@
 import asyncio
+import binascii
 import concurrent.futures
 from collections.abc import Sequence
 from contextlib import (
@@ -19,7 +20,7 @@ import langgraph.scheduler.kafka.serde as serde
 from langgraph.constants import CONFIG_KEY_DELEGATE, ERROR
 from langgraph.errors import CheckpointNotLatest, GraphDelegate, TaskNotFound
 from langgraph.pregel import Pregel
-from langgraph.pregel.algo import prepare_single_task
+from langgraph.pregel.algo import checkpoint_null_version, prepare_single_task
 from langgraph.pregel.executor import (
     AsyncBackgroundExecutor,
     BackgroundExecutor,
@@ -421,6 +422,10 @@ class KafkaExecutor(AbstractContextManager):
                 step=saved.metadata["step"] + 1,
                 for_execution=True,
                 checkpointer=self.graph.checkpointer,
+                checkpoint_id_bytes=binascii.unhexlify(
+                    saved.checkpoint["id"].replace("-", "")
+                ),
+                checkpoint_null_version=checkpoint_null_version(saved.checkpoint),
             ):
                 # execute task, saving writes
                 runner = PregelRunner(

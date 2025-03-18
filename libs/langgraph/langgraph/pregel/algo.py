@@ -1,3 +1,4 @@
+import binascii
 import itertools
 import sys
 from collections import defaultdict, deque
@@ -373,6 +374,8 @@ def prepare_next_tasks(
     """Prepare the set of tasks that will make up the next Pregel step.
     This is the union of all PUSH tasks (Sends) and PULL tasks (nodes triggered
     by edges)."""
+    checkpoint_id_bytes = binascii.unhexlify(checkpoint["id"].replace("-", ""))
+    null_version = checkpoint_null_version(checkpoint)
     tasks: list[Union[PregelTask, PregelExecutableTask]] = []
     # Consume pending_sends from previous step
     for idx, _ in enumerate(checkpoint["pending_sends"]):
@@ -380,6 +383,8 @@ def prepare_next_tasks(
             (PUSH, idx),
             None,
             checkpoint=checkpoint,
+            checkpoint_id_bytes=checkpoint_id_bytes,
+            checkpoint_null_version=null_version,
             pending_writes=pending_writes,
             processes=processes,
             channels=channels,
@@ -399,6 +404,8 @@ def prepare_next_tasks(
             (PULL, name),
             None,
             checkpoint=checkpoint,
+            checkpoint_id_bytes=checkpoint_id_bytes,
+            checkpoint_null_version=null_version,
             pending_writes=pending_writes,
             processes=processes,
             channels=channels,
@@ -419,6 +426,8 @@ def prepare_single_task(
     task_id_checksum: Optional[str],
     *,
     checkpoint: Checkpoint,
+    checkpoint_id_bytes: bytes,
+    checkpoint_null_version: Optional[V],
     pending_writes: list[PendingWrite],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
@@ -432,7 +441,6 @@ def prepare_single_task(
 ) -> Union[None, PregelTask, PregelExecutableTask]:
     """Prepares a single task for the next Pregel step, given a task path, which
     uniquely identifies a PUSH or PULL task within the graph."""
-    checkpoint_id = checkpoint["id"].encode()
     configurable = config.get(CONF, {})
     parent_ns = configurable.get(CONFIG_KEY_CHECKPOINT_NS, "")
 
@@ -448,7 +456,7 @@ def prepare_single_task(
         triggers = [PUSH]
         checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
         task_id = _uuid5_str(
-            checkpoint_id,
+            checkpoint_id_bytes,
             checkpoint_ns,
             str(step),
             name,
@@ -544,7 +552,7 @@ def prepare_single_task(
                 f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
             )
             task_id = _uuid5_str(
-                checkpoint_id,
+                checkpoint_id_bytes,
                 checkpoint_ns,
                 str(step),
                 packet.node,
@@ -641,17 +649,14 @@ def prepare_single_task(
         if name not in processes:
             return
         proc = processes[name]
-        versions = checkpoint["channel_versions"]
-        version_type = type(next(iter(versions.values()), None))
-        null_version = version_type()  # type: ignore[misc]
-        if null_version is None:
+        if checkpoint_null_version is None:
             return
         # If any of the channels read by this process were updated
         if triggers := _triggers(
             channels,
-            versions,
+            checkpoint["channel_versions"],
             checkpoint["versions_seen"].get(name),
-            null_version,
+            checkpoint_null_version,
             proc,
         ):
             try:
@@ -670,7 +675,7 @@ def prepare_single_task(
             # create task id
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
             task_id = _uuid5_str(
-                checkpoint_id,
+                checkpoint_id_bytes,
                 checkpoint_ns,
                 str(step),
                 name,
@@ -759,6 +764,15 @@ def prepare_single_task(
                     )
             else:
                 return PregelTask(task_id, name, task_path[:3])
+
+
+def checkpoint_null_version(
+    checkpoint: Checkpoint,
+) -> Optional[V]:
+    """Get the null version for the checkpoint, if available."""
+    for version in checkpoint["channel_versions"].values():
+        return type(version)()
+    return None
 
 
 def _triggers(

@@ -1,4 +1,5 @@
 import asyncio
+import binascii
 import concurrent.futures
 from collections import defaultdict, deque
 from contextlib import AsyncExitStack, ExitStack
@@ -79,6 +80,7 @@ from langgraph.pregel.algo import (
     GetNextVersion,
     PregelTaskWrites,
     apply_writes,
+    checkpoint_null_version,
     increment,
     prepare_next_tasks,
     prepare_single_task,
@@ -347,12 +349,16 @@ class PregelLoop(LoopProtocol):
         ):
             self.to_interrupt.append(task)
             return
+        checkpoint_id_bytes = binascii.unhexlify(self.checkpoint["id"].replace("-", ""))
+        null_version = checkpoint_null_version(self.checkpoint)
         if pushed := cast(
             Optional[PregelExecutableTask],
             prepare_single_task(
                 (PUSH, task.path, write_idx, task.id, call),
                 None,
                 checkpoint=self.checkpoint,
+                checkpoint_id_bytes=checkpoint_id_bytes,
+                checkpoint_null_version=null_version,
                 pending_writes=self.checkpoint_pending_writes,
                 processes=self.nodes,
                 channels=self.channels,
