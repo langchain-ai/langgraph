@@ -817,7 +817,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": AnyStr(),
                 "name": "one",
                 "input": 2,
-                "triggers": ["input"],
+                "triggers": ("input",),
             },
         },
         {
@@ -828,7 +828,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": AnyStr(),
                 "name": "two",
                 "input": [12],
-                "triggers": ["inbox"],
+                "triggers": ("inbox",),
             },
         },
         {
@@ -863,7 +863,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": AnyStr(),
                 "name": "two",
                 "input": [3],
-                "triggers": ["inbox"],
+                "triggers": ("inbox",),
             },
         },
         {
@@ -5969,9 +5969,7 @@ def test_falsy_return_from_task(
                     "a": 5,
                 },
                 "name": "graph",
-                "triggers": [
-                    "__start__",
-                ],
+                "triggers": ("__start__",),
             },
             "step": 0,
             "timestamp": AnyStr(),
@@ -5985,9 +5983,7 @@ def test_falsy_return_from_task(
                     {},
                 ),
                 "name": "falsy_task",
-                "triggers": [
-                    "__pregel_push",
-                ],
+                "triggers": ("__pregel_push",),
             },
             "step": 0,
             "timestamp": AnyStr(),
@@ -6094,9 +6090,7 @@ def test_falsy_return_from_task(
                     "a": 5,
                 },
                 "name": "graph",
-                "triggers": [
-                    "__start__",
-                ],
+                "triggers": ("__start__",),
             },
             "step": 0,
             "timestamp": AnyStr(),
@@ -6110,9 +6104,7 @@ def test_falsy_return_from_task(
                     {},
                 ),
                 "name": "falsy_task",
-                "triggers": [
-                    "__pregel_push",
-                ],
+                "triggers": ("__pregel_push",),
             },
             "step": 0,
             "timestamp": AnyStr(),
@@ -6923,7 +6915,7 @@ def test_tags_stream_mode_messages() -> None:
             {
                 "langgraph_step": 1,
                 "langgraph_node": "call_model",
-                "langgraph_triggers": ["start:call_model"],
+                "langgraph_triggers": ("start:call_model",),
                 "langgraph_path": ("__pregel_pull", "call_model"),
                 "langgraph_checkpoint_ns": AnyStr("call_model:"),
                 "checkpoint_ns": AnyStr("call_model:"),
