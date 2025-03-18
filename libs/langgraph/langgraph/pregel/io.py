@@ -28,7 +28,7 @@ def is_task_id(task_id: str) -> bool:
     """Check if a string is a valid task id."""
     try:
         UUID(task_id)
-    except ValueError:
+    except Exception:
         return False
     return True
 

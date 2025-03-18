@@ -293,8 +293,9 @@ def tasks_w_writes(
                 ),
                 tuple(
                     v
-                    for tid, n, v in pending_writes
+                    for tid, n, vv in pending_writes
                     if tid == task.id and n == INTERRUPT
+                    for v in (vv if isinstance(vv, Sequence) else [vv])
                 ),
                 states.get(task.id) if states else None,
                 (
