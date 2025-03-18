@@ -10,6 +10,7 @@ from typing import (
 from typing_extensions import NotRequired, Required, Self
 
 from langgraph.channels.base import BaseChannel, Value
+from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError
 
 
@@ -51,7 +52,7 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
         try:
             self.value = typ()
         except Exception:
-            pass
+            self.value = MISSING
 
     def __eq__(self, value: object) -> bool:
         return isinstance(value, BinaryOperatorAggregate) and (
@@ -81,7 +82,7 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
     def update(self, values: Sequence[Value]) -> bool:
         if not values:
             return False
-        if not hasattr(self, "value"):
+        if self.value is MISSING:
             self.value = values[0]
             values = values[1:]
         for value in values:
@@ -89,7 +90,9 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
         return True
 
     def get(self) -> Value:
-        try:
-            return self.value
-        except AttributeError:
+        if self.value is MISSING:
             raise EmptyChannelError()
+        return self.value
+
+    def is_available(self) -> bool:
+        return self.value is not MISSING

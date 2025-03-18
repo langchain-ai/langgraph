@@ -14,7 +14,6 @@ from langgraph.constants import (
     NULL_TASK_ID,
     RESUME,
     RETURN,
-    SELF,
     START,
     TAG_HIDDEN,
     TASKS,
@@ -38,14 +37,11 @@ def read_channel(
     chan: str,
     *,
     catch: bool = True,
-    return_exception: bool = False,
 ) -> Any:
     try:
         return channels[chan].get()
-    except EmptyChannelError as exc:
-        if return_exception:
-            return exc
-        elif catch:
+    except EmptyChannelError:
+        if catch:
             return None
         else:
             raise
@@ -84,7 +80,7 @@ def map_command(
             if isinstance(send, Send):
                 yield (NULL_TASK_ID, TASKS, send)
             elif isinstance(send, str):
-                yield (NULL_TASK_ID, f"branch:{START}:{SELF}:{send}", START)
+                yield (NULL_TASK_ID, f"branch:to:{send}", START)
             else:
                 raise TypeError(
                     f"In Command.goto, expected Send/str, got {type(send).__name__}"
