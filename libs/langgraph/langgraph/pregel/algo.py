@@ -650,9 +650,7 @@ def prepare_single_task(
         if triggers := sorted(
             chan
             for chan in proc.triggers
-            if not isinstance(
-                read_channel(channels, chan, return_exception=True), EmptyChannelError
-            )
+            if channels[chan].is_available()
             and checkpoint["channel_versions"].get(chan, null_version)  # type: ignore[operator]
             > seen.get(chan, null_version)
         ):
