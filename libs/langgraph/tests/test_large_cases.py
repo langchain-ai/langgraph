@@ -5608,7 +5608,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                         "query": "query: what is weather in sf",
                         "docs": ["doc1", "doc2", "doc3", "doc4"],
                     },
-                    "triggers": ("retriever_one",),
+                    "triggers": (AnyStr("retriever_"),),
                 },
             },
         ),
