@@ -940,9 +940,6 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
             )
         ] == [
             {
-                "tool_one": {"my_key": " one"},
-            },
-            {
                 "__interrupt__": (
                     Interrupt(
                         value="Just because...",
@@ -950,6 +947,9 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
                         ns=[AnyStr("tool_two:")],
                     ),
                 )
+            },
+            {
+                "tool_one": {"my_key": " one"},
             },
         ]
         # resume with answer
