@@ -210,6 +210,10 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
                 for_execution=True,
                 checkpointer=self.graph.checkpointer,
                 store=self.graph.store,
+                checkpoint_id_bytes=binascii.unhexlify(
+                    saved.checkpoint["id"].replace("-", "")
+                ),
+                checkpoint_null_version=checkpoint_null_version(saved.checkpoint),
             ):
                 # execute task, saving writes
                 runner = PregelRunner(
