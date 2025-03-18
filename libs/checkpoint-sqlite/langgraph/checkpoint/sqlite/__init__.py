@@ -56,6 +56,9 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         >>> builder.add_node("add_one", lambda x: x + 1)
         >>> builder.set_entry_point("add_one")
         >>> builder.set_finish_point("add_one")
+        >>> # Create a new SqliteSaver instance
+        >>> # Note: check_same_thread=False is OK as the implementation uses a lock
+        >>> # to ensure thread safety.
         >>> conn = sqlite3.connect("checkpoints.sqlite", check_same_thread=False)
         >>> memory = SqliteSaver(conn)
         >>> graph = builder.compile(checkpointer=memory)
