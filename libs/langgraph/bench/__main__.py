@@ -205,11 +205,23 @@ benchmarks = (
         },
     ),
     (
-        "sequential_graph_200_nodes",
+        "sequential_50",
+        create_sequential(20).compile(),
+        create_sequential(20).compile(),
+        {"messages": []},  # Empty list of messages
+    ),
+    (
+        "sequential_200",
         create_sequential(200).compile(),
         create_sequential(200).compile(),
         {"messages": []},  # Empty list of messages
     ),
+    # (
+    #     "sequential_1000",
+    #     create_sequential(1000).compile(),
+    #     create_sequential(1000).compile(),
+    #     {"messages": []},  # Empty list of messages
+    # ),
 )
 
 
