@@ -185,6 +185,7 @@ class StateGraph(Graph):
         self.schemas = {}
         self.channels = {}
         self.managed = {}
+        self.type_hints: dict[Type[Any], dict[str, Any]] = {}
         self.schema = state_schema
         self.input = input
         self.output = output
@@ -203,7 +204,7 @@ class StateGraph(Graph):
     def _add_schema(self, schema: Type[Any], /, allow_managed: bool = True) -> None:
         if schema not in self.schemas:
             _warn_invalid_state_schema(schema)
-            channels, managed = _get_channels(schema)
+            channels, managed, type_hints = _get_channels(schema)
             if managed and not allow_managed:
                 names = ", ".join(managed)
                 schema_name = getattr(schema, "__name__", "")
@@ -212,6 +213,7 @@ class StateGraph(Graph):
                     " Managed channels are not permitted in Input/Output schema."
                 )
             self.schemas[schema] = {**channels, **managed}
+            self.type_hints[schema] = type_hints
             for key, channel in channels.items():
                 if key in self.channels:
                     if self.channels[key] != channel:
@@ -829,7 +831,11 @@ class CompiledStateGraph(CompiledGraph):
                 # read state keys and managed values
                 channels=(list(input_values) if is_single_input else input_values),
                 # coerce state dict to schema class (eg. pydantic model)
-                mapper=_pick_mapper(list(input_values), input_schema),
+                mapper=_pick_mapper(
+                    list(input_values),
+                    input_schema,
+                    self.builder.type_hints[input_schema],
+                ),
                 writers=[
                     # publish to this channel and state keys
                     ChannelWrite(
@@ -939,12 +945,12 @@ def _get_state_reader(
         select=select[0] if select == ["__root__"] else select,
         fresh=True,
         # coerce state dict to schema class (eg. pydantic model)
-        mapper=_pick_mapper(state_keys, schema),
+        mapper=_pick_mapper(state_keys, schema, builder.type_hints[schema]),
     )
 
 
 def _pick_mapper(
-    state_keys: Sequence[str], schema: Type[Any]
+    state_keys: Sequence[str], schema: Type[Any], type_hints: Optional[dict[str, Any]]
 ) -> Optional[Callable[[Any], Any]]:
     if state_keys == ["__root__"]:
         return None
@@ -952,7 +958,7 @@ def _pick_mapper(
         if issubclass(schema, dict):
             return None
         if issubclass(schema, (BaseModel, BaseModelV1)):
-            return SchemaCoercionMapper(schema)
+            return SchemaCoercionMapper(schema, type_hints)
     return partial(_coerce_state, schema)
 
 
@@ -1014,18 +1020,24 @@ CONTROL_BRANCH = Branch(CONTROL_BRANCH_PATH, None)
 
 def _get_channels(
     schema: Type[dict],
-) -> tuple[dict[str, BaseChannel], dict[str, ManagedValueSpec]]:
+) -> tuple[dict[str, BaseChannel], dict[str, ManagedValueSpec], dict[str, Any]]:
     if not hasattr(schema, "__annotations__"):
-        return {"__root__": _get_channel("__root__", schema, allow_managed=False)}, {}
+        return (
+            {"__root__": _get_channel("__root__", schema, allow_managed=False)},
+            {},
+            {},
+        )
 
+    type_hints = get_type_hints(schema, include_extras=True)
     all_keys = {
         name: _get_channel(name, typ)
-        for name, typ in get_type_hints(schema, include_extras=True).items()
+        for name, typ in type_hints.items()
         if name != "__slots__"
     }
     return (
         {k: v for k, v in all_keys.items() if isinstance(v, BaseChannel)},
         {k: v for k, v in all_keys.items() if is_managed_value(v)},
+        type_hints,
     )
 
 
