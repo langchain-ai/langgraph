@@ -1189,7 +1189,7 @@ class ThreadsClient:
             }
         if if_exists:
             payload["if_exists"] = if_exists
-        return await self.http.post("/threads/state/batch", json=payload)
+        return await self.http.post("/threads/state/bulk", json=payload)
 
     async def get_history(
         self,
