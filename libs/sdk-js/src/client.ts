@@ -489,7 +489,7 @@ export class ThreadsClient<
      */
     threadId?: string;
     /**
-     * How to handle dplicate creation.
+     * How to handle duplicate creation.
      *
      * @default "raise"
      */
