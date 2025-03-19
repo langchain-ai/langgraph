@@ -897,6 +897,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         input_model: Optional[Type[BaseModel]] = None,
         debug: bool = False,
+        triggers_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
     ) -> None:
         super().__init__(
             input,
@@ -913,6 +914,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             interrupt_before=interrupt_before,
             manager=manager,
             debug=debug,
+            triggers_to_nodes=triggers_to_nodes,
         )
         self.stack = ExitStack()
         if checkpointer:
@@ -1055,6 +1057,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             interrupt_before=interrupt_before,
             manager=manager,
             debug=debug,
+            triggers_to_nodes=triggers_to_nodes,
         )
         self.stack = AsyncExitStack()
         if checkpointer:

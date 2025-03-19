@@ -2006,6 +2006,7 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
                 debug=debug,
+                triggers_to_nodes=self.trigger_to_node,
             ) as loop:
                 # create runner
                 runner = PregelRunner(
