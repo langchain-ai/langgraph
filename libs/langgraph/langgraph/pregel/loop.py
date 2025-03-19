@@ -572,9 +572,7 @@ class PregelLoop(LoopProtocol):
                         self.checkpoint["versions_seen"].get(INTERRUPT, {}).values(),
                         default=None,
                     ):
-                        self.tasks[tid] = PregelExecutableTask(
-                            **dataclasses.asdict(task) | {"scheduled": True}
-                        )
+                        self.tasks[tid] = dataclasses.replace(task, scheduled=True)
                 else:
                     task.writes.append((k, v))
 
