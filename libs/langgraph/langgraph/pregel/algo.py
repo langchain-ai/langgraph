@@ -517,7 +517,7 @@ def prepare_single_task(
                         CONFIG_KEY_CHECKPOINT_ID: None,
                         CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                         CONFIG_KEY_SCRATCHPAD: _scratchpad(
-                            config,
+                            config[CONF].get(CONFIG_KEY_SCRATCHPAD),
                             pending_writes,
                             task_id,
                         ),
@@ -627,7 +627,7 @@ def prepare_single_task(
                             CONFIG_KEY_CHECKPOINT_ID: None,
                             CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                             CONFIG_KEY_SCRATCHPAD: _scratchpad(
-                                config,
+                                config[CONF].get(CONFIG_KEY_SCRATCHPAD),
                                 pending_writes,
                                 task_id,
                             ),
@@ -721,7 +721,7 @@ def prepare_single_task(
                                 CONFIG_KEY_SEND: partial(
                                     local_write,
                                     writes.extend,
-                                    processes.keys(),
+                                    tuple(processes.keys()),
                                 ),
                                 CONFIG_KEY_READ: partial(
                                     local_read,
@@ -730,7 +730,7 @@ def prepare_single_task(
                                     channels,
                                     managed,
                                     PregelTaskWrites(
-                                        task_path[:3], name, writes, triggers
+                                        task_path[:3], name, writes, proc.triggers
                                     ),
                                     config,
                                 ),
@@ -748,7 +748,7 @@ def prepare_single_task(
                                 CONFIG_KEY_CHECKPOINT_ID: None,
                                 CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                                 CONFIG_KEY_SCRATCHPAD: _scratchpad(
-                                    config,
+                                    config[CONF].get(CONFIG_KEY_SCRATCHPAD),
                                     pending_writes,
                                     task_id,
                                 ),
@@ -757,7 +757,7 @@ def prepare_single_task(
                                 ),
                             },
                         ),
-                        triggers,
+                        proc.triggers,
                         proc.retry_policy,
                         None,
                         task_id,
@@ -799,7 +799,7 @@ def _triggers(
 
 
 def _scratchpad(
-    config: RunnableConfig,
+    parent_scratchpad: Optional[PregelScratchpad],
     pending_writes: list[PendingWrite],
     task_id: str,
 ) -> PregelScratchpad:
@@ -807,9 +807,6 @@ def _scratchpad(
     # distinguish from missing when used over http
     null_resume_write = next(
         (w for w in pending_writes if w[0] == NULL_TASK_ID and w[1] == RESUME), None
-    )
-    parent_scratchpad: Optional[PregelScratchpad] = config[CONF].get(
-        CONFIG_KEY_SCRATCHPAD
     )
 
     def get_null_resume(consume: bool = False) -> Any:
