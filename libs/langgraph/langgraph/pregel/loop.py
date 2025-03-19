@@ -209,6 +209,7 @@ class PregelLoop(LoopProtocol):
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
         input_model: Optional[Type[BaseModel]] = None,
         debug: bool = False,
+        triggers_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
     ) -> None:
         super().__init__(
             step=0,
@@ -278,6 +279,7 @@ class PregelLoop(LoopProtocol):
             if self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS)
             else ()
         )
+        self.triggers_to_nodes = triggers_to_nodes
         self.prev_checkpoint_config = None
 
     def put_writes(self, task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
@@ -406,6 +408,8 @@ class PregelLoop(LoopProtocol):
         if self.status != "pending":
             raise RuntimeError("Cannot tick when status is no longer 'pending'")
 
+        updated_channels: set[str] | None = None
+
         if self.input not in (INPUT_DONE, INPUT_RESUMING, INPUT_SHOULD_VALIDATE):
             self._first(input_keys=input_keys)
         elif self.to_interrupt:
@@ -427,7 +431,7 @@ class PregelLoop(LoopProtocol):
                     ),
                 )
             # all tasks have finished
-            mv_writes = apply_writes(
+            mv_writes, updated_channels = apply_writes(
                 self.checkpoint,
                 self.channels,
                 self.tasks.values(),
@@ -480,11 +484,25 @@ class PregelLoop(LoopProtocol):
             self.status = "out_of_steps"
             return False
 
+        # If updated channels is available, we project only a subset of the nodes.
+        # since only those nodes have been updated?
+        if updated_channels is not None:
+            candidate_node_ids: set[str] = set()
+            # Get all nodes that have triggers associated with an updated channel
+            for channel in updated_channels:
+                if triggered_nodes := self.triggers_to_nodes.get(channel):
+                    candidate_node_ids.update(triggered_nodes)
+            candidate_nodes = {
+                node_id: self.nodes[node_id] for node_id in candidate_node_ids
+            }
+        else:
+            candidate_nodes = self.nodes
+
         # prepare next tasks
         self.tasks = prepare_next_tasks(
             self.checkpoint,
             self.checkpoint_pending_writes,
-            self.nodes,
+            candidate_nodes,
             self.channels,
             self.managed,
             self.config,
@@ -612,7 +630,7 @@ class PregelLoop(LoopProtocol):
         if null_writes := [
             w[1:] for w in self.checkpoint_pending_writes if w[0] == NULL_TASK_ID
         ]:
-            mv_writes = apply_writes(
+            mv_writes, updated_channels = apply_writes(
                 self.checkpoint,
                 self.channels,
                 [PregelTaskWrites((), INPUT, null_writes, [])],
@@ -661,7 +679,7 @@ class PregelLoop(LoopProtocol):
                 manager=None,
             )
             # apply input writes
-            mv_writes = apply_writes(
+            mv_writes, updated_channels = apply_writes(
                 self.checkpoint,
                 self.channels,
                 [
@@ -776,7 +794,7 @@ class PregelLoop(LoopProtocol):
                 and self.checkpoint_pending_writes
                 and any(task.writes for task in self.tasks.values())
             ):
-                mv_writes = apply_writes(
+                mv_writes, updated_channels = apply_writes(
                     self.checkpoint,
                     self.channels,
                     self.tasks.values(),
@@ -1024,6 +1042,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         input_model: Optional[Type[BaseModel]] = None,
         debug: bool = False,
+        triggers_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
     ) -> None:
         super().__init__(
             input,

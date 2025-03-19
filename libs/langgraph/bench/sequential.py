@@ -32,8 +32,6 @@ if __name__ == "__main__":
     import asyncio
     import time
 
-    import uvloop
-
     graph = create_sequential(2000).compile()
     input = {"messages": []}  # Empty list of messages
     config = {"recursion_limit": 20000000000}
@@ -41,7 +39,6 @@ if __name__ == "__main__":
     async def run():
         len([c async for c in graph.astream(input, config=config)])
 
-    uvloop.install()
     start = time.time()
     asyncio.run(run())
     end = time.time()

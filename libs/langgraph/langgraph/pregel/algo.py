@@ -233,10 +233,21 @@ def apply_writes(
     channels: Mapping[str, BaseChannel],
     tasks: Iterable[WritesProtocol],
     get_next_version: Optional[GetNextVersion],
-) -> dict[str, list[Any]]:
+) -> tuple[dict[str, list[Any]], set[str]]:
     """Apply writes from a set of tasks (usually the tasks from a Pregel step)
     to the checkpoint and channels, and return managed values writes to be applied
-    externally."""
+    externally.
+
+    Args:
+        checkpoint: The checkpoint to update.
+        channels: The channels to update.
+        tasks: The tasks to apply writes from.
+        get_next_version: Optional function to determine the next version of a channel.
+
+    Returns:
+        A tuple containing the managed values writes to be applied externally, and
+        the set of channels that were updated in this step.
+    """
     # sort tasks on path, to ensure deterministic order for update application
     # any path parts after the 3rd are ignored for sorting
     # (we use them for eg. task ids which aren't good for sorting)
@@ -320,7 +331,7 @@ def apply_writes(
                     )
 
     # Return managed values writes to be applied externally
-    return pending_writes_by_managed
+    return pending_writes_by_managed, updated_channels
 
 
 @overload
@@ -372,8 +383,28 @@ def prepare_next_tasks(
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> Union[dict[str, PregelTask], dict[str, PregelExecutableTask]]:
     """Prepare the set of tasks that will make up the next Pregel step.
-    This is the union of all PUSH tasks (Sends) and PULL tasks (nodes triggered
-    by edges)."""
+
+    Args:
+        checkpoint: The current checkpoint.
+        pending_writes: The list of pending writes.
+        processes: The mapping of process names to PregelNode instances.
+        channels: The mapping of channel names to BaseChannel instances.
+        managed: The mapping of managed value names to functions.
+        config: The runnable configuration.
+        step: The current step.
+        for_execution: Whether the tasks are being prepared for execution.
+        store: An instance of BaseStore to make it available for usage within tasks.
+        checkpointer: Checkpointer instance used for saving checkpoints.
+        manager: The parent run manager to use for the tasks.
+        updated_channels: The set of channels that were updated in the previous step.
+            When available, it allows to efficiently determine which tasks
+            should be executed next instead of having to check all of them.
+
+    Returns:
+        A dictionary of tasks to be executed. The keys are the task ids and the values
+        are the tasks themselves. This is the union of all PUSH tasks (Sends)
+        and PULL tasks (nodes triggered by edges).
+    """
     checkpoint_id_bytes = binascii.unhexlify(checkpoint["id"].replace("-", ""))
     null_version = checkpoint_null_version(checkpoint)
     tasks: list[Union[PregelTask, PregelExecutableTask]] = []
@@ -400,6 +431,8 @@ def prepare_next_tasks(
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
     for name in processes:
+        # Check if we know which channels have been updated.
+
         if task := prepare_single_task(
             (PULL, name),
             None,
