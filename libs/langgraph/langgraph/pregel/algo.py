@@ -233,10 +233,21 @@ def apply_writes(
     channels: Mapping[str, BaseChannel],
     tasks: Iterable[WritesProtocol],
     get_next_version: Optional[GetNextVersion],
-) -> dict[str, list[Any]]:
+) -> tuple[dict[str, list[Any]], set[str]]:
     """Apply writes from a set of tasks (usually the tasks from a Pregel step)
     to the checkpoint and channels, and return managed values writes to be applied
-    externally."""
+    externally.
+
+    Args:
+        checkpoint: The checkpoint to update.
+        channels: The channels to update.
+        tasks: The tasks to apply writes from.
+        get_next_version: Optional function to determine the next version of a channel.
+
+    Returns:
+        A tuple containing the managed values writes to be applied externally, and
+        the set of channels that were updated in this step.
+    """
     # sort tasks on path, to ensure deterministic order for update application
     # any path parts after the 3rd are ignored for sorting
     # (we use them for eg. task ids which aren't good for sorting)
@@ -318,9 +329,8 @@ def apply_writes(
                         max_version,
                         channels[chan],
                     )
-
     # Return managed values writes to be applied externally
-    return pending_writes_by_managed
+    return pending_writes_by_managed, updated_channels
 
 
 @overload
@@ -337,6 +347,8 @@ def prepare_next_tasks(
     store: Literal[None] = None,
     checkpointer: Literal[None] = None,
     manager: Literal[None] = None,
+    trigger_to_nodes: Optional[Mapping[str, list[str]]] = None,
+    updated_channels: Optional[set[str]] = None,
 ) -> dict[str, PregelTask]: ...
 
 
@@ -354,6 +366,8 @@ def prepare_next_tasks(
     store: Optional[BaseStore],
     checkpointer: Optional[BaseCheckpointSaver],
     manager: Union[None, ParentRunManager, AsyncParentRunManager],
+    trigger_to_nodes: Optional[Mapping[str, list[str]]] = None,
+    updated_channels: Optional[set[str]] = None,
 ) -> dict[str, PregelExecutableTask]: ...
 
 
@@ -370,10 +384,35 @@ def prepare_next_tasks(
     store: Optional[BaseStore] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
+    trigger_to_nodes: Optional[Mapping[str, list[str]]] = None,
+    updated_channels: Optional[set[str]] = None,
 ) -> Union[dict[str, PregelTask], dict[str, PregelExecutableTask]]:
     """Prepare the set of tasks that will make up the next Pregel step.
-    This is the union of all PUSH tasks (Sends) and PULL tasks (nodes triggered
-    by edges)."""
+
+    Args:
+        checkpoint: The current checkpoint.
+        pending_writes: The list of pending writes.
+        processes: The mapping of process names to PregelNode instances.
+        channels: The mapping of channel names to BaseChannel instances.
+        managed: The mapping of managed value names to functions.
+        config: The runnable configuration.
+        step: The current step.
+        for_execution: Whether the tasks are being prepared for execution.
+        store: An instance of BaseStore to make it available for usage within tasks.
+        checkpointer: Checkpointer instance used for saving checkpoints.
+        manager: The parent run manager to use for the tasks.
+        trigger_to_nodes: Optional: Mapping of channel names to the set of nodes
+            that are can be triggered by that channel.
+        updated_channels: Optional. Set of channel names that have been updated during
+            the previous step. Using in conjunction with trigger_to_nodes to speed
+            up the process of determining which nodes should be triggered in the next
+            step.
+
+    Returns:
+        A dictionary of tasks to be executed. The keys are the task ids and the values
+        are the tasks themselves. This is the union of all PUSH tasks (Sends)
+        and PULL tasks (nodes triggered by edges).
+    """
     checkpoint_id_bytes = binascii.unhexlify(checkpoint["id"].replace("-", ""))
     null_version = checkpoint_null_version(checkpoint)
     tasks: list[Union[PregelTask, PregelExecutableTask]] = []
@@ -397,9 +436,28 @@ def prepare_next_tasks(
             manager=manager,
         ):
             tasks.append(task)
+
+    # This section is an optimization that allows which nodes will be active
+    # during the next step.
+    # When there's information about:
+    # 1. Which channels were updated in the previous step
+    # 2. Which nodes are triggered by which channels
+    # Then we can determine which nodes should be triggered in the next step
+    # without having to cycle through all nodes.
+    if updated_channels and trigger_to_nodes:
+        triggered_nodes: set[str] = set()
+        # Get all nodes that have triggers associated with an updated channel
+        for channel in updated_channels:
+            if node_ids := trigger_to_nodes.get(channel):
+                triggered_nodes.update(node_ids)
+        # Sort the nodes to ensure deterministic order
+        candidate_nodes: Iterable[str] = sorted(triggered_nodes)
+    else:
+        candidate_nodes = processes.keys()
+
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
-    for name in processes:
+    for name in candidate_nodes:
         if task := prepare_single_task(
             (PULL, name),
             None,

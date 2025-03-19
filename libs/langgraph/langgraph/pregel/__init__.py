@@ -5,7 +5,7 @@ import concurrent
 import concurrent.futures
 import queue
 import weakref
-from collections import deque
+from collections import defaultdict, deque
 from functools import partial
 from typing import (
     Any,
@@ -1545,7 +1545,7 @@ class Pregel(PregelProtocol):
                 if saved and channel_writes:
                     checkpointer.put_writes(checkpoint_config, channel_writes, task_id)
             # apply to checkpoint and save
-            mv_writes = apply_writes(
+            mv_writes, _ = apply_writes(
                 checkpoint, channels, run_tasks, checkpointer.get_next_version
             )
             assert not mv_writes, "Can't write to SharedValues from update_state"
@@ -1956,7 +1956,7 @@ class Pregel(PregelProtocol):
                         checkpoint_config, channel_writes, task_id
                     )
             # apply to checkpoint and save
-            mv_writes = apply_writes(
+            mv_writes, _ = apply_writes(
                 checkpoint, channels, run_tasks, checkpointer.get_next_version
             )
             assert not mv_writes, "Can't write to SharedValues from update_state"
@@ -2276,6 +2276,12 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
                 debug=debug,
+                # `self.nodes` can be modified after creation of `Pregel`. For example,
+                # that's how StateGraph compilation currently works.
+                # For now, we recompute the trigger_to_nodes mapping every time the
+                # loop is created. We could potentially memoize this if it becomes a
+                # performance issue.
+                trigger_to_nodes=_trigger_to_nodes(self.nodes),
             ) as loop:
                 # create runner
                 runner = PregelRunner(
@@ -2569,6 +2575,12 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
                 debug=debug,
+                # `self.nodes` can be modified after creation of `Pregel`. For example,
+                # that's how StateGraph compilation currently works.
+                # For now, we recompute the trigger_to_nodes mapping every time the
+                # loop is created. We could potentially memoize this if it becomes a
+                # performance issue.
+                trigger_to_nodes=_trigger_to_nodes(self.nodes),
             ) as loop:
                 # create runner
                 runner = PregelRunner(
@@ -2737,3 +2749,12 @@ class Pregel(PregelProtocol):
             return latest
         else:
             return chunks
+
+
+def _trigger_to_nodes(nodes: dict[str, PregelNode]) -> Mapping[str, list[str]]:
+    """Index from a trigger to nodes that depend on it."""
+    trigger_to_nodes: defaultdict[str, list[str]] = defaultdict(list)
+    for name, node in nodes.items():
+        for trigger in node.triggers:
+            trigger_to_nodes.setdefault(trigger, []).append(name)
+    return cast(Mapping[str, list[str]], trigger_to_nodes)
