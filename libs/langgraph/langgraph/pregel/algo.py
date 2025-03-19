@@ -381,6 +381,8 @@ def prepare_next_tasks(
     store: Optional[BaseStore] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
+    # Nodes that are known to have been triggered in the previous step
+    triggered_nodes: Optional[set[str]] = None,
 ) -> Union[dict[str, PregelTask], dict[str, PregelExecutableTask]]:
     """Prepare the set of tasks that will make up the next Pregel step.
 
@@ -396,9 +398,7 @@ def prepare_next_tasks(
         store: An instance of BaseStore to make it available for usage within tasks.
         checkpointer: Checkpointer instance used for saving checkpoints.
         manager: The parent run manager to use for the tasks.
-        updated_channels: The set of channels that were updated in the previous step.
-            When available, it allows to efficiently determine which tasks
-            should be executed next instead of having to check all of them.
+        triggered_nodes: The set of nodes that were triggered in the previous step
 
     Returns:
         A dictionary of tasks to be executed. The keys are the task ids and the values
@@ -430,9 +430,11 @@ def prepare_next_tasks(
             tasks.append(task)
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
-    for name in processes:
-        # Check if we know which channels have been updated.
 
+    candidate_nodes: Iterable[str] = processes.keys() if triggered_nodes is None else sorted(triggered_nodes)
+
+    for name in candidate_nodes:
+        # Check if we know which channels have been updated.
         if task := prepare_single_task(
             (PULL, name),
             None,

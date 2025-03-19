@@ -1430,7 +1430,7 @@ class Pregel(PregelProtocol):
             if saved and channel_writes:
                 checkpointer.put_writes(checkpoint_config, channel_writes, task_id)
             # apply to checkpoint and save
-            mv_writes, updated_channels = apply_writes(
+            mv_writes, _ = apply_writes(
                 checkpoint, channels, [task], checkpointer.get_next_version
             )
             assert not mv_writes, "Can't write to SharedValues from update_state"
@@ -1716,7 +1716,7 @@ class Pregel(PregelProtocol):
                     checkpoint_config, channel_writes, task_id
                 )
             # apply to checkpoint and save
-            mv_writes, updated_channels = apply_writes(
+            mv_writes, _ = apply_writes(
                 checkpoint, channels, [task], checkpointer.get_next_version
             )
             assert not mv_writes, "Can't write to SharedValues from update_state"
