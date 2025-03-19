@@ -655,13 +655,14 @@ def prepare_single_task(
         if checkpoint_null_version is None:
             return
         # If any of the channels read by this process were updated
-        if triggers := _triggers(
+        if _triggers(
             channels,
             checkpoint["channel_versions"],
             checkpoint["versions_seen"].get(name),
             checkpoint_null_version,
             proc,
         ):
+            triggers = tuple(sorted(proc.triggers))
             try:
                 val = next(
                     _proc_input(proc, managed, channels, for_execution=for_execution)
@@ -730,7 +731,10 @@ def prepare_single_task(
                                     channels,
                                     managed,
                                     PregelTaskWrites(
-                                        task_path[:3], name, writes, proc.triggers
+                                        task_path[:3],
+                                        name,
+                                        writes,
+                                        triggers,
                                     ),
                                     config,
                                 ),
@@ -757,7 +761,7 @@ def prepare_single_task(
                                 ),
                             },
                         ),
-                        proc.triggers,
+                        triggers,
                         proc.retry_policy,
                         None,
                         task_id,
