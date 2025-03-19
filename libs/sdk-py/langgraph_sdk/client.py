@@ -839,7 +839,7 @@ class ThreadsClient:
         metadata: Json = None,
         thread_id: Optional[str] = None,
         if_exists: Optional[OnConflictBehavior] = None,
-        from_supersteps: Optional[Sequence[dict[str, Sequence[dict[str, Any]]]]] = None,
+        supersteps: Optional[Sequence[dict[str, Sequence[dict[str, Any]]]]] = None,
         graph_id: Optional[str] = None,
     ) -> Thread:
         """Create a new thread.
@@ -850,7 +850,7 @@ class ThreadsClient:
                 If None, ID will be a randomly generated UUID.
             if_exists: How to handle duplicate creation. Defaults to 'raise' under the hood.
                 Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing thread).
-            from_supersteps: Apply a list of supersteps when creating a thread, each containing a sequence of updates.
+            supersteps: Apply a list of supersteps when creating a thread, each containing a sequence of updates.
                 Each update has `values` or `command` and `as_node`. Used for copying a thread between deployments.
             graph_id: Optional graph ID to associate with the thread.
 
@@ -875,25 +875,21 @@ class ThreadsClient:
             }
         if if_exists:
             payload["if_exists"] = if_exists
-        if from_supersteps:
-            payload["supersteps"] = {
-                "supersteps": [
-                    {
-                        "updates": [
-                            {
-                                "values": u["values"],
-                                "command": u.get("command"),
-                                "as_node": u["as_node"],
-                            }
-                            for u in s["updates"]
-                        ]
-                    }
-                    for s in from_supersteps
-                ],
-            }
+        if supersteps:
+            payload["supersteps"] = [
+                {
+                    "updates": [
+                        {
+                            "values": u["values"],
+                            "command": u.get("command"),
+                            "as_node": u["as_node"],
+                        }
+                        for u in s["updates"]
+                    ]
+                }
+                for s in supersteps
+            ]
 
-        if payload.get("supersteps") is not None:
-            return self.http.post("/threads/state/bulk", json=payload)
         return await self.http.post("/threads", json=payload)
 
     async def update(self, thread_id: str, *, metadata: dict[str, Any]) -> Thread:
@@ -3063,7 +3059,7 @@ class SyncThreadsClient:
         metadata: Json = None,
         thread_id: Optional[str] = None,
         if_exists: Optional[OnConflictBehavior] = None,
-        from_supersteps: Optional[Sequence[dict[str, Sequence[dict[str, Any]]]]] = None,
+        supersteps: Optional[Sequence[dict[str, Sequence[dict[str, Any]]]]] = None,
         graph_id: Optional[str] = None,
     ) -> Thread:
         """Create a new thread.
@@ -3074,7 +3070,7 @@ class SyncThreadsClient:
                 If None, ID will be a randomly generated UUID.
             if_exists: How to handle duplicate creation. Defaults to 'raise' under the hood.
                 Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing thread).
-            from_supersteps: Apply a list of supersteps when creating a thread, each containing a sequence of updates.
+            supersteps: Apply a list of supersteps when creating a thread, each containing a sequence of updates.
                 Each update has `values` or `command` and `as_node`. Used for copying a thread between deployments.
             graph_id: Optional graph ID to associate with the thread.
 
@@ -3099,25 +3095,21 @@ class SyncThreadsClient:
             }
         if if_exists:
             payload["if_exists"] = if_exists
-        if from_supersteps:
-            payload["supersteps"] = {
-                "supersteps": [
-                    {
-                        "updates": [
-                            {
-                                "values": u["values"],
-                                "command": u.get("command"),
-                                "as_node": u["as_node"],
-                            }
-                            for u in s["updates"]
-                        ]
-                    }
-                    for s in from_supersteps
-                ],
-            }
+        if supersteps:
+            payload["supersteps"] = [
+                {
+                    "updates": [
+                        {
+                            "values": u["values"],
+                            "command": u.get("command"),
+                            "as_node": u["as_node"],
+                        }
+                        for u in s["updates"]
+                    ]
+                }
+                for s in supersteps
+            ]
 
-        if payload.get("supersteps") is not None:
-            return self.http.post("/threads/state/bulk", json=payload)
         return self.http.post("/threads", json=payload)
 
     def update(self, thread_id: str, *, metadata: dict[str, Any]) -> Thread:

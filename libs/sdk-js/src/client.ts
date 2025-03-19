@@ -503,35 +503,28 @@ export class ThreadsClient<
      *
      * Used for copying a thread between deployments.
      */
-    fromSupersteps?: Array<{
+    supersteps?: Array<{
       updates: Array<{ values: unknown; command?: Command; asNode: string }>;
     }>;
   }): Promise<Thread<TStateType>> {
-    const json: Record<string, unknown> = {
-      metadata: {
-        ...payload?.metadata,
-        graph_id: payload?.graphId,
-      },
-      thread_id: payload?.threadId,
-      if_exists: payload?.ifExists,
-    };
-
-    if (payload?.fromSupersteps) {
-      json.supersteps = payload.fromSupersteps.map((s) => ({
-        updates: s.updates.map((u) => ({
-          values: u.values,
-          command: u.command,
-          as_node: u.asNode,
+    return this.fetch<Thread<TStateType>>(`/threads`, {
+      method: "POST",
+      json: {
+        metadata: {
+          ...payload?.metadata,
+          graph_id: payload?.graphId,
+        },
+        thread_id: payload?.threadId,
+        if_exists: payload?.ifExists,
+        supersteps: payload?.supersteps?.map((s) => ({
+          updates: s.updates.map((u) => ({
+            values: u.values,
+            command: u.command,
+            as_node: u.asNode,
+          })),
         })),
-      }));
-
-      return this.fetch<Thread<TStateType>>(`/threads/state/bulk`, {
-        method: "POST",
-        json,
-      });
-    }
-
-    return this.fetch<Thread<TStateType>>(`/threads`, { method: "POST", json });
+      },
+    });
   }
 
   /**
