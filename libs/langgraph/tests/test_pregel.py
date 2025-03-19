@@ -817,7 +817,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": AnyStr(),
                 "name": "one",
                 "input": 2,
-                "triggers": ["input"],
+                "triggers": ("input",),
             },
         },
         {
@@ -828,7 +828,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": AnyStr(),
                 "name": "two",
                 "input": [12],
-                "triggers": ["inbox"],
+                "triggers": ("inbox",),
             },
         },
         {
@@ -863,7 +863,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": AnyStr(),
                 "name": "two",
                 "input": [3],
-                "triggers": ["inbox"],
+                "triggers": ("inbox",),
             },
         },
         {
@@ -3247,14 +3247,24 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
 
     assert [
         c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
-    ] == [
-        {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {"qa": {"answer": ""}},
-        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-        {"retriever_two": {"docs": ["doc3", "doc4"]}},
-        {"retriever_one": {"docs": ["doc1", "doc2"]}},
-        {"__interrupt__": ()},
-    ]
+    ] in (
+        [
+            {"rewrite_query": {"query": "query: what is weather in sf"}},
+            {"qa": {"answer": ""}},
+            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {"retriever_two": {"docs": ["doc3", "doc4"]}},
+            {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"__interrupt__": ()},
+        ],
+        [
+            {"rewrite_query": {"query": "query: what is weather in sf"}},
+            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {"qa": {"answer": ""}},
+            {"retriever_two": {"docs": ["doc3", "doc4"]}},
+            {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"__interrupt__": ()},
+        ],
+    )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
@@ -5969,9 +5979,7 @@ def test_falsy_return_from_task(
                     "a": 5,
                 },
                 "name": "graph",
-                "triggers": [
-                    "__start__",
-                ],
+                "triggers": ("__start__",),
             },
             "step": 0,
             "timestamp": AnyStr(),
@@ -5985,9 +5993,7 @@ def test_falsy_return_from_task(
                     {},
                 ),
                 "name": "falsy_task",
-                "triggers": [
-                    "__pregel_push",
-                ],
+                "triggers": ("__pregel_push",),
             },
             "step": 0,
             "timestamp": AnyStr(),
@@ -6094,9 +6100,7 @@ def test_falsy_return_from_task(
                     "a": 5,
                 },
                 "name": "graph",
-                "triggers": [
-                    "__start__",
-                ],
+                "triggers": ("__start__",),
             },
             "step": 0,
             "timestamp": AnyStr(),
@@ -6110,9 +6114,7 @@ def test_falsy_return_from_task(
                     {},
                 ),
                 "name": "falsy_task",
-                "triggers": [
-                    "__pregel_push",
-                ],
+                "triggers": ("__pregel_push",),
             },
             "step": 0,
             "timestamp": AnyStr(),
@@ -6923,7 +6925,7 @@ def test_tags_stream_mode_messages() -> None:
             {
                 "langgraph_step": 1,
                 "langgraph_node": "call_model",
-                "langgraph_triggers": ["start:call_model"],
+                "langgraph_triggers": ("start:call_model",),
                 "langgraph_path": ("__pregel_pull", "call_model"),
                 "langgraph_checkpoint_ns": AnyStr("call_model:"),
                 "checkpoint_ns": AnyStr("call_model:"),
@@ -7317,3 +7319,297 @@ def test_empty_invoke() -> None:
         "111": 111,
         "222": 222,
     }
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_parallel_interrupts(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    from pydantic import BaseModel, Field
+
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    # --- CHILD GRAPH ---
+
+    class ChildState(BaseModel):
+        prompt: str = Field(..., description="What is going to be asked to the user?")
+        human_input: Optional[str] = Field(None, description="What the human said")
+        human_inputs: Annotated[List[str], operator.add] = Field(
+            default_factory=list, description="All of my messages"
+        )
+
+    def get_human_input(state: ChildState):
+        human_input = interrupt(state.prompt)
+
+        return dict(
+            human_input=human_input,  # update child state
+            human_inputs=[human_input],  # update parent state
+        )
+
+    child_graph_builder = StateGraph(ChildState)
+    child_graph_builder.add_node("get_human_input", get_human_input)
+    child_graph_builder.add_edge(START, "get_human_input")
+    child_graph_builder.add_edge("get_human_input", END)
+    child_graph = child_graph_builder.compile()
+
+    # --- PARENT GRAPH ---
+
+    class ParentState(BaseModel):
+        prompts: List[str] = Field(
+            ..., description="What is going to be asked to the user?"
+        )
+        human_inputs: Annotated[List[str], operator.add] = Field(
+            default_factory=list, description="All of my messages"
+        )
+
+    def assign_workers(state: ParentState):
+        return [
+            Send(
+                "child_graph",
+                dict(
+                    prompt=prompt,
+                ),
+            )
+            for prompt in state.prompts
+        ]
+
+    def cleanup(state: ParentState):
+        assert len(state.human_inputs) == len(state.prompts)
+
+    parent_graph_builder = StateGraph(ParentState)
+    parent_graph_builder.add_node("child_graph", child_graph)
+    parent_graph_builder.add_node("cleanup", cleanup)
+
+    parent_graph_builder.add_conditional_edges(START, assign_workers, ["child_graph"])
+    parent_graph_builder.add_edge("child_graph", "cleanup")
+    parent_graph_builder.add_edge("cleanup", END)
+
+    parent_graph = parent_graph_builder.compile(checkpointer=checkpointer)
+
+    # --- CLIENT INVOCATION ---
+
+    thread_config = dict(
+        configurable=dict(
+            thread_id=str(uuid.uuid4()),
+        )
+    )
+    current_input = dict(
+        prompts=["a", "b"],
+    )
+
+    invokes = 0
+    events: dict[int, list[dict]] = {}
+    while invokes < 10:
+        # reset interrupt
+        invokes += 1
+        events[invokes] = []
+        current_interrupts: list[Interrupt] = []
+
+        # start / resume the graph
+        for event in parent_graph.stream(
+            input=current_input,
+            config=thread_config,
+            stream_mode="updates",
+        ):
+            events[invokes].append(event)
+            # handle the interrupt
+            if "__interrupt__" in event:
+                current_interrupts.extend(event["__interrupt__"])
+                # assume that it breaks here, because it is an interrupt
+
+        # get human input and resume
+        if any(i.resumable for i in current_interrupts):
+            current_input = Command(resume=f"Resume #{invokes}")
+
+        # not more human input required, must be completed
+        else:
+            break
+    else:
+        assert False, "Detected infinite loop"
+
+    assert invokes == 3
+    assert len(events) == 3
+
+    assert events[1] == UnsortedSequence(
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="a",
+                    resumable=True,
+                    ns=[
+                        AnyStr("child_graph:"),
+                        AnyStr("get_human_input:"),
+                    ],
+                ),
+            )
+        },
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="b",
+                    resumable=True,
+                    ns=[
+                        AnyStr("child_graph:"),
+                        AnyStr("get_human_input:"),
+                    ],
+                ),
+            )
+        },
+    )
+    assert events[2] in (
+        UnsortedSequence(
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="a",
+                        resumable=True,
+                        ns=[
+                            AnyStr("child_graph:"),
+                            AnyStr("get_human_input:"),
+                        ],
+                    ),
+                )
+            },
+            {"child_graph": {"human_inputs": ["Resume #1"]}},
+        ),
+        UnsortedSequence(
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="b",
+                        resumable=True,
+                        ns=[
+                            AnyStr("child_graph:"),
+                            AnyStr("get_human_input:"),
+                        ],
+                    ),
+                )
+            },
+            {"child_graph": {"human_inputs": ["Resume #1"]}},
+        ),
+    )
+    assert events[3] == UnsortedSequence(
+        {
+            "child_graph": {"human_inputs": ["Resume #1"]},
+            "__metadata__": {"cached": True},
+        },
+        {"child_graph": {"human_inputs": ["Resume #2"]}},
+        {"cleanup": None},
+    )
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_parallel_interrupts_double(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    from pydantic import BaseModel, Field
+
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    # --- CHILD GRAPH ---
+
+    class ChildState(BaseModel):
+        prompt: str = Field(..., description="What is going to be asked to the user?")
+        human_input: Optional[str] = Field(None, description="What the human said")
+        human_inputs: Annotated[List[str], operator.add] = Field(
+            default_factory=list, description="All of my messages"
+        )
+
+    def get_human_input(state: ChildState):
+        human_input = interrupt(state.prompt)
+
+        return dict(
+            human_inputs=[human_input],  # update parent state
+        )
+
+    def get_dolphin_input(state: ChildState):
+        human_input = interrupt(state.prompt)
+
+        return dict(
+            human_inputs=[human_input],  # update parent state
+        )
+
+    child_graph_builder = StateGraph(ChildState)
+    child_graph_builder.add_node("get_human_input", get_human_input)
+    child_graph_builder.add_node("get_dolphin_input", get_dolphin_input)
+    child_graph_builder.add_edge(START, "get_human_input")
+    child_graph_builder.add_edge(START, "get_dolphin_input")
+    child_graph = child_graph_builder.compile()
+
+    # --- PARENT GRAPH ---
+
+    class ParentState(BaseModel):
+        prompts: List[str] = Field(
+            ..., description="What is going to be asked to the user?"
+        )
+        human_inputs: Annotated[List[str], operator.add] = Field(
+            default_factory=list, description="All of my messages"
+        )
+
+    def assign_workers(state: ParentState):
+        return [
+            Send(
+                "child_graph",
+                dict(
+                    prompt=prompt,
+                ),
+            )
+            for prompt in state.prompts
+        ]
+
+    def cleanup(state: ParentState):
+        assert len(state.human_inputs) == len(state.prompts) * 2
+
+    parent_graph_builder = StateGraph(ParentState)
+    parent_graph_builder.add_node("child_graph", child_graph)
+    parent_graph_builder.add_node("cleanup", cleanup)
+
+    parent_graph_builder.add_conditional_edges(START, assign_workers, ["child_graph"])
+    parent_graph_builder.add_edge("child_graph", "cleanup")
+    parent_graph_builder.add_edge("cleanup", END)
+
+    parent_graph = parent_graph_builder.compile(checkpointer=checkpointer)
+
+    # --- CLIENT INVOCATION ---
+
+    thread_config = dict(
+        configurable=dict(
+            thread_id=str(uuid.uuid4()),
+        )
+    )
+    current_input = dict(
+        prompts=["a", "b"],
+    )
+
+    invokes = 0
+    events: dict[int, list[dict]] = {}
+    while invokes < 10:
+        # reset interrupt
+        invokes += 1
+        events[invokes] = []
+        current_interrupts: list[Interrupt] = []
+
+        # start / resume the graph
+        for event in parent_graph.stream(
+            input=current_input,
+            config=thread_config,
+            stream_mode="updates",
+        ):
+            events[invokes].append(event)
+            # handle the interrupt
+            if "__interrupt__" in event:
+                current_interrupts.extend(event["__interrupt__"])
+                # assume that it breaks here, because it is an interrupt
+
+        # get human input and resume
+        if any(i.resumable for i in current_interrupts):
+            current_input = Command(resume=f"Resume #{invokes}")
+
+        # not more human input required, must be completed
+        else:
+            break
+    else:
+        assert False, "Detected infinite loop"
+
+    assert invokes == 5
+    assert len(events) == 5

@@ -60,15 +60,17 @@ async def store(request) -> AsyncIterator[AsyncPostgresStore]:
         ) as store:
             store.MIGRATIONS = [
                 (
-                    mig.replace(
-                        "ADD COLUMN ttl_minutes INT;", "ADD COLUMN ttl_minutes FLOAT;"
-                    )
+                    mig.replace("ttl_minutes INT;", "ttl_minutes FLOAT;")
                     if isinstance(mig, str)
                     else mig
                 )
                 for mig in store.MIGRATIONS
             ]
             await store.setup()
+            async with store._cursor() as cur:
+                # drop the migration index
+                await cur.execute("DROP TABLE IF EXISTS store_migrations")
+            await store.setup()  # Will fail if migrations aren't idempotent
 
         if request.param == "pipe":
             async with AsyncPostgresStore.from_conn_string(
