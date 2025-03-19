@@ -1,9 +1,11 @@
+import gc
 import sys
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
 from uuid import UUID, uuid4
 
 import pytest
+import referrers
 from langchain_core import __version__ as core_version
 from packaging import version
 from psycopg import AsyncConnection, Connection
@@ -19,9 +21,16 @@ from langgraph.checkpoint.postgres.aio import (
 from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.pregel.loop import PregelTaskWrites
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
 from langgraph.store.postgres import AsyncPostgresStore, PostgresStore
+from langgraph.types import (
+    PregelExecutableTask,
+    PregelScratchpad,
+    PregelTask,
+    StateSnapshot,
+)
 
 pytest.register_assert_rewrite("tests.memory_assert")
 
@@ -438,6 +447,32 @@ async def awith_store(store_name: Optional[str]) -> AsyncIterator[BaseStore]:
             yield store
     else:
         raise NotImplementedError(f"Unknown store {store_name}")
+
+
+@pytest.fixture(autouse=True)
+def check_live_objects() -> None:
+    """Check for live objects after each test."""
+    gc.collect()
+    gc.disable()
+    try:
+        yield
+        leaked_objs = [
+            o
+            for o in gc.get_objects()
+            if isinstance(
+                o,
+                (
+                    PregelExecutableTask,
+                    PregelTask,
+                    PregelScratchpad,
+                    PregelTaskWrites,
+                    StateSnapshot,
+                ),
+            )
+        ]
+        assert not leaked_objs, f"""Leaked objects at end of test: {referrers.get_referrer_graph_for_list(leaked_objs, exclude_object_ids=(id(leaked_objs),))}"""
+    finally:
+        gc.enable()
 
 
 SHALLOW_CHECKPOINTERS_SYNC = ["postgres_shallow"]
