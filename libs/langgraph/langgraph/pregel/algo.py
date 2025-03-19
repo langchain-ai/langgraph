@@ -517,7 +517,7 @@ def prepare_single_task(
                         CONFIG_KEY_CHECKPOINT_ID: None,
                         CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                         CONFIG_KEY_SCRATCHPAD: _scratchpad(
-                            config,
+                            config[CONF].get(CONFIG_KEY_SCRATCHPAD),
                             pending_writes,
                             task_id,
                         ),
@@ -627,7 +627,7 @@ def prepare_single_task(
                             CONFIG_KEY_CHECKPOINT_ID: None,
                             CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                             CONFIG_KEY_SCRATCHPAD: _scratchpad(
-                                config,
+                                config[CONF].get(CONFIG_KEY_SCRATCHPAD),
                                 pending_writes,
                                 task_id,
                             ),
@@ -655,13 +655,14 @@ def prepare_single_task(
         if checkpoint_null_version is None:
             return
         # If any of the channels read by this process were updated
-        if triggers := _triggers(
+        if _triggers(
             channels,
             checkpoint["channel_versions"],
             checkpoint["versions_seen"].get(name),
             checkpoint_null_version,
             proc,
         ):
+            triggers = tuple(sorted(proc.triggers))
             try:
                 val = next(
                     _proc_input(proc, managed, channels, for_execution=for_execution)
@@ -721,7 +722,7 @@ def prepare_single_task(
                                 CONFIG_KEY_SEND: partial(
                                     local_write,
                                     writes.extend,
-                                    processes.keys(),
+                                    tuple(processes.keys()),
                                 ),
                                 CONFIG_KEY_READ: partial(
                                     local_read,
@@ -730,7 +731,10 @@ def prepare_single_task(
                                     channels,
                                     managed,
                                     PregelTaskWrites(
-                                        task_path[:3], name, writes, triggers
+                                        task_path[:3],
+                                        name,
+                                        writes,
+                                        triggers,
                                     ),
                                     config,
                                 ),
@@ -748,7 +752,7 @@ def prepare_single_task(
                                 CONFIG_KEY_CHECKPOINT_ID: None,
                                 CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                                 CONFIG_KEY_SCRATCHPAD: _scratchpad(
-                                    config,
+                                    config[CONF].get(CONFIG_KEY_SCRATCHPAD),
                                     pending_writes,
                                     task_id,
                                 ),
@@ -799,7 +803,7 @@ def _triggers(
 
 
 def _scratchpad(
-    config: RunnableConfig,
+    parent_scratchpad: Optional[PregelScratchpad],
     pending_writes: list[PendingWrite],
     task_id: str,
 ) -> PregelScratchpad:
@@ -807,9 +811,6 @@ def _scratchpad(
     # distinguish from missing when used over http
     null_resume_write = next(
         (w for w in pending_writes if w[0] == NULL_TASK_ID and w[1] == RESUME), None
-    )
-    parent_scratchpad: Optional[PregelScratchpad] = config[CONF].get(
-        CONFIG_KEY_SCRATCHPAD
     )
 
     def get_null_resume(consume: bool = False) -> Any:

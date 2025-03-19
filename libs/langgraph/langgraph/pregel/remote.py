@@ -457,6 +457,20 @@ class RemoteGraph(PregelProtocol):
         for state in states:
             yield self._create_state_snapshot(state)
 
+    def bulk_update_state(
+        self,
+        config: RunnableConfig,
+        updates: list[tuple[Optional[dict[str, Any]], Optional[str]]],
+    ) -> RunnableConfig:
+        raise NotImplementedError
+
+    async def abulk_update_state(
+        self,
+        config: RunnableConfig,
+        updates: list[tuple[Optional[dict[str, Any]], Optional[str]]],
+    ) -> RunnableConfig:
+        raise NotImplementedError
+
     def update_state(
         self,
         config: RunnableConfig,

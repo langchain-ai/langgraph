@@ -149,7 +149,7 @@ class PregelRunner:
                     configurable={
                         CONFIG_KEY_CALL: partial(
                             _call,
-                            t,
+                            weakref.ref(t),
                             retry=retry_policy,
                             futures=weakref.ref(futures),
                             schedule_task=self.schedule_task,
@@ -185,7 +185,7 @@ class PregelRunner:
                     configurable={
                         CONFIG_KEY_CALL: partial(
                             _call,
-                            t,
+                            weakref.ref(t),
                             retry=retry_policy,
                             futures=weakref.ref(futures),
                             schedule_task=self.schedule_task,
@@ -263,7 +263,7 @@ class PregelRunner:
                     configurable={
                         CONFIG_KEY_CALL: partial(
                             _acall,
-                            t,
+                            weakref.ref(t),
                             stream=self.use_astream,
                             retry=retry_policy,
                             futures=weakref.ref(futures),
@@ -304,7 +304,7 @@ class PregelRunner:
                         configurable={
                             CONFIG_KEY_CALL: partial(
                                 _acall,
-                                t,
+                                weakref.ref(t),
                                 retry=retry_policy,
                                 stream=self.use_astream,
                                 futures=weakref.ref(futures),
@@ -469,7 +469,7 @@ def _panic_or_proceed(
 
 
 def _call(
-    task: PregelExecutableTask,
+    task: weakref.ref[PregelExecutableTask],
     func: Callable[[Any], Union[Awaitable[Any], Any]],
     input: Any,
     *,
@@ -489,10 +489,10 @@ def _call(
 
     fut: Optional[concurrent.futures.Future] = None
     # schedule PUSH tasks, collect futures
-    scratchpad: PregelScratchpad = task.config[CONF][CONFIG_KEY_SCRATCHPAD]
+    scratchpad: PregelScratchpad = task().config[CONF][CONFIG_KEY_SCRATCHPAD]  # type: ignore[union-attr]
     # schedule the next task, if the callback returns one
     if next_task := schedule_task()(  # type: ignore[misc]
-        task,
+        task(),  # type: ignore[arg-type]
         scratchpad.call_counter(),
         Call(func, input, retry=retry, callbacks=callbacks),
     ):
@@ -528,7 +528,7 @@ def _call(
                 configurable={
                     CONFIG_KEY_CALL: partial(
                         _call,
-                        next_task,
+                        weakref.ref(next_task),
                         futures=futures,
                         retry=retry,
                         callbacks=callbacks,
@@ -550,7 +550,7 @@ def _call(
 
 
 def _acall(
-    task: PregelExecutableTask,
+    task: weakref.ref[PregelExecutableTask],
     func: Callable[[Any], Union[Awaitable[Any], Any]],
     input: Any,
     *,
@@ -570,10 +570,10 @@ def _acall(
 ) -> Union[asyncio.Future[Any], concurrent.futures.Future[Any]]:
     fut: Optional[asyncio.Future] = None
     # schedule PUSH tasks, collect futures
-    scratchpad: PregelScratchpad = task.config[CONF][CONFIG_KEY_SCRATCHPAD]
+    scratchpad: PregelScratchpad = task().config[CONF][CONFIG_KEY_SCRATCHPAD]  # type: ignore[union-attr]
     # schedule the next task, if the callback returns one
     if next_task := schedule_task()(  # type: ignore[misc]
-        task,
+        task(),  # type: ignore[arg-type]
         scratchpad.call_counter(),
         Call(func, input, retry=retry, callbacks=callbacks),
     ):
@@ -614,7 +614,7 @@ def _acall(
                     configurable={
                         CONFIG_KEY_CALL: partial(
                             _acall,
-                            next_task,
+                            weakref.ref(next_task),
                             stream=stream,
                             futures=futures,
                             schedule_task=schedule_task,
@@ -623,7 +623,7 @@ def _acall(
                             reraise=reraise,
                         ),
                     },
-                    __name__=task.name,
+                    __name__=task().name,  # type: ignore[union-attr]
                     __cancel_on_exit__=True,
                     __reraise_on_exit__=reraise,
                     # starting a new task in the next tick ensures
