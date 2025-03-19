@@ -643,7 +643,9 @@ export class ThreadsClient<
    * Create a new thread from a batch states.
    */
   async bulkUpdateState(
-    supersteps: Array<{ updates: Array<{ values: unknown; command?: Command; asNode: string }> }>,
+    supersteps: Array<{
+      updates: Array<{ values: unknown; command?: Command; asNode: string }>;
+    }>,
     options?: {
       graphId?: string;
       threadId?: string;
