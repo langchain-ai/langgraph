@@ -7844,25 +7844,38 @@ async def test_handles_multiple_interrupts_from_tasks() -> None:
 
 
 async def test_pregel_loop_refcount():
-    class State(TypedDict):
-        messages: Annotated[list, add_messages]
+    gc.collect()
+    try:
+        gc.disable()
 
-    graph_builder = StateGraph(State)
+        class State(TypedDict):
+            messages: Annotated[list, add_messages]
 
-    async def chatbot(state: State):
-        return {"messages": [("ai", "HIYA")]}
+        graph_builder = StateGraph(State)
 
-    graph_builder.add_node("chatbot", chatbot)
-    graph_builder.set_entry_point("chatbot")
-    graph_builder.set_finish_point("chatbot")
-    graph = graph_builder.compile()
+        async def chatbot(state: State):
+            return {"messages": [("ai", "HIYA")]}
 
-    for _ in range(5):
-        await graph.ainvoke({"messages": [{"role": "user", "content": "hi"}]})
-        assert (
-            len([obj for obj in gc.get_objects() if isinstance(obj, AsyncPregelLoop)])
-            == 0
-        )
-        assert (
-            len([obj for obj in gc.get_objects() if isinstance(obj, PregelRunner)]) == 0
-        )
+        graph_builder.add_node("chatbot", chatbot)
+        graph_builder.set_entry_point("chatbot")
+        graph_builder.set_finish_point("chatbot")
+        graph = graph_builder.compile()
+
+        for _ in range(5):
+            await graph.ainvoke({"messages": [{"role": "user", "content": "hi"}]})
+            assert (
+                len(
+                    [
+                        obj
+                        for obj in gc.get_objects()
+                        if isinstance(obj, AsyncPregelLoop)
+                    ]
+                )
+                == 0
+            )
+            assert (
+                len([obj for obj in gc.get_objects() if isinstance(obj, PregelRunner)])
+                == 0
+            )
+    finally:
+        gc.enable()
