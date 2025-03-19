@@ -7734,3 +7734,166 @@ def test_bulk_state_updates(
                 ],
             ],
         )
+
+
+@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_SYNC)
+def test_update_as_input(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class State(TypedDict):
+        foo: str
+
+    def agent(state: State) -> State:
+        return {"foo": "agent"}
+
+    def tool(state: State) -> State:
+        return {"foo": "tool"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("agent", agent)
+        .add_node("tool", tool)
+        .add_edge(START, "agent")
+        .add_edge("agent", "tool")
+        .compile(checkpointer=checkpointer)
+    )
+
+    assert graph.invoke({"foo": "input"}, {"configurable": {"thread_id": "1"}}) == {
+        "foo": "tool"
+    }
+
+    assert graph.invoke({"foo": "input"}, {"configurable": {"thread_id": "1"}}) == {
+        "foo": "tool"
+    }
+
+    def map_snapshot(i: StateSnapshot) -> dict:
+        return {
+            "values": i.values,
+            "next": i.next,
+            "step": i.metadata.get("step"),
+        }
+
+    history = [
+        map_snapshot(s)
+        for s in graph.get_state_history({"configurable": {"thread_id": "1"}})
+    ]
+
+    graph.bulk_update_state(
+        {"configurable": {"thread_id": "2"}},
+        [
+            # First turn
+            [StateUpdate({"foo": "input"}, "__input__")],
+            [StateUpdate({"foo": "input"}, "__start__")],
+            [StateUpdate({"foo": "agent"}, "agent")],
+            [StateUpdate({"foo": "tool"}, "tool")],
+            # Second turn
+            [StateUpdate({"foo": "input"}, "__input__")],
+            [StateUpdate({"foo": "input"}, "__start__")],
+            [StateUpdate({"foo": "agent"}, "agent")],
+            [StateUpdate({"foo": "tool"}, "tool")],
+        ],
+    )
+
+    state = graph.get_state({"configurable": {"thread_id": "2"}})
+    assert state.values == {"foo": "tool"}
+
+    new_history = [
+        map_snapshot(s)
+        for s in graph.get_state_history({"configurable": {"thread_id": "2"}})
+    ]
+
+    assert new_history == history
+
+
+@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_SYNC)
+def test_batch_update_as_input(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class State(TypedDict):
+        foo: str
+        tasks: Annotated[list[int], operator.add]
+
+    def agent(state: State) -> State:
+        return {"foo": "agent"}
+
+    def map(state: State) -> Command["task"]:
+        return Command(
+            goto=[
+                Send("task", {"index": 0}),
+                Send("task", {"index": 1}),
+                Send("task", {"index": 2}),
+            ],
+            update={"foo": "map"},
+        )
+
+    def task(state: dict) -> State:
+        return {"tasks": [state["index"]]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("agent", agent)
+        .add_node("map", map)
+        .add_node("task", task)
+        .add_edge(START, "agent")
+        .add_edge("agent", "map")
+        .compile(checkpointer=checkpointer)
+    )
+
+    assert graph.invoke({"foo": "input"}, {"configurable": {"thread_id": "1"}}) == {
+        "foo": "map",
+        "tasks": [0, 1, 2],
+    }
+
+    def map_snapshot(i: StateSnapshot) -> dict:
+        return {
+            "values": i.values,
+            "next": i.next,
+            "step": i.metadata.get("step"),
+            "tasks": [t.name for t in i.tasks],
+        }
+
+    history = [
+        map_snapshot(s)
+        for s in graph.get_state_history({"configurable": {"thread_id": "1"}})
+    ]
+
+    graph.bulk_update_state(
+        {"configurable": {"thread_id": "2"}},
+        [
+            [StateUpdate({"foo": "input"}, "__input__")],
+            [StateUpdate({"foo": "input"}, "__start__")],
+            [StateUpdate({"foo": "agent", "tasks": []}, "agent")],
+            [
+                StateUpdate(
+                    Command(
+                        goto=[
+                            Send("task", {"index": 0}),
+                            Send("task", {"index": 1}),
+                            Send("task", {"index": 2}),
+                        ],
+                        update={"foo": "map"},
+                    ),
+                    "map",
+                )
+            ],
+            [
+                StateUpdate({"tasks": [0]}, "task"),
+                StateUpdate({"tasks": [1]}, "task"),
+                StateUpdate({"tasks": [2]}, "task"),
+            ],
+        ],
+    )
+
+    state = graph.get_state({"configurable": {"thread_id": "2"}})
+    assert state.values == {"foo": "map", "tasks": [0, 1, 2]}
+
+    new_history = [
+        map_snapshot(s)
+        for s in graph.get_state_history({"configurable": {"thread_id": "2"}})
+    ]
+
+    assert new_history == history

@@ -92,7 +92,7 @@ from langgraph.pregel.algo import (
     prepare_next_tasks,
 )
 from langgraph.pregel.debug import tasks_w_writes
-from langgraph.pregel.io import read_channels
+from langgraph.pregel.io import map_input, read_channels
 from langgraph.pregel.loop import AsyncPregelLoop, StreamProtocol, SyncPregelLoop
 from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.messages import StreamMessagesHandler
@@ -1332,6 +1332,58 @@ class Pregel(PregelProtocol):
                     return patch_checkpoint_map(
                         next_config, saved.metadata if saved else None
                     )
+
+                # act as an input
+                if as_node == INPUT:
+                    if len(updates) > 1:
+                        raise InvalidUpdateError(
+                            "Cannot apply multiple updates when updating as input"
+                        )
+
+                    if input_writes := deque(map_input(self.input_channels, values)):
+                        apply_writes(
+                            checkpoint,
+                            channels,
+                            [PregelTaskWrites((), INPUT, input_writes, [])],
+                            checkpointer.get_next_version,
+                        )
+
+                        # apply input write to channels
+                        next_step = (
+                            step + 1
+                            if saved and saved.metadata.get("step") is not None
+                            else -1
+                        )
+                        next_config = checkpointer.put(
+                            checkpoint_config,
+                            create_checkpoint(checkpoint, channels, next_step),
+                            {
+                                **checkpoint_metadata,
+                                "source": "input",
+                                "step": next_step,
+                                "writes": dict(input_writes),
+                            },
+                            get_new_channel_versions(
+                                checkpoint_previous_versions,
+                                checkpoint["channel_versions"],
+                            ),
+                        )
+
+                        # store the writes
+                        checkpointer.put_writes(
+                            next_config,
+                            input_writes,
+                            str(uuid5(UUID(checkpoint["id"]), INPUT)),
+                        )
+
+                        return patch_checkpoint_map(
+                            next_config, saved.metadata if saved else None
+                        )
+                    else:
+                        raise InvalidUpdateError(
+                            f"Received no input writes for {self.input_channels}"
+                        )
+
                 # no values, copy checkpoint
                 if values is None and as_node == "__copy__":
                     if len(updates) > 1:
@@ -1417,119 +1469,107 @@ class Pregel(PregelProtocol):
                         isinstance(self.input_channels, str)
                         and self.input_channels in self.nodes
                     ):
-                        if (
-                            isinstance(self.input_channels, str)
-                            and self.input_channels in self.nodes
-                        ):
-                            as_node = self.input_channels
-                    elif as_node is None:
-                        last_seen_by_node = sorted(
-                            (v, n)
-                            for n, seen in checkpoint["versions_seen"].items()
-                            if n in self.nodes
-                            for v in seen.values()
-                        )
-                        # if two nodes updated the state at the same time, it's ambiguous
-                        if last_seen_by_node:
-                            if len(last_seen_by_node) == 1:
-                                as_node = last_seen_by_node[0][1]
-                            elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
-                                as_node = last_seen_by_node[-1][1]
+                        as_node = self.input_channels
+                elif as_node is None:
+                    last_seen_by_node = sorted(
+                        (v, n)
+                        for n, seen in checkpoint["versions_seen"].items()
+                        if n in self.nodes
+                        for v in seen.values()
+                    )
+                    # if two nodes updated the state at the same time, it's ambiguous
+                    if last_seen_by_node:
+                        if len(last_seen_by_node) == 1:
+                            as_node = last_seen_by_node[0][1]
+                        elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
+                            as_node = last_seen_by_node[-1][1]
+                if as_node is None:
+                    raise InvalidUpdateError("Ambiguous update, specify as_node")
+                if as_node not in self.nodes:
+                    raise InvalidUpdateError(f"Node {as_node} does not exist")
+                valid_updates.append((as_node, values))
+            else:
+                for values, as_node in updates:
                     if as_node is None:
-                        raise InvalidUpdateError("Ambiguous update, specify as_node")
+                        raise InvalidUpdateError(
+                            "as_node is required when applying multiple updates"
+                        )
                     if as_node not in self.nodes:
                         raise InvalidUpdateError(f"Node {as_node} does not exist")
 
                     valid_updates.append((as_node, values))
-                else:
-                    for values, as_node in updates:
-                        if as_node is None:
-                            raise InvalidUpdateError(
-                                "as_node is required when applying multiple updates"
-                            )
 
-                        if as_node not in self.nodes:
-                            raise InvalidUpdateError(f"Node {as_node} does not exist")
+            run_tasks: list[PregelTaskWrites] = []
+            run_task_ids: list[str] = []
 
-                        valid_updates.append((as_node, values))
-
-                run_tasks: list[PregelTaskWrites] = []
-                run_task_ids: list[str] = []
-
-                for as_node, values in valid_updates:
-                    # create task to run all writers of the chosen node
-                    writers = self.nodes[as_node].flat_writers
-                    if not writers:
-                        raise InvalidUpdateError(f"Node {as_node} has no writers")
-                    writes: deque[tuple[str, Any]] = deque()
-                    task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
-                    task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
-                    run_tasks.append(task)
-                    run_task_ids.append(task_id)
-                    run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
-                    # execute task
-                    run.invoke(
-                        values,
-                        patch_config(
-                            config,
-                            run_name=self.name + "UpdateState",
-                            configurable={
-                                # deque.extend is thread-safe
-                                CONFIG_KEY_SEND: partial(
-                                    local_write,
-                                    writes.extend,
-                                    self.nodes.keys(),
-                                ),
-                                CONFIG_KEY_READ: partial(
-                                    local_read,
-                                    step + 1,
-                                    checkpoint,
-                                    channels,
-                                    managed,
-                                    task,
-                                    config,
-                                ),
-                            },
-                        ),
-                    )
-                # save task writes
-                for task_id, task in zip(run_task_ids, run_tasks):
-                    channel_writes = [w for w in task.writes if w[0] != PUSH]
-                    # channel writes are saved to current checkpoint
-                    if saved and channel_writes:
-                        checkpointer.put_writes(
-                            checkpoint_config, channel_writes, task_id
-                        )
-                # apply to checkpoint and save
-                mv_writes = apply_writes(
-                    checkpoint, channels, run_tasks, checkpointer.get_next_version
-                )
-                assert not mv_writes, "Can't write to SharedValues from update_state"
-                checkpoint = create_checkpoint(checkpoint, channels, step + 1)
-                next_config = checkpointer.put(
-                    checkpoint_config,
-                    checkpoint,
-                    {
-                        **checkpoint_metadata,
-                        "source": "update",
-                        "step": step + 1,
-                        "writes": {
-                            as_node: values for as_node, values in valid_updates
+            for as_node, values in valid_updates:
+                # create task to run all writers of the chosen node
+                writers = self.nodes[as_node].flat_writers
+                if not writers:
+                    raise InvalidUpdateError(f"Node {as_node} has no writers")
+                writes: deque[tuple[str, Any]] = deque()
+                task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
+                task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
+                run_tasks.append(task)
+                run_task_ids.append(task_id)
+                run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
+                # execute task
+                run.invoke(
+                    values,
+                    patch_config(
+                        config,
+                        run_name=self.name + "UpdateState",
+                        configurable={
+                            # deque.extend is thread-safe
+                            CONFIG_KEY_SEND: partial(
+                                local_write,
+                                writes.extend,
+                                self.nodes.keys(),
+                            ),
+                            CONFIG_KEY_READ: partial(
+                                local_read,
+                                step + 1,
+                                checkpoint,
+                                channels,
+                                managed,
+                                task,
+                                config,
+                            ),
                         },
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
-                    },
-                    get_new_channel_versions(
-                        checkpoint_previous_versions, checkpoint["channel_versions"]
                     ),
                 )
-                for task_id, task in zip(run_task_ids, run_tasks):
-                    # save push writes
-                    if push_writes := [w for w in task.writes if w[0] == PUSH]:
-                        checkpointer.put_writes(next_config, push_writes, task_id)
+            # save task writes
+            for task_id, task in zip(run_task_ids, run_tasks):
+                # channel writes are saved to current checkpoint
+                channel_writes = [w for w in task.writes if w[0] != PUSH]
+                if saved and channel_writes:
+                    checkpointer.put_writes(checkpoint_config, channel_writes, task_id)
+            # apply to checkpoint and save
+            mv_writes = apply_writes(
+                checkpoint, channels, run_tasks, checkpointer.get_next_version
+            )
+            assert not mv_writes, "Can't write to SharedValues from update_state"
+            checkpoint = create_checkpoint(checkpoint, channels, step + 1)
+            next_config = checkpointer.put(
+                checkpoint_config,
+                checkpoint,
+                {
+                    **checkpoint_metadata,
+                    "source": "update",
+                    "step": step + 1,
+                    "writes": {as_node: values for as_node, values in valid_updates},
+                    "parents": saved.metadata.get("parents", {}) if saved else {},
+                },
+                get_new_channel_versions(
+                    checkpoint_previous_versions, checkpoint["channel_versions"]
+                ),
+            )
+            for task_id, task in zip(run_task_ids, run_tasks):
+                # save push writes
+                if push_writes := [w for w in task.writes if w[0] == PUSH]:
+                    checkpointer.put_writes(next_config, push_writes, task_id)
 
-                return patch_checkpoint_map(
-                    next_config, saved.metadata if saved else None
-                )
+            return patch_checkpoint_map(next_config, saved.metadata if saved else None)
 
         current_config = config
         for superstep in supersteps:
@@ -1706,6 +1746,58 @@ class Pregel(PregelProtocol):
                     return patch_checkpoint_map(
                         next_config, saved.metadata if saved else None
                     )
+
+                # act as an input
+                if as_node == INPUT:
+                    if len(updates) > 1:
+                        raise InvalidUpdateError(
+                            "Cannot apply multiple updates when updating as input"
+                        )
+
+                    if input_writes := deque(map_input(self.input_channels, values)):
+                        apply_writes(
+                            checkpoint,
+                            channels,
+                            [PregelTaskWrites((), INPUT, input_writes, [])],
+                            checkpointer.get_next_version,
+                        )
+
+                        # apply input write to channels
+                        next_step = (
+                            step + 1
+                            if saved and saved.metadata.get("step") is not None
+                            else -1
+                        )
+                        next_config = await checkpointer.aput(
+                            checkpoint_config,
+                            create_checkpoint(checkpoint, channels, next_step),
+                            {
+                                **checkpoint_metadata,
+                                "source": "input",
+                                "step": next_step,
+                                "writes": dict(input_writes),
+                            },
+                            get_new_channel_versions(
+                                checkpoint_previous_versions,
+                                checkpoint["channel_versions"],
+                            ),
+                        )
+
+                        # store the writes
+                        await checkpointer.aput_writes(
+                            next_config,
+                            input_writes,
+                            str(uuid5(UUID(checkpoint["id"]), INPUT)),
+                        )
+
+                        return patch_checkpoint_map(
+                            next_config, saved.metadata if saved else None
+                        )
+                    else:
+                        raise InvalidUpdateError(
+                            f"Received no input writes for {self.input_channels}"
+                        )
+
                 # no values, copy checkpoint
                 if values is None and as_node == "__copy__":
                     if len(updates) > 1:
@@ -1811,9 +1903,6 @@ class Pregel(PregelProtocol):
                         raise InvalidUpdateError(
                             "as_node is required when applying multiple updates"
                         )
-                    if as_node is None:
-                        raise InvalidUpdateError("Ambiguous update, specify as_node")
-
                     if as_node not in self.nodes:
                         raise InvalidUpdateError(f"Node {as_node} does not exist")
 
