@@ -506,7 +506,7 @@ class PregelLoop(LoopProtocol):
             manager=self.manager,
             store=self.store,
             checkpointer=self.checkpointer,
-            candidate_node_ids=triggered_nodes or None,
+            triggered_nodes=triggered_nodes or None,
         )
         self.to_interrupt = []
 
