@@ -634,9 +634,6 @@ def _acall(
             futures()[fut] = next_task  # type: ignore[index]
 
     fut = cast(Union[asyncio.Future, concurrent.futures.Future], fut)
-    import sys
-
-    print(f"FOO: {fut} {loop}", flush=True, file=sys.stderr)
     # return a chained future to ensure commit() callback is called
     # before the returned future is resolved, to ensure stream order etc
     try:
