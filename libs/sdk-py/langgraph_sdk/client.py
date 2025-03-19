@@ -3343,18 +3343,38 @@ class SyncThreadsClient:
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,  # deprecated
     ) -> ThreadUpdateStateResponse:
-        """Add state to a thread.
+        """Update the state of a thread.
 
         Args:
-            thread_id: The ID of the thread.
-            values: The values to add to the thread state.
-            as_node: The node to add the state as.
-            checkpoint: The checkpoint to add the state to.
-            checkpoint_id: The ID of the checkpoint to add the state to. Deprecated.
+            thread_id: The ID of the thread to update.
+            values: The values to update the state with.
+            as_node: Update the state as if this node had just executed.
+            checkpoint: The checkpoint to update the state of.
 
         Returns:
-            The response from the server.
-        """
+            ThreadUpdateStateResponse: Response after updating a thread's state.
+
+        Example Usage:
+
+            response = await client.threads.update_state(
+                thread_id="my_thread_id",
+                values={"messages":[{"role": "user", "content": "hello!"}]},
+                as_node="my_node",
+            )
+            print(response)
+
+            ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+            {
+                'checkpoint': {
+                    'thread_id': 'e2496803-ecd5-4e0c-a779-3226296181c2',
+                    'checkpoint_ns': '',
+                    'checkpoint_id': '1ef4a9b8-e6fb-67b1-8001-abd5184439d1',
+                    'checkpoint_map': {}
+                }
+            }
+
+        """  # noqa: E501
         payload: Dict[str, Any] = {
             "values": values,
         }
