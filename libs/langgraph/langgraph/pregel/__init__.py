@@ -5,7 +5,7 @@ import concurrent
 import concurrent.futures
 import queue
 import weakref
-from collections import deque
+from collections import defaultdict, deque
 from functools import partial
 from typing import (
     Any,
@@ -2753,7 +2753,7 @@ class Pregel(PregelProtocol):
 
 def _trigger_to_nodes(nodes: dict[str, PregelNode]) -> dict[str, list[str]]:
     """Index from a trigger to nodes that depend on it."""
-    trigger_to_nodes = {}
+    trigger_to_nodes: defaultdict[str, list[str]] = defaultdict(list)
     for name, node in nodes.items():
         for trigger in node.triggers:
             trigger_to_nodes.setdefault(trigger, []).append(name)
