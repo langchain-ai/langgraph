@@ -7583,7 +7583,10 @@ async def test_tags_stream_mode_messages() -> None:
             {
                 "langgraph_step": 1,
                 "langgraph_node": "call_model",
-                "langgraph_triggers": ("start:call_model",),
+                "langgraph_triggers": (
+                    "branch:to:call_model",
+                    "start:call_model",
+                ),
                 "langgraph_path": ("__pregel_pull", "call_model"),
                 "langgraph_checkpoint_ns": AnyStr("call_model:"),
                 "checkpoint_ns": AnyStr("call_model:"),
