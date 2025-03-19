@@ -30,6 +30,7 @@ import type {
   StreamEvent,
   CronsCreatePayload,
   OnConflictBehavior,
+  Command,
 } from "./types.js";
 import { mergeSignals } from "./utils/signals.js";
 import { getEnvironmentVariable } from "./utils/env.js";
@@ -636,6 +637,40 @@ export class ThreadsClient<
         },
       },
     );
+  }
+
+  /**
+   * Create a new thread from a batch states.
+   */
+  async bulkUpdateState(
+    supersteps: Array<{
+      updates: Array<{ values: unknown; command?: Command; asNode: string }>;
+    }>,
+    options?: {
+      graphId?: string;
+      threadId?: string;
+      metadata?: Metadata;
+      ifExists?: OnConflictBehavior;
+    },
+  ): Promise<Thread<TStateType>> {
+    return this.fetch<Thread<TStateType>>("/threads/state/batch", {
+      method: "POST",
+      json: {
+        supersteps: supersteps.map((s) => ({
+          updates: s.updates.map((u) => ({
+            values: u.values,
+            command: u.command,
+            as_node: u.asNode,
+          })),
+        })),
+        thread_id: options?.threadId,
+        metadata: {
+          ...options?.metadata,
+          graph_id: options?.graphId,
+        },
+        if_exists: options?.ifExists,
+      },
+    });
   }
 
   /**
