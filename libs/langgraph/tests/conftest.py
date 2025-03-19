@@ -20,7 +20,8 @@ from langgraph.checkpoint.postgres.aio import (
 from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-from langgraph.pregel.loop import PregelTaskWrites
+from langgraph.pregel.loop import AsyncPregelLoop, PregelTaskWrites, SyncPregelLoop
+from langgraph.pregel.runner import PregelRunner
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
 from langgraph.store.postgres import AsyncPostgresStore, PostgresStore
@@ -451,27 +452,26 @@ async def awith_store(store_name: Optional[str]) -> AsyncIterator[BaseStore]:
 @pytest.fixture(autouse=True)
 def check_live_objects() -> None:
     """Check for live objects after each test."""
-    try:
-        gc.disable()
-        # Should we be yielding?
-        gc.collect()
-        leaked_objs = [
-            o
-            for o in gc.get_objects()
-            if isinstance(
-                o,
-                (
-                    PregelExecutableTask,
-                    PregelTask,
-                    PregelScratchpad,
-                    PregelTaskWrites,
-                    StateSnapshot,
-                ),
-            )
-        ]
-        assert not leaked_objs, f"{len(leaked_objs)} leaked objects at end of test."
-    finally:
-        gc.enable()
+    # TODO: Ideally we should be yielding
+    gc.collect()
+    leaked_objs = [
+        o
+        for o in gc.get_objects()
+        if isinstance(
+            o,
+            (
+                PregelExecutableTask,
+                PregelTask,
+                PregelScratchpad,
+                PregelTaskWrites,
+                StateSnapshot,
+                SyncPregelLoop,
+                AsyncPregelLoop,
+                PregelRunner,
+            ),
+        )
+    ]
+    assert not leaked_objs, f"{len(leaked_objs)} leaked objects at end of test."
 
 
 SHALLOW_CHECKPOINTERS_SYNC = ["postgres_shallow"]

@@ -7623,28 +7623,37 @@ def test_parallel_interrupts_double(
 
 
 def test_pregel_loop_refcount():
-    class State(TypedDict):
-        messages: Annotated[list, add_messages]
+    gc.collect()
+    try:
+        gc.disable()
 
-    graph_builder = StateGraph(State)
+        class State(TypedDict):
+            messages: Annotated[list, add_messages]
 
-    def chatbot(state: State):
-        return {"messages": [("ai", "HIYA")]}
+        graph_builder = StateGraph(State)
 
-    graph_builder.add_node("chatbot", chatbot)
-    graph_builder.set_entry_point("chatbot")
-    graph_builder.set_finish_point("chatbot")
-    graph = graph_builder.compile()
+        def chatbot(state: State):
+            return {"messages": [("ai", "HIYA")]}
 
-    for _ in range(5):
-        graph.invoke({"messages": [{"role": "user", "content": "hi"}]})
-        assert (
-            len([obj for obj in gc.get_objects() if isinstance(obj, SyncPregelLoop)])
-            == 0
-        )
-        assert (
-            len([obj for obj in gc.get_objects() if isinstance(obj, PregelRunner)]) == 0
-        )
+        graph_builder.add_node("chatbot", chatbot)
+        graph_builder.set_entry_point("chatbot")
+        graph_builder.set_finish_point("chatbot")
+        graph = graph_builder.compile()
+
+        for _ in range(5):
+            graph.invoke({"messages": [{"role": "user", "content": "hi"}]})
+            assert (
+                len(
+                    [obj for obj in gc.get_objects() if isinstance(obj, SyncPregelLoop)]
+                )
+                == 0
+            )
+            assert (
+                len([obj for obj in gc.get_objects() if isinstance(obj, PregelRunner)])
+                == 0
+            )
+    finally:
+        gc.enable()
 
 
 @pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_SYNC)
