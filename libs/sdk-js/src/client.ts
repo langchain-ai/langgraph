@@ -514,15 +514,13 @@ export class ThreadsClient<
     };
 
     if (payload?.fromSupersteps) {
-      json.supersteps = {
-        supersteps: payload.fromSupersteps.map((s) => ({
-          updates: s.updates.map((u) => ({
-            values: u.values,
-            command: u.command,
-            as_node: u.asNode,
-          })),
+      json.supersteps = payload.fromSupersteps.map((s) => ({
+        updates: s.updates.map((u) => ({
+          values: u.values,
+          command: u.command,
+          as_node: u.asNode,
         })),
-      };
+      }));
 
       return this.fetch<Thread<TStateType>>(`/threads/state/bulk`, {
         method: "POST",
