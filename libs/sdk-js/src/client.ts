@@ -508,7 +508,10 @@ export class ThreadsClient<
     }>;
   }): Promise<Thread<TStateType>> {
     const json: Record<string, unknown> = {
-      metadata: payload?.metadata,
+      metadata: {
+        ...payload?.metadata,
+        graph_id: payload?.graphId,
+      },
       thread_id: payload?.threadId,
       if_exists: payload?.ifExists,
     };
