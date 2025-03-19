@@ -482,15 +482,47 @@ export class ThreadsClient<
      * Metadata for the thread.
      */
     metadata?: Metadata;
+    /**
+     * ID of the thread to create.
+     *
+     * If not provided, a random UUID will be generated.
+     */
     threadId?: string;
+    /**
+     * How to handle duplicate creation.
+     *
+     * @default "raise"
+     */
     ifExists?: OnConflictBehavior;
+    /**
+     * Graph ID to associate with the thread.
+     */
+    graphId?: string;
+    /**
+     * Apply a list of supersteps when creating a thread, each containing a sequence of updates.
+     *
+     * Used for copying a thread between deployments.
+     */
+    supersteps?: Array<{
+      updates: Array<{ values: unknown; command?: Command; asNode: string }>;
+    }>;
   }): Promise<Thread<TStateType>> {
     return this.fetch<Thread<TStateType>>(`/threads`, {
       method: "POST",
       json: {
-        metadata: payload?.metadata,
+        metadata: {
+          ...payload?.metadata,
+          graph_id: payload?.graphId,
+        },
         thread_id: payload?.threadId,
         if_exists: payload?.ifExists,
+        supersteps: payload?.supersteps?.map((s) => ({
+          updates: s.updates.map((u) => ({
+            values: u.values,
+            command: u.command,
+            as_node: u.asNode,
+          })),
+        })),
       },
     });
   }
@@ -637,40 +669,6 @@ export class ThreadsClient<
         },
       },
     );
-  }
-
-  /**
-   * Create a new thread from a batch states.
-   */
-  async bulkUpdateState(
-    supersteps: Array<{
-      updates: Array<{ values: unknown; command?: Command; asNode: string }>;
-    }>,
-    options?: {
-      graphId?: string;
-      threadId?: string;
-      metadata?: Metadata;
-      ifExists?: OnConflictBehavior;
-    },
-  ): Promise<Thread<TStateType>> {
-    return this.fetch<Thread<TStateType>>("/threads/state/batch", {
-      method: "POST",
-      json: {
-        supersteps: supersteps.map((s) => ({
-          updates: s.updates.map((u) => ({
-            values: u.values,
-            command: u.command,
-            as_node: u.asNode,
-          })),
-        })),
-        thread_id: options?.threadId,
-        metadata: {
-          ...options?.metadata,
-          graph_id: options?.graphId,
-        },
-        if_exists: options?.ifExists,
-      },
-    });
   }
 
   /**
