@@ -390,12 +390,32 @@ for name, agraph, graph, input in benchmarks:
 # Graph compilation times
 compilation_benchmarks = (
     (
-        "sequential_1000_compilation",
+        "sequential_1000",
         create_sequential(1_000),
     ),
     (
-        "sequential_10000_compilation",
+        "sequential_10000",
         create_sequential(10_000),
+    ),
+    (
+        "pydantic_state_25x300",
+        pydantic_state(300),
+    ),
+    (
+        "pydantic_state_15x600",
+        pydantic_state(600),
+    ),
+    (
+        "pydantic_state_9x1200",
+        pydantic_state(1200),
+    ),
+    (
+        "wide_state_15x600",
+        wide_state(600),
+    ),
+    (
+        "wide_state_9x1200",
+        wide_state(1200),
     ),
 )
 
