@@ -209,7 +209,7 @@ class PregelLoop(LoopProtocol):
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
         input_model: Optional[Type[BaseModel]] = None,
         debug: bool = False,
-        triggers_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
+        trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
     ) -> None:
         super().__init__(
             step=0,
@@ -233,6 +233,7 @@ class PregelLoop(LoopProtocol):
             CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
             or CONFIG_KEY_DEDUPE_TASKS in config[CONF]
         )
+        self.trigger_to_nodes = trigger_to_nodes
         self.debug = debug
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
@@ -279,7 +280,6 @@ class PregelLoop(LoopProtocol):
             if self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS)
             else ()
         )
-        self.triggers_to_nodes = triggers_to_nodes
         self.prev_checkpoint_config = None
 
     def put_writes(self, task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
@@ -431,7 +431,7 @@ class PregelLoop(LoopProtocol):
                     ),
                 )
             # all tasks have finished
-            mv_writes, _ = apply_writes(
+            mv_writes, updated_channels = apply_writes(
                 self.checkpoint,
                 self.channels,
                 self.tasks.values(),
@@ -484,15 +484,6 @@ class PregelLoop(LoopProtocol):
             self.status = "out_of_steps"
             return False
 
-        # If updated channels is available, we project only a subset of the nodes.
-        # since only those nodes have been updated?
-        triggered_nodes: set[str] = set()
-        if updated_channels is not None:
-            # Get all nodes that have triggers associated with an updated channel
-            for channel in updated_channels:
-                if node_ids := self.triggers_to_nodes.get(channel):
-                    triggered_nodes.update(node_ids)
-
         # prepare next tasks
         self.tasks = prepare_next_tasks(
             self.checkpoint,
@@ -506,7 +497,8 @@ class PregelLoop(LoopProtocol):
             manager=self.manager,
             store=self.store,
             checkpointer=self.checkpointer,
-            triggered_nodes=triggered_nodes or None,
+            trigger_to_nodes=self.trigger_to_nodes,
+            updated_channels=updated_channels,
         )
         self.to_interrupt = []
 
@@ -897,7 +889,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         input_model: Optional[Type[BaseModel]] = None,
         debug: bool = False,
-        triggers_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
+        trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
     ) -> None:
         super().__init__(
             input,
@@ -914,7 +906,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             interrupt_before=interrupt_before,
             manager=manager,
             debug=debug,
-            triggers_to_nodes=triggers_to_nodes,
+            trigger_to_nodes=trigger_to_nodes,
         )
         self.stack = ExitStack()
         if checkpointer:
@@ -1040,7 +1032,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         input_model: Optional[Type[BaseModel]] = None,
         debug: bool = False,
-        triggers_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
+        trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
     ) -> None:
         super().__init__(
             input,
@@ -1057,7 +1049,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             interrupt_before=interrupt_before,
             manager=manager,
             debug=debug,
-            triggers_to_nodes=triggers_to_nodes,
+            trigger_to_nodes=trigger_to_nodes,
         )
         self.stack = AsyncExitStack()
         if checkpointer:

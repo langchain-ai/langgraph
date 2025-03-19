@@ -329,7 +329,6 @@ def apply_writes(
                         max_version,
                         channels[chan],
                     )
-
     # Return managed values writes to be applied externally
     return pending_writes_by_managed, updated_channels
 
@@ -348,6 +347,8 @@ def prepare_next_tasks(
     store: Literal[None] = None,
     checkpointer: Literal[None] = None,
     manager: Literal[None] = None,
+    trigger_to_nodes: Optional[Mapping[str, set[str]]] = None,
+    updated_channels: Optional[set[str]] = None,
 ) -> dict[str, PregelTask]: ...
 
 
@@ -365,6 +366,8 @@ def prepare_next_tasks(
     store: Optional[BaseStore],
     checkpointer: Optional[BaseCheckpointSaver],
     manager: Union[None, ParentRunManager, AsyncParentRunManager],
+    trigger_to_nodes: Optional[Mapping[str, set[str]]] = None,
+    updated_channels: Optional[set[str]] = None,
 ) -> dict[str, PregelExecutableTask]: ...
 
 
@@ -381,8 +384,8 @@ def prepare_next_tasks(
     store: Optional[BaseStore] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
-    # Nodes that are known to have been triggered in the previous step
-    triggered_nodes: Optional[set[str]] = None,
+    trigger_to_nodes: Optional[Mapping[str, set[str]]] = None,
+    updated_channels: Optional[set[str]] = None,
 ) -> Union[dict[str, PregelTask], dict[str, PregelExecutableTask]]:
     """Prepare the set of tasks that will make up the next Pregel step.
 
@@ -398,7 +401,12 @@ def prepare_next_tasks(
         store: An instance of BaseStore to make it available for usage within tasks.
         checkpointer: Checkpointer instance used for saving checkpoints.
         manager: The parent run manager to use for the tasks.
-        triggered_nodes: The set of nodes that were triggered in the previous step
+        trigger_to_nodes: Optional: Mapping of channel names to the set of nodes
+            that are can be triggered by that channel.
+        updated_channels: Optional. Set of channel names that have been updated during
+            the previous step. Using in conjunction with trigger_to_nodes to speed
+            up the process of determining which nodes should be triggered in the next
+            step.
 
     Returns:
         A dictionary of tasks to be executed. The keys are the task ids and the values
@@ -428,11 +436,21 @@ def prepare_next_tasks(
             manager=manager,
         ):
             tasks.append(task)
+    # If updated channels is available, we project only a subset of the nodes.
+    # since only those nodes have been updated?
+    if updated_channels and trigger_to_nodes:
+        triggered_nodes: set[str] = set()
+        # Get all nodes that have triggers associated with an updated channel
+        for channel in updated_channels:
+            if node_ids := trigger_to_nodes.get(channel):
+                triggered_nodes.update(node_ids)
+        # Sort the nodes to ensure deterministic order
+        candidate_nodes: Iterable[str] = sorted(triggered_nodes)
+    else:
+        candidate_nodes = processes.keys()
+
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
-
-    candidate_nodes: Iterable[str] = processes.keys() if triggered_nodes is None else sorted(triggered_nodes)
-
     for name in candidate_nodes:
         # Check if we know which channels have been updated.
         if task := prepare_single_task(

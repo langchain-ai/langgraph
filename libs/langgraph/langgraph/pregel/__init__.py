@@ -543,12 +543,6 @@ class Pregel(PregelProtocol):
         self.config_type = config_type
         self.input_model = input_model
         self.config = config
-        # Index from a trigger to nodes that depend on it
-        trigger_to_node = {}
-        for name, node in self.nodes.items():
-            for trigger in node.triggers:
-                trigger_to_node.setdefault(trigger, []).append(name)
-        self.trigger_to_node = trigger_to_node
 
         self.name = name
         if auto_validate:
@@ -2006,7 +2000,12 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
                 debug=debug,
-                triggers_to_nodes=self.trigger_to_node,
+                # `self.nodes` can be modified after creation of `Pregel`. For example,
+                # that's how StateGraph compilation currently works.
+                # For now, we recompute the trigger_to_nodes mapping every time the
+                # loop is created. We could potentially memoize this if it becomes a
+                # performance issue.
+                trigger_to_nodes=_trigger_to_nodes(self.nodes),
             ) as loop:
                 # create runner
                 runner = PregelRunner(
@@ -2285,6 +2284,7 @@ class Pregel(PregelProtocol):
                         stream.put_nowait, ((), "custom", c)
                     )
                 )
+
             async with AsyncPregelLoop(
                 input,
                 input_model=self.input_model,
@@ -2300,7 +2300,12 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
                 debug=debug,
-                triggers_to_nodes=self.trigger_to_node,
+                # `self.nodes` can be modified after creation of `Pregel`. For example,
+                # that's how StateGraph compilation currently works.
+                # For now, we recompute the trigger_to_nodes mapping every time the
+                # loop is created. We could potentially memoize this if it becomes a
+                # performance issue.
+                trigger_to_nodes=_trigger_to_nodes(self.nodes),
             ) as loop:
                 # create runner
                 runner = PregelRunner(
@@ -2469,3 +2474,12 @@ class Pregel(PregelProtocol):
             return latest
         else:
             return chunks
+
+
+def _trigger_to_nodes(nodes: dict[str, PregelNode]) -> dict[str, list[str]]:
+    """Index from a trigger to nodes that depend on it."""
+    trigger_to_nodes = {}
+    for name, node in nodes.items():
+        for trigger in node.triggers:
+            trigger_to_nodes.setdefault(trigger, []).append(name)
+    return trigger_to_nodes
