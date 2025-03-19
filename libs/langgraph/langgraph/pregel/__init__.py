@@ -2751,10 +2751,10 @@ class Pregel(PregelProtocol):
             return chunks
 
 
-def _trigger_to_nodes(nodes: dict[str, PregelNode]) -> dict[str, list[str]]:
+def _trigger_to_nodes(nodes: dict[str, PregelNode]) -> Mapping[str, list[str]]:
     """Index from a trigger to nodes that depend on it."""
     trigger_to_nodes: defaultdict[str, list[str]] = defaultdict(list)
     for name, node in nodes.items():
         for trigger in node.triggers:
             trigger_to_nodes.setdefault(trigger, []).append(name)
-    return trigger_to_nodes
+    return cast(Mapping[str, list[str]], trigger_to_nodes)
