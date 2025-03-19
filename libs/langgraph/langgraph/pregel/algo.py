@@ -436,8 +436,14 @@ def prepare_next_tasks(
             manager=manager,
         ):
             tasks.append(task)
-    # If updated channels is available, we project only a subset of the nodes.
-    # since only those nodes have been updated?
+
+    # This section is an optimization that allows which nodes will be active
+    # during the next step.
+    # When there's information about:
+    # 1. Which channels were updated in the previous step
+    # 2. Which nodes are triggered by which channels
+    # Then we can determine which nodes should be triggered in the next step
+    # without having to cycle through all nodes.
     if updated_channels and trigger_to_nodes:
         triggered_nodes: set[str] = set()
         # Get all nodes that have triggers associated with an updated channel
