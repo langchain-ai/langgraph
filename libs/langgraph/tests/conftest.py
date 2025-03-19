@@ -5,7 +5,6 @@ from typing import AsyncIterator, Optional
 from uuid import UUID, uuid4
 
 import pytest
-import referrers
 from langchain_core import __version__ as core_version
 from packaging import version
 from psycopg import AsyncConnection, Connection
@@ -452,10 +451,10 @@ async def awith_store(store_name: Optional[str]) -> AsyncIterator[BaseStore]:
 @pytest.fixture(autouse=True)
 def check_live_objects() -> None:
     """Check for live objects after each test."""
-    gc.collect()
-    gc.disable()
     try:
-        yield
+        gc.disable()
+        # Should we be yielding?
+        gc.collect()
         leaked_objs = [
             o
             for o in gc.get_objects()
@@ -470,7 +469,7 @@ def check_live_objects() -> None:
                 ),
             )
         ]
-        assert not leaked_objs, f"""Leaked objects at end of test: {referrers.get_referrer_graph_for_list(leaked_objs, exclude_object_ids=(id(leaked_objs),))}"""
+        assert not leaked_objs, f"{len(leaked_objs)} leaked objects at end of test."
     finally:
         gc.enable()
 
