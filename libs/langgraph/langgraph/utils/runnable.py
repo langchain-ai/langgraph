@@ -2,8 +2,8 @@ import asyncio
 import enum
 import inspect
 import sys
-from contextlib import AsyncExitStack
-from contextvars import copy_context
+from contextlib import AsyncExitStack, contextmanager
+from contextvars import Context, Token, copy_context
 from functools import partial, wraps
 from typing import (
     Any,
@@ -11,6 +11,7 @@ from typing import (
     Awaitable,
     Callable,
     Coroutine,
+    Generator,
     Iterator,
     Optional,
     Protocol,
@@ -53,13 +54,69 @@ from langgraph.utils.config import (
     patch_config,
 )
 
-try:
-    from langchain_core.runnables.config import _set_config_context
-except ImportError:
-    # For forwards compatibility
-    def _set_config_context(context: RunnableConfig) -> None:  # type: ignore
-        """Set the context for the current thread."""
-        var_child_runnable_config.set(context)
+
+def _set_config_context(
+    config: RunnableConfig,
+) -> tuple[Token[Optional[RunnableConfig]], Optional[dict[str, Any]]]:
+    """Set the child Runnable config + tracing context.
+
+    Args:
+        config (RunnableConfig): The config to set.
+    """
+    from langchain_core.tracers.langchain import LangChainTracer
+
+    config_token = var_child_runnable_config.set(config)
+    current_context = None
+    if (
+        (callbacks := config.get("callbacks"))
+        and (
+            parent_run_id := getattr(callbacks, "parent_run_id", None)
+        )  # Is callback manager
+        and (
+            tracer := next(
+                (
+                    handler
+                    for handler in getattr(callbacks, "handlers", [])
+                    if isinstance(handler, LangChainTracer)
+                ),
+                None,
+            )
+        )
+        and (run := tracer.run_map.get(str(parent_run_id)))
+    ):
+        from langsmith.run_helpers import _set_tracing_context, get_tracing_context
+
+        current_context = get_tracing_context()
+        _set_tracing_context({"parent": run})
+    return config_token, current_context
+
+
+@contextmanager
+def set_config_context(config: RunnableConfig) -> Generator[Context, None, None]:
+    """Set the child Runnable config + tracing context.
+
+    Args:
+        config (RunnableConfig): The config to set.
+    """
+    from langsmith.run_helpers import _set_tracing_context
+
+    ctx = copy_context()
+    config_token, _ = ctx.run(_set_config_context, config)
+    try:
+        yield ctx
+    finally:
+        ctx.run(var_child_runnable_config.reset, config_token)
+        ctx.run(
+            _set_tracing_context,
+            {
+                "parent": None,
+                "project_name": None,
+                "tags": None,
+                "metadata": None,
+                "enabled": None,
+                "client": None,
+            },
+        )
 
 
 # Before Python 3.11 native StrEnum is not available
@@ -286,7 +343,6 @@ class RunnableCallable(Runnable):
 
             kwargs[kw] = _conf.get(config_key, default_value)
 
-        context = copy_context()
         if self.trace:
             callback_manager = get_callback_manager_for_config(config, self.tags)
             run_manager = callback_manager.on_chain_start(
@@ -297,17 +353,16 @@ class RunnableCallable(Runnable):
             )
             try:
                 child_config = patch_config(config, callbacks=run_manager.get_child())
-                context = copy_context()
-                context.run(_set_config_context, child_config)
-                ret = context.run(self.func, *args, **kwargs)
+                with set_config_context(child_config) as context:
+                    ret = context.run(self.func, *args, **kwargs)
             except BaseException as e:
                 run_manager.on_chain_error(e)
                 raise
             else:
                 run_manager.on_chain_end(ret)
         else:
-            context.run(_set_config_context, config)
-            ret = context.run(self.func, *args, **kwargs)
+            with set_config_context(config) as context:
+                ret = context.run(self.func, *args, **kwargs)
         if isinstance(ret, Runnable) and self.recurse:
             return ret.invoke(input, config)
         return ret
@@ -342,7 +397,6 @@ class RunnableCallable(Runnable):
                     f"Missing required config key '{config_key}' for '{self.name}'."
                 )
             kwargs[kw] = _conf.get(config_key, default_value)
-        context = copy_context()
         if self.trace:
             callback_manager = get_async_callback_manager_for_config(config, self.tags)
             run_manager = await callback_manager.on_chain_start(
@@ -353,24 +407,24 @@ class RunnableCallable(Runnable):
             )
             try:
                 child_config = patch_config(config, callbacks=run_manager.get_child())
-                context.run(_set_config_context, child_config)
-                coro = cast(Coroutine[None, None, Any], self.afunc(*args, **kwargs))
-                if ASYNCIO_ACCEPTS_CONTEXT:
-                    ret = await asyncio.create_task(coro, context=context)
-                else:
-                    ret = await coro
+                with set_config_context(child_config) as context:
+                    coro = cast(Coroutine[None, None, Any], self.afunc(*args, **kwargs))
+                    if ASYNCIO_ACCEPTS_CONTEXT:
+                        ret = await asyncio.create_task(coro, context=context)
+                    else:
+                        ret = await coro
             except BaseException as e:
                 await run_manager.on_chain_error(e)
                 raise
             else:
                 await run_manager.on_chain_end(ret)
         else:
-            context.run(_set_config_context, config)
-            if ASYNCIO_ACCEPTS_CONTEXT:
-                coro = cast(Coroutine[None, None, Any], self.afunc(*args, **kwargs))
-                ret = await asyncio.create_task(coro, context=context)
-            else:
-                ret = await self.afunc(*args, **kwargs)
+            with set_config_context(config) as context:
+                if ASYNCIO_ACCEPTS_CONTEXT:
+                    coro = cast(Coroutine[None, None, Any], self.afunc(*args, **kwargs))
+                    ret = await asyncio.create_task(coro, context=context)
+                else:
+                    ret = await self.afunc(*args, **kwargs)
         if isinstance(ret, Runnable) and self.recurse:
             return await ret.ainvoke(input, config)
         return ret
