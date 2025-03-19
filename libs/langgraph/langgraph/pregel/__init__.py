@@ -1819,8 +1819,8 @@ class Pregel(PregelProtocol):
 
                     valid_updates.append((as_node, values))
 
-                run_tasks: list[PregelTaskWrites] = []
-                run_task_ids: list[str] = []
+            run_tasks: list[PregelTaskWrites] = []
+            run_task_ids: list[str] = []
 
             for as_node, values in valid_updates:
                 # create task to run all writers of the chosen node
