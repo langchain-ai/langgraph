@@ -4,6 +4,7 @@ import asyncio
 import concurrent
 import concurrent.futures
 import queue
+import weakref
 from collections import deque
 from functools import partial
 from typing import (
@@ -797,9 +798,11 @@ class Pregel(PregelProtocol):
                 saved.metadata.get("step", -1) + 1,
                 for_execution=True,
                 store=self.store,
-                checkpointer=self.checkpointer
-                if isinstance(self.checkpointer, BaseCheckpointSaver)
-                else None,
+                checkpointer=(
+                    self.checkpointer
+                    if isinstance(self.checkpointer, BaseCheckpointSaver)
+                    else None
+                ),
                 manager=None,
             )
             # get the subgraphs
@@ -911,9 +914,11 @@ class Pregel(PregelProtocol):
                 saved.metadata.get("step", -1) + 1,
                 for_execution=True,
                 store=self.store,
-                checkpointer=self.checkpointer
-                if isinstance(self.checkpointer, BaseCheckpointSaver)
-                else None,
+                checkpointer=(
+                    self.checkpointer
+                    if isinstance(self.checkpointer, BaseCheckpointSaver)
+                    else None
+                ),
                 manager=None,
             )
             # get the subgraphs
@@ -1225,9 +1230,11 @@ class Pregel(PregelProtocol):
                         saved.metadata.get("step", -1) + 1,
                         for_execution=True,
                         store=self.store,
-                        checkpointer=self.checkpointer
-                        if isinstance(self.checkpointer, BaseCheckpointSaver)
-                        else None,
+                        checkpointer=(
+                            self.checkpointer
+                            if isinstance(self.checkpointer, BaseCheckpointSaver)
+                            else None
+                        ),
                         manager=None,
                     )
                     # apply null writes
@@ -1321,9 +1328,11 @@ class Pregel(PregelProtocol):
                     saved.metadata.get("step", -1) + 1,
                     for_execution=True,
                     store=self.store,
-                    checkpointer=self.checkpointer
-                    if isinstance(self.checkpointer, BaseCheckpointSaver)
-                    else None,
+                    checkpointer=(
+                        self.checkpointer
+                        if isinstance(self.checkpointer, BaseCheckpointSaver)
+                        else None
+                    ),
                     manager=None,
                 )
                 # apply null writes
@@ -1508,9 +1517,11 @@ class Pregel(PregelProtocol):
                         saved.metadata.get("step", -1) + 1,
                         for_execution=True,
                         store=self.store,
-                        checkpointer=self.checkpointer
-                        if isinstance(self.checkpointer, BaseCheckpointSaver)
-                        else None,
+                        checkpointer=(
+                            self.checkpointer
+                            if isinstance(self.checkpointer, BaseCheckpointSaver)
+                            else None
+                        ),
                         manager=None,
                     )
                     # apply null writes
@@ -1604,9 +1615,11 @@ class Pregel(PregelProtocol):
                     saved.metadata.get("step", -1) + 1,
                     for_execution=True,
                     store=self.store,
-                    checkpointer=self.checkpointer
-                    if isinstance(self.checkpointer, BaseCheckpointSaver)
-                    else None,
+                    checkpointer=(
+                        self.checkpointer
+                        if isinstance(self.checkpointer, BaseCheckpointSaver)
+                        else None
+                    ),
                     manager=None,
                 )
                 # apply null writes
@@ -1989,9 +2002,11 @@ class Pregel(PregelProtocol):
             ) as loop:
                 # create runner
                 runner = PregelRunner(
-                    submit=config[CONF].get(CONFIG_KEY_RUNNER_SUBMIT, loop.submit),
-                    put_writes=loop.put_writes,
-                    schedule_task=loop.accept_push,
+                    submit=config[CONF].get(
+                        CONFIG_KEY_RUNNER_SUBMIT, weakref.WeakMethod(loop.submit)
+                    ),
+                    put_writes=weakref.WeakMethod(loop.put_writes),
+                    schedule_task=weakref.WeakMethod(loop.accept_push),
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
                 )
                 # enable subgraph streaming
@@ -2280,9 +2295,11 @@ class Pregel(PregelProtocol):
             ) as loop:
                 # create runner
                 runner = PregelRunner(
-                    submit=config[CONF].get(CONFIG_KEY_RUNNER_SUBMIT, loop.submit),
-                    put_writes=loop.put_writes,
-                    schedule_task=loop.accept_push,
+                    submit=config[CONF].get(
+                        CONFIG_KEY_RUNNER_SUBMIT, weakref.WeakMethod(loop.submit)
+                    ),
+                    put_writes=weakref.WeakMethod(loop.put_writes),
+                    schedule_task=weakref.WeakMethod(loop.accept_push),
                     use_astream=do_stream is not None,
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
                 )

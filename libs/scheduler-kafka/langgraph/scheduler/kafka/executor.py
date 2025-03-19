@@ -1,6 +1,7 @@
 import asyncio
 import binascii
 import concurrent.futures
+import weakref
 from collections.abc import Sequence
 from contextlib import (
     AbstractAsyncContextManager,
@@ -216,10 +217,11 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
                 checkpoint_null_version=checkpoint_null_version(saved.checkpoint),
             ):
                 # execute task, saving writes
+                put_writes = partial(self._put_writes, submit, msg["config"])
                 runner = PregelRunner(
-                    submit=submit,
-                    put_writes=partial(self._put_writes, submit, msg["config"]),
-                    schedule_task=self._schedule_task,
+                    submit=weakref.ref(submit),
+                    put_writes=weakref.ref(put_writes),
+                    schedule_task=weakref.WeakMethod(self._schedule_task),
                 )
                 async for _ in runner.atick([task], reraise=False):
                     pass
@@ -432,10 +434,11 @@ class KafkaExecutor(AbstractContextManager):
                 checkpoint_null_version=checkpoint_null_version(saved.checkpoint),
             ):
                 # execute task, saving writes
+                put_writes = partial(self._put_writes, submit, msg["config"])
                 runner = PregelRunner(
-                    submit=submit,
-                    put_writes=partial(self._put_writes, submit, msg["config"]),
-                    schedule_task=self._schedule_task,
+                    submit=weakref.ref(submit),
+                    put_writes=weakref.ref(put_writes),
+                    schedule_task=weakref.WeakMethod(self._schedule_task),
                 )
                 for _ in runner.tick([task], reraise=False):
                     pass
