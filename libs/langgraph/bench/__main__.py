@@ -11,6 +11,7 @@ from bench.react_agent import react_agent
 from bench.sequential import create_sequential
 from bench.wide_state import wide_state
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import StateGraph
 from langgraph.pregel import Pregel
 
 
@@ -72,6 +73,11 @@ def run_first_event_latency(graph: Pregel, input: dict) -> None:
         },
     ):
         break
+
+
+def compile_graph(graph: StateGraph) -> None:
+    """Compile the graph."""
+    graph.compile()
 
 
 benchmarks = (
@@ -380,3 +386,18 @@ for name, agraph, graph, input in benchmarks:
         r.bench_func(
             name + "_first_event_latency_sync", run_first_event_latency, graph, input
         )
+
+# Graph compilation times
+compilation_benchmarks = (
+    (
+        "sequential_1000_compilation",
+        create_sequential(1_000),
+    ),
+    (
+        "sequential_10000_compilation",
+        create_sequential(10_000),
+    ),
+)
+
+for name, graph, input in compilation_benchmarks:
+    r.bench_func(name, "_compilation", compile_graph, graph, input)
