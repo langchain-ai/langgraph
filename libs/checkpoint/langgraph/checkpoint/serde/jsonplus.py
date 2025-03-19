@@ -5,10 +5,10 @@ import json
 import pathlib
 import re
 from collections import deque
-from pandas import DataFrame
 from collections.abc import Sequence
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
+from importlib.util import find_spec
 from inspect import isclass
 from ipaddress import (
     IPv4Address,
@@ -20,11 +20,11 @@ from ipaddress import (
 )
 from typing import Any, Callable, Optional, Union, cast
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import msgpack  # type: ignore[import-untyped]
 from langchain_core.load.load import Reviver
 from langchain_core.load.serializable import Serializable
-from zoneinfo import ZoneInfo
 
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.types import SendProtocol
@@ -432,7 +432,40 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
         )
     elif isinstance(obj, BaseException):
         return repr(obj)
-    elif isinstance(obj, DataFrame):
+    else:
+        # Attempt to encode using any additional special case encoders
+        encoded = _maybe_special_case_encode(obj)
+        if encoded:
+            return encoded
+        raise TypeError(f"Object of type {obj.__class__.__name__} is not serializable")
+
+
+def _maybe_special_case_encode(obj: Any) -> Optional[msgpack.ExtType]:
+    """Attempt to encode using special cased encoders."""
+    for encoder in ADDITIONAL_ENCODERS:
+        encoded = encoder(obj)
+        if encoded is not None:
+            return encoded
+    return None
+
+
+def _get_additional_encoders() -> list[Callable[[Any], Optional[msgpack.ExtType]]]:
+    """Get additional encoders that are supported if relevant packages are installed."""
+    encoders = []
+    if find_spec("pandas"):
+        encoders.append(_encode_pandas_dataframe)
+    return encoders
+
+
+ADDITIONAL_ENCODERS = _get_additional_encoders()
+
+
+# Special cased encoders. Supported if user has the relevant library installed.
+def _encode_pandas_dataframe(obj: Any) -> Optional[msgpack.ExtType]:
+    """Encode pandas DataFrame objects."""
+    from pandas import DataFrame
+
+    if isinstance(obj, DataFrame):
         return msgpack.ExtType(
             EXT_CONSTRUCTOR_POS_ARGS,
             _msgpack_enc(
@@ -443,8 +476,7 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
                 ),
             ),
         )
-    else:
-        raise TypeError(f"Object of type {obj.__class__.__name__} is not serializable")
+    return None
 
 
 def _msgpack_ext_hook(code: int, data: bytes) -> Any:
