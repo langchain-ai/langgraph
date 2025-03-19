@@ -14,6 +14,8 @@ To run the documentation server locally you can run:
 make serve-docs
 ```
 
+This will start the documentation server on [http://127.0.0.1:8000/langgraph/](http://127.0.0.1:8000/langgraph/).
+
 ## Execute notebooks
 
 If you would like to automatically execute all of the notebooks, to mimic the "Run notebooks" GHA, you can run:
