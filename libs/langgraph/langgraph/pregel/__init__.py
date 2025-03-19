@@ -544,7 +544,6 @@ class Pregel(PregelProtocol):
         self.config_type = config_type
         self.input_model = input_model
         self.config = config
-
         self.name = name
         if auto_validate:
             self.validate()
@@ -2561,7 +2560,6 @@ class Pregel(PregelProtocol):
                         stream.put_nowait, ((), "custom", c)
                     )
                 )
-
             async with AsyncPregelLoop(
                 input,
                 input_model=self.input_model,

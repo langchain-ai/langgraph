@@ -452,7 +452,6 @@ def prepare_next_tasks(
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
     for name in candidate_nodes:
-        # Check if we know which channels have been updated.
         if task := prepare_single_task(
             (PULL, name),
             None,
