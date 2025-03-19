@@ -859,7 +859,7 @@ class ThreadsClient:
 
         Example Usage:
 
-            thread = client.threads.create(
+            thread = await client.threads.create(
                 metadata={"number":1},
                 thread_id="my-thread-id",
                 if_exists="raise"
