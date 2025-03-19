@@ -148,7 +148,14 @@ class PregelTask(NamedTuple):
     result: Optional[Any] = None
 
 
-class PregelExecutableTask(NamedTuple):
+if sys.version_info > (3, 11):
+    _T_DC_KWARGS = {"weakref_slot": True, "slots": True, "frozen": True}
+else:
+    _T_DC_KWARGS = {"frozen": True}
+
+
+@dataclasses.dataclass(**_T_DC_KWARGS)
+class PregelExecutableTask:
     name: str
     input: Any
     proc: Runnable

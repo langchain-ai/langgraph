@@ -1,6 +1,7 @@
 import asyncio
 import binascii
 import concurrent.futures
+import dataclasses
 from collections import defaultdict, deque
 from contextlib import AsyncExitStack, ExitStack
 from inspect import signature
@@ -571,7 +572,9 @@ class PregelLoop(LoopProtocol):
                         self.checkpoint["versions_seen"].get(INTERRUPT, {}).values(),
                         default=None,
                     ):
-                        self.tasks[tid] = task._replace(scheduled=True)
+                        self.tasks[tid] = PregelExecutableTask(
+                            **dataclasses.asdict(task) | {"scheduled": True}
+                        )
                 else:
                     task.writes.append((k, v))
 
