@@ -1142,6 +1142,55 @@ class ThreadsClient:
             payload["as_node"] = as_node
         return await self.http.post(f"/threads/{thread_id}/state", json=payload)
 
+    async def bulk_update_state(
+        self,
+        supersteps: Sequence[dict[str, Sequence[dict[str, Any]]]],
+        *,
+        graph_id: Optional[str] = None,
+        thread_id: Optional[str] = None,
+        metadata: Optional[dict[str, Any]] = None,
+        if_exists: Optional[OnConflictBehavior] = None,
+    ) -> Thread:
+        """Create a new thread from a batch of states.
+
+        Args:
+            supersteps: A sequence of supersteps, each containing a sequence of updates.
+                Each update has `values` or `command` and `as_node`.
+            graph_id: Optional graph ID to associate with the thread.
+            thread_id: Optional thread ID to use. If not provided, a new one will be generated.
+            metadata: Optional metadata to associate with the thread.
+            if_exists: Optional behavior when `thread_id` already exists.
+
+        Returns:
+            The created thread.
+        """
+
+        payload: Dict[str, Any] = {
+            "supersteps": [
+                {
+                    "updates": [
+                        {
+                            "values": u["values"],
+                            "command": u.get("command"),
+                            "as_node": u["as_node"],
+                        }
+                        for u in s["updates"]
+                    ]
+                }
+                for s in supersteps
+            ],
+        }
+        if thread_id:
+            payload["thread_id"] = thread_id
+        if metadata or graph_id:
+            payload["metadata"] = {
+                **(metadata or {}),
+                **({"graph_id": graph_id} if graph_id else {}),
+            }
+        if if_exists:
+            payload["if_exists"] = if_exists
+        return await self.http.post("/threads/state/batch", json=payload)
+
     async def get_history(
         self,
         thread_id: str,
@@ -3294,38 +3343,18 @@ class SyncThreadsClient:
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,  # deprecated
     ) -> ThreadUpdateStateResponse:
-        """Update the state of a thread.
+        """Add state to a thread.
 
         Args:
-            thread_id: The ID of the thread to update.
-            values: The values to update the state with.
-            as_node: Update the state as if this node had just executed.
-            checkpoint: The checkpoint to update the state of.
+            thread_id: The ID of the thread.
+            values: The values to add to the thread state.
+            as_node: The node to add the state as.
+            checkpoint: The checkpoint to add the state to.
+            checkpoint_id: The ID of the checkpoint to add the state to. Deprecated.
 
         Returns:
-            ThreadUpdateStateResponse: Response after updating a thread's state.
-
-        Example Usage:
-
-            response = client.threads.update_state(
-                thread_id="my_thread_id",
-                values={"messages":[{"role": "user", "content": "hello!"}]},
-                as_node="my_node",
-            )
-            print(response)
-
-            ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-            {
-                'checkpoint': {
-                    'thread_id': 'e2496803-ecd5-4e0c-a779-3226296181c2',
-                    'checkpoint_ns': '',
-                    'checkpoint_id': '1ef4a9b8-e6fb-67b1-8001-abd5184439d1',
-                    'checkpoint_map': {}
-                }
-            }
-
-        """  # noqa: E501
+            The response from the server.
+        """
         payload: Dict[str, Any] = {
             "values": values,
         }
@@ -3336,6 +3365,55 @@ class SyncThreadsClient:
         if as_node:
             payload["as_node"] = as_node
         return self.http.post(f"/threads/{thread_id}/state", json=payload)
+
+    def bulk_update_state(
+        self,
+        supersteps: Sequence[dict[str, Sequence[dict[str, Any]]]],
+        *,
+        graph_id: Optional[str] = None,
+        thread_id: Optional[str] = None,
+        metadata: Optional[dict[str, Any]] = None,
+        if_exists: Optional[OnConflictBehavior] = None,
+    ) -> Thread:
+        """Create a new thread from a batch of states.
+
+        Args:
+            supersteps: A sequence of supersteps, each containing a sequence of updates.
+                Each update has `values` or `command` and `as_node`.
+            graph_id: Optional graph ID to associate with the thread.
+            thread_id: Optional thread ID to use. If not provided, a new one will be generated.
+            metadata: Optional metadata to associate with the thread.
+            if_exists: Optional behavior when `thread_id` already exists.
+
+        Returns:
+            The created thread.
+        """
+
+        payload: Dict[str, Any] = {
+            "supersteps": [
+                {
+                    "updates": [
+                        {
+                            "values": u["values"],
+                            "command": u.get("command"),
+                            "as_node": u["as_node"],
+                        }
+                        for u in s["updates"]
+                    ]
+                }
+                for s in supersteps
+            ],
+        }
+        if thread_id:
+            payload["thread_id"] = thread_id
+        if metadata or graph_id:
+            payload["metadata"] = {
+                **(metadata or {}),
+                **({"graph_id": graph_id} if graph_id else {}),
+            }
+        if if_exists:
+            payload["if_exists"] = if_exists
+        return self.http.post("/threads/state/bulk", json=payload)
 
     def get_history(
         self,

@@ -641,6 +641,10 @@ export class ThreadsClient<
 
   /**
    * Create a new thread from a batch states.
+   *
+   * @param supersteps An array of supersteps.
+   * @param options Additional options.
+   * @returns The created thread.
    */
   async bulkUpdateState(
     supersteps: Array<{
@@ -653,7 +657,7 @@ export class ThreadsClient<
       ifExists?: OnConflictBehavior;
     },
   ): Promise<Thread<TStateType>> {
-    return this.fetch<Thread<TStateType>>("/threads/state/batch", {
+    return this.fetch<Thread<TStateType>>("/threads/state/bulk", {
       method: "POST",
       json: {
         supersteps: supersteps.map((s) => ({
