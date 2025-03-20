@@ -7,6 +7,7 @@ from langgraph.types import (
     PregelTask,
     RetryPolicy,
     StateSnapshot,
+    StateUpdate,
     StreamMode,
     StreamWriter,
     default_retry_on,
@@ -14,6 +15,7 @@ from langgraph.types import (
 
 __all__ = [
     "All",
+    "StateUpdate",
     "CachePolicy",
     "PregelExecutableTask",
     "PregelTask",

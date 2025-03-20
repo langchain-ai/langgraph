@@ -839,6 +839,8 @@ class ThreadsClient:
         metadata: Json = None,
         thread_id: Optional[str] = None,
         if_exists: Optional[OnConflictBehavior] = None,
+        supersteps: Optional[Sequence[dict[str, Sequence[dict[str, Any]]]]] = None,
+        graph_id: Optional[str] = None,
     ) -> Thread:
         """Create a new thread.
 
@@ -848,6 +850,9 @@ class ThreadsClient:
                 If None, ID will be a randomly generated UUID.
             if_exists: How to handle duplicate creation. Defaults to 'raise' under the hood.
                 Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing thread).
+            supersteps: Apply a list of supersteps when creating a thread, each containing a sequence of updates.
+                Each update has `values` or `command` and `as_node`. Used for copying a thread between deployments.
+            graph_id: Optional graph ID to associate with the thread.
 
         Returns:
             Thread: The created thread.
@@ -863,10 +868,28 @@ class ThreadsClient:
         payload: Dict[str, Any] = {}
         if thread_id:
             payload["thread_id"] = thread_id
-        if metadata:
-            payload["metadata"] = metadata
+        if metadata or graph_id:
+            payload["metadata"] = {
+                **(metadata or {}),
+                **({"graph_id": graph_id} if graph_id else {}),
+            }
         if if_exists:
             payload["if_exists"] = if_exists
+        if supersteps:
+            payload["supersteps"] = [
+                {
+                    "updates": [
+                        {
+                            "values": u["values"],
+                            "command": u.get("command"),
+                            "as_node": u["as_node"],
+                        }
+                        for u in s["updates"]
+                    ]
+                }
+                for s in supersteps
+            ]
+
         return await self.http.post("/threads", json=payload)
 
     async def update(self, thread_id: str, *, metadata: dict[str, Any]) -> Thread:
@@ -3036,6 +3059,8 @@ class SyncThreadsClient:
         metadata: Json = None,
         thread_id: Optional[str] = None,
         if_exists: Optional[OnConflictBehavior] = None,
+        supersteps: Optional[Sequence[dict[str, Sequence[dict[str, Any]]]]] = None,
+        graph_id: Optional[str] = None,
     ) -> Thread:
         """Create a new thread.
 
@@ -3045,6 +3070,9 @@ class SyncThreadsClient:
                 If None, ID will be a randomly generated UUID.
             if_exists: How to handle duplicate creation. Defaults to 'raise' under the hood.
                 Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing thread).
+            supersteps: Apply a list of supersteps when creating a thread, each containing a sequence of updates.
+                Each update has `values` or `command` and `as_node`. Used for copying a thread between deployments.
+            graph_id: Optional graph ID to associate with the thread.
 
         Returns:
             Thread: The created thread.
@@ -3060,10 +3088,28 @@ class SyncThreadsClient:
         payload: Dict[str, Any] = {}
         if thread_id:
             payload["thread_id"] = thread_id
-        if metadata:
-            payload["metadata"] = metadata
+        if metadata or graph_id:
+            payload["metadata"] = {
+                **(metadata or {}),
+                **({"graph_id": graph_id} if graph_id else {}),
+            }
         if if_exists:
             payload["if_exists"] = if_exists
+        if supersteps:
+            payload["supersteps"] = [
+                {
+                    "updates": [
+                        {
+                            "values": u["values"],
+                            "command": u.get("command"),
+                            "as_node": u["as_node"],
+                        }
+                        for u in s["updates"]
+                    ]
+                }
+                for s in supersteps
+            ]
+
         return self.http.post("/threads", json=payload)
 
     def update(self, thread_id: str, *, metadata: dict[str, Any]) -> Thread:
@@ -3307,7 +3353,7 @@ class SyncThreadsClient:
 
         Example Usage:
 
-            response = client.threads.update_state(
+            response = await client.threads.update_state(
                 thread_id="my_thread_id",
                 values={"messages":[{"role": "user", "content": "hello!"}]},
                 as_node="my_node",
