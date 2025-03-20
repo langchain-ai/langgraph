@@ -77,10 +77,7 @@ from tests.conftest import (
     awith_store,
 )
 from tests.fake_tracer import FakeTracer
-from tests.memory_assert import (
-    MemorySaverAssertCheckpointMetadata,
-    MemorySaverNoPending,
-)
+from tests.memory_assert import MemorySaverNoPending
 from tests.messages import (
     _AnyIdAIMessage,
     _AnyIdAIMessageChunk,
@@ -5762,11 +5759,11 @@ async def test_checkpoint_metadata() -> None:
     workflow.add_edge("tools", "agent")
 
     # graph w/o interrupt
-    checkpointer_1 = MemorySaverAssertCheckpointMetadata()
+    checkpointer_1 = InMemorySaver()
     app = workflow.compile(checkpointer=checkpointer_1)
 
     # graph w/ interrupt
-    checkpointer_2 = MemorySaverAssertCheckpointMetadata()
+    checkpointer_2 = InMemorySaver()
     app_w_interrupt = workflow.compile(
         checkpointer=checkpointer_2, interrupt_before=["tools"]
     )
@@ -7011,6 +7008,8 @@ async def test_double_interrupt_subgraph(checkpointer_name: str) -> None:
 
         def invoke_sub_agent(state: AgentState):
             return subgraph.invoke(state)
+
+        thread = {"configurable": {"thread_id": str(uuid.uuid4())}}
 
         parent_agent = (
             StateGraph(AgentState)

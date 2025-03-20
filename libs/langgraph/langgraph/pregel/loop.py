@@ -269,13 +269,13 @@ class PregelLoop(LoopProtocol):
             self.checkpoint_config = patch_configurable(
                 self.config,
                 {
-                    CONFIG_KEY_CHECKPOINT_ID: config[CONF][CONFIG_KEY_CHECKPOINT_MAP][
-                        self.config[CONF][CONFIG_KEY_CHECKPOINT_NS]
-                    ]
+                    CONFIG_KEY_CHECKPOINT_ID: self.config[CONF][
+                        CONFIG_KEY_CHECKPOINT_MAP
+                    ][self.config[CONF][CONFIG_KEY_CHECKPOINT_NS]]
                 },
             )
         else:
-            self.checkpoint_config = config
+            self.checkpoint_config = self.config
         self.checkpoint_ns = (
             tuple(cast(str, self.config[CONF][CONFIG_KEY_CHECKPOINT_NS]).split(NS_SEP))
             if self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS)
