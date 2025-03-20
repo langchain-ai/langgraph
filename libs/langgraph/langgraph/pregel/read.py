@@ -62,7 +62,13 @@ class ChannelRead(RunnableCallable):
         mapper: Optional[Callable[[Any], Any]] = None,
         tags: Optional[list[str]] = None,
     ) -> None:
-        super().__init__(func=self._read, afunc=self._aread, tags=tags, name=None)
+        super().__init__(
+            func=self._read,
+            afunc=self._aread,
+            tags=tags,
+            name=None,
+            func_accepts_config=True,
+        )
         self.fresh = fresh
         self.mapper = mapper
         self.channel = channel
@@ -161,6 +167,7 @@ class PregelNode(Runnable):
         metadata: Optional[Mapping[str, Any]] = None,
         bound: Optional[Runnable[Any, Any]] = None,
         retry_policy: Optional[RetryPolicy] = None,
+        subgraphs: Optional[Sequence[PregelProtocol]] = None,
     ) -> None:
         self.channels = channels
         self.triggers = list(triggers)
@@ -170,7 +177,9 @@ class PregelNode(Runnable):
         self.retry_policy = retry_policy
         self.tags = tags
         self.metadata = metadata
-        if self.bound is not DEFAULT_BOUND:
+        if subgraphs is not None:
+            self.subgraphs = subgraphs
+        elif self.bound is not DEFAULT_BOUND:
             try:
                 subgraph = find_subgraph_pregel(self.bound)
             except Exception:
@@ -184,7 +193,6 @@ class PregelNode(Runnable):
 
     def copy(self, update: dict[str, Any]) -> PregelNode:
         attrs = {**self.__dict__, **update}
-        attrs.pop("subgraphs")
         return PregelNode(**attrs)
 
     @cached_property

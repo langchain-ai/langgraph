@@ -859,8 +859,10 @@ class CompiledStateGraph(CompiledGraph):
                 # subscribe to channel
                 self.nodes[end].triggers.append(channel_name)
                 # publish to channel
-                self.nodes[START] |= ChannelWrite(
-                    [ChannelWriteEntry(channel_name, START)], tags=[TAG_HIDDEN]
+                self.nodes[START].writers.append(
+                    ChannelWrite(
+                        [ChannelWriteEntry(channel_name, START)], tags=[TAG_HIDDEN]
+                    )
                 )
             elif end != END:
                 # subscribe to start channel
@@ -873,8 +875,10 @@ class CompiledStateGraph(CompiledGraph):
             self.nodes[end].triggers.append(channel_name)
             # publish to channel
             for start in starts:
-                self.nodes[start] |= ChannelWrite(
-                    [ChannelWriteEntry(channel_name, start)], tags=[TAG_HIDDEN]
+                self.nodes[start].writers.append(
+                    ChannelWrite(
+                        [ChannelWriteEntry(channel_name, start)], tags=[TAG_HIDDEN]
+                    )
                 )
 
     def attach_branch(
@@ -910,28 +914,31 @@ class CompiledStateGraph(CompiledGraph):
             if start in self.builder.nodes
             else self.builder.schema
         )
-        # attach branch publisher
-        self.nodes[start] |= branch.run(
-            branch_writer,
-            _get_state_reader(self.builder, schema) if with_reader else None,
-        )
 
-        # attach branch subscribers
-        ends = (
-            branch.ends.values()
-            if branch.ends
-            else [node for node in self.builder.nodes if node != branch.then]
+        # attach branch publisher
+        self.nodes[start].writers.append(
+            branch.run(
+                branch_writer,
+                _get_state_reader(self.builder, schema) if with_reader else None,
+            )
         )
 
         # attach then subscriber
         if branch.then and branch.then != END:
+            ends = (
+                branch.ends.values()
+                if branch.ends
+                else [node for node in self.builder.nodes if node != branch.then]
+            )
             channel_name = f"branch:{start}:{name}::then"
             self.channels[channel_name] = DynamicBarrierValue(str)
             self.nodes[branch.then].triggers.append(channel_name)
             for end in ends:
                 if end != END:
-                    self.nodes[end] |= ChannelWrite(
-                        [ChannelWriteEntry(channel_name, end)], tags=[TAG_HIDDEN]
+                    self.nodes[end].writers.append(
+                        ChannelWrite(
+                            [ChannelWriteEntry(channel_name, end)], tags=[TAG_HIDDEN]
+                        )
                     )
 
 
@@ -1013,7 +1020,12 @@ async def _acontrol_branch(value: Any) -> Sequence[Union[str, Send]]:
 
 
 CONTROL_BRANCH_PATH = RunnableCallable(
-    _control_branch, _acontrol_branch, tags=[TAG_HIDDEN], trace=False, recurse=False
+    _control_branch,
+    _acontrol_branch,
+    tags=[TAG_HIDDEN],
+    trace=False,
+    recurse=False,
+    func_accepts_config=False,
 )
 CONTROL_BRANCH = Branch(CONTROL_BRANCH_PATH, None)
 

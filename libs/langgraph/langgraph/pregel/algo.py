@@ -323,8 +323,8 @@ def apply_writes(
     # Channels that weren't updated in this step are notified of a new step
     if bump_step:
         for chan in channels:
-            if chan not in updated_channels:
-                if channels[chan].update([]) and get_next_version is not None:
+            if channels[chan].is_available() and chan not in updated_channels:
+                if channels[chan].update(EMPTY_SEQ) and get_next_version is not None:
                     checkpoint["channel_versions"][chan] = get_next_version(
                         max_version,
                         channels[chan],
