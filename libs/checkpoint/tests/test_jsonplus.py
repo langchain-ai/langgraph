@@ -104,6 +104,7 @@ def test_serde_jsonplus() -> None:
         "time": current_time,
         "uid": uid,
         "timestamp": current_timestamp,
+        "my_rich_dict": {(1, 2, 3): 45},
         "my_slotted_class": MyDataclassWSlots("bar", 2, InnerDataclass("hello")),
         "my_dataclass": MyDataclass("foo", 1, InnerDataclass("hello")),
         "my_enum": MyEnum.FOO,
