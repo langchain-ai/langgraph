@@ -19,7 +19,6 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
     SerializerProtocol,
-    V,
     get_checkpoint_id,
     get_checkpoint_metadata,
 )
