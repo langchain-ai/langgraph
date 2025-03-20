@@ -7,7 +7,7 @@ from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
 from types import TracebackType
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from langchain_core.runnables import RunnableConfig
 
@@ -70,6 +70,12 @@ class InMemorySaver(
         tuple[str, str, str],
         dict[tuple[str, int], tuple[str, str, tuple[str, bytes], str]],
     ]
+    blobs: dict[
+        tuple[
+            str, str, str, Union[str, int, float]
+        ],  # thread id, checkpoint ns, channel, version
+        tuple[str, bytes],
+    ]
 
     def __init__(
         self,
@@ -80,6 +86,7 @@ class InMemorySaver(
         super().__init__(serde=serde)
         self.storage = factory(lambda: defaultdict(dict))
         self.writes = factory(dict)
+        self.blobs = factory()
         self.stack = ExitStack()
         if factory is not defaultdict:
             self.stack.enter_context(self.storage)  # type: ignore[arg-type]
@@ -107,6 +114,18 @@ class InMemorySaver(
     ) -> Optional[bool]:
         return self.stack.__exit__(__exc_type, __exc_value, __traceback)
 
+    def _load_blobs(
+        self, thread_id: str, checkpoint_ns: str, versions: ChannelVersions
+    ) -> dict[str, Any]:
+        channel_values: dict[str, Any] = {}
+        for k, v in versions.items():
+            kk = (thread_id, checkpoint_ns, k, v)
+            if kk in self.blobs:
+                vv = self.blobs[kk]
+                if vv[0] != "empty":
+                    channel_values[k] = self.serde.loads_typed(vv)
+        return channel_values
+
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the in-memory storage.
 
@@ -121,8 +140,8 @@ class InMemorySaver(
         Returns:
             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
-        thread_id = config["configurable"]["thread_id"]
-        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        thread_id: str = config["configurable"]["thread_id"]
+        checkpoint_ns: str = config["configurable"].get("checkpoint_ns", "")
         if checkpoint_id := get_checkpoint_id(config):
             if saved := self.storage[thread_id][checkpoint_ns].get(checkpoint_id):
                 checkpoint, metadata, parent_checkpoint_id = saved
@@ -140,10 +159,14 @@ class InMemorySaver(
                     )
                 else:
                     sends = []
+                checkpoint_: Checkpoint = self.serde.loads_typed(checkpoint)
                 return CheckpointTuple(
                     config=config,
                     checkpoint={
-                        **self.serde.loads_typed(checkpoint),
+                        **checkpoint_,
+                        "channel_values": self._load_blobs(
+                            thread_id, checkpoint_ns, checkpoint_["channel_versions"]
+                        ),
                         "pending_sends": [self.serde.loads_typed(s[2]) for s in sends],
                     },
                     metadata=self.serde.loads_typed(metadata),
@@ -180,6 +203,9 @@ class InMemorySaver(
                     )
                 else:
                     sends = []
+
+                checkpoint_ = self.serde.loads_typed(checkpoint)
+
                 return CheckpointTuple(
                     config={
                         "configurable": {
@@ -189,7 +215,10 @@ class InMemorySaver(
                         }
                     },
                     checkpoint={
-                        **self.serde.loads_typed(checkpoint),
+                        **checkpoint_,
+                        "channel_values": self._load_blobs(
+                            thread_id, checkpoint_ns, checkpoint_["channel_versions"]
+                        ),
                         "pending_sends": [self.serde.loads_typed(s[2]) for s in sends],
                     },
                     metadata=self.serde.loads_typed(metadata),
@@ -297,6 +326,8 @@ class InMemorySaver(
                     else:
                         sends = []
 
+                    checkpoint_: Checkpoint = self.serde.loads_typed(checkpoint)
+
                     yield CheckpointTuple(
                         config={
                             "configurable": {
@@ -306,7 +337,12 @@ class InMemorySaver(
                             }
                         },
                         checkpoint={
-                            **self.serde.loads_typed(checkpoint),
+                            **checkpoint_,
+                            "channel_values": self._load_blobs(
+                                thread_id,
+                                checkpoint_ns,
+                                checkpoint_["channel_versions"],
+                            ),
                             "pending_sends": [
                                 self.serde.loads_typed(s[2]) for s in sends
                             ],
@@ -353,6 +389,11 @@ class InMemorySaver(
         c.pop("pending_sends")  # type: ignore[misc]
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
+        values: dict[str, Any] = c.pop("channel_values")  # type: ignore[misc]
+        for k, v in new_versions.items():
+            self.blobs[(thread_id, checkpoint_ns, k, v)] = (
+                self.serde.dumps_typed(values[k]) if k in values else ("empty", b"")
+            )
         self.storage[thread_id][checkpoint_ns].update(
             {
                 checkpoint["id"]: (
