@@ -1,4 +1,5 @@
 import asyncio
+import enum
 import functools
 import gc
 import logging
@@ -4546,8 +4547,13 @@ async def test_nested_pydantic_models(version: str) -> None:
         name: str
         friends: list[str] = Field(default_factory=list)  # IDs of friends
 
+    class MyEnum(enum.Enum):
+        A = 1
+        B = 2
+
     class MyTypedDict(TypedDict):
         x: int
+        my_enum: MyEnum
 
     class State(BaseModel):
         # Basic nested model tests
@@ -4556,6 +4562,7 @@ async def test_nested_pydantic_models(version: str) -> None:
         optional_nested: Optional[NestedModel] = None
         dict_nested: dict[str, NestedModel]
         my_set: set[int]
+        my_enum: MyEnum
         list_nested: Annotated[
             Union[dict, list[dict[str, NestedModel]]], lambda x, y: (x or []) + [y]
         ]
@@ -4583,7 +4590,8 @@ async def test_nested_pydantic_models(version: str) -> None:
         "nested": {"value": 42, "name": "test"},
         "optional_nested": {"value": 10, "name": "optional"},
         "my_set": [1, 2, 7],
-        "my_typed_dict": {"x": 1},
+        "my_enum": MyEnum.B,
+        "my_typed_dict": {"x": 1, "my_enum": MyEnum.A},
         "dict_nested": {"a": {"value": 5, "name": "a"}},
         "list_nested": [{"a": {"value": 6, "name": "b"}}],
         "list_nested_reversed": ["foo", "bar"],
