@@ -347,7 +347,7 @@ def prepare_next_tasks(
     store: Literal[None] = None,
     checkpointer: Literal[None] = None,
     manager: Literal[None] = None,
-    trigger_to_nodes: Optional[Mapping[str, list[str]]] = None,
+    trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
     updated_channels: Optional[set[str]] = None,
 ) -> dict[str, PregelTask]: ...
 
@@ -366,7 +366,7 @@ def prepare_next_tasks(
     store: Optional[BaseStore],
     checkpointer: Optional[BaseCheckpointSaver],
     manager: Union[None, ParentRunManager, AsyncParentRunManager],
-    trigger_to_nodes: Optional[Mapping[str, list[str]]] = None,
+    trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
     updated_channels: Optional[set[str]] = None,
 ) -> dict[str, PregelExecutableTask]: ...
 
@@ -384,7 +384,7 @@ def prepare_next_tasks(
     store: Optional[BaseStore] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
-    trigger_to_nodes: Optional[Mapping[str, list[str]]] = None,
+    trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
     updated_channels: Optional[set[str]] = None,
 ) -> Union[dict[str, PregelTask], dict[str, PregelExecutableTask]]:
     """Prepare the set of tasks that will make up the next Pregel step.
@@ -452,6 +452,8 @@ def prepare_next_tasks(
                 triggered_nodes.update(node_ids)
         # Sort the nodes to ensure deterministic order
         candidate_nodes: Iterable[str] = sorted(triggered_nodes)
+    elif not checkpoint["channel_versions"]:
+        candidate_nodes = ()
     else:
         candidate_nodes = processes.keys()
 

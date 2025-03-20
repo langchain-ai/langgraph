@@ -504,6 +504,8 @@ class Pregel(PregelProtocol):
 
     name: str = "LangGraph"
 
+    trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None
+
     def __init__(
         self,
         *,
@@ -525,6 +527,7 @@ class Pregel(PregelProtocol):
         config_type: Optional[Type[Any]] = None,
         input_model: Optional[Type[BaseModel]] = None,
         config: Optional[RunnableConfig] = None,
+        trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
         name: str = "LangGraph",
     ) -> None:
         self.nodes = nodes
@@ -544,25 +547,28 @@ class Pregel(PregelProtocol):
         self.config_type = config_type
         self.input_model = input_model
         self.config = config
+        self.trigger_to_nodes = trigger_to_nodes
         self.name = name
         if auto_validate:
             self.validate()
 
     def get_graph(
-        self, config: RunnableConfig | None = None, *, xray: int | bool = False
+        self, config: Optional[RunnableConfig] = None, *, xray: Union[int, bool] = False
     ) -> Graph:
         raise NotImplementedError
 
     async def aget_graph(
-        self, config: RunnableConfig | None = None, *, xray: int | bool = False
+        self, config: Optional[RunnableConfig] = None, *, xray: Union[int, bool] = False
     ) -> Graph:
         raise NotImplementedError
 
-    def copy(self, update: dict[str, Any] | None = None) -> Self:
+    def copy(self, update: Optional[dict[str, Any]] = None) -> Self:
         attrs = {**self.__dict__, **(update or {})}
         return self.__class__(**attrs)
 
-    def with_config(self, config: RunnableConfig | None = None, **kwargs: Any) -> Self:
+    def with_config(
+        self, config: Optional[RunnableConfig] = None, **kwargs: Any
+    ) -> Self:
         return self.copy(
             {"config": merge_configs(self.config, config, cast(RunnableConfig, kwargs))}
         )
@@ -577,6 +583,7 @@ class Pregel(PregelProtocol):
             self.interrupt_after_nodes,
             self.interrupt_before_nodes,
         )
+        self.trigger_to_nodes = _trigger_to_nodes(self.nodes)
         return self
 
     @property
@@ -2276,12 +2283,7 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
                 debug=debug,
-                # `self.nodes` can be modified after creation of `Pregel`. For example,
-                # that's how StateGraph compilation currently works.
-                # For now, we recompute the trigger_to_nodes mapping every time the
-                # loop is created. We could potentially memoize this if it becomes a
-                # performance issue.
-                trigger_to_nodes=_trigger_to_nodes(self.nodes),
+                trigger_to_nodes=self.trigger_to_nodes,
             ) as loop:
                 # create runner
                 runner = PregelRunner(
@@ -2751,10 +2753,10 @@ class Pregel(PregelProtocol):
             return chunks
 
 
-def _trigger_to_nodes(nodes: dict[str, PregelNode]) -> Mapping[str, list[str]]:
+def _trigger_to_nodes(nodes: dict[str, PregelNode]) -> Mapping[str, Sequence[str]]:
     """Index from a trigger to nodes that depend on it."""
     trigger_to_nodes: defaultdict[str, list[str]] = defaultdict(list)
     for name, node in nodes.items():
         for trigger in node.triggers:
-            trigger_to_nodes.setdefault(trigger, []).append(name)
-    return cast(Mapping[str, list[str]], trigger_to_nodes)
+            trigger_to_nodes[trigger].append(name)
+    return dict(trigger_to_nodes)
