@@ -251,6 +251,7 @@ class RunnableCallable(Runnable):
         trace: bool = True,
         recurse: bool = True,
         explode_args: bool = False,
+        func_accepts_config: Optional[bool] = None,
         **kwargs: Any,
     ) -> None:
         self.name = name
@@ -276,27 +277,32 @@ class RunnableCallable(Runnable):
         # check signature
         if func is None and afunc is None:
             raise ValueError("At least one of func or afunc must be provided.")
-        params = inspect.signature(cast(Callable, func or afunc)).parameters
 
-        self.func_accepts_config = "config" in params
-        # Mapping from kwarg name to (config key, default value) to be used.
-        # The default value is used if the config key is not found in the config.
-        self.func_accepts: dict[str, Tuple[str, Any]] = {}
+        if func_accepts_config is not None:
+            self.func_accepts_config = func_accepts_config
+            self.func_accepts: dict[str, Tuple[str, Any]] = {}
+        else:
+            params = inspect.signature(cast(Callable, func or afunc)).parameters
 
-        for kw, typ, config_key, default in KWARGS_CONFIG_KEYS:
-            p = params.get(kw)
+            self.func_accepts_config = "config" in params
+            # Mapping from kwarg name to (config key, default value) to be used.
+            # The default value is used if the config key is not found in the config.
+            self.func_accepts = {}
 
-            if p is None or p.kind not in VALID_KINDS:
-                # If parameter is not found or is not a valid kind, skip
-                continue
+            for kw, typ, config_key, default in KWARGS_CONFIG_KEYS:
+                p = params.get(kw)
 
-            if typ != (ANY_TYPE,) and p.annotation not in typ:
-                # A specific type is required, but the function annotation does
-                # not match the expected type.
-                continue
+                if p is None or p.kind not in VALID_KINDS:
+                    # If parameter is not found or is not a valid kind, skip
+                    continue
 
-            # If the kwarg is accepted by the function, store the default value
-            self.func_accepts[kw] = (config_key, default)
+                if typ != (ANY_TYPE,) and p.annotation not in typ:
+                    # A specific type is required, but the function annotation does
+                    # not match the expected type.
+                    continue
+
+                # If the kwarg is accepted by the function, store the default value
+                self.func_accepts[kw] = (config_key, default)
 
     def __repr__(self) -> str:
         repr_args = {

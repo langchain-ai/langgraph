@@ -57,7 +57,13 @@ class ChannelWrite(RunnableCallable):
         tags: Optional[Sequence[str]] = None,
         require_at_least_one_of: Optional[Sequence[str]] = None,  # ignored
     ):
-        super().__init__(func=self._write, afunc=self._awrite, name=None, tags=tags)
+        super().__init__(
+            func=self._write,
+            afunc=self._awrite,
+            name=None,
+            tags=tags,
+            func_accepts_config=True,
+        )
         self.writes = cast(
             list[Union[ChannelWriteEntry, ChannelWriteTupleEntry, Send]], writes
         )

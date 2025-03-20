@@ -138,6 +138,7 @@ class Branch(NamedTuple):
                 reader=reader,
                 name=None,
                 trace=False,
+                func_accepts_config=True,
             )
         )
 
