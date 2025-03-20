@@ -527,6 +527,7 @@ class Pregel(PregelProtocol):
         config_type: Optional[Type[Any]] = None,
         input_model: Optional[Type[BaseModel]] = None,
         config: Optional[RunnableConfig] = None,
+        trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
         name: str = "LangGraph",
     ) -> None:
         self.nodes = nodes
@@ -546,6 +547,7 @@ class Pregel(PregelProtocol):
         self.config_type = config_type
         self.input_model = input_model
         self.config = config
+        self.trigger_to_nodes = trigger_to_nodes
         self.name = name
         if auto_validate:
             self.validate()
