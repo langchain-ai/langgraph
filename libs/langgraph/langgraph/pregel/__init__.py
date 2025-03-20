@@ -504,6 +504,8 @@ class Pregel(PregelProtocol):
 
     name: str = "LangGraph"
 
+    trigger_to_nodes: dict[str, set[str]] = None
+
     def __init__(
         self,
         *,
@@ -577,6 +579,7 @@ class Pregel(PregelProtocol):
             self.interrupt_after_nodes,
             self.interrupt_before_nodes,
         )
+        self.trigger_to_nodes = _trigger_to_nodes(self.nodes)
         return self
 
     @property
@@ -2276,12 +2279,7 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
                 debug=debug,
-                # `self.nodes` can be modified after creation of `Pregel`. For example,
-                # that's how StateGraph compilation currently works.
-                # For now, we recompute the trigger_to_nodes mapping every time the
-                # loop is created. We could potentially memoize this if it becomes a
-                # performance issue.
-                trigger_to_nodes=_trigger_to_nodes(self.nodes),
+                trigger_to_nodes=self.trigger_to_nodes,
             ) as loop:
                 # create runner
                 runner = PregelRunner(

@@ -412,7 +412,7 @@ class PregelLoop(LoopProtocol):
         updated_channels: set[str] | None = None
 
         if self.input not in (INPUT_DONE, INPUT_RESUMING, INPUT_SHOULD_VALIDATE):
-            self._first(input_keys=input_keys)
+            updated_channels = self._first(input_keys=input_keys)
         elif self.to_interrupt:
             # if we need to interrupt, do so
             self.status = "interrupt_before"
@@ -582,7 +582,7 @@ class PregelLoop(LoopProtocol):
                 else:
                     task.writes.append((k, v))
 
-    def _first(self, *, input_keys: Union[str, Sequence[str]]) -> None:
+    def _first(self, *, input_keys: Union[str, Sequence[str]]) -> set[str] | None:
         # resuming from previous checkpoint requires
         # - finding a previous checkpoint
         # - receiving None input (outer graph) or RESUMING flag (subgraph)
@@ -599,6 +599,8 @@ class PregelLoop(LoopProtocol):
                 ),
             )
         )
+        # this can be set only when there are input_writes
+        updated_channels: set[str] | None = None
 
         # map command to writes
         if isinstance(self.input, Command):
@@ -668,7 +670,7 @@ class PregelLoop(LoopProtocol):
                 manager=None,
             )
             # apply input writes
-            mv_writes, _ = apply_writes(
+            mv_writes, updated_channels = apply_writes(
                 self.checkpoint,
                 self.channels,
                 [
@@ -698,6 +700,7 @@ class PregelLoop(LoopProtocol):
             self.config = patch_configurable(
                 self.config, {CONFIG_KEY_RESUMING: is_resuming}
             )
+        return updated_channels
 
     def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
         for k, v in self.config["metadata"].items():

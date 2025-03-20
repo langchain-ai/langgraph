@@ -452,6 +452,8 @@ def prepare_next_tasks(
                 triggered_nodes.update(node_ids)
         # Sort the nodes to ensure deterministic order
         candidate_nodes: Iterable[str] = sorted(triggered_nodes)
+    elif not checkpoint["channel_versions"]:
+        candidate_nodes = ()
     else:
         candidate_nodes = processes.keys()
 
