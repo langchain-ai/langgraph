@@ -11,6 +11,7 @@ from bench.react_agent import react_agent
 from bench.sequential import create_sequential
 from bench.wide_state import wide_state
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import StateGraph
 from langgraph.pregel import Pregel
 
 
@@ -42,6 +43,11 @@ def run(graph: Pregel, input: dict):
             )
         ]
     )
+
+
+def compile_graph(graph: StateGraph) -> None:
+    """Compile the graph."""
+    graph.compile()
 
 
 benchmarks = (
@@ -330,7 +336,43 @@ benchmarks = (
 
 r = Runner()
 
+# Full graph run time
 for name, agraph, graph, input in benchmarks:
     r.bench_async_func(name, arun, agraph, input, loop_factory=new_event_loop)
     if graph is not None:
         r.bench_func(name + "_sync", run, graph, input)
+
+# Graph compilation times
+compilation_benchmarks = (
+    (
+        "sequential_1000",
+        create_sequential(1_000),
+    ),
+    (
+        "sequential_10000",
+        create_sequential(10_000),
+    ),
+    (
+        "pydantic_state_25x300",
+        pydantic_state(300),
+    ),
+    (
+        "pydantic_state_15x600",
+        pydantic_state(600),
+    ),
+    (
+        "pydantic_state_9x1200",
+        pydantic_state(1200),
+    ),
+    (
+        "wide_state_15x600",
+        wide_state(600),
+    ),
+    (
+        "wide_state_9x1200",
+        wide_state(1200),
+    ),
+)
+
+for name, graph in compilation_benchmarks:
+    r.bench_func(name + "_compilation", compile_graph, graph)
