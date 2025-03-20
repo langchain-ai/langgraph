@@ -504,7 +504,7 @@ class Pregel(PregelProtocol):
 
     name: str = "LangGraph"
 
-    trigger_to_nodes: dict[str, set[str]] = None
+    trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None
 
     def __init__(
         self,
@@ -2749,10 +2749,10 @@ class Pregel(PregelProtocol):
             return chunks
 
 
-def _trigger_to_nodes(nodes: dict[str, PregelNode]) -> Mapping[str, list[str]]:
+def _trigger_to_nodes(nodes: dict[str, PregelNode]) -> Mapping[str, Sequence[str]]:
     """Index from a trigger to nodes that depend on it."""
     trigger_to_nodes: defaultdict[str, list[str]] = defaultdict(list)
     for name, node in nodes.items():
         for trigger in node.triggers:
-            trigger_to_nodes.setdefault(trigger, []).append(name)
-    return cast(Mapping[str, list[str]], trigger_to_nodes)
+            trigger_to_nodes[trigger].append(name)
+    return dict(trigger_to_nodes)
