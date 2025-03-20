@@ -553,20 +553,22 @@ class Pregel(PregelProtocol):
             self.validate()
 
     def get_graph(
-        self, config: RunnableConfig | None = None, *, xray: int | bool = False
+        self, config: Optional[RunnableConfig] = None, *, xray: Union[int, bool] = False
     ) -> Graph:
         raise NotImplementedError
 
     async def aget_graph(
-        self, config: RunnableConfig | None = None, *, xray: int | bool = False
+        self, config: Optional[RunnableConfig] = None, *, xray: Union[int, bool] = False
     ) -> Graph:
         raise NotImplementedError
 
-    def copy(self, update: dict[str, Any] | None = None) -> Self:
+    def copy(self, update: Optional[dict[str, Any]] = None) -> Self:
         attrs = {**self.__dict__, **(update or {})}
         return self.__class__(**attrs)
 
-    def with_config(self, config: RunnableConfig | None = None, **kwargs: Any) -> Self:
+    def with_config(
+        self, config: Optional[RunnableConfig] = None, **kwargs: Any
+    ) -> Self:
         return self.copy(
             {"config": merge_configs(self.config, config, cast(RunnableConfig, kwargs))}
         )

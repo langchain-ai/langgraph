@@ -582,7 +582,7 @@ class PregelLoop(LoopProtocol):
                 else:
                     task.writes.append((k, v))
 
-    def _first(self, *, input_keys: Union[str, Sequence[str]]) -> set[str] | None:
+    def _first(self, *, input_keys: Union[str, Sequence[str]]) -> Union[set[str]]:
         # resuming from previous checkpoint requires
         # - finding a previous checkpoint
         # - receiving None input (outer graph) or RESUMING flag (subgraph)
