@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph-checkpoint-postgres"
-version = "2.0.9"
+version = "2.0.19"
 description = "Library with a Postgres implementation of LangGraph checkpoint saver."
 authors = []
 license = "MIT"
@@ -10,7 +10,7 @@ packages = [{ include = "langgraph" }]
 
 [tool.poetry.dependencies]
 python = "^3.9.0,<4.0"
-langgraph-checkpoint = "^2.0.7"
+langgraph-checkpoint = "^2.0.21"
 orjson = ">=3.10.1"
 psycopg = "^3.2.0"
 psycopg-pool = "^3.2.0"
@@ -22,10 +22,10 @@ pytest = "^7.2.1"
 anyio = "^4.4.0"
 pytest-asyncio = "^0.21.1"
 pytest-mock = "^3.11.1"
-pytest-watch = "^4.2.0"
 mypy = "^1.10.0"
 psycopg = {extras = ["binary"], version = ">=3.0.0"}
 langgraph-checkpoint = {path = "../checkpoint", develop = true}
+pytest-watcher = "^0.4.3"
 
 [tool.pytest.ini_options]
 # --strict-markers will raise errors on unknown marks.
@@ -61,3 +61,9 @@ warn_unused_ignores = "True"
 warn_redundant_casts = "True"
 allow_redefinition = "True"
 disable_error_code = "typeddict-item, return-value"
+
+[tool.pytest-watcher]
+now = true
+delay = 0.1
+runner_args = ["--ff", "-x", "-v", "--tb", "short"]
+patterns = ["*.py"]

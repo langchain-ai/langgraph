@@ -11,17 +11,15 @@ from psycopg_pool import AsyncConnectionPool, ConnectionPool
 from pytest_mock import MockerFixture
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.checkpoint.duckdb import DuckDBSaver
-from langgraph.checkpoint.duckdb.aio import AsyncDuckDBSaver
 from langgraph.checkpoint.postgres import PostgresSaver, ShallowPostgresSaver
 from langgraph.checkpoint.postgres.aio import (
     AsyncPostgresSaver,
     AsyncShallowPostgresSaver,
 )
+from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.store.base import BaseStore
-from langgraph.store.duckdb import AsyncDuckDBStore, DuckDBStore
 from langgraph.store.memory import InMemoryStore
 from langgraph.store.postgres import AsyncPostgresStore, PostgresStore
 
@@ -64,23 +62,18 @@ def checkpointer_sqlite():
         yield checkpointer
 
 
+@pytest.fixture(scope="function")
+def checkpointer_sqlite_aes():
+    with SqliteSaver.from_conn_string(":memory:") as checkpointer:
+        checkpointer.serde = EncryptedSerializer.from_pycryptodome_aes(
+            key=b"1234567890123456"
+        )
+        yield checkpointer
+
+
 @asynccontextmanager
 async def _checkpointer_sqlite_aio():
     async with AsyncSqliteSaver.from_conn_string(":memory:") as checkpointer:
-        yield checkpointer
-
-
-@pytest.fixture(scope="function")
-def checkpointer_duckdb():
-    with DuckDBSaver.from_conn_string(":memory:") as checkpointer:
-        checkpointer.setup()
-        yield checkpointer
-
-
-@asynccontextmanager
-async def _checkpointer_duckdb_aio():
-    async with AsyncDuckDBSaver.from_conn_string(":memory:") as checkpointer:
-        await checkpointer.setup()
         yield checkpointer
 
 
@@ -281,9 +274,6 @@ async def awith_checkpointer(
     elif checkpointer_name == "sqlite_aio":
         async with _checkpointer_sqlite_aio() as checkpointer:
             yield checkpointer
-    elif checkpointer_name == "duckdb_aio":
-        async with _checkpointer_duckdb_aio() as checkpointer:
-            yield checkpointer
     elif checkpointer_name == "postgres_aio":
         async with _checkpointer_postgres_aio() as checkpointer:
             yield checkpointer
@@ -370,13 +360,6 @@ async def _store_postgres_aio_pool():
             await conn.execute(f"DROP DATABASE {database}")
 
 
-@asynccontextmanager
-async def _store_duckdb_aio():
-    async with AsyncDuckDBStore.from_conn_string(":memory:") as store:
-        await store.setup()
-        yield store
-
-
 @pytest.fixture(scope="function")
 def store_postgres():
     database = f"test_{uuid4().hex[:16]}"
@@ -434,13 +417,6 @@ def store_postgres_pool():
 
 
 @pytest.fixture(scope="function")
-def store_duckdb():
-    with DuckDBStore.from_conn_string(":memory:") as store:
-        store.setup()
-        yield store
-
-
-@pytest.fixture(scope="function")
 def store_in_memory():
     yield InMemoryStore()
 
@@ -460,9 +436,6 @@ async def awith_store(store_name: Optional[str]) -> AsyncIterator[BaseStore]:
     elif store_name == "postgres_aio_pool":
         async with _store_postgres_aio_pool() as store:
             yield store
-    elif store_name == "duckdb_aio":
-        async with _store_duckdb_aio() as store:
-            yield store
     else:
         raise NotImplementedError(f"Unknown store {store_name}")
 
@@ -474,6 +447,7 @@ REGULAR_CHECKPOINTERS_SYNC = [
     "postgres",
     "postgres_pipe",
     "postgres_pool",
+    "sqlite_aes",
 ]
 ALL_CHECKPOINTERS_SYNC = [
     *REGULAR_CHECKPOINTERS_SYNC,
@@ -500,12 +474,10 @@ ALL_STORES_SYNC = [
     "postgres",
     "postgres_pipe",
     "postgres_pool",
-    "duckdb",
 ]
 ALL_STORES_ASYNC = [
     "in_memory",
     "postgres_aio",
     "postgres_aio_pipe",
     "postgres_aio_pool",
-    "duckdb_aio",
 ]

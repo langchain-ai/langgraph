@@ -15,7 +15,7 @@ from langgraph.pregel import Pregel
 from langgraph.scheduler.kafka import serde
 from langgraph.scheduler.kafka.default_sync import DefaultProducer
 from langgraph.scheduler.kafka.types import MessageToOrchestrator, Topics
-from tests.any import AnyDict, AnyList
+from tests.any import AnyDict
 from tests.drain import drain_topics
 from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage
 
@@ -194,10 +194,16 @@ def test_subgraph_w_interrupt(
                             "__pregel_ensure_latest": True,
                             "__pregel_dedupe_tasks": True,
                             "__pregel_resuming": False,
+                            "__pregel_previous": None,
                             "__pregel_store": None,
                             "__pregel_task_id": history[0].tasks[0].id,
-                            "__pregel_scratchpad": {},
-                            "__pregel_writes": AnyList(),
+                            "__pregel_scratchpad": {
+                                "subgraph_counter": None,
+                                "call_counter": None,
+                                "interrupt_counter": None,
+                                "get_null_resume": None,
+                                "resume": [],
+                            },
                             "checkpoint_id": None,
                             "checkpoint_map": {
                                 "": history[0].config["configurable"]["checkpoint_id"]
@@ -262,9 +268,15 @@ def test_subgraph_w_interrupt(
                             "__pregel_store": None,
                             "__pregel_dedupe_tasks": True,
                             "__pregel_resuming": False,
+                            "__pregel_previous": None,
                             "__pregel_task_id": history[0].tasks[0].id,
-                            "__pregel_scratchpad": {},
-                            "__pregel_writes": AnyList(),
+                            "__pregel_scratchpad": {
+                                "subgraph_counter": None,
+                                "call_counter": None,
+                                "interrupt_counter": None,
+                                "get_null_resume": None,
+                                "resume": [],
+                            },
                             "checkpoint_id": c.config["configurable"]["checkpoint_id"],
                             "checkpoint_map": {
                                 "": history[0].config["configurable"]["checkpoint_id"]
@@ -360,8 +372,14 @@ def test_subgraph_w_interrupt(
                             "__pregel_store": None,
                             "__pregel_resuming": False,
                             "__pregel_task_id": history[0].tasks[0].id,
-                            "__pregel_scratchpad": {},
-                            "__pregel_writes": AnyList(),
+                            "__pregel_previous": None,
+                            "__pregel_scratchpad": {
+                                "subgraph_counter": None,
+                                "call_counter": None,
+                                "interrupt_counter": None,
+                                "get_null_resume": None,
+                                "resume": [],
+                            },
                             "checkpoint_id": c.config["configurable"]["checkpoint_id"],
                             "checkpoint_map": {
                                 "": history[0].config["configurable"]["checkpoint_id"]
@@ -465,9 +483,15 @@ def test_subgraph_w_interrupt(
                             "__pregel_dedupe_tasks": True,
                             "__pregel_store": None,
                             "__pregel_resuming": True,
+                            "__pregel_previous": None,
                             "__pregel_task_id": history[1].tasks[0].id,
-                            "__pregel_scratchpad": {},
-                            "__pregel_writes": AnyList(),
+                            "__pregel_scratchpad": {
+                                "subgraph_counter": None,
+                                "call_counter": None,
+                                "interrupt_counter": None,
+                                "get_null_resume": None,
+                                "resume": [],
+                            },
                             "checkpoint_id": None,
                             "checkpoint_map": {
                                 "": history[1].config["configurable"]["checkpoint_id"]
@@ -527,9 +551,15 @@ def test_subgraph_w_interrupt(
                             "__pregel_dedupe_tasks": True,
                             "__pregel_store": None,
                             "__pregel_resuming": True,
+                            "__pregel_previous": None,
                             "__pregel_task_id": history[1].tasks[0].id,
-                            "__pregel_scratchpad": {},
-                            "__pregel_writes": AnyList(),
+                            "__pregel_scratchpad": {
+                                "subgraph_counter": None,
+                                "call_counter": None,
+                                "interrupt_counter": None,
+                                "get_null_resume": None,
+                                "resume": [],
+                            },
                             "checkpoint_id": c.config["configurable"]["checkpoint_id"],
                             "checkpoint_map": {
                                 "": history[1].config["configurable"]["checkpoint_id"]
@@ -644,10 +674,16 @@ def test_subgraph_w_interrupt(
                             "__pregel_ensure_latest": True,
                             "__pregel_dedupe_tasks": True,
                             "__pregel_resuming": True,
+                            "__pregel_previous": None,
                             "__pregel_store": None,
                             "__pregel_task_id": history[1].tasks[0].id,
-                            "__pregel_scratchpad": {},
-                            "__pregel_writes": AnyList(),
+                            "__pregel_scratchpad": {
+                                "subgraph_counter": None,
+                                "call_counter": None,
+                                "interrupt_counter": None,
+                                "get_null_resume": None,
+                                "resume": [],
+                            },
                             "checkpoint_id": c.config["configurable"]["checkpoint_id"],
                             "checkpoint_map": {
                                 "": history[1].config["configurable"]["checkpoint_id"]

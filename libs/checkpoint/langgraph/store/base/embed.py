@@ -7,6 +7,7 @@ asynchronous operations.
 """
 
 import asyncio
+import functools
 import json
 from typing import Any, Awaitable, Callable, Optional, Sequence, Union
 
@@ -28,7 +29,7 @@ Similar to EmbeddingsFunc, but returns an awaitable that resolves to the embeddi
 
 
 def ensure_embeddings(
-    embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc, None],
+    embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc, str, None],
 ) -> Embeddings:
     """Ensure that an embedding function conforms to LangChain's Embeddings interface.
 
@@ -62,9 +63,37 @@ def ensure_embeddings(
         embeddings = ensure_embeddings(my_async_fn)
         result = await embeddings.aembed_query("hello")  # Returns [0.1, 0.2]
         ```
+
+        Initialize embeddings using a provider string:
+        ```python
+        # Requires langchain>=0.3.9 and langgraph-checkpoint>=2.0.11
+        embeddings = ensure_embeddings("openai:text-embedding-3-small")
+        result = embeddings.embed_query("hello")
+        ```
     """
     if embed is None:
         raise ValueError("embed must be provided")
+    if isinstance(embed, str):
+        init_embeddings = _get_init_embeddings()
+        if init_embeddings is None:
+            from importlib.metadata import PackageNotFoundError, version
+
+            try:
+                lc_version = version("langchain")
+                version_info = f"Found langchain version {lc_version}, but"
+            except PackageNotFoundError:
+                version_info = "langchain is not installed;"
+
+            raise ValueError(
+                f"Could not load embeddings from string '{embed}'. {version_info} "
+                "loading embeddings by provider:identifier string requires langchain>=0.3.9 "
+                "as well as the provider-specific package. "
+                "Install LangChain with: pip install 'langchain>=0.3.9' "
+                "and the provider-specific package (e.g., 'langchain-openai>=0.3.0'). "
+                "Alternatively, specify 'embed' as a compatible Embeddings object or python function."
+            )
+        return init_embeddings(embed)
+
     if isinstance(embed, Embeddings):
         return embed
     return EmbeddingsLambda(embed)
@@ -371,6 +400,16 @@ def _is_async_callable(
         or hasattr(func, "__call__")  # noqa: B004
         and asyncio.iscoroutinefunction(func.__call__)
     )
+
+
+@functools.lru_cache
+def _get_init_embeddings() -> Optional[Callable[[str], Embeddings]]:
+    try:
+        from langchain.embeddings import init_embeddings  # type: ignore
+
+        return init_embeddings
+    except ImportError:
+        return None
 
 
 __all__ = [

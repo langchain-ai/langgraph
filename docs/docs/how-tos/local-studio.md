@@ -1,15 +1,6 @@
 # How to connect a local agent to LangGraph Studio
 
-This guide shows you how to connect your local agent to [LangGraph Studio](../concepts/langgraph_studio.md) for visualization, interaction, and debugging.
-
-## Connection Options
-
-There are two ways to connect your local agent to LangGraph Studio:
-
-- [Development Server](../concepts/langgraph_studio.md#development-server-with-web-ui): Python package, all platforms, no Docker
-- [LangGraph Desktop](../concepts/langgraph_studio.md#desktop-app): Application, Mac only, requires Docker
-
-In this guide we will cover how to use the development server as that is generally an easier and better experience.
+This guide shows you how to connect your local agent to [LangGraph Studio](../concepts/langgraph_studio.md) for visualization, interaction, and debugging using the development server.
 
 ## Setup your application
 
@@ -24,9 +15,8 @@ You will need to make sure to install the `inmem` extras.
 
 ???+ note "Minimum version"
 
-  The minimum version to use the `inmem` extra with `langgraph-cli` is `0.1.55`.
-  Python 3.11 or higher is required.
-  
+The minimum version to use the `inmem` extra with `langgraph-cli` is `0.1.55`.
+Python 3.11 or higher is required.
 
 ```shell
 pip install -U "langgraph-cli[inmem]"
@@ -41,7 +31,7 @@ pip install -U "langgraph-cli[inmem]"
    langgraph dev
    ```
 
-This will look for the `langgraph.json` file in your current directory. 
+This will look for the `langgraph.json` file in your current directory.
 In there, it will find the paths to the graph(s), and start those up.
 It will then automatically connect to the cloud-hosted studio.
 

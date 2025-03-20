@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph"
-version = "0.2.61"
+version = "0.3.18"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 license = "MIT"
@@ -9,9 +9,10 @@ repository = "https://www.github.com/langchain-ai/langgraph"
 
 [tool.poetry.dependencies]
 python = ">=3.9.0,<4.0"
-langchain-core = ">=0.2.43,<0.4.0,!=0.3.0,!=0.3.1,!=0.3.2,!=0.3.3,!=0.3.4,!=0.3.5,!=0.3.6,!=0.3.7,!=0.3.8,!=0.3.9,!=0.3.10,!=0.3.11,!=0.3.12,!=0.3.13,!=0.3.14,!=0.3.15,!=0.3.16,!=0.3.17,!=0.3.18,!=0.3.19,!=0.3.20,!=0.3.21,!=0.3.22"
-langgraph-checkpoint = "^2.0.4"
+langchain-core = ">=0.1,<0.4"
+langgraph-checkpoint = "^2.0.10"
 langgraph-sdk = "^0.1.42"
+langgraph-prebuilt = ">=0.1.1,<0.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.2"
@@ -26,8 +27,8 @@ ruff = "^0.6.2"
 jupyter = "^1.0.0"
 pytest-xdist = {extras = ["psutil"], version = "^3.6.1"}
 pytest-repeat = "^0.9.3"
+langgraph-prebuilt = {path = "../prebuilt", develop = true}
 langgraph-checkpoint = {path = "../checkpoint", develop = true}
-langgraph-checkpoint-duckdb = {path = "../checkpoint-duckdb", develop = true}
 langgraph-checkpoint-sqlite = {path = "../checkpoint-sqlite", develop = true}
 langgraph-checkpoint-postgres = {path = "../checkpoint-postgres", develop = true}
 langgraph-sdk = {path = "../sdk-py", develop = true}
@@ -36,6 +37,7 @@ uvloop = "0.21.0beta1"
 pyperf = "^2.7.0"
 py-spy = "^0.3.14"
 types-requests = "^2.32.0.20240914"
+pycryptodome = "^3.21.0"
 
 [tool.ruff]
 lint.select = [ "E", "F", "I", "TID251" ]

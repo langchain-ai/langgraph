@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Read the list of notebooks to skip from the JSON file
-SKIP_NOTEBOOKS=$(python -c "import json; print('\n'.join(json.load(open('docs/notebooks_no_execution.json'))))")
+SKIP_NOTEBOOKS=$(python -c "import json; print('\n'.join(json.load(open('notebooks_no_execution.json'))))")
 
 # Function to execute a single notebook
 execute_notebook() {
@@ -27,7 +27,7 @@ if [ $# -gt 0 ]; then
     notebooks=$(echo "$@" | tr ' ' '\n' | grep -vFf <(echo "$SKIP_NOTEBOOKS"))
 else
     # Find all notebooks and filter out those in the skip list
-    notebooks=$(find docs/docs/tutorials docs/docs/how-tos -name "*.ipynb" | grep -v ".ipynb_checkpoints" | grep -vFf <(echo "$SKIP_NOTEBOOKS"))
+    notebooks=$(find docs/tutorials docs/how-tos -name "*.ipynb" | grep -v ".ipynb_checkpoints" | grep -vFf <(echo "$SKIP_NOTEBOOKS"))
 fi
 
 # Execute notebooks sequentially

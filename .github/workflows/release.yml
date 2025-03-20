@@ -195,7 +195,11 @@ jobs:
               "$PKG_NAME==$VERSION" \
           )
 
-          if [[ "$PKG_NAME" == *checkpoint* ]]; then
+          if [[ "$PKG_NAME" == *prebuilt* ]]; then
+            poetry run pip install langgraph
+          fi
+
+          if [[ "$PKG_NAME" == *checkpoint* || "$PKG_NAME" == *prebuilt* ]]; then
             # since checkpoint packages are namespace packages, import them with . convention
             # i.e. import langgraph.checkpoint or langgraph.checkpoint.sqlite
             IMPORT_NAME="$(echo "$PKG_NAME" | sed s/-/./g)"

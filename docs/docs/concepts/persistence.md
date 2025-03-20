@@ -32,7 +32,7 @@ from typing_extensions import TypedDict
 from operator import add
 
 class State(TypedDict):
-    foo: int
+    foo: str
     bar: Annotated[list[str], add]
 
 def node_a(state: State):
@@ -147,24 +147,21 @@ In our example, the output of `get_state_history` will look like this:
 
 ### Replay
 
-It's also possible to play-back a prior graph execution. If we `invoking` a graph with a `thread_id` and a `checkpoint_id`, then we will *re-play* the graph from a checkpoint that corresponds to the `checkpoint_id`.
+It's also possible to play-back a prior graph execution. If we `invoke` a graph with a `thread_id` and a `checkpoint_id`, then we will *re-play* the previously executed steps _before_ a checkpoint that corresponds to the `checkpoint_id`, and only execute the steps _after_ the checkpoint.
 
-* `thread_id` is simply the ID of a thread. This is always required.
-* `checkpoint_id` This identifier refers to a specific checkpoint within a thread. 
+* `thread_id` is the ID of a thread.
+* `checkpoint_id` is an identifier that refers to a specific checkpoint within a thread.
 
 You must pass these when invoking the graph as part of the `configurable` portion of the config:
 
 ```python
-# {"configurable": {"thread_id": "1"}}  # valid config
-# {"configurable": {"thread_id": "1", "checkpoint_id": "0c62ca34-ac19-445d-bbb0-5b4984975b2a"}}  # also valid config
-
-config = {"configurable": {"thread_id": "1"}}
+config = {"configurable": {"thread_id": "1", "checkpoint_id": "0c62ca34-ac19-445d-bbb0-5b4984975b2a"}}
 graph.invoke(None, config=config)
 ```
 
-Importantly, LangGraph knows whether a particular checkpoint has been executed previously. If it has, LangGraph simply *re-plays* that particular step in the graph and does not re-execute the step. See this [how to guide on time-travel to learn more about replaying](../how-tos/human_in_the_loop/time-travel.ipynb).
+Importantly, LangGraph knows whether a particular step has been executed previously. If it has, LangGraph simply *re-plays* that particular step in the graph and does not re-execute the step, but only for the steps _before_ the provided `checkpoint_id`. All of the steps _after_ `checkpoint_id` will be executed (i.e., a new fork), even if they have been executed previously. See this [how to guide on time-travel to learn more about replaying](../how-tos/human_in_the_loop/time-travel.ipynb).
 
-![Replay](img/persistence/re_play.jpg)
+![Replay](img/persistence/re_play.png)
 
 ### Update state
 
@@ -235,7 +232,7 @@ from langgraph.store.memory import InMemoryStore
 in_memory_store = InMemoryStore()
 ```
 
-Memories are namespaced by a `tuple`, which in this specific example will be `(<user_id>, "memories")`. The namespace can be any length and represent anything, does not have be user specific.
+Memories are namespaced by a `tuple`, which in this specific example will be `(<user_id>, "memories")`. The namespace can be any length and represent anything, does not have to be user specific.
 
 ```python 
 user_id = "1"
@@ -390,6 +387,9 @@ We can access the memories and use them in our model call.
 def call_model(state: MessagesState, config: RunnableConfig, *, store: BaseStore):
     # Get the user id from the config
     user_id = config["configurable"]["user_id"]
+
+    # Namespace the memory
+    namespace = (user_id, "memories")
     
     # Search based on the most recent message
     memories = store.search(
@@ -436,7 +436,7 @@ See the [deployment guide](../cloud/deployment/semantic_search.md) for more deta
 
 Under the hood, checkpointing is powered by checkpointer objects that conform to [BaseCheckpointSaver][langgraph.checkpoint.base.BaseCheckpointSaver] interface. LangGraph provides several checkpointer implementations, all implemented via standalone, installable libraries:
 
-* `langgraph-checkpoint`: The base interface for checkpointer savers ([BaseCheckpointSaver][langgraph.checkpoint.base.BaseCheckpointSaver]) and serialization/deserialization interface ([SerializerProtocol][langgraph.checkpoint.serde.base.SerializerProtocol]). Includes in-memory checkpointer implementation ([MemorySaver][langgraph.checkpoint.memory.MemorySaver]) for experimentation. LangGraph comes with `langgraph-checkpoint` included.
+* `langgraph-checkpoint`: The base interface for checkpointer savers ([BaseCheckpointSaver][langgraph.checkpoint.base.BaseCheckpointSaver]) and serialization/deserialization interface ([SerializerProtocol][langgraph.checkpoint.serde.base.SerializerProtocol]). Includes in-memory checkpointer implementation ([InMemorySaver][langgraph.checkpoint.memory.InMemorySaver]) for experimentation. LangGraph comes with `langgraph-checkpoint` included.
 * `langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database ([SqliteSaver][langgraph.checkpoint.sqlite.SqliteSaver] / [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver]). Ideal for experimentation and local workflows. Needs to be installed separately.
 * `langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database ([PostgresSaver][langgraph.checkpoint.postgres.PostgresSaver] / [AsyncPostgresSaver][langgraph.checkpoint.postgres.aio.AsyncPostgresSaver]), used in LangGraph Cloud. Ideal for using in production. Needs to be installed separately.
 

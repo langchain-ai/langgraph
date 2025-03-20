@@ -24,6 +24,7 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
+    get_checkpoint_metadata,
 )
 from langgraph.checkpoint.postgres import _ainternal, _internal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
@@ -74,6 +75,9 @@ MIGRATIONS = [
     """
     CREATE INDEX CONCURRENTLY IF NOT EXISTS checkpoint_writes_thread_id_idx ON checkpoint_writes(thread_id);
     """,
+    """
+    ALTER TABLE checkpoint_writes ADD COLUMN task_path TEXT NOT NULL DEFAULT '';
+    """,
 ]
 
 SELECT_SQL = f"""
@@ -99,7 +103,7 @@ select
             and cw.checkpoint_id = (checkpoint->>'id')
     ) as pending_writes,
     (
-        select array_agg(array[cw.type::bytea, cw.blob] order by cw.task_id, cw.idx)
+        select array_agg(array[cw.type::bytea, cw.blob] order by cw.task_path, cw.task_id, cw.idx)
         from checkpoint_writes cw
         where cw.thread_id = checkpoints.thread_id
             and cw.checkpoint_ns = checkpoints.checkpoint_ns
@@ -125,8 +129,8 @@ UPSERT_CHECKPOINTS_SQL = """
 """
 
 UPSERT_CHECKPOINT_WRITES_SQL = """
-    INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, task_path, idx, channel, type, blob)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO UPDATE SET
         channel = EXCLUDED.channel,
         type = EXCLUDED.type,
@@ -134,8 +138,8 @@ UPSERT_CHECKPOINT_WRITES_SQL = """
 """
 
 INSERT_CHECKPOINT_WRITES_SQL = """
-    INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, task_path, idx, channel, type, blob)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO NOTHING
 """
 
@@ -420,7 +424,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
                     thread_id,
                     checkpoint_ns,
                     Jsonb(self._dump_checkpoint(copy)),
-                    self._dump_metadata(metadata),
+                    self._dump_metadata(get_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config
@@ -430,6 +434,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
         config: RunnableConfig,
         writes: Sequence[tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Store intermediate writes linked to a checkpoint.
 
@@ -453,6 +458,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
                     config["configurable"]["checkpoint_ns"],
                     config["configurable"]["checkpoint_id"],
                     task_id,
+                    task_path,
                     writes,
                 ),
             )
@@ -737,7 +743,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                     thread_id,
                     checkpoint_ns,
                     Jsonb(self._dump_checkpoint(copy)),
-                    self._dump_metadata(metadata),
+                    self._dump_metadata(get_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config
@@ -747,6 +753,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         config: RunnableConfig,
         writes: Sequence[tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Store intermediate writes linked to a checkpoint asynchronously.
 
@@ -768,6 +775,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
             config["configurable"]["checkpoint_ns"],
             config["configurable"]["checkpoint_id"],
             task_id,
+            task_path,
             writes,
         )
         async with self._cursor(pipeline=True) as cur:
@@ -903,6 +911,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         config: RunnableConfig,
         writes: Sequence[tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Store intermediate writes linked to a checkpoint.
 
@@ -912,7 +921,8 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
             config (RunnableConfig): Configuration of the related checkpoint.
             writes (Sequence[Tuple[str, Any]]): List of writes to store, each as (channel, value) pair.
             task_id (str): Identifier for the task creating the writes.
+            task_path (str): Path of the task creating the writes.
         """
         return asyncio.run_coroutine_threadsafe(
-            self.aput_writes(config, writes, task_id), self.loop
+            self.aput_writes(config, writes, task_id, task_path), self.loop
         ).result()

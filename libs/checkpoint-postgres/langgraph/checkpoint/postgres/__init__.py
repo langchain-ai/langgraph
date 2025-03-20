@@ -16,6 +16,7 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
     get_checkpoint_id,
+    get_checkpoint_metadata,
 )
 from langgraph.checkpoint.postgres import _internal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
@@ -317,7 +318,7 @@ class PostgresSaver(BasePostgresSaver):
                     checkpoint["id"],
                     checkpoint_id,
                     Jsonb(self._dump_checkpoint(copy)),
-                    self._dump_metadata(metadata),
+                    self._dump_metadata(get_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config
@@ -327,6 +328,7 @@ class PostgresSaver(BasePostgresSaver):
         config: RunnableConfig,
         writes: Sequence[tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Store intermediate writes linked to a checkpoint.
 
@@ -350,6 +352,7 @@ class PostgresSaver(BasePostgresSaver):
                     config["configurable"]["checkpoint_ns"],
                     config["configurable"]["checkpoint_id"],
                     task_id,
+                    task_path,
                     writes,
                 ),
             )

@@ -1,8 +1,15 @@
 import asyncio
 import concurrent.futures
-from typing import Union
+import contextvars
+import inspect
+import sys
+import types
+from typing import Awaitable, Coroutine, Generator, Optional, TypeVar, Union, cast
 
+T = TypeVar("T")
 AnyFuture = Union[asyncio.Future, concurrent.futures.Future]
+
+CONTEXT_NOT_SUPPORTED = sys.version_info < (3, 11)
 
 
 def _get_loop(fut: asyncio.Future) -> asyncio.AbstractEventLoop:
@@ -52,10 +59,11 @@ def _copy_future_state(source: AnyFuture, dest: asyncio.Future) -> None:
 
     The other Future may be a concurrent.futures.Future.
     """
+    if dest.done():
+        return
     assert source.done()
     if dest.cancelled():
         return
-    assert not dest.done()
     if source.cancelled():
         dest.cancel()
     else:
@@ -112,13 +120,85 @@ def _chain_future(source: AnyFuture, destination: AnyFuture) -> None:
     source.add_done_callback(_call_set_state)
 
 
-def chain_future(source: AnyFuture, destination: concurrent.futures.Future) -> None:
+def chain_future(source: AnyFuture, destination: AnyFuture) -> AnyFuture:
     # adapted from asyncio.run_coroutine_threadsafe
     try:
         _chain_future(source, destination)
+        return destination
     except (SystemExit, KeyboardInterrupt):
         raise
     except BaseException as exc:
-        if destination.set_running_or_notify_cancel():
+        if isinstance(destination, concurrent.futures.Future):
+            if destination.set_running_or_notify_cancel():
+                destination.set_exception(exc)
+        else:
             destination.set_exception(exc)
         raise
+
+
+def _ensure_future(
+    coro_or_future: Union[Coroutine[None, None, T], Awaitable[T]],
+    *,
+    loop: asyncio.AbstractEventLoop,
+    name: Optional[str] = None,
+    context: Optional[contextvars.Context] = None,
+) -> asyncio.Task[T]:
+    called_wrap_awaitable = False
+    if not asyncio.iscoroutine(coro_or_future):
+        if inspect.isawaitable(coro_or_future):
+            coro_or_future = cast(
+                Coroutine[None, None, T], _wrap_awaitable(coro_or_future)
+            )
+            called_wrap_awaitable = True
+        else:
+            raise TypeError(
+                "An asyncio.Future, a coroutine or an awaitable is required."
+                f" Got {type(coro_or_future).__name__} instead."
+            )
+
+    try:
+        if CONTEXT_NOT_SUPPORTED:
+            return loop.create_task(coro_or_future, name=name)
+        else:
+            return loop.create_task(coro_or_future, name=name, context=context)
+    except RuntimeError:
+        if not called_wrap_awaitable:
+            coro_or_future.close()
+        raise
+
+
+@types.coroutine
+def _wrap_awaitable(awaitable: Awaitable[T]) -> Generator[None, None, T]:
+    """Helper for asyncio.ensure_future().
+
+    Wraps awaitable (an object with __await__) into a coroutine
+    that will later be wrapped in a Task by ensure_future().
+    """
+    return (yield from awaitable.__await__())
+
+
+def run_coroutine_threadsafe(
+    coro: Coroutine[None, None, T],
+    loop: asyncio.AbstractEventLoop,
+    name: Optional[str] = None,
+    context: Optional[contextvars.Context] = None,
+) -> asyncio.Future[T]:
+    """Submit a coroutine object to a given event loop.
+
+    Return a asyncio.Future to access the result.
+    """
+    future: asyncio.Future[T] = asyncio.Future(loop=loop)
+
+    def callback() -> None:
+        try:
+            chain_future(
+                _ensure_future(coro, loop=loop, name=name, context=context), future
+            )
+        except (SystemExit, KeyboardInterrupt):
+            raise
+        except BaseException as exc:
+            future.set_exception(exc)
+            raise
+
+    loop.call_soon_threadsafe(callback, context=context)
+    return future

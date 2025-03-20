@@ -1,6 +1,5 @@
-import asyncio
-import sys
 from collections import ChainMap
+from os import getenv
 from typing import Any, Optional, Sequence, cast
 
 from langchain_core.callbacks import (
@@ -13,17 +12,35 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import (
     CONFIG_KEYS,
     COPIABLE_KEYS,
-    DEFAULT_RECURSION_LIMIT,
     var_child_runnable_config,
 )
 
 from langgraph.checkpoint.base import CheckpointMetadata
+from langgraph.config import get_config, get_store, get_stream_writer  # noqa
 from langgraph.constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
+    NS_END,
+    NS_SEP,
 )
+
+DEFAULT_RECURSION_LIMIT = int(getenv("LANGGRAPH_DEFAULT_RECURSION_LIMIT", "25"))
+
+
+def recast_checkpoint_ns(ns: str) -> str:
+    """Remove task IDs from checkpoint namespace.
+
+    Args:
+        ns (str): The checkpoint namespace with task IDs.
+
+    Returns:
+        str: The checkpoint namespace without task IDs.
+    """
+    return NS_SEP.join(
+        part.split(NS_END)[0] for part in ns.split(NS_SEP) if not part.isdigit()
+    )
 
 
 def patch_configurable(
@@ -132,7 +149,7 @@ def merge_configs(*configs: Optional[RunnableConfig]) -> RunnableConfig:
 def patch_config(
     config: Optional[RunnableConfig],
     *,
-    callbacks: Optional[Callbacks] = None,
+    callbacks: Callbacks = None,
     recursion_limit: Optional[int] = None,
     max_concurrency: Optional[int] = None,
     run_name: Optional[str] = None,
@@ -250,6 +267,13 @@ def get_async_callback_manager_for_config(
         )
 
 
+def _is_not_empty(value: Any) -> bool:
+    if isinstance(value, (list, tuple, dict)):
+        return len(value) > 0
+    else:
+        return value is not None
+
+
 def ensure_config(*configs: Optional[RunnableConfig]) -> RunnableConfig:
     """Ensure that a config is a dict with all keys present.
 
@@ -272,20 +296,20 @@ def ensure_config(*configs: Optional[RunnableConfig]) -> RunnableConfig:
             {
                 k: v.copy() if k in COPIABLE_KEYS else v  # type: ignore[attr-defined]
                 for k, v in var_config.items()
-                if v is not None
+                if _is_not_empty(v)
             },
         )
     for config in configs:
         if config is None:
             continue
         for k, v in config.items():
-            if v is not None and k in CONFIG_KEYS:
+            if _is_not_empty(v) and k in CONFIG_KEYS:
                 if k == CONF:
                     empty[k] = cast(dict, v).copy()
                 else:
                     empty[k] = v  # type: ignore[literal-required]
         for k, v in config.items():
-            if v is not None and k not in CONFIG_KEYS:
+            if _is_not_empty(v) and k not in CONFIG_KEYS:
                 empty[CONF][k] = v
     for key, value in empty[CONF].items():
         if (
@@ -295,18 +319,3 @@ def ensure_config(*configs: Optional[RunnableConfig]) -> RunnableConfig:
         ):
             empty["metadata"][key] = value
     return empty
-
-
-def get_configurable() -> dict[str, Any]:
-    if sys.version_info < (3, 11):
-        try:
-            if asyncio.current_task():
-                raise RuntimeError(
-                    "Python 3.11 or later required to use this in an async context"
-                )
-        except RuntimeError:
-            pass
-    if var_config := var_child_runnable_config.get():
-        return var_config[CONF]
-    else:
-        raise RuntimeError("Called get_configurable outside of a runnable context")

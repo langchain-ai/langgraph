@@ -1,8 +1,10 @@
+"""CLI entrypoint for LangGraph API server."""
+
 import os
 import pathlib
 import shutil
 import sys
-from typing import Callable, Optional, Sequence
+from typing import Callable, List, Optional, Sequence, Tuple
 
 import click
 import click.exceptions
@@ -301,7 +303,15 @@ def _build(
         tag,
     ]
     # apply config
-    stdin = langgraph_cli.config.config_to_docker(config, config_json, base_image)
+    stdin, additional_contexts = langgraph_cli.config.config_to_docker(
+        config, config_json, base_image
+    )
+    # add additional_contexts
+    if additional_contexts:
+        additional_contexts_str = ",".join(
+            f"{k}={v}" for k, v in additional_contexts.items()
+        )
+        args.extend(["--build-context", additional_contexts_str])
     # run docker build
     runner.run(
         subp_exec(
@@ -437,19 +447,27 @@ def dockerfile(save_path: str, config: pathlib.Path, add_docker_compose: bool) -
     secho("✅ Configuration validated!", fg="green")
 
     secho(f"📝 Generating Dockerfile at {save_path}", fg="yellow")
+    dockerfile, additional_contexts = langgraph_cli.config.config_to_docker(
+        config,
+        config_json,
+        (
+            "langchain/langgraphjs-api"
+            if config_json.get("node_version")
+            else "langchain/langgraph-api"
+        ),
+    )
     with open(str(save_path), "w", encoding="utf-8") as f:
-        f.write(
-            langgraph_cli.config.config_to_docker(
-                config,
-                config_json,
-                (
-                    "langchain/langgraphjs-api"
-                    if config_json.get("node_version")
-                    else "langchain/langgraph-api"
-                ),
-            )
-        )
+        f.write(dockerfile)
     secho("✅ Created: Dockerfile", fg="green")
+
+    if additional_contexts:
+        additional_contexts_str = ",".join(
+            f"{k}={v}" for k, v in additional_contexts.items()
+        )
+        secho(
+            f"""📝 Run docker build with these additional build contexts `--build-context {additional_contexts_str}`""",
+            fg="yellow",
+        )
 
     if add_docker_compose:
         # Add docker compose and related files
@@ -573,8 +591,15 @@ def dev(
 ):
     """CLI entrypoint for running the LangGraph API server."""
     try:
-        from langgraph_api.cli import run_server
+        from langgraph_api.cli import run_server  # type: ignore
     except ImportError:
+        py_version_msg = ""
+        if sys.version_info < (3, 11):
+            py_version_msg = (
+                "\n\nNote: The in-mem server requires Python 3.11 or higher to be installed."
+                f" You are currently using Python {sys.version_info.major}.{sys.version_info.minor}."
+                ' Please upgrade your Python version before installing "langgraph-cli[inmem]".'
+            )
         try:
             from importlib import util
 
@@ -582,19 +607,27 @@ def dev(
                 raise click.UsageError(
                     "Required package 'langgraph-api' is not installed.\n"
                     "Please install it with:\n\n"
-                    '    pip install -U "langgraph-cli[inmem]"\n\n'
+                    '    pip install -U "langgraph-cli[inmem]"'
+                    f"{py_version_msg}"
                 ) from None
         except ImportError:
             raise click.UsageError(
                 "Could not verify package installation. Please ensure Python is up to date and\n"
                 "langgraph-cli is installed with the 'inmem' extra: pip install -U \"langgraph-cli[inmem]\""
+                f"{py_version_msg}"
             ) from None
         raise click.UsageError(
             "Could not import run_server. This likely means your installation is incomplete.\n"
             "Please ensure langgraph-cli is installed with the 'inmem' extra: pip install -U \"langgraph-cli[inmem]\""
+            f"{py_version_msg}"
         ) from None
 
     config_json = langgraph_cli.config.validate_config_file(pathlib.Path(config))
+    if config_json.get("node_version"):
+        raise click.UsageError(
+            "In-mem server for JS graphs is not supported in this version of the LangGraph CLI. Please use `npx @langchain/langgraph-cli` instead."
+        ) from None
+
     cwd = os.getcwd()
     sys.path.append(cwd)
     dependencies = config_json.get("dependencies", [])
@@ -617,6 +650,7 @@ def dev(
         store=config_json.get("store"),
         wait_for_client=wait_for_client,
         auth=config_json.get("auth"),
+        http=config_json.get("http"),
     )
 
 
@@ -644,7 +678,8 @@ def prepare_args_and_stdin(
     debugger_port: Optional[int] = None,
     debugger_base_url: Optional[str] = None,
     postgres_uri: Optional[str] = None,
-):
+) -> Tuple[List[str], str]:
+    assert config_path.exists(), f"Config file not found: {config_path}"
     # prepare args
     stdin = langgraph_cli.docker.compose(
         capabilities,
@@ -688,7 +723,8 @@ def prepare(
     debugger_port: Optional[int] = None,
     debugger_base_url: Optional[str] = None,
     postgres_uri: Optional[str] = None,
-):
+) -> Tuple[List[str], str]:
+    """Prepare the arguments and stdin for running the LangGraph API server."""
     config_json = langgraph_cli.config.validate_config_file(config_path)
     # pull latest images
     if pull:

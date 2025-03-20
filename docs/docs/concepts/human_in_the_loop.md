@@ -647,19 +647,15 @@ def node_in_parent_graph(state: State):
       This will print out
 
       ```pycon
-      --- First invocation ---
-      In parent node: {'foo': 'bar'}
       Entered `parent_node` a total of 1 times
       Entered `node_in_subgraph` a total of 1 times
       Entered human_node in sub-graph a total of 1 times
-      {'__interrupt__': (Interrupt(value='what is your name?', resumable=True, ns=['parent_node:0b23d72f-aaba-0329-1a59-ca4f3c8bad3b', 'human_node:25df717c-cb80-57b0-7410-44e20aac8f3c'], when='during'),)}
-
+      {'__interrupt__': (Interrupt(value='what is your name?', resumable=True, ns=['parent_node:4c3a0248-21f0-1287-eacf-3002bc304db4', 'human_node:2fe86d52-6f70-2a3f-6b2f-b1eededd6348'], when='during'),)}
       --- Resuming ---
-      In parent node: {'foo': 'bar'}
       Entered `parent_node` a total of 2 times
       Entered human_node in sub-graph a total of 2 times
       Got an answer of 35
-      {'parent_node': None} 
+      {'parent_node': {'state_counter': 1}}
       ```
 
 

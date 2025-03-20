@@ -9,13 +9,11 @@ from langgraph.checkpoint.base import PendingWrite
 from langgraph.constants import (
     EMPTY_SEQ,
     ERROR,
-    FF_SEND_V2,
     INTERRUPT,
+    MISSING,
     NULL_TASK_ID,
-    PUSH,
     RESUME,
     RETURN,
-    SELF,
     START,
     TAG_HIDDEN,
     TASKS,
@@ -29,7 +27,7 @@ def is_task_id(task_id: str) -> bool:
     """Check if a string is a valid task id."""
     try:
         UUID(task_id)
-    except ValueError:
+    except Exception:
         return False
     return True
 
@@ -39,14 +37,11 @@ def read_channel(
     chan: str,
     *,
     catch: bool = True,
-    return_exception: bool = False,
 ) -> Any:
     try:
         return channels[chan].get()
-    except EmptyChannelError as exc:
-        if return_exception:
-            return exc
-        elif catch:
+    except EmptyChannelError:
+        if catch:
             return None
         else:
             raise
@@ -75,7 +70,7 @@ def map_command(
 ) -> Iterator[tuple[str, str, Any]]:
     """Map input chunk to a sequence of pending writes in the form (channel, value)."""
     if cmd.graph == Command.PARENT:
-        raise InvalidUpdateError("There is not parent graph")
+        raise InvalidUpdateError("There is no parent graph")
     if cmd.goto:
         if isinstance(cmd.goto, (tuple, list)):
             sends = cmd.goto
@@ -83,14 +78,14 @@ def map_command(
             sends = [cmd.goto]
         for send in sends:
             if isinstance(send, Send):
-                yield (NULL_TASK_ID, PUSH if FF_SEND_V2 else TASKS, send)
+                yield (NULL_TASK_ID, TASKS, send)
             elif isinstance(send, str):
-                yield (NULL_TASK_ID, f"branch:{START}:{SELF}:{send}", START)
+                yield (NULL_TASK_ID, f"branch:to:{send}", START)
             else:
                 raise TypeError(
                     f"In Command.goto, expected Send/str, got {type(send).__name__}"
                 )
-    if cmd.resume:
+    if cmd.resume is not None:
         if isinstance(cmd.resume, dict) and all(is_task_id(k) for k in cmd.resume):
             for tid, resume in cmd.resume.items():
                 existing: list[Any] = next(
@@ -175,7 +170,8 @@ def map_output_updates(
         return
     updated: list[tuple[str, Any]] = []
     for task, writes in output_tasks:
-        if rtn := next((value for chan, value in writes if chan == RETURN), None):
+        rtn = next((value for chan, value in writes if chan == RETURN), MISSING)
+        if rtn is not MISSING:
             updated.append((task.name, rtn))
         elif isinstance(output_channels, str):
             updated.extend(

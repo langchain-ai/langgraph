@@ -1,4 +1,4 @@
-# QuickStart: Launch Local LangGraph Server
+# Quickstart: Launch Local LangGraph Server
 
 This is a quick start guide to help you get a LangGraph app up and running locally.
 
@@ -250,4 +250,4 @@ Access detailed documentation for development and API usage:
 
 - **[LangGraph Server API Reference](../../cloud/reference/api/api_ref.html)**: Explore the LangGraph Server API documentation.  
 - **[Python SDK Reference](../../cloud/reference/sdk/python_sdk_ref.md)**: Explore the Python SDK API Reference.
-- **[JS/TS SDK Reference](../../cloud/reference/sdk/js_ts_sdk_ref.md)**: Explore the Python SDK API Reference.
+- **[JS/TS SDK Reference](../../cloud/reference/sdk/js_ts_sdk_ref.md)**: Explore the JS/TS SDK API Reference.

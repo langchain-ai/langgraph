@@ -17,17 +17,9 @@ We call these debugging techniques **Time Travel**, composed of two key actions:
 
 ![](./img/human_in_the_loop/replay.png)
 
-Replaying allows us to revisit and reproduce an agent's past actions. This can be done either from the current state (or checkpoint) of the graph or from a specific checkpoint.
+Replaying allows us to revisit and reproduce an agent's past actions, up to and including a specific step (checkpoint).
 
-To replay from the current state, simply pass `None` as the input along with a `thread`:
-
-```python
-thread = {"configurable": {"thread_id": "1"}}
-for event in graph.stream(None, thread, stream_mode="values"):
-    print(event)
-```
-
-To replay actions from a specific checkpoint, start by retrieving all checkpoints for the thread:
+To replay actions before a specific checkpoint, start by retrieving all checkpoints for the thread:
 
 ```python
 all_checkpoints = []
@@ -43,7 +35,7 @@ for event in graph.stream(None, config, stream_mode="values"):
     print(event)
 ```
 
-The graph efficiently replays previously executed nodes instead of re-executing them, leveraging its awareness of prior checkpoint executions.
+The graph replays previously executed steps _before_ the provided `checkpoint_id` and executes the steps _after_ `checkpoint_id` (i.e., a new fork), even if they have been executed previously.
 
 ## Forking
 

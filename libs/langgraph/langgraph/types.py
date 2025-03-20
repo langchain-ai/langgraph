@@ -16,18 +16,16 @@ from typing import (
     TypeVar,
     Union,
     cast,
+    get_type_hints,
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
-from typing_extensions import Self, TypedDict
+from typing_extensions import Self
 
-from langgraph.checkpoint.base import (
-    BaseCheckpointSaver,
-    CheckpointMetadata,
-    PendingWrite,
-)
+from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 
 if TYPE_CHECKING:
+    from langgraph.pregel.protocol import PregelProtocol
     from langgraph.store.base import BaseStore
 
 
@@ -42,19 +40,22 @@ except ImportError:
 All = Literal["*"]
 """Special value to indicate that graph should interrupt on all nodes."""
 
-Checkpointer = Union[None, Literal[False], BaseCheckpointSaver]
-"""Type of the checkpointer to use for a subgraph. False disables checkpointing,
-even if the parent graph has a checkpointer. None inherits checkpointer."""
+Checkpointer = Union[None, bool, BaseCheckpointSaver]
+"""Type of the checkpointer to use for a subgraph.
+- True enables persistent checkpointing for this subgraph.
+- False disables checkpointing, even if the parent graph has a checkpointer.
+- None inherits checkpointer from the parent graph."""
 
 StreamMode = Literal["values", "updates", "debug", "messages", "custom"]
 """How the stream method should emit outputs.
 
-- 'values': Emit all values of the state for each step.
-- 'updates': Emit only the node name(s) and updates
-    that were returned by the node(s) **after** each step.
-- 'debug': Emit debug events for each step.
-- 'messages': Emit LLM messages token-by-token.
-- 'custom': Emit custom output `write: StreamWriter` kwarg of each node.
+- `"values"`: Emit all values in the state after each step.
+    When used with functional API, values are emitted once at the end of the workflow.
+- `"updates"`: Emit only the node or task names and updates returned by the nodes or tasks after each step.
+    If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
+- `"custom"`: Emit custom data using from inside nodes or tasks using `StreamWriter`.
+- `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
+- `"debug"`: Emit debug events with as much information as possible for each step.
 """
 
 StreamWriter = Callable[[Any], None]
@@ -132,7 +133,12 @@ class Interrupt:
     value: Any
     resumable: bool = False
     ns: Optional[Sequence[str]] = None
-    when: Literal["during"] = "during"
+    when: Literal["during"] = dataclasses.field(default="during", repr=False)
+
+
+class StateUpdate(NamedTuple):
+    values: Optional[dict[str, Any]]
+    as_node: Optional[str] = None
 
 
 class PregelTask(NamedTuple):
@@ -142,22 +148,30 @@ class PregelTask(NamedTuple):
     error: Optional[Exception] = None
     interrupts: tuple[Interrupt, ...] = ()
     state: Union[None, RunnableConfig, "StateSnapshot"] = None
-    result: Optional[dict[str, Any]] = None
+    result: Optional[Any] = None
 
 
-class PregelExecutableTask(NamedTuple):
+if sys.version_info > (3, 11):
+    _T_DC_KWARGS = {"weakref_slot": True, "slots": True, "frozen": True}
+else:
+    _T_DC_KWARGS = {"frozen": True}
+
+
+@dataclasses.dataclass(**_T_DC_KWARGS)
+class PregelExecutableTask:
     name: str
     input: Any
     proc: Runnable
     writes: deque[tuple[str, Any]]
     config: RunnableConfig
-    triggers: list[str]
+    triggers: Sequence[str]
     retry_policy: Optional[RetryPolicy]
     cache_policy: Optional[CachePolicy]
     id: str
     path: tuple[Union[str, int, tuple], ...]
     scheduled: bool = False
     writers: Sequence[Runnable] = ()
+    subgraphs: Sequence["PregelProtocol"] = ()
 
 
 class StateSnapshot(NamedTuple):
@@ -294,6 +308,8 @@ class Command(Generic[N], ToolOutputMixin):
             for t in self.update
         ):
             return self.update
+        elif hints := get_type_hints(type(self.update)):
+            return [(k, getattr(self.update, k)) for k in hints]
         elif self.update is not None:
             return [("__root__", self.update)]
         else:
@@ -344,10 +360,16 @@ class LoopProtocol:
         self.stop = stop
 
 
-class PregelScratchpad(TypedDict, total=False):
-    interrupt_counter: int
-    used_null_resume: bool
+@dataclasses.dataclass(**{**_DC_KWARGS, "frozen": False})
+class PregelScratchpad:
+    # call
+    call_counter: Callable[[], int]
+    # interrupt
+    interrupt_counter: Callable[[], int]
+    get_null_resume: Callable[[bool], Any]
     resume: list[Any]
+    # subgraph
+    subgraph_counter: Callable[[], int]
 
 
 def interrupt(value: Any) -> Any:
@@ -449,41 +471,27 @@ def interrupt(value: Any) -> Any:
         CONFIG_KEY_CHECKPOINT_NS,
         CONFIG_KEY_SCRATCHPAD,
         CONFIG_KEY_SEND,
-        CONFIG_KEY_TASK_ID,
-        CONFIG_KEY_WRITES,
         NS_SEP,
-        NULL_TASK_ID,
         RESUME,
     )
     from langgraph.errors import GraphInterrupt
-    from langgraph.utils.config import get_configurable
+    from langgraph.utils.config import get_config
 
-    conf = get_configurable()
+    conf = get_config()["configurable"]
     # track interrupt index
     scratchpad: PregelScratchpad = conf[CONFIG_KEY_SCRATCHPAD]
-    if "interrupt_counter" not in scratchpad:
-        scratchpad["interrupt_counter"] = 0
-    else:
-        scratchpad["interrupt_counter"] += 1
-    idx = scratchpad["interrupt_counter"]
+    idx = scratchpad.interrupt_counter()
     # find previous resume values
-    task_id = conf[CONFIG_KEY_TASK_ID]
-    writes: list[PendingWrite] = conf[CONFIG_KEY_WRITES]
-    scratchpad.setdefault(
-        "resume", next((w[2] for w in writes if w[0] == task_id and w[1] == RESUME), [])
-    )
-    if scratchpad["resume"]:
-        if idx < len(scratchpad["resume"]):
-            return scratchpad["resume"][idx]
+    if scratchpad.resume:
+        if idx < len(scratchpad.resume):
+            return scratchpad.resume[idx]
     # find current resume value
-    if not scratchpad.get("used_null_resume"):
-        scratchpad["used_null_resume"] = True
-        for tid, c, v in sorted(writes, key=lambda x: x[0], reverse=True):
-            if tid == NULL_TASK_ID and c == RESUME:
-                assert len(scratchpad["resume"]) == idx, (scratchpad["resume"], idx)
-                scratchpad["resume"].append(v)
-                conf[CONFIG_KEY_SEND]([(RESUME, scratchpad["resume"])])
-                return v
+    v = scratchpad.get_null_resume(True)
+    if v is not None:
+        assert len(scratchpad.resume) == idx, (scratchpad.resume, idx)
+        scratchpad.resume.append(v)
+        conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
+        return v
     # no resume value found
     raise GraphInterrupt(
         (

@@ -22,10 +22,6 @@ A super-step can be considered a single iteration over the graph nodes. Nodes th
 
 The `StateGraph` class is the main graph class to use. This is parameterized by a user defined `State` object.
 
-### MessageGraph
-
-The `MessageGraph` class is a special type of graph. The `State` of a `MessageGraph` is ONLY a list of messages. This class is rarely used except for chatbots, as most applications require the `State` to be more complex than a list of messages.
-
 ### Compiling your graph
 
 To build your graph, you first define the [state](#state), you then add [nodes](#nodes) and [edges](#edges), and then you compile it. What exactly is compiling your graph and why is it needed?
@@ -217,9 +213,9 @@ builder.add_node("other_node", my_other_node)
 ...
 ```
 
-Behind the scenes, functions are converted to [RunnableLambda's](https://api.python.langchain.com/en/latest/runnables/langchain_core.runnables.base.RunnableLambda.html#langchain_core.runnables.base.RunnableLambda), which add batch and async support to your function, along with native tracing and debugging.
+Behind the scenes, functions are converted to [RunnableLambda](https://api.python.langchain.com/en/latest/runnables/langchain_core.runnables.base.RunnableLambda.html#langchain_core.runnables.base.RunnableLambda)s, which add batch and async support to your function, along with native tracing and debugging.
 
-If you add a node to graph without specifying a name, it will be given a default name equivalent to the function name.
+If you add a node to a graph without specifying a name, it will be given a default name equivalent to the function name.
 
 ```python
 builder.add_node(my_node)
@@ -228,7 +224,7 @@ builder.add_node(my_node)
 
 ### `START` Node
 
-The `START` Node is a special node that represents the node sends user input to the graph. The main purpose for referencing this node is to determine which nodes should be called first.
+The `START` Node is a special node that represents the node that sends user input to the graph. The main purpose for referencing this node is to determine which nodes should be called first.
 
 ```python
 from langgraph.graph import START
@@ -273,9 +269,9 @@ If you want to **optionally** route to 1 or more edges (or optionally terminate)
 graph.add_conditional_edges("node_a", routing_function)
 ```
 
-Similar to nodes, the `routing_function` accept the current `state` of the graph and return a value.
+Similar to nodes, the `routing_function` accepts the current `state` of the graph and returns a value.
 
-By default, the return value `routing_function` is used as the name of the node (or a list of nodes) to send the state to next. All those nodes will be run in parallel as a part of the next superstep.
+By default, the return value `routing_function` is used as the name of the node (or list of nodes) to send the state to next. All those nodes will be run in parallel as a part of the next superstep.
 
 You can optionally provide a dictionary that maps the `routing_function`'s output to the name of the next node.
 
@@ -314,7 +310,7 @@ graph.add_conditional_edges(START, routing_function, {True: "node_b", False: "no
 
 ## `Send`
 
-By default, `Nodes` and `Edges` are defined ahead of time and operate on the same shared state. However, there can be cases where the exact edges are not known ahead of time and/or you may want different versions of `State` to exist at the same time. A common of example of this is with `map-reduce` design patterns. In this design pattern, a first node may generate a list of objects, and you may want to apply some other node to all those objects. The number of objects may be unknown ahead of time (meaning the number of edges may not be known) and the input `State` to the downstream `Node` should be different (one for each generated object).
+By default, `Nodes` and `Edges` are defined ahead of time and operate on the same shared state. However, there can be cases where the exact edges are not known ahead of time and/or you may want different versions of `State` to exist at the same time. A common example of this is with [map-reduce](https://langchain-ai.github.io/langgraph/how-tos/map-reduce/) design patterns. In this design pattern, a first node may generate a list of objects, and you may want to apply some other node to all those objects. The number of objects may be unknown ahead of time (meaning the number of edges may not be known) and the input `State` to the downstream `Node` should be different (one for each generated object).
 
 To support this design pattern, LangGraph supports returning [`Send`][langgraph.types.Send] objects from conditional edges. `Send` takes two arguments: first is the name of the node, and second is the state to pass to that node.
 
@@ -359,6 +355,29 @@ Use `Command` when you need to **both** update the graph state **and** route to 
 
 Use [conditional edges](#conditional-edges) to route between nodes conditionally without updating the state.
 
+### Navigating to a node in a parent graph
+
+If you are using [subgraphs](#subgraphs), you might want to navigate from a node within a subgraph to a different subgraph (i.e. a different node in the parent graph). To do so, you can specify `graph=Command.PARENT` in `Command`:
+
+```python
+def my_node(state: State) -> Command[Literal["my_other_node"]]:
+    return Command(
+        update={"foo": "bar"},
+        goto="other_subgraph",  # where `other_subgraph` is a node in the parent graph
+        graph=Command.PARENT
+    )
+```
+
+!!! note
+
+    Setting `graph` to `Command.PARENT` will navigate to the closest parent graph.
+
+!!! important "State updates with `Command.PARENT`"
+
+    When you send updates from a subgraph node to a parent graph node for a key that's shared by both parent and subgraph [state schemas](#schema), you **must** define a [reducer](#reducers) for the key you're updating in the parent graph state. See this [example](../how-tos/command.ipynb#navigating-to-a-node-in-a-parent-graph).
+
+This is particularly useful when implementing [multi-agent handoffs](./multi_agent.md#handoffs).
+
 ### Using inside tools
 
 A common use case is updating graph state from inside a tool. For example, in a customer support application you might want to look up customer information based on their account number or ID in the beginning of the conversation. To update the graph state from the tool, you can return `Command(update={"my_custom_key": "foo", "messages": [...]})` from the tool:
@@ -381,7 +400,7 @@ def lookup_user_info(tool_call_id: Annotated[str, InjectedToolCallId], config: R
 !!! important
     You MUST include `messages` (or any state key used for the message history) in `Command.update` when returning `Command` from a tool and the list of messages in `messages` MUST contain a `ToolMessage`. This is necessary for the resulting message history to be valid (LLM providers require AI messages with tool calls to be followed by the tool result messages).
 
-If you are using tools that update state via `Command`, we recommend using prebuilt [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] which automatically handles tools returning `Command` objects and propagates them to the graph state. If you're writing a custom node that calls tools, you would need to manually propagate `Command` objects returned by the tools as the update from node.
+If you are using tools that update state via `Command`, we recommend using prebuilt [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] which automatically handles tools returning `Command` objects and propagates them to the graph state. If you're writing a custom node that calls tools, you would need to manually propagate `Command` objects returned by the tools as the update from the node.
 
 ### Human-in-the-loop
 
@@ -475,7 +494,7 @@ Read more about how the `interrupt` is used for **human-in-the-loop** workflows 
 
 ## Breakpoints
 
-Breakpoints pause graph execution at specific points and enable stepping through execution step by step. Breakpoints are powered by LangGraph's [**persistence layer**](./persistence.md), which saves the state after each graph step. Breakpoints can also be used to enable [**human-in-the-loop**](./human_in_the_loop.md) workflows, though we recommend using the [`interrupt` function](#interrupt-function) for this purpose.
+Breakpoints pause graph execution at specific points and enable stepping through execution step by step. Breakpoints are powered by LangGraph's [**persistence layer**](./persistence.md), which saves the state after each graph step. Breakpoints can also be used to enable [**human-in-the-loop**](./human_in_the_loop.md) workflows, though we recommend using the [`interrupt` function](#interrupt) for this purpose.
 
 Read more about breakpoints in the [Breakpoints conceptual guide](./breakpoints.md).
 
@@ -512,7 +531,7 @@ Let's take a look at examples for each.
 
 ### As a compiled graph
 
-The simplest way to create subgraph nodes is by using a [compiled subgraph](#compiling-your-graph) directly. When doing so, it is **important** that the parent graph and the subgraph [state schemas](#state) share at least one key which they can use to communicate. If your graph and subgraph do not share any keys, you should use write a function [invoking the subgraph](#as-a-function) instead.
+The simplest way to create subgraph nodes is by using a [compiled subgraph](#compiling-your-graph) directly. When doing so, it is **important** that the parent graph and the subgraph [state schemas](#state) share at least one key which they can use to communicate. If your graph and subgraph do not share any keys, you should write a function [invoking the subgraph](#as-a-function) instead.
 
 !!! Note
     If you pass extra keys to the subgraph node (i.e., in addition to the shared keys), they will be ignored by the subgraph node. Similarly, if you return extra keys from the subgraph, they will be ignored by the parent graph.

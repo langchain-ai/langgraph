@@ -4,7 +4,8 @@ import asyncio
 import concurrent
 import concurrent.futures
 import queue
-from collections import deque
+import weakref
+from collections import defaultdict, deque
 from functools import partial
 from typing import (
     Any,
@@ -18,6 +19,7 @@ from typing import (
     Type,
     Union,
     cast,
+    get_type_hints,
     overload,
 )
 from uuid import UUID, uuid5
@@ -59,6 +61,7 @@ from langgraph.constants import (
     CONFIG_KEY_NODE_FINISHED,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
+    CONFIG_KEY_RUNNER_SUBMIT,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STORE,
     CONFIG_KEY_STREAM,
@@ -89,7 +92,7 @@ from langgraph.pregel.algo import (
     prepare_next_tasks,
 )
 from langgraph.pregel.debug import tasks_w_writes
-from langgraph.pregel.io import read_channels
+from langgraph.pregel.io import map_input, read_channels
 from langgraph.pregel.loop import AsyncPregelLoop, StreamProtocol, SyncPregelLoop
 from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.messages import StreamMessagesHandler
@@ -97,7 +100,7 @@ from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.runner import PregelRunner
-from langgraph.pregel.utils import find_subgraph_pregel, get_new_channel_versions
+from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
@@ -106,6 +109,7 @@ from langgraph.types import (
     Checkpointer,
     LoopProtocol,
     StateSnapshot,
+    StateUpdate,
     StreamChunk,
     StreamMode,
 )
@@ -115,9 +119,10 @@ from langgraph.utils.config import (
     patch_checkpoint_map,
     patch_config,
     patch_configurable,
+    recast_checkpoint_ns,
 )
 from langgraph.utils.fields import get_enhanced_type_hints
-from langgraph.utils.pydantic import create_model
+from langgraph.utils.pydantic import create_model, is_supported_by_pydantic
 from langgraph.utils.queue import AsyncQueue, SyncQueue  # type: ignore[attr-defined]
 
 WriteValue = Union[Callable[[Input], Output], Any]
@@ -196,12 +201,274 @@ class Channel:
 
 
 class Pregel(PregelProtocol):
+    """Pregel manages the runtime behavior for LangGraph applications.
+
+    ## Overview
+
+    Pregel combines [**actors**](https://en.wikipedia.org/wiki/Actor_model)
+    and **channels** into a single application.
+    **Actors** read data from channels and write data to channels.
+    Pregel organizes the execution of the application into multiple steps,
+    following the **Pregel Algorithm**/**Bulk Synchronous Parallel** model.
+
+    Each step consists of three phases:
+
+    - **Plan**: Determine which **actors** to execute in this step. For example,
+        in the first step, select the **actors** that subscribe to the special
+        **input** channels; in subsequent steps,
+        select the **actors** that subscribe to channels updated in the previous step.
+    - **Execution**: Execute all selected **actors** in parallel,
+        until all complete, or one fails, or a timeout is reached. During this
+        phase, channel updates are invisible to actors until the next step.
+    - **Update**: Update the channels with the values written by the **actors**
+        in this step.
+
+    Repeat until no **actors** are selected for execution, or a maximum number of
+    steps is reached.
+
+    ## Actors
+
+    An **actor** is a [PregelNode][langgraph.pregel.read.PregelNode].
+    It subscribes to channels, reads data from them, and writes data to them.
+    It can be thought of as an **actor** in the Pregel algorithm.
+    [PregelNodes][langgraph.pregel.read.PregelNode] implement LangChain's
+    Runnable interface.
+
+    ## Channels
+
+    Channels are used to communicate between actors (PregelNodes).
+    Each channel has a value type, an update type, and an update function – which
+    takes a sequence of updates and
+    modifies the stored value. Channels can be used to send data from one chain to
+    another, or to send data from a chain to itself in a future step. LangGraph
+    provides a number of built-in channels:
+
+    ### Basic channels: LastValue and Topic
+
+    - `LastValue`: The default channel, stores the last value sent to the channel,
+       useful for input and output values, or for sending data from one step to the next
+    - `Topic`: A configurable PubSub Topic, useful for sending multiple values
+       between *actors*, or for accumulating output. Can be configured to deduplicate
+       values, and/or to accumulate values over the course of multiple steps.
+
+    ### Advanced channels: Context and BinaryOperatorAggregate
+
+    - `Context`: exposes the value of a context manager, managing its lifecycle.
+      Useful for accessing external resources that require setup and/or teardown. eg.
+      `client = Context(httpx.Client)`
+    - `BinaryOperatorAggregate`: stores a persistent value, updated by applying
+       a binary operator to the current value and each update
+       sent to the channel, useful for computing aggregates over multiple steps. eg.
+      `total = BinaryOperatorAggregate(int, operator.add)`
+
+    ## Examples
+
+    Most users will interact with Pregel via a
+    [StateGraph (Graph API)][langgraph.graph.StateGraph] or via an
+    [entrypoint (Functional API)][langgraph.func.entrypoint].
+
+    However, for **advanced** use cases, Pregel can be used directly. If you're
+    not sure whether you need to use Pregel directly, then the answer is probably no
+    – you should use the Graph API or Functional API instead. These are higher-level
+    interfaces that will compile down to Pregel under the hood.
+
+    Here are some examples to give you a sense of how it works:
+
+    Example: Single node application
+        ```python
+        from langgraph.channels import EphemeralValue
+        from langgraph.pregel import Pregel, Channel, ChannelWriteEntry
+
+        node1 = (
+            Channel.subscribe_to("a")
+            | (lambda x: x + x)
+            | Channel.write_to("b")
+        )
+
+        app = Pregel(
+            nodes={"node1": node1},
+            channels={
+                "a": EphemeralValue(str),
+                "b": EphemeralValue(str),
+            },
+            input_channels=["a"],
+            output_channels=["b"],
+        )
+
+        app.invoke({"a": "foo"})
+        ```
+
+        ```con
+        {'b': 'foofoo'}
+        ```
+
+    Example: Using multiple nodes and multiple output channels
+        ```python
+        from langgraph.channels import LastValue, EphemeralValue
+        from langgraph.pregel import Pregel, Channel, ChannelWriteEntry
+
+        node1 = (
+            Channel.subscribe_to("a")
+            | (lambda x: x + x)
+            | Channel.write_to("b")
+        )
+
+        node2 = (
+            Channel.subscribe_to("b")
+            | (lambda x: x + x)
+            | Channel.write_to("c")
+        )
+
+
+        app = Pregel(
+            nodes={"node1": node1, "node2": node2},
+            channels={
+                "a": EphemeralValue(str),
+                "b": LastValue(str),
+                "c": EphemeralValue(str),
+            },
+            input_channels=["a"],
+            output_channels=["b", "c"],
+        )
+
+        app.invoke({"a": "foo"})
+        ```
+
+        ```con
+        {'b': 'foofoo', 'c': 'foofoofoofoo'}
+        ```
+
+    Example: Using a Topic channel
+        ```python
+        from langgraph.channels import LastValue, EphemeralValue, Topic
+        from langgraph.pregel import Pregel, Channel, ChannelWriteEntry
+
+        node1 = (
+            Channel.subscribe_to("a")
+            | (lambda x: x + x)
+            | {
+                "b": Channel.write_to("b"),
+                "c": Channel.write_to("c")
+            }
+        )
+
+        node2 = (
+            Channel.subscribe_to("b")
+            | (lambda x: x + x)
+            | {
+                "c": Channel.write_to("c"),
+            }
+        )
+
+
+        app = Pregel(
+            nodes={"node1": node1, "node2": node2},
+            channels={
+                "a": EphemeralValue(str),
+                "b": EphemeralValue(str),
+                "c": Topic(str, accumulate=True),
+            },
+            input_channels=["a"],
+            output_channels=["c"],
+        )
+
+        app.invoke({"a": "foo"})
+        ```
+
+        ```pycon
+        {'c': ['foofoo', 'foofoofoofoo']}
+        ```
+
+    Example: Using a BinaryOperatorAggregate channel
+        ```python
+        from langgraph.channels import EphemeralValue, BinaryOperatorAggregate
+        from langgraph.pregel import Pregel, Channel
+
+
+        node1 = (
+            Channel.subscribe_to("a")
+            | (lambda x: x + x)
+            | {
+                "b": Channel.write_to("b"),
+                "c": Channel.write_to("c")
+            }
+        )
+
+        node2 = (
+            Channel.subscribe_to("b")
+            | (lambda x: x + x)
+            | {
+                "c": Channel.write_to("c"),
+            }
+        )
+
+
+        def reducer(current, update):
+            if current:
+                return current + " | " + "update"
+            else:
+                return update
+
+        app = Pregel(
+            nodes={"node1": node1, "node2": node2},
+            channels={
+                "a": EphemeralValue(str),
+                "b": EphemeralValue(str),
+                "c": BinaryOperatorAggregate(str, operator=reducer),
+            },
+            input_channels=["a"],
+            output_channels=["c"]
+        )
+
+        app.invoke({"a": "foo"})
+        ```
+
+        ```con
+        {'c': 'foofoo | foofoofoofoo'}
+        ```
+
+    Example: Introducing a cycle
+        This example demonstrates how to introduce a cycle in the graph, by having
+        a chain write to a channel it subscribes to. Execution will continue
+        until a None value is written to the channel.
+
+        ```python
+        from langgraph.channels import EphemeralValue
+        from langgraph.pregel import Pregel, Channel, ChannelWrite, ChannelWriteEntry
+
+        example_node = (
+            Channel.subscribe_to("value")
+            | (lambda x: x + x if len(x) < 10 else None)
+            | ChannelWrite(writes=[ChannelWriteEntry(channel="value", skip_none=True)])
+        )
+
+        app = Pregel(
+            nodes={"example_node": example_node},
+            channels={
+                "value": EphemeralValue(str),
+            },
+            input_channels=["value"],
+            output_channels=["value"]
+        )
+
+        app.invoke({"value": "a"})
+        ```
+
+        ```con
+        {'value': 'aaaaaaaaaaaaaaaa'}
+        ```
+    """
+
     nodes: dict[str, PregelNode]
 
     channels: dict[str, Union[BaseChannel, ManagedValueSpec]]
 
     stream_mode: StreamMode = "values"
     """Mode to stream output, defaults to 'values'."""
+
+    stream_eager: bool = False
+    """Whether to force emitting stream events eagerly, automatically turned on
+    for stream_mode "messages" and "custom"."""
 
     output_channels: Union[str, Sequence[str]]
 
@@ -231,6 +498,8 @@ class Pregel(PregelProtocol):
 
     config_type: Optional[Type[Any]] = None
 
+    input_model: Optional[Type[BaseModel]] = None
+
     config: Optional[RunnableConfig] = None
 
     name: str = "LangGraph"
@@ -242,6 +511,7 @@ class Pregel(PregelProtocol):
         channels: Optional[dict[str, Union[BaseChannel, ManagedValueSpec]]],
         auto_validate: bool = True,
         stream_mode: StreamMode = "values",
+        stream_eager: bool = False,
         output_channels: Union[str, Sequence[str]],
         stream_channels: Optional[Union[str, Sequence[str]]] = None,
         interrupt_after_nodes: Union[All, Sequence[str]] = (),
@@ -253,12 +523,14 @@ class Pregel(PregelProtocol):
         store: Optional[BaseStore] = None,
         retry_policy: Optional[RetryPolicy] = None,
         config_type: Optional[Type[Any]] = None,
+        input_model: Optional[Type[BaseModel]] = None,
         config: Optional[RunnableConfig] = None,
         name: str = "LangGraph",
     ) -> None:
         self.nodes = nodes
         self.channels = channels or {}
         self.stream_mode = stream_mode
+        self.stream_eager = stream_eager
         self.output_channels = output_channels
         self.stream_channels = stream_channels
         self.interrupt_after_nodes = interrupt_after_nodes
@@ -270,6 +542,7 @@ class Pregel(PregelProtocol):
         self.store = store
         self.retry_policy = retry_policy
         self.config_type = config_type
+        self.input_model = input_model
         self.config = config
         self.name = name
         if auto_validate:
@@ -343,6 +616,36 @@ class Pregel(PregelProtocol):
             ]
         ]
 
+    def config_schema(
+        self, *, include: Optional[Sequence[str]] = None
+    ) -> Type[BaseModel]:
+        # If the config type is not set explicitly, we will try to infer it.
+        # If the config type is provided, but isn't directly supported by pydantic
+        # (e.g., vanilla python class), we will also delegate to the parent class,
+        # which handles cases where Pydantic doesn't support the type.
+        if self.config_type is None or not is_supported_by_pydantic(self.config_type):
+            return super().config_schema(include=include)
+
+        include = include or []
+        fields = {
+            "configurable": (self.config_type, None),
+            **{
+                field_name: (field_type, None)
+                for field_name, field_type in get_type_hints(RunnableConfig).items()
+                if field_name in [i for i in include if i != "configurable"]
+            },
+        }
+        return create_model(self.get_name("Config"), field_definitions=fields)
+
+    def get_config_jsonschema(
+        self, *, include: Optional[Sequence[str]] = None
+    ) -> Dict[str, Any]:
+        schema = self.config_schema(include=include)
+        if hasattr(schema, "model_json_schema"):
+            return schema.model_json_schema()
+        else:
+            return schema.schema()
+
     @property
     def InputType(self) -> Any:
         if isinstance(self.input_channels, str):
@@ -353,6 +656,8 @@ class Pregel(PregelProtocol):
     def get_input_schema(
         self, config: Optional[RunnableConfig] = None
     ) -> Type[BaseModel]:
+        if self.input_model is not None:
+            return self.input_model
         config = merge_configs(self.config, config)
         if isinstance(self.input_channels, str):
             return super().get_input_schema(config)
@@ -368,7 +673,7 @@ class Pregel(PregelProtocol):
 
     def get_input_jsonschema(
         self, config: Optional[RunnableConfig] = None
-    ) -> Dict[All, Any]:
+    ) -> Dict[str, Any]:
         schema = self.get_input_schema(config)
         if hasattr(schema, "model_json_schema"):
             return schema.model_json_schema()
@@ -400,7 +705,7 @@ class Pregel(PregelProtocol):
 
     def get_output_jsonschema(
         self, config: Optional[RunnableConfig] = None
-    ) -> Dict[All, Any]:
+    ) -> Dict[str, Any]:
         schema = self.get_output_schema(config)
         if hasattr(schema, "model_json_schema"):
             return schema.model_json_schema()
@@ -422,7 +727,7 @@ class Pregel(PregelProtocol):
 
     def get_subgraphs(
         self, *, namespace: Optional[str] = None, recurse: bool = False
-    ) -> Iterator[tuple[str, Pregel]]:
+    ) -> Iterator[tuple[str, PregelProtocol]]:
         for name, node in self.nodes.items():
             # filter by prefix
             if namespace is not None:
@@ -430,7 +735,7 @@ class Pregel(PregelProtocol):
                     continue
 
             # find the subgraph, if any
-            graph = cast(Optional[Pregel], find_subgraph_pregel(node.bound))
+            graph = node.subgraphs[0] if node.subgraphs else None
 
             # if found, yield recursively
             if graph:
@@ -439,7 +744,7 @@ class Pregel(PregelProtocol):
                     return  # we found it, stop searching
                 if namespace is None:
                     yield name, graph
-                if recurse:
+                if recurse and isinstance(graph, Pregel):
                     if namespace is not None:
                         namespace = namespace[len(name) + 1 :]
                     yield from (
@@ -451,7 +756,7 @@ class Pregel(PregelProtocol):
 
     async def aget_subgraphs(
         self, *, namespace: Optional[str] = None, recurse: bool = False
-    ) -> AsyncIterator[tuple[str, Pregel]]:
+    ) -> AsyncIterator[tuple[str, PregelProtocol]]:
         for name, node in self.get_subgraphs(namespace=namespace, recurse=recurse):
             yield name, node
 
@@ -494,7 +799,11 @@ class Pregel(PregelProtocol):
                 saved.metadata.get("step", -1) + 1,
                 for_execution=True,
                 store=self.store,
-                checkpointer=self.checkpointer or None,
+                checkpointer=(
+                    self.checkpointer
+                    if isinstance(self.checkpointer, BaseCheckpointSaver)
+                    else None
+                ),
                 manager=None,
             )
             # get the subgraphs
@@ -606,7 +915,11 @@ class Pregel(PregelProtocol):
                 saved.metadata.get("step", -1) + 1,
                 for_execution=True,
                 store=self.store,
-                checkpointer=self.checkpointer or None,
+                checkpointer=(
+                    self.checkpointer
+                    if isinstance(self.checkpointer, BaseCheckpointSaver)
+                    else None
+                ),
                 manager=None,
             )
             # get the subgraphs
@@ -690,21 +1003,23 @@ class Pregel(PregelProtocol):
             checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            for _, pregel in self.get_subgraphs(
-                namespace=recast_checkpoint_ns, recurse=True
-            ):
+            for _, pregel in self.get_subgraphs(namespace=recast, recurse=True):
                 return pregel.get_state(
                     patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
                     subgraphs=subgraphs,
                 )
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
 
         config = merge_configs(self.config, config) if self.config else config
+        if self.checkpointer is True:
+            ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
+            config = merge_configs(
+                config, {CONF: {CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(ns)}}
+            )
+
         saved = checkpointer.get_tuple(config)
         return self._prepare_state_snapshot(
             config,
@@ -727,21 +1042,23 @@ class Pregel(PregelProtocol):
             checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            async for _, pregel in self.aget_subgraphs(
-                namespace=recast_checkpoint_ns, recurse=True
-            ):
+            async for _, pregel in self.aget_subgraphs(namespace=recast, recurse=True):
                 return await pregel.aget_state(
                     patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
                     subgraphs=subgraphs,
                 )
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
 
         config = merge_configs(self.config, config) if self.config else config
+        if self.checkpointer is True:
+            ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
+            config = merge_configs(
+                config, {CONF: {CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(ns)}}
+            )
+
         saved = await checkpointer.aget_tuple(config)
         return await self._aprepare_state_snapshot(
             config,
@@ -770,13 +1087,9 @@ class Pregel(PregelProtocol):
             checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            for _, pregel in self.get_subgraphs(
-                namespace=recast_checkpoint_ns, recurse=True
-            ):
+            for _, pregel in self.get_subgraphs(namespace=recast, recurse=True):
                 yield from pregel.get_state_history(
                     patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
                     filter=filter,
@@ -785,7 +1098,7 @@ class Pregel(PregelProtocol):
                 )
                 return
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
 
         config = merge_configs(
             self.config,
@@ -820,13 +1133,9 @@ class Pregel(PregelProtocol):
             checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            async for _, pregel in self.aget_subgraphs(
-                namespace=recast_checkpoint_ns, recurse=True
-            ):
+            async for _, pregel in self.aget_subgraphs(namespace=recast, recurse=True):
                 async for state in pregel.aget_state_history(
                     patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
                     filter=filter,
@@ -836,7 +1145,7 @@ class Pregel(PregelProtocol):
                     yield state
                 return
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
 
         config = merge_configs(
             self.config,
@@ -854,71 +1163,264 @@ class Pregel(PregelProtocol):
                 checkpoint_tuple.config, checkpoint_tuple
             )
 
-    def update_state(
+    def bulk_update_state(
         self,
         config: RunnableConfig,
-        values: Optional[Union[dict[str, Any], Any]],
-        as_node: Optional[str] = None,
+        supersteps: Sequence[Sequence[StateUpdate]],
     ) -> RunnableConfig:
-        """Update the state of the graph with the given values, as if they came from
-        node `as_node`. If `as_node` is not provided, it will be set to the last node
-        that updated the state, if not ambiguous.
+        """Apply updates to the graph state in bulk. Requires a checkpointer to be set.
+
+        Args:
+            config: The config to apply the updates to.
+            supersteps: A list of supersteps, each including a list of updates to apply sequentially to a graph state.
+                        Each update is a tuple of the form `(values, as_node)`.
+
+        Raises:
+            ValueError: If no checkpointer is set or no updates are provided.
+            InvalidUpdateError: If an invalid update is provided.
+
+        Returns:
+            RunnableConfig: The updated config.
         """
+
         checkpointer: Optional[BaseCheckpointSaver] = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
             raise ValueError("No checkpointer set")
 
+        if len(supersteps) == 0:
+            raise ValueError("No supersteps provided")
+
+        if any(len(u) == 0 for u in supersteps):
+            raise ValueError("No updates provided")
+
         # delegate to subgraph
         if (
             checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            for _, pregel in self.get_subgraphs(
-                namespace=recast_checkpoint_ns, recurse=True
-            ):
-                return pregel.update_state(
+            for _, pregel in self.get_subgraphs(namespace=recast, recurse=True):
+                return pregel.bulk_update_state(
                     patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
-                    values,
-                    as_node,
+                    supersteps,
                 )
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
 
-        # get last checkpoint
-        config = ensure_config(self.config, config)
-        saved = checkpointer.get_tuple(config)
-        checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
-        checkpoint_previous_versions = (
-            saved.checkpoint["channel_versions"].copy() if saved else {}
-        )
-        step = saved.metadata.get("step", -1) if saved else -1
-        # merge configurable fields with previous checkpoint config
-        checkpoint_config = patch_configurable(
-            config,
-            {CONFIG_KEY_CHECKPOINT_NS: config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")},
-        )
-        checkpoint_metadata = config["metadata"]
-        if saved:
-            checkpoint_config = patch_configurable(config, saved.config[CONF])
-            checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}
-        with ChannelsManager(
-            self.channels,
-            checkpoint,
-            LoopProtocol(config=config, step=step + 1, stop=step + 2),
-        ) as (channels, managed):
-            # no values as END, just clear all tasks
-            if values is None and as_node == END:
-                if saved is not None:
+        def perform_superstep(
+            input_config: RunnableConfig, updates: Sequence[StateUpdate]
+        ) -> RunnableConfig:
+            # get last checkpoint
+            config = ensure_config(self.config, input_config)
+            saved = checkpointer.get_tuple(config)
+            checkpoint = (
+                copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
+            )
+            checkpoint_previous_versions = (
+                saved.checkpoint["channel_versions"].copy() if saved else {}
+            )
+            step = saved.metadata.get("step", -1) if saved else -1
+            # merge configurable fields with previous checkpoint config
+            checkpoint_config = patch_configurable(
+                config,
+                {
+                    CONFIG_KEY_CHECKPOINT_NS: config[CONF].get(
+                        CONFIG_KEY_CHECKPOINT_NS, ""
+                    )
+                },
+            )
+            checkpoint_metadata = config["metadata"]
+            if saved:
+                checkpoint_config = patch_configurable(config, saved.config[CONF])
+                checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}
+            with ChannelsManager(
+                self.channels,
+                checkpoint,
+                LoopProtocol(config=config, step=step + 1, stop=step + 2),
+            ) as (channels, managed):
+                values, as_node = updates[0]
+
+                # no values as END, just clear all tasks
+                if values is None and as_node == END:
+                    if len(updates) > 1:
+                        raise InvalidUpdateError(
+                            "Cannot apply multiple updates when clearing state"
+                        )
+
+                    if saved is not None:
+                        # tasks for this checkpoint
+                        next_tasks = prepare_next_tasks(
+                            checkpoint,
+                            saved.pending_writes or [],
+                            self.nodes,
+                            channels,
+                            managed,
+                            saved.config,
+                            saved.metadata.get("step", -1) + 1,
+                            for_execution=True,
+                            store=self.store,
+                            checkpointer=self.checkpointer
+                            if isinstance(self.checkpointer, BaseCheckpointSaver)
+                            else None,
+                            manager=None,
+                        )
+                        # apply null writes
+                        if null_writes := [
+                            w[1:]
+                            for w in saved.pending_writes or []
+                            if w[0] == NULL_TASK_ID
+                        ]:
+                            apply_writes(
+                                saved.checkpoint,
+                                channels,
+                                [PregelTaskWrites((), INPUT, null_writes, [])],
+                                None,
+                            )
+                        # apply writes from tasks that already ran
+                        for tid, k, v in saved.pending_writes or []:
+                            if k in (ERROR, INTERRUPT, SCHEDULED):
+                                continue
+                            if tid not in next_tasks:
+                                continue
+                            next_tasks[tid].writes.append((k, v))
+                        # clear all current tasks
+                        apply_writes(checkpoint, channels, next_tasks.values(), None)
+                    # save checkpoint
+                    next_config = checkpointer.put(
+                        checkpoint_config,
+                        create_checkpoint(checkpoint, None, step),
+                        {
+                            **checkpoint_metadata,
+                            "source": "update",
+                            "step": step + 1,
+                            "writes": {},
+                            "parents": saved.metadata.get("parents", {})
+                            if saved
+                            else {},
+                        },
+                        {},
+                    )
+                    return patch_checkpoint_map(
+                        next_config, saved.metadata if saved else None
+                    )
+                # no values, empty checkpoint
+                if values is None and as_node is None:
+                    if len(updates) > 1:
+                        raise InvalidUpdateError(
+                            "Cannot create empty checkpoint with multiple updates"
+                        )
+
+                    next_checkpoint = create_checkpoint(checkpoint, None, step)
+                    # copy checkpoint
+                    next_config = checkpointer.put(
+                        checkpoint_config,
+                        next_checkpoint,
+                        {
+                            **checkpoint_metadata,
+                            "source": "update",
+                            "step": step + 1,
+                            "writes": {},
+                            "parents": saved.metadata.get("parents", {})
+                            if saved
+                            else {},
+                        },
+                        {},
+                    )
+                    return patch_checkpoint_map(
+                        next_config, saved.metadata if saved else None
+                    )
+
+                # act as an input
+                if as_node == INPUT:
+                    if len(updates) > 1:
+                        raise InvalidUpdateError(
+                            "Cannot apply multiple updates when updating as input"
+                        )
+
+                    if input_writes := deque(map_input(self.input_channels, values)):
+                        apply_writes(
+                            checkpoint,
+                            channels,
+                            [PregelTaskWrites((), INPUT, input_writes, [])],
+                            checkpointer.get_next_version,
+                        )
+
+                        # apply input write to channels
+                        next_step = (
+                            step + 1
+                            if saved and saved.metadata.get("step") is not None
+                            else -1
+                        )
+                        next_config = checkpointer.put(
+                            checkpoint_config,
+                            create_checkpoint(checkpoint, channels, next_step),
+                            {
+                                **checkpoint_metadata,
+                                "source": "input",
+                                "step": next_step,
+                                "writes": dict(input_writes),
+                            },
+                            get_new_channel_versions(
+                                checkpoint_previous_versions,
+                                checkpoint["channel_versions"],
+                            ),
+                        )
+
+                        # store the writes
+                        checkpointer.put_writes(
+                            next_config,
+                            input_writes,
+                            str(uuid5(UUID(checkpoint["id"]), INPUT)),
+                        )
+
+                        return patch_checkpoint_map(
+                            next_config, saved.metadata if saved else None
+                        )
+                    else:
+                        raise InvalidUpdateError(
+                            f"Received no input writes for {self.input_channels}"
+                        )
+
+                # no values, copy checkpoint
+                if values is None and as_node == "__copy__":
+                    if len(updates) > 1:
+                        raise InvalidUpdateError(
+                            "Cannot copy checkpoint with multiple updates"
+                        )
+
+                    next_checkpoint = create_checkpoint(checkpoint, None, step)
+                    # copy checkpoint
+                    next_config = checkpointer.put(
+                        saved.parent_config or saved.config
+                        if saved
+                        else checkpoint_config,
+                        next_checkpoint,
+                        {
+                            **checkpoint_metadata,
+                            "source": "fork",
+                            "step": step + 1,
+                            "parents": saved.metadata.get("parents", {})
+                            if saved
+                            else {},
+                        },
+                        {},
+                    )
+                    return patch_checkpoint_map(
+                        next_config, saved.metadata if saved else None
+                    )
+                # apply pending writes, if not on specific checkpoint
+                if (
+                    CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
+                    and saved is not None
+                    and saved.pending_writes
+                ):
                     # tasks for this checkpoint
                     next_tasks = prepare_next_tasks(
                         checkpoint,
-                        saved.pending_writes or [],
+                        saved.pending_writes,
                         self.nodes,
                         channels,
                         managed,
@@ -926,7 +1428,11 @@ class Pregel(PregelProtocol):
                         saved.metadata.get("step", -1) + 1,
                         for_execution=True,
                         store=self.store,
-                        checkpointer=self.checkpointer or None,
+                        checkpointer=(
+                            self.checkpointer
+                            if isinstance(self.checkpointer, BaseCheckpointSaver)
+                            else None
+                        ),
                         manager=None,
                     )
                     # apply null writes
@@ -941,177 +1447,106 @@ class Pregel(PregelProtocol):
                             [PregelTaskWrites((), INPUT, null_writes, [])],
                             None,
                         )
-                    # apply writes from tasks that already ran
-                    for tid, k, v in saved.pending_writes or []:
+                    # apply writes
+                    for tid, k, v in saved.pending_writes:
                         if k in (ERROR, INTERRUPT, SCHEDULED):
                             continue
                         if tid not in next_tasks:
                             continue
                         next_tasks[tid].writes.append((k, v))
-                    # clear all current tasks
-                    apply_writes(checkpoint, channels, next_tasks.values(), None)
-                # save checkpoint
-                next_config = checkpointer.put(
-                    checkpoint_config,
-                    create_checkpoint(checkpoint, None, step),
-                    {
-                        **checkpoint_metadata,
-                        "source": "update",
-                        "step": step + 1,
-                        "writes": {},
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
-                    },
-                    {},
-                )
-                return patch_checkpoint_map(
-                    next_config, saved.metadata if saved else None
-                )
-            # no values, copy checkpoint
-            if values is None and as_node is None:
-                next_checkpoint = create_checkpoint(checkpoint, None, step)
-                # copy checkpoint
-                next_config = checkpointer.put(
-                    checkpoint_config,
-                    next_checkpoint,
-                    {
-                        **checkpoint_metadata,
-                        "source": "update",
-                        "step": step + 1,
-                        "writes": {},
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
-                    },
-                    {},
-                )
-                return patch_checkpoint_map(
-                    next_config, saved.metadata if saved else None
-                )
-            if values is None and as_node == "__copy__":
-                next_checkpoint = create_checkpoint(checkpoint, None, step)
-                # copy checkpoint
-                next_config = checkpointer.put(
-                    saved.parent_config or saved.config if saved else checkpoint_config,
-                    next_checkpoint,
-                    {
-                        **checkpoint_metadata,
-                        "source": "fork",
-                        "step": step + 1,
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
-                    },
-                    {},
-                )
-                return patch_checkpoint_map(
-                    next_config, saved.metadata if saved else None
-                )
-            # apply pending writes, if not on specific checkpoint
-            if (
-                CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
-                and saved is not None
-                and saved.pending_writes
-            ):
-                # tasks for this checkpoint
-                next_tasks = prepare_next_tasks(
-                    checkpoint,
-                    saved.pending_writes,
-                    self.nodes,
-                    channels,
-                    managed,
-                    saved.config,
-                    saved.metadata.get("step", -1) + 1,
-                    for_execution=True,
-                    store=self.store,
-                    checkpointer=self.checkpointer or None,
-                    manager=None,
-                )
-                # apply null writes
-                if null_writes := [
-                    w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
-                ]:
-                    apply_writes(
-                        saved.checkpoint,
-                        channels,
-                        [PregelTaskWrites((), INPUT, null_writes, [])],
-                        None,
-                    )
-                # apply writes
-                for tid, k, v in saved.pending_writes:
-                    if k in (ERROR, INTERRUPT, SCHEDULED):
-                        continue
-                    if tid not in next_tasks:
-                        continue
-                    next_tasks[tid].writes.append((k, v))
-                if tasks := [t for t in next_tasks.values() if t.writes]:
-                    apply_writes(checkpoint, channels, tasks, None)
-            # find last node that updated the state, if not provided
-            if as_node is None and not any(
-                v for vv in checkpoint["versions_seen"].values() for v in vv.values()
-            ):
-                if (
-                    isinstance(self.input_channels, str)
-                    and self.input_channels in self.nodes
+                    if tasks := [t for t in next_tasks.values() if t.writes]:
+                        apply_writes(checkpoint, channels, tasks, None)
+            valid_updates: list[tuple[str, Optional[dict[str, Any]]]] = []
+            if len(updates) == 1:
+                values, as_node = updates[0]
+                # find last node that updated the state, if not provided
+                if as_node is None and not any(
+                    v
+                    for vv in checkpoint["versions_seen"].values()
+                    for v in vv.values()
                 ):
-                    as_node = self.input_channels
-            elif as_node is None:
-                last_seen_by_node = sorted(
-                    (v, n)
-                    for n, seen in checkpoint["versions_seen"].items()
-                    if n in self.nodes
-                    for v in seen.values()
+                    if (
+                        isinstance(self.input_channels, str)
+                        and self.input_channels in self.nodes
+                    ):
+                        as_node = self.input_channels
+                elif as_node is None:
+                    last_seen_by_node = sorted(
+                        (v, n)
+                        for n, seen in checkpoint["versions_seen"].items()
+                        if n in self.nodes
+                        for v in seen.values()
+                    )
+                    # if two nodes updated the state at the same time, it's ambiguous
+                    if last_seen_by_node:
+                        if len(last_seen_by_node) == 1:
+                            as_node = last_seen_by_node[0][1]
+                        elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
+                            as_node = last_seen_by_node[-1][1]
+                if as_node is None:
+                    raise InvalidUpdateError("Ambiguous update, specify as_node")
+                if as_node not in self.nodes:
+                    raise InvalidUpdateError(f"Node {as_node} does not exist")
+                valid_updates.append((as_node, values))
+            else:
+                for values, as_node in updates:
+                    if as_node is None:
+                        raise InvalidUpdateError(
+                            "as_node is required when applying multiple updates"
+                        )
+                    if as_node not in self.nodes:
+                        raise InvalidUpdateError(f"Node {as_node} does not exist")
+
+                    valid_updates.append((as_node, values))
+
+            run_tasks: list[PregelTaskWrites] = []
+            run_task_ids: list[str] = []
+
+            for as_node, values in valid_updates:
+                # create task to run all writers of the chosen node
+                writers = self.nodes[as_node].flat_writers
+                if not writers:
+                    raise InvalidUpdateError(f"Node {as_node} has no writers")
+                writes: deque[tuple[str, Any]] = deque()
+                task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
+                task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
+                run_tasks.append(task)
+                run_task_ids.append(task_id)
+                run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
+                # execute task
+                run.invoke(
+                    values,
+                    patch_config(
+                        config,
+                        run_name=self.name + "UpdateState",
+                        configurable={
+                            # deque.extend is thread-safe
+                            CONFIG_KEY_SEND: partial(
+                                local_write,
+                                writes.extend,
+                                self.nodes.keys(),
+                            ),
+                            CONFIG_KEY_READ: partial(
+                                local_read,
+                                step + 1,
+                                checkpoint,
+                                channels,
+                                managed,
+                                task,
+                                config,
+                            ),
+                        },
+                    ),
                 )
-                # if two nodes updated the state at the same time, it's ambiguous
-                if last_seen_by_node:
-                    if len(last_seen_by_node) == 1:
-                        as_node = last_seen_by_node[0][1]
-                    elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
-                        as_node = last_seen_by_node[-1][1]
-            if as_node is None:
-                raise InvalidUpdateError("Ambiguous update, specify as_node")
-            if as_node not in self.nodes:
-                raise InvalidUpdateError(f"Node {as_node} does not exist")
-            # create task to run all writers of the chosen node
-            writers = self.nodes[as_node].flat_writers
-            if not writers:
-                raise InvalidUpdateError(f"Node {as_node} has no writers")
-            writes: deque[tuple[str, Any]] = deque()
-            task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
-            task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
-            run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
-            # execute task
-            run.invoke(
-                values,
-                patch_config(
-                    config,
-                    run_name=self.name + "UpdateState",
-                    configurable={
-                        # deque.extend is thread-safe
-                        CONFIG_KEY_SEND: partial(
-                            local_write,
-                            writes.extend,
-                            self.nodes.keys(),
-                        ),
-                        CONFIG_KEY_READ: partial(
-                            local_read,
-                            step + 1,
-                            checkpoint,
-                            channels,
-                            managed,
-                            task,
-                            config,
-                        ),
-                    },
-                ),
-            )
             # save task writes
-            # channel writes are saved to current checkpoint
-            # push writes are saved to next checkpoint
-            channel_writes, push_writes = (
-                [w for w in task.writes if w[0] != PUSH],
-                [w for w in task.writes if w[0] == PUSH],
-            )
-            if saved and channel_writes:
-                checkpointer.put_writes(checkpoint_config, channel_writes, task_id)
+            for task_id, task in zip(run_task_ids, run_tasks):
+                # channel writes are saved to current checkpoint
+                channel_writes = [w for w in task.writes if w[0] != PUSH]
+                if saved and channel_writes:
+                    checkpointer.put_writes(checkpoint_config, channel_writes, task_id)
             # apply to checkpoint and save
-            mv_writes = apply_writes(
-                checkpoint, channels, [task], checkpointer.get_next_version
+            mv_writes, _ = apply_writes(
+                checkpoint, channels, run_tasks, checkpointer.get_next_version
             )
             assert not mv_writes, "Can't write to SharedValues from update_state"
             checkpoint = create_checkpoint(checkpoint, channels, step + 1)
@@ -1122,85 +1557,284 @@ class Pregel(PregelProtocol):
                     **checkpoint_metadata,
                     "source": "update",
                     "step": step + 1,
-                    "writes": {as_node: values},
+                    "writes": {as_node: values for as_node, values in valid_updates},
                     "parents": saved.metadata.get("parents", {}) if saved else {},
                 },
                 get_new_channel_versions(
                     checkpoint_previous_versions, checkpoint["channel_versions"]
                 ),
             )
-            if push_writes:
-                checkpointer.put_writes(next_config, push_writes, task_id)
+            for task_id, task in zip(run_task_ids, run_tasks):
+                # save push writes
+                if push_writes := [w for w in task.writes if w[0] == PUSH]:
+                    checkpointer.put_writes(next_config, push_writes, task_id)
+
             return patch_checkpoint_map(next_config, saved.metadata if saved else None)
 
-    async def aupdate_state(
+        current_config = config
+        for superstep in supersteps:
+            current_config = perform_superstep(current_config, superstep)
+        return current_config
+
+    async def abulk_update_state(
         self,
         config: RunnableConfig,
-        values: dict[str, Any] | Any,
-        as_node: Optional[str] = None,
+        supersteps: Sequence[Sequence[StateUpdate]],
     ) -> RunnableConfig:
-        """Update the state of the graph asynchronously with the given values, as if they came from
-        node `as_node`. If `as_node` is not provided, it will be set to the last node
-        that updated the state, if not ambiguous.
+        """Apply updates to the graph state in bulk. Requires a checkpointer to be set.
+
+        Args:
+            config: The config to apply the updates to.
+            supersteps: A list of supersteps, each including a list of updates to apply sequentially to a graph state.
+                        Each update is a tuple of the form `(values, as_node)`.
+
+        Raises:
+            ValueError: If no checkpointer is set or no updates are provided.
+            InvalidUpdateError: If an invalid update is provided.
+
+        Returns:
+            RunnableConfig: The updated config.
         """
+
         checkpointer: Optional[BaseCheckpointSaver] = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
             raise ValueError("No checkpointer set")
 
+        if len(supersteps) == 0:
+            raise ValueError("No supersteps provided")
+
+        if any(len(u) == 0 for u in supersteps):
+            raise ValueError("No updates provided")
+
         # delegate to subgraph
         if (
             checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
         ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            async for _, pregel in self.aget_subgraphs(
-                namespace=recast_checkpoint_ns, recurse=True
-            ):
-                return await pregel.aupdate_state(
+            async for _, pregel in self.aget_subgraphs(namespace=recast, recurse=True):
+                return await pregel.abulk_update_state(
                     patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
-                    values,
-                    as_node,
+                    supersteps,
                 )
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
 
-        # get last checkpoint
-        config = ensure_config(self.config, config)
-        saved = await checkpointer.aget_tuple(config)
-        checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
-        checkpoint_previous_versions = (
-            saved.checkpoint["channel_versions"].copy() if saved else {}
-        )
-        step = saved.metadata.get("step", -1) if saved else -1
-        # merge configurable fields with previous checkpoint config
-        checkpoint_config = patch_configurable(
-            config,
-            {CONFIG_KEY_CHECKPOINT_NS: config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")},
-        )
-        checkpoint_metadata = config["metadata"]
-        if saved:
-            checkpoint_config = patch_configurable(config, saved.config[CONF])
-            checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}
-        async with AsyncChannelsManager(
-            self.channels,
-            checkpoint,
-            LoopProtocol(config=config, step=step + 1, stop=step + 2),
-        ) as (
-            channels,
-            managed,
-        ):
-            # no values, just clear all tasks
-            if values is None and as_node == END:
-                if saved is not None:
+        async def aperform_superstep(
+            input_config: RunnableConfig, updates: Sequence[StateUpdate]
+        ) -> RunnableConfig:
+            # get last checkpoint
+            config = ensure_config(self.config, input_config)
+            saved = await checkpointer.aget_tuple(config)
+            checkpoint = (
+                copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
+            )
+            checkpoint_previous_versions = (
+                saved.checkpoint["channel_versions"].copy() if saved else {}
+            )
+            step = saved.metadata.get("step", -1) if saved else -1
+            # merge configurable fields with previous checkpoint config
+            checkpoint_config = patch_configurable(
+                config,
+                {
+                    CONFIG_KEY_CHECKPOINT_NS: config[CONF].get(
+                        CONFIG_KEY_CHECKPOINT_NS, ""
+                    )
+                },
+            )
+            checkpoint_metadata = config["metadata"]
+            if saved:
+                checkpoint_config = patch_configurable(config, saved.config[CONF])
+                checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}
+            async with AsyncChannelsManager(
+                self.channels,
+                checkpoint,
+                LoopProtocol(config=config, step=step + 1, stop=step + 2),
+            ) as (
+                channels,
+                managed,
+            ):
+                values, as_node = updates[0]
+                # no values, just clear all tasks
+                if values is None and as_node == END:
+                    if len(updates) > 1:
+                        raise InvalidUpdateError(
+                            "Cannot apply multiple updates when clearing state"
+                        )
+                    if saved is not None:
+                        # tasks for this checkpoint
+                        next_tasks = prepare_next_tasks(
+                            checkpoint,
+                            saved.pending_writes or [],
+                            self.nodes,
+                            channels,
+                            managed,
+                            saved.config,
+                            saved.metadata.get("step", -1) + 1,
+                            for_execution=True,
+                            store=self.store,
+                            checkpointer=self.checkpointer
+                            if isinstance(self.checkpointer, BaseCheckpointSaver)
+                            else None,
+                            manager=None,
+                        )
+                        # apply null writes
+                        if null_writes := [
+                            w[1:]
+                            for w in saved.pending_writes or []
+                            if w[0] == NULL_TASK_ID
+                        ]:
+                            apply_writes(
+                                saved.checkpoint,
+                                channels,
+                                [PregelTaskWrites((), INPUT, null_writes, [])],
+                                None,
+                            )
+                        # apply writes from tasks that already ran
+                        for tid, k, v in saved.pending_writes or []:
+                            if k in (ERROR, INTERRUPT, SCHEDULED):
+                                continue
+                            if tid not in next_tasks:
+                                continue
+                            next_tasks[tid].writes.append((k, v))
+                        # clear all current tasks
+                        apply_writes(checkpoint, channels, next_tasks.values(), None)
+                    # save checkpoint
+                    next_config = await checkpointer.aput(
+                        checkpoint_config,
+                        create_checkpoint(checkpoint, None, step),
+                        {
+                            **checkpoint_metadata,
+                            "source": "update",
+                            "step": step + 1,
+                            "writes": {},
+                            "parents": saved.metadata.get("parents", {})
+                            if saved
+                            else {},
+                        },
+                        {},
+                    )
+                    return patch_checkpoint_map(
+                        next_config, saved.metadata if saved else None
+                    )
+                # no values, empty checkpoint
+                if values is None and as_node is None:
+                    if len(updates) > 1:
+                        raise InvalidUpdateError(
+                            "Cannot create empty checkpoint with multiple updates"
+                        )
+
+                    next_checkpoint = create_checkpoint(checkpoint, None, step)
+                    # copy checkpoint
+                    next_config = await checkpointer.aput(
+                        checkpoint_config,
+                        next_checkpoint,
+                        {
+                            **checkpoint_metadata,
+                            "source": "update",
+                            "step": step + 1,
+                            "writes": {},
+                            "parents": saved.metadata.get("parents", {})
+                            if saved
+                            else {},
+                        },
+                        {},
+                    )
+                    return patch_checkpoint_map(
+                        next_config, saved.metadata if saved else None
+                    )
+
+                # act as an input
+                if as_node == INPUT:
+                    if len(updates) > 1:
+                        raise InvalidUpdateError(
+                            "Cannot apply multiple updates when updating as input"
+                        )
+
+                    if input_writes := deque(map_input(self.input_channels, values)):
+                        apply_writes(
+                            checkpoint,
+                            channels,
+                            [PregelTaskWrites((), INPUT, input_writes, [])],
+                            checkpointer.get_next_version,
+                        )
+
+                        # apply input write to channels
+                        next_step = (
+                            step + 1
+                            if saved and saved.metadata.get("step") is not None
+                            else -1
+                        )
+                        next_config = await checkpointer.aput(
+                            checkpoint_config,
+                            create_checkpoint(checkpoint, channels, next_step),
+                            {
+                                **checkpoint_metadata,
+                                "source": "input",
+                                "step": next_step,
+                                "writes": dict(input_writes),
+                            },
+                            get_new_channel_versions(
+                                checkpoint_previous_versions,
+                                checkpoint["channel_versions"],
+                            ),
+                        )
+
+                        # store the writes
+                        await checkpointer.aput_writes(
+                            next_config,
+                            input_writes,
+                            str(uuid5(UUID(checkpoint["id"]), INPUT)),
+                        )
+
+                        return patch_checkpoint_map(
+                            next_config, saved.metadata if saved else None
+                        )
+                    else:
+                        raise InvalidUpdateError(
+                            f"Received no input writes for {self.input_channels}"
+                        )
+
+                # no values, copy checkpoint
+                if values is None and as_node == "__copy__":
+                    if len(updates) > 1:
+                        raise InvalidUpdateError(
+                            "Cannot copy checkpoint with multiple updates"
+                        )
+
+                    next_checkpoint = create_checkpoint(checkpoint, None, step)
+                    # copy checkpoint
+                    next_config = await checkpointer.aput(
+                        saved.parent_config or saved.config
+                        if saved
+                        else checkpoint_config,
+                        next_checkpoint,
+                        {
+                            **checkpoint_metadata,
+                            "source": "fork",
+                            "step": step + 1,
+                            "parents": saved.metadata.get("parents", {})
+                            if saved
+                            else {},
+                        },
+                        {},
+                    )
+                    return patch_checkpoint_map(
+                        next_config, saved.metadata if saved else None
+                    )
+                # apply pending writes, if not on specific checkpoint
+                if (
+                    CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
+                    and saved is not None
+                    and saved.pending_writes
+                ):
                     # tasks for this checkpoint
                     next_tasks = prepare_next_tasks(
                         checkpoint,
-                        saved.pending_writes or [],
+                        saved.pending_writes,
                         self.nodes,
                         channels,
                         managed,
@@ -1208,7 +1842,11 @@ class Pregel(PregelProtocol):
                         saved.metadata.get("step", -1) + 1,
                         for_execution=True,
                         store=self.store,
-                        checkpointer=self.checkpointer or None,
+                        checkpointer=(
+                            self.checkpointer
+                            if isinstance(self.checkpointer, BaseCheckpointSaver)
+                            else None
+                        ),
                         manager=None,
                     )
                     # apply null writes
@@ -1223,176 +1861,103 @@ class Pregel(PregelProtocol):
                             [PregelTaskWrites((), INPUT, null_writes, [])],
                             None,
                         )
-                    # apply writes from tasks that already ran
-                    for tid, k, v in saved.pending_writes or []:
+                    for tid, k, v in saved.pending_writes:
                         if k in (ERROR, INTERRUPT, SCHEDULED):
                             continue
                         if tid not in next_tasks:
                             continue
                         next_tasks[tid].writes.append((k, v))
-                    # clear all current tasks
-                    apply_writes(checkpoint, channels, next_tasks.values(), None)
-                # save checkpoint
-                next_config = await checkpointer.aput(
-                    checkpoint_config,
-                    create_checkpoint(checkpoint, None, step),
-                    {
-                        **checkpoint_metadata,
-                        "source": "update",
-                        "step": step + 1,
-                        "writes": {},
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
-                    },
-                    {},
-                )
-                return patch_checkpoint_map(
-                    next_config, saved.metadata if saved else None
-                )
-            # no values, copy checkpoint
-            if values is None and as_node is None:
-                next_checkpoint = create_checkpoint(checkpoint, None, step)
-                # copy checkpoint
-                next_config = await checkpointer.aput(
-                    checkpoint_config,
-                    next_checkpoint,
-                    {
-                        **checkpoint_metadata,
-                        "source": "update",
-                        "step": step + 1,
-                        "writes": {},
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
-                    },
-                    {},
-                )
-                return patch_checkpoint_map(
-                    next_config, saved.metadata if saved else None
-                )
-            if values is None and as_node == "__copy__":
-                next_checkpoint = create_checkpoint(checkpoint, None, step)
-                # copy checkpoint
-                next_config = await checkpointer.aput(
-                    saved.parent_config or saved.config if saved else checkpoint_config,
-                    next_checkpoint,
-                    {
-                        **checkpoint_metadata,
-                        "source": "fork",
-                        "step": step + 1,
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
-                    },
-                    {},
-                )
-                return patch_checkpoint_map(
-                    next_config, saved.metadata if saved else None
-                )
-            # apply pending writes, if not on specific checkpoint
-            if (
-                CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
-                and saved is not None
-                and saved.pending_writes
-            ):
-                # tasks for this checkpoint
-                next_tasks = prepare_next_tasks(
-                    checkpoint,
-                    saved.pending_writes,
-                    self.nodes,
-                    channels,
-                    managed,
-                    saved.config,
-                    saved.metadata.get("step", -1) + 1,
-                    for_execution=True,
-                    store=self.store,
-                    checkpointer=self.checkpointer or None,
-                    manager=None,
-                )
-                # apply null writes
-                if null_writes := [
-                    w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
-                ]:
-                    apply_writes(
-                        saved.checkpoint,
-                        channels,
-                        [PregelTaskWrites((), INPUT, null_writes, [])],
-                        None,
+                    if tasks := [t for t in next_tasks.values() if t.writes]:
+                        apply_writes(checkpoint, channels, tasks, None)
+            valid_updates: list[tuple[str, Optional[dict[str, Any]]]] = []
+            if len(updates) == 1:
+                values, as_node = updates[0]
+                # find last node that updated the state, if not provided
+                if as_node is None and not saved:
+                    if (
+                        isinstance(self.input_channels, str)
+                        and self.input_channels in self.nodes
+                    ):
+                        as_node = self.input_channels
+                elif as_node is None:
+                    last_seen_by_node = sorted(
+                        (v, n)
+                        for n, seen in checkpoint["versions_seen"].items()
+                        if n in self.nodes
+                        for v in seen.values()
                     )
-                for tid, k, v in saved.pending_writes:
-                    if k in (ERROR, INTERRUPT, SCHEDULED):
-                        continue
-                    if tid not in next_tasks:
-                        continue
-                    next_tasks[tid].writes.append((k, v))
-                if tasks := [t for t in next_tasks.values() if t.writes]:
-                    apply_writes(checkpoint, channels, tasks, None)
-            # find last node that updated the state, if not provided
-            if as_node is None and not saved:
-                if (
-                    isinstance(self.input_channels, str)
-                    and self.input_channels in self.nodes
-                ):
-                    as_node = self.input_channels
-            elif as_node is None:
-                last_seen_by_node = sorted(
-                    (v, n)
-                    for n, seen in checkpoint["versions_seen"].items()
-                    if n in self.nodes
-                    for v in seen.values()
+                    # if two nodes updated the state at the same time, it's ambiguous
+                    if last_seen_by_node:
+                        if len(last_seen_by_node) == 1:
+                            as_node = last_seen_by_node[0][1]
+                        elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
+                            as_node = last_seen_by_node[-1][1]
+                if as_node is None:
+                    raise InvalidUpdateError("Ambiguous update, specify as_node")
+                if as_node not in self.nodes:
+                    raise InvalidUpdateError(f"Node {as_node} does not exist")
+                valid_updates.append((as_node, values))
+            else:
+                for values, as_node in updates:
+                    if as_node is None:
+                        raise InvalidUpdateError(
+                            "as_node is required when applying multiple updates"
+                        )
+                    if as_node not in self.nodes:
+                        raise InvalidUpdateError(f"Node {as_node} does not exist")
+
+                    valid_updates.append((as_node, values))
+
+            run_tasks: list[PregelTaskWrites] = []
+            run_task_ids: list[str] = []
+
+            for as_node, values in valid_updates:
+                # create task to run all writers of the chosen node
+                writers = self.nodes[as_node].flat_writers
+                if not writers:
+                    raise InvalidUpdateError(f"Node {as_node} has no writers")
+                writes: deque[tuple[str, Any]] = deque()
+                task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
+                task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
+                run_tasks.append(task)
+                run_task_ids.append(task_id)
+                run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
+                # execute task
+                await run.ainvoke(
+                    values,
+                    patch_config(
+                        config,
+                        run_name=self.name + "UpdateState",
+                        configurable={
+                            # deque.extend is thread-safe
+                            CONFIG_KEY_SEND: partial(
+                                local_write,
+                                writes.extend,
+                                self.nodes.keys(),
+                            ),
+                            CONFIG_KEY_READ: partial(
+                                local_read,
+                                step + 1,
+                                checkpoint,
+                                channels,
+                                managed,
+                                task,
+                                config,
+                            ),
+                        },
+                    ),
                 )
-                # if two nodes updated the state at the same time, it's ambiguous
-                if last_seen_by_node:
-                    if len(last_seen_by_node) == 1:
-                        as_node = last_seen_by_node[0][1]
-                    elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
-                        as_node = last_seen_by_node[-1][1]
-            if as_node is None:
-                raise InvalidUpdateError("Ambiguous update, specify as_node")
-            if as_node not in self.nodes:
-                raise InvalidUpdateError(f"Node {as_node} does not exist")
-            # create task to run all writers of the chosen node
-            writers = self.nodes[as_node].flat_writers
-            if not writers:
-                raise InvalidUpdateError(f"Node {as_node} has no writers")
-            writes: deque[tuple[str, Any]] = deque()
-            task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
-            task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
-            run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
-            # execute task
-            await run.ainvoke(
-                values,
-                patch_config(
-                    config,
-                    run_name=self.name + "UpdateState",
-                    configurable={
-                        # deque.extend is thread-safe
-                        CONFIG_KEY_SEND: partial(
-                            local_write,
-                            writes.extend,
-                            self.nodes.keys(),
-                        ),
-                        CONFIG_KEY_READ: partial(
-                            local_read,
-                            step + 1,
-                            checkpoint,
-                            channels,
-                            managed,
-                            task,
-                            config,
-                        ),
-                    },
-                ),
-            )
             # save task writes
-            # channel writes are saved to current checkpoint
-            # push writes are saved to next checkpoint
-            channel_writes, push_writes = (
-                [w for w in task.writes if w[0] != PUSH],
-                [w for w in task.writes if w[0] == PUSH],
-            )
-            if saved and channel_writes:
-                await checkpointer.aput_writes(
-                    checkpoint_config, channel_writes, task_id
-                )
+            for task_id, task in zip(run_task_ids, run_tasks):
+                # channel writes are saved to current checkpoint
+                channel_writes = [w for w in task.writes if w[0] != PUSH]
+                if saved and channel_writes:
+                    await checkpointer.aput_writes(
+                        checkpoint_config, channel_writes, task_id
+                    )
             # apply to checkpoint and save
-            mv_writes = apply_writes(
-                checkpoint, channels, [task], checkpointer.get_next_version
+            mv_writes, _ = apply_writes(
+                checkpoint, channels, run_tasks, checkpointer.get_next_version
             )
             assert not mv_writes, "Can't write to SharedValues from update_state"
             checkpoint = create_checkpoint(checkpoint, channels, step + 1)
@@ -1404,17 +1969,47 @@ class Pregel(PregelProtocol):
                     **checkpoint_metadata,
                     "source": "update",
                     "step": step + 1,
-                    "writes": {as_node: values},
+                    "writes": {as_node: values for as_node, values in valid_updates},
                     "parents": saved.metadata.get("parents", {}) if saved else {},
                 },
                 get_new_channel_versions(
                     checkpoint_previous_versions, checkpoint["channel_versions"]
                 ),
             )
-            # save push writes
-            if push_writes:
-                await checkpointer.aput_writes(next_config, push_writes, task_id)
+            for task_id, task in zip(run_task_ids, run_tasks):
+                # save push writes
+                if push_writes := [w for w in task.writes if w[0] == PUSH]:
+                    await checkpointer.aput_writes(next_config, push_writes, task_id)
             return patch_checkpoint_map(next_config, saved.metadata if saved else None)
+
+        current_config = config
+        for superstep in supersteps:
+            current_config = await aperform_superstep(current_config, superstep)
+        return current_config
+
+    def update_state(
+        self,
+        config: RunnableConfig,
+        values: Optional[Union[dict[str, Any], Any]],
+        as_node: Optional[str] = None,
+    ) -> RunnableConfig:
+        """Update the state of the graph with the given values, as if they came from
+        node `as_node`. If `as_node` is not provided, it will be set to the last node
+        that updated the state, if not ambiguous.
+        """
+        return self.bulk_update_state(config, [[StateUpdate(values, as_node)]])
+
+    async def aupdate_state(
+        self,
+        config: RunnableConfig,
+        values: dict[str, Any] | Any,
+        as_node: Optional[str] = None,
+    ) -> RunnableConfig:
+        """Update the state of the graph asynchronously with the given values, as if they came from
+        node `as_node`. If `as_node` is not provided, it will be set to the last node
+        that updated the state, if not ambiguous.
+        """
+        return await self.abulk_update_state(config, [[StateUpdate(values, as_node)]])
 
     def _defaults(
         self,
@@ -1453,6 +2048,8 @@ class Pregel(PregelProtocol):
             checkpointer: Optional[BaseCheckpointSaver] = None
         elif CONFIG_KEY_CHECKPOINTER in config.get(CONF, {}):
             checkpointer = config[CONF][CONFIG_KEY_CHECKPOINTER]
+        elif self.checkpointer is True:
+            raise RuntimeError("checkpointer=True cannot be used for root graphs.")
         else:
             checkpointer = self.checkpointer
         if checkpointer and not config.get(CONF):
@@ -1491,11 +2088,15 @@ class Pregel(PregelProtocol):
             input: The input to the graph.
             config: The configuration to use for the run.
             stream_mode: The mode to stream output, defaults to self.stream_mode.
-                Options are 'values', 'updates', and 'debug'.
-                values: Emit the current values of the state for each step.
-                updates: Emit only the updates to the state for each step.
-                    Output is a dict with the node name as key and the updated values as value.
-                debug: Emit debug events for each step.
+                Options are:
+
+                - `"values"`: Emit all values in the state after each step.
+                    When used with functional API, values are emitted once at the end of the workflow.
+                - `"updates"`: Emit only the node or task names and updates returned by the nodes or tasks after each step.
+                    If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
+                - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
+                - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
+                - `"debug"`: Emit debug events with as much information as possible for each step.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
@@ -1510,8 +2111,7 @@ class Pregel(PregelProtocol):
             ```pycon
             >>> import operator
             >>> from typing_extensions import Annotated, TypedDict
-            >>> from langgraph.graph import StateGraph
-            >>> from langgraph.constants import START
+            >>> from langgraph.graph import StateGraph, START
             ...
             >>> class State(TypedDict):
             ...     alist: Annotated[list, operator.add]
@@ -1550,6 +2150,57 @@ class Pregel(PregelProtocol):
             {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 1, 'payload': {'id': '...', 'name': 'a', 'result': [('another_list', ['hi'])]}}
             {'type': 'task', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'input': {'alist': ['Ex for stream_mode="debug"'], 'another_list': ['hi']}, 'triggers': ['a']}}
             {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
+            ```
+
+            With stream_mode="custom":
+
+            ```pycon
+            >>> from langgraph.types import StreamWriter
+            ...
+            >>> def node_a(state: State, writer: StreamWriter):
+            ...     writer({"custom_data": "foo"})
+            ...     return {"alist": ["hi"]}
+            ...
+            >>> builder = StateGraph(State)
+            >>> builder.add_node("a", node_a)
+            >>> builder.add_edge(START, "a")
+            >>> graph = builder.compile()
+            ...
+            >>> for event in graph.stream({"alist": ['Ex for stream_mode="custom"']}, stream_mode="custom"):
+            ...     print(event)
+            {'custom_data': 'foo'}
+            ```
+
+            With stream_mode="messages":
+
+            ```pycon
+            >>> from typing_extensions import Annotated, TypedDict
+            >>> from langgraph.graph import StateGraph, START
+            >>> from langchain_openai import ChatOpenAI
+            ...
+            >>> llm = ChatOpenAI(model="gpt-4o-mini")
+            ...
+            >>> class State(TypedDict):
+            ...     question: str
+            ...     answer: str
+            ...
+            >>> def node_a(state: State):
+            ...     response = llm.invoke(state["question"])
+            ...     return {"answer": response.content}
+            ...
+            >>> builder = StateGraph(State)
+            >>> builder.add_node("a", node_a)
+            >>> builder.add_edge(START, "a")
+            >>> graph = builder.compile()
+
+            >>> for event in graph.stream({"question": "What is the capital of France?"}, stream_mode="messages"):
+            ...     print(event)
+            (AIMessageChunk(content='The', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], 'langgraph_path': ('__pregel_pull', 'a'), 'langgraph_checkpoint_ns': '...', 'checkpoint_ns': '...', 'ls_provider': 'openai', 'ls_model_name': 'gpt-4o-mini', 'ls_model_type': 'chat', 'ls_temperature': 0.7})
+            (AIMessageChunk(content=' capital', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], ...})
+            (AIMessageChunk(content=' of', additional_kwargs={}, response_metadata={}, id='...'), {...})
+            (AIMessageChunk(content=' France', additional_kwargs={}, response_metadata={}, id='...'), {...})
+            (AIMessageChunk(content=' is', additional_kwargs={}, response_metadata={}, id='...'), {...})
+            (AIMessageChunk(content=' Paris', additional_kwargs={}, response_metadata={}, id='...'), {...})
             ```
         """
 
@@ -1596,6 +2247,10 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after,
                 debug=debug,
             )
+            # set up subgraph checkpointing
+            if self.checkpointer is True:
+                ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
+                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
@@ -1608,6 +2263,7 @@ class Pregel(PregelProtocol):
                 )
             with SyncPregelLoop(
                 input,
+                input_model=self.input_model,
                 stream=StreamProtocol(stream.put, stream_modes),
                 config=config,
                 store=store,
@@ -1620,19 +2276,32 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
                 debug=debug,
+                # `self.nodes` can be modified after creation of `Pregel`. For example,
+                # that's how StateGraph compilation currently works.
+                # For now, we recompute the trigger_to_nodes mapping every time the
+                # loop is created. We could potentially memoize this if it becomes a
+                # performance issue.
+                trigger_to_nodes=_trigger_to_nodes(self.nodes),
             ) as loop:
                 # create runner
                 runner = PregelRunner(
-                    submit=loop.submit,
-                    put_writes=loop.put_writes,
-                    schedule_task=loop.accept_push,
+                    submit=config[CONF].get(
+                        CONFIG_KEY_RUNNER_SUBMIT, weakref.WeakMethod(loop.submit)
+                    ),
+                    put_writes=weakref.WeakMethod(loop.put_writes),
+                    schedule_task=weakref.WeakMethod(loop.accept_push),
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
                 )
                 # enable subgraph streaming
                 if subgraphs:
                     loop.config[CONF][CONFIG_KEY_STREAM] = loop.stream
                 # enable concurrent streaming
-                if subgraphs or "messages" in stream_modes or "custom" in stream_modes:
+                if (
+                    self.stream_eager
+                    or subgraphs
+                    or "messages" in stream_modes
+                    or "custom" in stream_modes
+                ):
                     # we are careful to have a single waiter live at any one time
                     # because on exit we increment semaphore count by exactly 1
                     waiter: Optional[concurrent.futures.Future] = None
@@ -1652,10 +2321,10 @@ class Pregel(PregelProtocol):
                 else:
                     get_waiter = None  # type: ignore[assignment]
                 # Similarly to Bulk Synchronous Parallel / Pregel model
-                # computation proceeds in steps, while there are channel updates
-                # channel updates from step N are only visible in step N+1
+                # computation proceeds in steps, while there are channel updates.
+                # Channel updates from step N are only visible in step N+1
                 # channels are guaranteed to be immutable for the duration of the step,
-                # with channel updates applied only at the transition between steps
+                # with channel updates applied only at the transition between steps.
                 while loop.tick(input_keys=self.input_channels):
                     for _ in runner.tick(
                         loop.tasks.values(),
@@ -1702,11 +2371,15 @@ class Pregel(PregelProtocol):
             input: The input to the graph.
             config: The configuration to use for the run.
             stream_mode: The mode to stream output, defaults to self.stream_mode.
-                Options are 'values', 'updates', and 'debug'.
-                values: Emit the current values of the state for each step.
-                updates: Emit only the updates to the state for each step.
-                    Output is a dict with the node name as key and the updated values as value.
-                debug: Emit debug events for each step.
+                Options are:
+
+                - `"values"`: Emit all values in the state after each step.
+                    When used with functional API, values are emitted once at the end of the workflow.
+                - `"updates"`: Emit only the node or task names and updates returned by the nodes or tasks after each step.
+                    If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
+                - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
+                - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
+                - `"debug"`: Emit debug events with as much information as possible for each step.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
@@ -1721,8 +2394,7 @@ class Pregel(PregelProtocol):
             ```pycon
             >>> import operator
             >>> from typing_extensions import Annotated, TypedDict
-            >>> from langgraph.graph import StateGraph
-            >>> from langgraph.constants import START
+            >>> from langgraph.graph import StateGraph, START
             ...
             >>> class State(TypedDict):
             ...     alist: Annotated[list, operator.add]
@@ -1761,6 +2433,57 @@ class Pregel(PregelProtocol):
             {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 1, 'payload': {'id': '...', 'name': 'a', 'result': [('another_list', ['hi'])]}}
             {'type': 'task', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'input': {'alist': ['Ex for stream_mode="debug"'], 'another_list': ['hi']}, 'triggers': ['a']}}
             {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
+            ```
+
+            With stream_mode="custom":
+
+            ```pycon
+            >>> from langgraph.types import StreamWriter
+            ...
+            >>> async def node_a(state: State, writer: StreamWriter):
+            ...     writer({"custom_data": "foo"})
+            ...     return {"alist": ["hi"]}
+            ...
+            >>> builder = StateGraph(State)
+            >>> builder.add_node("a", node_a)
+            >>> builder.add_edge(START, "a")
+            >>> graph = builder.compile()
+            ...
+            >>> async for event in graph.astream({"alist": ['Ex for stream_mode="custom"']}, stream_mode="custom"):
+            ...     print(event)
+            {'custom_data': 'foo'}
+            ```
+
+            With stream_mode="messages":
+
+            ```pycon
+            >>> from typing_extensions import Annotated, TypedDict
+            >>> from langgraph.graph import StateGraph, START
+            >>> from langchain_openai import ChatOpenAI
+            ...
+            >>> llm = ChatOpenAI(model="gpt-4o-mini")
+            ...
+            >>> class State(TypedDict):
+            ...     question: str
+            ...     answer: str
+            ...
+            >>> async def node_a(state: State):
+            ...     response = await llm.ainvoke(state["question"])
+            ...     return {"answer": response.content}
+            ...
+            >>> builder = StateGraph(State)
+            >>> builder.add_node("a", node_a)
+            >>> builder.add_edge(START, "a")
+            >>> graph = builder.compile()
+
+            >>> for event in graph.stream({"question": "What is the capital of France?"}, stream_mode="messages"):
+            ...     print(event)
+            (AIMessageChunk(content='The', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], 'langgraph_path': ('__pregel_pull', 'a'), 'langgraph_checkpoint_ns': '...', 'checkpoint_ns': '...', 'ls_provider': 'openai', 'ls_model_name': 'gpt-4o-mini', 'ls_model_type': 'chat', 'ls_temperature': 0.7})
+            (AIMessageChunk(content=' capital', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], ...})
+            (AIMessageChunk(content=' of', additional_kwargs={}, response_metadata={}, id='...'), {...})
+            (AIMessageChunk(content=' France', additional_kwargs={}, response_metadata={}, id='...'), {...})
+            (AIMessageChunk(content=' is', additional_kwargs={}, response_metadata={}, id='...'), {...})
+            (AIMessageChunk(content=' Paris', additional_kwargs={}, response_metadata={}, id='...'), {...})
             ```
         """
 
@@ -1821,6 +2544,10 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after,
                 debug=debug,
             )
+            # set up subgraph checkpointing
+            if self.checkpointer is True:
+                ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
+                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
@@ -1835,6 +2562,7 @@ class Pregel(PregelProtocol):
                 )
             async with AsyncPregelLoop(
                 input,
+                input_model=self.input_model,
                 stream=StreamProtocol(stream.put_nowait, stream_modes),
                 config=config,
                 store=store,
@@ -1847,12 +2575,20 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
                 debug=debug,
+                # `self.nodes` can be modified after creation of `Pregel`. For example,
+                # that's how StateGraph compilation currently works.
+                # For now, we recompute the trigger_to_nodes mapping every time the
+                # loop is created. We could potentially memoize this if it becomes a
+                # performance issue.
+                trigger_to_nodes=_trigger_to_nodes(self.nodes),
             ) as loop:
                 # create runner
                 runner = PregelRunner(
-                    submit=loop.submit,
-                    put_writes=loop.put_writes,
-                    schedule_task=loop.accept_push,
+                    submit=config[CONF].get(
+                        CONFIG_KEY_RUNNER_SUBMIT, weakref.WeakMethod(loop.submit)
+                    ),
+                    put_writes=weakref.WeakMethod(loop.put_writes),
+                    schedule_task=weakref.WeakMethod(loop.accept_push),
                     use_astream=do_stream is not None,
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
                 )
@@ -1862,7 +2598,12 @@ class Pregel(PregelProtocol):
                         stream_put, stream_modes
                     )
                 # enable concurrent streaming
-                if subgraphs or "messages" in stream_modes or "custom" in stream_modes:
+                if (
+                    self.stream_eager
+                    or subgraphs
+                    or "messages" in stream_modes
+                    or "custom" in stream_modes
+                ):
 
                     def get_waiter() -> asyncio.Task[None]:
                         return aioloop.create_task(stream.wait())
@@ -2008,3 +2749,12 @@ class Pregel(PregelProtocol):
             return latest
         else:
             return chunks
+
+
+def _trigger_to_nodes(nodes: dict[str, PregelNode]) -> Mapping[str, list[str]]:
+    """Index from a trigger to nodes that depend on it."""
+    trigger_to_nodes: defaultdict[str, list[str]] = defaultdict(list)
+    for name, node in nodes.items():
+        for trigger in node.triggers:
+            trigger_to_nodes.setdefault(trigger, []).append(name)
+    return cast(Mapping[str, list[str]], trigger_to_nodes)

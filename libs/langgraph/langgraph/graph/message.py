@@ -180,14 +180,15 @@ def add_messages(
         if m.id is None:
             m.id = str(uuid.uuid4())
     # merge
-    left_idx_by_id = {m.id: i for i, m in enumerate(left)}
     merged = left.copy()
+    merged_by_id = {m.id: i for i, m in enumerate(merged)}
     ids_to_remove = set()
     for m in right:
-        if (existing_idx := left_idx_by_id.get(m.id)) is not None:
+        if (existing_idx := merged_by_id.get(m.id)) is not None:
             if isinstance(m, RemoveMessage):
                 ids_to_remove.add(m.id)
             else:
+                ids_to_remove.discard(m.id)
                 merged[existing_idx] = m
         else:
             if isinstance(m, RemoveMessage):
@@ -195,6 +196,7 @@ def add_messages(
                     f"Attempting to delete a message with an ID that doesn't exist ('{m.id}')"
                 )
 
+            merged_by_id[m.id] = len(merged)
             merged.append(m)
     merged = [m for m in merged if m.id not in ids_to_remove]
 

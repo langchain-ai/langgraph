@@ -279,6 +279,58 @@
         }
       }
     },
+    "/v1/projects/{project_id}/revisions/{revision_id}/deploy": {
+      "post": {
+        "tags": ["Revisions (v1)"],
+        "summary": "Deploy Revision",
+        "description": "Deploy revision by ID.\n\nThis endpoint redeploys the deployment of a revision without rebuilding the image for the deployment. Redeploying the deployment of a revision may mitigate intermittent issues with a deployment.\n\nThe revision must be in the `DEPLOYED` status and must be the latest revision of the project.",
+        "operationId": "deploy_revision_projects__project_id__revisions__revision_id__deploy_post",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project ID"
+            },
+            "name": "project_id",
+            "in": "path"
+          },
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Revision ID"
+            },
+            "name": "revision_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Revision is not in DEPLOYED status or revision is not the latest revision for the project.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Revision not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/projects/{project_id}/revisions/{revision_id}/interrupt": {
       "post": {
         "tags": ["Revisions (v1)"],
@@ -319,31 +371,6 @@
       }
     },
     "schemas": {
-      "EnvVar": {
-        "type": "object",
-        "description": "An environment variable or secret.",
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "Environment variable or secret name.",
-            "required": true
-          },
-          "value": {
-            "type": "string",
-            "description": "Environment variable or secret value.",
-            "required": true
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "default",
-              "secret"
-            ],
-            "description": "Field to designate type of the environment variable (default) or secret.",
-            "required": true
-          }
-        }
-      },
       "ContainerSpec": {
         "type": "object",
         "description": "Container specification for a revision's deployment.\n\nIf any field is omitted or set to `null`, the internal default value is used depending on the deployment type (`dev` or `prod`).",
@@ -401,6 +428,42 @@
             "description": "If this field is omitted or set to `null`, the previous revision's `container_spec` value is used.",
             "$ref": "#/components/schemas/ContainerSpec",
             "default": "null"
+          }
+        }
+      },
+      "EnvVar": {
+        "type": "object",
+        "description": "An environment variable or secret.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Environment variable or secret name.",
+            "required": true
+          },
+          "value": {
+            "type": "string",
+            "description": "Environment variable or secret value.",
+            "required": true
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "default",
+              "secret"
+            ],
+            "description": "Field to designate type of the environment variable (default) or secret.",
+            "required": true
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "description": "Error response.",
+        "properties": {
+          "detail": {
+            "type": "string",
+            "description": "Error details.",
+            "required": true
           }
         }
       },
@@ -498,6 +561,16 @@
           },
           "resource": {
             "$ref": "#/components/schemas/ResourceService"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "AWAITING_DATABASE",
+              "READY",
+              "AWAITING_DELETE",
+              "UNKNOWN"
+            ],
+            "description": "Deployment status of the project.\n\nNon-terminal statuses: `AWAITING_DATABASE`, `AWAITING_DELETE`. All other statuses are terminal."
           }
         }
       },

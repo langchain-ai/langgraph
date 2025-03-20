@@ -57,8 +57,9 @@ MIGRATIONS = [
     PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
 );""",
     "ALTER TABLE checkpoint_blobs ALTER COLUMN blob DROP not null;",
-    """
-    """,
+    # NOTE: this is a no-op migration to ensure that the versions in the migrations table are correct.
+    # This is necessary due to an empty migration previously added to the list.
+    "SELECT 1;",
     """
     CREATE INDEX CONCURRENTLY IF NOT EXISTS checkpoints_thread_id_idx ON checkpoints(thread_id);
     """,
@@ -68,6 +69,7 @@ MIGRATIONS = [
     """
     CREATE INDEX CONCURRENTLY IF NOT EXISTS checkpoint_writes_thread_id_idx ON checkpoint_writes(thread_id);
     """,
+    """ALTER TABLE checkpoint_writes ADD COLUMN task_path TEXT NOT NULL DEFAULT '';""",
 ]
 
 SELECT_SQL = f"""
@@ -96,7 +98,7 @@ select
             and cw.checkpoint_id = checkpoints.checkpoint_id
     ) as pending_writes,
     (
-        select array_agg(array[cw.type::bytea, cw.blob] order by cw.task_id, cw.idx)
+        select array_agg(array[cw.type::bytea, cw.blob] order by cw.task_path, cw.task_id, cw.idx)
         from checkpoint_writes cw
         where cw.thread_id = checkpoints.thread_id
             and cw.checkpoint_ns = checkpoints.checkpoint_ns
@@ -121,8 +123,8 @@ UPSERT_CHECKPOINTS_SQL = """
 """
 
 UPSERT_CHECKPOINT_WRITES_SQL = """
-    INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, task_path, idx, channel, type, blob)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO UPDATE SET
         channel = EXCLUDED.channel,
         type = EXCLUDED.type,
@@ -130,8 +132,8 @@ UPSERT_CHECKPOINT_WRITES_SQL = """
 """
 
 INSERT_CHECKPOINT_WRITES_SQL = """
-    INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, task_path, idx, channel, type, blob)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO NOTHING
 """
 
@@ -222,14 +224,16 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         checkpoint_ns: str,
         checkpoint_id: str,
         task_id: str,
+        task_path: str,
         writes: Sequence[tuple[str, Any]],
-    ) -> list[tuple[str, str, str, str, int, str, str, bytes]]:
+    ) -> list[tuple[str, str, str, str, str, int, str, str, bytes]]:
         return [
             (
                 thread_id,
                 checkpoint_ns,
                 checkpoint_id,
                 task_id,
+                task_path,
                 WRITES_IDX_MAP.get(channel, idx),
                 channel,
                 *self.serde.dumps_typed(value),

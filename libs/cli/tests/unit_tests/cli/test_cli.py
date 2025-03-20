@@ -40,9 +40,9 @@ def temporary_config_folder(config_content: dict):
 
 def test_prepare_args_and_stdin() -> None:
     # this basically serves as an end-to-end test for using config and docker helpers
-    config_path = pathlib.Path("./langgraph.json")
+    config_path = pathlib.Path(__file__).parent / "langgraph.json"
     config = validate_config(
-        Config(dependencies=["."], graphs={"agent": "agent.py:graph"})
+        Config(dependencies=[".", "../../.."], graphs={"agent": "agent.py:graph"})
     )
     port = 8000
     debugger_port = 8001
@@ -61,7 +61,7 @@ def test_prepare_args_and_stdin() -> None:
 
     expected_args = [
         "--project-directory",
-        ".",
+        str(pathlib.Path(__file__).parent.absolute()),
         "-f",
         "custom-docker-compose.yml",
         "-f",
@@ -79,13 +79,17 @@ services:
             timeout: 1s
             retries: 5
     langgraph-postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         ports:
             - "5433:5432"
         environment:
             POSTGRES_DB: postgres
             POSTGRES_USER: postgres
             POSTGRES_PASSWORD: postgres
+        command:
+            - postgres
+            - -c
+            - shared_preload_libraries=vector
         volumes:
             - langgraph-data:/var/lib/postgresql/data
         healthcheck:
@@ -125,18 +129,29 @@ services:
         pull_policy: build
         build:
             context: .
+            additional_contexts:
+                - cli_1: {str(pathlib.Path(__file__).parent.parent.parent.parent.absolute())}
             dockerfile_inline: |
                 FROM langchain/langgraph-api:3.11
-                ADD . /deps/
+                # -- Adding local package . --
+                ADD . /deps/cli
+                # -- End of local package . --
+                # -- Adding local package ../../.. --
+                COPY --from=cli_1 . /deps/cli_1
+                # -- End of local package ../../.. --
+                # -- Installing all local dependencies --
                 RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
+                # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "agent.py:graph"}}'
-                WORKDIR /deps/
+                WORKDIR /deps/cli
         
         develop:
             watch:
                 - path: langgraph.json
                   action: rebuild
                 - path: .
+                  action: rebuild
+                - path: ../../..
                   action: rebuild\
 """
     assert actual_args == expected_args

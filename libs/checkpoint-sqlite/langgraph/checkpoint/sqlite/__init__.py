@@ -15,6 +15,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     SerializerProtocol,
     get_checkpoint_id,
+    get_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import ChannelProtocol
@@ -55,7 +56,10 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         >>> builder.add_node("add_one", lambda x: x + 1)
         >>> builder.set_entry_point("add_one")
         >>> builder.set_finish_point("add_one")
-        >>> conn = sqlite3.connect("checkpoints.sqlite")
+        >>> # Create a new SqliteSaver instance
+        >>> # Note: check_same_thread=False is OK as the implementation uses a lock
+        >>> # to ensure thread safety.
+        >>> conn = sqlite3.connect("checkpoints.sqlite", check_same_thread=False)
         >>> memory = SqliteSaver(conn)
         >>> graph = builder.compile(checkpointer=memory)
         >>> config = {"configurable": {"thread_id": "1"}}
@@ -397,7 +401,9 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         type_, serialized_checkpoint = self.serde.dumps_typed(checkpoint)
-        serialized_metadata = self.jsonplus_serde.dumps(metadata)
+        serialized_metadata = self.jsonplus_serde.dumps(
+            get_checkpoint_metadata(config, metadata)
+        )
         with self.cursor() as cur:
             cur.execute(
                 "INSERT OR REPLACE INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -424,6 +430,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         config: RunnableConfig,
         writes: Sequence[Tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Store intermediate writes linked to a checkpoint.
 
@@ -433,6 +440,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             config (RunnableConfig): Configuration of the related checkpoint.
             writes (Sequence[Tuple[str, Any]]): List of writes to store, each as (channel, value) pair.
             task_id (str): Identifier for the task creating the writes.
+            task_path (str): Path of the task creating the writes.
         """
         query = (
             "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"

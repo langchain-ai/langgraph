@@ -5,6 +5,7 @@ import json
 import pathlib
 import re
 from collections import deque
+from collections.abc import Sequence
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
 from inspect import isclass
@@ -16,7 +17,7 @@ from ipaddress import (
     IPv6Interface,
     IPv6Network,
 )
-from typing import Any, Callable, Optional, Sequence, Union, cast
+from typing import Any, Callable, Optional, Union, cast
 from uuid import UUID
 
 import msgpack  # type: ignore[import-untyped]
@@ -486,7 +487,12 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             except Exception:
                 return cls.construct(**tup[2])
         except Exception:
-            return
+            # for pydantic objects we can't find/reconstruct
+            # let's return the kwargs dict instead
+            try:
+                return tup[2]
+            except NameError:
+                return
     elif code == EXT_PYDANTIC_V2:
         try:
             tup = msgpack.unpackb(
@@ -499,18 +505,13 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             except Exception:
                 return cls.model_construct(**tup[2])
         except Exception:
-            return
-
-
-ENC_POOL: deque[msgpack.Packer] = deque(maxlen=32)
+            # for pydantic objects we can't find/reconstruct
+            # let's return the kwargs dict instead
+            try:
+                return tup[2]
+            except NameError:
+                return
 
 
 def _msgpack_enc(data: Any) -> bytes:
-    try:
-        enc = ENC_POOL.popleft()
-    except IndexError:
-        enc = msgpack.Packer(default=_msgpack_default)
-    try:
-        return enc.pack(data)
-    finally:
-        ENC_POOL.append(enc)
+    return msgpack.packb(data, default=_msgpack_default)

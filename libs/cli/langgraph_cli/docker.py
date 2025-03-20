@@ -49,7 +49,9 @@ def check_capabilities(runner) -> DockerCapabilities:
         raise click.UsageError("Docker not installed") from None
 
     try:
-        stdout, _ = runner.run(subp_exec("docker", "info", "-f", "json", collect=True))
+        stdout, _ = runner.run(
+            subp_exec("docker", "info", "-f", "{{json .}}", collect=True)
+        )
         info = json.loads(stdout)
     except (click.exceptions.Exit, json.JSONDecodeError):
         raise click.UsageError("Docker not installed or not running") from None
@@ -170,13 +172,14 @@ def compose_as_dict(
     # Add Postgres service before langgraph-api if it is needed
     if include_db:
         services["langgraph-postgres"] = {
-            "image": "postgres:16",
+            "image": "pgvector/pgvector:pg16",
             "ports": ['"5433:5432"'],
             "environment": {
                 "POSTGRES_DB": "postgres",
                 "POSTGRES_USER": "postgres",
                 "POSTGRES_PASSWORD": "postgres",
             },
+            "command": ["postgres", "-c", "shared_preload_libraries=vector"],
             "volumes": ["langgraph-data:/var/lib/postgresql/data"],
             "healthcheck": {
                 "test": "pg_isready -U postgres",

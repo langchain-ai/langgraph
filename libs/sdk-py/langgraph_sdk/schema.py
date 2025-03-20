@@ -169,6 +169,8 @@ class AssistantBase(TypedDict):
     """The assistant metadata."""
     version: int
     """The version of the assistant"""
+    name: str
+    """The name of the assistant"""
 
 
 class AssistantVersion(AssistantBase):
@@ -182,8 +184,6 @@ class Assistant(AssistantBase):
 
     updated_at: datetime
     """The last time the assistant was updated."""
-    name: str
-    """The name of the assistant"""
 
 
 class Interrupt(TypedDict, total=False):
@@ -378,11 +378,42 @@ class StreamPart(NamedTuple):
 
 
 class Send(TypedDict):
+    """Represents a message to be sent to a specific node in the graph.
+
+    This type is used to explicitly send messages to nodes in the graph, typically
+    used within Command objects to control graph execution flow.
+    """
+
     node: str
+    """The name of the target node to send the message to."""
     input: Optional[dict[str, Any]]
+    """Optional dictionary containing the input data to be passed to the node.
+
+    If None, the node will be called with no input."""
 
 
 class Command(TypedDict, total=False):
+    """Represents one or more commands to control graph execution flow and state.
+
+    This type defines the control commands that can be returned by nodes to influence
+    graph execution. It lets you navigate to other nodes, update graph state,
+    and resume from interruptions.
+    """
+
     goto: Union[Send, str, Sequence[Union[Send, str]]]
+    """Specifies where execution should continue. Can be:
+
+        - A string node name to navigate to
+        - A Send object to execute a node with specific input
+        - A sequence of node names or Send objects to execute in order
+    """
     update: Union[dict[str, Any], Sequence[Tuple[str, Any]]]
+    """Updates to apply to the graph's state. Can be:
+
+        - A dictionary of state updates to merge
+        - A sequence of (key, value) tuples for ordered updates
+    """
     resume: Any
+    """Value to resume execution with after an interruption.
+       Used in conjunction with interrupt() to implement control flow.
+    """

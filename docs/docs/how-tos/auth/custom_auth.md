@@ -13,11 +13,13 @@
   
     We currently only support custom authentication and authorization in Python deployments with `langgraph-api>=0.0.11`. Support for LangGraph.JS will be added soon.
 
+???+ note "Support by deployment type"
+
+    Custom auth is supported for all deployments in the **managed LangGraph Cloud**, as well as **Enterprise** self-hosted plans. It is not supported for **Lite** self-hosted plans.
+
 This guide shows how to add custom authentication to your LangGraph Platform application. This guide applies to both LangGraph Cloud, BYOC, and self-hosted deployments. It does not apply to isolated usage of the LangGraph open source library in your own custom server.
 
 ## 1. Implement authentication
-
-Create `auth.py` file, with a basic JWT authentication handler:
 
 ```python
 from langgraph_sdk import Auth
@@ -37,7 +39,7 @@ async def authenticate(authorization: str) -> str:
             detail="Invalid token"
         )
 
-# Optional: Add authorization rules
+# Add authorization rules to actually control access to resources
 @my_auth.on
 async def add_owner(
     ctx: Auth.types.AuthContext,
@@ -48,6 +50,13 @@ async def add_owner(
     metadata = value.setdefault("metadata", {})
     metadata.update(filters)
     return filters
+
+# Assumes you organize information in store like (user_id, resource_type, resource_id)
+@my_auth.on.store()
+async def authorize_store(ctx: Auth.types.AuthContext, value: dict):
+    namespace: tuple = value["namespace"]
+    assert namespace[0] == ctx.user.identity, "Not authorized"
+
 ```
 
 ## 2. Update configuration

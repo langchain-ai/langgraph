@@ -22,7 +22,9 @@ from langchain_core.runnables.base import Input, Other, coerce_to_runnable
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
 from langgraph.constants import CONF, CONFIG_KEY_READ
+from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.retry import RetryPolicy
+from langgraph.pregel.utils import find_subgraph_pregel
 from langgraph.pregel.write import ChannelWrite
 from langgraph.utils.config import merge_configs
 from langgraph.utils.runnable import RunnableCallable, RunnableSeq
@@ -145,6 +147,9 @@ class PregelNode(Runnable):
     metadata: Optional[Mapping[str, Any]]
     """Metadata to attach to the node for tracing."""
 
+    subgraphs: Sequence[PregelProtocol]
+    """Subgraphs used by the node."""
+
     def __init__(
         self,
         *,
@@ -165,9 +170,21 @@ class PregelNode(Runnable):
         self.retry_policy = retry_policy
         self.tags = tags
         self.metadata = metadata
+        if self.bound is not DEFAULT_BOUND:
+            try:
+                subgraph = find_subgraph_pregel(self.bound)
+            except Exception:
+                subgraph = None
+            if subgraph:
+                self.subgraphs = [subgraph]
+            else:
+                self.subgraphs = []
+        else:
+            self.subgraphs = []
 
     def copy(self, update: dict[str, Any]) -> PregelNode:
         attrs = {**self.__dict__, **update}
+        attrs.pop("subgraphs")
         return PregelNode(**attrs)
 
     @cached_property
@@ -184,7 +201,6 @@ class PregelNode(Runnable):
             writers[-2] = ChannelWrite(
                 writes=writers[-2].writes + writers[-1].writes,
                 tags=writers[-2].tags,
-                require_at_least_one_of=writers[-2].require_at_least_one_of,
             )
             writers.pop()
         return writers

@@ -107,18 +107,3 @@ class CheckpointNotLatest(Exception):
     """Raised when the checkpoint is not the latest version (for distributed mode)."""
 
     pass
-
-
-class MultipleSubgraphsError(Exception):
-    """Raised when multiple subgraphs are called inside the same node.
-
-    Troubleshooting guides:
-
-    - [MULTIPLE_SUBGRAPHS](https://python.langchain.com/docs/troubleshooting/errors/MULTIPLE_SUBGRAPHS)
-    """
-
-    pass
-
-
-_SEEN_CHECKPOINT_NS: set[str] = set()
-"""Used for subgraph detection."""

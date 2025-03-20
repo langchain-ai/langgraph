@@ -89,7 +89,7 @@ def transfer_to_bob(state):
     )
 ```
 
-This is a special case of updating the graph state from tools where in addition the state update, the control flow is included as well.
+This is a special case of updating the graph state from tools where, in addition to the state update, the control flow is included as well.
 
 !!! important
 
@@ -112,7 +112,8 @@ In this architecture, agents are defined as graph nodes. Each agent can communic
 ```python
 from typing import Literal
 from langchain_openai import ChatOpenAI
-from langgraph.graph import StateGraph, MessagesState, START
+from langgraph.types import Command
+from langgraph.graph import StateGraph, MessagesState, START, END
 
 model = ChatOpenAI()
 
@@ -158,6 +159,7 @@ In this architecture, we define agents as nodes and add a supervisor node (LLM) 
 ```python
 from typing import Literal
 from langchain_openai import ChatOpenAI
+from langgraph.types import Command
 from langgraph.graph import StateGraph, MessagesState, START, END
 
 model = ChatOpenAI()
@@ -233,7 +235,7 @@ supervisor = create_react_agent(model, tools)
 
 ### Hierarchical
 
-As you add more agents to your system, it might become too hard for the supervisor to manage all of them. The supervisor might start making poor decisions about which agent to call next, the context might become too complex for a single supervisor to keep track of. In other words, you end up with the same problems that motivated the multi-agent architecture in the first place.
+As you add more agents to your system, it might become too hard for the supervisor to manage all of them. The supervisor might start making poor decisions about which agent to call next, or the context might become too complex for a single supervisor to keep track of. In other words, you end up with the same problems that motivated the multi-agent architecture in the first place.
 
 To address this, you can design your system _hierarchically_. For example, you can create separate, specialized teams of agents managed by individual supervisors, and a top-level supervisor to manage the teams.
 
@@ -241,7 +243,7 @@ To address this, you can design your system _hierarchically_. For example, you c
 from typing import Literal
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, MessagesState, START, END
-
+from langgraph.types import Command
 model = ChatOpenAI()
 
 # define team 1 (same as the single supervisor example above)
@@ -286,7 +288,7 @@ team_2_graph = team_2_builder.compile()
 # define top-level supervisor
 
 builder = StateGraph(MessagesState)
-def top_level_supervisor(state: MessagesState):
+def top_level_supervisor(state: MessagesState) -> Command[Literal["team_1_graph", "team_2_graph", END]]:
     # you can pass relevant parts of the state to the LLM (e.g., state["messages"])
     # to determine which team to call next. a common pattern is to call the model
     # with a structured output (e.g. force it to return an output with a "next_team" field)
@@ -297,10 +299,11 @@ def top_level_supervisor(state: MessagesState):
 
 builder = StateGraph(MessagesState)
 builder.add_node(top_level_supervisor)
-builder.add_node(team_1_graph)
-builder.add_node(team_2_graph)
-
+builder.add_node("team_1_graph", team_1_graph)
+builder.add_node("team_2_graph", team_2_graph)
 builder.add_edge(START, "top_level_supervisor")
+builder.add_edge("team_1_graph", "top_level_supervisor")
+builder.add_edge("team_2_graph", "top_level_supervisor")
 graph = builder.compile()
 ```
 
@@ -336,9 +339,9 @@ builder.add_edge("agent_1", "agent_2")
 
 ## Communication between agents
 
-The most important thing when building multi-agent systems is figuring out how the agents communicate. There are few different considerations:
+The most important thing when building multi-agent systems is figuring out how the agents communicate. There are a few different considerations:
 
-- Do agents communicate via [**via graph state or via tool calls**](#graph-state-vs-tool-calls)?
+- Do agents communicate [**via graph state or via tool calls**](#graph-state-vs-tool-calls)?
 - What if two agents have [**different state schemas**](#different-state-schemas)?
 - How to communicate over a [**shared message list**](#shared-message-list)?
 
