@@ -582,7 +582,7 @@ class PregelLoop(LoopProtocol):
                 else:
                     task.writes.append((k, v))
 
-    def _first(self, *, input_keys: Union[str, Sequence[str]]) -> Union[set[str]]:
+    def _first(self, *, input_keys: Union[str, Sequence[str]]) -> Optional[set[str]]:
         # resuming from previous checkpoint requires
         # - finding a previous checkpoint
         # - receiving None input (outer graph) or RESUMING flag (subgraph)
@@ -600,7 +600,7 @@ class PregelLoop(LoopProtocol):
             )
         )
         # this can be set only when there are input_writes
-        updated_channels: Union[set[str]] = None
+        updated_channels: Optional[set[str]] = None
 
         # map command to writes
         if isinstance(self.input, Command):
