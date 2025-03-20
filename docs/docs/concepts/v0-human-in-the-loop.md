@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # Human-in-the-loop
 
 !!! note "Use the `interrupt` function instead."
