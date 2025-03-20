@@ -28,6 +28,11 @@ from langgraph.checkpoint.serde.types import (
     SendProtocol,
 )
 
+try:
+    from langgraph.version import __version__  # type: ignore[import-untyped]
+except ImportError:
+    __version__ = "0.0.0"
+
 V = TypeVar("V", int, float, str)
 PendingWrite = Tuple[str, str, Any]
 
@@ -123,35 +128,70 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
     )
 
 
-def create_checkpoint(
-    checkpoint: Checkpoint,
-    channels: Optional[Mapping[str, ChannelProtocol]],
-    step: int,
-    *,
-    id: Optional[str] = None,
-) -> Checkpoint:
-    """Create a checkpoint for the given channels."""
-    ts = datetime.now(timezone.utc).isoformat()
-    if channels is None:
-        values = checkpoint["channel_values"]
-    else:
-        values = {}
-        for k, v in channels.items():
-            if k not in checkpoint["channel_versions"]:
-                continue
-            try:
-                values[k] = v.checkpoint()
-            except EmptyChannelError:
-                pass
-    return Checkpoint(
-        v=1,
-        ts=ts,
-        id=id or str(uuid6(clock_seq=step)),
-        channel_values=values,
-        channel_versions=checkpoint["channel_versions"],
-        versions_seen=checkpoint["versions_seen"],
-        pending_sends=checkpoint.get("pending_sends", []),
-    )
+if tuple(int(s) for s in __version__.split(".")) >= (0, 3, 15):
+    # 0.3.15 introduced BaseChannel.is_available
+
+    def create_checkpoint(
+        checkpoint: Checkpoint,
+        channels: Optional[Mapping[str, ChannelProtocol]],
+        step: int,
+        *,
+        id: Optional[str] = None,
+    ) -> Checkpoint:
+        """Create a checkpoint for the given channels."""
+        ts = datetime.now(timezone.utc).isoformat()
+        if channels is None:
+            values = checkpoint["channel_values"]
+        else:
+            versions = checkpoint["channel_versions"]
+            values = {}
+            for k, v in channels.items():
+                if v.is_available() and k in versions:
+                    try:
+                        values[k] = v.checkpoint()
+                    except EmptyChannelError:
+                        pass
+        return Checkpoint(
+            v=1,
+            ts=ts,
+            id=id or str(uuid6(clock_seq=step)),
+            channel_values=values,
+            channel_versions=checkpoint["channel_versions"],
+            versions_seen=checkpoint["versions_seen"],
+            pending_sends=checkpoint.get("pending_sends", []),
+        )
+
+else:
+
+    def create_checkpoint(
+        checkpoint: Checkpoint,
+        channels: Optional[Mapping[str, ChannelProtocol]],
+        step: int,
+        *,
+        id: Optional[str] = None,
+    ) -> Checkpoint:
+        """Create a checkpoint for the given channels."""
+        ts = datetime.now(timezone.utc).isoformat()
+        if channels is None:
+            values = checkpoint["channel_values"]
+        else:
+            values = {}
+            for k, v in channels.items():
+                if k not in checkpoint["channel_versions"]:
+                    continue
+                try:
+                    values[k] = v.checkpoint()
+                except EmptyChannelError:
+                    pass
+        return Checkpoint(
+            v=1,
+            ts=ts,
+            id=id or str(uuid6(clock_seq=step)),
+            channel_values=values,
+            channel_versions=checkpoint["channel_versions"],
+            versions_seen=checkpoint["versions_seen"],
+            pending_sends=checkpoint.get("pending_sends", []),
+        )
 
 
 class CheckpointTuple(NamedTuple):
