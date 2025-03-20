@@ -600,7 +600,7 @@ class PregelLoop(LoopProtocol):
             )
         )
         # this can be set only when there are input_writes
-        updated_channels: set[str] | None = None
+        updated_channels: Union[set[str]] = None
 
         # map command to writes
         if isinstance(self.input, Command):
