@@ -7,7 +7,7 @@ from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
 from types import TracebackType
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from langchain_core.runnables import RunnableConfig
 
@@ -72,7 +72,9 @@ class InMemorySaver(
         dict[tuple[str, int], tuple[str, str, tuple[str, bytes], str]],
     ]
     blobs: dict[
-        tuple[str, str, str, V],  # thread id, checkpoint ns, channel, version
+        tuple[
+            str, str, str, Union[str, int, float]
+        ],  # thread id, checkpoint ns, channel, version
         tuple[str, bytes],
     ]
 
