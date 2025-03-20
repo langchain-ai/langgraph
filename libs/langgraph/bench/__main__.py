@@ -30,21 +30,6 @@ async def arun(graph: Pregel, input: dict):
     )
 
 
-async def arun_first_event_latency(graph: Pregel, input: dict) -> None:
-    """Latency for the first event.
-
-    Run the graph until the first event is processed and then stop.
-    """
-    async for _ in graph.astream(
-        input,
-        {
-            "configurable": {"thread_id": str(uuid4())},
-            "recursion_limit": 1000000000,
-        },
-    ):
-        break
-
-
 def run(graph: Pregel, input: dict):
     len(
         [
@@ -58,21 +43,6 @@ def run(graph: Pregel, input: dict):
             )
         ]
     )
-
-
-def run_first_event_latency(graph: Pregel, input: dict) -> None:
-    """Latency for the first event.
-
-    Run the graph until the first event is processed and then stop.
-    """
-    for _ in graph.stream(
-        input,
-        {
-            "configurable": {"thread_id": str(uuid4())},
-            "recursion_limit": 1000000000,
-        },
-    ):
-        break
 
 
 def compile_graph(graph: StateGraph) -> None:
@@ -371,21 +341,6 @@ for name, agraph, graph, input in benchmarks:
     r.bench_async_func(name, arun, agraph, input, loop_factory=new_event_loop)
     if graph is not None:
         r.bench_func(name + "_sync", run, graph, input)
-
-
-# First event latency
-for name, agraph, graph, input in benchmarks:
-    r.bench_async_func(
-        name + "_first_event_latency",
-        arun_first_event_latency,
-        agraph,
-        input,
-        loop_factory=new_event_loop,
-    )
-    if graph is not None:
-        r.bench_func(
-            name + "_first_event_latency_sync", run_first_event_latency, graph, input
-        )
 
 # Graph compilation times
 compilation_benchmarks = (
