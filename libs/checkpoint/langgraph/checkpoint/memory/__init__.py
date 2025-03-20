@@ -19,6 +19,7 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
     SerializerProtocol,
+    V,
     get_checkpoint_id,
     get_checkpoint_metadata,
 )
@@ -71,9 +72,7 @@ class InMemorySaver(
         dict[tuple[str, int], tuple[str, str, tuple[str, bytes], str]],
     ]
     blobs: dict[
-        tuple[
-            str, str, str, str | int | float
-        ],  # thread id, checkpoint ns, channel, version
+        tuple[str, str, str, V],  # thread id, checkpoint ns, channel, version
         tuple[str, bytes],
     ]
 
