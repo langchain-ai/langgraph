@@ -719,9 +719,7 @@ def create_react_agent(
     def generate_structured_response(
         state: StateSchema, config: RunnableConfig
     ) -> StateSchema:
-        # NOTE: we exclude the last message because there is enough information
-        # for the LLM to generate the structured response
-        messages = _get_state_value(state, "messages")[:-1]
+        messages = _get_state_value(state, "messages")
         structured_response_schema = response_format
         if isinstance(response_format, tuple):
             system_prompt, structured_response_schema = response_format
@@ -736,9 +734,7 @@ def create_react_agent(
     async def agenerate_structured_response(
         state: StateSchema, config: RunnableConfig
     ) -> StateSchema:
-        # NOTE: we exclude the last message because there is enough information
-        # for the LLM to generate the structured response
-        messages = _get_state_value(state, "messages")[:-1]
+        messages = _get_state_value(state, "messages")
         structured_response_schema = response_format
         if isinstance(response_format, tuple):
             system_prompt, structured_response_schema = response_format
