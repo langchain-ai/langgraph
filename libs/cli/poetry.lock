@@ -535,42 +535,42 @@ langgraph-sdk = ">=0.1.42,<0.2.0"
 
 [[package]]
 name = "langgraph-api"
-version = "0.0.27"
+version = "0.0.32"
 description = ""
 optional = true
 python-versions = "<4.0,>=3.11.0"
 files = [
-    {file = "langgraph_api-0.0.27-py3-none-any.whl", hash = "sha256:9b21742238b15b8db9c2d3fd760a670332c8897d0bcbbd9d82e43b6ac15a7937"},
-    {file = "langgraph_api-0.0.27.tar.gz", hash = "sha256:c21eb2b7fe3b93998379f7b13ad7d23b3ef06ab821b008c6b12b954acfb587ec"},
+    {file = "langgraph_api-0.0.32-py3-none-any.whl", hash = "sha256:7990cedc65f784813aba867c5bde3fdfae3fa4588baef1aa346cbeac7c3aebf1"},
+    {file = "langgraph_api-0.0.32.tar.gz", hash = "sha256:6f5b698ad8d136b73c2c53bcfa30670e9244a318b08b5e9cf00a707ea57c058c"},
 ]
 
 [package.dependencies]
 cryptography = ">=43.0.3,<44.0.0"
 httpx = ">=0.25.0"
-jsonschema-rs = ">=0.20.0,<0.21.0"
+jsonschema-rs = ">=0.20.0,<0.30"
 langchain-core = ">=0.2.38,<0.4.0"
 langgraph = ">=0.2.56,<0.4.0"
-langgraph-checkpoint = ">=2.0.15,<3.0"
-langgraph-sdk = ">=0.1.53,<0.2.0"
+langgraph-checkpoint = ">=2.0.21,<3.0"
+langgraph-sdk = ">=0.1.58,<0.2.0"
 langsmith = ">=0.1.63,<0.4.0"
 orjson = ">=3.9.7"
 pyjwt = ">=2.9.0,<3.0.0"
 sse-starlette = ">=2.1.0,<2.2.0"
 starlette = ">=0.38.6"
-structlog = ">=23.1.0,<24.0.0"
+structlog = ">=24.1.0,<26"
 tenacity = ">=8.0.0"
 uvicorn = ">=0.26.0"
 watchfiles = ">=0.13"
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.0.16"
+version = "2.0.21"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 optional = true
 python-versions = "<4.0.0,>=3.9.0"
 files = [
-    {file = "langgraph_checkpoint-2.0.16-py3-none-any.whl", hash = "sha256:dfab51076a6eddb5f9e146cfe1b977e3dd6419168b2afa23ff3f4e47973bf06f"},
-    {file = "langgraph_checkpoint-2.0.16.tar.gz", hash = "sha256:49ba8cfa12b2aae845ccc3b1fbd1d7a8d3a6c4a2e387ab3a92fca40dd3d4baa5"},
+    {file = "langgraph_checkpoint-2.0.21-py3-none-any.whl", hash = "sha256:ca89c2090cd9729f83f9782226935dc5ff9fe7756c24936f484ccb0ce367f87b"},
+    {file = "langgraph_checkpoint-2.0.21.tar.gz", hash = "sha256:52beeb6dc1bd8c487b8315466cab271093b65eb97f54a0942dfe105cd20b237f"},
 ]
 
 [package.dependencies]
@@ -594,13 +594,13 @@ langgraph-checkpoint = ">=2.0.10,<3.0.0"
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.1.53"
+version = "0.1.58"
 description = "SDK for interacting with LangGraph API"
 optional = true
 python-versions = "<4.0.0,>=3.9.0"
 files = [
-    {file = "langgraph_sdk-0.1.53-py3-none-any.whl", hash = "sha256:4fab62caad73661ffe4c3ababedcd0d7bfaaba986bee4416b9c28948458a3af5"},
-    {file = "langgraph_sdk-0.1.53.tar.gz", hash = "sha256:12906ed965905fa27e0c28d9fa07dc6fd89e6895ff321ff049fdf3965d057cc4"},
+    {file = "langgraph_sdk-0.1.58-py3-none-any.whl", hash = "sha256:65f88cf5582da0c316714dc475126fa03c5f74d72bc0b9221dd42649de8e23d4"},
+    {file = "langgraph_sdk-0.1.58.tar.gz", hash = "sha256:ef8b0e4c08af8c7efd3919497879c87a3627806b51e4ba5e8b06e0717e3d44cd"},
 ]
 
 [package.dependencies]
@@ -1357,18 +1357,18 @@ full = ["httpx (>=0.27.0,<0.29.0)", "itsdangerous", "jinja2", "python-multipart 
 
 [[package]]
 name = "structlog"
-version = "23.3.0"
+version = "25.2.0"
 description = "Structured Logging for Python"
 optional = true
 python-versions = ">=3.8"
 files = [
-    {file = "structlog-23.3.0-py3-none-any.whl", hash = "sha256:d6922a88ceabef5b13b9eda9c4043624924f60edbb00397f4d193bd754cde60a"},
-    {file = "structlog-23.3.0.tar.gz", hash = "sha256:24b42b914ac6bc4a4e6f716e82ac70d7fb1e8c3b1035a765591953bfc37101a5"},
+    {file = "structlog-25.2.0-py3-none-any.whl", hash = "sha256:0fecea2e345d5d491b72f3db2e5fcd6393abfc8cd06a4851f21fcd4d1a99f437"},
+    {file = "structlog-25.2.0.tar.gz", hash = "sha256:d9f9776944207d1035b8b26072b9b140c63702fd7aa57c2f85d28ab701bd8e92"},
 ]
 
 [package.extras]
-dev = ["structlog[tests,typing]"]
-docs = ["furo", "myst-parser", "sphinx", "sphinx-notfound-page", "sphinxcontrib-mermaid", "sphinxext-opengraph", "twisted"]
+dev = ["freezegun (>=0.2.8)", "mypy (>=1.4)", "pretend", "pytest (>=6.0)", "pytest-asyncio (>=0.17)", "rich", "simplejson", "twisted"]
+docs = ["cogapp", "furo", "myst-parser", "sphinx", "sphinx-notfound-page", "sphinxcontrib-mermaid", "sphinxext-opengraph", "twisted"]
 tests = ["freezegun (>=0.2.8)", "pretend", "pytest (>=6.0)", "pytest-asyncio (>=0.17)", "simplejson"]
 typing = ["mypy (>=1.4)", "rich", "twisted"]
 
@@ -1717,4 +1717,4 @@ inmem = ["langgraph-api", "python-dotenv"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9.0,<4.0"
-content-hash = "d0e2bdcb600ad031867413025fcc58bb162609209359d63ca99a77060cf8cbb4"
+content-hash = "f5aa4d66f9c0b98b8321a70a82387dc6e5f3a3a7ecedd87ac00d6415199038f9"
