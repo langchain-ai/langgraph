@@ -35,14 +35,19 @@ async def arun_first_event_latency(graph: Pregel, input: dict) -> None:
 
     Run the graph until the first event is processed and then stop.
     """
-    async for _ in graph.astream(
+    stream = graph.astream(
         input,
         {
             "configurable": {"thread_id": str(uuid4())},
             "recursion_limit": 1000000000,
         },
-    ):
-        break
+    )
+
+    try:
+        async for _ in stream:
+            break
+    finally:
+        await stream.aclose()
 
 
 def run(graph: Pregel, input: dict):
@@ -65,14 +70,19 @@ def run_first_event_latency(graph: Pregel, input: dict) -> None:
 
     Run the graph until the first event is processed and then stop.
     """
-    for _ in graph.stream(
+    stream = graph.stream(
         input,
         {
             "configurable": {"thread_id": str(uuid4())},
             "recursion_limit": 1000000000,
         },
-    ):
-        break
+    )
+
+    try:
+        for _ in stream:
+            break
+    finally:
+        stream.close()
 
 
 def compile_graph(graph: StateGraph) -> None:
