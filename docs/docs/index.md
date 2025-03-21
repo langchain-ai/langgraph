@@ -20,7 +20,7 @@ title: Home
 </p>
 
 <style>
-h1 {
+.md-content h1 {
   display: none;
 }
 </style>

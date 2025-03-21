@@ -397,7 +397,7 @@ typing-extensions = ">=4.7"
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.0.18"
+version = "2.0.21"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -1404,4 +1404,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9.0,<4.0"
-content-hash = "369bfffecb9489835b43b8255932e043176a11d2f639aad2d055ffd89263ca1e"
+content-hash = "4b0efdd115566f294fcd876334f9c3787aafc81f2689473759d88189a71d4635"

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph-checkpoint-postgres"
-version = "2.0.18"
+version = "2.0.19"
 description = "Library with a Postgres implementation of LangGraph checkpoint saver."
 authors = []
 license = "MIT"
@@ -10,7 +10,7 @@ packages = [{ include = "langgraph" }]
 
 [tool.poetry.dependencies]
 python = "^3.9.0,<4.0"
-langgraph-checkpoint = "^2.0.15"
+langgraph-checkpoint = "^2.0.21"
 orjson = ">=3.10.1"
 psycopg = "^3.2.0"
 psycopg-pool = "^3.2.0"

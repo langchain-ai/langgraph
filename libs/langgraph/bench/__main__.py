@@ -420,4 +420,4 @@ compilation_benchmarks = (
 )
 
 for name, graph in compilation_benchmarks:
-    r.bench_func(name, "_compilation", compile_graph, graph)
+    r.bench_func(name + "_compilation", compile_graph, graph)

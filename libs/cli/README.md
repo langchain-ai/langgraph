@@ -79,7 +79,7 @@ The CLI uses a `langgraph.json` configuration file with these key settings:
 }
 ```
 
-See the [full documentation](https://langchain-ai.github.io/langgraph/docs/cloud/reference/cli.html) for detailed configuration options.
+See the [full documentation](https://langchain-ai.github.io/langgraph/cloud/reference/cli/) for detailed configuration options.
 
 ## Development
 
