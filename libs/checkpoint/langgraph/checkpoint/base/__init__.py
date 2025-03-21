@@ -30,6 +30,7 @@ from langgraph.checkpoint.serde.types import (
 
 V = TypeVar("V", int, float, str)
 PendingWrite = Tuple[str, str, Any]
+LATEST_VERSION = 2
 
 
 # Marked as total=False to allow for future expansion.
@@ -101,7 +102,7 @@ class Checkpoint(TypedDict):
 
 def empty_checkpoint() -> Checkpoint:
     return Checkpoint(
-        v=1,
+        v=LATEST_VERSION,
         id=str(uuid6(clock_seq=-2)),
         ts=datetime.now(timezone.utc).isoformat(),
         channel_values={},
@@ -144,7 +145,7 @@ def create_checkpoint(
             except EmptyChannelError:
                 pass
     return Checkpoint(
-        v=1,
+        v=LATEST_VERSION,
         ts=ts,
         id=id or str(uuid6(clock_seq=step)),
         channel_values=values,

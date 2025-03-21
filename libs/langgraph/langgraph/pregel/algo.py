@@ -23,6 +23,7 @@ from typing import (
 from langchain_core.callbacks import Callbacks
 from langchain_core.callbacks.manager import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables.config import RunnableConfig
+from xxhash import xxh3_64_hexdigest
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import (
@@ -506,6 +507,7 @@ def prepare_single_task(
     uniquely identifies a PUSH or PULL task within the graph."""
     configurable = config.get(CONF, {})
     parent_ns = configurable.get(CONFIG_KEY_CHECKPOINT_NS, "")
+    task_id_func = _xxhash_str if checkpoint["v"] > 1 else _uuid5_str
 
     if task_path[0] == PUSH and isinstance(task_path[-1], Call):
         # (PUSH, parent task path, idx of PUSH write, id of parent task, Call)
@@ -518,7 +520,7 @@ def prepare_single_task(
         # create task id
         triggers: Sequence[str] = PUSH_TRIGGER
         checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
-        task_id = _uuid5_str(
+        task_id = task_id_func(
             checkpoint_id_bytes,
             checkpoint_ns,
             str(step),
@@ -614,7 +616,7 @@ def prepare_single_task(
             checkpoint_ns = (
                 f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
             )
-            task_id = _uuid5_str(
+            task_id = task_id_func(
                 checkpoint_id_bytes,
                 checkpoint_ns,
                 str(step),
@@ -738,7 +740,7 @@ def prepare_single_task(
 
             # create task id
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
-            task_id = _uuid5_str(
+            task_id = task_id_func(
                 checkpoint_id_bytes,
                 checkpoint_ns,
                 str(step),
@@ -948,11 +950,17 @@ def _proc_input(
 
 
 def _uuid5_str(namespace: bytes, *parts: str) -> str:
-    """Generate a UUID from the SHA-1 hash of a namespace UUID and a name."""
+    """Generate a UUID from the SHA-1 hash of a namespace and str parts."""
 
     sha = sha1(namespace, usedforsecurity=False)
     sha.update(b"".join(p.encode() for p in parts))
     hex = sha.hexdigest()
+    return f"{hex[:8]}-{hex[8:12]}-{hex[12:16]}-{hex[16:20]}-{hex[20:32]}"
+
+
+def _xxhash_str(namespace: bytes, *parts: str) -> str:
+    """Generate a UUID from the XXH3 hash of a namespace and str parts."""
+    hex = xxh3_64_hexdigest(namespace + b"".join(p.encode() for p in parts))
     return f"{hex[:8]}-{hex[8:12]}-{hex[12:16]}-{hex[16:20]}-{hex[20:32]}"
 
 
