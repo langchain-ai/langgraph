@@ -1,5 +1,6 @@
 import json
-from typing import Any, Dict, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any, Dict, Optional, Tuple
 
 from langchain_core.runnables import RunnableConfig
 
