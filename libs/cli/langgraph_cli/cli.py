@@ -575,7 +575,7 @@ def dockerfile(save_path: str, config: pathlib.Path, add_docker_compose: bool) -
     default=False,
 )
 @click.option(
-    "--studio_url",
+    "--studio-url",
     type=str,
     default=None,
     help="URL of the LangGraph Studio instance to connect to. Defaults to https://smith.langchain.com",
