@@ -78,7 +78,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
             await store.aput(("docs",), "doc3", {"text": "Other guide"}, index=False)  # don't index
 
             # Search by similarity
-            results = await store.asearch(("docs",), "programming guides", limit=2)
+            results = await store.asearch(("docs",), query="programming guides", limit=2)
         ```
 
         Using connection pooling for better performance:
