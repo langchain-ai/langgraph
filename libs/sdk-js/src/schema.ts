@@ -57,25 +57,25 @@ export interface GraphSchema {
    * The schema for the input state.
    * Missing if unable to generate JSON schema from graph.
    */
-  input_schema?: JSONSchema7;
+  input_schema?: JSONSchema7 | null | undefined;
 
   /**
    * The schema for the output state.
    * Missing if unable to generate JSON schema from graph.
    */
-  output_schema?: JSONSchema7;
+  output_schema?: JSONSchema7 | null | undefined;
 
   /**
    * The schema for the graph state.
    * Missing if unable to generate JSON schema from graph.
    */
-  state_schema?: JSONSchema7;
+  state_schema?: JSONSchema7 | null | undefined;
 
   /**
    * The schema for the graph config.
    * Missing if unable to generate JSON schema from graph.
    */
-  config_schema?: JSONSchema7;
+  config_schema?: JSONSchema7 | null | undefined;
 }
 
 export type Subgraphs = Record<string, GraphSchema>;
