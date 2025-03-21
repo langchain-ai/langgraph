@@ -435,7 +435,7 @@ typing-extensions = ">=4.7"
 
 [[package]]
 name = "langgraph"
-version = "0.3.0"
+version = "0.3.18"
 description = "Building stateful, multi-actor applications with LLMs"
 optional = false
 python-versions = ">=3.9.0,<4.0"
@@ -446,6 +446,7 @@ develop = true
 [package.dependencies]
 langchain-core = ">=0.1,<0.4"
 langgraph-checkpoint = "^2.0.10"
+langgraph-prebuilt = ">=0.1.1,<0.2"
 langgraph-sdk = "^0.1.42"
 
 [package.source]
@@ -454,7 +455,7 @@ url = "../langgraph"
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.0.16"
+version = "2.0.21"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -472,7 +473,7 @@ url = "../checkpoint"
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
-version = "2.0.15"
+version = "2.0.19"
 description = "Library with a Postgres implementation of LangGraph checkpoint saver."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -481,7 +482,7 @@ files = []
 develop = true
 
 [package.dependencies]
-langgraph-checkpoint = "^2.0.15"
+langgraph-checkpoint = "^2.0.21"
 orjson = ">=3.10.1"
 psycopg = "^3.2.0"
 psycopg-pool = "^3.2.0"
@@ -492,7 +493,7 @@ url = "../checkpoint-postgres"
 
 [[package]]
 name = "langgraph-checkpoint-sqlite"
-version = "2.0.5"
+version = "2.0.6"
 description = "Library with a SQLite implementation of LangGraph checkpoint saver."
 optional = false
 python-versions = "^3.9.0"
