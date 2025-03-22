@@ -38,6 +38,8 @@ class ChannelProtocol(Protocol[Value, Update, C]):
 
     def consume(self) -> bool: ...
 
+    def is_available(self) -> bool: ...
+
 
 @runtime_checkable
 class SendProtocol(Protocol):
