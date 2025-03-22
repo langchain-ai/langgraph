@@ -1,17 +1,33 @@
-<picture class="github-only">
-  <source media="(prefers-color-scheme: light)" srcset="https://langchain-ai.github.io/langgraph/static/wordmark_dark.svg">
-  <source media="(prefers-color-scheme: dark)" srcset="https://langchain-ai.github.io/langgraph/static/wordmark_light.svg">
-  <img alt="LangGraph Logo" src="https://langchain-ai.github.io/langgraph/static/wordmark_dark.svg" width="80%">
-</picture>
+<p align="center">
+  <picture class="github-only">
+    <source media="(prefers-color-scheme: light)" srcset="https://langchain-ai.github.io/langgraph/static/wordmark_dark.svg">
+    <source media="(prefers-color-scheme: dark)" srcset="https://langchain-ai.github.io/langgraph/static/wordmark_light.svg">
+    <img alt="LangGraph Logo" src="https://langchain-ai.github.io/langgraph/static/wordmark_dark.svg" width="80%">
+  </picture>
+</p>
 
 <div>
 <br>
 </div>
 
-[![Version](https://img.shields.io/pypi/v/langgraph.svg)](https://pypi.org/project/langgraph/)
-[![Downloads](https://static.pepy.tech/badge/langgraph/month)](https://pepy.tech/project/langgraph)
-[![Open Issues](https://img.shields.io/github/issues-raw/langchain-ai/langgraph)](https://github.com/langchain-ai/langgraph/issues)
-[![Docs](https://img.shields.io/badge/docs-latest-blue)](https://langchain-ai.github.io/langgraph/)
+<p align="center">
+  <!-- Version -->
+  <a href="https://pypi.org/project/langgraph/" target="_blank">
+    <img src="https://img.shields.io/pypi/v/langgraph.svg">
+  </a>
+  <!-- Downloads -->
+  <a href="https://pepy.tech/project/langgraph" target="_blank">
+    <img src="https://static.pepy.tech/badge/langgraph/month">
+  </a>
+  <!-- Open Issues -->
+  <a href="https://github.com/langchain-ai/langgraph/issues" target="_blank">
+    <img src="https://img.shields.io/github/issues-raw/langchain-ai/langgraph">
+  </a>
+  <!-- Docs -->
+  <a href="https://langchain-ai.github.io/langgraph/" target="_blank">
+    <img src="https://img.shields.io/badge/docs-latest-blue">
+  </a>
+</p>
 
 > [!NOTE]
 > Looking for the JS version? See the [JS repo](https://github.com/langchain-ai/langgraphjs) and the [JS docs](https://langchain-ai.github.io/langgraphjs/).
