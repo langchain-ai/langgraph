@@ -684,7 +684,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
             store.put(("docs",), "doc2", {"text": "Other guide"}, index=False) # don't index
 
             # Search by similarity
-            results = store.search(("docs",), "programming guides", limit=2)
+            results = store.search(("docs",), query="programming guides", limit=2)
         ```
 
     Note:
