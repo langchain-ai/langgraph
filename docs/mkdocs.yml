@@ -506,5 +506,3 @@ copyright: >
   Copyright &copy; 2025 LangChain, Inc | <a href="#__consent">Consent Preferences</a>
 extra_css:
   - stylesheets/version_admonitions.css
-extra_css:
-  - docs/stylesheets/version_admonitions.css
