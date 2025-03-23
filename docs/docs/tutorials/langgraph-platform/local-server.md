@@ -33,26 +33,8 @@ Create a new app from the `react-agent` template. This template is a simple agen
 
     If you use `langgraph new` without specifying a template, you will be presented with an interactive menu that will allow you to choose from a list of available templates.
 
-### Application Structure
+These templates create a LangGraph application for you, which generally follows the following structure:
 
-The structure of the LangGraph app generally follows the following patterns:
-
-=== "Python (requirements.txt)"
-
-    ```plaintext
-    my-app/
-    ├── my_agent # all project code lies within here
-    │   ├── utils # utilities for your graph
-    │   │   ├── __init__.py
-    │   │   ├── tools.py # tools for your graph
-    │   │   ├── nodes.py # node functions for you graph
-    │   │   └── state.py # state definition of your graph
-    │   ├── __init__.py
-    │   └── agent.py # code for constructing your graph
-    ├── .env # environment variables
-    ├── requirements.txt # package dependencies
-    └── langgraph.json # configuration file for LangGraph
-    ```
 === "Python (pyproject.toml)"
 
     ```plaintext
@@ -85,52 +67,7 @@ The structure of the LangGraph app generally follows the following patterns:
     └── langgraph.json # configuration file for LangGraph
     ```
 
-!!! note
-
-    The directory structure of a LangGraph application can vary depending on the programming language and the package manager used.
-
-The `langgraph.json` file is a JSON file that specifies the dependencies, graphs, environment variables, and other settings required to deploy a LangGraph application. Some examples: 
-
-=== "Python"
-
-    * The dependencies involve a custom local package and the `langchain_openai` package.
-    * A single graph will be loaded from the file `./your_package/your_file.py` with the variable `variable`.
-    * The environment variables are loaded from the `.env` file.
-
-    ```json
-    {
-        "dependencies": [
-            "langchain_openai",
-            "./your_package"
-        ],
-        "graphs": {
-            "my_agent": "./your_package/your_file.py:agent"
-        },
-        "env": "./.env"
-    }
-    ```
-
-=== "JavaScript"
-
-    * The dependencies will be loaded from a dependency file in the local directory (e.g., `package.json`).
-    * A single graph will be loaded from the file `./your_package/your_file.js` with the function `agent`.
-    * The environment variable `OPENAI_API_KEY` is set inline.
-
-    ```json
-    {
-        "dependencies": [
-            "."
-        ],
-        "graphs": {
-            "my_agent": "./your_package/your_file.js:agent"
-        },
-        "env": {
-            "OPENAI_API_KEY": "secret-key"
-        }
-    }
-    ```
-
-For more details on the application structure, please refer to the [Application Structure](../../concepts/application_structure.md) concept page.
+For more details on LangGraph application structure, please refer to the [Application Structure](../../concepts/application_structure.md) concept page.
 
 ## Install Dependencies
 
