@@ -383,6 +383,7 @@ nav:
       - Channels: reference/channels.md
       - Errors: reference/errors.md
       - Types: reference/types.md
+      - Test Version Admonitions: test_versions.md
       - Constants: reference/constants.md
       - Pregel: reference/pregel.md
       - Config: reference/config.md
@@ -503,3 +504,7 @@ validation:
   not_found: info
 copyright: >
   Copyright &copy; 2025 LangChain, Inc | <a href="#__consent">Consent Preferences</a>
+extra_css:
+  - stylesheets/version_admonitions.css
+extra_css:
+  - docs/stylesheets/version_admonitions.css
