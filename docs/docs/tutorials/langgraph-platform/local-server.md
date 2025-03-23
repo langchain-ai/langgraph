@@ -33,42 +33,6 @@ Create a new app from the `react-agent` template. This template is a simple agen
 
     If you use `langgraph new` without specifying a template, you will be presented with an interactive menu that will allow you to choose from a list of available templates.
 
-These templates create a LangGraph application for you, which generally follows the following structure:
-
-=== "Python (pyproject.toml)"
-
-    ```plaintext
-    my-app/
-    ├── my_agent # all project code lies within here
-    │   ├── utils # utilities for your graph
-    │   │   ├── __init__.py
-    │   │   ├── tools.py # tools for your graph
-    │   │   ├── nodes.py # node functions for you graph
-    │   │   └── state.py # state definition of your graph
-    │   ├── __init__.py
-    │   └── agent.py # code for constructing your graph
-    ├── .env # environment variables
-    ├── langgraph.json  # configuration file for LangGraph
-    └── pyproject.toml # dependencies for your project
-    ```
-
-=== "JS (package.json)"
-
-    ```plaintext
-    my-app/
-    ├── src # all project code lies within here
-    │   ├── utils # optional utilities for your graph
-    │   │   ├── tools.ts # tools for your graph
-    │   │   ├── nodes.ts # node functions for you graph
-    │   │   └── state.ts # state definition of your graph
-    │   └── agent.ts # code for constructing your graph
-    ├── package.json # package dependencies
-    ├── .env # environment variables
-    └── langgraph.json # configuration file for LangGraph
-    ```
-
-For more details on LangGraph application structure, please refer to the [Application Structure](../../concepts/application_structure.md) concept page.
-
 ## Install Dependencies
 
 In the root of your new LangGraph app, install the dependencies in `edit` mode so your local changes are used by the server:
