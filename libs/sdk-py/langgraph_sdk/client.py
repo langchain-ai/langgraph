@@ -1360,6 +1360,7 @@ class RunsClient:
         multitask_strategy: Optional[MultitaskStrategy] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> AsyncIterator[StreamPart]: ...
 
     @overload
@@ -1382,6 +1383,7 @@ class RunsClient:
         if_not_exists: Optional[IfNotExists] = None,
         webhook: Optional[str] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> AsyncIterator[StreamPart]: ...
 
     def stream(
@@ -1406,6 +1408,7 @@ class RunsClient:
         multitask_strategy: Optional[MultitaskStrategy] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> AsyncIterator[StreamPart]:
         """Create a run and stream the results.
 
@@ -1492,7 +1495,10 @@ class RunsClient:
             else "/runs/stream"
         )
         return self.http.stream(
-            endpoint, "POST", json={k: v for k, v in payload.items() if v is not None}
+            endpoint,
+            "POST",
+            json={k: v for k, v in payload.items() if v is not None},
+            headers=headers,
         )
 
     @overload
@@ -1513,6 +1519,7 @@ class RunsClient:
         on_completion: Optional[OnCompletionBehavior] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Run: ...
 
     @overload
@@ -1535,6 +1542,7 @@ class RunsClient:
         multitask_strategy: Optional[MultitaskStrategy] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Run: ...
 
     async def create(
@@ -1557,6 +1565,7 @@ class RunsClient:
         if_not_exists: Optional[IfNotExists] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Run:
         """Create a background run.
 
@@ -1583,6 +1592,7 @@ class RunsClient:
                 Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Run: The created background run.
@@ -1706,6 +1716,7 @@ class RunsClient:
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
         raise_error: bool = True,
+        headers: Optional[dict[str, str]] = None,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
     @overload
@@ -1726,6 +1737,7 @@ class RunsClient:
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
         raise_error: bool = True,
+        headers: Optional[dict[str, str]] = None,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
     async def wait(
@@ -1748,6 +1760,7 @@ class RunsClient:
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
         raise_error: bool = True,
+        headers: Optional[dict[str, str]] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         """Create a run, wait until it finishes and return the final state.
 
@@ -1774,6 +1787,7 @@ class RunsClient:
                 Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Union[list[dict], dict[str, Any]]: The output of the run.
@@ -1845,7 +1859,9 @@ class RunsClient:
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
         )
         response = await self.http.post(
-            endpoint, json={k: v for k, v in payload.items() if v is not None}
+            endpoint,
+            json={k: v for k, v in payload.items() if v is not None},
+            headers=headers,
         )
         if (
             raise_error
@@ -2088,6 +2104,7 @@ class CronClient:
         interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[str] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Run:
         """Create a cron job for a thread.
 
@@ -2106,6 +2123,7 @@ class CronClient:
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Run: The cron run.
@@ -2139,7 +2157,9 @@ class CronClient:
         if multitask_strategy:
             payload["multitask_strategy"] = multitask_strategy
         payload = {k: v for k, v in payload.items() if v is not None}
-        return await self.http.post(f"/threads/{thread_id}/runs/crons", json=payload)
+        return await self.http.post(
+            f"/threads/{thread_id}/runs/crons", json=payload, headers=headers
+        )
 
     async def create(
         self,
@@ -2153,6 +2173,7 @@ class CronClient:
         interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[str] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Run:
         """Create a cron run.
 
@@ -2168,6 +2189,7 @@ class CronClient:
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Run: The cron run.
@@ -2200,13 +2222,18 @@ class CronClient:
         if multitask_strategy:
             payload["multitask_strategy"] = multitask_strategy
         payload = {k: v for k, v in payload.items() if v is not None}
-        return await self.http.post("/runs/crons", json=payload)
+        return await self.http.post("/runs/crons", json=payload, headers=headers)
 
-    async def delete(self, cron_id: str) -> None:
+    async def delete(
+        self,
+        cron_id: str,
+        headers: Optional[dict[str, str]] = None,
+    ) -> None:
         """Delete a cron.
 
         Args:
             cron_id: The cron ID to delete.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             None
@@ -2218,7 +2245,7 @@ class CronClient:
             )
 
         """  # noqa: E501
-        await self.http.delete(f"/runs/crons/{cron_id}")
+        await self.http.delete(f"/runs/crons/{cron_id}", headers=headers)
 
     async def search(
         self,
@@ -2227,6 +2254,7 @@ class CronClient:
         thread_id: Optional[str] = None,
         limit: int = 10,
         offset: int = 0,
+        headers: Optional[dict[str, str]] = None,
     ) -> list[Cron]:
         """Get a list of cron jobs.
 
@@ -2235,6 +2263,7 @@ class CronClient:
             thread_id: the thread ID to search for.
             limit: The maximum number of results to return.
             offset: The number of results to skip.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             list[Cron]: The list of cron jobs returned by the search,
@@ -2279,7 +2308,7 @@ class CronClient:
             "offset": offset,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
-        return await self.http.post("/runs/crons/search", json=payload)
+        return await self.http.post("/runs/crons/search", json=payload, headers=headers)
 
 
 class StoreClient:
@@ -2305,6 +2334,7 @@ class StoreClient:
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
         ttl: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> None:
         """Store or update an item.
 
@@ -2314,6 +2344,7 @@ class StoreClient:
             value: A dictionary containing the item's data.
             index: Controls search indexing - None (use defaults), False (disable), or list of field paths to index.
             ttl: Optional time-to-live in minutes for the item, or None for no expiration.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             None
@@ -2338,7 +2369,9 @@ class StoreClient:
             "index": index,
             "ttl": ttl,
         }
-        await self.http.put("/store/items", json=_provided_vals(payload))
+        await self.http.put(
+            "/store/items", json=_provided_vals(payload), headers=headers
+        )
 
     async def get_item(
         self,
@@ -2347,6 +2380,7 @@ class StoreClient:
         key: str,
         *,
         refresh_ttl: Optional[bool] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Item:
         """Retrieve a single item.
 
@@ -2357,6 +2391,7 @@ class StoreClient:
 
         Returns:
             Item: The retrieved item.
+            headers: Optional custom headers to include with the request.
 
         Example Usage:
 
@@ -2384,14 +2419,21 @@ class StoreClient:
         params = {"namespace": ".".join(namespace), "key": key}
         if refresh_ttl is not None:
             params["refresh_ttl"] = refresh_ttl
-        return await self.http.get("/store/items", params=params)
+        return await self.http.get("/store/items", params=params, headers=headers)
 
-    async def delete_item(self, namespace: Sequence[str], /, key: str) -> None:
+    async def delete_item(
+        self,
+        namespace: Sequence[str],
+        /,
+        key: str,
+        headers: Optional[dict[str, str]] = None,
+    ) -> None:
         """Delete an item.
 
         Args:
             key: The unique identifier for the item.
             namespace: Optional list of strings representing the namespace path.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             None
@@ -2404,7 +2446,9 @@ class StoreClient:
             )
         """
         await self.http.delete(
-            "/store/items", json={"namespace": namespace, "key": key}
+            "/store/items",
+            json={"namespace": namespace, "key": key},
+            headers=headers,
         )
 
     async def search_items(
@@ -2416,6 +2460,7 @@ class StoreClient:
         offset: int = 0,
         query: Optional[str] = None,
         refresh_ttl: Optional[bool] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
 
@@ -2426,6 +2471,7 @@ class StoreClient:
             offset: Number of items to skip before returning results (default is 0).
             query: Optional query for natural language search.
             refresh_ttl: Whether to refresh the TTL on items returned by this search. If None, uses the store's default behavior.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             List[Item]: A list of items matching the search criteria.
@@ -2467,7 +2513,11 @@ class StoreClient:
             "refresh_ttl": refresh_ttl,
         }
 
-        return await self.http.post("/store/items/search", json=_provided_vals(payload))
+        return await self.http.post(
+            "/store/items/search",
+            json=_provided_vals(payload),
+            headers=headers,
+        )
 
     async def list_namespaces(
         self,
@@ -2476,6 +2526,7 @@ class StoreClient:
         max_depth: Optional[int] = None,
         limit: int = 100,
         offset: int = 0,
+        headers: Optional[dict[str, str]] = None,
     ) -> ListNamespaceResponse:
         """List namespaces with optional match conditions.
 
@@ -2485,6 +2536,7 @@ class StoreClient:
             max_depth: Optional integer specifying the maximum depth of namespaces to return.
             limit: Maximum number of namespaces to return (default is 100).
             offset: Number of namespaces to skip before returning results (default is 0).
+            headers: Optional custom headers to include with the request.
 
         Returns:
             List[List[str]]: A list of namespaces matching the criteria.
@@ -2514,7 +2566,11 @@ class StoreClient:
             "limit": limit,
             "offset": offset,
         }
-        return await self.http.post("/store/namespaces", json=_provided_vals(payload))
+        return await self.http.post(
+            "/store/namespaces",
+            json=_provided_vals(payload),
+            headers=headers,
+        )
 
 
 def get_sync_client(
