@@ -33,6 +33,15 @@ LC_REVIVER = Reviver()
 
 
 class JsonPlusSerializer(SerializerProtocol):
+    def __init__(
+        self, *, __unpack_ext_hook__: Optional[Callable[[int, bytes], Any]] = None
+    ) -> None:
+        self._unpack_ext_hook = (
+            __unpack_ext_hook__
+            if __unpack_ext_hook__ is not None
+            else _msgpack_ext_hook
+        )
+
     def _encode_constructor_args(
         self,
         constructor: Union[Callable, type[Any]],
@@ -210,7 +219,7 @@ class JsonPlusSerializer(SerializerProtocol):
             return self.loads(data_)
         elif type_ == "msgpack":
             return ormsgpack.unpackb(
-                data_, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
         else:
             raise NotImplementedError(f"Unknown serialization type: {type_}")
@@ -519,6 +528,82 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
                 return tup[2]
             except NameError:
                 return
+
+
+def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
+    if code == EXT_CONSTRUCTOR_SINGLE_ARG:
+        try:
+            tup = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            if tup[0] == "uuid" and tup[1] == "UUID":
+                hex_ = tup[2]
+                return (
+                    f"{hex_[:8]}-{hex_[8:12]}-{hex_[12:16]}-{hex_[16:20]}-{hex_[20:]}"
+                )
+            # module, name, arg
+            return tup[2]
+        except Exception:
+            return
+    elif code == EXT_CONSTRUCTOR_POS_ARGS:
+        try:
+            tup = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            # module, name, args
+            return tup[2]
+        except Exception:
+            return
+    elif code == EXT_CONSTRUCTOR_KW_ARGS:
+        try:
+            tup = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            # module, name, args
+            return tup[2]
+        except Exception:
+            return
+    elif code == EXT_METHOD_SINGLE_ARG:
+        try:
+            tup = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            # module, name, arg, method
+            return tup[2]
+        except Exception:
+            return
+    elif code == EXT_PYDANTIC_V1:
+        try:
+            tup = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            # module, name, kwargs
+            return tup[2]
+        except Exception:
+            # for pydantic objects we can't find/reconstruct
+            # let's return the kwargs dict instead
+            return
+    elif code == EXT_PYDANTIC_V2:
+        try:
+            tup = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            # module, name, kwargs, method
+            return tup[2]
+        except Exception:
+            return
 
 
 _option = (
