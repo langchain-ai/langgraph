@@ -4,7 +4,7 @@ from langgraph.graph import MessagesState, StateGraph
 from langgraph.utils.runnable import RunnableCallable
 
 
-def create_sequential(number_nodes) -> StateGraph:
+def create_sequential(number_nodes: int) -> StateGraph:
     """Create a sequential no-op graph consisting of a few hundred nodes."""
     builder = StateGraph(MessagesState)
 
