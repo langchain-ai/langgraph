@@ -397,11 +397,14 @@ class AssistantsClient:
     def __init__(self, http: HttpClient) -> None:
         self.http = http
 
-    async def get(self, assistant_id: str) -> Assistant:
+    async def get(
+        self, assistant_id: str, *, headers: Optional[dict[str, str]] = None
+    ) -> Assistant:
         """Get an assistant by ID.
 
         Args:
             assistant_id: The ID of the assistant to get.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Assistant: Assistant Object.
@@ -427,16 +430,21 @@ class AssistantsClient:
             }
 
         """  # noqa: E501
-        return await self.http.get(f"/assistants/{assistant_id}")
+        return await self.http.get(f"/assistants/{assistant_id}", headers=headers)
 
     async def get_graph(
-        self, assistant_id: str, *, xray: Union[int, bool] = False
+        self,
+        assistant_id: str,
+        *,
+        xray: Union[int, bool] = False,
+        headers: Optional[dict[str, str]] = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """Get the graph of an assistant by ID.
 
         Args:
             assistant_id: The ID of the assistant to get the graph of.
             xray: Include graph representation of subgraphs. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Graph: The graph information for the assistant in JSON format.
@@ -467,14 +475,17 @@ class AssistantsClient:
 
         """  # noqa: E501
         return await self.http.get(
-            f"/assistants/{assistant_id}/graph", params={"xray": xray}
+            f"/assistants/{assistant_id}/graph", params={"xray": xray}, headers=headers
         )
 
-    async def get_schemas(self, assistant_id: str) -> GraphSchema:
+    async def get_schemas(
+        self, assistant_id: str, *, headers: Optional[dict[str, str]] = None
+    ) -> GraphSchema:
         """Get the schemas of an assistant by ID.
 
         Args:
             assistant_id: The ID of the assistant to get the schema of.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             GraphSchema: The graph schema for the assistant.
@@ -573,15 +584,25 @@ class AssistantsClient:
             }
 
         """  # noqa: E501
-        return await self.http.get(f"/assistants/{assistant_id}/schemas")
+        return await self.http.get(
+            f"/assistants/{assistant_id}/schemas", headers=headers
+        )
 
     async def get_subgraphs(
-        self, assistant_id: str, namespace: Optional[str] = None, recurse: bool = False
+        self,
+        assistant_id: str,
+        namespace: Optional[str] = None,
+        recurse: bool = False,
+        *,
+        headers: Optional[dict[str, str]] = None,
     ) -> Subgraphs:
         """Get the schemas of an assistant by ID.
 
         Args:
             assistant_id: The ID of the assistant to get the schema of.
+            namespace: Optional namespace to filter by.
+            recurse: Whether to recursively get subgraphs.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Subgraphs: The graph schema for the assistant.
@@ -591,11 +612,13 @@ class AssistantsClient:
             return await self.http.get(
                 f"/assistants/{assistant_id}/subgraphs/{namespace}",
                 params={"recurse": recurse},
+                headers=headers,
             )
         else:
             return await self.http.get(
                 f"/assistants/{assistant_id}/subgraphs",
                 params={"recurse": recurse},
+                headers=headers,
             )
 
     async def create(
@@ -607,6 +630,7 @@ class AssistantsClient:
         assistant_id: Optional[str] = None,
         if_exists: Optional[OnConflictBehavior] = None,
         name: Optional[str] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Assistant:
         """Create a new assistant.
 
@@ -620,6 +644,7 @@ class AssistantsClient:
             if_exists: How to handle duplicate creation. Defaults to 'raise' under the hood.
                 Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing assistant).
             name: The name of the assistant. Defaults to 'Untitled' under the hood.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Assistant: The created assistant.
@@ -648,7 +673,7 @@ class AssistantsClient:
             payload["if_exists"] = if_exists
         if name:
             payload["name"] = name
-        return await self.http.post("/assistants", json=payload)
+        return await self.http.post("/assistants", json=payload, headers=headers)
 
     async def update(
         self,
@@ -658,6 +683,7 @@ class AssistantsClient:
         config: Optional[Config] = None,
         metadata: Json = None,
         name: Optional[str] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Assistant:
         """Update an assistant.
 
@@ -670,6 +696,7 @@ class AssistantsClient:
             config: Configuration to use for the graph.
             metadata: Metadata to merge with existing assistant metadata.
             name: The new name for the assistant.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Assistant: The updated assistant.
@@ -696,16 +723,20 @@ class AssistantsClient:
         return await self.http.patch(
             f"/assistants/{assistant_id}",
             json=payload,
+            headers=headers,
         )
 
     async def delete(
         self,
         assistant_id: str,
+        *,
+        headers: Optional[dict[str, str]] = None,
     ) -> None:
         """Delete an assistant.
 
         Args:
             assistant_id: The assistant ID to delete.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             None
@@ -717,7 +748,7 @@ class AssistantsClient:
             )
 
         """  # noqa: E501
-        await self.http.delete(f"/assistants/{assistant_id}")
+        await self.http.delete(f"/assistants/{assistant_id}", headers=headers)
 
     async def search(
         self,
@@ -726,6 +757,7 @@ class AssistantsClient:
         graph_id: Optional[str] = None,
         limit: int = 10,
         offset: int = 0,
+        headers: Optional[dict[str, str]] = None,
     ) -> list[Assistant]:
         """Search for assistants.
 
@@ -735,6 +767,7 @@ class AssistantsClient:
                 The graph ID is normally set in your langgraph.json configuration.
             limit: The maximum number of results to return.
             offset: The number of results to skip.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             list[Assistant]: A list of assistants.
@@ -759,6 +792,7 @@ class AssistantsClient:
         return await self.http.post(
             "/assistants/search",
             json=payload,
+            headers=headers,
         )
 
     async def get_versions(
@@ -767,6 +801,8 @@ class AssistantsClient:
         metadata: Json = None,
         limit: int = 10,
         offset: int = 0,
+        *,
+        headers: Optional[dict[str, str]] = None,
     ) -> list[AssistantVersion]:
         """List all versions of an assistant.
 
@@ -775,6 +811,7 @@ class AssistantsClient:
             metadata: Metadata to filter versions by. Exact match filter for each KV pair.
             limit: The maximum number of versions to return.
             offset: The number of versions to skip.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             list[AssistantVersion]: A list of assistant versions.
@@ -794,15 +831,22 @@ class AssistantsClient:
         if metadata:
             payload["metadata"] = metadata
         return await self.http.post(
-            f"/assistants/{assistant_id}/versions", json=payload
+            f"/assistants/{assistant_id}/versions", json=payload, headers=headers
         )
 
-    async def set_latest(self, assistant_id: str, version: int) -> Assistant:
+    async def set_latest(
+        self,
+        assistant_id: str,
+        version: int,
+        *,
+        headers: Optional[dict[str, str]] = None,
+    ) -> Assistant:
         """Change the version of an assistant.
 
         Args:
             assistant_id: The assistant ID to delete.
             version: The version to change to.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Assistant: Assistant Object.
@@ -818,7 +862,9 @@ class AssistantsClient:
 
         payload: Dict[str, Any] = {"version": version}
 
-        return await self.http.post(f"/assistants/{assistant_id}/latest", json=payload)
+        return await self.http.post(
+            f"/assistants/{assistant_id}/latest", json=payload, headers=headers
+        )
 
 
 class ThreadsClient:
@@ -837,11 +883,14 @@ class ThreadsClient:
     def __init__(self, http: HttpClient) -> None:
         self.http = http
 
-    async def get(self, thread_id: str) -> Thread:
+    async def get(
+        self, thread_id: str, *, headers: Optional[dict[str, str]] = None
+    ) -> Thread:
         """Get a thread by ID.
 
         Args:
             thread_id: The ID of the thread to get.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Thread: Thread object.
@@ -864,7 +913,7 @@ class ThreadsClient:
 
         """  # noqa: E501
 
-        return await self.http.get(f"/threads/{thread_id}")
+        return await self.http.get(f"/threads/{thread_id}", headers=headers)
 
     async def create(
         self,
@@ -874,6 +923,7 @@ class ThreadsClient:
         if_exists: Optional[OnConflictBehavior] = None,
         supersteps: Optional[Sequence[dict[str, Sequence[dict[str, Any]]]]] = None,
         graph_id: Optional[str] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Thread:
         """Create a new thread.
 
@@ -886,6 +936,7 @@ class ThreadsClient:
             supersteps: Apply a list of supersteps when creating a thread, each containing a sequence of updates.
                 Each update has `values` or `command` and `as_node`. Used for copying a thread between deployments.
             graph_id: Optional graph ID to associate with the thread.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Thread: The created thread.
@@ -923,14 +974,21 @@ class ThreadsClient:
                 for s in supersteps
             ]
 
-        return await self.http.post("/threads", json=payload)
+        return await self.http.post("/threads", json=payload, headers=headers)
 
-    async def update(self, thread_id: str, *, metadata: dict[str, Any]) -> Thread:
+    async def update(
+        self,
+        thread_id: str,
+        *,
+        metadata: dict[str, Any],
+        headers: Optional[dict[str, str]] = None,
+    ) -> Thread:
         """Update a thread.
 
         Args:
             thread_id: ID of thread to update.
             metadata: Metadata to merge with existing thread metadata.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Thread: The created thread.
@@ -943,14 +1001,17 @@ class ThreadsClient:
             )
         """  # noqa: E501
         return await self.http.patch(
-            f"/threads/{thread_id}", json={"metadata": metadata}
+            f"/threads/{thread_id}", json={"metadata": metadata}, headers=headers
         )
 
-    async def delete(self, thread_id: str) -> None:
+    async def delete(
+        self, thread_id: str, *, headers: Optional[dict[str, str]] = None
+    ) -> None:
         """Delete a thread.
 
         Args:
             thread_id: The ID of the thread to delete.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             None
@@ -962,7 +1023,7 @@ class ThreadsClient:
             )
 
         """  # noqa: E501
-        await self.http.delete(f"/threads/{thread_id}")
+        await self.http.delete(f"/threads/{thread_id}", headers=headers)
 
     async def search(
         self,
@@ -972,6 +1033,7 @@ class ThreadsClient:
         status: Optional[ThreadStatus] = None,
         limit: int = 10,
         offset: int = 0,
+        headers: Optional[dict[str, str]] = None,
     ) -> list[Thread]:
         """Search for threads.
 
@@ -982,6 +1044,7 @@ class ThreadsClient:
                 Must be one of 'idle', 'busy', 'interrupted' or 'error'.
             limit: Limit on number of threads to return.
             offset: Offset in threads table to start search from.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             list[Thread]: List of the threads matching the search parameters.
@@ -1009,13 +1072,17 @@ class ThreadsClient:
         return await self.http.post(
             "/threads/search",
             json=payload,
+            headers=headers,
         )
 
-    async def copy(self, thread_id: str) -> None:
+    async def copy(
+        self, thread_id: str, *, headers: Optional[dict[str, str]] = None
+    ) -> None:
         """Copy a thread.
 
         Args:
             thread_id: The ID of the thread to copy.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             None
@@ -1027,7 +1094,9 @@ class ThreadsClient:
             )
 
         """  # noqa: E501
-        return await self.http.post(f"/threads/{thread_id}/copy", json=None)
+        return await self.http.post(
+            f"/threads/{thread_id}/copy", json=None, headers=headers
+        )
 
     async def get_state(
         self,
@@ -1036,13 +1105,16 @@ class ThreadsClient:
         checkpoint_id: Optional[str] = None,  # deprecated
         *,
         subgraphs: bool = False,
+        headers: Optional[dict[str, str]] = None,
     ) -> ThreadState:
         """Get the state of a thread.
 
         Args:
             thread_id: The ID of the thread to get the state of.
             checkpoint: The checkpoint to get the state of.
+            checkpoint_id: (deprecated) The checkpoint ID to get the state of.
             subgraphs: Include subgraphs states.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             ThreadState: the thread of the state.
@@ -1134,16 +1206,19 @@ class ThreadsClient:
             return await self.http.post(
                 f"/threads/{thread_id}/state/checkpoint",
                 json={"checkpoint": checkpoint, "subgraphs": subgraphs},
+                headers=headers,
             )
         elif checkpoint_id:
             return await self.http.get(
                 f"/threads/{thread_id}/state/{checkpoint_id}",
                 params={"subgraphs": subgraphs},
+                headers=headers,
             )
         else:
             return await self.http.get(
                 f"/threads/{thread_id}/state",
                 params={"subgraphs": subgraphs},
+                headers=headers,
             )
 
     async def update_state(
@@ -1154,6 +1229,7 @@ class ThreadsClient:
         as_node: Optional[str] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,  # deprecated
+        headers: Optional[dict[str, str]] = None,
     ) -> ThreadUpdateStateResponse:
         """Update the state of a thread.
 
@@ -1162,6 +1238,8 @@ class ThreadsClient:
             values: The values to update the state with.
             as_node: Update the state as if this node had just executed.
             checkpoint: The checkpoint to update the state of.
+            checkpoint_id: (deprecated) The checkpoint ID to update the state of.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             ThreadUpdateStateResponse: Response after updating a thread's state.
@@ -1196,7 +1274,9 @@ class ThreadsClient:
             payload["checkpoint"] = checkpoint
         if as_node:
             payload["as_node"] = as_node
-        return await self.http.post(f"/threads/{thread_id}/state", json=payload)
+        return await self.http.post(
+            f"/threads/{thread_id}/state", json=payload, headers=headers
+        )
 
     async def get_history(
         self,
@@ -1206,6 +1286,7 @@ class ThreadsClient:
         before: Optional[str | Checkpoint] = None,
         metadata: Optional[dict] = None,
         checkpoint: Optional[Checkpoint] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> list[ThreadState]:
         """Get the state history of a thread.
 
@@ -1215,6 +1296,7 @@ class ThreadsClient:
             limit: The maximum number of states to return.
             before: Return states before this checkpoint.
             metadata: Filter states by metadata key-value pairs.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             list[ThreadState]: the state history of the thread.
@@ -1236,7 +1318,9 @@ class ThreadsClient:
             payload["metadata"] = metadata
         if checkpoint:
             payload["checkpoint"] = checkpoint
-        return await self.http.post(f"/threads/{thread_id}/history", json=payload)
+        return await self.http.post(
+            f"/threads/{thread_id}/history", json=payload, headers=headers
+        )
 
 
 class RunsClient:
@@ -1781,6 +1865,7 @@ class RunsClient:
         limit: int = 10,
         offset: int = 0,
         status: Optional[RunStatus] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> List[Run]:
         """List runs.
 
@@ -1789,6 +1874,7 @@ class RunsClient:
             limit: The maximum number of results to return.
             offset: The number of results to skip.
             status: The status of the run to filter by.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             List[Run]: The runs for the thread.
@@ -1808,14 +1894,19 @@ class RunsClient:
         }
         if status is not None:
             params["status"] = status
-        return await self.http.get(f"/threads/{thread_id}/runs", params=params)
+        return await self.http.get(
+            f"/threads/{thread_id}/runs", params=params, headers=headers
+        )
 
-    async def get(self, thread_id: str, run_id: str) -> Run:
+    async def get(
+        self, thread_id: str, run_id: str, *, headers: Optional[dict[str, str]] = None
+    ) -> Run:
         """Get a run.
 
         Args:
             thread_id: The thread ID to get.
             run_id: The run ID to get.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Run: Run object.
@@ -1829,7 +1920,9 @@ class RunsClient:
 
         """  # noqa: E501
 
-        return await self.http.get(f"/threads/{thread_id}/runs/{run_id}")
+        return await self.http.get(
+            f"/threads/{thread_id}/runs/{run_id}", headers=headers
+        )
 
     async def cancel(
         self,
@@ -1838,6 +1931,7 @@ class RunsClient:
         *,
         wait: bool = False,
         action: CancelAction = "interrupt",
+        headers: Optional[dict[str, str]] = None,
     ) -> None:
         """Get a run.
 
@@ -1847,6 +1941,7 @@ class RunsClient:
             wait: Whether to wait until run has completed.
             action: Action to take when cancelling the run. Possible values
                 are `interrupt` or `rollback`. Default is `interrupt`.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             None
@@ -1864,14 +1959,18 @@ class RunsClient:
         return await self.http.post(
             f"/threads/{thread_id}/runs/{run_id}/cancel?wait={1 if wait else 0}&action={action}",
             json=None,
+            headers=headers,
         )
 
-    async def join(self, thread_id: str, run_id: str) -> dict:
+    async def join(
+        self, thread_id: str, run_id: str, *, headers: Optional[dict[str, str]] = None
+    ) -> dict:
         """Block until a run is done. Returns the final state of the thread.
 
         Args:
             thread_id: The thread ID to join.
             run_id: The run ID to join.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             None
@@ -1884,7 +1983,9 @@ class RunsClient:
             )
 
         """  # noqa: E501
-        return await self.http.get(f"/threads/{thread_id}/runs/{run_id}/join")
+        return await self.http.get(
+            f"/threads/{thread_id}/runs/{run_id}/join", headers=headers
+        )
 
     def join_stream(
         self,
@@ -1893,6 +1994,7 @@ class RunsClient:
         *,
         cancel_on_disconnect: bool = False,
         stream_mode: Optional[Union[StreamMode, Sequence[StreamMode]]] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> AsyncIterator[StreamPart]:
         """Stream output from a run in real-time, until the run is done.
         Output is not buffered, so any output produced before this call will
@@ -1905,6 +2007,7 @@ class RunsClient:
             stream_mode: The stream mode(s) to use. Must be a subset of the stream modes passed
                 when creating the run. Background runs default to having the union of all
                 stream modes.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             None
@@ -1925,14 +2028,18 @@ class RunsClient:
                 "cancel_on_disconnect": cancel_on_disconnect,
                 "stream_mode": stream_mode,
             },
+            headers=headers,
         )
 
-    async def delete(self, thread_id: str, run_id: str) -> None:
+    async def delete(
+        self, thread_id: str, run_id: str, *, headers: Optional[dict[str, str]] = None
+    ) -> None:
         """Delete a run.
 
         Args:
             thread_id: The thread ID to delete.
             run_id: The run ID to delete.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             None
@@ -1945,7 +2052,7 @@ class RunsClient:
             )
 
         """  # noqa: E501
-        await self.http.delete(f"/threads/{thread_id}/runs/{run_id}")
+        await self.http.delete(f"/threads/{thread_id}/runs/{run_id}", headers=headers)
 
 
 class CronClient:
