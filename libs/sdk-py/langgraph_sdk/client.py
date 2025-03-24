@@ -208,7 +208,13 @@ class HttpClient:
     def __init__(self, client: httpx.AsyncClient) -> None:
         self.client = client
 
-    async def get(self, path: str, *, params: Optional[QueryParamTypes] = None, headers: Optional[dict[str, str]] = None) -> Any:
+    async def get(
+        self,
+        path: str,
+        *,
+        params: Optional[QueryParamTypes] = None,
+        headers: Optional[dict[str, str]] = None,
+    ) -> Any:
         """Send a GET request."""
         r = await self.client.get(path, params=params, headers=headers)
         try:
@@ -222,7 +228,13 @@ class HttpClient:
             raise e
         return await adecode_json(r)
 
-    async def post(self, path: str, *, json: Optional[dict], headers: Optional[dict[str, str]] = None) -> Any:
+    async def post(
+        self,
+        path: str,
+        *,
+        json: Optional[dict],
+        headers: Optional[dict[str, str]] = None,
+    ) -> Any:
         """Send a POST request."""
         if json is not None:
             content_headers, content = await aencode_json(json)
@@ -244,7 +256,9 @@ class HttpClient:
             raise e
         return await adecode_json(r)
 
-    async def put(self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None) -> Any:
+    async def put(
+        self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None
+    ) -> Any:
         """Send a PUT request."""
         content_headers, content = await aencode_json(json)
         # Merge headers, with runtime headers taking precedence
@@ -263,7 +277,9 @@ class HttpClient:
             raise e
         return await adecode_json(r)
 
-    async def patch(self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None) -> Any:
+    async def patch(
+        self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None
+    ) -> Any:
         """Send a PATCH request."""
         content_headers, content = await aencode_json(json)
         # Merge headers, with runtime headers taking precedence
@@ -282,7 +298,13 @@ class HttpClient:
             raise e
         return await adecode_json(r)
 
-    async def delete(self, path: str, *, json: Optional[Any] = None, headers: Optional[dict[str, str]] = None) -> None:
+    async def delete(
+        self,
+        path: str,
+        *,
+        json: Optional[Any] = None,
+        headers: Optional[dict[str, str]] = None,
+    ) -> None:
         """Send a DELETE request."""
         r = await self.client.request("DELETE", path, json=json, headers=headers)
         try:
@@ -2465,9 +2487,15 @@ class SyncHttpClient:
     def __init__(self, client: httpx.Client) -> None:
         self.client = client
 
-    def get(self, path: str, *, params: Optional[QueryParamTypes] = None) -> Any:
+    def get(
+        self,
+        path: str,
+        *,
+        params: Optional[QueryParamTypes] = None,
+        headers: Optional[dict[str, str]] = None,
+    ) -> Any:
         """Send a GET request."""
-        r = self.client.get(path, params=params)
+        r = self.client.get(path, params=params, headers=headers)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -2479,13 +2507,23 @@ class SyncHttpClient:
             raise e
         return decode_json(r)
 
-    def post(self, path: str, *, json: Optional[dict]) -> Any:
+    def post(
+        self,
+        path: str,
+        *,
+        json: Optional[dict],
+        headers: Optional[dict[str, str]] = None,
+    ) -> Any:
         """Send a POST request."""
         if json is not None:
-            headers, content = encode_json(json)
+            content_headers, content = encode_json(json)
         else:
-            headers, content = {}, b""
-        r = self.client.post(path, headers=headers, content=content)
+            content_headers, content = {}, b""
+        # Merge headers, with runtime headers taking precedence
+        request_headers = {**content_headers}
+        if headers:
+            request_headers.update(headers)
+        r = self.client.post(path, headers=request_headers, content=content)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -2512,10 +2550,16 @@ class SyncHttpClient:
             raise e
         return decode_json(r)
 
-    def patch(self, path: str, *, json: dict) -> Any:
+    def patch(
+        self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None
+    ) -> Any:
         """Send a PATCH request."""
-        headers, content = encode_json(json)
-        r = self.client.patch(path, headers=headers, content=content)
+        content_headers, content = encode_json(json)
+        # Merge headers, with runtime headers taking precedence
+        request_headers = {**content_headers}
+        if headers:
+            request_headers.update(headers)
+        r = self.client.patch(path, headers=request_headers, content=content)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -2527,9 +2571,15 @@ class SyncHttpClient:
             raise e
         return decode_json(r)
 
-    def delete(self, path: str, *, json: Optional[Any] = None) -> None:
+    def delete(
+        self,
+        path: str,
+        *,
+        json: Optional[Any] = None,
+        headers: Optional[dict[str, str]] = None,
+    ) -> None:
         """Send a DELETE request."""
-        r = self.client.request("DELETE", path, json=json)
+        r = self.client.request("DELETE", path, json=json, headers=headers)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -2547,11 +2597,17 @@ class SyncHttpClient:
         *,
         json: Optional[dict] = None,
         params: Optional[QueryParamTypes] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Iterator[StreamPart]:
         """Stream the results of a request using SSE."""
-        headers, content = encode_json(json)
+        content_headers, content = encode_json(json)
+        request_headers = {**content_headers}
+        request_headers["Accept"] = "text/event-stream"
+        request_headers["Cache-Control"] = "no-store"
+        if headers:
+            request_headers.update(headers)
         with self.client.stream(
-            method, path, headers=headers, content=content, params=params
+            method, path, headers=request_headers, content=content, params=params
         ) as res:
             # check status
             try:
