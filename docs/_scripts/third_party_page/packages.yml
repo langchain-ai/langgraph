@@ -36,3 +36,6 @@ packages:
   - name: "langgraph-reflection"
     repo: "langchain-ai/langgraph-reflection"
     description: "LangGraph agent that runs a reflection step."
+  - name: "langmanus"
+    repo: "langmanus/langmanus"
+    description: "A community-driven AI automation framework that builds upon the incredible work of the open source community. Our goal is to combine language models with specialized tools for tasks like web search, crawling, and Python code execution, while giving back to the community that made this possible."
