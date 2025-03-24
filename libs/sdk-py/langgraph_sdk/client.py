@@ -208,9 +208,9 @@ class HttpClient:
     def __init__(self, client: httpx.AsyncClient) -> None:
         self.client = client
 
-    async def get(self, path: str, *, params: Optional[QueryParamTypes] = None) -> Any:
+    async def get(self, path: str, *, params: Optional[QueryParamTypes] = None, headers: Optional[dict[str, str]] = None) -> Any:
         """Send a GET request."""
-        r = await self.client.get(path, params=params)
+        r = await self.client.get(path, params=params, headers=headers)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -222,13 +222,17 @@ class HttpClient:
             raise e
         return await adecode_json(r)
 
-    async def post(self, path: str, *, json: Optional[dict]) -> Any:
+    async def post(self, path: str, *, json: Optional[dict], headers: Optional[dict[str, str]] = None) -> Any:
         """Send a POST request."""
         if json is not None:
-            headers, content = await aencode_json(json)
+            content_headers, content = await aencode_json(json)
         else:
-            headers, content = {}, b""
-        r = await self.client.post(path, headers=headers, content=content)
+            content_headers, content = {}, b""
+        # Merge headers, with runtime headers taking precedence
+        request_headers = {**content_headers}
+        if headers:
+            request_headers.update(headers)
+        r = await self.client.post(path, headers=request_headers, content=content)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -240,10 +244,14 @@ class HttpClient:
             raise e
         return await adecode_json(r)
 
-    async def put(self, path: str, *, json: dict) -> Any:
+    async def put(self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None) -> Any:
         """Send a PUT request."""
-        headers, content = await aencode_json(json)
-        r = await self.client.put(path, headers=headers, content=content)
+        content_headers, content = await aencode_json(json)
+        # Merge headers, with runtime headers taking precedence
+        request_headers = {**content_headers}
+        if headers:
+            request_headers.update(headers)
+        r = await self.client.put(path, headers=request_headers, content=content)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -255,10 +263,14 @@ class HttpClient:
             raise e
         return await adecode_json(r)
 
-    async def patch(self, path: str, *, json: dict) -> Any:
+    async def patch(self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None) -> Any:
         """Send a PATCH request."""
-        headers, content = await aencode_json(json)
-        r = await self.client.patch(path, headers=headers, content=content)
+        content_headers, content = await aencode_json(json)
+        # Merge headers, with runtime headers taking precedence
+        request_headers = {**content_headers}
+        if headers:
+            request_headers.update(headers)
+        r = await self.client.patch(path, headers=request_headers, content=content)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -270,9 +282,9 @@ class HttpClient:
             raise e
         return await adecode_json(r)
 
-    async def delete(self, path: str, *, json: Optional[Any] = None) -> None:
+    async def delete(self, path: str, *, json: Optional[Any] = None, headers: Optional[dict[str, str]] = None) -> None:
         """Send a DELETE request."""
-        r = await self.client.request("DELETE", path, json=json)
+        r = await self.client.request("DELETE", path, json=json, headers=headers)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -290,14 +302,20 @@ class HttpClient:
         *,
         json: Optional[dict] = None,
         params: Optional[QueryParamTypes] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> AsyncIterator[StreamPart]:
         """Stream results using SSE."""
-        headers, content = await aencode_json(json)
-        headers["Accept"] = "text/event-stream"
-        headers["Cache-Control"] = "no-store"
+        content_headers, content = await aencode_json(json)
+        # Prepare request headers with required SSE headers
+        request_headers = {**content_headers}
+        request_headers["Accept"] = "text/event-stream"
+        request_headers["Cache-Control"] = "no-store"
+        # Add runtime headers with precedence
+        if headers:
+            request_headers.update(headers)
 
         async with self.client.stream(
-            method, path, headers=headers, content=content, params=params
+            method, path, headers=request_headers, content=content, params=params
         ) as res:
             # check status
             try:
