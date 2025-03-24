@@ -101,9 +101,9 @@ def default_retry_on(exc: Exception) -> bool:
 
 
 class RetryPolicy(NamedTuple):
-    """
-    !!! version-added "Added in v0.2.24"
-        The RetryPolicy class was introduced in version 0.2.24 (September 2024).
+    """Configuration for retrying nodes.
+    
+    !!! version-added "Added in version 0.2.24."
     """
 
     initial_interval: float = 0.5
@@ -124,8 +124,7 @@ class RetryPolicy(NamedTuple):
 
 class CachePolicy(NamedTuple):
     """
-    !!! version-added "Added in v0.2.24"
-        The CachePolicy class was introduced in version 0.2.24 (November 2024).
+    !!! version-added "Added in version 0.2.24."
     """
 
     pass
@@ -134,8 +133,7 @@ class CachePolicy(NamedTuple):
 @dataclasses.dataclass(**_DC_KWARGS)
 class Interrupt:
     """
-    !!! version-added "Added in v0.2.24"
-        The Interrupt class was introduced in version 0.2.24 (September 2024).
+    !!! version-added "Added in version 0.2.24."
     """
     value: Any
     resumable: bool = False
@@ -278,8 +276,7 @@ N = TypeVar("N", bound=Hashable)
 class Command(Generic[N], ToolOutputMixin):
     """One or more commands to update the graph's state and send messages to nodes.
 
-    !!! version-added "Added in v0.2.24"
-        The Command class was introduced in version 0.2.24 (November 2024).
+    !!! version-added "Added in version 0.2.24."
 
     Args:
         graph: graph to send the command to. Supported values are:
