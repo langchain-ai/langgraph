@@ -237,11 +237,10 @@ class HttpClient:
     ) -> Any:
         """Send a POST request."""
         if json is not None:
-            content_headers, content = await aencode_json(json)
+            request_headers, content = await aencode_json(json)
         else:
-            content_headers, content = {}, b""
+            request_headers, content = {}, b""
         # Merge headers, with runtime headers taking precedence
-        request_headers = {**content_headers}
         if headers:
             request_headers.update(headers)
         r = await self.client.post(path, headers=request_headers, content=content)
@@ -260,9 +259,7 @@ class HttpClient:
         self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None
     ) -> Any:
         """Send a PUT request."""
-        content_headers, content = await aencode_json(json)
-        # Merge headers, with runtime headers taking precedence
-        request_headers = {**content_headers}
+        request_headers, content = await aencode_json(json)
         if headers:
             request_headers.update(headers)
         r = await self.client.put(path, headers=request_headers, content=content)
@@ -281,9 +278,7 @@ class HttpClient:
         self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None
     ) -> Any:
         """Send a PATCH request."""
-        content_headers, content = await aencode_json(json)
-        # Merge headers, with runtime headers taking precedence
-        request_headers = {**content_headers}
+        request_headers, content = await aencode_json(json)
         if headers:
             request_headers.update(headers)
         r = await self.client.patch(path, headers=request_headers, content=content)
@@ -327,9 +322,7 @@ class HttpClient:
         headers: Optional[dict[str, str]] = None,
     ) -> AsyncIterator[StreamPart]:
         """Stream results using SSE."""
-        content_headers, content = await aencode_json(json)
-        # Prepare request headers with required SSE headers
-        request_headers = {**content_headers}
+        request_headers, content = await aencode_json(json)
         request_headers["Accept"] = "text/event-stream"
         request_headers["Cache-Control"] = "no-store"
         # Add runtime headers with precedence
@@ -2516,11 +2509,9 @@ class SyncHttpClient:
     ) -> Any:
         """Send a POST request."""
         if json is not None:
-            content_headers, content = encode_json(json)
+            request_headers, content = encode_json(json)
         else:
-            content_headers, content = {}, b""
-        # Merge headers, with runtime headers taking precedence
-        request_headers = {**content_headers}
+            request_headers, content = {}, b""
         if headers:
             request_headers.update(headers)
         r = self.client.post(path, headers=request_headers, content=content)
@@ -2554,9 +2545,7 @@ class SyncHttpClient:
         self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None
     ) -> Any:
         """Send a PATCH request."""
-        content_headers, content = encode_json(json)
-        # Merge headers, with runtime headers taking precedence
-        request_headers = {**content_headers}
+        request_headers, content = encode_json(json)
         if headers:
             request_headers.update(headers)
         r = self.client.patch(path, headers=request_headers, content=content)
@@ -2600,8 +2589,7 @@ class SyncHttpClient:
         headers: Optional[dict[str, str]] = None,
     ) -> Iterator[StreamPart]:
         """Stream the results of a request using SSE."""
-        content_headers, content = encode_json(json)
-        request_headers = {**content_headers}
+        request_headers, content = encode_json(json)
         request_headers["Accept"] = "text/event-stream"
         request_headers["Cache-Control"] = "no-store"
         if headers:
