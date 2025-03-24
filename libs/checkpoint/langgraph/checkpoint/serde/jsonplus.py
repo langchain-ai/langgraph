@@ -525,6 +525,7 @@ _option = (
     ormsgpack.OPT_NON_STR_KEYS
     | ormsgpack.OPT_PASSTHROUGH_DATACLASS
     | ormsgpack.OPT_PASSTHROUGH_DATETIME
+    | ormsgpack.OPT_PASSTHROUGH_ENUM
     | ormsgpack.OPT_PASSTHROUGH_UUID
 )
 
