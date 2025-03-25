@@ -4109,7 +4109,9 @@ class SyncRunsClient:
         else:
             return self.http.post("/runs", json=payload, headers=headers)
 
-    def create_batch(self, payloads: list[RunCreate]) -> list[Run]:
+    def create_batch(
+        self, payloads: list[RunCreate], *, headers: Optional[dict[str, str]] = None
+    ) -> list[Run]:
         """Create a batch of stateless background runs."""
 
         def filter_payload(payload: RunCreate):
