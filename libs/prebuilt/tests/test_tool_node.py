@@ -595,20 +595,16 @@ async def test_tool_node_command(input_type: str):
             ]
         },
         Command(
-            goto=[
-                Send(
-                    "bob",
-                    {
-                        "messages": [
-                            ToolMessage(
-                                content="Transferred to Bob",
-                                tool_call_id="2",
-                                name="transfer_to_bob",
-                            )
-                        ]
-                    },
-                )
-            ],
+            update={
+                "messages": [
+                    ToolMessage(
+                        content="Transferred to Bob",
+                        tool_call_id="2",
+                        name="transfer_to_bob",
+                    )
+                ]
+            },
+            goto="bob",
             graph=Command.PARENT,
         ),
     ]
@@ -628,20 +624,16 @@ async def test_tool_node_command(input_type: str):
         )
         assert result == [
             Command(
-                goto=[
-                    Send(
-                        "bob",
-                        {
-                            "messages": [
-                                ToolMessage(
-                                    content="Transferred to Bob",
-                                    tool_call_id="1",
-                                    name=tool.name,
-                                )
-                            ]
-                        },
-                    )
-                ],
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content="Transferred to Bob",
+                            tool_call_id="1",
+                            name=tool.name,
+                        )
+                    ]
+                },
+                goto="bob",
                 graph=Command.PARENT,
             )
         ]
@@ -659,20 +651,16 @@ async def test_tool_node_command(input_type: str):
         )
         assert result == [
             Command(
-                goto=[
-                    Send(
-                        "bob",
-                        {
-                            "messages": [
-                                ToolMessage(
-                                    content="Transferred to Bob",
-                                    tool_call_id="1",
-                                    name=tool.name,
-                                )
-                            ]
-                        },
-                    )
-                ],
+                update={
+                    "messages": [
+                        ToolMessage(
+                            content="Transferred to Bob",
+                            tool_call_id="1",
+                            name=tool.name,
+                        )
+                    ]
+                },
+                goto="bob",
                 graph=Command.PARENT,
             )
         ]
@@ -693,33 +681,30 @@ async def test_tool_node_command(input_type: str):
     )
     assert result == [
         Command(
+            update={
+                "messages": [
+                    ToolMessage(
+                        content="Transferred to Bob",
+                        tool_call_id="1",
+                        name="transfer_to_bob",
+                    )
+                ]
+            },
+            goto="bob",
             graph=Command.PARENT,
-            goto=[
-                Send(
-                    "bob",
-                    {
-                        "messages": [
-                            ToolMessage(
-                                content="Transferred to Bob",
-                                tool_call_id="1",
-                                name="transfer_to_bob",
-                            )
-                        ]
-                    },
-                ),
-                Send(
-                    "bob",
-                    {
-                        "messages": [
-                            ToolMessage(
-                                content="Transferred to Bob",
-                                tool_call_id="2",
-                                name="custom_transfer_to_bob",
-                            )
-                        ]
-                    },
-                ),
-            ],
+        ),
+        Command(
+            update={
+                "messages": [
+                    ToolMessage(
+                        content="Transferred to Bob",
+                        tool_call_id="2",
+                        name="custom_transfer_to_bob",
+                    )
+                ]
+            },
+            goto="bob",
+            graph=Command.PARENT,
         ),
     ]
 
@@ -906,19 +891,15 @@ async def test_tool_node_command_list_input():
             )
         ],
         Command(
-            graph=Command.PARENT,
-            goto=[
-                Send(
-                    "bob",
-                    [
-                        ToolMessage(
-                            content="Transferred to Bob",
-                            tool_call_id="2",
-                            name="transfer_to_bob",
-                        )
-                    ],
+            update=[
+                ToolMessage(
+                    content="Transferred to Bob",
+                    tool_call_id="2",
+                    name="transfer_to_bob",
                 )
             ],
+            goto="bob",
+            graph=Command.PARENT,
         ),
     ]
 
@@ -931,18 +912,14 @@ async def test_tool_node_command_list_input():
         )
         assert result == [
             Command(
-                goto=[
-                    Send(
-                        "bob",
-                        [
-                            ToolMessage(
-                                content="Transferred to Bob",
-                                tool_call_id="1",
-                                name=tool.name,
-                            )
-                        ],
+                update=[
+                    ToolMessage(
+                        content="Transferred to Bob",
+                        tool_call_id="1",
+                        name=tool.name,
                     )
                 ],
+                goto="bob",
                 graph=Command.PARENT,
             )
         ]
@@ -954,18 +931,14 @@ async def test_tool_node_command_list_input():
         )
         assert result == [
             Command(
-                goto=[
-                    Send(
-                        "bob",
-                        [
-                            ToolMessage(
-                                content="Transferred to Bob",
-                                tool_call_id="1",
-                                name=tool.name,
-                            )
-                        ],
+                update=[
+                    ToolMessage(
+                        content="Transferred to Bob",
+                        tool_call_id="1",
+                        name=tool.name,
                     )
                 ],
+                goto="bob",
                 graph=Command.PARENT,
             )
         ]
@@ -984,28 +957,25 @@ async def test_tool_node_command_list_input():
     )
     assert result == [
         Command(
-            goto=[
-                Send(
-                    "bob",
-                    [
-                        ToolMessage(
-                            content="Transferred to Bob",
-                            tool_call_id="1",
-                            name="transfer_to_bob",
-                        )
-                    ],
-                ),
-                Send(
-                    "bob",
-                    [
-                        ToolMessage(
-                            content="Transferred to Bob",
-                            tool_call_id="2",
-                            name="custom_transfer_to_bob",
-                        )
-                    ],
-                ),
+            update=[
+                ToolMessage(
+                    content="Transferred to Bob",
+                    tool_call_id="1",
+                    name="transfer_to_bob",
+                )
             ],
+            goto="bob",
+            graph=Command.PARENT,
+        ),
+        Command(
+            update=[
+                ToolMessage(
+                    content="Transferred to Bob",
+                    tool_call_id="2",
+                    name="custom_transfer_to_bob",
+                )
+            ],
+            goto="bob",
             graph=Command.PARENT,
         ),
     ]
@@ -1081,3 +1051,90 @@ async def test_tool_node_command_list_input():
             )
         ]
     ) == [Command(update=[], graph=Command.PARENT)]
+
+
+def test_tool_node_parent_command_with_send():
+    from langchain_core.tools.base import InjectedToolCallId
+
+    @dec_tool
+    def transfer_to_alice(tool_call_id: Annotated[str, InjectedToolCallId]):
+        """Transfer to Alice"""
+        return Command(
+            goto=[
+                Send(
+                    "alice",
+                    {
+                        "messages": [
+                            ToolMessage(
+                                content="Transferred to Alice",
+                                name="transfer_to_alice",
+                                tool_call_id=tool_call_id,
+                            )
+                        ]
+                    },
+                )
+            ],
+            graph=Command.PARENT,
+        )
+
+    @dec_tool
+    def transfer_to_bob(tool_call_id: Annotated[str, InjectedToolCallId]):
+        """Transfer to Bob"""
+        return Command(
+            goto=[
+                Send(
+                    "bob",
+                    {
+                        "messages": [
+                            ToolMessage(
+                                content="Transferred to Bob",
+                                name="transfer_to_bob",
+                                tool_call_id=tool_call_id,
+                            )
+                        ]
+                    },
+                )
+            ],
+            graph=Command.PARENT,
+        )
+
+    tool_calls = [
+        {"args": {}, "id": "1", "name": "transfer_to_alice", "type": "tool_call"},
+        {"args": {}, "id": "2", "name": "transfer_to_bob", "type": "tool_call"},
+    ]
+
+    result = ToolNode([transfer_to_alice, transfer_to_bob]).invoke(
+        [AIMessage("", tool_calls=tool_calls)]
+    )
+
+    assert result == [
+        Command(
+            goto=[
+                Send(
+                    "alice",
+                    {
+                        "messages": [
+                            ToolMessage(
+                                content="Transferred to Alice",
+                                name="transfer_to_alice",
+                                tool_call_id="1",
+                            )
+                        ]
+                    },
+                ),
+                Send(
+                    "bob",
+                    {
+                        "messages": [
+                            ToolMessage(
+                                content="Transferred to Bob",
+                                name="transfer_to_bob",
+                                tool_call_id="2",
+                            )
+                        ]
+                    },
+                ),
+            ],
+            graph=Command.PARENT,
+        )
+    ]
