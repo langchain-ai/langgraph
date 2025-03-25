@@ -13,7 +13,7 @@ python = "^3.9.0,<4.0"
 orjson = "^3.10.7"
 crc32c = "^2.7.post1"
 aiokafka = "^0.11.0"
-langgraph = "^0.2.19"
+langgraph = ">=0.2.19,<0.4.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.6.2"

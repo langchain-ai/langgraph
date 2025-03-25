@@ -1,6 +1,6 @@
 # Workflows and Agents
 
-This guide reviews common patterns for agentic systems. In describing these systems, it can be useful to make a distinction between "workflows" and "agents". One way to think about this difference is nicely explained [here](https://www.anthropic.com/research/building-effective-agents) by Anthropic:
+This guide reviews common patterns for agentic systems. In describing these systems, it can be useful to make a distinction between "workflows" and "agents". One way to think about this difference is nicely explained in [Anthropic's](https://python.langchain.com/docs/integrations/providers/anthropic/) `Building Effective Agents` blog post:
 
 > Workflows are systems where LLMs and tools are orchestrated through predefined code paths.
 > Agents, on the other hand, are systems where LLMs dynamically direct their own processes and tool usage, maintaining control over how they accomplish tasks.
@@ -9,7 +9,7 @@ Here is a simple way to visualize these differences:
 
 ![Agent Workflow](../../concepts/img/agent_workflow.png)
 
-When building agents and workflows, LangGraph [offers a number of benefits](https://langchain-ai.github.io/langgraph/concepts/high_level/) including persistence, streaming, and support for debugging as well as deployment.
+When building agents and workflows, LangGraph offers a number of benefits including persistence, streaming, and support for debugging as well as deployment.
 
 ## Set up
 
@@ -41,7 +41,7 @@ llm = ChatAnthropic(model="claude-3-5-sonnet-latest")
 
 ## Building Blocks: The Augmented LLM 
 
-LLM have [augmentations](https://www.anthropic.com/research/building-effective-agents) that support building workflows and agents. These include [structured outputs](https://python.langchain.com/docs/concepts/structured_outputs/) and [tool calling](https://python.langchain.com/docs/concepts/tool_calling/), as shown in this image from the Anthropic [blog](https://www.anthropic.com/research/building-effective-agents):
+LLM have augmentations that support building workflows and agents. These include [structured outputs](https://python.langchain.com/docs/concepts/structured_outputs/) and [tool calling](https://python.langchain.com/docs/concepts/tool_calling/), as shown in this image from the Anthropic blog on `Building Effective Agents`:
 
 ![augmented_llm.png](./img/augmented_llm.png)
 
@@ -81,7 +81,7 @@ msg.tool_calls
 
 In prompt chaining, each LLM call processes the output of the previous one. 
 
-As noted in the [Anthropic blog](https://www.anthropic.com/research/building-effective-agents): 
+As noted in the Anthropic blog on `Building Effective Agents`: 
 
 > Prompt chaining decomposes a task into a sequence of steps, where each LLM call processes the output of the previous one. You can add programmatic checks (see "gate” in the diagram below) on any intermediate steps to ensure that the process is still on track.
 
@@ -392,7 +392,7 @@ With parallelization, LLMs work simultaneously on a task:
 
 ## Routing
 
-Routing classifies an input and directs it to a followup task. As noted in the [Anthropic blog](https://www.anthropic.com/research/building-effective-agents): 
+Routing classifies an input and directs it to a followup task. As noted in the Anthropic blog on `Building Effective Agents`: 
 
 > Routing classifies an input and directs it to a specialized followup task. This workflow allows for separation of concerns, and building more specialized prompts. Without this workflow, optimizing for one kind of input can hurt performance on other inputs.
 
@@ -603,7 +603,7 @@ Routing classifies an input and directs it to a followup task. As noted in the [
 
 ## Orchestrator-Worker
 
-With orchestrator-worker, an orchestrator breaks down a task and delegates each sub-task to workers. As noted in the [Anthropic blog](https://www.anthropic.com/research/building-effective-agents): 
+With orchestrator-worker, an orchestrator breaks down a task and delegates each sub-task to workers. As noted in the Anthropic blog on `Building Effective Agents`: 
 
 > In the orchestrator-workers workflow, a central LLM dynamically breaks down tasks, delegates them to worker LLMs, and synthesizes their results.
 
@@ -948,7 +948,7 @@ In the evaluator-optimizer workflow, one LLM call generates a response while ano
 
     **Examples**
 
-    [Here](https://github.com/langchain-ai/research-rabbit) is an assistant that uses evaluator-optimizer to improve a report. See our video [here](https://www.youtube.com/watch?v=XGuTzHoqlj8).
+    [Here](https://github.com/langchain-ai/local-deep-researcher) is an assistant that uses evaluator-optimizer to improve a report. See our video [here](https://www.youtube.com/watch?v=XGuTzHoqlj8).
 
     [Here](https://langchain-ai.github.io/langgraph/tutorials/rag/langgraph_adaptive_rag_local/) is a RAG workflow that grades answers for hallucinations or errors. See our video [here](https://www.youtube.com/watch?v=bq1Plo2RhYI).
 
@@ -1012,7 +1012,7 @@ In the evaluator-optimizer workflow, one LLM call generates a response while ano
 
 ## Agent
 
-Agents are typically implemented as an LLM performing actions (via tool-calling) based on environmental feedback in a loop. As noted in the [Anthropic blog](https://www.anthropic.com/research/building-effective-agents):
+Agents are typically implemented as an LLM performing actions (via tool-calling) based on environmental feedback in a loop. As noted in the Anthropic blog on `Building Effective Agents`:
 
 > Agents can handle sophisticated tasks, but their implementation is often straightforward. They are typically just LLMs using tools based on environmental feedback in a loop. It is therefore crucial to design toolsets and their documentation clearly and thoughtfully.
 

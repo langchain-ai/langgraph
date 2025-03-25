@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph-checkpoint"
-version = "2.0.21"
+version = "2.0.23"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 authors = []
 license = "MIT"
@@ -11,7 +11,7 @@ packages = [{ include = "langgraph" }]
 [tool.poetry.dependencies]
 python = "^3.9.0,<4.0"
 langchain-core = ">=0.2.38,<0.4"
-msgpack = "^1.1.0"
+ormsgpack = "^1.8.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.6.2"
