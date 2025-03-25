@@ -4347,7 +4347,7 @@ class SyncRunsClient:
 
         """  # noqa: E501
 
-        return self.http.get(f"/threads/{thread_id}/runs/{run_id}")
+        return self.http.get(f"/threads/{thread_id}/runs/{run_id}", headers=headers)
 
     def cancel(
         self,
