@@ -23,7 +23,7 @@ from typing import (
 from langchain_core.callbacks import Callbacks
 from langchain_core.callbacks.manager import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables.config import RunnableConfig
-from xxhash import xxh3_64_hexdigest
+from xxhash import xxh3_128_hexdigest
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import (
@@ -960,7 +960,7 @@ def _uuid5_str(namespace: bytes, *parts: str) -> str:
 
 def _xxhash_str(namespace: bytes, *parts: str) -> str:
     """Generate a UUID from the XXH3 hash of a namespace and str parts."""
-    hex = xxh3_64_hexdigest(namespace + b"".join(p.encode() for p in parts))
+    hex = xxh3_128_hexdigest(namespace + b"".join(p.encode() for p in parts))
     return f"{hex[:8]}-{hex[8:12]}-{hex[12:16]}-{hex[16:20]}-{hex[20:32]}"
 
 
