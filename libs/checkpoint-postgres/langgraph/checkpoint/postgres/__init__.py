@@ -458,4 +458,4 @@ class ResilientPostgresSaver(PostgresSaver):
 
 
 
-__all__ = ["PostgresSaver", "BasePostgresSaver", "ShallowPostgresSaver", "Conn"]
+__all__ = ["PostgresSaver", "BasePostgresSaver", "ShallowPostgresSaver", "Conn", "ResilientPostgresSaver"]
