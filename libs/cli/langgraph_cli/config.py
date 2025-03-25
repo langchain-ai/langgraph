@@ -1022,6 +1022,28 @@ def node_config_to_docker(
         except OSError:
             return False
 
+    # inspired by `package-manager-detector`
+    def get_pkg_manager_name():
+        try:
+            with open(config_path.parent / "package.json") as f:
+                pkg = json.load(f)
+
+                if (pkg_manager_name := pkg.get("packageManager")) and isinstance(
+                    pkg_manager_name, str
+                ):
+                    return pkg_manager_name.lstrip("^").split("@")[0]
+
+                if (
+                    dev_engine_name := (
+                        (pkg.get("devEngines") or {}).get("packageManager") or {}
+                    ).get("name")
+                ) and isinstance(dev_engine_name, str):
+                    return dev_engine_name
+
+                return None
+        except Exception:
+            return None
+
     npm, yarn, pnpm, bun = [
         test_file("package-lock.json"),
         test_file("yarn.lock"),
@@ -1038,7 +1060,16 @@ def node_config_to_docker(
     elif bun:
         install_cmd = "bun i"
     else:
-        install_cmd = "npm i"
+        pkg_manager_name = get_pkg_manager_name()
+
+        if pkg_manager_name == "yarn":
+            install_cmd = "yarn install"
+        elif pkg_manager_name == "pnpm":
+            install_cmd = "pnpm i"
+        elif pkg_manager_name == "bun":
+            install_cmd = "bun i"
+        else:
+            install_cmd = "npm i"
     store_config = config.get("store")
     env_additional_config = (
         ""
