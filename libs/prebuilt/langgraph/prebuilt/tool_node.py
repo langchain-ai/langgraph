@@ -281,15 +281,18 @@ class ToolNode(RunnableCallable):
         parent_command: Optional[Command] = None
         for output in outputs:
             if isinstance(output, Command):
-                if output.graph is Command.PARENT and isinstance(output.goto, str):
-                    parent_send = [Send(output.goto, output.update)]
+                if (
+                    output.graph is Command.PARENT
+                    and isinstance(output.goto, list)
+                    and all(isinstance(send, Send) for send in output.goto)
+                ):
                     if parent_command:
                         parent_command = replace(
                             parent_command,
-                            goto=cast(list[Send], parent_command.goto) + parent_send,
+                            goto=cast(list[Send], parent_command.goto) + output.goto,
                         )
                     else:
-                        parent_command = Command(graph=Command.PARENT, goto=parent_send)
+                        parent_command = output
                 else:
                     combined_outputs.append(output)
             else:
