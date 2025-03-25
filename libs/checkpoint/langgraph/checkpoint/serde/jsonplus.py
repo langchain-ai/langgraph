@@ -554,6 +554,10 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
                 ext_hook=_msgpack_ext_hook_to_json,
                 option=ormsgpack.OPT_NON_STR_KEYS,
             )
+            if tup[0] == "langgraph.types" and tup[1] == "Send":
+                from langgraph.types import Send  # type: ignore
+
+                return Send(*tup[2])
             # module, name, args
             return tup[2]
         except Exception:
