@@ -3152,7 +3152,7 @@ class SyncAssistantsClient:
     def delete(
         self,
         assistant_id: str,
-*,
+        *,
         headers: Optional[dict[str, str]] = None,
     ) -> None:
         """Delete an assistant.
@@ -3224,7 +3224,7 @@ class SyncAssistantsClient:
         metadata: Json = None,
         limit: int = 10,
         offset: int = 0,
-*,
+        *,
         headers: Optional[dict[str, str]] = None,
     ) -> list[AssistantVersion]:
         """List all versions of an assistant.
@@ -3261,7 +3261,7 @@ class SyncAssistantsClient:
         self,
         assistant_id: str,
         version: int,
-*,
+        *,
         headers: Optional[dict[str, str]] = None,
     ) -> Assistant:
         """Change the version of an assistant.
@@ -3432,7 +3432,7 @@ class SyncThreadsClient:
     def delete(
         self,
         thread_id: str,
-*,
+        *,
         headers: Optional[dict[str, str]] = None,
     ) -> None:
         """Delete a thread.
@@ -3502,7 +3502,7 @@ class SyncThreadsClient:
     def copy(
         self,
         thread_id: str,
-*,
+        *,
         headers: Optional[dict[str, str]] = None,
     ) -> None:
         """Copy a thread.
@@ -4325,7 +4325,7 @@ class SyncRunsClient:
         self,
         thread_id: str,
         run_id: str,
-*,
+        *,
         headers: Optional[dict[str, str]] = None,
     ) -> Run:
         """Get a run.
@@ -4391,7 +4391,7 @@ class SyncRunsClient:
         self,
         thread_id: str,
         run_id: str,
-*,
+        *,
         headers: Optional[dict[str, str]] = None,
     ) -> dict:
         """Block until a run is done. Returns the final state of the thread.
