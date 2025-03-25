@@ -1022,6 +1022,7 @@ def node_config_to_docker(
         except OSError:
             return False
 
+    # inspired by `package-manager-detector`
     def get_pkg_manager_name():
         try:
             with open(config_path.parent / "package.json") as f:
@@ -1059,16 +1060,12 @@ def node_config_to_docker(
     elif bun:
         install_cmd = "bun i"
     else:
-        # read package.json
-        # inspired by `package-manager-detector`
         pkg_manager_name = get_pkg_manager_name()
 
         if pkg_manager_name == "yarn":
-            install_cmd = "yarn install --frozen-lockfile"
+            install_cmd = "yarn install"
         elif pkg_manager_name == "pnpm":
-            install_cmd = "pnpm i --frozen-lockfile"
-        elif pkg_manager_name == "npm":
-            install_cmd = "npm ci"
+            install_cmd = "pnpm i"
         elif pkg_manager_name == "bun":
             install_cmd = "bun i"
         else:
