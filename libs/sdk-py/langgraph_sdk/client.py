@@ -2816,7 +2816,11 @@ class SyncAssistantsClient:
     def __init__(self, http: SyncHttpClient) -> None:
         self.http = http
 
-    def get(self, assistant_id: str) -> Assistant:
+    def get(
+        self,
+        assistant_id: str,
+        headers: Optional[dict[str, str]] = None,
+    ) -> Assistant:
         """Get an assistant by ID.
 
         Args:
@@ -2847,7 +2851,11 @@ class SyncAssistantsClient:
         return self.http.get(f"/assistants/{assistant_id}")
 
     def get_graph(
-        self, assistant_id: str, *, xray: Union[int, bool] = False
+        self,
+        assistant_id: str,
+        *,
+        xray: Union[int, bool] = False,
+        headers: Optional[dict[str, str]] = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """Get the graph of an assistant by ID.
 
@@ -2885,7 +2893,12 @@ class SyncAssistantsClient:
         """  # noqa: E501
         return self.http.get(f"/assistants/{assistant_id}/graph", params={"xray": xray})
 
-    def get_schemas(self, assistant_id: str) -> GraphSchema:
+    def get_schemas(
+        self,
+        assistant_id: str,
+        *,
+        headers: Optional[dict[str, str]] = None,
+    ) -> GraphSchema:
         """Get the schemas of an assistant by ID.
 
         Args:
@@ -2991,7 +3004,11 @@ class SyncAssistantsClient:
         return self.http.get(f"/assistants/{assistant_id}/schemas")
 
     def get_subgraphs(
-        self, assistant_id: str, namespace: Optional[str] = None, recurse: bool = False
+        self,
+        assistant_id: str,
+        namespace: Optional[str] = None,
+        recurse: bool = False,
+        headers: Optional[dict[str, str]] = None,
     ) -> Subgraphs:
         """Get the schemas of an assistant by ID.
 
@@ -3022,6 +3039,7 @@ class SyncAssistantsClient:
         assistant_id: Optional[str] = None,
         if_exists: Optional[OnConflictBehavior] = None,
         name: Optional[str] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Assistant:
         """Create a new assistant.
 
@@ -3073,6 +3091,7 @@ class SyncAssistantsClient:
         config: Optional[Config] = None,
         metadata: Json = None,
         name: Optional[str] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Assistant:
         """Update an assistant.
 
@@ -3116,6 +3135,7 @@ class SyncAssistantsClient:
     def delete(
         self,
         assistant_id: str,
+        headers: Optional[dict[str, str]] = None,
     ) -> None:
         """Delete an assistant.
 
@@ -3141,6 +3161,7 @@ class SyncAssistantsClient:
         graph_id: Optional[str] = None,
         limit: int = 10,
         offset: int = 0,
+        headers: Optional[dict[str, str]] = None,
     ) -> list[Assistant]:
         """Search for assistants.
 
@@ -3182,6 +3203,7 @@ class SyncAssistantsClient:
         metadata: Json = None,
         limit: int = 10,
         offset: int = 0,
+        headers: Optional[dict[str, str]] = None,
     ) -> list[AssistantVersion]:
         """List all versions of an assistant.
 
@@ -3210,7 +3232,12 @@ class SyncAssistantsClient:
             payload["metadata"] = metadata
         return self.http.post(f"/assistants/{assistant_id}/versions", json=payload)
 
-    def set_latest(self, assistant_id: str, version: int) -> Assistant:
+    def set_latest(
+        self,
+        assistant_id: str,
+        version: int,
+        headers: Optional[dict[str, str]] = None,
+    ) -> Assistant:
         """Change the version of an assistant.
 
         Args:
@@ -3249,7 +3276,12 @@ class SyncThreadsClient:
     def __init__(self, http: SyncHttpClient) -> None:
         self.http = http
 
-    def get(self, thread_id: str) -> Thread:
+    def get(
+        self,
+        thread_id: str,
+        *,
+        headers: Optional[dict[str, str]] = None,
+    ) -> Thread:
         """Get a thread by ID.
 
         Args:
@@ -3286,6 +3318,7 @@ class SyncThreadsClient:
         if_exists: Optional[OnConflictBehavior] = None,
         supersteps: Optional[Sequence[dict[str, Sequence[dict[str, Any]]]]] = None,
         graph_id: Optional[str] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Thread:
         """Create a new thread.
 
@@ -3337,7 +3370,13 @@ class SyncThreadsClient:
 
         return self.http.post("/threads", json=payload)
 
-    def update(self, thread_id: str, *, metadata: dict[str, Any]) -> Thread:
+    def update(
+        self,
+        thread_id: str,
+        *,
+        metadata: dict[str, Any],
+        headers: Optional[dict[str, str]] = None,
+    ) -> Thread:
         """Update a thread.
 
         Args:
@@ -3356,7 +3395,11 @@ class SyncThreadsClient:
         """  # noqa: E501
         return self.http.patch(f"/threads/{thread_id}", json={"metadata": metadata})
 
-    def delete(self, thread_id: str) -> None:
+    def delete(
+        self,
+        thread_id: str,
+        headers: Optional[dict[str, str]] = None,
+    ) -> None:
         """Delete a thread.
 
         Args:
@@ -3382,6 +3425,7 @@ class SyncThreadsClient:
         status: Optional[ThreadStatus] = None,
         limit: int = 10,
         offset: int = 0,
+        headers: Optional[dict[str, str]] = None,
     ) -> list[Thread]:
         """Search for threads.
 
@@ -3421,7 +3465,11 @@ class SyncThreadsClient:
             json=payload,
         )
 
-    def copy(self, thread_id: str) -> None:
+    def copy(
+        self,
+        thread_id: str,
+        headers: Optional[dict[str, str]] = None,
+    ) -> None:
         """Copy a thread.
 
         Args:
@@ -3446,6 +3494,7 @@ class SyncThreadsClient:
         checkpoint_id: Optional[str] = None,  # deprecated
         *,
         subgraphs: bool = False,
+        headers: Optional[dict[str, str]] = None,
     ) -> ThreadState:
         """Get the state of a thread.
 
@@ -3564,6 +3613,7 @@ class SyncThreadsClient:
         as_node: Optional[str] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,  # deprecated
+        headers: Optional[dict[str, str]] = None,
     ) -> ThreadUpdateStateResponse:
         """Update the state of a thread.
 
@@ -3616,6 +3666,7 @@ class SyncThreadsClient:
         before: Optional[str | Checkpoint] = None,
         metadata: Optional[dict] = None,
         checkpoint: Optional[Checkpoint] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> list[ThreadState]:
         """Get the state history of a thread.
 
@@ -3688,6 +3739,7 @@ class SyncRunsClient:
         multitask_strategy: Optional[MultitaskStrategy] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Iterator[StreamPart]: ...
 
     @overload
@@ -3710,6 +3762,7 @@ class SyncRunsClient:
         if_not_exists: Optional[IfNotExists] = None,
         webhook: Optional[str] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Iterator[StreamPart]: ...
 
     def stream(
@@ -3734,6 +3787,7 @@ class SyncRunsClient:
         multitask_strategy: Optional[MultitaskStrategy] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Iterator[StreamPart]:
         """Create a run and stream the results.
 
@@ -3841,6 +3895,7 @@ class SyncRunsClient:
         on_completion: Optional[OnCompletionBehavior] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Run: ...
 
     @overload
@@ -3863,6 +3918,7 @@ class SyncRunsClient:
         multitask_strategy: Optional[MultitaskStrategy] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Run: ...
 
     def create(
@@ -3885,6 +3941,7 @@ class SyncRunsClient:
         on_completion: Optional[OnCompletionBehavior] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Run:
         """Create a background run.
 
@@ -4033,6 +4090,7 @@ class SyncRunsClient:
         multitask_strategy: Optional[MultitaskStrategy] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
     @overload
@@ -4052,6 +4110,7 @@ class SyncRunsClient:
         on_completion: Optional[OnCompletionBehavior] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
     def wait(
@@ -4073,6 +4132,7 @@ class SyncRunsClient:
         multitask_strategy: Optional[MultitaskStrategy] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         """Create a run, wait until it finishes and return the final state.
 
@@ -4173,7 +4233,14 @@ class SyncRunsClient:
             endpoint, json={k: v for k, v in payload.items() if v is not None}
         )
 
-    def list(self, thread_id: str, *, limit: int = 10, offset: int = 0) -> List[Run]:
+    def list(
+        self,
+        thread_id: str,
+        *,
+        limit: int = 10,
+        offset: int = 0,
+        headers: Optional[dict[str, str]] = None,
+    ) -> List[Run]:
         """List runs.
 
         Args:
@@ -4195,7 +4262,12 @@ class SyncRunsClient:
         """  # noqa: E501
         return self.http.get(f"/threads/{thread_id}/runs?limit={limit}&offset={offset}")
 
-    def get(self, thread_id: str, run_id: str) -> Run:
+    def get(
+        self,
+        thread_id: str,
+        run_id: str,
+        headers: Optional[dict[str, str]] = None,
+    ) -> Run:
         """Get a run.
 
         Args:
@@ -4223,6 +4295,7 @@ class SyncRunsClient:
         *,
         wait: bool = False,
         action: CancelAction = "interrupt",
+        headers: Optional[dict[str, str]] = None,
     ) -> None:
         """Get a run.
 
@@ -4251,7 +4324,12 @@ class SyncRunsClient:
             json=None,
         )
 
-    def join(self, thread_id: str, run_id: str) -> dict:
+    def join(
+        self,
+        thread_id: str,
+        run_id: str,
+        headers: Optional[dict[str, str]] = None,
+    ) -> dict:
         """Block until a run is done. Returns the final state of the thread.
 
         Args:
@@ -4278,6 +4356,7 @@ class SyncRunsClient:
         *,
         stream_mode: Optional[Union[StreamMode, Sequence[StreamMode]]] = None,
         cancel_on_disconnect: bool = False,
+        headers: Optional[dict[str, str]] = None,
     ) -> Iterator[StreamPart]:
         """Stream output from a run in real-time, until the run is done.
         Output is not buffered, so any output produced before this call will
@@ -4312,7 +4391,12 @@ class SyncRunsClient:
             },
         )
 
-    def delete(self, thread_id: str, run_id: str) -> None:
+    def delete(
+        self,
+        thread_id: str,
+        run_id: str,
+        headers: Optional[dict[str, str]] = None,
+    ) -> None:
         """Delete a run.
 
         Args:
@@ -4360,6 +4444,7 @@ class SyncCronClient:
         interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[str] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Run:
         """Create a cron job for a thread.
 
@@ -4425,6 +4510,7 @@ class SyncCronClient:
         interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[str] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Run:
         """Create a cron run.
 
@@ -4474,7 +4560,12 @@ class SyncCronClient:
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.post("/runs/crons", json=payload)
 
-    def delete(self, cron_id: str) -> None:
+    def delete(
+        self,
+        cron_id: str,
+        *,
+        headers: Optional[dict[str, str]] = None,
+    ) -> None:
         """Delete a cron.
 
         Args:
@@ -4499,6 +4590,7 @@ class SyncCronClient:
         thread_id: Optional[str] = None,
         limit: int = 10,
         offset: int = 0,
+        headers: Optional[dict[str, str]] = None,
     ) -> list[Cron]:
         """Get a list of cron jobs.
 
@@ -4577,6 +4669,7 @@ class SyncStoreClient:
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
         ttl: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> None:
         """Store or update an item.
 
@@ -4618,6 +4711,7 @@ class SyncStoreClient:
         key: str,
         *,
         refresh_ttl: Optional[bool] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Item:
         """Retrieve a single item.
 
@@ -4658,7 +4752,13 @@ class SyncStoreClient:
             params["refresh_ttl"] = refresh_ttl
         return self.http.get("/store/items", params=params)
 
-    def delete_item(self, namespace: Sequence[str], /, key: str) -> None:
+    def delete_item(
+        self,
+        namespace: Sequence[str],
+        /,
+        key: str,
+        headers: Optional[dict[str, str]] = None,
+    ) -> None:
         """Delete an item.
 
         Args:
@@ -4686,6 +4786,7 @@ class SyncStoreClient:
         offset: int = 0,
         query: Optional[str] = None,
         refresh_ttl: Optional[bool] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
 
@@ -4745,6 +4846,7 @@ class SyncStoreClient:
         max_depth: Optional[int] = None,
         limit: int = 100,
         offset: int = 0,
+        headers: Optional[dict[str, str]] = None,
     ) -> ListNamespaceResponse:
         """List namespaces with optional match conditions.
 
