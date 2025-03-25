@@ -123,7 +123,7 @@ class RetryPolicy(NamedTuple):
 
 
 class CachePolicy(NamedTuple):
-    """
+    """Configuration for caching nodes.
     !!! version-added "Added in version 0.2.24."
     """
 
