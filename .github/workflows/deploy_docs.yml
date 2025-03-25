@@ -63,34 +63,15 @@ jobs:
           poetry-version: ${{ env.POETRY_VERSION }}
           cache-key: docs
 
-      - name: Use Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: "22"
-          cache: "yarn"
-          cache-dependency-path: docs/yarn.lock
-
       - name: Install dependencies
         run: |
           yarn
           poetry install --with test --with docs --no-root
-          poetry run pip install -U \
-            pytest \
-            pytest-check-links \
-            GitPython \
-            "git+https://github.com/benjamincburns/markdown-exec.git@cc0d39d737e5ffd4b83d23cd8729d7ea16e363c8"
-
           # we run this installation only for internal PRs
           # as GITHUB_TOKEN is not available for PRs from outside contributors
           if [ -n "${GITHUB_TOKEN}" ]; then
             poetry run pip install "git+https://${GITHUB_TOKEN}@github.com/langchain-ai/mkdocs-material-insiders.git"
           fi
-
-          poetry run jupyter kernelspec list
-          poetry run python3 -m ipykernel install --user --name=python3
-          npm install -g tslab
-          poetry run tslab install --python=python3
-          poetry run jupyter kernelspec list
 
       - name: Run unit tests
         # Run unit tests on the docs build pipeline
