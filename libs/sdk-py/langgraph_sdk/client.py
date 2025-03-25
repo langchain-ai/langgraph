@@ -2824,6 +2824,7 @@ class SyncAssistantsClient:
     def get(
         self,
         assistant_id: str,
+        *,
         headers: Optional[dict[str, str]] = None,
     ) -> Assistant:
         """Get an assistant by ID.
