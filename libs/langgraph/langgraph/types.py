@@ -123,7 +123,8 @@ class RetryPolicy(NamedTuple):
 
 
 class CachePolicy(NamedTuple):
-    """
+    """Configuration for caching nodes.
+
     !!! version-added "Added in version 0.2.24."
     """
 
@@ -428,7 +429,7 @@ def interrupt(value: Any) -> Any:
                 # as part of the interrupt information.
                 \"what is your age?\"
             )
-            print(f"> Received an input from the interrupt: {answer}\")
+            print(f"> Received an input from the interrupt: {answer}")
             return {\"human_value\": answer}
 
 
