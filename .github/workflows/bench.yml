@@ -43,7 +43,7 @@ jobs:
         run: |
           {
             echo 'OUTPUT<<EOF'
-            make -s benchmark
+            make -s benchmark-fast
             echo EOF
           } >> "$GITHUB_OUTPUT"
       - name: Compare benchmarks
