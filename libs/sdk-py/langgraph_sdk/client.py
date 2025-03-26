@@ -2689,10 +2689,15 @@ class SyncHttpClient:
             raise e
         return decode_json(r)
 
-    def put(self, path: str, *, json: dict) -> Any:
+    def put(
+        self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None
+    ) -> Any:
         """Send a PUT request."""
-        headers, content = encode_json(json)
-        r = self.client.put(path, headers=headers, content=content)
+        request_headers, content = encode_json(json)
+        if headers:
+            request_headers.update(headers)
+
+        r = self.client.put(path, headers=request_headers, content=content)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -2816,11 +2821,17 @@ class SyncAssistantsClient:
     def __init__(self, http: SyncHttpClient) -> None:
         self.http = http
 
-    def get(self, assistant_id: str) -> Assistant:
+    def get(
+        self,
+        assistant_id: str,
+        *,
+        headers: Optional[dict[str, str]] = None,
+    ) -> Assistant:
         """Get an assistant by ID.
 
         Args:
             assistant_id: The ID of the assistant to get.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Assistant: Assistant Object.
@@ -2844,16 +2855,21 @@ class SyncAssistantsClient:
             }
 
         """  # noqa: E501
-        return self.http.get(f"/assistants/{assistant_id}")
+        return self.http.get(f"/assistants/{assistant_id}", headers=headers)
 
     def get_graph(
-        self, assistant_id: str, *, xray: Union[int, bool] = False
+        self,
+        assistant_id: str,
+        *,
+        xray: Union[int, bool] = False,
+        headers: Optional[dict[str, str]] = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """Get the graph of an assistant by ID.
 
         Args:
             assistant_id: The ID of the assistant to get the graph of.
             xray: Include graph representation of subgraphs. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Graph: The graph information for the assistant in JSON format.
@@ -2883,13 +2899,21 @@ class SyncAssistantsClient:
 
 
         """  # noqa: E501
-        return self.http.get(f"/assistants/{assistant_id}/graph", params={"xray": xray})
+        return self.http.get(
+            f"/assistants/{assistant_id}/graph", params={"xray": xray}, headers=headers
+        )
 
-    def get_schemas(self, assistant_id: str) -> GraphSchema:
+    def get_schemas(
+        self,
+        assistant_id: str,
+        *,
+        headers: Optional[dict[str, str]] = None,
+    ) -> GraphSchema:
         """Get the schemas of an assistant by ID.
 
         Args:
             assistant_id: The ID of the assistant to get the schema of.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             GraphSchema: The graph schema for the assistant.
@@ -2988,15 +3012,21 @@ class SyncAssistantsClient:
             }
 
         """  # noqa: E501
-        return self.http.get(f"/assistants/{assistant_id}/schemas")
+        return self.http.get(f"/assistants/{assistant_id}/schemas", headers=headers)
 
     def get_subgraphs(
-        self, assistant_id: str, namespace: Optional[str] = None, recurse: bool = False
+        self,
+        assistant_id: str,
+        namespace: Optional[str] = None,
+        recurse: bool = False,
+        *,
+        headers: Optional[dict[str, str]] = None,
     ) -> Subgraphs:
         """Get the schemas of an assistant by ID.
 
         Args:
             assistant_id: The ID of the assistant to get the schema of.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Subgraphs: The graph schema for the assistant.
@@ -3006,11 +3036,13 @@ class SyncAssistantsClient:
             return self.http.get(
                 f"/assistants/{assistant_id}/subgraphs/{namespace}",
                 params={"recurse": recurse},
+                headers=headers,
             )
         else:
             return self.http.get(
                 f"/assistants/{assistant_id}/subgraphs",
                 params={"recurse": recurse},
+                headers=headers,
             )
 
     def create(
@@ -3022,6 +3054,7 @@ class SyncAssistantsClient:
         assistant_id: Optional[str] = None,
         if_exists: Optional[OnConflictBehavior] = None,
         name: Optional[str] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Assistant:
         """Create a new assistant.
 
@@ -3035,6 +3068,7 @@ class SyncAssistantsClient:
             if_exists: How to handle duplicate creation. Defaults to 'raise' under the hood.
                 Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing assistant).
             name: The name of the assistant. Defaults to 'Untitled' under the hood.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Assistant: The created assistant.
@@ -3063,7 +3097,7 @@ class SyncAssistantsClient:
             payload["if_exists"] = if_exists
         if name:
             payload["name"] = name
-        return self.http.post("/assistants", json=payload)
+        return self.http.post("/assistants", json=payload, headers=headers)
 
     def update(
         self,
@@ -3073,6 +3107,7 @@ class SyncAssistantsClient:
         config: Optional[Config] = None,
         metadata: Json = None,
         name: Optional[str] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Assistant:
         """Update an assistant.
 
@@ -3085,6 +3120,7 @@ class SyncAssistantsClient:
             config: Configuration to use for the graph.
             metadata: Metadata to merge with existing assistant metadata.
             name: The new name for the assistant.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Assistant: The updated assistant.
@@ -3111,16 +3147,20 @@ class SyncAssistantsClient:
         return self.http.patch(
             f"/assistants/{assistant_id}",
             json=payload,
+            headers=headers,
         )
 
     def delete(
         self,
         assistant_id: str,
+        *,
+        headers: Optional[dict[str, str]] = None,
     ) -> None:
         """Delete an assistant.
 
         Args:
             assistant_id: The assistant ID to delete.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             None
@@ -3132,7 +3172,7 @@ class SyncAssistantsClient:
             )
 
         """  # noqa: E501
-        self.http.delete(f"/assistants/{assistant_id}")
+        self.http.delete(f"/assistants/{assistant_id}", headers=headers)
 
     def search(
         self,
@@ -3141,6 +3181,7 @@ class SyncAssistantsClient:
         graph_id: Optional[str] = None,
         limit: int = 10,
         offset: int = 0,
+        headers: Optional[dict[str, str]] = None,
     ) -> list[Assistant]:
         """Search for assistants.
 
@@ -3150,6 +3191,7 @@ class SyncAssistantsClient:
                 The graph ID is normally set in your langgraph.json configuration.
             limit: The maximum number of results to return.
             offset: The number of results to skip.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             list[Assistant]: A list of assistants.
@@ -3174,6 +3216,7 @@ class SyncAssistantsClient:
         return self.http.post(
             "/assistants/search",
             json=payload,
+            headers=headers,
         )
 
     def get_versions(
@@ -3182,6 +3225,8 @@ class SyncAssistantsClient:
         metadata: Json = None,
         limit: int = 10,
         offset: int = 0,
+        *,
+        headers: Optional[dict[str, str]] = None,
     ) -> list[AssistantVersion]:
         """List all versions of an assistant.
 
@@ -3190,6 +3235,7 @@ class SyncAssistantsClient:
             metadata: Metadata to filter versions by. Exact match filter for each KV pair.
             limit: The maximum number of versions to return.
             offset: The number of versions to skip.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             list[Assistant]: A list of assistants.
@@ -3208,14 +3254,23 @@ class SyncAssistantsClient:
         }
         if metadata:
             payload["metadata"] = metadata
-        return self.http.post(f"/assistants/{assistant_id}/versions", json=payload)
+        return self.http.post(
+            f"/assistants/{assistant_id}/versions", json=payload, headers=headers
+        )
 
-    def set_latest(self, assistant_id: str, version: int) -> Assistant:
+    def set_latest(
+        self,
+        assistant_id: str,
+        version: int,
+        *,
+        headers: Optional[dict[str, str]] = None,
+    ) -> Assistant:
         """Change the version of an assistant.
 
         Args:
             assistant_id: The assistant ID to delete.
             version: The version to change to.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Assistant: Assistant Object.
@@ -3231,7 +3286,9 @@ class SyncAssistantsClient:
 
         payload: Dict[str, Any] = {"version": version}
 
-        return self.http.post(f"/assistants/{assistant_id}/latest", json=payload)
+        return self.http.post(
+            f"/assistants/{assistant_id}/latest", json=payload, headers=headers
+        )
 
 
 class SyncThreadsClient:
@@ -3249,11 +3306,17 @@ class SyncThreadsClient:
     def __init__(self, http: SyncHttpClient) -> None:
         self.http = http
 
-    def get(self, thread_id: str) -> Thread:
+    def get(
+        self,
+        thread_id: str,
+        *,
+        headers: Optional[dict[str, str]] = None,
+    ) -> Thread:
         """Get a thread by ID.
 
         Args:
             thread_id: The ID of the thread to get.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Thread: Thread object.
@@ -3276,7 +3339,7 @@ class SyncThreadsClient:
 
         """  # noqa: E501
 
-        return self.http.get(f"/threads/{thread_id}")
+        return self.http.get(f"/threads/{thread_id}", headers=headers)
 
     def create(
         self,
@@ -3286,6 +3349,7 @@ class SyncThreadsClient:
         if_exists: Optional[OnConflictBehavior] = None,
         supersteps: Optional[Sequence[dict[str, Sequence[dict[str, Any]]]]] = None,
         graph_id: Optional[str] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Thread:
         """Create a new thread.
 
@@ -3298,6 +3362,7 @@ class SyncThreadsClient:
             supersteps: Apply a list of supersteps when creating a thread, each containing a sequence of updates.
                 Each update has `values` or `command` and `as_node`. Used for copying a thread between deployments.
             graph_id: Optional graph ID to associate with the thread.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Thread: The created thread.
@@ -3335,14 +3400,21 @@ class SyncThreadsClient:
                 for s in supersteps
             ]
 
-        return self.http.post("/threads", json=payload)
+        return self.http.post("/threads", json=payload, headers=headers)
 
-    def update(self, thread_id: str, *, metadata: dict[str, Any]) -> Thread:
+    def update(
+        self,
+        thread_id: str,
+        *,
+        metadata: dict[str, Any],
+        headers: Optional[dict[str, str]] = None,
+    ) -> Thread:
         """Update a thread.
 
         Args:
             thread_id: ID of thread to update.
             metadata: Metadata to merge with existing thread metadata.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Thread: The created thread.
@@ -3354,13 +3426,21 @@ class SyncThreadsClient:
                 metadata={"number":1},
             )
         """  # noqa: E501
-        return self.http.patch(f"/threads/{thread_id}", json={"metadata": metadata})
+        return self.http.patch(
+            f"/threads/{thread_id}", json={"metadata": metadata}, headers=headers
+        )
 
-    def delete(self, thread_id: str) -> None:
+    def delete(
+        self,
+        thread_id: str,
+        *,
+        headers: Optional[dict[str, str]] = None,
+    ) -> None:
         """Delete a thread.
 
         Args:
             thread_id: The ID of the thread to delete.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             None
@@ -3372,7 +3452,7 @@ class SyncThreadsClient:
             )
 
         """  # noqa: E501
-        self.http.delete(f"/threads/{thread_id}")
+        self.http.delete(f"/threads/{thread_id}", headers=headers)
 
     def search(
         self,
@@ -3382,6 +3462,7 @@ class SyncThreadsClient:
         status: Optional[ThreadStatus] = None,
         limit: int = 10,
         offset: int = 0,
+        headers: Optional[dict[str, str]] = None,
     ) -> list[Thread]:
         """Search for threads.
 
@@ -3392,6 +3473,7 @@ class SyncThreadsClient:
                 Must be one of 'idle', 'busy', 'interrupted' or 'error'.
             limit: Limit on number of threads to return.
             offset: Offset in threads table to start search from.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             list[Thread]: List of the threads matching the search parameters.
@@ -3416,16 +3498,19 @@ class SyncThreadsClient:
             payload["values"] = values
         if status:
             payload["status"] = status
-        return self.http.post(
-            "/threads/search",
-            json=payload,
-        )
+        return self.http.post("/threads/search", json=payload, headers=headers)
 
-    def copy(self, thread_id: str) -> None:
+    def copy(
+        self,
+        thread_id: str,
+        *,
+        headers: Optional[dict[str, str]] = None,
+    ) -> None:
         """Copy a thread.
 
         Args:
             thread_id: The ID of the thread to copy.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             None
@@ -3437,7 +3522,7 @@ class SyncThreadsClient:
             )
 
         """  # noqa: E501
-        return self.http.post(f"/threads/{thread_id}/copy", json=None)
+        return self.http.post(f"/threads/{thread_id}/copy", json=None, headers=headers)
 
     def get_state(
         self,
@@ -3446,6 +3531,7 @@ class SyncThreadsClient:
         checkpoint_id: Optional[str] = None,  # deprecated
         *,
         subgraphs: bool = False,
+        headers: Optional[dict[str, str]] = None,
     ) -> ThreadState:
         """Get the state of a thread.
 
@@ -3453,6 +3539,7 @@ class SyncThreadsClient:
             thread_id: The ID of the thread to get the state of.
             checkpoint: The checkpoint to get the state of.
             subgraphs: Include subgraphs states.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             ThreadState: the thread of the state.
@@ -3544,16 +3631,19 @@ class SyncThreadsClient:
             return self.http.post(
                 f"/threads/{thread_id}/state/checkpoint",
                 json={"checkpoint": checkpoint, "subgraphs": subgraphs},
+                headers=headers,
             )
         elif checkpoint_id:
             return self.http.get(
                 f"/threads/{thread_id}/state/{checkpoint_id}",
                 params={"subgraphs": subgraphs},
+                headers=headers,
             )
         else:
             return self.http.get(
                 f"/threads/{thread_id}/state",
                 params={"subgraphs": subgraphs},
+                headers=headers,
             )
 
     def update_state(
@@ -3564,6 +3654,7 @@ class SyncThreadsClient:
         as_node: Optional[str] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,  # deprecated
+        headers: Optional[dict[str, str]] = None,
     ) -> ThreadUpdateStateResponse:
         """Update the state of a thread.
 
@@ -3572,6 +3663,7 @@ class SyncThreadsClient:
             values: The values to update the state with.
             as_node: Update the state as if this node had just executed.
             checkpoint: The checkpoint to update the state of.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             ThreadUpdateStateResponse: Response after updating a thread's state.
@@ -3606,7 +3698,9 @@ class SyncThreadsClient:
             payload["checkpoint"] = checkpoint
         if as_node:
             payload["as_node"] = as_node
-        return self.http.post(f"/threads/{thread_id}/state", json=payload)
+        return self.http.post(
+            f"/threads/{thread_id}/state", json=payload, headers=headers
+        )
 
     def get_history(
         self,
@@ -3616,6 +3710,7 @@ class SyncThreadsClient:
         before: Optional[str | Checkpoint] = None,
         metadata: Optional[dict] = None,
         checkpoint: Optional[Checkpoint] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> list[ThreadState]:
         """Get the state history of a thread.
 
@@ -3625,6 +3720,7 @@ class SyncThreadsClient:
             limit: The maximum number of states to return.
             before: Return states before this checkpoint.
             metadata: Filter states by metadata key-value pairs.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             list[ThreadState]: the state history of the thread.
@@ -3648,7 +3744,9 @@ class SyncThreadsClient:
             payload["metadata"] = metadata
         if checkpoint:
             payload["checkpoint"] = checkpoint
-        return self.http.post(f"/threads/{thread_id}/history", json=payload)
+        return self.http.post(
+            f"/threads/{thread_id}/history", json=payload, headers=headers
+        )
 
 
 class SyncRunsClient:
@@ -3688,6 +3786,7 @@ class SyncRunsClient:
         multitask_strategy: Optional[MultitaskStrategy] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Iterator[StreamPart]: ...
 
     @overload
@@ -3710,6 +3809,7 @@ class SyncRunsClient:
         if_not_exists: Optional[IfNotExists] = None,
         webhook: Optional[str] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Iterator[StreamPart]: ...
 
     def stream(
@@ -3734,6 +3834,7 @@ class SyncRunsClient:
         multitask_strategy: Optional[MultitaskStrategy] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Iterator[StreamPart]:
         """Create a run and stream the results.
 
@@ -3763,6 +3864,7 @@ class SyncRunsClient:
                 Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Iterator[StreamPart]: Iterator of stream results.
@@ -3820,7 +3922,10 @@ class SyncRunsClient:
             else "/runs/stream"
         )
         return self.http.stream(
-            endpoint, "POST", json={k: v for k, v in payload.items() if v is not None}
+            endpoint,
+            "POST",
+            json={k: v for k, v in payload.items() if v is not None},
+            headers=headers,
         )
 
     @overload
@@ -3841,6 +3946,7 @@ class SyncRunsClient:
         on_completion: Optional[OnCompletionBehavior] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Run: ...
 
     @overload
@@ -3863,6 +3969,7 @@ class SyncRunsClient:
         multitask_strategy: Optional[MultitaskStrategy] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Run: ...
 
     def create(
@@ -3885,6 +3992,7 @@ class SyncRunsClient:
         on_completion: Optional[OnCompletionBehavior] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Run:
         """Create a background run.
 
@@ -3911,6 +4019,7 @@ class SyncRunsClient:
                 Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Run: The created background run.
@@ -4001,18 +4110,22 @@ class SyncRunsClient:
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         if thread_id:
-            return self.http.post(f"/threads/{thread_id}/runs", json=payload)
+            return self.http.post(
+                f"/threads/{thread_id}/runs", json=payload, headers=headers
+            )
         else:
-            return self.http.post("/runs", json=payload)
+            return self.http.post("/runs", json=payload, headers=headers)
 
-    def create_batch(self, payloads: list[RunCreate]) -> list[Run]:
+    def create_batch(
+        self, payloads: list[RunCreate], *, headers: Optional[dict[str, str]] = None
+    ) -> list[Run]:
         """Create a batch of stateless background runs."""
 
         def filter_payload(payload: RunCreate):
             return {k: v for k, v in payload.items() if v is not None}
 
         payloads = [filter_payload(payload) for payload in payloads]
-        return self.http.post("/runs/batch", json=payloads)
+        return self.http.post("/runs/batch", json=payloads, headers=headers)
 
     @overload
     def wait(
@@ -4033,6 +4146,7 @@ class SyncRunsClient:
         multitask_strategy: Optional[MultitaskStrategy] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
     @overload
@@ -4052,6 +4166,7 @@ class SyncRunsClient:
         on_completion: Optional[OnCompletionBehavior] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
     def wait(
@@ -4073,6 +4188,7 @@ class SyncRunsClient:
         multitask_strategy: Optional[MultitaskStrategy] = None,
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         """Create a run, wait until it finishes and return the final state.
 
@@ -4099,6 +4215,7 @@ class SyncRunsClient:
                 Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Union[list[dict], dict[str, Any]]: The output of the run.
@@ -4173,13 +4290,21 @@ class SyncRunsClient:
             endpoint, json={k: v for k, v in payload.items() if v is not None}
         )
 
-    def list(self, thread_id: str, *, limit: int = 10, offset: int = 0) -> List[Run]:
+    def list(
+        self,
+        thread_id: str,
+        *,
+        limit: int = 10,
+        offset: int = 0,
+        headers: Optional[dict[str, str]] = None,
+    ) -> List[Run]:
         """List runs.
 
         Args:
             thread_id: The thread ID to list runs for.
             limit: The maximum number of results to return.
             offset: The number of results to skip.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             List[Run]: The runs for the thread.
@@ -4193,14 +4318,23 @@ class SyncRunsClient:
             )
 
         """  # noqa: E501
-        return self.http.get(f"/threads/{thread_id}/runs?limit={limit}&offset={offset}")
+        return self.http.get(
+            f"/threads/{thread_id}/runs?limit={limit}&offset={offset}", headers=headers
+        )
 
-    def get(self, thread_id: str, run_id: str) -> Run:
+    def get(
+        self,
+        thread_id: str,
+        run_id: str,
+        *,
+        headers: Optional[dict[str, str]] = None,
+    ) -> Run:
         """Get a run.
 
         Args:
             thread_id: The thread ID to get.
             run_id: The run ID to get.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Run: Run object.
@@ -4214,7 +4348,7 @@ class SyncRunsClient:
 
         """  # noqa: E501
 
-        return self.http.get(f"/threads/{thread_id}/runs/{run_id}")
+        return self.http.get(f"/threads/{thread_id}/runs/{run_id}", headers=headers)
 
     def cancel(
         self,
@@ -4223,6 +4357,7 @@ class SyncRunsClient:
         *,
         wait: bool = False,
         action: CancelAction = "interrupt",
+        headers: Optional[dict[str, str]] = None,
     ) -> None:
         """Get a run.
 
@@ -4232,6 +4367,7 @@ class SyncRunsClient:
             wait: Whether to wait until run has completed.
             action: Action to take when cancelling the run. Possible values
                 are `interrupt` or `rollback`. Default is `interrupt`.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             None
@@ -4249,14 +4385,22 @@ class SyncRunsClient:
         return self.http.post(
             f"/threads/{thread_id}/runs/{run_id}/cancel?wait={1 if wait else 0}&action={action}",
             json=None,
+            headers=headers,
         )
 
-    def join(self, thread_id: str, run_id: str) -> dict:
+    def join(
+        self,
+        thread_id: str,
+        run_id: str,
+        *,
+        headers: Optional[dict[str, str]] = None,
+    ) -> dict:
         """Block until a run is done. Returns the final state of the thread.
 
         Args:
             thread_id: The thread ID to join.
             run_id: The run ID to join.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             None
@@ -4269,7 +4413,9 @@ class SyncRunsClient:
             )
 
         """  # noqa: E501
-        return self.http.get(f"/threads/{thread_id}/runs/{run_id}/join")
+        return self.http.get(
+            f"/threads/{thread_id}/runs/{run_id}/join", headers=headers
+        )
 
     def join_stream(
         self,
@@ -4278,6 +4424,7 @@ class SyncRunsClient:
         *,
         stream_mode: Optional[Union[StreamMode, Sequence[StreamMode]]] = None,
         cancel_on_disconnect: bool = False,
+        headers: Optional[dict[str, str]] = None,
     ) -> Iterator[StreamPart]:
         """Stream output from a run in real-time, until the run is done.
         Output is not buffered, so any output produced before this call will
@@ -4290,6 +4437,7 @@ class SyncRunsClient:
                 when creating the run. Background runs default to having the union of all
                 stream modes.
             cancel_on_disconnect: Whether to cancel the run when the stream is disconnected.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             None
@@ -4310,14 +4458,22 @@ class SyncRunsClient:
                 "stream_mode": stream_mode,
                 "cancel_on_disconnect": cancel_on_disconnect,
             },
+            headers=headers,
         )
 
-    def delete(self, thread_id: str, run_id: str) -> None:
+    def delete(
+        self,
+        thread_id: str,
+        run_id: str,
+        *,
+        headers: Optional[dict[str, str]] = None,
+    ) -> None:
         """Delete a run.
 
         Args:
             thread_id: The thread ID to delete.
             run_id: The run ID to delete.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             None
@@ -4330,7 +4486,7 @@ class SyncRunsClient:
             )
 
         """  # noqa: E501
-        self.http.delete(f"/threads/{thread_id}/runs/{run_id}")
+        self.http.delete(f"/threads/{thread_id}/runs/{run_id}", headers=headers)
 
 
 class SyncCronClient:
@@ -4360,6 +4516,7 @@ class SyncCronClient:
         interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[str] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Run:
         """Create a cron job for a thread.
 
@@ -4378,6 +4535,7 @@ class SyncCronClient:
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Run: The cron run.
@@ -4411,7 +4569,9 @@ class SyncCronClient:
         if multitask_strategy:
             payload["multitask_strategy"] = multitask_strategy
         payload = {k: v for k, v in payload.items() if v is not None}
-        return self.http.post(f"/threads/{thread_id}/runs/crons", json=payload)
+        return self.http.post(
+            f"/threads/{thread_id}/runs/crons", json=payload, headers=headers
+        )
 
     def create(
         self,
@@ -4425,6 +4585,7 @@ class SyncCronClient:
         interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[str] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Run:
         """Create a cron run.
 
@@ -4440,6 +4601,7 @@ class SyncCronClient:
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Run: The cron run.
@@ -4472,13 +4634,19 @@ class SyncCronClient:
         if multitask_strategy:
             payload["multitask_strategy"] = multitask_strategy
         payload = {k: v for k, v in payload.items() if v is not None}
-        return self.http.post("/runs/crons", json=payload)
+        return self.http.post("/runs/crons", json=payload, headers=headers)
 
-    def delete(self, cron_id: str) -> None:
+    def delete(
+        self,
+        cron_id: str,
+        *,
+        headers: Optional[dict[str, str]] = None,
+    ) -> None:
         """Delete a cron.
 
         Args:
             cron_id: The cron ID to delete.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             None
@@ -4490,7 +4658,7 @@ class SyncCronClient:
             )
 
         """  # noqa: E501
-        self.http.delete(f"/runs/crons/{cron_id}")
+        self.http.delete(f"/runs/crons/{cron_id}", headers=headers)
 
     def search(
         self,
@@ -4499,6 +4667,7 @@ class SyncCronClient:
         thread_id: Optional[str] = None,
         limit: int = 10,
         offset: int = 0,
+        headers: Optional[dict[str, str]] = None,
     ) -> list[Cron]:
         """Get a list of cron jobs.
 
@@ -4507,6 +4676,7 @@ class SyncCronClient:
             thread_id: the thread ID to search for.
             limit: The maximum number of results to return.
             offset: The number of results to skip.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             list[Cron]: The list of cron jobs returned by the search,
@@ -4551,7 +4721,7 @@ class SyncCronClient:
             "offset": offset,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
-        return self.http.post("/runs/crons/search", json=payload)
+        return self.http.post("/runs/crons/search", json=payload, headers=headers)
 
 
 class SyncStoreClient:
@@ -4577,6 +4747,7 @@ class SyncStoreClient:
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
         ttl: Optional[int] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> None:
         """Store or update an item.
 
@@ -4586,6 +4757,8 @@ class SyncStoreClient:
             value: A dictionary containing the item's data.
             index: Controls search indexing - None (use defaults), False (disable), or list of field paths to index.
             ttl: Optional time-to-live in minutes for the item, or None for no expiration.
+            headers: Optional custom headers to include with the request.
+
         Returns:
             None
 
@@ -4609,7 +4782,7 @@ class SyncStoreClient:
             "index": index,
             "ttl": ttl,
         }
-        self.http.put("/store/items", json=_provided_vals(payload))
+        self.http.put("/store/items", json=_provided_vals(payload), headers=headers)
 
     def get_item(
         self,
@@ -4618,6 +4791,7 @@ class SyncStoreClient:
         key: str,
         *,
         refresh_ttl: Optional[bool] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> Item:
         """Retrieve a single item.
 
@@ -4625,6 +4799,7 @@ class SyncStoreClient:
             key: The unique identifier for the item.
             namespace: Optional list of strings representing the namespace path.
             refresh_ttl: Whether to refresh the TTL on this read operation. If None, uses the store's default behavior.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             Item: The retrieved item.
@@ -4656,14 +4831,21 @@ class SyncStoreClient:
         params = {"key": key, "namespace": ".".join(namespace)}
         if refresh_ttl is not None:
             params["refresh_ttl"] = refresh_ttl
-        return self.http.get("/store/items", params=params)
+        return self.http.get("/store/items", params=params, headers=headers)
 
-    def delete_item(self, namespace: Sequence[str], /, key: str) -> None:
+    def delete_item(
+        self,
+        namespace: Sequence[str],
+        /,
+        key: str,
+        headers: Optional[dict[str, str]] = None,
+    ) -> None:
         """Delete an item.
 
         Args:
             key: The unique identifier for the item.
             namespace: Optional list of strings representing the namespace path.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             None
@@ -4675,7 +4857,9 @@ class SyncStoreClient:
                 key="item456",
             )
         """
-        self.http.delete("/store/items", json={"key": key, "namespace": namespace})
+        self.http.delete(
+            "/store/items", json={"key": key, "namespace": namespace}, headers=headers
+        )
 
     def search_items(
         self,
@@ -4686,6 +4870,7 @@ class SyncStoreClient:
         offset: int = 0,
         query: Optional[str] = None,
         refresh_ttl: Optional[bool] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
 
@@ -4696,6 +4881,7 @@ class SyncStoreClient:
             offset: Number of items to skip before returning results (default is 0).
             query: Optional query for natural language search.
             refresh_ttl: Whether to refresh the TTL on items returned by this search. If None, uses the store's default behavior.
+            headers: Optional custom headers to include with the request.
 
         Returns:
             List[Item]: A list of items matching the search criteria.
@@ -4736,7 +4922,9 @@ class SyncStoreClient:
             "query": query,
             "refresh_ttl": refresh_ttl,
         }
-        return self.http.post("/store/items/search", json=_provided_vals(payload))
+        return self.http.post(
+            "/store/items/search", json=_provided_vals(payload), headers=headers
+        )
 
     def list_namespaces(
         self,
@@ -4745,6 +4933,7 @@ class SyncStoreClient:
         max_depth: Optional[int] = None,
         limit: int = 100,
         offset: int = 0,
+        headers: Optional[dict[str, str]] = None,
     ) -> ListNamespaceResponse:
         """List namespaces with optional match conditions.
 
@@ -4754,6 +4943,7 @@ class SyncStoreClient:
             max_depth: Optional integer specifying the maximum depth of namespaces to return.
             limit: Maximum number of namespaces to return (default is 100).
             offset: Number of namespaces to skip before returning results (default is 0).
+            headers: Optional custom headers to include with the request.
 
         Returns:
             List[List[str]]: A list of namespaces matching the criteria.
@@ -4783,7 +4973,9 @@ class SyncStoreClient:
             "limit": limit,
             "offset": offset,
         }
-        return self.http.post("/store/namespaces", json=_provided_vals(payload))
+        return self.http.post(
+            "/store/namespaces", json=_provided_vals(payload), headers=headers
+        )
 
 
 def _provided_vals(d: dict):
