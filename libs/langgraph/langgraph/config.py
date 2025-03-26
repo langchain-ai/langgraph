@@ -118,6 +118,17 @@ def get_store() -> BaseStore:
     return config[CONF][CONFIG_KEY_STORE]
 
 
+def set_store(store: BaseStore) -> None:
+    """Set LangGraph store in context."""
+    var_config = var_child_runnable_config.get()
+    if not var_config:
+        var_config = {CONF: {CONFIG_KEY_STORE: store}}
+        var_child_runnable_config.set(var_config)
+    else:
+        var_config[CONF][CONFIG_KEY_STORE] = store
+        var_child_runnable_config.set(var_config)
+
+
 def get_stream_writer() -> StreamWriter:
     """Access LangGraph [StreamWriter][langgraph.types.StreamWriter] from inside a graph node or entrypoint task at runtime.
 
@@ -183,3 +194,14 @@ def get_stream_writer() -> StreamWriter:
     """
     config = get_config()
     return config[CONF].get(CONFIG_KEY_STREAM_WRITER, _no_op_stream_writer)
+
+
+def set_stream_writer(stream_writer: StreamWriter) -> None:
+    """Set LangGraph stream writer in context."""
+    var_config = var_child_runnable_config.get()
+    if not var_config:
+        var_config = {CONF: {CONFIG_KEY_STREAM_WRITER: stream_writer}}
+        var_child_runnable_config.set(var_config)
+    else:
+        var_config[CONF][CONFIG_KEY_STREAM_WRITER] = stream_writer
+        var_child_runnable_config.set(var_config)
