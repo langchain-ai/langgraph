@@ -252,27 +252,15 @@ benchmarks = (
         },
     ),
     (
-        "sequential_20",
-        create_sequential(20).compile(),
-        create_sequential(20).compile(),
+        "sequential_10",
+        create_sequential(10).compile(),
+        create_sequential(10).compile(),
         {"messages": []},  # Empty list of messages
     ),
     (
-        "sequential_50",
-        create_sequential(50).compile(),
-        create_sequential(50).compile(),
-        {"messages": []},  # Empty list of messages
-    ),
-    (
-        "sequential_100",
-        create_sequential(100).compile(),
-        create_sequential(100).compile(),
-        {"messages": []},  # Empty list of messages
-    ),
-    (
-        "sequential_200",
-        create_sequential(200).compile(),
-        create_sequential(200).compile(),
+        "sequential_1000",
+        create_sequential(1000).compile(),
+        create_sequential(1000).compile(),
         {"messages": []},  # Empty list of messages
     ),
     (
@@ -383,8 +371,17 @@ for name, agraph, graph, input in benchmarks:
         r.bench_func(name + "_sync", run, graph, input)
 
 
+# Pick a handful of graphs to measure the first event latency.
+# At the moment, limiting just due to the size of the annotation on github.
+GRAPHS_FOR_1st_EVENT_LATENCY = (
+    "sequential_1000",
+    "pydantic_state_25x300",
+)
+
 # First event latency
 for name, agraph, graph, input in benchmarks:
+    if graph not in GRAPHS_FOR_1st_EVENT_LATENCY:
+        continue
     r.bench_async_func(
         name + "_first_event_latency",
         arun_first_event_latency,
@@ -404,28 +401,12 @@ compilation_benchmarks = (
         create_sequential(1_000),
     ),
     (
-        "sequential_10000",
-        create_sequential(10_000),
-    ),
-    (
         "pydantic_state_25x300",
         pydantic_state(300),
     ),
     (
-        "pydantic_state_15x600",
-        pydantic_state(600),
-    ),
-    (
-        "pydantic_state_9x1200",
-        pydantic_state(1200),
-    ),
-    (
         "wide_state_15x600",
         wide_state(600),
-    ),
-    (
-        "wide_state_9x1200",
-        wide_state(1200),
     ),
 )
 
