@@ -62,7 +62,7 @@ class Topic(
                 empty.values = checkpoint
         return empty
 
-    def update(self, values: Sequence[Union[Value, list[Value]]]) -> None:
+    def update(self, values: Sequence[Union[Value, list[Value]]]) -> bool:
         current = list(self.values)
         if not self.accumulate:
             self.values = list[Value]()
