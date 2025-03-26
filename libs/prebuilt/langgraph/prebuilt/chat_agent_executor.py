@@ -18,7 +18,13 @@ from langchain_core.language_models import (
     LanguageModelInput,
     LanguageModelLike,
 )
-from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    BaseMessage,
+    SystemMessage,
+    ToolMessage,
+)
 from langchain_core.runnables import (
     Runnable,
     RunnableBinding,
@@ -99,21 +105,21 @@ def _get_state_value(state: StateSchema, key: str, default: Any = None) -> Any:
     )
 
 
-def _get_prompt_runnable(prompt: Optional[Prompt]) -> Runnable:
+def _get_prompt_runnable(prompt: Optional[Prompt], messages_key: str) -> Runnable:
     prompt_runnable: Runnable
     if prompt is None:
         prompt_runnable = RunnableCallable(
-            lambda state: _get_state_value(state, "messages"), name=PROMPT_RUNNABLE_NAME
+            lambda state: _get_state_value(state, messages_key), name=PROMPT_RUNNABLE_NAME
         )
     elif isinstance(prompt, str):
         _system_message: BaseMessage = SystemMessage(content=prompt)
         prompt_runnable = RunnableCallable(
-            lambda state: [_system_message] + _get_state_value(state, "messages"),
+            lambda state: [_system_message] + _get_state_value(state, messages_key),
             name=PROMPT_RUNNABLE_NAME,
         )
     elif isinstance(prompt, SystemMessage):
         prompt_runnable = RunnableCallable(
-            lambda state: [prompt] + _get_state_value(state, "messages"),
+            lambda state: [prompt] + _get_state_value(state, messages_key),
             name=PROMPT_RUNNABLE_NAME,
         )
     elif inspect.iscoroutinefunction(prompt):
@@ -254,6 +260,12 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
+MessageProcessor = Union[
+    Callable[[StateSchema], StateSchema],
+    Runnable[StateSchema, StateSchema],
+]
+
+
 @_convert_modifier_to_prompt
 def create_react_agent(
     model: Union[str, LanguageModelLike],
@@ -263,6 +275,7 @@ def create_react_agent(
     response_format: Optional[
         Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
     ] = None,
+    message_processor: Optional[MessageProcessor] = None,
     state_schema: Optional[StateSchemaType] = None,
     config_schema: Optional[Type[Any]] = None,
     checkpointer: Optional[Checkpointer] = None,
@@ -653,8 +666,6 @@ def create_react_agent(
     if _should_bind_tools(model, tool_classes) and tool_calling_enabled:
         model = cast(BaseChatModel, model).bind_tools(tool_classes)
 
-    model_runnable = _get_prompt_runnable(prompt) | model
-
     # If any of the tools are configured to return_directly after running,
     # our graph needs to check if these were called
     should_return_direct = {t.name for t in tool_classes if t.return_direct}
@@ -678,9 +689,16 @@ def create_react_agent(
             or (remaining_steps is not None and remaining_steps < 2 and has_tool_calls)
         )
 
-    # Define the function that calls the model
-    def call_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
-        messages = _get_state_value(state, "messages")
+    class InputSchema(TypedDict):
+        processed_messages: list[AnyMessage]
+
+    def _call_model(
+        input_messages_key: str,
+        state: Union[StateSchema, InputSchema],
+        config: RunnableConfig,
+    ) -> StateSchema:
+        messages = _get_state_value(state, input_messages_key)
+        model_runnable = _get_prompt_runnable(prompt, input_messages_key) | model
         _validate_chat_history(messages)
         response = cast(AIMessage, model_runnable.invoke(state, config))
         # add agent name to the AIMessage
@@ -698,8 +716,18 @@ def create_react_agent(
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
+    # Define the function that calls the model
+    if message_processor is not None:
+        def call_model(state: InputSchema, config: RunnableConfig) -> StateSchema:
+            return _call_model("processed_messages", state, config)
+    else:
+
+        def call_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
+            return _call_model("messages", state, config)
+
     async def acall_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
         messages = _get_state_value(state, "messages")
+        model_runnable = _get_prompt_runnable(prompt, "messages") | model
         _validate_chat_history(messages)
         response = cast(AIMessage, await model_runnable.ainvoke(state, config))
         # add agent name to the AIMessage
@@ -791,12 +819,22 @@ def create_react_agent(
     workflow = StateGraph(state_schema or AgentState, config_schema=config_schema)
 
     # Define the two nodes we will cycle between
-    workflow.add_node("agent", RunnableCallable(call_model, acall_model))
+    # TODO: this needs to be a RunnableCallable
+    workflow.add_node("agent", call_model)
     workflow.add_node("tools", tool_node)
+
+    # Optionally add a state processor node that will be called
+    # every time before the agent node
+    if message_processor is not None:
+        workflow.add_node("message_processor", message_processor)
+        workflow.add_edge("message_processor", "agent")
+        entrypoint = "message_processor"
+    else:
+        entrypoint = "agent"
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
-    workflow.set_entry_point("agent")
+    workflow.set_entry_point(entrypoint)
 
     # Add a structured output node if response_format is provided
     if response_format is not None:
@@ -821,18 +859,20 @@ def create_react_agent(
         path_map=should_continue_destinations,
     )
 
-    def route_tool_responses(state: StateSchema) -> Literal["agent", "__end__"]:
+    def route_tool_responses(state: StateSchema) -> str:
         for m in reversed(_get_state_value(state, "messages")):
             if not isinstance(m, ToolMessage):
                 break
             if m.name in should_return_direct:
                 return END
-        return "agent"
+        return entrypoint
 
     if should_return_direct:
-        workflow.add_conditional_edges("tools", route_tool_responses)
+        workflow.add_conditional_edges(
+            "tools", route_tool_responses, path_map=[entrypoint, END]
+        )
     else:
-        workflow.add_edge("tools", "agent")
+        workflow.add_edge("tools", entrypoint)
 
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,
