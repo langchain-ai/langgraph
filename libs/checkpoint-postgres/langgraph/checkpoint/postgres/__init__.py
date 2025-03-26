@@ -430,13 +430,10 @@ class ResilientPostgresSaver(PostgresSaver):
                 self._reconnect()
 
     def _reconnect(self):
-        if hasattr(self.conn, "close"):
-            self.conn.close()
+        self.conn.close()
         if isinstance(self.conn, ConnectionPool):
-            self.conn.close()
             self.conn = ConnectionPool(self.conn.conninfo)  # Reinitialize connection pool
         else:
-            self.conn.close()
             self.conn = Connection.connect(
                 self.conn.conninfo, autocommit=True, prepare_threshold=0, row_factory=dict_row
             )
