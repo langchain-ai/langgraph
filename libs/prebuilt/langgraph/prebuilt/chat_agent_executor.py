@@ -84,6 +84,17 @@ class AgentStateWithStructuredResponsePydantic(AgentStatePydantic):
     structured_response: StructuredResponse
 
 
+class CallModelInputSchema(TypedDict):
+    # these are the messages that have been returned by the memory hook
+    # these will NOT be applied to the `messages` key in the state and
+    # will only be used as input to the model
+    processed_messages: list[AnyMessage]
+
+
+InputSchema = TypeVar(
+    "InputSchema", bound=Union[AgentState, AgentStatePydantic, CallModelInputSchema]
+)
+InputSchemaType = Type[InputSchema]
 StateSchema = TypeVar("StateSchema", bound=Union[AgentState, AgentStatePydantic])
 StateSchemaType = Type[StateSchema]
 
@@ -97,7 +108,7 @@ Prompt = Union[
 ]
 
 
-def _get_state_value(state: StateSchema, key: str, default: Any = None) -> Any:
+def _get_state_value(state: InputSchema, key: str, default: Any = None) -> Any:
     return (
         state.get(key, default)
         if isinstance(state, dict)
@@ -678,7 +689,7 @@ def create_react_agent(
     # our graph needs to check if these were called
     should_return_direct = {t.name for t in tool_classes if t.return_direct}
 
-    def _are_more_steps_needed(state: StateSchema, response: BaseMessage) -> bool:
+    def _are_more_steps_needed(state: InputSchema, response: BaseMessage) -> bool:
         has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
         all_tools_return_direct = (
             all(call["name"] in should_return_direct for call in response.tool_calls)
@@ -697,17 +708,11 @@ def create_react_agent(
             or (remaining_steps is not None and remaining_steps < 2 and has_tool_calls)
         )
 
-    class CallModelInputSchema(TypedDict):
-        # these are the messages that have been returned by the memory hook
-        # these will NOT be applied to the `messages` key in the state and
-        # will only be used as input to the model
-        processed_messages: list[AnyMessage]
-
     def _call_model(
         input_messages_key: str,
-        state: Union[dict[str, Any], BaseModel],
+        state: InputSchema,
         config: RunnableConfig,
-    ) -> StateSchema:
+    ) -> Union[dict[str, Any], BaseModel]:
         messages = _get_state_value(state, input_messages_key)
         if messages is None:
             raise ValueError(
@@ -734,9 +739,9 @@ def create_react_agent(
 
     async def _acall_model(
         input_messages_key: str,
-        state: Union[dict[str, Any], BaseModel],
+        state: InputSchema,
         config: RunnableConfig,
-    ) -> StateSchema:
+    ) -> Union[dict[str, Any], BaseModel]:
         messages = _get_state_value(state, input_messages_key)
         if messages is None:
             raise ValueError(
@@ -763,19 +768,19 @@ def create_react_agent(
     # Define the function that calls the model
     if memory_hook is not None:
         input_messages_key = "processed_messages"
-        input_schema = CallModelInputSchema
+        input_schema: InputSchemaType = CallModelInputSchema
     else:
         input_messages_key = "messages"
         input_schema = state_schema
 
     def call_model(
-        state: Union[dict[str, Any], BaseModel], config: RunnableConfig
-    ) -> StateSchema:
+        state: InputSchema, config: RunnableConfig
+    ) -> Union[dict[str, Any], BaseModel]:
         return _call_model(input_messages_key, state, config)
 
     async def acall_model(
-        state: Union[dict[str, Any], BaseModel], config: RunnableConfig
-    ) -> StateSchema:
+        state: InputSchema, config: RunnableConfig
+    ) -> Union[dict[str, Any], BaseModel]:
         return await _acall_model(input_messages_key, state, config)
 
     def generate_structured_response(
