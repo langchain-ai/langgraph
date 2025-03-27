@@ -84,17 +84,6 @@ class AgentStateWithStructuredResponsePydantic(AgentStatePydantic):
     structured_response: StructuredResponse
 
 
-class CallModelInputSchema(TypedDict):
-    # these are the messages that have been returned by the memory hook
-    # these will NOT be applied to the `messages` key in the state and
-    # will only be used as input to the model
-    processed_messages: list[AnyMessage]
-
-
-InputSchema = TypeVar(
-    "InputSchema", bound=Union[AgentState, AgentStatePydantic, CallModelInputSchema]
-)
-InputSchemaType = Type[InputSchema]
 StateSchema = TypeVar("StateSchema", bound=Union[AgentState, AgentStatePydantic])
 StateSchemaType = Type[StateSchema]
 
@@ -108,7 +97,7 @@ Prompt = Union[
 ]
 
 
-def _get_state_value(state: InputSchema, key: str, default: Any = None) -> Any:
+def _get_state_value(state: StateSchema, key: str, default: Any = None) -> Any:
     return (
         state.get(key, default)
         if isinstance(state, dict)
@@ -116,22 +105,21 @@ def _get_state_value(state: InputSchema, key: str, default: Any = None) -> Any:
     )
 
 
-def _get_prompt_runnable(prompt: Optional[Prompt], messages_key: str) -> Runnable:
+def _get_prompt_runnable(prompt: Optional[Prompt]) -> Runnable:
     prompt_runnable: Runnable
     if prompt is None:
         prompt_runnable = RunnableCallable(
-            lambda state: _get_state_value(state, messages_key),
-            name=PROMPT_RUNNABLE_NAME,
+            lambda state: _get_state_value(state, "messages"), name=PROMPT_RUNNABLE_NAME
         )
     elif isinstance(prompt, str):
         _system_message: BaseMessage = SystemMessage(content=prompt)
         prompt_runnable = RunnableCallable(
-            lambda state: [_system_message] + _get_state_value(state, messages_key),
+            lambda state: [_system_message] + _get_state_value(state, "messages"),
             name=PROMPT_RUNNABLE_NAME,
         )
     elif isinstance(prompt, SystemMessage):
         prompt_runnable = RunnableCallable(
-            lambda state: [prompt] + _get_state_value(state, messages_key),
+            lambda state: [prompt] + _get_state_value(state, "messages"),
             name=PROMPT_RUNNABLE_NAME,
         )
     elif inspect.iscoroutinefunction(prompt):
@@ -689,7 +677,7 @@ def create_react_agent(
     # our graph needs to check if these were called
     should_return_direct = {t.name for t in tool_classes if t.return_direct}
 
-    def _are_more_steps_needed(state: InputSchema, response: BaseMessage) -> bool:
+    def _are_more_steps_needed(state: StateSchema, response: BaseMessage) -> bool:
         has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
         all_tools_return_direct = (
             all(call["name"] in should_return_direct for call in response.tool_calls)
@@ -710,7 +698,7 @@ def create_react_agent(
 
     def _call_model(
         input_messages_key: str,
-        state: InputSchema,
+        state: StateSchema,
         config: RunnableConfig,
     ) -> Union[dict[str, Any], BaseModel]:
         messages = _get_state_value(state, input_messages_key)
@@ -719,8 +707,13 @@ def create_react_agent(
                 f"Expected input to call_model to have {input_messages_key}, but got {state}"
             )
 
-        model_runnable = _get_prompt_runnable(prompt, input_messages_key) | model
+        model_runnable = _get_prompt_runnable(prompt) | model
         _validate_chat_history(messages)
+        # we're passing messages under `messages` key, as this is expected by the prompt
+        if isinstance(state_schema, type) and issubclass(state_schema, BaseModel):
+            state.messages = messages  # type: ignore
+        else:
+            state["messages"] = messages  # type: ignore
         response = cast(AIMessage, model_runnable.invoke(state, config))
         # add agent name to the AIMessage
         response.name = name
@@ -739,7 +732,7 @@ def create_react_agent(
 
     async def _acall_model(
         input_messages_key: str,
-        state: InputSchema,
+        state: StateSchema,
         config: RunnableConfig,
     ) -> Union[dict[str, Any], BaseModel]:
         messages = _get_state_value(state, input_messages_key)
@@ -748,8 +741,13 @@ def create_react_agent(
                 f"Expected input to call_model to have {input_messages_key}, but got {state}"
             )
 
-        model_runnable = _get_prompt_runnable(prompt, input_messages_key) | model
+        model_runnable = _get_prompt_runnable(prompt) | model
         _validate_chat_history(messages)
+        # we're passing messages under `messages` key, as this is expected by the prompt
+        if isinstance(state_schema, type) and issubclass(state_schema, BaseModel):
+            state.messages = messages  # type: ignore
+        else:
+            state["messages"] = messages  # type: ignore
         response = cast(AIMessage, await model_runnable.ainvoke(state, config))
         # add agent name to the AIMessage
         response.name = name
@@ -766,21 +764,34 @@ def create_react_agent(
         return {"messages": [response]}
 
     # Define the function that calls the model
+    input_schema: StateSchemaType
     if memory_hook is not None:
         input_messages_key = "processed_messages"
-        input_schema: InputSchemaType = CallModelInputSchema
+
+        # Dynamically create a schema that inherits from state_schema and adds processed_messages
+        if isinstance(state_schema, type) and issubclass(state_schema, BaseModel):
+            # For Pydantic schemas
+            from pydantic import create_model
+
+            input_schema = create_model(
+                "CallModelInputSchema",
+                processed_messages=(list[AnyMessage], ...),
+                __base__=state_schema,
+            )
+        else:
+            # For TypedDict schemas
+            class CallModelInputSchema(state_schema):  # type: ignore
+                processed_messages: list[AnyMessage]
+
+            input_schema = CallModelInputSchema
     else:
         input_messages_key = "messages"
         input_schema = state_schema
 
-    def call_model(
-        state: InputSchema, config: RunnableConfig
-    ) -> Union[dict[str, Any], BaseModel]:
+    def call_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
         return _call_model(input_messages_key, state, config)
 
-    async def acall_model(
-        state: InputSchema, config: RunnableConfig
-    ) -> Union[dict[str, Any], BaseModel]:
+    async def acall_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
         return await _acall_model(input_messages_key, state, config)
 
     def generate_structured_response(
