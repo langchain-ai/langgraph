@@ -19,6 +19,7 @@ from langchain_core.language_models import (
     LanguageModelLike,
 )
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
+from langchain_core.prompts.chat import ChatPromptValue
 from langchain_core.runnables import (
     Runnable,
     RunnableBinding,
@@ -680,7 +681,7 @@ def create_react_agent(
     # Define the function that calls the model
     def call_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
         processed_state = prompt_runnable.invoke(state)
-        if isinstance(processed_state, list):
+        if isinstance(processed_state, (list, ChatPromptValue)):
             messages = processed_state
             processed_state = {}
         elif isinstance(processed_state, dict):
@@ -710,7 +711,7 @@ def create_react_agent(
 
     async def acall_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
         processed_state = await prompt_runnable.ainvoke(state)
-        if isinstance(processed_state, list):
+        if isinstance(processed_state, (list, ChatPromptValue)):
             messages = processed_state
             processed_state = {}
         elif isinstance(processed_state, dict):
