@@ -24,7 +24,7 @@ First navigate to the LangSmith trace. Here you should see a button to "Run in S
 
 ![Run in Studio](../img/run_in_studio.png){width=1200}
 
-This will prompt you to enter the url that your locally running agent is accesible at. Once provided, select "Clone thread locally". If you have multiple graphs in your agent, you will also be prompted to select a graph to clone this thread under.
+This will prompt you to enter the url that your locally running agent is accessible at. Once provided, select "Clone thread locally". If you have multiple graphs in your agent, you will also be prompted to select a graph to clone this thread under.
 
 Once selected, a will a new thread in your local agent will be created and the thread history will be reconstruced to reflect the original trace.
 
