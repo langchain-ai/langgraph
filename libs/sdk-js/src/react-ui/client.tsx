@@ -206,6 +206,8 @@ export function experimental_loadShare(name: string, module: unknown) {
   if (typeof window === "undefined") {
     throw new Error("Cannot register module in server context");
   }
+
+  window[REQUIRE_EXTRA_SYMBOL] ??= {};
   window[REQUIRE_EXTRA_SYMBOL][name] = module;
 }
 
@@ -233,7 +235,11 @@ export function bootstrapUiContext() {
       };
     }
 
-    if (name in window[REQUIRE_EXTRA_SYMBOL]) {
+    if (
+      window[REQUIRE_EXTRA_SYMBOL] != null &&
+      typeof window[REQUIRE_EXTRA_SYMBOL] === "object" &&
+      name in window[REQUIRE_EXTRA_SYMBOL]
+    ) {
       return window[REQUIRE_EXTRA_SYMBOL][name];
     }
 
