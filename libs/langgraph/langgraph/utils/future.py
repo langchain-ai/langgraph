@@ -143,6 +143,7 @@ def _ensure_future(
     loop: asyncio.AbstractEventLoop,
     name: Optional[str] = None,
     context: Optional[contextvars.Context] = None,
+    lazy: bool = True,
 ) -> asyncio.Task[T]:
     called_wrap_awaitable = False
     if not asyncio.iscoroutine(coro_or_future):
@@ -160,7 +161,7 @@ def _ensure_future(
     try:
         if CONTEXT_NOT_SUPPORTED:
             return loop.create_task(coro_or_future, name=name)
-        elif EAGER_NOT_SUPPORTED:
+        elif EAGER_NOT_SUPPORTED or lazy:
             return loop.create_task(coro_or_future, name=name, context=context)
         else:
             return asyncio.eager_task_factory(
@@ -185,6 +186,8 @@ def _wrap_awaitable(awaitable: Awaitable[T]) -> Generator[None, None, T]:
 def run_coroutine_threadsafe(
     coro: Coroutine[None, None, T],
     loop: asyncio.AbstractEventLoop,
+    *,
+    lazy: bool,
     name: Optional[str] = None,
     context: Optional[contextvars.Context] = None,
 ) -> asyncio.Future[T]:
@@ -192,18 +195,23 @@ def run_coroutine_threadsafe(
 
     Return a asyncio.Future to access the result.
     """
-    future: asyncio.Future[T] = asyncio.Future(loop=loop)
 
-    def callback() -> None:
-        try:
-            chain_future(
-                _ensure_future(coro, loop=loop, name=name, context=context), future
-            )
-        except (SystemExit, KeyboardInterrupt):
-            raise
-        except BaseException as exc:
-            future.set_exception(exc)
-            raise
+    if asyncio._get_running_loop() is loop:
+        return _ensure_future(coro, loop=loop, name=name, context=context, lazy=lazy)
+    else:
+        future: asyncio.Future[T] = asyncio.Future(loop=loop)
 
-    loop.call_soon_threadsafe(callback, context=context)
-    return future
+        def callback() -> None:
+            try:
+                chain_future(
+                    _ensure_future(coro, loop=loop, name=name, context=context),
+                    future,
+                )
+            except (SystemExit, KeyboardInterrupt):
+                raise
+            except BaseException as exc:
+                future.set_exception(exc)
+                raise
+
+        loop.call_soon_threadsafe(callback, context=context)
+        return future
