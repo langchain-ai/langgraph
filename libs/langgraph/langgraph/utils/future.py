@@ -10,6 +10,7 @@ T = TypeVar("T")
 AnyFuture = Union[asyncio.Future, concurrent.futures.Future]
 
 CONTEXT_NOT_SUPPORTED = sys.version_info < (3, 11)
+EAGER_NOT_SUPPORTED = sys.version_info < (3, 12)
 
 
 def _get_loop(fut: asyncio.Future) -> asyncio.AbstractEventLoop:
@@ -159,8 +160,12 @@ def _ensure_future(
     try:
         if CONTEXT_NOT_SUPPORTED:
             return loop.create_task(coro_or_future, name=name)
-        else:
+        elif EAGER_NOT_SUPPORTED:
             return loop.create_task(coro_or_future, name=name, context=context)
+        else:
+            return asyncio.eager_task_factory(
+                loop, coro_or_future, name=name, context=context
+            )
     except RuntimeError:
         if not called_wrap_awaitable:
             coro_or_future.close()
