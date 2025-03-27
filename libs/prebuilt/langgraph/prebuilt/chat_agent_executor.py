@@ -109,7 +109,8 @@ def _get_prompt_runnable(prompt: Optional[Prompt], messages_key: str) -> Runnabl
     prompt_runnable: Runnable
     if prompt is None:
         prompt_runnable = RunnableCallable(
-            lambda state: _get_state_value(state, messages_key), name=PROMPT_RUNNABLE_NAME
+            lambda state: _get_state_value(state, messages_key),
+            name=PROMPT_RUNNABLE_NAME,
         )
     elif isinstance(prompt, str):
         _system_message: BaseMessage = SystemMessage(content=prompt)
@@ -260,7 +261,7 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
-MessageProcessor = Union[
+MemoryHook = Union[
     Callable[[StateSchema], StateSchema],
     Runnable[StateSchema, StateSchema],
 ]
@@ -275,7 +276,7 @@ def create_react_agent(
     response_format: Optional[
         Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
     ] = None,
-    message_processor: Optional[MessageProcessor] = None,
+    memory_hook: Optional[MemoryHook] = None,
     state_schema: Optional[StateSchemaType] = None,
     config_schema: Optional[Type[Any]] = None,
     checkpointer: Optional[Checkpointer] = None,
@@ -318,6 +319,13 @@ def create_react_agent(
             !!! Note
                 The graph will make a separate call to the LLM to generate the structured response after the agent loop is finished.
                 This is not the only strategy to get structured responses, see more options in [this guide](https://langchain-ai.github.io/langgraph/how-tos/react-agent-structured-output/).
+        memory_hook: An optional memory hook that will be called every time before the `agent` node (LLM-calling node) and changes the input to the LLM.
+            Useful for managing long message history (e.g., message trimming, summarization, etc.).
+            If provided, a special node will be added to the graph that runs before the `agent` node.
+            Memory hook must be a callable or a runnable that takes in current graph state and returns an update in the form of {"processed_messages": [...], **other_keys}.
+
+            !!! Important
+                The `processed_messages` key is required and will be used as an input to the `agent` node. The rest of the keys will be added to the graph state.
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `remaining_steps` keys.
             Defaults to `AgentState` that defines those two keys.
@@ -689,15 +697,23 @@ def create_react_agent(
             or (remaining_steps is not None and remaining_steps < 2 and has_tool_calls)
         )
 
-    class InputSchema(TypedDict):
+    class CallModelInputSchema(TypedDict):
+        # these are the messages that have been returned by the memory hook
+        # these will NOT be applied to the `messages` key in the state and
+        # will only be used as input to the model
         processed_messages: list[AnyMessage]
 
     def _call_model(
         input_messages_key: str,
-        state: Union[StateSchema, InputSchema],
+        state: Union[dict[str, Any], BaseModel],
         config: RunnableConfig,
     ) -> StateSchema:
         messages = _get_state_value(state, input_messages_key)
+        if messages is None:
+            raise ValueError(
+                f"Expected input to call_model to have {input_messages_key}, but got {state}"
+            )
+
         model_runnable = _get_prompt_runnable(prompt, input_messages_key) | model
         _validate_chat_history(messages)
         response = cast(AIMessage, model_runnable.invoke(state, config))
@@ -716,18 +732,18 @@ def create_react_agent(
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
-    # Define the function that calls the model
-    if message_processor is not None:
-        def call_model(state: InputSchema, config: RunnableConfig) -> StateSchema:
-            return _call_model("processed_messages", state, config)
-    else:
+    async def _acall_model(
+        input_messages_key: str,
+        state: Union[dict[str, Any], BaseModel],
+        config: RunnableConfig,
+    ) -> StateSchema:
+        messages = _get_state_value(state, input_messages_key)
+        if messages is None:
+            raise ValueError(
+                f"Expected input to call_model to have {input_messages_key}, but got {state}"
+            )
 
-        def call_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
-            return _call_model("messages", state, config)
-
-    async def acall_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
-        messages = _get_state_value(state, "messages")
-        model_runnable = _get_prompt_runnable(prompt, "messages") | model
+        model_runnable = _get_prompt_runnable(prompt, input_messages_key) | model
         _validate_chat_history(messages)
         response = cast(AIMessage, await model_runnable.ainvoke(state, config))
         # add agent name to the AIMessage
@@ -743,6 +759,24 @@ def create_react_agent(
             }
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
+
+    # Define the function that calls the model
+    if memory_hook is not None:
+        input_messages_key = "processed_messages"
+        input_schema = CallModelInputSchema
+    else:
+        input_messages_key = "messages"
+        input_schema = state_schema
+
+    def call_model(
+        state: Union[dict[str, Any], BaseModel], config: RunnableConfig
+    ) -> StateSchema:
+        return _call_model(input_messages_key, state, config)
+
+    async def acall_model(
+        state: Union[dict[str, Any], BaseModel], config: RunnableConfig
+    ) -> StateSchema:
+        return await _acall_model(input_messages_key, state, config)
 
     def generate_structured_response(
         state: StateSchema, config: RunnableConfig
@@ -777,8 +811,20 @@ def create_react_agent(
     if not tool_calling_enabled:
         # Define a new graph
         workflow = StateGraph(state_schema, config_schema=config_schema)
-        workflow.add_node("agent", RunnableCallable(call_model, acall_model))
-        workflow.set_entry_point("agent")
+        workflow.add_node(
+            "agent",
+            RunnableCallable(call_model, acall_model),
+            input=input_schema,
+        )
+        if memory_hook is not None:
+            workflow.add_node("memory_hook", memory_hook)
+            workflow.add_edge("memory_hook", "agent")
+            entrypoint = "memory_hook"
+        else:
+            entrypoint = "agent"
+
+        workflow.set_entry_point(entrypoint)
+
         if response_format is not None:
             workflow.add_node(
                 "generate_structured_response",
@@ -819,16 +865,17 @@ def create_react_agent(
     workflow = StateGraph(state_schema or AgentState, config_schema=config_schema)
 
     # Define the two nodes we will cycle between
-    # TODO: this needs to be a RunnableCallable
-    workflow.add_node("agent", call_model)
+    workflow.add_node(
+        "agent", RunnableCallable(call_model, acall_model), input=input_schema
+    )
     workflow.add_node("tools", tool_node)
 
-    # Optionally add a state processor node that will be called
-    # every time before the agent node
-    if message_processor is not None:
-        workflow.add_node("message_processor", message_processor)
-        workflow.add_edge("message_processor", "agent")
-        entrypoint = "message_processor"
+    # Optionally add a memory hook node that will be called
+    # every time before the "agent" (LLM-calling node)
+    if memory_hook is not None:
+        workflow.add_node("memory_hook", memory_hook)
+        workflow.add_edge("memory_hook", "agent")
+        entrypoint = "memory_hook"
     else:
         entrypoint = "agent"
 
