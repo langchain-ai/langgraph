@@ -99,7 +99,7 @@ jobs:
         env:
           LANGCHAIN_API_KEY: test
         run: |
-          if [ "${{ github.event_name }}" == "schedule" ] || [ "${{ github.event_name }}" == "workflow_dispatch" ] || ([ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]); then
+          if [ "${{ github.event_name }}" == "schedule" ]; then
             echo "Running link check on all HTML files matching notebooks in docs directory..."
             poetry run pytest -v \
               --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
