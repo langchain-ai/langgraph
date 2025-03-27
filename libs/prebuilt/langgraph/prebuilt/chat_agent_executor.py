@@ -653,8 +653,7 @@ def create_react_agent(
     if _should_bind_tools(model, tool_classes) and tool_calling_enabled:
         model = cast(BaseChatModel, model).bind_tools(tool_classes)
 
-    model_runnable = _get_prompt_runnable(prompt) | model
-
+    prompt_runnable = _get_prompt_runnable(prompt)
     # If any of the tools are configured to return_directly after running,
     # our graph needs to check if these were called
     should_return_direct = {t.name for t in tool_classes if t.return_direct}
@@ -680,41 +679,63 @@ def create_react_agent(
 
     # Define the function that calls the model
     def call_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
-        messages = _get_state_value(state, "messages")
+        processed_state = prompt_runnable.invoke(state)
+        if isinstance(processed_state, list):
+            messages = processed_state
+            processed_state = {}
+        elif isinstance(processed_state, dict):
+            messages = processed_state.pop("messages", None)
+        else:
+            raise ValueError(
+                "Prompt runnable must return either a list of messages or a state update dict, "
+                f"got {type(processed_state)} instead."
+            )
+
         _validate_chat_history(messages)
-        response = cast(AIMessage, model_runnable.invoke(state, config))
+        response = cast(AIMessage, model.invoke(messages, config))
         # add agent name to the AIMessage
         response.name = name
 
         if _are_more_steps_needed(state, response):
-            return {
-                "messages": [
-                    AIMessage(
-                        id=response.id,
-                        content="Sorry, need more steps to process this request.",
-                    )
-                ]
-            }
-        # We return a list, because this will get added to the existing list
-        return {"messages": [response]}
+            response = AIMessage(
+                id=response.id,
+                content="Sorry, need more steps to process this request.",
+                name=name,
+            )
+
+        # Combine the processed state (if any) with the `messages` state update (new AI message)
+        state_update = processed_state
+        state_update["messages"] = [response]
+        return state_update
 
     async def acall_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
-        messages = _get_state_value(state, "messages")
+        processed_state = await prompt_runnable.ainvoke(state)
+        if isinstance(processed_state, list):
+            messages = processed_state
+            processed_state = {}
+        elif isinstance(processed_state, dict):
+            messages = processed_state.pop("messages", None)
+        else:
+            raise ValueError(
+                "Prompt runnable must return either a list of messages or a state update dict, "
+                f"got {type(processed_state)} instead."
+            )
+
         _validate_chat_history(messages)
-        response = cast(AIMessage, await model_runnable.ainvoke(state, config))
+        response = cast(AIMessage, await model.ainvoke(messages, config))
         # add agent name to the AIMessage
         response.name = name
         if _are_more_steps_needed(state, response):
-            return {
-                "messages": [
-                    AIMessage(
-                        id=response.id,
-                        content="Sorry, need more steps to process this request.",
-                    )
-                ]
-            }
-        # We return a list, because this will get added to the existing list
-        return {"messages": [response]}
+            response = AIMessage(
+                id=response.id,
+                content="Sorry, need more steps to process this request.",
+                name=name,
+            )
+
+        # Combine the processed state (if any) with the `messages` state update (new AI message)
+        state_update = processed_state
+        state_update["messages"] = [response]
+        return state_update
 
     def generate_structured_response(
         state: StateSchema, config: RunnableConfig
