@@ -192,6 +192,18 @@ class BaseUser(typing.Protocol):
         """The permissions associated with the user."""
         ...
 
+    def __getitem__(self, key):
+        """Get a key from your minimal user dict."""
+        ...
+
+    def __contains__(self, key):
+        """Check if a property exists."""
+        ...
+
+    def __iter__(self):
+        """Iterate over the keys of the user."""
+        ...
+
 
 class StudioUser:
     """A user object that's populated from authenticated requests from the LangGraph studio.
