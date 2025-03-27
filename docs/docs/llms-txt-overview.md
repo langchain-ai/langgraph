@@ -1,8 +1,8 @@
-# LLMs-txt for LangGraph
+# LLMs-txt Overview
 
 ## Overview
 
-LangGraph provides documentation files in the [`llms.txt`](https://llmstxt.org/) format, specifically `llms.txt` and `llms-full.txt`. These files allow large language models (LLMs) and agents to access programming documentation and APIs, particularly useful within integrated development environments (IDEs).
+Below you can find a list of documentation files in the [`llms.txt`](https://llmstxt.org/) format, specifically `llms.txt` and `llms-full.txt`. These files allow large language models (LLMs) and agents to access programming documentation and APIs, particularly useful within integrated development environments (IDEs).
 
 | Language Version | llms.txt                                                                                                   | llms-full.txt                                                                                                        |
 |------------------|------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
