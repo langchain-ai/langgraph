@@ -680,7 +680,7 @@ def create_react_agent(
 
     # Define the function that calls the model
     def call_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
-        processed_state = prompt_runnable.invoke(state)
+        processed_state = prompt_runnable.invoke(state, config)
         if isinstance(processed_state, (list, ChatPromptValue)):
             messages = processed_state
             processed_state = {}
@@ -710,7 +710,7 @@ def create_react_agent(
         return state_update
 
     async def acall_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
-        processed_state = await prompt_runnable.ainvoke(state)
+        processed_state = await prompt_runnable.ainvoke(state, config)
         if isinstance(processed_state, (list, ChatPromptValue)):
             messages = processed_state
             processed_state = {}
