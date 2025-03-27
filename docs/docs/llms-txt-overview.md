@@ -12,7 +12,8 @@ LangGraph provides documentation files in the [`llms.txt`](https://llmstxt.org/)
 | LangChain JS     | [https://js.langchain.com/llms.txt](https://js.langchain.com/llms.txt)                                     | N/A                                                                                                                  |
 
 
-!!! important "Review the output"
+!!! info "Review the output"
+
    Even with access to up-to-date documentation, current state-of-the-art models may not always generate correct code. Treat the generated code as a starting point, and always review it before shipping
    code to production.
 
