@@ -203,9 +203,7 @@ declare global {
 }
 
 export function experimental_loadShare(name: string, module: unknown) {
-  if (typeof window === "undefined") {
-    throw new Error("Cannot register module in server context");
-  }
+  if (typeof window === "undefined") return;
 
   window[REQUIRE_EXTRA_SYMBOL] ??= {};
   window[REQUIRE_EXTRA_SYMBOL][name] = module;
