@@ -4,20 +4,22 @@
 
 Pregel is the foundational execution engine for LangGraph, implementing a Bulk Synchronous Parallel (BSP) computation model. Inspired by Google's original Pregel system, it provides a framework for executing computational graphs with stateful communication between nodes while maintaining strict invariants around execution order, state updates, and error handling.
 
+Before exploring the conceptual model, it's helpful to understand a few core terms. In Pregel, **nodes** are functions that process data and produce outputs. **Channels** serve as communication pathways that store and propagate values between nodes. During execution, the system organizes work into **tasks** and captures state in **checkpoints** at defined synchronization points.
+
 ## Conceptual Model
 
 Pregel follows the Bulk Synchronous Parallel model, where computation proceeds in a series of synchronized steps called "supersteps." Each superstep consists of three distinct phases:
 
-1. **Plan**: Determine which actors to execute based on pending channel updates
+1. **Plan**: Determine which actors (nodes) to execute based on pending channel updates
 2. **Execute**: Run selected actors in parallel, collecting their outputs
-3. **Update**: Apply all updates to channels atomically at the end of the step
+3. **Update**: Apply all updates to channels atomically at the end of the superstep
 
 This model ensures several critical properties:
 
-- **Determinism**: Given the same input, execution produces the same output
-- **Isolation**: Node executions within a superstep cannot observe each other's updates until the next superstep
-- **Atomicity**: All channel updates from a superstep are applied at once
-- **Checkpoint-ability**: The system state can be captured at superstep boundaries
+- **Determinism**: Given identical inputs, the system produces the same control flow. This isolates variability to the LLM outputs, not execution order or timing.
+- **Isolation**: Node executions within a superstep cannot observe each other's updates until the next superstep. This controls exactly when information flows between LLMs, preventing premature or inconsistent observations that would lead to non-deterministic behavior when timing varies between runs.
+- **Atomicity**: All channel updates from a superstep happen at once. This maintains consistent state transitions, preventing scenarios where some updates apply while related ones don't (or where updates apply in variable order). In multi-agent systems, this allows LLMs to coordinate their work on related tasks asynchronously.
+- **Checkpoint-ability**: The system captures state at superstep boundaries, allowing processes to pause, resume, and recover without losing progress. This capability makes possible human review of intermediary results, recovery from infrastructure failures, and coordination between agents operating on different timescales.
 
 ## Core Components
 
@@ -198,7 +200,10 @@ This process is depicted in the diagram below:
 │       SUPERSTEP LOOP             │
 │  ┌────────────────────────────┐  │
 │  │         PLAN               │  │
-│  │  (Identify active nodes)   │  │
+│  │ (Identify active nodes:    │  │
+│  │  pulls from triggered      │  │
+│  │  channels/edges & pushes   │  │
+│  │  from explicit Sends)      │  │
 │  └────────────┬───────────────┘  │
 │               │                  │
 │               ▼                  │
@@ -289,18 +294,15 @@ class State(TypedDict):
     decision: str
 
 # Define node functions
-def process_input(state: State) -> Sequence[tuple[str, Any]]:
+def process_input(state: State) -> dict[str, Any]:
     # Process input data
-    return (
-        ("output", ...),
-        ("branch:to:make_decision", ...),
-    )
+    return {
+        "output": ...,
+    }
 
-def make_decision(state):
+def make_decision(state: State) -> dict[str, Any]:
     # Make a decision based on processed data
-    return (
-        ('decision', ...),
-    )
+    return {"decision": ...}
 
 # StateGraph definition
 builder = StateGraph(State)
@@ -378,3 +380,15 @@ result = pregel.invoke(
     {"input": input_data},
 )
 ```
+
+## Execution Walkthrough
+
+When you call `pregel.invoke({"input": input_data})`, the instance uses your input data to update the START channel. The system then examines all channels to find which ones have changed, discovering that the START channel now has new data. This change activates the `__start__` node, which is configured to run when the `__start__` channel updates.
+
+The `__start__` node executes next, reading from the START channel and producing several outputs. It places your input into the "input" channel, initializes the "output" and "decision" channels with default values, and sends a message to the "branch:to:process_input" channel.
+
+With the first round of updates applied, Pregel again checks which channels have changed. It finds that the "branch:to:process_input" channel now has new data, which triggers the process_input node (since it has `"branch:to:process_input"` as one of its `trigger_channels`). This node runs, reading from the "input", "output" and "decision" channels (the whole state). After applying its wrapped `process_input` function, it produces an update for a single channel (`"output"`). Its update is applied to the channel at the end of the superstep. Since we defined a directed edge from `"process_input"` to `"make_decision"`, Pregel also activates the "branch:to:make_decision" channel to ensure that that node is executed in the next superstep. Since no other nodes were triggered, the superstep ends.
+
+In the next superstep, Pregel identifies that the "branch:to:make_decision" channel has changed, which activates the `make_decision` node (since it has `"branch:to:make_decision"` as one of its `trigger_channels`). This node runs, reading the complete state again. After applying its wrapped `make_decision` function, it produces an update for the "decision" channel. This update is applied at the end of the superstep. Pregel then checks if any more nodes should run, but finds none - no channels have new updates that would trigger additional nodes, and no more edges were defined in the graph. Since no other nodes were triggered, this superstep ends.
+
+With no more work to do, Pregel concludes the execution and returns the final values from the output channels specified when creating the graph: "input", "output", and "decision".
