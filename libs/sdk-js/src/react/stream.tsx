@@ -782,6 +782,30 @@ export function useStream<
       submittingRef.current = true;
       abortRef.current = new AbortController();
 
+      // Unbranch things
+      const newPath = submitOptions?.checkpoint?.checkpoint_id
+        ? branchByCheckpoint[submitOptions?.checkpoint?.checkpoint_id]?.branch
+        : undefined;
+
+      if (newPath != null) setBranch(newPath ?? "");
+
+      // Assumption: we're setting the initial value
+      // Used for instant feedback
+      setStreamValues(() => {
+        const values = { ...historyValues };
+
+        if (submitOptions?.optimisticValues != null) {
+          return {
+            ...values,
+            ...(typeof submitOptions.optimisticValues === "function"
+              ? submitOptions.optimisticValues(values)
+              : submitOptions.optimisticValues),
+          };
+        }
+
+        return values;
+      });
+
       let usableThreadId = threadId;
       if (!usableThreadId) {
         const thread = await client.threads.create();
@@ -817,30 +841,6 @@ export function useStream<
         checkpoint,
         streamMode,
       }) as AsyncGenerator<EventStreamEvent>;
-
-      // Unbranch things
-      const newPath = submitOptions?.checkpoint?.checkpoint_id
-        ? branchByCheckpoint[submitOptions?.checkpoint?.checkpoint_id]?.branch
-        : undefined;
-
-      if (newPath != null) setBranch(newPath ?? "");
-
-      // Assumption: we're setting the initial value
-      // Used for instant feedback
-      setStreamValues(() => {
-        const values = { ...historyValues };
-
-        if (submitOptions?.optimisticValues != null) {
-          return {
-            ...values,
-            ...(typeof submitOptions.optimisticValues === "function"
-              ? submitOptions.optimisticValues(values)
-              : submitOptions.optimisticValues),
-          };
-        }
-
-        return values;
-      });
 
       let streamError: StreamError | undefined;
       for await (const { event, data } of run) {
