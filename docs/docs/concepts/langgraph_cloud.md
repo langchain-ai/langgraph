@@ -19,6 +19,10 @@ Resource Allocation:
 | Development         | 1 CPU   | 1 GB       | Up to 1 container   |
 | Production          | 2 CPU   | 2 GB       | Up to 10 containers |
 
+CPU and memory resources are per container.
+
+For **Production type** deployments, resources can be manually increased on a case-by-case basis depending on use case and capacity constraints. Contact support@langchain.dev to request an increase in resources.
+
 See the [how-to guide](../cloud/deployment/cloud.md#create-new-deployment) for creating a new deployment.
 
 ## Revision
@@ -34,6 +38,8 @@ A dedicated database is automatically created for each deployment. The database 
 When defining a graph to be deployed to LangGraph Cloud SaaS, a [checkpointer](../concepts/persistence.md#checkpointer-libraries) should not be configured by the user. Instead, a checkpointer is automatically configured for the graph.
 
 There is no direct access to the database. All access to the database occurs through the LangGraph Server APIs.
+
+The database is never deleted until the deployment itself is deleted. See [Automatic Deletion](#automatic-deletion) for additional details.
 
 ## Autoscaling
 `Production` type deployments automatically scale up to 10 containers. Scaling is based on the current request load for a single container. Specifically, the autoscaling implementation scales the deployment so that each container is processing about 10 concurrent requests. For example... 
@@ -57,7 +63,7 @@ Infrastructure for [deployments](#deployment) and [revisions](#revision) are pro
 
 ## LangSmith Integration
 
-A [LangSmith](https://docs.smith.langchain.com/) tracing project is automatically created for each deployemnt. The tracing project has the same name as the deployment. When creating a deployment, the `LANGCHAIN_TRACING_V2` and `LANGCHAIN_API_KEY` environment variables do not need to be specified; they are set internally, automatically. Traces are created for each run and are emitted to the tracing project automatically.
+A [LangSmith](https://docs.smith.langchain.com/) tracing project is automatically created for each deployemnt. The tracing project has the same name as the deployment. When creating a deployment, the `LANGCHAIN_TRACING` and `LANGSMITH_API_KEY`/`LANGCHAIN_API_KEY` environment variables do not need to be specified; they are set internally, automatically. Traces are created for each run and are emitted to the tracing project automatically.
 
 When a deployment is deleted, the traces and the tracing project are not deleted.
 
