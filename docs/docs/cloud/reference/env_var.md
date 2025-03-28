@@ -2,6 +2,22 @@
 
 The LangGraph Cloud Server supports specific environment variables for configuring a deployment.
 
+## `BG_JOB_ISOLATED_LOOPS`
+
+Set `BG_JOB_ISOLATED_LOOPS` to `True` to execute background runs in an isolated event loop separate from the serving API event loop.
+
+This environment variable should be set to `True` if the implementation of a graph/node contains synchronous code. In this situation, the synchronous code will block the serving API event loop, which may cause the API to be unavailable. A symptom of an unavailable API is continuous application restarts due to failing health checks.
+
+Defaults to `False`.
+
+## `BG_JOB_TIMEOUT_SECS`
+
+The timeout of a background run can be increased. However, the infrastructure for a Cloud SaaS deployment enforces a 1 hour timeout limit for API requests. This means the connection between client and server will timeout after 1 hour. This is not configurable.
+
+A background run can execute for longer than 1 hour, but a client must reconnect to the server (e.g. join stream via `POST /threads/{thread_id}/runs/{run_id}/stream`) to retrieve output from the run if the run is taking longer than 1 hour.
+
+Defaults to `3600`.
+
 ## `DD_API_KEY`
 
 Specify `DD_API_KEY` (your [Datadog API Key](https://docs.datadoghq.com/account_management/api-app-keys/)) to automatically enable Datadog tracing for the deployment. Specify other [`DD_*` environment variables](https://ddtrace.readthedocs.io/en/stable/configuration.html) to configure the tracing instrumentation.
@@ -27,6 +43,10 @@ For [Bring Your Own Cloud (BYOC)](../../concepts/bring_your_own_cloud.md) deploy
 Set this environment variable to have a BYOC deployment send traces to a self-hosted LangSmith instance. The value of `LANGSMITH_RUNS_ENDPOINTS` is a JSON string: `{"<SELF_HOSTED_LANGSMITH_HOSTNAME>":"<LANGSMITH_API_KEY>"}`.
 
 `SELF_HOSTED_LANGSMITH_HOSTNAME` is the hostname of the self-hosted LangSmith instance. It must be accessible to the BYOC deployment. `LANGSMITH_API_KEY` is a LangSmith API generated from the self-hosted LangSmith instance.
+
+## `LOG_LEVEL`
+
+Configure [log level](https://docs.python.org/3/library/logging.html#logging-levels). Defaults to `INFO`.
 
 ## `N_JOBS_PER_WORKER`
 
@@ -55,3 +75,9 @@ Database Connectivity:
 
 - The externally managed Postgres instance must be accessible by the LangGraph Server service in the ECS cluster. The BYOC user is responsible for ensuring connectivity.
 - For example, if an AWS RDS Postgres instance is provisioned, it can be provisioned in the same VPC (`langgraph-cloud-vpc`) as the ECS cluster with the `langgraph-cloud-service-sg` security group to ensure connectivity.
+
+## `REDIS_URI_CUSTOM`
+
+For [Bring Your Own Cloud (BYOC)](../../concepts/bring_your_own_cloud.md) deployments only.
+
+Specify `REDIS_URI_CUSTOM` to use an externally managed Redis instance. The value of `REDIS_URI_CUSTOM` must be a valid [Redis connection URI](https://redis-py.readthedocs.io/en/stable/connections.html#redis.Redis.from_url).
