@@ -800,7 +800,7 @@ export function useStream<
       // @ts-expect-error
       if (checkpoint != null) delete checkpoint.thread_id;
 
-      const run = (await client.runs.stream(usableThreadId, assistantId, {
+      const run = client.runs.stream(usableThreadId, assistantId, {
         input: values as Record<string, unknown>,
         config: submitOptions?.config,
         command: submitOptions?.command,
@@ -816,7 +816,7 @@ export function useStream<
 
         checkpoint,
         streamMode,
-      })) as AsyncGenerator<EventStreamEvent>;
+      }) as AsyncGenerator<EventStreamEvent>;
 
       // Unbranch things
       const newPath = submitOptions?.checkpoint?.checkpoint_id
