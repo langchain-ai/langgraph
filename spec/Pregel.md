@@ -27,14 +27,13 @@ Abstract interface defining the contract for all Pregel implementations:
 
 ```python
 class PregelProtocol(Protocol):
-    def invoke(self, input: Any, config: Optional[dict] = None, **kwargs: Any) -> Any: ...
+    def invoke(self, input: Any, config: Optional[dict] = None) -> Any: ...
 
     def stream(
         self,
         input: Any,
         config: Optional[dict] = None,
-        stream_mode: Optional[StreamMode] = None,
-        **kwargs: Any,
+        stream_mode: StreamMode = 'updates',
     ) -> Iterator[Any]: ...
 
     def get_state(self, thread_id: Optional[str] = None) -> Any: ...
@@ -50,40 +49,36 @@ Represents an actor in the system with the following properties:
 
 ```python
 class PregelNode:
-    def __init__(
-        self,
-        name: str,
-        action: PregelExecutable,
-        *,
-        subscribe: Optional[Collection[str]] = None,
-        trigger: Optional[str] = None,
-        writers: Optional[Collection[str]] = None,
-        retry_policy: Optional[RetryPolicy] = None,
-    ) -> None: ...
+    # name of the node, unique within the graph
+    name: str
+    # function to execute when the node is triggered
+    action: Runnable
+    # functions that convert node output into channel updates
+    writers: Sequence[Runnable]
+    # channels that trigger the node when updated
+    trigger_channels: Sequence[str]
+    # channels the node reads when triggered
+    read_channels: Sequence[str]
+    # retry policy for the node
+    retry_policy: RetryPolicy
+    # cache policy for the node
+    cache_policy: CachePolicy
 ```
-
-Key properties:
-
-- **name**: Unique identifier for the node
-- **action**: Function to execute when the node is triggered
-- **subscribe**: Channel names this node listens to for updates
-- **trigger**: Special condition for node execution
-- **writers**: Channels this node can write to (for validation)
-- **retry_policy**: Strategy for handling execution failures
 
 ### Channels
 
 Communication paths that store values and propagate them between nodes:
 
 ```python
-class Channel(Protocol):
-    def get_value(self) -> Any: ...
+class Channel(Protocol, Generic[V, U, C]):
+    def get(self) -> V: ...
 
-    def update(self, value: Any) -> bool: ...
+    def update(self, updates: Sequence[U]) -> bool: ...
 
-    def checkpoint(self) -> Any: ...
+    def checkpoint(self) -> C: ...
 
-    def from_checkpoint(self, value: Any) -> None: ...
+    @classmethod
+    def from_checkpoint(cls, value: C) -> Channel: ...
 ```
 
 Each channel type implements this interface with specific behaviors:
@@ -101,21 +96,27 @@ Each channel type implements this interface with specific behaviors:
 Units of work representing computations to execute:
 
 ```python
-class PregelTask:
-    def __init__(
-        self,
-        node: str,
-        trigger: Optional[str] = None,
-        retry_policy: Optional[RetryPolicy] = None,
-    ) -> None: ...
-
 class PregelExecutableTask:
-    def __init__(
-        self,
-        task: PregelTask,
-        inputs: dict[str, Any],
-        context: dict[str, Any],
-    ) -> None: ...
+    # task parameters (primary key)
+    path: tuple[Union[str, int, tuple], ...]
+    # hash of task parameters
+    id: str
+    # name of the node
+    name: str
+    # function to execute
+    proc: Runnable
+    # input to the node (1st arg)
+    input: Any
+    # config for the node (2nd arg)
+    config: RunnableConfig
+    # functions that convert node output into channel updates
+    writers: Sequence[Runnable] = ()
+    # accumulates channel updates, tuple (channel, value)
+    writes: deque[tuple[str, Any]]
+    # retry policy for the task
+    retry_policy: Optional[RetryPolicy]
+    # cache policy for the task
+    cache_policy: Optional[CachePolicy]
 ```
 
 ### Checkpoints
@@ -123,12 +124,39 @@ class PregelExecutableTask:
 Snapshots of execution state at superstep boundaries:
 
 ```python
+class SendProtocol(Protocol):
+    # node to execute
+    node: str
+    # input to the node
+    arg: Any
+
 class Checkpoint:
-    def __init__(self, channel_values: dict[str, Any]) -> None: ...
+    """State snapshot at a given point in time."""
 
-    def get_values(self) -> dict[str, Any]: ...
-
-    def update(self, channel_values: dict[str, Any]) -> None: ...
+    v: int
+    """The version of the checkpoint format. Currently 2."""
+    id: str
+    """The ID of the checkpoint. This is both unique and monotonically
+    increasing, so can be used for sorting checkpoints from first to last."""
+    ts: str
+    """The timestamp of the checkpoint in ISO 8601 format."""
+    channel_values: dict[str, Any]
+    """The values of the channels at the time of the checkpoint.
+    Mapping from channel name to deserialized channel snapshot value.
+    """
+    channel_versions: dict[str, str]
+    """The versions of the channels at the time of the checkpoint.
+    The keys are channel names and the values are monotonically increasing
+    version strings for each channel.
+    """
+    versions_seen: dict[str, dict[str, str]]
+    """Map from node ID to map from channel name to version seen.
+    This keeps track of the versions of the channels that each node has seen.
+    Used to determine which nodes to execute next.
+    """
+    pending_sends: List[SendProtocol]
+    """List of inputs pushed to nodes but not yet processed.
+    Cleared by the next checkpoint."""
 ```
 
 ## Execution Flow
@@ -172,31 +200,31 @@ This process is depicted in the diagram below:
 │  │         PLAN               │  │
 │  │  (Identify active nodes)   │  │
 │  └────────────┬───────────────┘  │
-│               │                   │
-│               ▼                   │
+│               │                  │
+│               ▼                  │
 │  ┌────────────────────────────┐  │
 │  │        EXECUTE             │  │
 │  │  (Run nodes in parallel)   │  │
 │  └────────────┬───────────────┘  │
-│               │                   │
-│               ▼                   │
+│               │                  │
+│               ▼                  │
 │  ┌────────────────────────────┐  │
 │  │         UPDATE             │  │
 │  │  (Apply channel updates)   │  │
 │  └────────────┬───────────────┘  │
-│               │                   │
-│               ▼                   │
+│               │                  │
+│               ▼                  │
 │  ┌────────────────────────────┐  │
 │  │       CHECKPOINT           │  │
 │  │  (Save current state)      │  │
 │  └────────────┬───────────────┘  │
-│               │                   │
-│               ▼                   │
-│      [More nodes active?]         │
-│      /                \           │
-│    Yes                No          │
-│     │                  │          │
-│     └──────────────────┘          │
+│               │                  │
+│               ▼                  │
+│      [More nodes active?]        │
+│      /                \          │
+│    Yes                No         │
+│     │                  │         │
+│     └──────────────────┘         │
 └──────────────────┬───────────────┘
                    │
                    ▼
@@ -211,6 +239,8 @@ Pregel supports different streaming options to provide visibility into execution
 
 - **values**: Stream the complete state after each superstep
 - **updates**: Stream state deltas after each node execution
+- **messages**: Stream LLM messages token-by-token
+- **custom**: Stream user-defined chunks emitted by nodes
 - **debug**: Stream comprehensive execution information for debugging
 
 Each mode has different performance characteristics and use cases.
@@ -248,7 +278,7 @@ Based on LangGraph's test suite, Pregel maintains the following invariants:
 6. **Termination Guarantees**:
    - Execution always terminates for acyclic graphs
    - Cyclic graphs require explicit exit conditions to ensure termination
-   - Execution timeouts prevent infinite loops
+   - Execution timeouts and step limits prevent infinite loops
 
 ## Implementation Notes
 
