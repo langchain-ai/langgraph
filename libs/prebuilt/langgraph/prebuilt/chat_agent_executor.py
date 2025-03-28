@@ -673,6 +673,8 @@ def create_react_agent(
     if _should_bind_tools(model, tool_classes) and tool_calling_enabled:
         model = cast(BaseChatModel, model).bind_tools(tool_classes)
 
+    model_runnable = _get_prompt_runnable(prompt) | model
+
     # If any of the tools are configured to return_directly after running,
     # our graph needs to check if these were called
     should_return_direct = {t.name for t in tool_classes if t.return_direct}
@@ -707,7 +709,6 @@ def create_react_agent(
                 f"Expected input to call_model to have {input_messages_key}, but got {state}"
             )
 
-        model_runnable = _get_prompt_runnable(prompt) | model
         _validate_chat_history(messages)
         # we're passing messages under `messages` key, as this is expected by the prompt
         if isinstance(state_schema, type) and issubclass(state_schema, BaseModel):
@@ -741,7 +742,6 @@ def create_react_agent(
                 f"Expected input to call_model to have {input_messages_key}, but got {state}"
             )
 
-        model_runnable = _get_prompt_runnable(prompt) | model
         _validate_chat_history(messages)
         # we're passing messages under `messages` key, as this is expected by the prompt
         if isinstance(state_schema, type) and issubclass(state_schema, BaseModel):
