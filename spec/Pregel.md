@@ -280,120 +280,101 @@ Based on LangGraph's test suite, Pregel maintains the following invariants:
    - Cyclic graphs require explicit exit conditions to ensure termination
    - Execution timeouts and step limits prevent infinite loops
 
-## Implementation Notes
-
-### Type Safety
-
-Pregel enforces type safety through:
-
-- Input/output schema validation
-- Channel type checking for updates
-- Runtime validation of node return values
-
-### Concurrency Model
-
-Pregel balances parallelism with determinism:
-
-- Nodes within a superstep can execute in parallel
-- Channel updates are collected and applied sequentially
-- Execution order is deterministic despite parallel processing
-
-### Performance Optimizations
-
-- **Eager Planning**: Pregel identifies all active nodes at the start of a superstep
-- **Task Batching**: Similar tasks can be batched for efficient execution
-- **Lazy Checkpointing**: Only modified channels are included in checkpoints
-- **Channel-specific optimizations**: Different channel types use specialized storage strategies
-
-### Testing Approach
-
-The test suite for Pregel focuses on:
-
-1. **Functional correctness**: Ensuring proper node execution and state updates
-2. **Concurrency safety**: Verifying parallel execution does not affect determinism
-3. **Error handling**: Confirming failures are properly managed
-4. **Checkpoint fidelity**: Validating checkpoint creation and restoration
-5. **Edge cases**: Testing unusual graph topologies and execution patterns
-
-## Reimplementation Guidance
-
-When reimplementing Pregel from scratch, consider the following approach:
-
-1. Start with a simplified sequential execution model that maintains basic invariants
-2. Add channel implementations one at a time, focusing on correctness
-3. Implement the checkpoint system with proper serialization
-4. Add parallel execution with careful attention to update ordering
-5. Implement error handling and retry policies
-6. Optimize for performance and resource usage
-
-The most challenging aspects are:
-
-- Maintaining determinism with parallel execution
-- Ensuring checkpoint consistency
-- Properly handling error cases
-- Managing memory usage for large state objects
-
-## Example Usage
+## Example Usage: StateGraph
 
 ```python
+class State(TypedDict):
+    input: str
+    output: str
+    decision: str
+
 # Define node functions
-def process_input(state):
+def process_input(state: State) -> Sequence[tuple[str, Any]]:
     # Process input data
-    return {"output_channel": processed_data}
+    return (
+        ("output", ...),
+        ("branch:to:make_decision", ...),
+    )
 
 def make_decision(state):
     # Make a decision based on processed data
-    return {"decision_channel": decision}
+    return (
+        ('decision', ...),
+    )
 
-# Create PregelNodes
-input_node = PregelNode(
-    name="input_processor",
-    action=process_input,
-    subscribe=["input_channel"],
-    writers=["output_channel"]
-)
+# StateGraph definition
+builder = StateGraph(State)
+builder.add_node("process_input", process_input)
+builder.add_node("make_decision", make_decision)
+builder.add_edge(START, "process_input")
+builder.add_edge("process_input", "make_decision")
+```
 
-decision_node = PregelNode(
-    name="decision_maker",
-    action=make_decision,
-    subscribe=["output_channel"],
-    writers=["decision_channel"]
-)
+### How is it compiled to Pregel?
 
+```python
 # Create channels
 channels = {
-    "input_channel": LastValue(),
-    "output_channel": LastValue(),
-    "decision_channel": LastValue()
+    # the reserved entrypoint channel
+    START: EphemeralValue(),
+    # one channel per key in state schema
+    "input": LastValue(),
+    "output": LastValue(),
+    "decision": LastValue(),
+    # each node gets an "inbox" channel to trigger it
+    "branch:to:process_input": EphemeralValue(),
+    "branch:to:make_decision": EphemeralValue(),
 }
+
+# Create PregelNodes
+process_input_node = PregelNode(
+    name="process_input",
+    action=process_input,
+    trigger_channels=["branch:to:process_input"],
+    read_channels=["input", "output", "decision"],
+)
+
+make_decision_node = PregelNode(
+    name="make_decision",
+    action=make_decision,
+    trigger_channels=["branch:to:make_decision"],
+    read_channels=["input", "output", "decision"],
+)
+
+# Define the start node
+
+def __start__(state: State) -> Sequence[tuple[str, Any]]:
+    # Trigger the first node, update the state channels
+    return (
+        ("branch:to:process_input", ...),
+        ("input", state["input"]),
+        ("output", state["output"]),
+        ("decision", state["decision"]),
+    )
+
+__start__node = PregelNode(
+    name=START,
+    action=__start__,
+    trigger_channels=[START],
+    read_channels=[START],
+)
 
 # Create Pregel instance
 pregel = Pregel(
-    nodes={"input_processor": input_node, "decision_maker": decision_node},
     channels=channels,
-    checkpoint_factories={"memory": memory_checkpointer_factory}
+    nodes={
+        "process_input": process_input_node,
+        "make_decision": make_decision_node,
+        START: __start__node,
+    },
+    # the entrypoint channel
+    input_channels=[START],
+    # the keys in state schema are the output channels
+    output_channels=["input", "output", "decision"],
 )
 
 # Invoke the graph
 result = pregel.invoke(
-    {"input_channel": input_data},
-    config={"thread_id": "conversation_123"}
+    {"input": input_data},
 )
-
-# Stream execution with updates
-for update in pregel.stream(
-    {"input_channel": input_data},
-    config={"thread_id": "conversation_456"},
-    stream_mode="updates"
-):
-    print(update)
 ```
-
-## Related Components
-
-Pregel interacts closely with:
-
-- **StateGraph**: High-level API that compiles to Pregel
-- **Channels**: Communication primitives used by Pregel
-- **Checkpoint System**: Provides persistence for Pregel execution
-- **Human-in-the-Loop**: Uses Pregel's checkpointing for interruption/resumption
