@@ -149,6 +149,9 @@ class StateUpdate(NamedTuple):
 
 
 class PregelTask(NamedTuple):
+    """
+    !!! version-added "Added in version 0.2.24."
+    """
     id: str
     name: str
     path: tuple[Union[str, int, tuple], ...]
@@ -166,6 +169,9 @@ else:
 
 @dataclasses.dataclass(**_T_DC_KWARGS)
 class PregelExecutableTask:
+    """
+    !!! version-added "Added in version 0.2.24."
+    """
     name: str
     input: Any
     proc: Runnable
@@ -182,7 +188,9 @@ class PregelExecutableTask:
 
 
 class StateSnapshot(NamedTuple):
-    """Snapshot of the state of the graph at the beginning of a step."""
+    """Snapshot of the state of the graph at the beginning of a step.
+    !!! version-added "Added in version 0.2.24."
+    """
 
     values: Union[dict[str, Any], Any]
     """Current values of channels"""
@@ -202,6 +210,8 @@ class StateSnapshot(NamedTuple):
 
 class Send:
     """A message or packet to send to a specific node in the graph.
+
+    !!! version-added "Added in version 0.2.24.
 
     The `Send` class is used within a `StateGraph`'s conditional edges to
     dynamically invoke a node with a custom state at the next step.
