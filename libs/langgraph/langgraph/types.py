@@ -117,9 +117,12 @@ class RetryPolicy(NamedTuple):
     jitter: bool = True
     """Whether to add random jitter to the interval between retries."""
     retry_on: Union[
-        Type[Exception], Sequence[Type[Exception]], Callable[[Exception], bool]
+        Type[Exception],
+        Sequence[Type[Exception]],
+        Callable[[Exception], bool],
+        dict[Type[Exception], Callable[[Any, Exception], None]],
     ] = default_retry_on
-    """List of exception classes that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
+    """List of exception classes that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry, or a dictionary mapping exception classes to callables that can modify state before retrying. The state-modifying callables should accept (state, exception) as parameters."""
 
 
 class CachePolicy(NamedTuple):
