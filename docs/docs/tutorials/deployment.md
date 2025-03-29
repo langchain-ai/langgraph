@@ -17,7 +17,17 @@ Get started deploying your LangGraph applications locally or on the cloud with
 
 ## Deployment Options
 
-- [Self-Hosted Lite](../concepts/self_hosted.md): A free (up to 1 million nodes executed per year), limited version of LangGraph Platform that you can run locally or in a self-hosted manner
-- [Cloud SaaS](../concepts/langgraph_cloud.md): Hosted as part of LangSmith.
-- [Bring Your Own Cloud](../concepts/bring_your_own_cloud.md): We manage the infrastructure, so you don't have to, but the infrastructure all runs within your cloud.
-- [Self-Hosted Enterprise](../concepts/self_hosted.md): Completely managed by you.
+- [Cloud SaaS](../concepts/langgraph_cloud.md): Connect GitHub repositories to LangSmith and deploy LangGraph servers to LangChain's cloud. We manage everything.
+- [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md): Manage deployments from LangSmith, but deploy LangGraph servers to your cloud. We manage LangSmith, you manage the deployments. 
+- [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md): Manage deployments from Self-Hosted LangSmith and deploy LangGraph servers to your cloud. You manage everything.
+- [Standalone Container](../concepts/langgraph_standalone_container.md): Deploy LangGraph server Docker images however you like.
+
+### Quick Comparison
+|                      | **Cloud SaaS** | **Self-Hosted Data Plane** | **Self-Hosted Control Plane** | **Standalone Container** |
+|----------------------|----------------|----------------------------|-------------------------------|--------------------------|
+| **Description**          | User connects GitHub repository to LangSmith and deploys via the Deployments UI. | User builds a Docker image using the LangGraph CLI. User deploys via the Deployments UI to their cloud. | User builds a Docker image using the LangGraph CLI. User deploys via the Deployments UI to their cloud. | User builds a Docker image using the LangGraph CLI. User deploys a standalone instance of the LangGraph server using any container deployment tooling. |
+| **LangSmith**            | Requires LangSmith SaaS | Requires LangSmith SaaS | Requires Self-Hosted LangSmith | Optional |
+| **Deployments UI**       | Yes | Yes | Yes | No |
+| **CI/CD**                | Build process is managed internally by the platform. | User builds image and manages CI/CD workflow externally. | User builds image and manages CI/CD workflow externally. | User builds image and manages CI/CD workflow externally. |
+| **Data Residency**       | LangChain’s cloud | User’s cloud | User’s cloud | User’s cloud |
+| **Required Permissions** | None | See details [here](). | See details [here](). | None |
