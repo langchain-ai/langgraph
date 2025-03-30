@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph-cli"
-version = "0.1.76"
+version = "0.1.81"
 description = "CLI for interacting with LangGraph API"
 authors = []
 license = "MIT"
@@ -14,7 +14,7 @@ langgraph = "langgraph_cli.cli:cli"
 [tool.poetry.dependencies]
 python = "^3.9.0,<4.0"
 click = "^8.1.7"
-langgraph-api = { version = ">=0.0.27,<0.1.0", optional = true, python = ">=3.11,<4.0" }
+langgraph-api = { version = ">=0.0.32,<0.1.0", optional = true, python = ">=3.11,<4.0" }
 python-dotenv = { version = ">=0.8.0", optional = true }
 
 [tool.poetry.group.dev.dependencies]

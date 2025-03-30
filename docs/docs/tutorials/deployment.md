@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # Deployment
 
 Get started deploying your LangGraph applications locally or on the cloud with

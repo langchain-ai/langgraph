@@ -1,4 +1,4 @@
-import functools
+import binascii
 import itertools
 import sys
 from collections import defaultdict, deque
@@ -19,15 +19,16 @@ from typing import (
     cast,
     overload,
 )
-from uuid import UUID
 
 from langchain_core.callbacks import Callbacks
 from langchain_core.callbacks.manager import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables.config import RunnableConfig
+from xxhash import xxh3_128_hexdigest
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
+    ChannelVersions,
     Checkpoint,
     PendingWrite,
     V,
@@ -233,10 +234,21 @@ def apply_writes(
     channels: Mapping[str, BaseChannel],
     tasks: Iterable[WritesProtocol],
     get_next_version: Optional[GetNextVersion],
-) -> dict[str, list[Any]]:
+) -> tuple[dict[str, list[Any]], set[str]]:
     """Apply writes from a set of tasks (usually the tasks from a Pregel step)
     to the checkpoint and channels, and return managed values writes to be applied
-    externally."""
+    externally.
+
+    Args:
+        checkpoint: The checkpoint to update.
+        channels: The channels to update.
+        tasks: The tasks to apply writes from.
+        get_next_version: Optional function to determine the next version of a channel.
+
+    Returns:
+        A tuple containing the managed values writes to be applied externally, and
+        the set of channels that were updated in this step.
+    """
     # sort tasks on path, to ensure deterministic order for update application
     # any path parts after the 3rd are ignored for sorting
     # (we use them for eg. task ids which aren't good for sorting)
@@ -312,15 +324,14 @@ def apply_writes(
     # Channels that weren't updated in this step are notified of a new step
     if bump_step:
         for chan in channels:
-            if chan not in updated_channels:
-                if channels[chan].update([]) and get_next_version is not None:
+            if channels[chan].is_available() and chan not in updated_channels:
+                if channels[chan].update(EMPTY_SEQ) and get_next_version is not None:
                     checkpoint["channel_versions"][chan] = get_next_version(
                         max_version,
                         channels[chan],
                     )
-
     # Return managed values writes to be applied externally
-    return pending_writes_by_managed
+    return pending_writes_by_managed, updated_channels
 
 
 @overload
@@ -337,6 +348,8 @@ def prepare_next_tasks(
     store: Literal[None] = None,
     checkpointer: Literal[None] = None,
     manager: Literal[None] = None,
+    trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
+    updated_channels: Optional[set[str]] = None,
 ) -> dict[str, PregelTask]: ...
 
 
@@ -354,6 +367,8 @@ def prepare_next_tasks(
     store: Optional[BaseStore],
     checkpointer: Optional[BaseCheckpointSaver],
     manager: Union[None, ParentRunManager, AsyncParentRunManager],
+    trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
+    updated_channels: Optional[set[str]] = None,
 ) -> dict[str, PregelExecutableTask]: ...
 
 
@@ -370,10 +385,37 @@ def prepare_next_tasks(
     store: Optional[BaseStore] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
+    trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
+    updated_channels: Optional[set[str]] = None,
 ) -> Union[dict[str, PregelTask], dict[str, PregelExecutableTask]]:
     """Prepare the set of tasks that will make up the next Pregel step.
-    This is the union of all PUSH tasks (Sends) and PULL tasks (nodes triggered
-    by edges)."""
+
+    Args:
+        checkpoint: The current checkpoint.
+        pending_writes: The list of pending writes.
+        processes: The mapping of process names to PregelNode instances.
+        channels: The mapping of channel names to BaseChannel instances.
+        managed: The mapping of managed value names to functions.
+        config: The runnable configuration.
+        step: The current step.
+        for_execution: Whether the tasks are being prepared for execution.
+        store: An instance of BaseStore to make it available for usage within tasks.
+        checkpointer: Checkpointer instance used for saving checkpoints.
+        manager: The parent run manager to use for the tasks.
+        trigger_to_nodes: Optional: Mapping of channel names to the set of nodes
+            that are can be triggered by that channel.
+        updated_channels: Optional. Set of channel names that have been updated during
+            the previous step. Using in conjunction with trigger_to_nodes to speed
+            up the process of determining which nodes should be triggered in the next
+            step.
+
+    Returns:
+        A dictionary of tasks to be executed. The keys are the task ids and the values
+        are the tasks themselves. This is the union of all PUSH tasks (Sends)
+        and PULL tasks (nodes triggered by edges).
+    """
+    checkpoint_id_bytes = binascii.unhexlify(checkpoint["id"].replace("-", ""))
+    null_version = checkpoint_null_version(checkpoint)
     tasks: list[Union[PregelTask, PregelExecutableTask]] = []
     # Consume pending_sends from previous step
     for idx, _ in enumerate(checkpoint["pending_sends"]):
@@ -381,6 +423,8 @@ def prepare_next_tasks(
             (PUSH, idx),
             None,
             checkpoint=checkpoint,
+            checkpoint_id_bytes=checkpoint_id_bytes,
+            checkpoint_null_version=null_version,
             pending_writes=pending_writes,
             processes=processes,
             channels=channels,
@@ -393,13 +437,36 @@ def prepare_next_tasks(
             manager=manager,
         ):
             tasks.append(task)
+
+    # This section is an optimization that allows which nodes will be active
+    # during the next step.
+    # When there's information about:
+    # 1. Which channels were updated in the previous step
+    # 2. Which nodes are triggered by which channels
+    # Then we can determine which nodes should be triggered in the next step
+    # without having to cycle through all nodes.
+    if updated_channels and trigger_to_nodes:
+        triggered_nodes: set[str] = set()
+        # Get all nodes that have triggers associated with an updated channel
+        for channel in updated_channels:
+            if node_ids := trigger_to_nodes.get(channel):
+                triggered_nodes.update(node_ids)
+        # Sort the nodes to ensure deterministic order
+        candidate_nodes: Iterable[str] = sorted(triggered_nodes)
+    elif not checkpoint["channel_versions"]:
+        candidate_nodes = ()
+    else:
+        candidate_nodes = processes.keys()
+
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
-    for name in processes:
+    for name in candidate_nodes:
         if task := prepare_single_task(
             (PULL, name),
             None,
             checkpoint=checkpoint,
+            checkpoint_id_bytes=checkpoint_id_bytes,
+            checkpoint_null_version=null_version,
             pending_writes=pending_writes,
             processes=processes,
             channels=channels,
@@ -415,11 +482,16 @@ def prepare_next_tasks(
     return {t.id: t for t in tasks}
 
 
+PUSH_TRIGGER = (PUSH,)
+
+
 def prepare_single_task(
     task_path: tuple[Any, ...],
     task_id_checksum: Optional[str],
     *,
     checkpoint: Checkpoint,
+    checkpoint_id_bytes: bytes,
+    checkpoint_null_version: Optional[V],
     pending_writes: list[PendingWrite],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
@@ -433,9 +505,9 @@ def prepare_single_task(
 ) -> Union[None, PregelTask, PregelExecutableTask]:
     """Prepares a single task for the next Pregel step, given a task path, which
     uniquely identifies a PUSH or PULL task within the graph."""
-    checkpoint_id = UUID(checkpoint["id"]).bytes
     configurable = config.get(CONF, {})
     parent_ns = configurable.get(CONFIG_KEY_CHECKPOINT_NS, "")
+    task_id_func = _xxhash_str if checkpoint["v"] > 1 else _uuid5_str
 
     if task_path[0] == PUSH and isinstance(task_path[-1], Call):
         # (PUSH, parent task path, idx of PUSH write, id of parent task, Call)
@@ -446,10 +518,10 @@ def prepare_single_task(
         if name is None:
             raise ValueError("`call` functions must have a `__name__` attribute")
         # create task id
-        triggers = [PUSH]
+        triggers: Sequence[str] = PUSH_TRIGGER
         checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
-        task_id = _uuid5_str(
-            checkpoint_id,
+        task_id = task_id_func(
+            checkpoint_id_bytes,
             checkpoint_ns,
             str(step),
             name,
@@ -507,6 +579,7 @@ def prepare_single_task(
                         CONFIG_KEY_CHECKPOINT_ID: None,
                         CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                         CONFIG_KEY_SCRATCHPAD: _scratchpad(
+                            config[CONF].get(CONFIG_KEY_SCRATCHPAD),
                             pending_writes,
                             task_id,
                         ),
@@ -539,12 +612,12 @@ def prepare_single_task(
                 )
                 return
             # create task id
-            triggers = [PUSH]
+            triggers = PUSH_TRIGGER
             checkpoint_ns = (
                 f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
             )
-            task_id = _uuid5_str(
-                checkpoint_id,
+            task_id = task_id_func(
+                checkpoint_id_bytes,
                 checkpoint_ns,
                 str(step),
                 packet.node,
@@ -616,6 +689,7 @@ def prepare_single_task(
                             CONFIG_KEY_CHECKPOINT_ID: None,
                             CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                             CONFIG_KEY_SCRATCHPAD: _scratchpad(
+                                config[CONF].get(CONFIG_KEY_SCRATCHPAD),
                                 pending_writes,
                                 task_id,
                             ),
@@ -640,21 +714,17 @@ def prepare_single_task(
         if name not in processes:
             return
         proc = processes[name]
-        version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
-        null_version = version_type()  # type: ignore[misc]
-        if null_version is None:
+        if checkpoint_null_version is None:
             return
-        seen = checkpoint["versions_seen"].get(name, {})
         # If any of the channels read by this process were updated
-        if triggers := sorted(
-            chan
-            for chan in proc.triggers
-            if not isinstance(
-                read_channel(channels, chan, return_exception=True), EmptyChannelError
-            )
-            and checkpoint["channel_versions"].get(chan, null_version)  # type: ignore[operator]
-            > seen.get(chan, null_version)
+        if _triggers(
+            channels,
+            checkpoint["channel_versions"],
+            checkpoint["versions_seen"].get(name),
+            checkpoint_null_version,
+            proc,
         ):
+            triggers = tuple(sorted(proc.triggers))
             try:
                 val = next(
                     _proc_input(proc, managed, channels, for_execution=for_execution)
@@ -670,8 +740,8 @@ def prepare_single_task(
 
             # create task id
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
-            task_id = _uuid5_str(
-                checkpoint_id,
+            task_id = task_id_func(
+                checkpoint_id_bytes,
                 checkpoint_ns,
                 str(step),
                 name,
@@ -714,7 +784,7 @@ def prepare_single_task(
                                 CONFIG_KEY_SEND: partial(
                                     local_write,
                                     writes.extend,
-                                    processes.keys(),
+                                    tuple(processes.keys()),
                                 ),
                                 CONFIG_KEY_READ: partial(
                                     local_read,
@@ -723,7 +793,10 @@ def prepare_single_task(
                                     channels,
                                     managed,
                                     PregelTaskWrites(
-                                        task_path[:3], name, writes, triggers
+                                        task_path[:3],
+                                        name,
+                                        writes,
+                                        triggers,
                                     ),
                                     config,
                                 ),
@@ -741,6 +814,7 @@ def prepare_single_task(
                                 CONFIG_KEY_CHECKPOINT_ID: None,
                                 CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                                 CONFIG_KEY_SCRATCHPAD: _scratchpad(
+                                    config[CONF].get(CONFIG_KEY_SCRATCHPAD),
                                     pending_writes,
                                     task_id,
                                 ),
@@ -761,13 +835,59 @@ def prepare_single_task(
                 return PregelTask(task_id, name, task_path[:3])
 
 
+def checkpoint_null_version(
+    checkpoint: Checkpoint,
+) -> Optional[V]:
+    """Get the null version for the checkpoint, if available."""
+    for version in checkpoint["channel_versions"].values():
+        return type(version)()
+    return None
+
+
+def _triggers(
+    channels: Mapping[str, BaseChannel],
+    versions: ChannelVersions,
+    seen: Optional[ChannelVersions],
+    null_version: V,
+    proc: PregelNode,
+) -> Sequence[str]:
+    if seen is None:
+        for chan in proc.triggers:
+            if channels[chan].is_available():
+                return (chan,)
+    else:
+        for chan in proc.triggers:
+            if channels[chan].is_available() and versions.get(  # type: ignore[operator]
+                chan, null_version
+            ) > seen.get(chan, null_version):
+                return (chan,)
+    return EMPTY_SEQ
+
+
 def _scratchpad(
+    parent_scratchpad: Optional[PregelScratchpad],
     pending_writes: list[PendingWrite],
     task_id: str,
 ) -> PregelScratchpad:
+    # None cannot be used as a resume value, because it would be difficult to
+    # distinguish from missing when used over http
     null_resume_write = next(
         (w for w in pending_writes if w[0] == NULL_TASK_ID and w[1] == RESUME), None
     )
+
+    def get_null_resume(consume: bool = False) -> Any:
+        if null_resume_write is None:
+            if parent_scratchpad is not None:
+                return parent_scratchpad.get_null_resume(consume)
+            return None
+        if consume:
+            try:
+                pending_writes.remove(null_resume_write)
+                return null_resume_write[2]
+            except ValueError:
+                return None
+        return null_resume_write[2]
+
     # using itertools.count as an atomic counter (+= 1 is not thread-safe)
     return PregelScratchpad(
         # call
@@ -777,10 +897,7 @@ def _scratchpad(
         resume=next(
             (w[2] for w in pending_writes if w[0] == task_id and w[1] == RESUME), []
         ),
-        null_resume=null_resume_write[2] if null_resume_write is not None else None,
-        _consume_null_resume=functools.partial(pending_writes.remove, null_resume_write)
-        if null_resume_write is not None
-        else lambda: None,
+        get_null_resume=get_null_resume,
         # subgraph
         subgraph_counter=itertools.count(0).__next__,
     )
@@ -833,11 +950,17 @@ def _proc_input(
 
 
 def _uuid5_str(namespace: bytes, *parts: str) -> str:
-    """Generate a UUID from the SHA-1 hash of a namespace UUID and a name."""
+    """Generate a UUID from the SHA-1 hash of a namespace and str parts."""
 
     sha = sha1(namespace, usedforsecurity=False)
     sha.update(b"".join(p.encode() for p in parts))
     hex = sha.hexdigest()
+    return f"{hex[:8]}-{hex[8:12]}-{hex[12:16]}-{hex[16:20]}-{hex[20:32]}"
+
+
+def _xxhash_str(namespace: bytes, *parts: str) -> str:
+    """Generate a UUID from the XXH3 hash of a namespace and str parts."""
+    hex = xxh3_128_hexdigest(namespace + b"".join(p.encode() for p in parts))
     return f"{hex[:8]}-{hex[8:12]}-{hex[12:16]}-{hex[16:20]}-{hex[20:32]}"
 
 

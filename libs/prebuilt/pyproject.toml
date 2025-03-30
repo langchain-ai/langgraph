@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph-prebuilt"
-version = "0.1.3"
+version = "0.1.7"
 description = "Library with high-level APIs for creating and executing LangGraph agents and tools."
 authors = []
 license = "MIT"

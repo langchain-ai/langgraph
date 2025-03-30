@@ -156,10 +156,16 @@ class AsyncBackgroundExecutor(AsyncContextManager):
         if self.semaphore:
             coro = gated(self.semaphore, coro)
         if CONTEXT_NOT_SUPPORTED:
-            task = run_coroutine_threadsafe(coro, self.loop, name=__name__)
+            task = run_coroutine_threadsafe(
+                coro, self.loop, name=__name__, lazy=__next_tick__
+            )
         else:
             task = run_coroutine_threadsafe(
-                coro, self.loop, name=__name__, context=copy_context()
+                coro,
+                self.loop,
+                name=__name__,
+                context=copy_context(),
+                lazy=__next_tick__,
             )
         self.tasks[task] = (__cancel_on_exit__, __reraise_on_exit__)
         task.add_done_callback(self.done)

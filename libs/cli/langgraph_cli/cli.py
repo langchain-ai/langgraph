@@ -574,6 +574,12 @@ def dockerfile(save_path: str, config: pathlib.Path, add_docker_compose: bool) -
     help="Wait for a debugger client to connect to the debug port before starting the server",
     default=False,
 )
+@click.option(
+    "--studio-url",
+    type=str,
+    default=None,
+    help="URL of the LangGraph Studio instance to connect to. Defaults to https://smith.langchain.com",
+)
 @cli.command(
     "dev",
     help="🏃‍♀️‍➡️ Run LangGraph API server in development mode with hot reloading and debugging support",
@@ -588,6 +594,7 @@ def dev(
     no_browser: bool,
     debug_port: Optional[int],
     wait_for_client: bool,
+    studio_url: Optional[str],
 ):
     """CLI entrypoint for running the LangGraph API server."""
     try:
@@ -651,6 +658,7 @@ def dev(
         wait_for_client=wait_for_client,
         auth=config_json.get("auth"),
         http=config_json.get("http"),
+        studio_url=studio_url,
     )
 
 

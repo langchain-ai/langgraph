@@ -457,6 +457,20 @@ class RemoteGraph(PregelProtocol):
         for state in states:
             yield self._create_state_snapshot(state)
 
+    def bulk_update_state(
+        self,
+        config: RunnableConfig,
+        updates: list[tuple[Optional[dict[str, Any]], Optional[str]]],
+    ) -> RunnableConfig:
+        raise NotImplementedError
+
+    async def abulk_update_state(
+        self,
+        config: RunnableConfig,
+        updates: list[tuple[Optional[dict[str, Any]], Optional[str]]],
+    ) -> RunnableConfig:
+        raise NotImplementedError
+
     def update_state(
         self,
         config: RunnableConfig,
@@ -640,7 +654,9 @@ class RemoteGraph(PregelProtocol):
             # raise interrupt or errors
             if chunk.event.startswith("updates"):
                 if isinstance(chunk.data, dict) and INTERRUPT in chunk.data:
-                    raise GraphInterrupt(chunk.data[INTERRUPT])
+                    raise GraphInterrupt(
+                        [Interrupt(**i) for i in chunk.data[INTERRUPT]]
+                    )
             elif chunk.event.startswith("error"):
                 raise RemoteException(chunk.data)
             # filter for what was actually requested
@@ -732,7 +748,9 @@ class RemoteGraph(PregelProtocol):
             # raise interrupt or errors
             if chunk.event.startswith("updates"):
                 if isinstance(chunk.data, dict) and INTERRUPT in chunk.data:
-                    raise GraphInterrupt(chunk.data[INTERRUPT])
+                    raise GraphInterrupt(
+                        [Interrupt(**i) for i in chunk.data[INTERRUPT]]
+                    )
             elif chunk.event.startswith("error"):
                 raise RemoteException(chunk.data)
             # filter for what was actually requested

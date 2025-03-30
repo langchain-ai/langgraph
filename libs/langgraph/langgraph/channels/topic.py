@@ -62,7 +62,7 @@ class Topic(
                 empty.values = checkpoint
         return empty
 
-    def update(self, values: Sequence[Union[Value, list[Value]]]) -> None:
+    def update(self, values: Sequence[Union[Value, list[Value]]]) -> bool:
         current = list(self.values)
         if not self.accumulate:
             self.values = list[Value]()
@@ -75,3 +75,6 @@ class Topic(
             return list(self.values)
         else:
             raise EmptyChannelError
+
+    def is_available(self) -> bool:
+        return bool(self.values)

@@ -12,6 +12,7 @@ from langgraph_sdk.schema import StreamPart
 from langgraph.errors import GraphInterrupt
 from langgraph.pregel.remote import RemoteGraph
 from langgraph.pregel.types import StateSnapshot
+from langgraph.types import Interrupt
 
 
 def test_with_config():
@@ -415,7 +416,19 @@ def test_stream():
         StreamPart(event="values", data={"chunk": "data2"}),
         StreamPart(event="values", data={"chunk": "data3"}),
         StreamPart(event="updates", data={"chunk": "data4"}),
-        StreamPart(event="updates", data={"__interrupt__": ()}),
+        StreamPart(
+            event="updates",
+            data={
+                "__interrupt__": [
+                    {
+                        "value": {"question": "Does this look good?"},
+                        "resumable": True,
+                        "ns": ["some_ns"],
+                        "when": "during",
+                    }
+                ]
+            },
+        ),
     ]
 
     # call method / assertions
@@ -426,13 +439,22 @@ def test_stream():
 
     # stream modes doesn't include 'updates'
     stream_parts = []
-    with pytest.raises(GraphInterrupt):
+    with pytest.raises(GraphInterrupt) as exc:
         for stream_part in remote_pregel.stream(
             {"input": "data"},
             config={"configurable": {"thread_id": "thread_1"}},
             stream_mode="values",
         ):
             stream_parts.append(stream_part)
+
+    assert exc.value.args[0] == [
+        Interrupt(
+            value={"question": "Does this look good?"},
+            resumable=True,
+            ns=["some_ns"],
+            when="during",
+        )
+    ]
 
     assert stream_parts == [
         {"chunk": "data1"},
@@ -517,7 +539,19 @@ async def test_astream():
         StreamPart(event="values", data={"chunk": "data2"}),
         StreamPart(event="values", data={"chunk": "data3"}),
         StreamPart(event="updates", data={"chunk": "data4"}),
-        StreamPart(event="updates", data={"__interrupt__": ()}),
+        StreamPart(
+            event="updates",
+            data={
+                "__interrupt__": [
+                    {
+                        "value": {"question": "Does this look good?"},
+                        "resumable": True,
+                        "ns": ["some_ns"],
+                        "when": "during",
+                    }
+                ]
+            },
+        ),
     ]
     mock_async_client.runs.stream.return_value = async_iter
 
@@ -529,13 +563,22 @@ async def test_astream():
 
     # stream modes doesn't include 'updates'
     stream_parts = []
-    with pytest.raises(GraphInterrupt):
+    with pytest.raises(GraphInterrupt) as exc:
         async for stream_part in remote_pregel.astream(
             {"input": "data"},
             config={"configurable": {"thread_id": "thread_1"}},
             stream_mode="values",
         ):
             stream_parts.append(stream_part)
+
+    assert exc.value.args[0] == [
+        Interrupt(
+            value={"question": "Does this look good?"},
+            resumable=True,
+            ns=["some_ns"],
+            when="during",
+        )
+    ]
 
     assert stream_parts == [
         {"chunk": "data1"},
