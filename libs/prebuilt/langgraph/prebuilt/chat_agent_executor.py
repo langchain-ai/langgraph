@@ -260,7 +260,7 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
-MemoryHook = Union[
+PreModelHook = Union[
     Callable[[StateSchema], StateSchema],
     Runnable[StateSchema, StateSchema],
 ]
@@ -275,7 +275,7 @@ def create_react_agent(
     response_format: Optional[
         Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
     ] = None,
-    memory_hook: Optional[MemoryHook] = None,
+    pre_model_hook: Optional[PreModelHook] = None,
     state_schema: Optional[StateSchemaType] = None,
     config_schema: Optional[Type[Any]] = None,
     checkpointer: Optional[Checkpointer] = None,
@@ -318,10 +318,10 @@ def create_react_agent(
             !!! Note
                 The graph will make a separate call to the LLM to generate the structured response after the agent loop is finished.
                 This is not the only strategy to get structured responses, see more options in [this guide](https://langchain-ai.github.io/langgraph/how-tos/react-agent-structured-output/).
-        memory_hook: An optional memory hook that will be called every time before the `agent` node (LLM-calling node) and changes the input to the LLM.
+        pre_model_hook: An optional pre-model hook that will be called every time before the `agent` node (LLM-calling node) and will change the input to the LLM.
             Useful for managing long message history (e.g., message trimming, summarization, etc.).
             If provided, a special node will be added to the graph that runs before the `agent` node.
-            Memory hook must be a callable or a runnable that takes in current graph state and returns an update in the form of {"processed_messages": [...], **other_keys}.
+            Pre-model hook must be a callable or a runnable that takes in current graph state and returns an update in the form of {"processed_messages": [...], **other_keys}.
 
             !!! Important
                 The `processed_messages` key is required and will be used as an input to the `agent` node. The rest of the keys will be added to the graph state.
@@ -765,7 +765,7 @@ def create_react_agent(
 
     # Define the function that calls the model
     input_schema: StateSchemaType
-    if memory_hook is not None:
+    if pre_model_hook is not None:
         input_messages_key = "processed_messages"
 
         # Dynamically create a schema that inherits from state_schema and adds processed_messages
@@ -832,10 +832,10 @@ def create_react_agent(
             RunnableCallable(call_model, acall_model),
             input=input_schema,
         )
-        if memory_hook is not None:
-            workflow.add_node("memory_hook", memory_hook)
-            workflow.add_edge("memory_hook", "agent")
-            entrypoint = "memory_hook"
+        if pre_model_hook is not None:
+            workflow.add_node("pre_model_hook", pre_model_hook)
+            workflow.add_edge("pre_model_hook", "agent")
+            entrypoint = "pre_model_hook"
         else:
             entrypoint = "agent"
 
@@ -886,12 +886,12 @@ def create_react_agent(
     )
     workflow.add_node("tools", tool_node)
 
-    # Optionally add a memory hook node that will be called
+    # Optionally add a pre-model hook node that will be called
     # every time before the "agent" (LLM-calling node)
-    if memory_hook is not None:
-        workflow.add_node("memory_hook", memory_hook)
-        workflow.add_edge("memory_hook", "agent")
-        entrypoint = "memory_hook"
+    if pre_model_hook is not None:
+        workflow.add_node("pre_model_hook", pre_model_hook)
+        workflow.add_edge("pre_model_hook", "agent")
+        entrypoint = "pre_model_hook"
     else:
         entrypoint = "agent"
 
