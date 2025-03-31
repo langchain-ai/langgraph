@@ -68,7 +68,7 @@ For more information, please see:
 
 The [Standalone Container](./langgraph_standalone_container.md) deployment is the least restrictive model for deployment. Deploy standalone instances of a LangGraph application in your cloud.
 
-Build a Docker image using the [LangGraph CLI] and deploy your LangGraph application using any container deployment tooling of your choice.
+Build a Docker image using the [LangGraph CLI]() and deploy your LangGraph application using any container deployment tooling of your choice.
 
 For more information, please see:
 

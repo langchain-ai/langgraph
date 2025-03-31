@@ -204,7 +204,7 @@ nav:
                 - cloud/deployment/cloud.md
                 - cloud/deployment/self_hosted_data_plane.md
                 - cloud/deployment/self_hosted_control_plane.md
-                - cloud/deployment/stanalone_container.md
+                - cloud/deployment/standalone_container.md
                 - how-tos/deploy-self-hosted.md
                 - how-tos/use-remote-graph.md
             - Authentication & Access Control:
