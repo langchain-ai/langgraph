@@ -63,6 +63,7 @@ Explore practical implementations tailored for specific scenarios:
 
 - [Agent-based](chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb): Evaluate chatbots via simulated user interactions
 - [In LangSmith](chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb): Evaluate chatbots in LangSmith over a dialog dataset
+- [In Langfuse](online-and-offline-evaluation/evaluate-agents.ipynb): Online and offline evaluation of LangGraph agents
 
 ### Experimental
 
