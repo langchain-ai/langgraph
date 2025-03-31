@@ -869,11 +869,30 @@ def _scratchpad(
     pending_writes: list[PendingWrite],
     task_id: str,
 ) -> PregelScratchpad:
-    # None cannot be used as a resume value, because it would be difficult to
-    # distinguish from missing when used over http
-    null_resume_write = next(
-        (w for w in pending_writes if w[0] == NULL_TASK_ID and w[1] == RESUME), None
-    )
+    if len(pending_writes) > 0:
+        # find global resume value
+        for w in pending_writes:
+            if w[0] == NULL_TASK_ID and w[1] == RESUME:
+                null_resume_write = w
+                break
+        else:
+            # None cannot be used as a resume value, because it would be difficult to
+            # distinguish from missing when used over http
+            null_resume_write = None
+        # find task-specific resume value
+        for w in pending_writes:
+            if w[0] == task_id and w[1] == RESUME:
+                task_resume_write = w[2]
+                if not isinstance(task_resume_write, list):
+                    task_resume_write = [task_resume_write]
+                break
+        else:
+            task_resume_write = []
+        # clear var
+        del w
+    else:
+        null_resume_write = None
+        task_resume_write = []
 
     def get_null_resume(consume: bool = False) -> Any:
         if null_resume_write is None:
@@ -894,9 +913,7 @@ def _scratchpad(
         call_counter=itertools.count(0).__next__,
         # interrupt
         interrupt_counter=itertools.count(0).__next__,
-        resume=next(
-            (w[2] for w in pending_writes if w[0] == task_id and w[1] == RESUME), []
-        ),
+        resume=task_resume_write,
         get_null_resume=get_null_resume,
         # subgraph
         subgraph_counter=itertools.count(0).__next__,

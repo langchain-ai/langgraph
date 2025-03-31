@@ -369,7 +369,7 @@ class LoopProtocol:
         self.stop = stop
 
 
-@dataclasses.dataclass(**{**_DC_KWARGS, "frozen": False})
+@dataclasses.dataclass(**_DC_KWARGS)
 class PregelScratchpad:
     # call
     call_counter: Callable[[], int]
