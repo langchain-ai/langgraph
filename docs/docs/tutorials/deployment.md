@@ -27,7 +27,7 @@ Get started deploying your LangGraph applications locally or on the cloud with
 |----------------------|----------------|----------------------------|-------------------------------|--------------------------|
 | **Description**          | User connects GitHub repository to LangSmith and deploys via the Deployments UI. | User builds a Docker image using the LangGraph CLI. User deploys via the Deployments UI to their cloud. | User builds a Docker image using the LangGraph CLI. User deploys via the Deployments UI to their cloud. | User builds a Docker image using the LangGraph CLI. User deploys a standalone instance of the LangGraph server using any container deployment tooling. |
 | **LangSmith**            | Requires LangSmith SaaS | Requires LangSmith SaaS | Requires Self-Hosted LangSmith | Optional |
-| **Deployments UI**       | Yes | Yes | Yes | No |
+| **Control Plane UI**       | Yes | Yes | Yes | No |
 | **CI/CD**                | Build process is managed internally by the platform. | User builds image and manages CI/CD workflow externally. | User builds image and manages CI/CD workflow externally. | User builds image and manages CI/CD workflow externally. |
 | **Data Residency**       | LangChain’s cloud | User’s cloud | User’s cloud | User’s cloud |
 | **Required Permissions** | None | See details [here](). | See details [here](). | None |

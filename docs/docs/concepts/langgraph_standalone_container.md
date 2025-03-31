@@ -16,6 +16,10 @@ The Standalone Container deployment option is the least restrictive model for de
 
 ## Compute Platforms
 
+### Kubernetes
+
+TBD
+
 ### Docker
 
 The Standalone Container deployment option supports deploying data plane infrastructure to any Docker-supported compute platform.
@@ -31,6 +35,6 @@ Miscellaneous options/details about the Standalone Container deployment option.
 | **Licensing** | Air-gapped license key or LangGraph Platform License Key |
 | **Telemetry** | Self-reported usage (audit) for air-gapped license key.</br></br>Telemetry sent to LangSmith SaaS for LangGraph Platform License Key. |
 
-## Related
+## Deployment
 
-* [How to deploy a Standalone Container](../cloud/deployment/standalone_container.md)
+Follow the how-to guide for [how to deploy a Standalone Container](../cloud/deployment/standalone_container.md).

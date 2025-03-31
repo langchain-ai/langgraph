@@ -6,7 +6,7 @@ LangGraph Platform's Self-Hosted Data Plane deployment option is a "hybrid" mode
 
 |                   | Control Plane     | Data Plane |
 |-------------------|-------------------|------------|
-| **What is it?** | <ul><li>LangGraph Platform UI for creating deployments and revisions</li><li>Control plane APIs for creating deployments and revisions</li></ul> | <ul><li>Data plane listene for reconciling deployments with control plane state</li><li>LangGraph server container(s)</li><li>Postgres, Redis</li></ul> |
+| **What is it?** | <ul><li>Control Plane UI for creating deployments and revisions</li><li>Control Plane APIs for creating deployments and revisions</li></ul> | <ul><li>Data plane listener for reconciling deployments with control plane state</li><li>LangGraph server container(s)</li><li>Postgres, Redis</li></ul> |
 | **Where it's hosted?** | LangChain's cloud | Your cloud |
 | **Who provisions and manages it?** | LangChain | You |
 
@@ -35,6 +35,6 @@ Miscellaneous options/details about the Self-Hosted Data Plane deployment option
 | **Licensing** | LangSmith API Key validated against LangSmith SaaS |
 | **Telemetry** | Telemetry sent to LangSmith SaaS |
 
-## Related
+## Deployment
 
-* [How to deploy the Self-Hosted Data Plane](../cloud/deployment/self_hosted_data_plane.md)
+Follow the how-to guide for [how to deploy the Self-Hosted Data Plane](../cloud/deployment/self_hosted_data_plane.md).

@@ -1,4 +1,4 @@
-# How to Deploy the Self-Hosted Data Plane
+# How to Deploy Self-Hosted Data Plane
 
 ## Kubernetes
 
@@ -22,6 +22,6 @@
 
 Coming soon...
 
-## Related
+## Concepts
 
-- [Self-Hosted Data Plane Conceptual Guide](../../concepts/langgraph_self_hosted_data_plane.md)
+Follow the conceptual guide for [Self-Hosted Data Plane Conceptual Guide](../../concepts/langgraph_self_hosted_data_plane.md).

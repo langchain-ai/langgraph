@@ -6,7 +6,7 @@ The Self-Hosted Control Plane deployment option is a fully self-hosted model for
 
 |                   | Control Plane     | Data Plane |
 |-------------------|-------------------|------------|
-| **What is it?** | <ul><li>LangGraph Platform UI for creating deployments and revisions</li><li>Control plane APIs for creating deployments and revisions</li></ul> | <ul><li>Data plane listener for reconciling deployments with control plane state</li><li>LangGraph server container(s)</li><li>Postgres, Redis</li></ul> |
+| **What is it?** | <ul><li>Control Plane UI for creating deployments and revisions</li><li>Control Plane APIs for creating deployments and revisions</li></ul> | <ul><li>Data plane listener for reconciling deployments with control plane state</li><li>LangGraph server container(s)</li><li>Postgres, Redis</li></ul> |
 | **Where it's hosted?** | Your cloud | Your cloud |
 | **Who provisions and manages it?** | You | You |
 
@@ -31,6 +31,6 @@ Miscellaneous options/details about the Self-Hosted Control Plane deployment opt
 | **Licensing** | Air-gapped license key or LangGraph Platform License Key |
 | **Telemetry** | Self-reported usage (audit) for air-gapped license key.</br></br>Telemetry sent to LangSmith SaaS for LangGraph Platform License Key. |
 
-## Related
+## Deployment
 
-* [How to deploy the Self-Hosted Control Plane](../cloud/deployment/self_hosted_control_plane.md)
+Follow the how-to guide for [how to deploy the Self-Hosted Control Plane](../cloud/deployment/self_hosted_control_plane.md).
