@@ -405,6 +405,7 @@ def validate_config(config: Config) -> Config:
             "auth": config.get("auth"),
             "http": config.get("http"),
             "ui": config.get("ui"),
+            "ui_config": config.get("ui_config"),
         }
         if config.get("node_version")
         else {
@@ -418,6 +419,7 @@ def validate_config(config: Config) -> Config:
             "auth": config.get("auth"),
             "http": config.get("http"),
             "ui": config.get("ui"),
+            "ui_config": config.get("ui_config"),
         }
     )
 
@@ -1098,6 +1100,7 @@ RUN cd {faux_path} && {install_cmd}
 {env_additional_config}
 ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
 {f"ENV LANGGRAPH_UI='{json.dumps(config['ui'])}'" if config.get("ui") else ""}
+{f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(config['ui_config'])}'" if config.get("ui_config") else ""}
 
 WORKDIR {faux_path}
 

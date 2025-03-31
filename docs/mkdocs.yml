@@ -256,6 +256,8 @@ nav:
                 - cloud/how-tos/invoke_studio.md
                 - cloud/how-tos/threads_studio.md
                 - cloud/how-tos/datasets_studio.md
+                - cloud/how-tos/iterate_graph_studio.md
+                - cloud/how-tos/clone_traces_studio.md
       - Concepts:
         - concepts/index.md
         - LangGraph:

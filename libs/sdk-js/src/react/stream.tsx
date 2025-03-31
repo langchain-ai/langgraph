@@ -782,42 +782,6 @@ export function useStream<
       submittingRef.current = true;
       abortRef.current = new AbortController();
 
-      let usableThreadId = threadId;
-      if (!usableThreadId) {
-        const thread = await client.threads.create();
-        onThreadId(thread.thread_id);
-        usableThreadId = thread.thread_id;
-      }
-
-      const streamMode = unique([
-        ...(submitOptions?.streamMode ?? []),
-        ...trackStreamModeRef.current,
-        ...callbackStreamMode,
-      ]);
-
-      const checkpoint =
-        submitOptions?.checkpoint ?? threadHead?.checkpoint ?? undefined;
-      // @ts-expect-error
-      if (checkpoint != null) delete checkpoint.thread_id;
-
-      const run = (await client.runs.stream(usableThreadId, assistantId, {
-        input: values as Record<string, unknown>,
-        config: submitOptions?.config,
-        command: submitOptions?.command,
-
-        interruptBefore: submitOptions?.interruptBefore,
-        interruptAfter: submitOptions?.interruptAfter,
-        metadata: submitOptions?.metadata,
-        multitaskStrategy: submitOptions?.multitaskStrategy,
-        onCompletion: submitOptions?.onCompletion,
-        onDisconnect: submitOptions?.onDisconnect ?? "cancel",
-
-        signal: abortRef.current.signal,
-
-        checkpoint,
-        streamMode,
-      })) as AsyncGenerator<EventStreamEvent>;
-
       // Unbranch things
       const newPath = submitOptions?.checkpoint?.checkpoint_id
         ? branchByCheckpoint[submitOptions?.checkpoint?.checkpoint_id]?.branch
@@ -841,6 +805,42 @@ export function useStream<
 
         return values;
       });
+
+      let usableThreadId = threadId;
+      if (!usableThreadId) {
+        const thread = await client.threads.create();
+        onThreadId(thread.thread_id);
+        usableThreadId = thread.thread_id;
+      }
+
+      const streamMode = unique([
+        ...(submitOptions?.streamMode ?? []),
+        ...trackStreamModeRef.current,
+        ...callbackStreamMode,
+      ]);
+
+      const checkpoint =
+        submitOptions?.checkpoint ?? threadHead?.checkpoint ?? undefined;
+      // @ts-expect-error
+      if (checkpoint != null) delete checkpoint.thread_id;
+
+      const run = client.runs.stream(usableThreadId, assistantId, {
+        input: values as Record<string, unknown>,
+        config: submitOptions?.config,
+        command: submitOptions?.command,
+
+        interruptBefore: submitOptions?.interruptBefore,
+        interruptAfter: submitOptions?.interruptAfter,
+        metadata: submitOptions?.metadata,
+        multitaskStrategy: submitOptions?.multitaskStrategy,
+        onCompletion: submitOptions?.onCompletion,
+        onDisconnect: submitOptions?.onDisconnect ?? "cancel",
+
+        signal: abortRef.current.signal,
+
+        checkpoint,
+        streamMode,
+      }) as AsyncGenerator<EventStreamEvent>;
 
       let streamError: StreamError | undefined;
       for await (const { event, data } of run) {
