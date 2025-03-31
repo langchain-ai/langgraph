@@ -43,7 +43,7 @@ from langgraph.managed import IsLastStep, RemainingSteps
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer, Send
-from langgraph.utils.runnable import RunnableCallable
+from langgraph.utils.runnable import RunnableCallable, RunnableLike
 
 StructuredResponse = Union[dict, BaseModel]
 StructuredResponseSchema = Union[dict, type[BaseModel]]
@@ -260,12 +260,6 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
-PreModelHook = Union[
-    Callable[[StateSchema], StateSchema],
-    Runnable[StateSchema, StateSchema],
-]
-
-
 @_convert_modifier_to_prompt
 def create_react_agent(
     model: Union[str, LanguageModelLike],
@@ -275,7 +269,7 @@ def create_react_agent(
     response_format: Optional[
         Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
     ] = None,
-    pre_model_hook: Optional[PreModelHook] = None,
+    pre_model_hook: Optional[RunnableLike] = None,
     state_schema: Optional[StateSchemaType] = None,
     config_schema: Optional[Type[Any]] = None,
     checkpointer: Optional[Checkpointer] = None,
@@ -318,13 +312,24 @@ def create_react_agent(
             !!! Note
                 The graph will make a separate call to the LLM to generate the structured response after the agent loop is finished.
                 This is not the only strategy to get structured responses, see more options in [this guide](https://langchain-ai.github.io/langgraph/how-tos/react-agent-structured-output/).
-        pre_model_hook: An optional pre-model hook that will be called every time before the `agent` node (LLM-calling node) and will change the input to the LLM.
-            Useful for managing long message history (e.g., message trimming, summarization, etc.).
-            If provided, a special node will be added to the graph that runs before the `agent` node.
-            Pre-model hook must be a callable or a runnable that takes in current graph state and returns an update in the form of {"processed_messages": [...], **other_keys}.
+
+        pre_model_hook: An optional node to add before the `agent` node (i.e., the node that calls the LLM).
+            Useful for implementing strategies to manage long message histories (e.g., message trimming, summarization, etc.).
+            Pre-model hook must be a callable or a runnable that takes in current graph state and returns a state update in the form of
+
+                ```python
+                {
+                    # `llm_input_messages` key MUST be provided.
+                    # It will be used as the input to the LLM, and will NOT OVERWRITE `messages` in the state.
+                    "llm_input_messages": [...],
+                    # Any other state keys that need to be propagated
+                    ...
+                }
+                ```
 
             !!! Important
-                The `processed_messages` key is required and will be used as an input to the `agent` node. The rest of the keys will be added to the graph state.
+                The `llm_input_messages` key MUST be provided and will be used as an input to the `agent` node.
+                The rest of the keys will be added to the graph state.
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `remaining_steps` keys.
             Defaults to `AgentState` that defines those two keys.
@@ -698,15 +703,16 @@ def create_react_agent(
             or (remaining_steps is not None and remaining_steps < 2 and has_tool_calls)
         )
 
-    def _call_model(
-        input_messages_key: str,
-        state: StateSchema,
-        config: RunnableConfig,
-    ) -> Union[dict[str, Any], BaseModel]:
+    def _get_model_input_state(state: StateSchema) -> StateSchema:
+        if pre_model_hook is not None:
+            input_messages_key = "llm_input_messages"
+        else:
+            input_messages_key = "messages"
+
         messages = _get_state_value(state, input_messages_key)
         if messages is None:
             raise ValueError(
-                f"Expected input to call_model to have {input_messages_key}, but got {state}"
+                f"Expected input to call_model to have '{input_messages_key}' key, but got {state}"
             )
 
         _validate_chat_history(messages)
@@ -715,6 +721,15 @@ def create_react_agent(
             state.messages = messages  # type: ignore
         else:
             state["messages"] = messages  # type: ignore
+
+        return state
+
+    # Define the function that calls the model
+    def call_model(
+        state: StateSchema,
+        config: RunnableConfig,
+    ) -> Union[dict[str, Any], BaseModel]:
+        state = _get_model_input_state(state)
         response = cast(AIMessage, model_runnable.invoke(state, config))
         # add agent name to the AIMessage
         response.name = name
@@ -731,23 +746,11 @@ def create_react_agent(
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
-    async def _acall_model(
-        input_messages_key: str,
+    async def acall_model(
         state: StateSchema,
         config: RunnableConfig,
     ) -> Union[dict[str, Any], BaseModel]:
-        messages = _get_state_value(state, input_messages_key)
-        if messages is None:
-            raise ValueError(
-                f"Expected input to call_model to have {input_messages_key}, but got {state}"
-            )
-
-        _validate_chat_history(messages)
-        # we're passing messages under `messages` key, as this is expected by the prompt
-        if isinstance(state_schema, type) and issubclass(state_schema, BaseModel):
-            state.messages = messages  # type: ignore
-        else:
-            state["messages"] = messages  # type: ignore
+        state = _get_model_input_state(state)
         response = cast(AIMessage, await model_runnable.ainvoke(state, config))
         # add agent name to the AIMessage
         response.name = name
@@ -763,36 +766,26 @@ def create_react_agent(
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
-    # Define the function that calls the model
     input_schema: StateSchemaType
     if pre_model_hook is not None:
-        input_messages_key = "processed_messages"
-
-        # Dynamically create a schema that inherits from state_schema and adds processed_messages
+        # Dynamically create a schema that inherits from state_schema and adds 'llm_input_messages'
         if isinstance(state_schema, type) and issubclass(state_schema, BaseModel):
             # For Pydantic schemas
             from pydantic import create_model
 
             input_schema = create_model(
                 "CallModelInputSchema",
-                processed_messages=(list[AnyMessage], ...),
+                llm_input_messages=(list[AnyMessage], ...),
                 __base__=state_schema,
             )
         else:
             # For TypedDict schemas
             class CallModelInputSchema(state_schema):  # type: ignore
-                processed_messages: list[AnyMessage]
+                llm_input_messages: list[AnyMessage]
 
             input_schema = CallModelInputSchema
     else:
-        input_messages_key = "messages"
         input_schema = state_schema
-
-    def call_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
-        return _call_model(input_messages_key, state, config)
-
-    async def acall_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
-        return await _acall_model(input_messages_key, state, config)
 
     def generate_structured_response(
         state: StateSchema, config: RunnableConfig
