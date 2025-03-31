@@ -1,4 +1,4 @@
-from typing import Generic, Optional, Sequence, Type
+from typing import Generic, Sequence, Type
 
 from typing_extensions import Self
 
@@ -33,7 +33,7 @@ class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
     def checkpoint(self) -> Value:
         raise EmptyChannelError()
 
-    def from_checkpoint(self, checkpoint: Optional[Value]) -> Self:
+    def from_checkpoint(self, checkpoint: Value) -> Self:
         empty = self.__class__(self.typ, self.guard)
         empty.key = self.key
         return empty

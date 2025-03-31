@@ -1,4 +1,4 @@
-from typing import Generic, Optional, Sequence, Type
+from typing import Generic, Sequence, Type
 
 from typing_extensions import Self
 
@@ -36,7 +36,7 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
     def checkpoint(self) -> set[Value]:
         return self.seen
 
-    def from_checkpoint(self, checkpoint: Optional[set[Value]]) -> Self:
+    def from_checkpoint(self, checkpoint: set[Value]) -> Self:
         empty = self.__class__(self.typ, self.names)
         empty.key = self.key
         if checkpoint is not MISSING:

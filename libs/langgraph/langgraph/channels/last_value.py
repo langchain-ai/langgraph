@@ -1,4 +1,4 @@
-from typing import Any, Generic, Optional, Sequence, Type
+from typing import Any, Generic, Sequence, Type
 
 from typing_extensions import Self
 
@@ -34,7 +34,7 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
         """The type of the update received by the channel."""
         return self.typ
 
-    def from_checkpoint(self, checkpoint: Optional[Value]) -> Self:
+    def from_checkpoint(self, checkpoint: Value) -> Self:
         empty = self.__class__(self.typ)
         empty.key = self.key
         if checkpoint is not MISSING:

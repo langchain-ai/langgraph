@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Generic, Optional, Sequence, TypeVar
+from typing import Any, Generic, Sequence, TypeVar
 
 from typing_extensions import Self
 
@@ -29,14 +29,14 @@ class BaseChannel(Generic[Value, Update, C], ABC):
 
     # serialize/deserialize methods
 
-    def checkpoint(self) -> Optional[C]:
+    def checkpoint(self) -> C:
         """Return a serializable representation of the channel's current state.
         Raises EmptyChannelError if the channel is empty (never updated yet),
         or doesn't support checkpoints."""
         return self.get()
 
     @abstractmethod
-    def from_checkpoint(self, checkpoint: Optional[C]) -> Self:
+    def from_checkpoint(self, checkpoint: C) -> Self:
         """Return a new identical channel, optionally initialized from a checkpoint.
         If the checkpoint contains complex data structures, they should be copied."""
 
