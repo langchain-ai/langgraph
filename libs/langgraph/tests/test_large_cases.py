@@ -9965,10 +9965,11 @@ def test_send_react_interrupt_control(
         tool_calls=[ToolCall(name="foo", args={"hi": [1, 2, 3]}, id=AnyStr())],
     )
 
-    def agent(state) -> Command[Literal["foo"]]:
+    def agent(state) -> Command[Literal["foo"], Literal["bar"]]:
         return Command(
             update={"messages": ai_message},
             goto=[Send(call["name"], call) for call in ai_message.tool_calls],
+            then="bar",
         )
 
     foo_called = 0

@@ -138,6 +138,11 @@ def should_interrupt(
     tasks: Iterable[PregelExecutableTask],
 ) -> list[PregelExecutableTask]:
     """Check if the graph should be interrupted based on current state."""
+
+    print(
+        f"Interrupt nodes: {interrupt_nodes}, Tasks: {[(t.name, t.writes) for t in tasks]}",
+    )
+
     version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
     null_version = version_type()  # type: ignore[misc]
     seen = checkpoint["versions_seen"].get(INTERRUPT, {})
@@ -232,6 +237,7 @@ def apply_writes(
     channels: Mapping[str, BaseChannel],
     tasks: Iterable[WritesProtocol],
     get_next_version: Optional[GetNextVersion],
+    trigger_to_nodes: Mapping[str, Sequence[str]],
 ) -> tuple[dict[str, list[Any]], set[str]]:
     """Apply writes from a set of tasks (usually the tasks from a Pregel step)
     to the checkpoint and channels, and return managed values writes to be applied
@@ -328,6 +334,17 @@ def apply_writes(
                         max_version,
                         channels[chan],
                     )
+
+    # If this is (tentatively) the last superstep, notify all channels of finish
+    if (
+        bump_step
+        and not checkpoint["pending_sends"]
+        and updated_channels.isdisjoint(trigger_to_nodes.keys())
+    ):
+        for chan in channels:
+            if channels[chan].finish():
+                updated_channels.add(chan)
+
     # Return managed values writes to be applied externally
     return pending_writes_by_managed, updated_channels
 
