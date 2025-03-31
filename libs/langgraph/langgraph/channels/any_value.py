@@ -33,7 +33,7 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
     def from_checkpoint(self, checkpoint: Optional[Value]) -> Self:
         empty = self.__class__(self.typ)
         empty.key = self.key
-        if checkpoint is not None:
+        if checkpoint is not MISSING:
             empty.value = checkpoint
         return empty
 

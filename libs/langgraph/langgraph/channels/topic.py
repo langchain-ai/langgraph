@@ -3,6 +3,7 @@ from typing import Any, Generic, Iterator, Optional, Sequence, Type, Union
 from typing_extensions import Self
 
 from langgraph.channels.base import BaseChannel, Value
+from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError
 
 
@@ -55,7 +56,7 @@ class Topic(
     def from_checkpoint(self, checkpoint: Optional[list[Value]]) -> Self:
         empty = self.__class__(self.typ, self.accumulate)
         empty.key = self.key
-        if checkpoint is not None:
+        if checkpoint is not MISSING:
             if isinstance(checkpoint, tuple):
                 empty.values = checkpoint[1]
             else:
