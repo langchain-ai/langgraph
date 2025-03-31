@@ -499,6 +499,11 @@ class CompiledGraph(Pregel):
         ) -> None:
             if end == END and END not in end_nodes:
                 end_nodes[END] = graph.add_node(self.get_output_schema(config), END)
+            if start not in start_nodes or end not in end_nodes:
+                logger.warning(
+                    f"Could not add edge from '{start}' to '{end}' due to missing nodes"
+                )
+                return
             return graph.add_edge(
                 start_nodes[start],
                 end_nodes[end],
@@ -522,9 +527,10 @@ class CompiledGraph(Pregel):
                 if len(subgraph.nodes) >= 1:
                     e, s = graph.extend(subgraph, prefix=key)
                     if e is None:
-                        raise ValueError(
+                        logger.warning(
                             f"Could not extend subgraph '{key}' due to missing entrypoint"
                         )
+                        continue
                     if s is not None:
                         start_nodes[key] = s
                     end_nodes[key] = e

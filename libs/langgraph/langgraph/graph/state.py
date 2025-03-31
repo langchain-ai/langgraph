@@ -242,7 +242,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
-        destinations: Optional[Union[dict[str, str], tuple[str]]] = None,
+        destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
     ) -> Self:
         """Adds a new node to the state graph.
         Will take the name of the function/runnable as the node name.
@@ -267,7 +267,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
-        destinations: Optional[Union[dict[str, str], tuple[str]]] = None,
+        destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
     ) -> Self:
         """Adds a new node to the state graph.
 
@@ -291,7 +291,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
-        destinations: Optional[Union[dict[str, str], tuple[str]]] = None,
+        destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
     ) -> Self:
         """Adds a new node to the state graph.
 
@@ -303,7 +303,7 @@ class StateGraph(Graph):
             metadata (Optional[dict[str, Any]]): The metadata associated with the node. (default: None)
             input (Optional[Type[Any]]): The input schema for the node. (default: the graph's input schema)
             retry (Optional[RetryPolicy]): The policy for retrying the node. (default: None)
-            destinations (Optional[Union[dict[str, str], tuple[str]]]): Destinations that indicate where a node can route to.
+            destinations (Optional[Union[dict[str, str], tuple[str, ...]]]): Destinations that indicate where a node can route to.
                 This is useful for edgeless graphs with nodes that return `Command` objects.
                 If a dict is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
                 If a tuple is provided, the values will be used as the target node names.
@@ -799,11 +799,11 @@ class CompiledStateGraph(CompiledGraph):
                 raise InvalidUpdateError(msg)
 
         # state updaters
-        write_entries: list[Union[ChannelWriteEntry, ChannelWriteTupleEntry]] = [
+        write_entries: tuple[Union[ChannelWriteEntry, ChannelWriteTupleEntry], ...] = (
             ChannelWriteTupleEntry(
                 mapper=_get_root if output_keys == ["__root__"] else _get_updates
-            )
-        ]
+            ),
+        )
 
         # add node and output channel
         if key == START:
@@ -811,20 +811,14 @@ class CompiledStateGraph(CompiledGraph):
                 tags=[TAG_HIDDEN],
                 triggers=[START],
                 channels=[START],
-                writers=[
-                    ChannelWrite(
-                        write_entries,
-                        tags=[TAG_HIDDEN],
-                    ),
-                ],
+                writers=[ChannelWrite(write_entries, tags=[TAG_HIDDEN])],
             )
         elif node is not None:
             input_schema = node.input if node else self.builder.schema
             input_values = {k: k for k in self.builder.schemas[input_schema]}
             is_single_input = len(input_values) == 1 and "__root__" in input_values
 
-            branch_channel = f"branch:to:{key}"
-            self.channels[key] = EphemeralValue(Any, guard=False)
+            branch_channel = CHANNEL_BRANCH_TO.format(key)
             self.channels[branch_channel] = EphemeralValue(Any, guard=False)
             self.nodes[key] = PregelNode(
                 triggers=[branch_channel],
@@ -836,13 +830,8 @@ class CompiledStateGraph(CompiledGraph):
                     input_schema,
                     self.builder.type_hints[input_schema],
                 ),
-                writers=[
-                    # publish to this channel and state keys
-                    ChannelWrite(
-                        write_entries + [ChannelWriteEntry(key, key)],
-                        tags=[TAG_HIDDEN],
-                    ),
-                ],
+                # publish to state keys
+                writers=[ChannelWrite(write_entries, tags=[TAG_HIDDEN])],
                 metadata=node.metadata,
                 retry_policy=node.retry_policy,
                 bound=node.runnable,
@@ -852,21 +841,13 @@ class CompiledStateGraph(CompiledGraph):
 
     def attach_edge(self, starts: Union[str, Sequence[str]], end: str) -> None:
         if isinstance(starts, str):
-            if starts == START:
-                channel_name = f"start:{end}"
-                # register channel
-                self.channels[channel_name] = EphemeralValue(Any)
-                # subscribe to channel
-                self.nodes[end].triggers.append(channel_name)
-                # publish to channel
-                self.nodes[START].writers.append(
+            # subscribe to start channel
+            if end != END:
+                self.nodes[starts].writers.append(
                     ChannelWrite(
-                        [ChannelWriteEntry(channel_name, START)], tags=[TAG_HIDDEN]
+                        (ChannelWriteEntry(CHANNEL_BRANCH_TO.format(end), starts),)
                     )
                 )
-            elif end != END:
-                # subscribe to start channel
-                self.nodes[end].triggers.append(starts)
         elif end != END:
             channel_name = f"join:{'+'.join(starts)}:{end}"
             # register channel
@@ -877,7 +858,7 @@ class CompiledStateGraph(CompiledGraph):
             for start in starts:
                 self.nodes[start].writers.append(
                     ChannelWrite(
-                        [ChannelWriteEntry(channel_name, start)], tags=[TAG_HIDDEN]
+                        (ChannelWriteEntry(channel_name, start),), tags=[TAG_HIDDEN]
                     )
                 )
 
@@ -890,7 +871,7 @@ class CompiledStateGraph(CompiledGraph):
             if filtered := [p for p in packets if p != END]:
                 writes = [
                     (
-                        ChannelWriteEntry(f"branch:to:{p}", start)
+                        ChannelWriteEntry(CHANNEL_BRANCH_TO.format(p), start)
                         if not isinstance(p, Send)
                         else p
                     )
@@ -1166,3 +1147,6 @@ def _get_schema(
                     if k in channels and isinstance(channels[k], BaseChannel)
                 },
             )
+
+
+CHANNEL_BRANCH_TO = "branch:to:{}"

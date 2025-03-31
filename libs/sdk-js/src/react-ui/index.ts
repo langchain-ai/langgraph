@@ -1,7 +1,11 @@
 import { bootstrapUiContext } from "./client.js";
 bootstrapUiContext();
 
-export { useStreamContext, LoadExternalComponent } from "./client.js";
+export {
+  useStreamContext,
+  LoadExternalComponent,
+  experimental_loadShare,
+} from "./client.js";
 export {
   uiMessageReducer,
   type UIMessage,

@@ -300,6 +300,7 @@ LangGraph Studio is a built-in UI for visualizing, testing, and debugging your a
 - [How to interact with threads in LangGraph Studio](../cloud/how-tos/threads_studio.md)
 - [How to add nodes as dataset examples in LangGraph Studio](../cloud/how-tos/datasets_studio.md)
 - [How to engineer prompts in LangGraph Studio](../cloud/how-tos/iterate_graph_studio.md)
+- [How to test your agent against remote traces](../cloud/how-tos/clone_traces_studio.md)
 
 ## Troubleshooting
 

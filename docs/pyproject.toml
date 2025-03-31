@@ -10,6 +10,7 @@ readme = "README.md"
 python = "^3.10"
 aiohappyeyeballs = "2.4.3"
 hub = "^3.0.1"
+xxhash = "^3.5.0"
 
 [tool.poetry.group.docs.dependencies]
 langgraph = { path = "../libs/langgraph/", develop = true }
@@ -63,6 +64,8 @@ grandalf = "^0.8"
 pyppeteer = "^2.0.0"
 networkx = "^3.3"
 autogen = { version = "^0.3.0", python = "<3.13,>=3.8" }
+pytest = "^8.3.5"
+pytest-check-links = "^0.10.1"
 
 [tool.poetry.group.test]
 optional = true

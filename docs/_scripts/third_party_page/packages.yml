@@ -36,3 +36,6 @@ packages:
   - name: "langgraph-reflection"
     repo: "langchain-ai/langgraph-reflection"
     description: "LangGraph agent that runs a reflection step."
+  - name: "langgraph-codeact"
+    repo: "langchain-ai/langgraph-codeact"
+    description: "LangGraph implementation of CodeAct agent that generates and executes code instead of tool calling."

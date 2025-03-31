@@ -1,13 +1,20 @@
-# LLMs-txt for LangGraph
+# LLMs-txt Overview
 
 ## Overview
 
-LangGraph provides documentation files in the [`llms.txt`](https://llmstxt.org/) format, specifically `llms.txt` and `llms-full.txt`. These files allow large language models (LLMs) and agents to access programming documentation and APIs, particularly useful within integrated development environments (IDEs).
+Below you can find a list of documentation files in the [`llms.txt`](https://llmstxt.org/) format, specifically `llms.txt` and `llms-full.txt`. These files allow large language models (LLMs) and agents to access programming documentation and APIs, particularly useful within integrated development environments (IDEs).
 
 | Language Version | llms.txt                                                                                                   | llms-full.txt                                                                                                        |
 |------------------|------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
 | LangGraph Python | [https://langchain-ai.github.io/langgraph/llms.txt](https://langchain-ai.github.io/langgraph/llms.txt)     | [https://langchain-ai.github.io/langgraph/llms-full.txt](https://langchain-ai.github.io/langgraph/llms-full.txt)     |
 | LangGraph JS     | [https://langchain-ai.github.io/langgraphjs/llms.txt](https://langchain-ai.github.io/langgraphjs/llms.txt) | [https://langchain-ai.github.io/langgraphjs/llms-full.txt](https://langchain-ai.github.io/langgraphjs/llms-full.txt) |
+| LangChain Python | [https://python.langchain.com/llms.txt](https://python.langchain.com/llms.txt)                             | N/A                                                                                                                  |
+| LangChain JS     | [https://js.langchain.com/llms.txt](https://js.langchain.com/llms.txt)                                     | N/A                                                                                                                  |
+
+!!! info "Review the output"
+
+    Even with access to up-to-date documentation, current state-of-the-art models may not always generate correct code. Treat the generated code as a starting point, and always review it before shipping
+    code to production.
 
 ## Differences Between `llms.txt` and `llms-full.txt`
 
@@ -19,9 +26,17 @@ A key consideration when using `llms-full.txt` is its size. For extensive docume
 
 ## Using `llms.txt` via an MCP Server
 
-As of March 9, 2025, IDEs [do not yet have robust native support for `llms.txt`](https://x.com/jeremyphoward/status/1902109312216129905?t=1eHFv2vdNdAckajnug0_Vw&s=19). However, you can utilize `llms.txt` effectively through an MCP server.
+As of March 9, 2025, IDEs [do not yet have robust native support for `llms.txt`](https://x.com/jeremyphoward/status/1902109312216129905?t=1eHFv2vdNdAckajnug0_Vw&s=19). However, you can still use `llms.txt` effectively through an MCP server.
 
-We provide an MCP server specifically designed to serve documentation, called [`mcpdoc`](https://github.com/langchain-ai/mcpdoc). This setup is compatible with IDEs and platforms such as Cursor, Windsurf, Claude, and Claude Code. Instructions for using `mcpdoc` with these tools are available in the repository.
+### 🚀 Use the `mcpdoc` Server
+
+We provide an **MCP server** that was designed to serve documentation for LLMs and IDEs:
+
+👉 **[langchain-ai/mcpdoc GitHub Repository](https://github.com/langchain-ai/mcpdoc)**
+
+This MCP server allows integrating `llms.txt` into tools like **Cursor**, **Windsurf**, **Claude**, and **Claude Code**.
+
+📘 **Setup instructions and usage examples** are available in the repository.
 
 ## Using `llms-full.txt`
 
