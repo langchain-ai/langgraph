@@ -57,7 +57,7 @@ Example `requirements.txt` file:
 ```
 langgraph
 langchain_anthropic
-tavily-python
+langchain-tavily
 langchain_community
 langchain_openai
 

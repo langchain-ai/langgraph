@@ -76,7 +76,7 @@ Here is an example `agent.ts`:
 
 ```ts
 import type { AIMessage } from "@langchain/core/messages";
-import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
+import { TavilySearchResults } from "@langchain/tavily";
 import { ChatOpenAI } from "@langchain/openai";
 
 import { MessagesAnnotation, StateGraph } from "@langchain/langgraph";
