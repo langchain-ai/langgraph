@@ -665,6 +665,8 @@ def dev(
         wait_for_client=wait_for_client,
         auth=config_json.get("auth"),
         http=config_json.get("http"),
+        ui=config_json.get("ui"),
+        ui_config=config_json.get("ui_config"),
         studio_url=studio_url,
         allow_blocking=allow_blocking,
     )
