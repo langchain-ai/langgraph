@@ -1,3 +1,3 @@
-# How to Deploy Standalone Container
+# How to Deploy a Standalone Container
 
 Test

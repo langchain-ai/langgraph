@@ -1,4 +1,4 @@
-# How to Deploy to LangGraph Cloud
+# How to Deploy to Cloud SaaS
 
 LangGraph Cloud is available within <a href="https://www.langchain.com/langsmith" target="_blank">LangSmith</a>. To deploy a LangGraph Cloud API, navigate to the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>.
 

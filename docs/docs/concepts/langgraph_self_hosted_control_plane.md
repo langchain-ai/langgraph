@@ -6,7 +6,7 @@ The Self-Hosted Control Plane deployment option is a fully self-hosted model for
 
 |                   | Control Plane     | Data Plane |
 |-------------------|-------------------|------------|
-| **What is it?** | <ul><li>LangGraph Platform UI for creating deployments and revisions</li><li>Control plane APIs for creating deployments and revisions</li></ul> | <ul><li>Data plane listene for reconciling deployments with control plane state</li><li>LangGraph server container(s)</li><li>Postgres, Redis</li></ul> |
+| **What is it?** | <ul><li>LangGraph Platform UI for creating deployments and revisions</li><li>Control plane APIs for creating deployments and revisions</li></ul> | <ul><li>Data plane listener for reconciling deployments with control plane state</li><li>LangGraph server container(s)</li><li>Postgres, Redis</li></ul> |
 | **Where it's hosted?** | Your cloud | Your cloud |
 | **Who provisions and manages it?** | You | You |
 
