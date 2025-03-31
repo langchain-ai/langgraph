@@ -30,6 +30,7 @@ from langgraph.checkpoint.serde.types import SendProtocol
 from langgraph.store.base import Item
 
 LC_REVIVER = Reviver()
+EMPTY_BYTES = b""
 
 
 class JsonPlusSerializer(SerializerProtocol):
@@ -194,7 +195,9 @@ class JsonPlusSerializer(SerializerProtocol):
         )
 
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
-        if isinstance(obj, bytes):
+        if obj is None:
+            return "null", EMPTY_BYTES
+        elif isinstance(obj, bytes):
             return "bytes", obj
         elif isinstance(obj, bytearray):
             return "bytearray", obj
@@ -211,7 +214,9 @@ class JsonPlusSerializer(SerializerProtocol):
 
     def loads_typed(self, data: tuple[str, bytes]) -> Any:
         type_, data_ = data
-        if type_ == "bytes":
+        if type_ == "null":
+            return None
+        elif type_ == "bytes":
             return data_
         elif type_ == "bytearray":
             return bytearray(data_)
