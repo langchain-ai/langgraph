@@ -2,6 +2,7 @@
   "pip_config_file": "./pipconf.txt",
   "dependencies": [
     "langchain_community",
+    "langchain_tavily",
     "langchain_anthropic",
     "langchain_openai",
     "wikipedia",
