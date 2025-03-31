@@ -1,6 +1,7 @@
 import binascii
 import itertools
 import sys
+import threading
 from collections import defaultdict, deque
 from functools import partial
 from hashlib import sha1
@@ -910,13 +911,13 @@ def _scratchpad(
     # using itertools.count as an atomic counter (+= 1 is not thread-safe)
     return PregelScratchpad(
         # call
-        call_counter=itertools.count(0).__next__,
+        call_counter=LazyAtomicCounter(),
         # interrupt
-        interrupt_counter=itertools.count(0).__next__,
+        interrupt_counter=LazyAtomicCounter(),
         resume=task_resume_write,
         get_null_resume=get_null_resume,
         # subgraph
-        subgraph_counter=itertools.count(0).__next__,
+        subgraph_counter=LazyAtomicCounter(),
     )
 
 
@@ -990,3 +991,22 @@ def task_path_str(tup: Union[str, int, tuple]) -> str:
         if isinstance(tup, int)
         else str(tup)
     )
+
+
+LAZY_ATOMIC_COUNTER_LOCK = threading.Lock()
+
+
+class LazyAtomicCounter:
+    __slots__ = ("_counter",)
+
+    _counter: Optional[Callable[[], int]]
+
+    def __init__(self) -> None:
+        self._counter = None
+
+    def __call__(self) -> int:
+        if self._counter is None:
+            with LAZY_ATOMIC_COUNTER_LOCK:
+                if self._counter is None:
+                    self._counter = itertools.count(0).__next__
+        return self._counter()
