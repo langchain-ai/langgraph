@@ -333,7 +333,7 @@ class BasePostgresStore(Generic[C]):
             # First handle main store insertions
             for op in inserts:
                 if op.ttl is not None:
-                    expires_at_str = f"NOW() + INTERVAL '{op.ttl*60} seconds'"
+                    expires_at_str = f"NOW() + INTERVAL '{op.ttl * 60} seconds'"
                     ttl_minutes = op.ttl
                 else:
                     expires_at_str = "NULL"
@@ -1320,12 +1320,12 @@ def _ensure_index_config(
     index_config = index_config.copy()
     tokenized: list[tuple[str, Union[Literal["$"], list[str]]]] = []
     tot = 0
-    text_fields = index_config.get("text_fields") or ["$"]
-    if isinstance(text_fields, str):
-        text_fields = [text_fields]
-    if not isinstance(text_fields, list):
-        raise ValueError(f"Text fields must be a list or a string. Got {text_fields}")
-    for p in text_fields:
+    fields = index_config.get("fields") or ["$"]
+    if isinstance(fields, str):
+        fields = [fields]
+    if not isinstance(fields, list):
+        raise ValueError(f"Text fields must be a list or a string. Got {fields}")
+    for p in fields:
         if p == "$":
             tokenized.append((p, "$"))
             tot += 1
