@@ -3,6 +3,7 @@ from typing import Any, Generic, Sequence, TypeVar
 
 from typing_extensions import Self
 
+from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
 Value = TypeVar("Value")
@@ -33,7 +34,10 @@ class BaseChannel(Generic[Value, Update, C], ABC):
         """Return a serializable representation of the channel's current state.
         Raises EmptyChannelError if the channel is empty (never updated yet),
         or doesn't support checkpoints."""
-        return self.get()
+        try:
+            return self.get()
+        except EmptyChannelError:
+            return MISSING
 
     @abstractmethod
     def from_checkpoint(self, checkpoint: C) -> Self:

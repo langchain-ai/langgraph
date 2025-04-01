@@ -90,3 +90,6 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
 
     def is_available(self) -> bool:
         return self.value is not MISSING
+
+    def checkpoint(self) -> Value:
+        return self.value
