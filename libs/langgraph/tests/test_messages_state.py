@@ -16,7 +16,7 @@ from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import TypedDict
 
 from langgraph.graph import add_messages
-from langgraph.graph.message import MessagesState
+from langgraph.graph.message import REMOVE_ALL_MESSAGES, MessagesState
 from langgraph.graph.state import END, START, StateGraph
 from tests.conftest import IS_LANGCHAIN_CORE_030_OR_GREATER
 from tests.messages import _AnyIdHumanMessage
@@ -313,3 +313,32 @@ def test_messages_state_format_openai():
     for m in result["messages"]:
         m.id = None
     assert result == {"messages": expected}
+
+
+def test_remove_all_messages():
+    # simple removal
+    left = [HumanMessage(content="Hello"), AIMessage(content="Hi there!")]
+    right = [RemoveMessage(id=REMOVE_ALL_MESSAGES)]
+    result = add_messages(left, right)
+    assert result == []
+
+    # removal and update (i.e., overwriting)
+    left = [HumanMessage(content="Hello"), AIMessage(content="Hi there!")]
+    right = [
+        RemoveMessage(id=REMOVE_ALL_MESSAGES),
+        HumanMessage(content="Updated hello"),
+    ]
+    result = add_messages(left, right)
+    assert result == [_AnyIdHumanMessage(content="Updated hello")]
+
+    # test removing preceding messages in the right list
+    left = [HumanMessage(content="Hello"), AIMessage(content="Hi there!")]
+    right = [
+        HumanMessage(content="Updated hello"),
+        RemoveMessage(id=REMOVE_ALL_MESSAGES),
+        HumanMessage(content="Updated hi there"),
+    ]
+    result = add_messages(left, right)
+    assert result == [
+        _AnyIdHumanMessage(content="Updated hi there"),
+    ]
