@@ -3,6 +3,7 @@ from typing import Any, Generic, NamedTuple, Optional, Sequence, Type, Union
 from typing_extensions import Self
 
 from langgraph.channels.base import BaseChannel, Value
+from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
 
@@ -45,16 +46,23 @@ class DynamicBarrierValue(
         """The type of the update received by the channel."""
         return self.typ
 
+    def copy(self) -> Self:
+        """Return a copy of the channel."""
+        empty = self.__class__(self.typ)
+        empty.key = self.key
+        empty.names = self.names
+        empty.seen = self.seen.copy()
+        return empty
+
     def checkpoint(self) -> tuple[Optional[set[Value]], set[Value]]:
         return (self.names, self.seen)
 
     def from_checkpoint(
-        self,
-        checkpoint: Optional[tuple[Optional[set[Value]], set[Value]]],
+        self, checkpoint: tuple[Optional[set[Value]], set[Value]]
     ) -> Self:
         empty = self.__class__(self.typ)
         empty.key = self.key
-        if checkpoint is not None:
+        if checkpoint is not MISSING:
             names, seen = checkpoint
             empty.names = names if names is not None else None
             empty.seen = seen

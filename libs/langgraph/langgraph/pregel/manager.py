@@ -4,6 +4,7 @@ from typing import AsyncIterator, Iterator, Mapping, Union
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint
+from langgraph.constants import MISSING
 from langgraph.managed.base import (
     ConfiguredManagedValue,
     ManagedValueMapping,
@@ -36,7 +37,7 @@ def ChannelsManager(
     with ExitStack() as stack:
         yield (
             {
-                k: v.from_checkpoint(checkpoint["channel_values"].get(k))
+                k: v.from_checkpoint(checkpoint["channel_values"].get(k, MISSING))
                 for k, v in channel_specs.items()
             },
             ManagedValueMapping(
@@ -90,7 +91,7 @@ async def AsyncChannelsManager(
         yield (
             # channels: enter each channel with checkpoint
             {
-                k: v.from_checkpoint(checkpoint["channel_values"].get(k))
+                k: v.from_checkpoint(checkpoint["channel_values"].get(k, MISSING))
                 for k, v in channel_specs.items()
             },
             # managed: build mapping from spec to result

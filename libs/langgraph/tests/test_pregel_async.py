@@ -2146,8 +2146,8 @@ async def test_pending_writes_resume(
                 },
                 "channel_values": {
                     "value": 1,
-                    "branch:to:one": "__start__",
-                    "branch:to:two": "__start__",
+                    "branch:to:one": None,
+                    "branch:to:two": None,
                 },
             },
             metadata={
@@ -2201,8 +2201,8 @@ async def test_pending_writes_resume(
             parent_config=None,
             pending_writes=UnsortedSequence(
                 (AnyStr(), "value", 1),
-                (AnyStr(), "branch:to:one", "__start__"),
-                (AnyStr(), "branch:to:two", "__start__"),
+                (AnyStr(), "branch:to:one", None),
+                (AnyStr(), "branch:to:two", None),
             ),
         )
 

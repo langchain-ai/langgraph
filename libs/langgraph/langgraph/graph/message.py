@@ -27,6 +27,8 @@ from langgraph.graph.state import StateGraph
 
 Messages = Union[list[MessageLikeRepresentation], MessageLikeRepresentation]
 
+REMOVE_ALL_MESSAGES = "__remove_all__"
+
 
 def _add_messages_wrapper(func: Callable) -> Callable[[Messages, Messages], Messages]:
     def _add_messages(
@@ -158,6 +160,7 @@ def add_messages(
 
         Support for 'format="langchain-openai"' flag added.
     """
+    remove_all_idx = None
     # coerce to list
     if not isinstance(left, list):
         left = [left]  # type: ignore[assignment]
@@ -176,9 +179,15 @@ def add_messages(
     for m in left:
         if m.id is None:
             m.id = str(uuid.uuid4())
-    for m in right:
+    for idx, m in enumerate(right):
         if m.id is None:
             m.id = str(uuid.uuid4())
+        if isinstance(m, RemoveMessage) and m.id == REMOVE_ALL_MESSAGES:
+            remove_all_idx = idx
+
+    if remove_all_idx is not None:
+        return right[remove_all_idx + 1 :]
+
     # merge
     merged = left.copy()
     merged_by_id = {m.id: i for i, m in enumerate(merged)}
