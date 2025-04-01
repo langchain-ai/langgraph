@@ -845,7 +845,7 @@ class CompiledStateGraph(CompiledGraph):
             if end != END:
                 self.nodes[starts].writers.append(
                     ChannelWrite(
-                        (ChannelWriteEntry(CHANNEL_BRANCH_TO.format(end), starts),)
+                        (ChannelWriteEntry(CHANNEL_BRANCH_TO.format(end), None),)
                     )
                 )
         elif end != END:
@@ -871,7 +871,7 @@ class CompiledStateGraph(CompiledGraph):
             if filtered := [p for p in packets if p != END]:
                 writes = [
                     (
-                        ChannelWriteEntry(CHANNEL_BRANCH_TO.format(p), start)
+                        ChannelWriteEntry(CHANNEL_BRANCH_TO.format(p), None)
                         if not isinstance(p, Send)
                         else p
                     )

@@ -1,11 +1,5 @@
 import collections.abc
-from typing import (
-    Callable,
-    Generic,
-    Optional,
-    Sequence,
-    Type,
-)
+from typing import Callable, Generic, Sequence, Type
 
 from typing_extensions import NotRequired, Required, Self
 
@@ -72,10 +66,10 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
         """The type of the update received by the channel."""
         return self.typ
 
-    def from_checkpoint(self, checkpoint: Optional[Value]) -> Self:
+    def from_checkpoint(self, checkpoint: Value) -> Self:
         empty = self.__class__(self.typ, self.operator)
         empty.key = self.key
-        if checkpoint is not None:
+        if checkpoint is not MISSING:
             empty.value = checkpoint
         return empty
 
