@@ -8,7 +8,7 @@ The Standalone Container deployment option is the least restrictive model for de
 
 |                   | [Control Plane](../concepts/langgraph_control_plane.md) | [Data Plane](../concepts/langgraph_data_plane.md) |
 |-------------------|-------------------|------------|
-| **What is it?** | n/a | <ul><li>LangGraph servers</li><li>Postgres, Redis, etc</li></ul> |
+| **What is it?** | n/a | <ul><li>LangGraph Servers</li><li>Postgres, Redis, etc</li></ul> |
 | **Where is it hosted?** | n/a | Your cloud |
 | **Who provisions and manages it?** | n/a | You |
 

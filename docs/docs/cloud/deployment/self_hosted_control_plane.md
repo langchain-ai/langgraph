@@ -2,38 +2,38 @@
 
 Before deploying, review the [conceptual guide for the Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md) deployment option.
 
-## Requirements
+## Prerequisites
 
-- You are using Kubernetes already
-- You have already deployed/are deploying LangSmith self-hosted
-- You use `langgraph-cli` and/or LangGraph Desktop app to test graph locally
-- You use `langgraph build` command to build image and then push it to a registry your cluster has access to.Requirements
-- `KEDA` installed on your cluster
+1. You are using Kubernetes.
+1. You have self-hosted LangSmith deployed.
+1. You use the [LangGraph CLI](../../concepts/langgraph_cli.md) to [test your application locally](./test_locally.md).
+1. You use the [LangGraph CLI](../../concepts/langgraph_cli.md) to build a Docker image (i.e. `langgraph build`) and push it to a registry your Kubernetes cluster or Amazon ECS cluster has access to.
+1. `KEDA` is installed on your cluster.
 
          helm repo add kedacore https://kedacore.github.io/charts 
          helm install keda kedacore/keda --namespace keda --create-namespac
 
-- Ingress Configuration (Recommended)
-    - `Ingress Nginx` to serve as a reverse proxy for your deployment
+1. Ingress Configuration (recommended)
+    1. Install `Ingress Nginx` to serve as a reverse proxy for your deployment.
 
             helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
             helm repo update
             helm install ingress-nginx ingress-nginx/ingress-nginx
 
-    - A root domain that will suffix all domains for your workloads. E.g `us.langgraph.app`
-    - Wildcard certificates to terminate TLS for your deployments
-    - If you do not set this up, you will need to provision domains/certs for each of your deployments.
+    1. Provision a root domain that will suffix all domains for your workloads (e.g. `us.langgraph.app`).
+    1. Provision wildcard certificates to terminate TLS for your deployments.
+    1. Note: If this step is skipped, you will need to provision domains/certs for each of your deployments.
 
-- Slack space in your cluster for additional deployments. `Cluster-Autoscaler` recommended to automatically provision new nodes
+1. You have slack space in your cluster for multiple deployments. `Cluster-Autoscaler` is recommended to automatically provision new nodes.
 
 ## Setup
 
-1. As part of configuring your self-hosted LangSmith setup, you enable the langgraphPlatform. This will provision a few key resources.
-    1. `listener`: This is a service that listens to our control plane for changes to your deployments and provision/updates downstream CRDS.
-    1. `LangGraphPlatform CRD`: A CRD for LangGraph platform deployments. This contains the spec for managing an instance of a specific LangGraph platform deployment.
-    1. `operator`: This operator handles changes to your LangGraph Platform CRDS.
-    1. `host-backend`: This service handles api requests for the control plane.
-1. Two additional images will be used by the chart:
+1. As part of configuring your Self-Hosted LangSmith instance, you enable the `langgraphPlatform` option. This will provision a few key resources.
+    1. `listener`: This is a service that listens to the [control plane](../../concepts/langgraph_control_plane.md) for changes to your deployments and creates/updates downstream CRDs.
+    1. `LangGraphPlatform CRD`: A CRD for LangGraph Platform deployments. This contains the spec for managing an instance of a LangGraph platform deployment.
+    1. `operator`: This operator handles changes to your LangGraph Platform CRDs.
+    1. `host-backend`: This is the [control plane](../../concepts/langgraph_control_plane.md).
+1. Two additional images will be used by the chart.
 
         hostBackendImage:
           repository: "docker.io/langchain/hosted-langserve-backend"
@@ -44,7 +44,7 @@ Before deploying, review the [conceptual guide for the Self-Hosted Control Plane
           pullPolicy: IfNotPresent
           tag: "aa9dff4"
 
-1. In your values file, configure this like so:
+1. In your `values.yaml` file, enable the `langgraphPlatform` option.
 
         config:
           langgraphPlatform:
@@ -52,8 +52,5 @@ Before deploying, review the [conceptual guide for the Self-Hosted Control Plane
             langgraphPlatformLicenseKey: "YOUR_LANGGRAPH_PLATFORM_LICENSE_KEY"
             rootDomain: "YOUR_ROOT_DOMAIN"
 
-1. You can also configure base templates for your agents by overriding the base templates here: [values.yaml](https://github.com/langchain-ai/helm/blob/main/charts/langsmith/values.yaml#L898)
-1. You create a LangGraph Cloud Project in your instance providing
-    1. Image path for your LangGraph Cloud image
-1. The `langgraph-listener` sees there is a revision that needs to be deployed in your Kubernetes cluster and provisions necessary resources
-1. You use your LangSmith instance/existing cluster monitoring to ensure your deployments are healthy/running smoothly.
+1. You can also configure base templates for your agents by overriding the base templates [here](https://github.com/langchain-ai/helm/blob/main/charts/langsmith/values.yaml#L898).
+1. You create a deployment from the [Control Plane UI](../../concepts/langgraph_control_plane.md#control-plane-ui).
