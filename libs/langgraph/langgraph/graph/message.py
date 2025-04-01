@@ -26,6 +26,7 @@ from typing_extensions import TypedDict
 from langgraph.graph.state import StateGraph
 
 Messages = Union[list[MessageLikeRepresentation], MessageLikeRepresentation]
+
 REMOVE_ALL_MESSAGES = "__remove_all__"
 
 
