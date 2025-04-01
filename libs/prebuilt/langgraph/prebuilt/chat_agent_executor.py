@@ -316,11 +316,13 @@ def create_react_agent(
         pre_model_hook: An optional node to add before the `agent` node (i.e., the node that calls the LLM).
             Useful for implementing strategies to manage long message histories (e.g., message trimming, summarization, etc.).
             Pre-model hook must be a callable or a runnable that takes in current graph state and returns a state update in the form of
-
                 ```python
+                # At least one of `messages` or `llm_input_messages` MUST be provided
                 {
-                    # `llm_input_messages` key MUST be provided.
-                    # It will be used as the input to the LLM, and will NOT OVERWRITE `messages` in the state.
+                    # If provided, will UPDATE the `messages` in the state
+                    "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), ...],
+                    # If provided, will be used as the input to the LLM,
+                    # and will NOT UPDATE `messages` in the state
                     "llm_input_messages": [...],
                     # Any other state keys that need to be propagated
                     ...
@@ -328,8 +330,18 @@ def create_react_agent(
                 ```
 
             !!! Important
-                The `llm_input_messages` key MUST be provided and will be used as an input to the `agent` node.
+                At least one of `messages` or `llm_input_messages` MUST be provided and will be used as an input to the `agent` node.
                 The rest of the keys will be added to the graph state.
+
+            !!! Warning
+                If you are returning `messages` in the pre-model hook, you should OVERWRITE the `messages` key by doing the following:
+
+                ```python
+                {
+                    "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), *new_messages]
+                    ...
+                }
+                ```
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `remaining_steps` keys.
             Defaults to `AgentState` that defines those two keys.
@@ -705,15 +717,18 @@ def create_react_agent(
 
     def _get_model_input_state(state: StateSchema) -> StateSchema:
         if pre_model_hook is not None:
-            input_messages_key = "llm_input_messages"
+            messages = (
+                _get_state_value(state, "llm_input_messages")
+            ) or _get_state_value(state, "messages")
+            error_msg = f"Expected input to call_model to have 'llm_input_messages' or 'messages' key, but got {state}"
         else:
-            input_messages_key = "messages"
-
-        messages = _get_state_value(state, input_messages_key)
-        if messages is None:
-            raise ValueError(
-                f"Expected input to call_model to have '{input_messages_key}' key, but got {state}"
+            messages = _get_state_value(state, "messages")
+            error_msg = (
+                f"Expected input to call_model to have 'messages' key, but got {state}"
             )
+
+        if messages is None:
+            raise ValueError(error_msg)
 
         _validate_chat_history(messages)
         # we're passing messages under `messages` key, as this is expected by the prompt
