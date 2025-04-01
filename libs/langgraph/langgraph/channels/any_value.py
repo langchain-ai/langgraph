@@ -30,7 +30,8 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
         """The type of the update received by the channel."""
         return self.typ
 
-    def copy(self):
+    def copy(self) -> Self:
+        """Return a copy of the channel."""
         empty = self.__class__(self.typ, self.key)
         empty.value = self.value
         return empty
