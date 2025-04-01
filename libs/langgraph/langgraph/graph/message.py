@@ -158,6 +158,11 @@ def add_messages(
 
         Support for 'format="langchain-openai"' flag added.
     """
+    overwrite = False
+    if isinstance(right, tuple) and len(right) == 2 and right[0] == "overwrite":
+        right = right[1]
+        overwrite = True
+
     # coerce to list
     if not isinstance(left, list):
         left = [left]  # type: ignore[assignment]
@@ -179,6 +184,10 @@ def add_messages(
     for m in right:
         if m.id is None:
             m.id = str(uuid.uuid4())
+
+    if overwrite:
+        return right
+
     # merge
     merged = left.copy()
     merged_by_id = {m.id: i for i, m in enumerate(merged)}
