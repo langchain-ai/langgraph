@@ -31,7 +31,7 @@ class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
         return self.typ
 
     def checkpoint(self) -> Value:
-        raise EmptyChannelError()
+        return MISSING
 
     def from_checkpoint(self, checkpoint: Value) -> Self:
         empty = self.__class__(self.typ, self.guard)

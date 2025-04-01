@@ -124,6 +124,7 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
     )
 
 
+# Kept for backwards compat, newer versions of LangGraph no longer use this.
 def create_checkpoint(
     checkpoint: Checkpoint,
     channels: Optional[Mapping[str, ChannelProtocol]],
