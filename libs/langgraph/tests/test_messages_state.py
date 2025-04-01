@@ -330,3 +330,15 @@ def test_remove_all_messages():
     ]
     result = add_messages(left, right)
     assert result == [_AnyIdHumanMessage(content="Updated hello")]
+
+    # test removing preceding messages in the right list
+    left = [HumanMessage(content="Hello"), AIMessage(content="Hi there!")]
+    right = [
+        HumanMessage(content="Updated hello"),
+        RemoveMessage(id=REMOVE_ALL_MESSAGES),
+        HumanMessage(content="Updated hi there"),
+    ]
+    result = add_messages(left, right)
+    assert result == [
+        _AnyIdHumanMessage(content="Updated hi there"),
+    ]
