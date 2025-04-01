@@ -17,17 +17,17 @@ Get started deploying your LangGraph applications locally or on the cloud with
 
 ## Deployment Options
 
-- [Cloud SaaS](../concepts/langgraph_cloud.md): Connect GitHub repositories to LangSmith and deploy LangGraph servers to LangChain's cloud. We manage everything.
-- [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md): Manage deployments from LangSmith, but deploy LangGraph servers to your cloud. We manage LangSmith, you manage the deployments. 
-- [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md): Manage deployments from Self-Hosted LangSmith and deploy LangGraph servers to your cloud. You manage everything.
-- [Standalone Container](../concepts/langgraph_standalone_container.md): Deploy LangGraph server Docker images however you like.
+- [Cloud SaaS](../concepts/langgraph_cloud.md): Connect to your GitHub repositories and deploy LangGraph Servers to LangChain's cloud. We manage everything.
+- [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md): Create deployments from the [Control Plane UI](../concepts/langgraph_control_plane.md#control-plane-ui) and deploy LangGraph Servers to your cloud. We manage the [control plane](../concepts/langgraph_control_plane.md), you manage the deployments.
+- [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md#control-plane-ui): Create deployments from a self-hosted [Control Plane UI](../concepts/langgraph_control_plane.md) and deploy LangGraph Servers to your cloud. You manage everything.
+- [Standalone Container](../concepts/langgraph_standalone_container.md): Deploy LangGraph Server Docker images however you like.
 
-### Quick Comparison
-|                      | **Cloud SaaS** | **Self-Hosted Data Plane** | **Self-Hosted Control Plane** | **Standalone Container** |
+A quick comparison...
+
+|                      | **Cloud SaaS** | **Self-Hosted [Data Plane](../concepts/langgraph_data_plane.md)** | **Self-Hosted [Control Plane](../concepts/langgraph_control_plane.md)** | **Standalone Container** |
 |----------------------|----------------|----------------------------|-------------------------------|--------------------------|
-| **Description**          | User connects GitHub repository to LangSmith and deploys via the Deployments UI. | User builds a Docker image using the LangGraph CLI. User deploys via the Deployments UI to their cloud. | User builds a Docker image using the LangGraph CLI. User deploys via the Deployments UI to their cloud. | User builds a Docker image using the LangGraph CLI. User deploys a standalone instance of the LangGraph server using any container deployment tooling. |
-| **LangSmith**            | Requires LangSmith SaaS | Requires LangSmith SaaS | Requires Self-Hosted LangSmith | Optional |
-| **Control Plane UI**       | Yes | Yes | Yes | No |
-| **CI/CD**                | Build process is managed internally by the platform. | User builds image and manages CI/CD workflow externally. | User builds image and manages CI/CD workflow externally. | User builds image and manages CI/CD workflow externally. |
-| **Data Residency**       | LangChain’s cloud | User’s cloud | User’s cloud | User’s cloud |
+| **[Control Plane UI/API](../concepts/langgraph_control_plane.md)** | Yes | Yes | Yes | No |
+| **CI/CD** | Managed internally by platform | Managed externally by you | Managed externally by you | Managed externally by you |
+| **Data/Compute Residency** | LangChain’s cloud | Your cloud | Your cloud | Your cloud |
 | **Required Permissions** | None | See details [here](). | See details [here](). | None |
+| **LangSmith Compatibility** | Trace to LangSmith SaaS | Trace to LangSmith SaaS | Trace to Self-Hosted LangSmith | Optional tracing |

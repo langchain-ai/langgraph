@@ -1,8 +1,21 @@
 # LangGraph Data Plane
 
-The term "data plane" is used broadly to refer to [LangGraph Server](./langgraph_server.md) instances (deployments), the corresponding database (Postgres) for each deployment, and the "listener" application that continuously polls for updates from the [LangGraph Control Plane](./langgraph_control_plane.md).
+The term "data plane" is used broadly to refer to [LangGraph Servers](./langgraph_server.md) (deployments), the corresponding infrastructure for each server, and the "listener" application that continuously polls for updates from the [LangGraph Control Plane](./langgraph_control_plane.md).
 
-The data plane "listener" application periodically calls LangGraph Control Plane APIs to:
+## Server Infrastructure
+
+In addition to the [LangGraph Server](./langgraph_server.md) itself, the following infrastructure for each server are also included in the broad defintion of "data plane":
+
+- [Postgres](../concepts/platform_architecture.md#how-we-use-postgres)
+- [Redis](../concepts/platform_architecture.md#how-we-use-redis)
+- Secrets store
+- Autoscalers
+
+See [LangGraph Platform Architecture](../concepts/platform_architecture.md) for more details.
+
+## "Listener" Application
+
+The data plane "listener" application periodically calls [Control Plane APIs](../concepts/langgraph_control_plane.md#control-plane-api) to:
 
 - Determine if new deployments should be created.
 - Determine if existing deployments should be updated (i.e. new revisions).

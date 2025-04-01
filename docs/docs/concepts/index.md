@@ -57,8 +57,8 @@ The LangGraph Platform offers a few different deployment options described in th
 
 The LangGraph Platform comprises several components that work together to support the deployment and management of LangGraph applications:
 
-- [LangGraph Control Plane](./langgraph_control_plane.md): The LangGraph Control Plane refers to the Control Plane UI where users create and update LangGraph Server instances and the Control Plane APIs that support the UI experience.
-- [LangGraph Data Plane](./langgraph_data_plane.md): The LangGraph Data Plane refers to LangGraph Server instances, the corresponding database for each instance, and the "listener" application that continuously polls for updates from the LangGraph Control Plane.
+- [LangGraph Control Plane](./langgraph_control_plane.md): The LangGraph Control Plane refers to the Control Plane UI where users create and update LangGraph Servers and the Control Plane APIs that support the UI experience.
+- [LangGraph Data Plane](./langgraph_data_plane.md): The LangGraph Data Plane refers to LangGraph Servers, the corresponding infrastructure for each server, and the "listener" application that continuously polls for updates from the LangGraph Control Plane.
 - [LangGraph Server](./langgraph_server.md): The LangGraph Server is designed to support a wide range of agentic application use cases, from background processing to real-time interactions.
 - [LangGraph Studio](./langgraph_studio.md): LangGraph Studio is a specialized IDE that can connect to a LangGraph Server to enable visualization, interaction, and debugging of the application locally.
 - [LangGraph CLI](./langgraph_cli.md): LangGraph CLI is a command-line interface that helps to interact with a local LangGraph
@@ -76,7 +76,7 @@ The LangGraph Platform comprises several components that work together to suppor
 
 ### Deployment Options
 
-- [Cloud SaaS](../concepts/langgraph_cloud.md): Connect GitHub repositories to LangSmith and deploy LangGraph servers to LangChain's cloud. We manage everything.
-- [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md): Manage deployments from LangSmith, but deploy LangGraph servers to your cloud. We manage LangSmith, you manage the deployments. 
-- [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md): Manage deployments from Self-Hosted LangSmith and deploy LangGraph servers to your cloud. You manage everything.
-- [Standalone Container](../concepts/langgraph_standalone_container.md): Deploy LangGraph server Docker images however you like.
+- [Cloud SaaS](../concepts/langgraph_cloud.md): Connect to your GitHub repositories and deploy LangGraph Servers to LangChain's cloud. We manage everything.
+- [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md): Create deployments from the [Control Plane UI](../concepts/langgraph_control_plane.md#control-plane-ui) and deploy LangGraph Servers to your cloud. We manage the [control plane](../concepts/langgraph_control_plane.md), you manage the deployments.
+- [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md#control-plane-ui): Create deployments from a self-hosted [Control Plane UI](../concepts/langgraph_control_plane.md) and deploy LangGraph Servers to your cloud. You manage everything.
+- [Standalone Container](../concepts/langgraph_standalone_container.md): Deploy LangGraph Server Docker images however you like.
