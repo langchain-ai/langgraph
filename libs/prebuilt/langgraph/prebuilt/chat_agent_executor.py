@@ -743,7 +743,7 @@ def create_react_agent(
     def call_model(
         state: StateSchema,
         config: RunnableConfig,
-    ) -> Union[dict[str, Any], BaseModel]:
+    ) -> StateSchema:
         state = _get_model_input_state(state)
         response = cast(AIMessage, model_runnable.invoke(state, config))
         # add agent name to the AIMessage
@@ -764,7 +764,7 @@ def create_react_agent(
     async def acall_model(
         state: StateSchema,
         config: RunnableConfig,
-    ) -> Union[dict[str, Any], BaseModel]:
+    ) -> StateSchema:
         state = _get_model_input_state(state)
         response = cast(AIMessage, await model_runnable.ainvoke(state, config))
         # add agent name to the AIMessage
