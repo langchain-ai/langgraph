@@ -48,6 +48,13 @@ class Topic(
         """The type of the update received by the channel."""
         return Union[self.typ, list[self.typ]]  # type: ignore[name-defined]
 
+    def copy(self) -> Self:
+        """Return a copy of the channel."""
+        empty = self.__class__(self.typ, self.accumulate)
+        empty.key = self.key
+        empty.values = self.values.copy()
+        return empty
+
     def checkpoint(self) -> list[Value]:
         return self.values
 

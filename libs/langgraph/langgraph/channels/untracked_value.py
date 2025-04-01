@@ -30,6 +30,13 @@ class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
         """The type of the update received by the channel."""
         return self.typ
 
+    def copy(self) -> Self:
+        """Return a copy of the channel."""
+        empty = self.__class__(self.typ, self.guard)
+        empty.key = self.key
+        empty.value = self.value
+        return empty
+
     def checkpoint(self) -> Value:
         return MISSING
 

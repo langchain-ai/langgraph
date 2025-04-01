@@ -30,9 +30,13 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
         """The type of the update received by the channel."""
         return self.typ
 
+    def copy(self):
+        empty = self.__class__(self.typ, self.key)
+        empty.value = self.value
+        return empty
+
     def from_checkpoint(self, checkpoint: Value) -> Self:
-        empty = self.__class__(self.typ)
-        empty.key = self.key
+        empty = self.__class__(self.typ, self.key)
         if checkpoint is not MISSING:
             empty.value = checkpoint
         return empty

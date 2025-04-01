@@ -30,6 +30,12 @@ class BaseChannel(Generic[Value, Update, C], ABC):
 
     # serialize/deserialize methods
 
+    def copy(self) -> Self:
+        """Return a copy of the channel.
+        By default, delegates to checkpoint() and from_checkpoint().
+        Subclasses can override this method with a more efficient implementation."""
+        return self.from_checkpoint(self.checkpoint())
+
     def checkpoint(self) -> C:
         """Return a serializable representation of the channel's current state.
         Raises EmptyChannelError if the channel is empty (never updated yet),
