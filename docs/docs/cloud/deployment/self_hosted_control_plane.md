@@ -1,5 +1,7 @@
 # How to Deploy Self-Hosted Control Plane
 
+Before deploying, review the [conceptual guide for the Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md) deployment option.
+
 ## Requirements
 
 - You are using Kubernetes already
@@ -55,7 +57,3 @@
     1. Image path for your LangGraph Cloud image
 1. The `langgraph-listener` sees there is a revision that needs to be deployed in your Kubernetes cluster and provisions necessary resources
 1. You use your LangSmith instance/existing cluster monitoring to ensure your deployments are healthy/running smoothly.
-
-## Concepts
-
-Follow the conceptual guide for [Self-Hosted Control Plane Conceptual Guide](../../concepts/langgraph_self_hosted_control_plane.md).

@@ -1,5 +1,7 @@
 # How to Deploy Self-Hosted Data Plane
 
+Before deploying, review the [conceptual guide for the Self-Hosted Data Plane](../../concepts/langgraph_self_hosted_data_plane.md) deployment option.
+
 ## Kubernetes
 
 ### Requirements
@@ -21,7 +23,3 @@
 ## Amazon ECS
 
 Coming soon...
-
-## Concepts
-
-Follow the conceptual guide for [Self-Hosted Data Plane Conceptual Guide](../../concepts/langgraph_self_hosted_data_plane.md).

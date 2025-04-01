@@ -18,7 +18,7 @@ The Standalone Container deployment option is the least restrictive model for de
 
 ### Kubernetes
 
-TBD
+The Standalone Container deployment option supports deploying data plane infrastructure to a Kubernetes cluster.
 
 ### Docker
 

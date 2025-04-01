@@ -1,9 +1,7 @@
 # How to Deploy a Standalone Container
 
+Before deploying, review the [conceptual guide for the Standalone Container](../../concepts/langgraph_standalone_container.md) deployment option.
+
 ## Requirements
 
 ## Setup
-
-## Concepts
-
-Follow the conceptual guide for [Standalone Container](../../concepts/langgraph_standalone_container.md).
