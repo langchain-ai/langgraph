@@ -740,10 +740,7 @@ def create_react_agent(
         return state
 
     # Define the function that calls the model
-    def call_model(
-        state: StateSchema,
-        config: RunnableConfig,
-    ) -> StateSchema:
+    def call_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
         state = _get_model_input_state(state)
         response = cast(AIMessage, model_runnable.invoke(state, config))
         # add agent name to the AIMessage
@@ -761,10 +758,7 @@ def create_react_agent(
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
-    async def acall_model(
-        state: StateSchema,
-        config: RunnableConfig,
-    ) -> StateSchema:
+    async def acall_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
         state = _get_model_input_state(state)
         response = cast(AIMessage, await model_runnable.ainvoke(state, config))
         # add agent name to the AIMessage
