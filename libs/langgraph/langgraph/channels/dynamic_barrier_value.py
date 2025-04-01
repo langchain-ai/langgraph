@@ -46,6 +46,14 @@ class DynamicBarrierValue(
         """The type of the update received by the channel."""
         return self.typ
 
+    def copy(self) -> Self:
+        """Return a copy of the channel."""
+        empty = self.__class__(self.typ)
+        empty.key = self.key
+        empty.names = self.names
+        empty.seen = self.seen.copy()
+        return empty
+
     def checkpoint(self) -> tuple[Optional[set[Value]], set[Value]]:
         return (self.names, self.seen)
 

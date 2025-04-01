@@ -33,6 +33,13 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
         """The type of the update received by the channel."""
         return self.typ
 
+    def copy(self) -> Self:
+        """Return a copy of the channel."""
+        empty = self.__class__(self.typ, self.names)
+        empty.key = self.key
+        empty.seen = self.seen.copy()
+        return empty
+
     def checkpoint(self) -> set[Value]:
         return self.seen
 

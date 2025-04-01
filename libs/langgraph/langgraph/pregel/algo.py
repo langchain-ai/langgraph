@@ -33,7 +33,6 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     PendingWrite,
     V,
-    copy_checkpoint,
 )
 from langgraph.constants import (
     CONF,
@@ -69,12 +68,10 @@ from langgraph.managed.base import ManagedValueMapping
 from langgraph.pregel.call import get_runnable_for_task
 from langgraph.pregel.io import read_channel, read_channels
 from langgraph.pregel.log import logger
-from langgraph.pregel.manager import ChannelsManager
 from langgraph.pregel.read import PregelNode
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
-    LoopProtocol,
     PregelExecutableTask,
     PregelScratchpad,
     PregelTask,
@@ -169,39 +166,39 @@ def should_interrupt(
 
 
 def local_read(
-    step: int,
-    checkpoint: Checkpoint,
     channels: Mapping[str, BaseChannel],
     managed: ManagedValueMapping,
     task: WritesProtocol,
-    config: RunnableConfig,
     select: Union[list[str], str],
     fresh: bool = False,
 ) -> Union[dict[str, Any], Any]:
     """Function injected under CONFIG_KEY_READ in task config, to read current state.
     Used by conditional edges to read a copy of the state with reflecting the writes
     from that node only."""
+    updated: dict[str, list[Any]] = defaultdict(list)
     if isinstance(select, str):
         managed_keys = []
-        for c, _ in task.writes:
+        for c, v in task.writes:
             if c == select:
-                updated = {c}
-                break
-        else:
-            updated = set()
+                updated[c].append(v)
     else:
         managed_keys = [k for k in select if k in managed]
         select = [k for k in select if k not in managed]
-        updated = set(select).intersection(c for c, _ in task.writes)
+        for c, v in task.writes:
+            if c in select:
+                updated[c].append(v)
     if fresh and updated:
-        with ChannelsManager(
-            {k: v for k, v in channels.items() if k in updated},
-            checkpoint,
-            LoopProtocol(config=config, step=step, stop=step + 1),
-            skip_context=True,
-        ) as (local_channels, _):
-            apply_writes(copy_checkpoint(checkpoint), local_channels, [task], None)
-            values = read_channels({**channels, **local_channels}, select)
+        # apply writes
+        local_channels: dict[str, BaseChannel] = {}
+        for k in channels:
+            if k in updated:
+                cc = channels[k].copy()
+                cc.update(updated[k])
+            else:
+                cc = channels[k]
+            local_channels[k] = cc
+        # read fresh values
+        values = read_channels(local_channels, select)
     else:
         values = read_channels(channels, select)
     if managed_keys:
@@ -333,6 +330,17 @@ def apply_writes(
                     )
     # Return managed values writes to be applied externally
     return pending_writes_by_managed, updated_channels
+
+
+def has_next_tasks(
+    trigger_to_nodes: Mapping[str, Sequence[str]],
+    updated_channels: set[str],
+    checkpoint: Checkpoint,
+) -> bool:
+    """Check if there are any tasks that should be run in the next step."""
+    return bool(checkpoint["pending_sends"]) or not updated_channels.isdisjoint(
+        trigger_to_nodes
+    )
 
 
 @overload
@@ -562,12 +570,9 @@ def prepare_single_task(
                         ),
                         CONFIG_KEY_READ: partial(
                             local_read,
-                            step,
-                            checkpoint,
                             channels,
                             managed,
                             PregelTaskWrites(task_path[:3], name, writes, triggers),
-                            config,
                         ),
                         CONFIG_KEY_STORE: (store or configurable.get(CONFIG_KEY_STORE)),
                         CONFIG_KEY_CHECKPOINTER: (
@@ -667,14 +672,11 @@ def prepare_single_task(
                             ),
                             CONFIG_KEY_READ: partial(
                                 local_read,
-                                step,
-                                checkpoint,
                                 channels,
                                 managed,
                                 PregelTaskWrites(
                                     task_path[:3], packet.node, writes, triggers
                                 ),
-                                config,
                             ),
                             CONFIG_KEY_STORE: (
                                 store or configurable.get(CONFIG_KEY_STORE)
@@ -789,8 +791,6 @@ def prepare_single_task(
                                 ),
                                 CONFIG_KEY_READ: partial(
                                     local_read,
-                                    step,
-                                    checkpoint,
                                     channels,
                                     managed,
                                     PregelTaskWrites(
@@ -799,7 +799,6 @@ def prepare_single_task(
                                         writes,
                                         triggers,
                                     ),
-                                    config,
                                 ),
                                 CONFIG_KEY_STORE: (
                                     store or configurable.get(CONFIG_KEY_STORE)
