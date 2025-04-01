@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Self-Hosted Control Plane deployment option is a fully self-hosted model for deployment where you manage the control plane and data plane in your cloud.
+The Self-Hosted Control Plane deployment option is a fully self-hosted model for deployment where you manage the [control plane](./langgraph_control_plane.md) and [data plane](./langgraph_data_plane.md) in your cloud.
 
 |                   | Control Plane     | Data Plane |
 |-------------------|-------------------|------------|
@@ -27,6 +27,7 @@ Miscellaneous options/details about the Self-Hosted Control Plane deployment opt
 |                   | Description |
 |-------------------|-------------|
 | **Lite vs Enterprise** | Enterprise |
+| **Custom Postgres/Redis** | Yes |
 | **Tracing** | Trace to Self-Hosted LangSmith |
 | **Licensing** | Air-gapped license key or LangGraph Platform License Key |
 | **Telemetry** | Self-reported usage (audit) for air-gapped license key.</br></br>Telemetry sent to LangSmith SaaS for LangGraph Platform License Key. |

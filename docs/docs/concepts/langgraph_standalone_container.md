@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Standalone Container deployment option is the least restrictive model for deployment. There's no management of a control plane. Data plane infrastructure is managed by you.
+The Standalone Container deployment option is the least restrictive model for deployment. There is no [control plane](./langgraph_control_plane.md). [Data plane](./langgraph_data_plane.md) infrastructure is managed by you.
 
 |                   | Control Plane     | Data Plane |
 |-------------------|-------------------|------------|
@@ -31,6 +31,7 @@ Miscellaneous options/details about the Standalone Container deployment option.
 |                   | Description |
 |-------------------|-------------|
 | **Lite vs Enterprise** | Lite or Enterprise |
+| **Custom Postgres/Redis** | Yes |
 | **Tracing** | Optional</br></br>Disable tracing, trace to LangSmith SaaS, or trace Self-Hosted LangSmith. |
 | **Licensing** | Air-gapped license key or LangGraph Platform License Key |
 | **Telemetry** | Self-reported usage (audit) for air-gapped license key.</br></br>Telemetry sent to LangSmith SaaS for LangGraph Platform License Key. |
