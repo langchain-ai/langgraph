@@ -26,6 +26,7 @@ from typing_extensions import TypedDict
 from langgraph.graph.state import StateGraph
 
 Messages = Union[list[MessageLikeRepresentation], MessageLikeRepresentation]
+REMOVE_ALL_MESSAGES = "__remove_all__"
 
 
 def _add_messages_wrapper(func: Callable) -> Callable[[Messages, Messages], Messages]:
@@ -158,6 +159,7 @@ def add_messages(
 
         Support for 'format="langchain-openai"' flag added.
     """
+    remove_all = False
     # coerce to list
     if not isinstance(left, list):
         left = [left]  # type: ignore[assignment]
@@ -179,6 +181,12 @@ def add_messages(
     for m in right:
         if m.id is None:
             m.id = str(uuid.uuid4())
+        if isinstance(m, RemoveMessage) and m.id == REMOVE_ALL_MESSAGES:
+            remove_all = True
+
+    if remove_all:
+        return [m for m in right if not isinstance(m, RemoveMessage)]
+
     # merge
     merged = left.copy()
     merged_by_id = {m.id: i for i, m in enumerate(merged)}
