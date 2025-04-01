@@ -16,6 +16,7 @@ from langchain_core.messages import (
     AIMessage,
     AnyMessage,
     HumanMessage,
+    RemoveMessage,
     SystemMessage,
     ToolCall,
     ToolMessage,
@@ -29,6 +30,7 @@ from typing_extensions import TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import START, MessagesState, StateGraph, add_messages
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.prebuilt import (
     ToolNode,
     create_react_agent,
@@ -1432,3 +1434,36 @@ def test_get_model() -> None:
 
     with pytest.raises(TypeError):
         _get_model(RunnableLambda(lambda message: message))
+
+
+def test_pre_model_hook() -> None:
+    model = FakeToolCallingModel(tool_calls=[])
+
+    # Test `llm_input_messages`
+    def pre_model_hook(state: AgentState):
+        return {"llm_input_messages": [HumanMessage("Hello!")]}
+
+    agent = create_react_agent(model, [], pre_model_hook=pre_model_hook)
+    assert "pre_model_hook" in agent.nodes
+    result = agent.invoke({"messages": [HumanMessage("hi?")]})
+    assert result == {
+        "messages": [
+            _AnyIdHumanMessage(content="hi?"),
+            AIMessage(content="Hello!", id="0"),
+        ]
+    }
+
+    # Test `messages`
+    def pre_model_hook(state: AgentState):
+        return {
+            "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), HumanMessage("Hello!")]
+        }
+
+    agent = create_react_agent(model, [], pre_model_hook=pre_model_hook)
+    result = agent.invoke({"messages": [HumanMessage("hi?")]})
+    assert result == {
+        "messages": [
+            _AnyIdHumanMessage(content="Hello!"),
+            AIMessage(content="Hello!", id="1"),
+        ]
+    }
