@@ -78,7 +78,7 @@ def add_messages(
         message from `right` will replace the message from `left`.
 
     Examples:
-        ```pycon
+        ```python
         >>> from langchain_core.messages import AIMessage, HumanMessage
         >>> msgs1 = [HumanMessage(content="Hello", id="1")]
         >>> msgs2 = [AIMessage(content="Hi there!", id="2")]
