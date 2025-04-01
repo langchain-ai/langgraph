@@ -4,7 +4,7 @@ The term "data plane" is used broadly to refer to [LangGraph Servers](./langgrap
 
 ## Server Infrastructure
 
-In addition to the [LangGraph Server](./langgraph_server.md) itself, the following infrastructure for each server are also included in the broad defintion of "data plane":
+In addition to the [LangGraph Server](./langgraph_server.md) itself, the following infrastructure for each server are also included in the broad definition of "data plane":
 
 - [Postgres](../concepts/platform_architecture.md#how-we-use-postgres)
 - [Redis](../concepts/platform_architecture.md#how-we-use-redis)

@@ -16,7 +16,7 @@ From the Control Plane UI, you can:
 - View build and server logs of a deployment.
 - Delete a deployment.
 
-The Control Plane UI is embeded in [LangSmith](https://docs.smith.langchain.com/langgraph_cloud).
+The Control Plane UI is embedded in [LangSmith](https://docs.smith.langchain.com/langgraph_cloud).
 
 ## Control Plane API
 
