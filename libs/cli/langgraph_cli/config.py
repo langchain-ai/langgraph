@@ -877,10 +877,10 @@ def _update_http_app_path(
         http_config["app"] = f"{module_str}:{attr_str}"
 
 
-def python_config_to_docker(
-    config_path: pathlib.Path, config: Config, base_image: str
-) -> tuple[str, dict[str, str]]:
-    """Generate a Dockerfile from the configuration."""
+def _dependencies_to_docker(
+    config_path: pathlib.Path,
+    config: Config,
+) -> tuple[str, dict[str, str], LocalDeps]:
     # configure pip
     pip_install = (
         "PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt"
@@ -970,6 +970,36 @@ ADD {relpath} /deps/{name}
         )
     )
 
+    additional_contexts: dict[str, str] = {}
+    for p in local_deps.additional_contexts:
+        if p in local_deps.real_pkgs:
+            name = local_deps.real_pkgs[p][1]
+        elif p in local_deps.faux_pkgs:
+            name = f"__outer_{p.name}"
+        else:
+            raise RuntimeError(f"Unknown additional context: {p}")
+        additional_contexts[name] = str(p)
+
+    dockerfile = [
+        installs,
+        "",
+        "# -- Installing all local dependencies --",
+        f"RUN {pip_install} -e /deps/*",
+        "# -- End of local dependencies install --",
+    ]
+
+    return os.linesep.join(dockerfile), additional_contexts, local_deps
+
+
+def python_config_to_docker(
+    config_path: pathlib.Path, config: Config, base_image: str
+) -> tuple[str, dict[str, str]]:
+    """Generate a Dockerfile from the configuration."""
+
+    install_lines, additional_contexts, local_deps = _dependencies_to_docker(
+        config_path, config
+    )
+
     env_vars = []
 
     if (store_config := config.get("store")) is not None:
@@ -989,25 +1019,11 @@ ADD {relpath} /deps/{name}
         "",
         os.linesep.join(config["dockerfile_lines"]),
         "",
-        installs,
-        "",
-        "# -- Installing all local dependencies --",
-        f"RUN {pip_install} -e /deps/*",
-        "# -- End of local dependencies install --",
+        install_lines,
         os.linesep.join(env_vars),
         "",
         f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
     ]
-
-    additional_contexts: dict[str, str] = {}
-    for p in local_deps.additional_contexts:
-        if p in local_deps.real_pkgs:
-            name = local_deps.real_pkgs[p][1]
-        elif p in local_deps.faux_pkgs:
-            name = f"__outer_{p.name}"
-        else:
-            raise RuntimeError(f"Unknown additional context: {p}")
-        additional_contexts[name] = str(p)
 
     return os.linesep.join(docker_file_contents), additional_contexts
 
@@ -1089,10 +1105,14 @@ ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'
 ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'
 """
 
+    install_lines, additional_contexts, _ = _dependencies_to_docker(config_path, config)
+
     return (
         f"""FROM {base_image}:{config['node_version']}
 
 {os.linesep.join(config["dockerfile_lines"])}
+
+{install_lines}
 
 ADD . {faux_path}
 
@@ -1105,7 +1125,7 @@ ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
 WORKDIR {faux_path}
 
 RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts""",
-        {},
+        additional_contexts,
     )
 
 
