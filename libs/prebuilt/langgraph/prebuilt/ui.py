@@ -78,7 +78,7 @@ def push_ui_message(
 
     .. code-block:: python
 
-        message = push_ui_message(
+        push_ui_message(
             name="component-name",
             props={"content": "Hello world"},
         )
@@ -133,7 +133,7 @@ def remove_ui_message(id: str, *, state_key: str = "ui") -> RemoveUIMessage:
 
     .. code-block:: python
 
-        remove_message = remove_ui_message("message-123")
+        remove_ui_message("message-123")
 
     """
     writer = get_stream_writer()
