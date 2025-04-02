@@ -50,7 +50,7 @@ def agent(state) -> Command[Literal["agent", "another_agent"]]:
 In a more complex scenario where each agent node is itself a graph (i.e., a [subgraph](./low_level.md#subgraphs)), a node in one of the agent subgraphs might want to navigate to a different agent. For example, if you have two agents, `alice` and `bob` (subgraph nodes in a parent graph), and `alice` needs to navigate to `bob`, you can set `graph=Command.PARENT` in the `Command` object:
 
 ```python
-def some_node_inside_alice(state)
+def some_node_inside_alice(state):
     return Command(
         goto="bob",
         update={"my_state_key": "my_state_value"},
