@@ -171,6 +171,8 @@ class AssistantBase(TypedDict):
     """The version of the assistant"""
     name: str
     """The name of the assistant"""
+    description: Optional[str]
+    """The description of the assistant"""
 
 
 class AssistantVersion(AssistantBase):
