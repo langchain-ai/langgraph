@@ -26,6 +26,8 @@ Below we demonstrate a simple application that writes an essay and [interrupts](
 from langgraph.func import entrypoint, task
 from langgraph.types import interrupt
 from langgraph.checkpoint.memory import MemorySaver
+
+
 @task
 def write_essay(topic: str) -> str:
     """Write an essay about the given topic."""
