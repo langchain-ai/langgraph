@@ -1233,7 +1233,8 @@ class Pregel(PregelProtocol):
             # get last checkpoint
             config = ensure_config(self.config, input_config)
             saved = checkpointer.get_tuple(config)
-            self._migrate_checkpoint(saved.checkpoint)
+            if saved is not None:
+                self._migrate_checkpoint(saved.checkpoint)
             checkpoint = (
                 copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
             )
@@ -1644,7 +1645,8 @@ class Pregel(PregelProtocol):
             # get last checkpoint
             config = ensure_config(self.config, input_config)
             saved = await checkpointer.aget_tuple(config)
-            self._migrate_checkpoint(saved.checkpoint)
+            if saved is not None:
+                self._migrate_checkpoint(saved.checkpoint)
             checkpoint = (
                 copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
             )
