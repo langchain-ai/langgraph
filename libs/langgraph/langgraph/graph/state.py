@@ -2,6 +2,7 @@ import inspect
 import logging
 import typing
 import warnings
+from collections import defaultdict
 from functools import partial
 from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
@@ -35,7 +36,16 @@ from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitFo
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
-from langgraph.constants import EMPTY_SEQ, MISSING, NS_END, NS_SEP, SELF, TAG_HIDDEN
+from langgraph.checkpoint.base import Checkpoint
+from langgraph.constants import (
+    EMPTY_SEQ,
+    INTERRUPT,
+    MISSING,
+    NS_END,
+    NS_SEP,
+    SELF,
+    TAG_HIDDEN,
+)
 from langgraph.errors import (
     ErrorCode,
     InvalidUpdateError,
@@ -921,6 +931,84 @@ class CompiledStateGraph(CompiledGraph):
                             [ChannelWriteEntry(channel_name, end)], tags=[TAG_HIDDEN]
                         )
                     )
+
+    def _migrate_checkpoint(self, checkpoint: Checkpoint) -> None:
+        """Migrate a checkpoint to new channel layout."""
+
+        values = checkpoint["channel_values"]
+        versions = checkpoint["channel_versions"]
+        seen = checkpoint["versions_seen"]
+
+        # empty checkpoints do not need migration
+        if not versions:
+            return
+
+        # current version
+        if checkpoint["v"] >= 3:
+            return
+
+        # migrate from v2 to v3
+        if any(k.startswith("start:") for k in versions):
+            # Migrate from start:node to branch:to:node
+            for k in list(versions):
+                if k.startswith("start:"):
+                    # confirm node is present
+                    node = k.split(":")[1]
+                    if node not in self.nodes:
+                        continue
+                    # get next version
+                    new_k = f"branch:to:{node}"
+                    new_v = (
+                        max(versions[new_k], versions.pop(k))
+                        if new_k in versions
+                        else versions.pop(k)
+                    )
+                    # update seen
+                    for ss in (seen.get(node, {}), seen.get(INTERRUPT, {})):
+                        if k in ss:
+                            s = ss.pop(k)
+                            if new_k in ss:
+                                ss[new_k] = max(s, ss[new_k])
+                            else:
+                                ss[new_k] = s
+                    # update value
+                    if new_k not in values and k in values:
+                        values[new_k] = values.pop(k)
+                    # update version
+                    versions[new_k] = new_v
+
+        if not set(self.nodes).isdisjoint(versions):
+            # Migrate from "node" to "branch:to:node"
+            source_to_target = defaultdict(list)
+            for start, end in self.builder.edges:
+                if start != START and end != END:
+                    source_to_target[start].append(end)
+            for k in list(versions):
+                if k == START:
+                    continue
+                if k in self.nodes:
+                    v = versions.pop(k)
+                    c = values.pop(k, MISSING)
+                    for end in source_to_target[k]:
+                        # get next version
+                        new_k = f"branch:to:{end}"
+                        new_v = max(versions[new_k], v) if new_k in versions else v
+                        # update seen
+                        for ss in (seen.get(end, {}), seen.get(INTERRUPT, {})):
+                            if k in ss:
+                                s = ss.pop(k)
+                                if new_k in ss:
+                                    ss[new_k] = max(s, ss[new_k])
+                                else:
+                                    ss[new_k] = s
+                        # update value
+                        if new_k not in values and c is not MISSING:
+                            values[new_k] = c
+                        # update version
+                        versions[new_k] = new_v
+                    # pop interrupt seen
+                    if INTERRUPT in seen:
+                        seen[INTERRUPT].pop(k, MISSING)
 
 
 def _get_state_reader(

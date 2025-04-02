@@ -5,9 +5,8 @@ from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.constants import MISSING
-from langgraph.pregel.read import PregelNode
 
-LATEST_VERSION = 2
+LATEST_VERSION = 3
 
 
 def empty_checkpoint() -> Checkpoint:
@@ -50,32 +49,3 @@ def create_checkpoint(
         versions_seen=checkpoint["versions_seen"],
         pending_sends=checkpoint.get("pending_sends", []),
     )
-
-
-def migrate_checkpoint(
-    checkpoint: Checkpoint,
-    channels: Mapping[str, BaseChannel],
-    nodes: Mapping[str, PregelNode],
-) -> None:
-    """Migrate a checkpoint to new channel layout."""
-
-    values = checkpoint["channel_values"]
-    versions = checkpoint["channel_versions"]
-    seen = checkpoint["versions_seen"]
-
-    if any(k.startswith("start:") for k in versions):
-        # Migrate from start:node to branch:to:node
-        for k in values:
-            if k.startswith("start:"):
-                node = k.split(":")[1]
-                new_k = f"branch:to:{node}"
-                if node not in nodes:
-                    continue
-                v = versions.pop(k)
-                s = seen.get(node, {}).pop(k, None)
-                if s is None or s < v:
-                    values[new_k] = values.pop(k)
-                # TODO handle s == v
-                # TODO handle new_k already in values
-
-    # TODO Migrate from "node" to "branch:to:node"
