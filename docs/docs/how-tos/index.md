@@ -201,10 +201,12 @@ Learn how to set up your app for deployment to LangGraph Platform:
 
 ### Deployment
 
-LangGraph applications can be deployed using LangGraph Cloud, which provides a range of services to help you deploy, manage, and scale your applications.
+LangGraph applications can be deployed using LangGraph Platform, which provides a range of services to help you deploy, manage, and scale your applications.
 
-- [How to deploy to LangGraph cloud](../cloud/deployment/cloud.md)
-- [How to deploy to a self-hosted environment](./deploy-self-hosted.md)
+- [How to deploy to Cloud SaaS](../cloud/deployment/cloud.md)
+- [How to deploy the Self-Hosted Data Plane](../cloud/deployment/self_hosted_data_plane.md)
+- [How to deploy the Self-Hosted Control Plane](../cloud/deployment/self_hosted_control_plane.md)
+- [How to deploy a Standalone Container](../cloud/deployment/standalone_container.md)
 - [How to interact with the deployment using RemoteGraph](./use-remote-graph.md)
 - [How to add TTLs to your LangGraph application](./ttl/configure_ttl.md)
 

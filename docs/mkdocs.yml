@@ -202,6 +202,9 @@ nav:
             - Deployment:
                 - Deployment: how-tos#deployment
                 - cloud/deployment/cloud.md
+                - cloud/deployment/self_hosted_data_plane.md
+                - cloud/deployment/self_hosted_control_plane.md
+                - cloud/deployment/standalone_container.md
                 - how-tos/deploy-self-hosted.md
                 - how-tos/use-remote-graph.md
                 - how-tos/ttl/configure_ttl.md
@@ -288,6 +291,8 @@ nav:
             - concepts/template_applications.md
           - Components:
             - Components: concepts#components
+            - concepts/langgraph_control_plane.md
+            - concepts/langgraph_data_plane.md
             - concepts/langgraph_server.md
             - concepts/langgraph_studio.md
             - concepts/langgraph_cli.md
@@ -301,9 +306,10 @@ nav:
             - concepts/auth.md
           - Deployment Options:
             - Deployment Options: concepts#deployment-options
-            - concepts/self_hosted.md
             - concepts/langgraph_cloud.md
-            - concepts/bring_your_own_cloud.md
+            - concepts/langgraph_self_hosted_data_plane.md
+            - concepts/langgraph_self_hosted_control_plane.md
+            - concepts/langgraph_standalone_container.md
       - Tutorials:
         - tutorials/index.md
         - Quick Start:

@@ -17,7 +17,18 @@ Get started deploying your LangGraph applications locally or on the cloud with
 
 ## Deployment Options
 
-- [Self-Hosted Lite](../concepts/self_hosted.md): A free (up to 1 million nodes executed per year), limited version of LangGraph Platform that you can run locally or in a self-hosted manner
-- [Cloud SaaS](../concepts/langgraph_cloud.md): Hosted as part of LangSmith.
-- [Bring Your Own Cloud](../concepts/bring_your_own_cloud.md): We manage the infrastructure, so you don't have to, but the infrastructure all runs within your cloud.
-- [Self-Hosted Enterprise](../concepts/self_hosted.md): Completely managed by you.
+- [Cloud SaaS](../concepts/langgraph_cloud.md): Connect to your GitHub repositories and deploy LangGraph Servers to LangChain's cloud. We manage everything.
+- [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md): Create deployments from the [Control Plane UI](../concepts/langgraph_control_plane.md#control-plane-ui) and deploy LangGraph Servers to your cloud. We manage the [control plane](../concepts/langgraph_control_plane.md), you manage the deployments.
+- [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md#control-plane-ui): Create deployments from a self-hosted [Control Plane UI](../concepts/langgraph_control_plane.md) and deploy LangGraph Servers to your cloud. You manage everything.
+- [Standalone Container](../concepts/langgraph_standalone_container.md): Deploy LangGraph Server Docker images however you like.
+
+A quick comparison...
+
+|                      | **Cloud SaaS** | **Self-Hosted [Data Plane](../concepts/langgraph_data_plane.md)** | **Self-Hosted [Control Plane](../concepts/langgraph_control_plane.md)** | **Standalone Container** |
+|----------------------|----------------|----------------------------|-------------------------------|--------------------------|
+| **[Control Plane UI/API](../concepts/langgraph_control_plane.md)** | Yes | Yes | Yes | No |
+| **CI/CD** | Managed internally by platform | Managed externally by you | Managed externally by you | Managed externally by you |
+| **Data/Compute Residency** | LangChain’s cloud | Your cloud | Your cloud | Your cloud |
+| **Required Permissions** | None | See details [here](). | See details [here](). | None |
+| **LangSmith Compatibility** | Trace to LangSmith SaaS | Trace to LangSmith SaaS | Trace to Self-Hosted LangSmith | Optional tracing |
+| **[Pricing](https://www.langchain.com/pricing-langgraph-platform)** | Plus | Enterprise | Enterprise | Developer |

@@ -49,7 +49,7 @@ The LangGraph Platform offers a few different deployment options described in th
 - [Why LangGraph Platform?](./langgraph_platform.md): The LangGraph platform is an opinionated way to deploy and manage LangGraph applications. This guide provides an overview of the key features and concepts behind LangGraph Platform.
 - [Platform Architecture](./platform_architecture.md): A high-level overview of the architecture of the LangGraph Platform.
 - [Scalability and Resilience](./scalability_and_resilience.md): LangGraph Platform is designed to be scalable and resilient. This document explains how the platform achieves this.
-- [Deployment Options](./deployment_options.md): LangGraph Platform offers four deployment options: [Self-Hosted Lite](./self_hosted.md#self-hosted-lite), [Self-Hosted Enterprise](./self_hosted.md#self-hosted-enterprise), [bring your own cloud (BYOC)](./bring_your_own_cloud.md), and [Cloud SaaS](./langgraph_cloud.md). This guide explains the differences between these options, and which Plans they are available on.
+- [Deployment Options](./deployment_options.md): LangGraph Platform offers four deployment options: [Cloud SaaS](./langgraph_cloud.md), [Self-Hosted Data Plane](./langgraph_self_hosted_data_plane.md), [Self-Hosted Control Plane](./langgraph_self_hosted_control_plane.md), and [Standalone Container](./langgraph_standalone_container.md). This guide explains the differences between these options, and which Plans they are available on.
 - [Plans](./plans.md): LangGraph Platforms offer three different plans: Developer, Plus, Enterprise. This guide explains the differences between these options, what deployment options are available for each, and how to sign up for each one.
 - [Template Applications](./template_applications.md): Reference applications designed to help you get started quickly when building with LangGraph.
 
@@ -62,6 +62,8 @@ The LangGraph Platform comprises several components that work together to suppor
 - [LangGraph CLI](./langgraph_cli.md): LangGraph CLI is a command-line interface that helps to interact with a local LangGraph
 - [Python/JS SDK](./sdk.md): The Python/JS SDK provides a programmatic way to interact with deployed LangGraph Applications.
 - [Remote Graph](../how-tos/use-remote-graph.md): A RemoteGraph allows you to interact with any deployed LangGraph application as though it were running locally.
+- [LangGraph Control Plane](./langgraph_control_plane.md): The LangGraph Control Plane refers to the Control Plane UI where users create and update LangGraph Servers and the Control Plane APIs that support the UI experience.
+- [LangGraph Data Plane](./langgraph_data_plane.md): The LangGraph Data Plane refers to LangGraph Servers, the corresponding infrastructure for each server, and the "listener" application that continuously polls for updates from the LangGraph Control Plane.
 
 ### LangGraph Server
 
@@ -74,7 +76,7 @@ The LangGraph Platform comprises several components that work together to suppor
 
 ### Deployment Options
 
-- [Self-Hosted Lite](./self_hosted.md): A free (up to 1 million nodes executed per year), limited version of LangGraph Platform that you can run locally or in a self-hosted manner
-- [Cloud SaaS](./langgraph_cloud.md): Hosted as part of LangSmith.
-- [Bring Your Own Cloud](./bring_your_own_cloud.md): We manage the infrastructure, so you don't have to, but the infrastructure all runs within your cloud.
-- [Self-Hosted Enterprise](./self_hosted.md): Completely managed by you.
+- [Cloud SaaS](../concepts/langgraph_cloud.md): Connect to your GitHub repositories and deploy LangGraph Servers to LangChain's cloud. We manage everything.
+- [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md): Create deployments from the [Control Plane UI](../concepts/langgraph_control_plane.md#control-plane-ui) and deploy LangGraph Servers to your cloud. We manage the [control plane](../concepts/langgraph_control_plane.md), you manage the deployments.
+- [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md#control-plane-ui): Create deployments from a self-hosted [Control Plane UI](../concepts/langgraph_control_plane.md) and deploy LangGraph Servers to your cloud. You manage everything.
+- [Standalone Container](../concepts/langgraph_standalone_container.md): Deploy LangGraph Server Docker images however you like.
