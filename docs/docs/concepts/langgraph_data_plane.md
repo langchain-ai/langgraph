@@ -40,6 +40,7 @@ Feature Differences:
 |       | Lite       | Enterprise |
 |-------|------------|------------|
 | [Cron Jobs](../concepts/langgraph_server.md#cron-jobs) |❌|✅|
+| [Custom Authentication](../concepts/auth.md) |❌|✅|
 
 ### Autoscaling
 

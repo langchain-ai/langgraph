@@ -7,7 +7,7 @@ Before deploying, review the [conceptual guide for the Self-Hosted Control Plane
 1. You are using Kubernetes.
 1. You have self-hosted LangSmith deployed.
 1. Use the [LangGraph CLI](../../concepts/langgraph_cli.md) to [test your application locally](./test_locally.md).
-1. Use the [LangGraph CLI](../../concepts/langgraph_cli.md) to build a Docker image (i.e. `langgraph build`) and push it to a registry your Kubernetes cluster or Amazon ECS cluster has access to.
+1. Use the [LangGraph CLI](../../concepts/langgraph_cli.md) to build a Docker image (i.e. `langgraph build`) and push it to a registry your Kubernetes cluster has access to.
 1. `KEDA` is installed on your cluster.
 
          helm repo add kedacore https://kedacore.github.io/charts 
