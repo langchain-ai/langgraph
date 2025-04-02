@@ -455,7 +455,6 @@ def get_checkpoint_metadata(
 ) -> CheckpointMetadata:
     """Get checkpoint metadata in a backwards-compatible manner."""
     metadata = metadata.copy()
-    print("metadata", metadata)
     for obj in (config.get("metadata"), config.get("configurable")):
         if not obj:
             continue
