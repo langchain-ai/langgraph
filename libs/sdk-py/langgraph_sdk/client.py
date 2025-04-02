@@ -647,6 +647,7 @@ class AssistantsClient:
             name: The name of the assistant. Defaults to 'Untitled' under the hood.
             headers: Optional custom headers to include with the request.
             description: Optional description of the assistant.
+                The description field is available for langgraph server version>=0.0.45
 
         Returns:
             Assistant: The created assistant.
@@ -703,6 +704,7 @@ class AssistantsClient:
             name: The new name for the assistant.
             headers: Optional custom headers to include with the request.
             description: Optional description of the assistant.
+                The description field is available for langgraph server version>=0.0.45
 
         Returns:
             Assistant: The updated assistant.
@@ -3079,6 +3081,7 @@ class SyncAssistantsClient:
             name: The name of the assistant. Defaults to 'Untitled' under the hood.
             headers: Optional custom headers to include with the request.
             description: Optional description of the assistant.
+                The description field is available for langgraph server version>=0.0.45
 
         Returns:
             Assistant: The created assistant.
@@ -3135,6 +3138,7 @@ class SyncAssistantsClient:
             name: The new name for the assistant.
             headers: Optional custom headers to include with the request.
             description: Optional description of the assistant.
+                The description field is available for langgraph server version>=0.0.45
 
         Returns:
             Assistant: The updated assistant.
