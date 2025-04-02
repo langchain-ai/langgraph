@@ -631,6 +631,7 @@ class AssistantsClient:
         if_exists: Optional[OnConflictBehavior] = None,
         name: Optional[str] = None,
         headers: Optional[dict[str, str]] = None,
+        description: Optional[str] = None,
     ) -> Assistant:
         """Create a new assistant.
 
@@ -645,6 +646,8 @@ class AssistantsClient:
                 Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing assistant).
             name: The name of the assistant. Defaults to 'Untitled' under the hood.
             headers: Optional custom headers to include with the request.
+            description: Optional description of the assistant.
+                The description field is available for langgraph-api server version>=0.0.45
 
         Returns:
             Assistant: The created assistant.
@@ -673,6 +676,8 @@ class AssistantsClient:
             payload["if_exists"] = if_exists
         if name:
             payload["name"] = name
+        if description:
+            payload["description"] = description
         return await self.http.post("/assistants", json=payload, headers=headers)
 
     async def update(
@@ -684,6 +689,7 @@ class AssistantsClient:
         metadata: Json = None,
         name: Optional[str] = None,
         headers: Optional[dict[str, str]] = None,
+        description: Optional[str] = None,
     ) -> Assistant:
         """Update an assistant.
 
@@ -697,6 +703,8 @@ class AssistantsClient:
             metadata: Metadata to merge with existing assistant metadata.
             name: The new name for the assistant.
             headers: Optional custom headers to include with the request.
+            description: Optional description of the assistant.
+                The description field is available for langgraph-api server version>=0.0.45
 
         Returns:
             Assistant: The updated assistant.
@@ -720,6 +728,8 @@ class AssistantsClient:
             payload["metadata"] = metadata
         if name:
             payload["name"] = name
+        if description:
+            payload["description"] = description
         return await self.http.patch(
             f"/assistants/{assistant_id}",
             json=payload,
@@ -3055,6 +3065,7 @@ class SyncAssistantsClient:
         if_exists: Optional[OnConflictBehavior] = None,
         name: Optional[str] = None,
         headers: Optional[dict[str, str]] = None,
+        description: Optional[str] = None,
     ) -> Assistant:
         """Create a new assistant.
 
@@ -3069,6 +3080,8 @@ class SyncAssistantsClient:
                 Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing assistant).
             name: The name of the assistant. Defaults to 'Untitled' under the hood.
             headers: Optional custom headers to include with the request.
+            description: Optional description of the assistant.
+                The description field is available for langgraph-api server version>=0.0.45
 
         Returns:
             Assistant: The created assistant.
@@ -3097,6 +3110,8 @@ class SyncAssistantsClient:
             payload["if_exists"] = if_exists
         if name:
             payload["name"] = name
+        if description:
+            payload["description"] = description
         return self.http.post("/assistants", json=payload, headers=headers)
 
     def update(
@@ -3108,6 +3123,7 @@ class SyncAssistantsClient:
         metadata: Json = None,
         name: Optional[str] = None,
         headers: Optional[dict[str, str]] = None,
+        description: Optional[str] = None,
     ) -> Assistant:
         """Update an assistant.
 
@@ -3121,6 +3137,8 @@ class SyncAssistantsClient:
             metadata: Metadata to merge with existing assistant metadata.
             name: The new name for the assistant.
             headers: Optional custom headers to include with the request.
+            description: Optional description of the assistant.
+                The description field is available for langgraph-api server version>=0.0.45
 
         Returns:
             Assistant: The updated assistant.
@@ -3144,6 +3162,8 @@ class SyncAssistantsClient:
             payload["metadata"] = metadata
         if name:
             payload["name"] = name
+        if description:
+            payload["description"] = description
         return self.http.patch(
             f"/assistants/{assistant_id}",
             json=payload,
