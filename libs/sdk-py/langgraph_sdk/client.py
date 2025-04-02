@@ -647,7 +647,7 @@ class AssistantsClient:
             name: The name of the assistant. Defaults to 'Untitled' under the hood.
             headers: Optional custom headers to include with the request.
             description: Optional description of the assistant.
-                The description field is available for langgraph server version>=0.0.45
+                The description field is available for langgraph-api server version>=0.0.45
 
         Returns:
             Assistant: The created assistant.
