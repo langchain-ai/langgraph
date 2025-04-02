@@ -40,6 +40,17 @@
               ],
               "description": "Optional. Custom authentication config, including the path to your Python auth logic and\nthe OpenAPI security definitions it uses.\n"
             },
+            "checkpointer": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CheckpointerConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Configuration for the built-in checkpointer, which handles checkpointing of state.\n\nIf omitted, no checkpointer is set up (the object store will still be present, however).\n"
+            },
             "dependencies": {
               "type": "array",
               "items": {
@@ -144,6 +155,17 @@
                 }
               ],
               "description": "Optional. Custom authentication config, including the path to your Python auth logic and\nthe OpenAPI security definitions it uses.\n"
+            },
+            "checkpointer": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CheckpointerConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Configuration for the built-in checkpointer, which handles checkpointing of state.\n\nIf omitted, no checkpointer is set up (the object store will still be present, however).\n"
             },
             "dependencies": {
               "type": "array",
@@ -287,6 +309,61 @@
             "type": "object"
           },
           "description": "Required. Dict describing each security scheme recognized by your OpenAPI spec.\n\nKeys are scheme names (e.g. \"OAuth2\", \"ApiKeyAuth\") and values are their definitions."
+        }
+      },
+      "required": []
+    },
+    "CheckpointerConfig": {
+      "title": "CheckpointerConfig",
+      "description": "Configuration for the built-in checkpointer, which handles checkpointing of state.\n\nIf omitted, no checkpointer is set up (the object store will still be present, however).",
+      "type": "object",
+      "properties": {
+        "ttl": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ThreadTTLConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional. Defines the TTL (time-to-live) behavior configuration.\n\nIf provided, the checkpointer will apply TTL settings according to the configuration.\nIf omitted, no TTL behavior is configured.\n"
+        }
+      },
+      "required": []
+    },
+    "ThreadTTLConfig": {
+      "title": "ThreadTTLConfig",
+      "description": "Configure a default TTL for checkpointed data within threads.",
+      "type": "object",
+      "properties": {
+        "default_ttl": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Default TTL (time-to-live) in minutes for checkpointed data."
+        },
+        "strategy": {
+          "enum": [
+            "delete"
+          ],
+          "description": "Strategy to use for deleting checkpointed data.\n"
+        },
+        "sweep_interval_minutes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Interval in minutes between sweep iterations.\nIf omitted, a default interval will be used (typically ~ 5 minutes)."
         }
       },
       "required": []
@@ -455,10 +532,12 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Optional. Default TTL (time-to-live) in minutes for new items.\n\nIf provided, all new items will have this TTL unless explicitly overridden.\nIf omitted, items will have no TTL by default.\n"
         },
         "refresh_on_read": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Default behavior for refreshing TTLs on read operations (GET and SEARCH).\n\nIf True, TTLs will be refreshed on read operations (get/search) by default.\nThis can be overridden per-operation by explicitly setting refresh_ttl.\nDefaults to True if not configured.\n"
         },
         "sweep_interval_minutes": {
           "anyOf": [
@@ -468,7 +547,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Optional. Interval in minutes between TTL sweep iterations.\n\nIf provided, the store will periodically delete expired items based on the TTL.\nIf omitted, no automatic sweeping will occur.\n"
         }
       },
       "required": []

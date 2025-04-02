@@ -3,7 +3,7 @@ import os
 import pathlib
 import textwrap
 from collections import Counter
-from typing import Any, NamedTuple, Optional, TypedDict, Union
+from typing import Any, Literal, NamedTuple, Optional, TypedDict, Union
 
 import click
 
@@ -107,6 +107,36 @@ class StoreConfig(TypedDict, total=False):
     """Optional. Defines the TTL (time-to-live) behavior configuration.
     
     If provided, the store will apply TTL settings according to the configuration.
+    If omitted, no TTL behavior is configured.
+    """
+
+
+class ThreadTTLConfig(TypedDict, total=False):
+    """Configure a default TTL for checkpointed data within threads."""
+
+    strategy: Literal["delete"]
+    """Strategy to use for deleting checkpointed data.
+    
+    Choices:
+      - "delete": Delete all checkpoints for a thread after TTL expires.
+    """
+    default_ttl: Optional[float]
+    """Default TTL (time-to-live) in minutes for checkpointed data."""
+    sweep_interval_minutes: Optional[int]
+    """Interval in minutes between sweep iterations.
+    If omitted, a default interval will be used (typically ~ 5 minutes)."""
+
+
+class CheckpointerConfig(TypedDict, total=False):
+    """Configuration for the built-in checkpointer, which handles checkpointing of state.
+
+    If omitted, no checkpointer is set up (the object store will still be present, however).
+    """
+
+    ttl: Optional[ThreadTTLConfig]
+    """Optional. Defines the TTL (time-to-live) behavior configuration.
+    
+    If provided, the checkpointer will apply TTL settings according to the configuration.
     If omitted, no TTL behavior is configured.
     """
 
@@ -229,7 +259,7 @@ class CorsConfig(TypedDict, total=False):
     allow_origin_regex: str
     """Optional. A regex pattern for matching allowed origins, used if you have dynamic subdomains.
     
-    Example: "^https://.*\.mycompany\.com$"
+    Example: "^https://.*\\.mycompany\\.com$"
     """
     expose_headers: list[str]
     """Optional. List of headers that browsers are allowed to read from the response in cross-origin contexts."""
@@ -355,6 +385,12 @@ class Config(TypedDict, total=False):
     If omitted, no vector index is set up (the object store will still be present, however).
     """
 
+    checkpointer: Optional[CheckpointerConfig]
+    """Optional. Configuration for the built-in checkpointer, which handles checkpointing of state.
+    
+    If omitted, no checkpointer is set up (the object store will still be present, however).
+    """
+
     auth: Optional[AuthConfig]
     """Optional. Custom authentication config, including the path to your Python auth logic and 
     the OpenAPI security definitions it uses.
@@ -404,6 +440,7 @@ def validate_config(config: Config) -> Config:
             "store": config.get("store"),
             "auth": config.get("auth"),
             "http": config.get("http"),
+            "checkpointer": config.get("checkpointer"),
             "ui": config.get("ui"),
             "ui_config": config.get("ui_config"),
         }
@@ -418,6 +455,7 @@ def validate_config(config: Config) -> Config:
             "store": config.get("store"),
             "auth": config.get("auth"),
             "http": config.get("http"),
+            "checkpointer": config.get("checkpointer"),
             "ui": config.get("ui"),
             "ui_config": config.get("ui_config"),
         }
@@ -981,6 +1019,11 @@ ADD {relpath} /deps/{name}
     if (http_config := config.get("http")) is not None:
         env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
 
+    if (checkpointer_config := config.get("checkpointer")) is not None:
+        env_vars.append(
+            f"ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'"
+        )
+
     graphs = config["graphs"]
     env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(graphs)}'")
 
@@ -1087,6 +1130,10 @@ ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'
     if (http_config := config.get("http")) is not None:
         env_additional_config += f"""
 ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'
+"""
+    if (checkpointer_config := config.get("checkpointer")) is not None:
+        env_additional_config += f"""
+ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'
 """
 
     return (

@@ -15,12 +15,15 @@ import msgspec
 
 from langgraph_cli.config import (
     AuthConfig,
+    CheckpointerConfig,
     Config,
     CorsConfig,
     HttpConfig,
     IndexConfig,
     SecurityConfig,
     StoreConfig,
+    ThreadTTLConfig,
+    TTLConfig,
 )
 
 
@@ -106,6 +109,9 @@ def add_descriptions_to_schema(schema, cls):
                 SecurityConfig,
                 HttpConfig,
                 CorsConfig,
+                ThreadTTLConfig,
+                CheckpointerConfig,
+                TTLConfig,
             ]:
                 if potential_cls.__name__ == def_name:
                     add_descriptions_to_schema(def_schema, potential_cls)
