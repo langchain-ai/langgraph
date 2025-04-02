@@ -494,6 +494,49 @@ RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not foun
     assert additional_contexts == {}
 
 
+def test_config_to_docker_gen_ui_python():
+    graphs = {"agent": "./agent.py:graph"}
+    actual_docker_stdin, additional_contexts = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "dependencies": ["."],
+                "graphs": graphs,
+                "ui": {"agent": "./graphs/agent.ui.jsx"},
+                "ui_config": {"shared": ["nuqs"]},
+            }
+        ),
+        "langchain/langgraph-api",
+    )
+
+    expected_docker_stdin = """FROM langchain/langgraph-api:3.11
+RUN /storage/install-node.sh
+# -- Adding non-package dependency unit_tests --
+ADD . /deps/__outer_unit_tests/unit_tests
+RUN set -ex && \\
+    for line in '[project]' \\
+                'name = "unit_tests"' \\
+                'version = "0.1"' \\
+                '[tool.setuptools.package-data]' \\
+                '"*" = ["**/*"]'; do \\
+        echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
+    done
+# -- End of non-package dependency unit_tests --
+# -- Installing all local dependencies --
+RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
+# -- End of local dependencies install --
+ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}'
+# -- Installing UI dependencies --
+ENV LANGGRAPH_UI='{"agent": "./graphs/agent.ui.jsx"}'
+ENV LANGGRAPH_UI_CONFIG='{"shared": ["nuqs"]}'
+RUN cd /deps/__outer_unit_tests/unit_tests && npm i && tsx /api/langgraph_api/js/build.mts
+# -- End of UI dependencies install --
+WORKDIR /deps/__outer_unit_tests/unit_tests"""
+
+    assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
+    assert additional_contexts == {}
+
+
 # config_to_compose
 def test_config_to_compose_simple_config():
     graphs = {"agent": "./agent.py:graph"}
