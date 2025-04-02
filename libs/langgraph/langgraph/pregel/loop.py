@@ -38,7 +38,6 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     PendingWrite,
     copy_checkpoint,
-    empty_checkpoint,
 )
 from langgraph.constants import (
     CONF,
@@ -87,7 +86,7 @@ from langgraph.pregel.algo import (
     should_interrupt,
     task_path_str,
 )
-from langgraph.pregel.checkpoint import create_checkpoint
+from langgraph.pregel.checkpoint import create_checkpoint, empty_checkpoint
 from langgraph.pregel.debug import (
     map_debug_checkpoint,
     map_debug_task_results,
