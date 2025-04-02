@@ -204,6 +204,9 @@ nav:
                 - cloud/deployment/cloud.md
                 - how-tos/deploy-self-hosted.md
                 - how-tos/use-remote-graph.md
+                - how-tos/ttl/configure_ttl.md
+            - Data Management:
+                - how-tos/ttl/configure_ttl.md
             - Authentication & Access Control:
                 - Authentication & Access Control: how-tos#authentication-access-control
                 - cloud/how-tos/auth/custom_auth_new.md
