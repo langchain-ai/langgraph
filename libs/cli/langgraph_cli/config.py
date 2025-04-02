@@ -915,6 +915,66 @@ def _update_http_app_path(
         http_config["app"] = f"{module_str}:{attr_str}"
 
 
+def _get_node_pm_install_cmd(config_path: pathlib.Path, config: Config) -> str:
+    def test_file(file_name):
+        full_path = config_path.parent / file_name
+        try:
+            return full_path.is_file()
+        except OSError:
+            return False
+
+    # inspired by `package-manager-detector`
+    def get_pkg_manager_name():
+        try:
+            with open(config_path.parent / "package.json") as f:
+                pkg = json.load(f)
+
+                if (pkg_manager_name := pkg.get("packageManager")) and isinstance(
+                    pkg_manager_name, str
+                ):
+                    return pkg_manager_name.lstrip("^").split("@")[0]
+
+                if (
+                    dev_engine_name := (
+                        (pkg.get("devEngines") or {}).get("packageManager") or {}
+                    ).get("name")
+                ) and isinstance(dev_engine_name, str):
+                    return dev_engine_name
+
+                return None
+        except Exception:
+            return None
+
+    npm, yarn, pnpm, bun = [
+        test_file("package-lock.json"),
+        test_file("yarn.lock"),
+        test_file("pnpm-lock.yaml"),
+        test_file("bun.lockb"),
+    ]
+
+    if yarn:
+        install_cmd = "yarn install --frozen-lockfile"
+    elif pnpm:
+        install_cmd = "pnpm i --frozen-lockfile"
+    elif npm:
+        install_cmd = "npm ci"
+    elif bun:
+        install_cmd = "bun i"
+    else:
+        pkg_manager_name = get_pkg_manager_name()
+
+        if pkg_manager_name == "yarn":
+            install_cmd = "yarn install"
+        elif pkg_manager_name == "pnpm":
+            install_cmd = "pnpm i"
+        elif pkg_manager_name == "bun":
+            install_cmd = "bun i"
+        else:
+            install_cmd = "npm i"
+
+    return install_cmd
+
+
 def python_config_to_docker(
     config_path: pathlib.Path, config: Config, base_image: str
 ) -> tuple[str, dict[str, str]]:
@@ -995,10 +1055,32 @@ ADD {relpath} /deps/{name}
         for fullpath, (relpath, name) in local_deps.real_pkgs.items()
     )
 
+    ui_inst_str: str = ""
+    install_node_str: str = ""
+
+    if config.get("ui") and local_deps.working_dir:
+        install_node_str = "RUN /storage/install-node.sh"
+
+        ui_inst: list[str] = []
+        ui_inst.append(f"ENV LANGGRAPH_UI='{json.dumps(config['ui'])}'")
+        if config.get("ui_config"):
+            ui_inst.append(
+                f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(config['ui_config'])}'"
+            )
+
+        ui_inst.append(
+            f"RUN cd {local_deps.working_dir} && {_get_node_pm_install_cmd(config_path, config)} && tsx /api/langgraph_api/js/build.mts",
+        )
+
+        ui_inst_str = f"""# -- Installing UI dependencies --
+{os.linesep.join(ui_inst)}
+# -- End of UI dependencies install --"""
+
     installs = f"{os.linesep}{os.linesep}".join(
         filter(
             None,
             [
+                install_node_str,
                 pip_config_file_str,
                 pip_pkgs_str,
                 pip_reqs_str,
@@ -1039,6 +1121,8 @@ ADD {relpath} /deps/{name}
         "# -- End of local dependencies install --",
         os.linesep.join(env_vars),
         "",
+        ui_inst_str,
+        "",
         f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
     ]
 
@@ -1059,62 +1143,7 @@ def node_config_to_docker(
     config_path: pathlib.Path, config: Config, base_image: str
 ) -> tuple[str, dict[str, str]]:
     faux_path = f"/deps/{config_path.parent.name}"
-
-    def test_file(file_name):
-        full_path = config_path.parent / file_name
-        try:
-            return full_path.is_file()
-        except OSError:
-            return False
-
-    # inspired by `package-manager-detector`
-    def get_pkg_manager_name():
-        try:
-            with open(config_path.parent / "package.json") as f:
-                pkg = json.load(f)
-
-                if (pkg_manager_name := pkg.get("packageManager")) and isinstance(
-                    pkg_manager_name, str
-                ):
-                    return pkg_manager_name.lstrip("^").split("@")[0]
-
-                if (
-                    dev_engine_name := (
-                        (pkg.get("devEngines") or {}).get("packageManager") or {}
-                    ).get("name")
-                ) and isinstance(dev_engine_name, str):
-                    return dev_engine_name
-
-                return None
-        except Exception:
-            return None
-
-    npm, yarn, pnpm, bun = [
-        test_file("package-lock.json"),
-        test_file("yarn.lock"),
-        test_file("pnpm-lock.yaml"),
-        test_file("bun.lockb"),
-    ]
-
-    if yarn:
-        install_cmd = "yarn install --frozen-lockfile"
-    elif pnpm:
-        install_cmd = "pnpm i --frozen-lockfile"
-    elif npm:
-        install_cmd = "npm ci"
-    elif bun:
-        install_cmd = "bun i"
-    else:
-        pkg_manager_name = get_pkg_manager_name()
-
-        if pkg_manager_name == "yarn":
-            install_cmd = "yarn install"
-        elif pkg_manager_name == "pnpm":
-            install_cmd = "pnpm i"
-        elif pkg_manager_name == "bun":
-            install_cmd = "bun i"
-        else:
-            install_cmd = "npm i"
+    install_cmd = _get_node_pm_install_cmd(config_path, config)
     store_config = config.get("store")
     env_additional_config = (
         ""
