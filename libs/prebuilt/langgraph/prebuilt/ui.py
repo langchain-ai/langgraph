@@ -37,7 +37,7 @@ class RemoveUIMessage(TypedDict):
 
     Attributes:
         type: Literal type indicating this is a remove-ui message.
-        id: Unique identifier of the UI component to remove.
+        id: Unique identifier of the UI message to remove.
     """
 
     type: Literal["remove-ui"]
