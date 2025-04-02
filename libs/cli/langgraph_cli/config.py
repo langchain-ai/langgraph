@@ -115,11 +115,16 @@ class ThreadTTLConfig(TypedDict, total=False):
     """Configure a default TTL for checkpointed data within threads."""
 
     strategy: Literal["delete"]
-    """Strategy to use for deleting checkpointed data."""
-    default_ttl: float | None
+    """Strategy to use for deleting checkpointed data.
+    
+    Choices:
+      - "delete": Delete all checkpoints for a thread after TTL expires.
+    """
+    default_ttl: Optional[float]
     """Default TTL (time-to-live) in minutes for checkpointed data."""
-    sweep_interval_minutes: int | None
-    """Interval in minutes between sweep iterations."""
+    sweep_interval_minutes: Optional[int]
+    """Interval in minutes between sweep iterations.
+    If omitted, a default interval will be used (typically ~ 5 minutes)."""
 
 
 class CheckpointerConfig(TypedDict, total=False):
@@ -254,7 +259,7 @@ class CorsConfig(TypedDict, total=False):
     allow_origin_regex: str
     """Optional. A regex pattern for matching allowed origins, used if you have dynamic subdomains.
     
-    Example: "^https://.*\.mycompany\.com$"
+    Example: "^https://.*\\.mycompany\\.com$"
     """
     expose_headers: list[str]
     """Optional. List of headers that browsers are allowed to read from the response in cross-origin contexts."""

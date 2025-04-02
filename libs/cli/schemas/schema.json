@@ -315,7 +315,7 @@
     },
     "CheckpointerConfig": {
       "title": "CheckpointerConfig",
-      "description": "Configuration for the built-in checkpointer, which handles checkpointing of state.\n\n    If omitted, no checkpointer is set up (the object store will still be present, however).",
+      "description": "Configuration for the built-in checkpointer, which handles checkpointing of state.\n\nIf omitted, no checkpointer is set up (the object store will still be present, however).",
       "type": "object",
       "properties": {
         "ttl": {
@@ -326,7 +326,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Optional. Defines the TTL (time-to-live) behavior configuration.\n\nIf provided, the checkpointer will apply TTL settings according to the configuration.\nIf omitted, no TTL behavior is configured.\n"
         }
       },
       "required": []
@@ -344,12 +345,14 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Default TTL (time-to-live) in minutes for checkpointed data."
         },
         "strategy": {
           "enum": [
             "delete"
-          ]
+          ],
+          "description": "Strategy to use for deleting checkpointed data.\n"
         },
         "sweep_interval_minutes": {
           "anyOf": [
@@ -359,7 +362,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Interval in minutes between sweep iterations.\nIf omitted, a default interval will be used (typically ~ 5 minutes)."
         }
       },
       "required": []
@@ -528,10 +532,12 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Optional. Default TTL (time-to-live) in minutes for new items.\n\nIf provided, all new items will have this TTL unless explicitly overridden.\nIf omitted, items will have no TTL by default.\n"
         },
         "refresh_on_read": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Default behavior for refreshing TTLs on read operations (GET and SEARCH).\n\nIf True, TTLs will be refreshed on read operations (get/search) by default.\nThis can be overridden per-operation by explicitly setting refresh_ttl.\nDefaults to True if not configured.\n"
         },
         "sweep_interval_minutes": {
           "anyOf": [
@@ -541,7 +547,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "Optional. Interval in minutes between TTL sweep iterations.\n\nIf provided, the store will periodically delete expired items based on the TTL.\nIf omitted, no automatic sweeping will occur.\n"
         }
       },
       "required": []
