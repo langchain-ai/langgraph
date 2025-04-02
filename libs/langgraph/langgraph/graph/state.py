@@ -947,35 +947,61 @@ class CompiledStateGraph(CompiledGraph):
         if checkpoint["v"] >= 3:
             return
 
-        # migrate from v2 to v3
-        if any(k.startswith("start:") for k in versions):
-            # Migrate from start:node to branch:to:node
-            for k in list(versions):
-                if k.startswith("start:"):
-                    # confirm node is present
-                    node = k.split(":")[1]
-                    if node not in self.nodes:
-                        continue
-                    # get next version
-                    new_k = f"branch:to:{node}"
-                    new_v = (
-                        max(versions[new_k], versions.pop(k))
-                        if new_k in versions
-                        else versions.pop(k)
-                    )
-                    # update seen
-                    for ss in (seen.get(node, {}), seen.get(INTERRUPT, {})):
-                        if k in ss:
-                            s = ss.pop(k)
-                            if new_k in ss:
-                                ss[new_k] = max(s, ss[new_k])
-                            else:
-                                ss[new_k] = s
-                    # update value
-                    if new_k not in values and k in values:
-                        values[new_k] = values.pop(k)
-                    # update version
-                    versions[new_k] = new_v
+        # Migrate from start:node to branch:to:node
+        for k in list(versions):
+            if k.startswith("start:"):
+                # confirm node is present
+                node = k.split(":")[1]
+                if node not in self.nodes:
+                    continue
+                # get next version
+                new_k = f"branch:to:{node}"
+                new_v = (
+                    max(versions[new_k], versions.pop(k))
+                    if new_k in versions
+                    else versions.pop(k)
+                )
+                # update seen
+                for ss in (seen.get(node, {}), seen.get(INTERRUPT, {})):
+                    if k in ss:
+                        s = ss.pop(k)
+                        if new_k in ss:
+                            ss[new_k] = max(s, ss[new_k])
+                        else:
+                            ss[new_k] = s
+                # update value
+                if new_k not in values and k in values:
+                    values[new_k] = values.pop(k)
+                # update version
+                versions[new_k] = new_v
+
+        # Migrate from branch:source:condition:node to branch:to:node
+        for k in list(versions):
+            if k.startswith("branch:") and k.count(":") == 3:
+                # confirm node is present
+                node = k.split(":")[-1]
+                if node not in self.nodes:
+                    continue
+                # get next version
+                new_k = f"branch:to:{node}"
+                new_v = (
+                    max(versions[new_k], versions.pop(k))
+                    if new_k in versions
+                    else versions.pop(k)
+                )
+                # update seen
+                for ss in (seen.get(node, {}), seen.get(INTERRUPT, {})):
+                    if k in ss:
+                        s = ss.pop(k)
+                        if new_k in ss:
+                            ss[new_k] = max(s, ss[new_k])
+                        else:
+                            ss[new_k] = s
+                # update value
+                if new_k not in values and k in values:
+                    values[new_k] = values.pop(k)
+                # update version
+                versions[new_k] = new_v
 
         if not set(self.nodes).isdisjoint(versions):
             # Migrate from "node" to "branch:to:node"

@@ -14,6 +14,7 @@ from langgraph.checkpoint.base import (
 from langgraph.graph.state import StateGraph
 from langgraph.types import Command, Interrupt, PregelTask, StateSnapshot, interrupt
 from langgraph.utils.config import patch_configurable
+from tests.any_int import AnyInt
 from tests.any_str import AnyDict, AnyObject, AnyStr
 from tests.conftest import (
     REGULAR_CHECKPOINTERS_ASYNC,
@@ -24,7 +25,7 @@ from tests.conftest import (
 pytestmark = pytest.mark.anyio
 
 
-def get_expected_history(*, exc_task_results: bool = False) -> list[StateSnapshot]:
+def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
     return [
         StateSnapshot(
             values={
@@ -194,7 +195,9 @@ def get_expected_history(*, exc_task_results: bool = False) -> list[StateSnapsho
                     error=None,
                     interrupts=(),
                     state=None,
-                    result={"docs": ["doc3", "doc4"]},
+                    result=None
+                    if exc_task_results >= 2
+                    else {"docs": ["doc3", "doc4"]},
                 ),
             ),
         ),
@@ -1069,6 +1072,413 @@ SAVED_CHECKPOINTS = {
             ],
         ),
     ],
+    "2-quadratic": [
+        CheckpointTuple(
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": "1f00ffbe-546a-64f0-8004-d2d4e06b6fb6",
+                }
+            },
+            checkpoint={
+                "v": 1,
+                "ts": "2025-04-02T19:51:40.630535+00:00",
+                "id": "1f00ffbe-546a-64f0-8004-d2d4e06b6fb6",
+                "channel_values": {
+                    "query": "analyzed: query: what is weather in sf",
+                    "answer": "doc1,doc2,doc3,doc4",
+                    "docs": ["doc1", "doc2", "doc3", "doc4"],
+                    "qa": "qa",
+                },
+                "channel_versions": {
+                    "__start__": "00000000000000000000000000000002.0.141080617837112",
+                    "query": "00000000000000000000000000000004.0.9004905790383284",
+                    "start:rewrite_query": "00000000000000000000000000000003.0.013109117892399547",
+                    "rewrite_query": "00000000000000000000000000000004.0.1679336326485974",
+                    "branch:rewrite_query:rewrite_query_then:retriever_two": "00000000000000000000000000000004.0.7474512867042074",
+                    "analyzer_one": "00000000000000000000000000000005.0.5817293698381076",
+                    "docs": "00000000000000000000000000000005.0.9650795030435029",
+                    "retriever_two": "00000000000000000000000000000005.0.77101858493518",
+                    "retriever_one": "00000000000000000000000000000006.0.4984661612084784",
+                    "answer": "00000000000000000000000000000006.0.6244466008661432",
+                    "qa": "00000000000000000000000000000006.0.06630110662217248",
+                },
+                "versions_seen": {
+                    "__input__": {},
+                    "__start__": {
+                        "__start__": "00000000000000000000000000000001.0.6759219622820284"
+                    },
+                    "rewrite_query": {
+                        "start:rewrite_query": "00000000000000000000000000000002.0.32002588286540445"
+                    },
+                    "analyzer_one": {
+                        "rewrite_query": "00000000000000000000000000000003.0.32578323811902354"
+                    },
+                    "retriever_two": {
+                        "branch:rewrite_query:rewrite_query_then:retriever_two": "00000000000000000000000000000003.0.8992241767805405"
+                    },
+                    "retriever_one": {
+                        "analyzer_one": "00000000000000000000000000000004.0.2684613370070208"
+                    },
+                    "__interrupt__": {
+                        "query": "00000000000000000000000000000004.0.9004905790383284",
+                        "docs": "00000000000000000000000000000005.0.9650795030435029",
+                        "__start__": "00000000000000000000000000000002.0.141080617837112",
+                        "rewrite_query": "00000000000000000000000000000004.0.1679336326485974",
+                        "analyzer_one": "00000000000000000000000000000005.0.5817293698381076",
+                        "retriever_one": "00000000000000000000000000000005.0.222301724202566",
+                        "retriever_two": "00000000000000000000000000000005.0.77101858493518",
+                        "start:rewrite_query": "00000000000000000000000000000003.0.013109117892399547",
+                        "branch:rewrite_query:rewrite_query_then:retriever_two": "00000000000000000000000000000004.0.7474512867042074",
+                    },
+                    "qa": {
+                        "retriever_one": "00000000000000000000000000000005.0.222301724202566"
+                    },
+                },
+                "pending_sends": [],
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+                "thread_id": "1",
+                "step": 4,
+                "parents": {},
+            },
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": "1f00ffbe-5466-61ac-8003-7ec684cd12cc",
+                }
+            },
+            pending_writes=[],
+        ),
+        CheckpointTuple(
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": "1f00ffbe-5466-61ac-8003-7ec684cd12cc",
+                }
+            },
+            checkpoint={
+                "v": 1,
+                "ts": "2025-04-02T19:51:40.628817+00:00",
+                "id": "1f00ffbe-5466-61ac-8003-7ec684cd12cc",
+                "channel_values": {
+                    "query": "analyzed: query: what is weather in sf",
+                    "docs": ["doc1", "doc2", "doc3", "doc4"],
+                    "retriever_one": "retriever_one",
+                },
+                "channel_versions": {
+                    "__start__": "00000000000000000000000000000002.0.141080617837112",
+                    "query": "00000000000000000000000000000004.0.9004905790383284",
+                    "start:rewrite_query": "00000000000000000000000000000003.0.013109117892399547",
+                    "rewrite_query": "00000000000000000000000000000004.0.1679336326485974",
+                    "branch:rewrite_query:rewrite_query_then:retriever_two": "00000000000000000000000000000004.0.7474512867042074",
+                    "analyzer_one": "00000000000000000000000000000005.0.5817293698381076",
+                    "docs": "00000000000000000000000000000005.0.9650795030435029",
+                    "retriever_two": "00000000000000000000000000000005.0.77101858493518",
+                    "retriever_one": "00000000000000000000000000000005.0.222301724202566",
+                },
+                "versions_seen": {
+                    "__input__": {},
+                    "__start__": {
+                        "__start__": "00000000000000000000000000000001.0.6759219622820284"
+                    },
+                    "rewrite_query": {
+                        "start:rewrite_query": "00000000000000000000000000000002.0.32002588286540445"
+                    },
+                    "analyzer_one": {
+                        "rewrite_query": "00000000000000000000000000000003.0.32578323811902354"
+                    },
+                    "retriever_two": {
+                        "branch:rewrite_query:rewrite_query_then:retriever_two": "00000000000000000000000000000003.0.8992241767805405"
+                    },
+                    "retriever_one": {
+                        "analyzer_one": "00000000000000000000000000000004.0.2684613370070208"
+                    },
+                },
+                "pending_sends": [],
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"retriever_one": {"docs": ["doc1", "doc2"]}},
+                "thread_id": "1",
+                "step": 3,
+                "parents": {},
+            },
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": "1f00ffbe-5465-6248-8002-ee1d8bdbbee5",
+                }
+            },
+            pending_writes=[
+                (
+                    "369e94b1-77d1-d67a-ab59-23d1ba20ee73",
+                    "__interrupt__",
+                    [
+                        Interrupt(
+                            value="",
+                            resumable=True,
+                            ns=["qa:369e94b1-77d1-d67a-ab59-23d1ba20ee73"],
+                        )
+                    ],
+                ),
+                ("00000000-0000-0000-0000-000000000000", "__resume__", ""),
+                ("369e94b1-77d1-d67a-ab59-23d1ba20ee73", "__resume__", [""]),
+                (
+                    "369e94b1-77d1-d67a-ab59-23d1ba20ee73",
+                    "answer",
+                    "doc1,doc2,doc3,doc4",
+                ),
+                ("369e94b1-77d1-d67a-ab59-23d1ba20ee73", "qa", "qa"),
+            ],
+        ),
+        CheckpointTuple(
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": "1f00ffbe-5465-6248-8002-ee1d8bdbbee5",
+                }
+            },
+            checkpoint={
+                "v": 1,
+                "ts": "2025-04-02T19:51:40.628408+00:00",
+                "id": "1f00ffbe-5465-6248-8002-ee1d8bdbbee5",
+                "channel_values": {
+                    "query": "analyzed: query: what is weather in sf",
+                    "docs": ["doc3", "doc4"],
+                    "analyzer_one": "analyzer_one",
+                    "retriever_two": "retriever_two",
+                },
+                "channel_versions": {
+                    "__start__": "00000000000000000000000000000002.0.141080617837112",
+                    "query": "00000000000000000000000000000004.0.9004905790383284",
+                    "start:rewrite_query": "00000000000000000000000000000003.0.013109117892399547",
+                    "rewrite_query": "00000000000000000000000000000004.0.1679336326485974",
+                    "branch:rewrite_query:rewrite_query_then:retriever_two": "00000000000000000000000000000004.0.7474512867042074",
+                    "analyzer_one": "00000000000000000000000000000004.0.2684613370070208",
+                    "docs": "00000000000000000000000000000004.0.37458911821520957",
+                    "retriever_two": "00000000000000000000000000000004.0.7340649978617967",
+                },
+                "versions_seen": {
+                    "__input__": {},
+                    "__start__": {
+                        "__start__": "00000000000000000000000000000001.0.6759219622820284"
+                    },
+                    "rewrite_query": {
+                        "start:rewrite_query": "00000000000000000000000000000002.0.32002588286540445"
+                    },
+                    "analyzer_one": {
+                        "rewrite_query": "00000000000000000000000000000003.0.32578323811902354"
+                    },
+                    "retriever_two": {
+                        "branch:rewrite_query:rewrite_query_then:retriever_two": "00000000000000000000000000000003.0.8992241767805405"
+                    },
+                },
+                "pending_sends": [],
+            },
+            metadata={
+                "source": "loop",
+                "writes": {
+                    "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
+                    "retriever_two": {"docs": ["doc3", "doc4"]},
+                },
+                "thread_id": "1",
+                "step": 2,
+                "parents": {},
+            },
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": "1f00ffbe-536a-6dca-8001-c7e021a73244",
+                }
+            },
+            pending_writes=[
+                ("601f2099-cb23-41f9-ae64-9b4e4a6b675e", "docs", ["doc1", "doc2"]),
+                (
+                    "601f2099-cb23-41f9-ae64-9b4e4a6b675e",
+                    "retriever_one",
+                    "retriever_one",
+                ),
+            ],
+        ),
+        CheckpointTuple(
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": "1f00ffbe-536a-6dca-8001-c7e021a73244",
+                }
+            },
+            checkpoint={
+                "v": 1,
+                "ts": "2025-04-02T19:51:40.525915+00:00",
+                "id": "1f00ffbe-536a-6dca-8001-c7e021a73244",
+                "channel_values": {
+                    "query": "query: what is weather in sf",
+                    "rewrite_query": "rewrite_query",
+                    "branch:rewrite_query:rewrite_query_then:retriever_two": "rewrite_query",
+                },
+                "channel_versions": {
+                    "__start__": "00000000000000000000000000000002.0.141080617837112",
+                    "query": "00000000000000000000000000000003.0.8982471206042032",
+                    "start:rewrite_query": "00000000000000000000000000000003.0.013109117892399547",
+                    "rewrite_query": "00000000000000000000000000000003.0.32578323811902354",
+                    "branch:rewrite_query:rewrite_query_then:retriever_two": "00000000000000000000000000000003.0.8992241767805405",
+                },
+                "versions_seen": {
+                    "__input__": {},
+                    "__start__": {
+                        "__start__": "00000000000000000000000000000001.0.6759219622820284"
+                    },
+                    "rewrite_query": {
+                        "start:rewrite_query": "00000000000000000000000000000002.0.32002588286540445"
+                    },
+                },
+                "pending_sends": [],
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"rewrite_query": {"query": "query: what is weather in sf"}},
+                "thread_id": "1",
+                "step": 1,
+                "parents": {},
+            },
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": "1f00ffbe-5369-6de4-8000-70bd3810f0ca",
+                }
+            },
+            pending_writes=[
+                (
+                    "88757475-bc8c-934c-7d18-921cb2d94864",
+                    "query",
+                    "analyzed: query: what is weather in sf",
+                ),
+                (
+                    "88757475-bc8c-934c-7d18-921cb2d94864",
+                    "analyzer_one",
+                    "analyzer_one",
+                ),
+                ("53c60600-588b-e49e-a9d2-bbcbf30a7497", "docs", ["doc3", "doc4"]),
+                (
+                    "53c60600-588b-e49e-a9d2-bbcbf30a7497",
+                    "retriever_two",
+                    "retriever_two",
+                ),
+            ],
+        ),
+        CheckpointTuple(
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": "1f00ffbe-5369-6de4-8000-70bd3810f0ca",
+                }
+            },
+            checkpoint={
+                "v": 1,
+                "ts": "2025-04-02T19:51:40.525508+00:00",
+                "id": "1f00ffbe-5369-6de4-8000-70bd3810f0ca",
+                "channel_values": {
+                    "query": "what is weather in sf",
+                    "start:rewrite_query": "__start__",
+                },
+                "channel_versions": {
+                    "__start__": "00000000000000000000000000000002.0.141080617837112",
+                    "query": "00000000000000000000000000000002.0.06948551802156189",
+                    "start:rewrite_query": "00000000000000000000000000000002.0.32002588286540445",
+                },
+                "versions_seen": {
+                    "__input__": {},
+                    "__start__": {
+                        "__start__": "00000000000000000000000000000001.0.6759219622820284"
+                    },
+                },
+                "pending_sends": [],
+            },
+            metadata={
+                "source": "loop",
+                "writes": None,
+                "thread_id": "1",
+                "step": 0,
+                "parents": {},
+            },
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": "1f00ffbe-5368-6c0a-bfff-ac22bea4c512",
+                }
+            },
+            pending_writes=[
+                (
+                    "3bb470dd-9bf8-6216-b5fb-e50162991da1",
+                    "query",
+                    "query: what is weather in sf",
+                ),
+                (
+                    "3bb470dd-9bf8-6216-b5fb-e50162991da1",
+                    "rewrite_query",
+                    "rewrite_query",
+                ),
+                (
+                    "3bb470dd-9bf8-6216-b5fb-e50162991da1",
+                    "branch:rewrite_query:rewrite_query_then:retriever_two",
+                    "rewrite_query",
+                ),
+            ],
+        ),
+        CheckpointTuple(
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": "1f00ffbe-5368-6c0a-bfff-ac22bea4c512",
+                }
+            },
+            checkpoint={
+                "v": 1,
+                "ts": "2025-04-02T19:51:40.525051+00:00",
+                "id": "1f00ffbe-5368-6c0a-bfff-ac22bea4c512",
+                "channel_values": {"__start__": {"query": "what is weather in sf"}},
+                "channel_versions": {
+                    "__start__": "00000000000000000000000000000001.0.6759219622820284"
+                },
+                "versions_seen": {"__input__": {}},
+                "pending_sends": [],
+            },
+            metadata={
+                "source": "input",
+                "writes": {"__start__": {"query": "what is weather in sf"}},
+                "thread_id": "1",
+                "step": -1,
+                "parents": {},
+            },
+            parent_config=None,
+            pending_writes=[
+                (
+                    "aa8c5e8a-da6f-ccb1-f8a9-3b145cdfe7a4",
+                    "query",
+                    "what is weather in sf",
+                ),
+                (
+                    "aa8c5e8a-da6f-ccb1-f8a9-3b145cdfe7a4",
+                    "start:rewrite_query",
+                    "__start__",
+                ),
+            ],
+        ),
+    ],
 }
 
 
@@ -1124,15 +1534,18 @@ def make_state_graph() -> StateGraph:
     return workflow
 
 
-def test_migrate_checkpoints() -> None:
+@pytest.mark.parametrize("source,target", [("2-start:*", "3"), ("2-quadratic", "3")])
+def test_migrate_checkpoints(source: str, target: str) -> None:
     # Check that the migration function works as expected
     builder = make_state_graph()
     graph = builder.compile()
 
-    source = list(reversed(SAVED_CHECKPOINTS["2-start:*"]))
-    target = list(reversed(SAVED_CHECKPOINTS["3"]))
-    assert len(source) == len(target)
-    for idx, (source_checkpoint, target_checkpoint) in enumerate(zip(source, target)):
+    source_checkpoints = list(reversed(SAVED_CHECKPOINTS[source]))
+    target_checkpoints = list(reversed(SAVED_CHECKPOINTS[target]))
+    assert len(source_checkpoints) == len(target_checkpoints)
+    for idx, (source_checkpoint, target_checkpoint) in enumerate(
+        zip(source_checkpoints, target_checkpoints)
+    ):
         # copy the checkpoint to avoid modifying the original
         migrated = copy_checkpoint(source_checkpoint.checkpoint)
         # migrate the checkpoint
@@ -1140,6 +1553,7 @@ def test_migrate_checkpoints() -> None:
         # replace values that don't need to match exactly
         migrated["id"] = AnyStr()
         migrated["ts"] = AnyStr()
+        migrated["v"] = AnyInt()
         for k in migrated["channel_values"]:
             migrated["channel_values"][k] = AnyObject()
         for v in migrated["channel_versions"]:
@@ -1242,7 +1656,7 @@ async def test_latest_checkpoint_state_graph_async(checkpointer_name: str) -> No
         assert history[5] == expected_history[5]
 
 
-@pytest.mark.parametrize("checkpoint_version", ["3", "2-start:*"])
+@pytest.mark.parametrize("checkpoint_version", ["3", "2-start:*", "2-quadratic"])
 @pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_SYNC)
 def test_saved_checkpoint_state_graph(
     request: pytest.FixtureRequest,
@@ -1278,7 +1692,12 @@ def test_saved_checkpoint_state_graph(
     # load history
     history = [*app.get_state_history(config)]
     # check history with saved checkpoints matches expected history
-    expected_history = get_expected_history(exc_task_results=checkpoint_version != "3")
+    exc_task_results: int = 0
+    if checkpoint_version == "2-start:*":
+        exc_task_results = 1
+    elif checkpoint_version == "2-quadratic":
+        exc_task_results = 2
+    expected_history = get_expected_history(exc_task_results=exc_task_results)
     assert len(history) == len(expected_history)
     assert history[0] == expected_history[0]
     assert history[1] == expected_history[1]
@@ -1307,7 +1726,7 @@ def test_saved_checkpoint_state_graph(
     )
 
 
-@pytest.mark.parametrize("checkpoint_version", ["3", "2-start:*"])
+@pytest.mark.parametrize("checkpoint_version", ["3", "2-start:*", "2-quadratic"])
 @pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_saved_checkpoint_state_graph_async(
     checkpointer_name: str,
@@ -1339,9 +1758,12 @@ async def test_saved_checkpoint_state_graph_async(
         # load history
         history = [c async for c in app.aget_state_history(config)]
         # check history with saved checkpoints matches expected history
-        expected_history = get_expected_history(
-            exc_task_results=checkpoint_version != "3"
-        )
+        exc_task_results: int = 0
+        if checkpoint_version == "2-start:*":
+            exc_task_results = 1
+        elif checkpoint_version == "2-quadratic":
+            exc_task_results = 2
+        expected_history = get_expected_history(exc_task_results=exc_task_results)
         assert len(history) == len(expected_history)
         assert history[0] == expected_history[0]
         assert history[1] == expected_history[1]
