@@ -4,6 +4,11 @@ from typing import Any, Sequence, Union
 from typing_extensions import Self
 
 
+class AnyObject:
+    def __eq__(self, value):
+        return True
+
+
 class FloatBetween(float):
     def __new__(cls, min_value: float, max_value: float) -> Self:
         return super().__new__(cls, min_value)

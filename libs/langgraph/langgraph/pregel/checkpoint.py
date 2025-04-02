@@ -6,7 +6,7 @@ from langgraph.checkpoint.base import Checkpoint
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.constants import MISSING
 
-LATEST_VERSION = 2
+LATEST_VERSION = 3
 
 
 def empty_checkpoint() -> Checkpoint:
