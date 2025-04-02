@@ -20,7 +20,7 @@ The Control Plane UI is embedded in [LangSmith](https://docs.smith.langchain.com
 
 ## Control Plane API
 
-This section describes data model of the LangGraph Control Plane API. Control Plane APIs are used to create, update, and delete deployments. However, they are not publicly accessible.
+This section describes data model of the LangGraph Control Plane API. Control Plane API is used to create, update, and delete deployments. However, they are not publicly accessible.
 
 ### Deployment
 
@@ -59,7 +59,7 @@ CPU and memory resources are per container.
 
 The control plane and [LangGraph Data Plane](./langgraph_data_plane.md) "listener" application coordinate to automatically create a Postgres database for each deployment. The database serves as the [persistence layer](../concepts/persistence.md) for the deployment.
 
-When implementing a LangGraph application, a [checkpointer](../concepts/persistence.md#checkpointer-libraries) should not be configured by the developer. Instead, a checkpointer is automatically configured for the graph.
+When implementing a LangGraph application, a [checkpointer](../concepts/persistence.md#checkpointer-libraries) does not need to be configured by the developer. Instead, a checkpointer is automatically configured for the graph. Any checkpointer configured for a graph will be replaced by the one that is automatically configured.
 
 There is no direct access to the database. All access to the database occurs through the [LangGraph Server](../concepts/langgraph_server.md).
 

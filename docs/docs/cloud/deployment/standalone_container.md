@@ -4,8 +4,8 @@ Before deploying, review the [conceptual guide for the Standalone Container](../
 
 ## Prerequisites
 
-1. You use the [LangGraph CLI](../../concepts/langgraph_cli.md) to [test your application locally](./test_locally.md).
-1. You use the [LangGraph CLI](../../concepts/langgraph_cli.md) to build a Docker image (i.e. `langgraph build`).
+1. Use the [LangGraph CLI](../../concepts/langgraph_cli.md) to [test your application locally](./test_locally.md).
+1. Use the [LangGraph CLI](../../concepts/langgraph_cli.md) to build a Docker image (i.e. `langgraph build`).
 1. The following environment variables are needed for a standalone container deployment.
     1. `REDIS_URI`: Connection details to a Redis instance. Redis will be used as a pub-sub broker to enable streaming real time output from background runs. The value of `REDIS_URI` must be a valid [Redis connection URI](https://redis-py.readthedocs.io/en/stable/connections.html#redis.Redis.from_url).
 
@@ -23,7 +23,7 @@ Before deploying, review the [conceptual guide for the Standalone Container](../
 
     1. `LANGSMITH_API_KEY`: (if using [Lite](../../concepts/langgraph_data_plane.md#lite-vs-enterprise)) LangSmith API key. This will be used to authenticate ONCE at server start up.
     1. `LANGGRAPH_CLOUD_LICENSE_KEY`: (if using [Enterprise](../../concepts/langgraph_data_plane.md#lite-vs-enterprise)) LangGraph Platform license key. This will be used to authenticate ONCE at server start up.
-    1. `LANGCHAIN_ENDPOINT`: To send traces to a [self-hosted LangSmith](https://docs.smith.langchain.com/self_hosting) instance, set `LANGCHAIN_ENDPOINT` to the hostname of the self-hosted LangSmith instance.
+    1. `LANGSMITH_ENDPOINT`: To send traces to a [self-hosted LangSmith](https://docs.smith.langchain.com/self_hosting) instance, set `LANGSMITH_ENDPOINT` to the hostname of the self-hosted LangSmith instance.
 
 ## Kubernetes (Helm)
 

@@ -4,8 +4,8 @@ Before deploying, review the [conceptual guide for the Self-Hosted Data Plane](.
 
 ## Prerequisites
 
-1. You use the [LangGraph CLI](../../concepts/langgraph_cli.md) to [test your application locally](./test_locally.md).
-1. You use the [LangGraph CLI](../../concepts/langgraph_cli.md) to build a Docker image (i.e. `langgraph build`) and push it to a registry your Kubernetes cluster or Amazon ECS cluster has access to.
+1. Use the [LangGraph CLI](../../concepts/langgraph_cli.md) to [test your application locally](./test_locally.md).
+1. Use the [LangGraph CLI](../../concepts/langgraph_cli.md) to build a Docker image (i.e. `langgraph build`) and push it to a registry your Kubernetes cluster or Amazon ECS cluster has access to.
 
 ## Kubernetes
 
