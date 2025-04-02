@@ -2,9 +2,23 @@ from datetime import datetime, timezone
 from typing import Mapping, Optional
 
 from langgraph.channels.base import BaseChannel
-from langgraph.checkpoint.base import LATEST_VERSION, Checkpoint
+from langgraph.checkpoint.base import Checkpoint
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.constants import MISSING
+
+LATEST_VERSION = 2
+
+
+def empty_checkpoint() -> Checkpoint:
+    return Checkpoint(
+        v=LATEST_VERSION,
+        id=str(uuid6(clock_seq=-2)),
+        ts=datetime.now(timezone.utc).isoformat(),
+        channel_values={},
+        channel_versions={},
+        versions_seen={},
+        pending_sends=[],
+    )
 
 
 def create_checkpoint(

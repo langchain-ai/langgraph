@@ -30,6 +30,7 @@ from langgraph.checkpoint.serde.types import (
 
 V = TypeVar("V", int, float, str)
 PendingWrite = Tuple[str, str, Any]
+# Kept for backwards compat, newer versions of LangGraph no longer use this.
 LATEST_VERSION = 2
 
 
@@ -100,6 +101,7 @@ class Checkpoint(TypedDict):
     Cleared by the next checkpoint."""
 
 
+# Kept for backwards compat, newer versions of LangGraph no longer use this.
 def empty_checkpoint() -> Checkpoint:
     return Checkpoint(
         v=LATEST_VERSION,

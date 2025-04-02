@@ -50,7 +50,6 @@ from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     CheckpointTuple,
     copy_checkpoint,
-    empty_checkpoint,
 )
 from langgraph.constants import (
     CONF,
@@ -90,7 +89,7 @@ from langgraph.pregel.algo import (
     local_write,
     prepare_next_tasks,
 )
-from langgraph.pregel.checkpoint import create_checkpoint
+from langgraph.pregel.checkpoint import create_checkpoint, empty_checkpoint
 from langgraph.pregel.debug import tasks_w_writes
 from langgraph.pregel.io import map_input, read_channels
 from langgraph.pregel.loop import AsyncPregelLoop, StreamProtocol, SyncPregelLoop
