@@ -1,4 +1,5 @@
 import operator
+import sys
 import time
 from collections import defaultdict
 from typing import Annotated, Literal, Optional, Union
@@ -23,6 +24,11 @@ from tests.conftest import (
 )
 
 pytestmark = pytest.mark.anyio
+
+NEEDS_CONTEXTVARS = pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 
 
 def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
@@ -1534,6 +1540,7 @@ def make_state_graph() -> StateGraph:
     return workflow
 
 
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("source,target", [("2-start:*", "3"), ("2-quadratic", "3")])
 def test_migrate_checkpoints(source: str, target: str) -> None:
     # Check that the migration function works as expected
@@ -1571,6 +1578,7 @@ def test_migrate_checkpoints(source: str, target: str) -> None:
         ), "Checkpoint mismatch at index {}".format(idx)
 
 
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_SYNC)
 def test_latest_checkpoint_state_graph(
     request: pytest.FixtureRequest, checkpointer_name: str
@@ -1615,6 +1623,7 @@ def test_latest_checkpoint_state_graph(
     assert history[5] == expected_history[5]
 
 
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_latest_checkpoint_state_graph_async(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
@@ -1656,6 +1665,7 @@ async def test_latest_checkpoint_state_graph_async(checkpointer_name: str) -> No
         assert history[5] == expected_history[5]
 
 
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpoint_version", ["3", "2-start:*", "2-quadratic"])
 @pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_SYNC)
 def test_saved_checkpoint_state_graph(
@@ -1726,6 +1736,7 @@ def test_saved_checkpoint_state_graph(
     )
 
 
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpoint_version", ["3", "2-start:*", "2-quadratic"])
 @pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_saved_checkpoint_state_graph_async(
