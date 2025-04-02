@@ -314,7 +314,7 @@ def create_react_agent(
                 This is not the only strategy to get structured responses, see more options in [this guide](https://langchain-ai.github.io/langgraph/how-tos/react-agent-structured-output/).
 
         pre_model_hook: An optional node to add before the `agent` node (i.e., the node that calls the LLM).
-            Useful for implementing strategies to manage long message histories (e.g., message trimming, summarization, etc.).
+            Useful for managing long message histories (e.g., message trimming, summarization, etc.).
             Pre-model hook must be a callable or a runnable that takes in current graph state and returns a state update in the form of
                 ```python
                 # At least one of `messages` or `llm_input_messages` MUST be provided
