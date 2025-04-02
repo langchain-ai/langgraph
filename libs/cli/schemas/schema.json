@@ -40,6 +40,17 @@
               ],
               "description": "Optional. Custom authentication config, including the path to your Python auth logic and\nthe OpenAPI security definitions it uses.\n"
             },
+            "checkpointer": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CheckpointerConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Configuration for the built-in checkpointer, which handles checkpointing of state.\n\nIf omitted, no checkpointer is set up (the object store will still be present, however).\n"
+            },
             "dependencies": {
               "type": "array",
               "items": {
@@ -144,6 +155,17 @@
                 }
               ],
               "description": "Optional. Custom authentication config, including the path to your Python auth logic and\nthe OpenAPI security definitions it uses.\n"
+            },
+            "checkpointer": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CheckpointerConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Configuration for the built-in checkpointer, which handles checkpointing of state.\n\nIf omitted, no checkpointer is set up (the object store will still be present, however).\n"
             },
             "dependencies": {
               "type": "array",
@@ -287,6 +309,57 @@
             "type": "object"
           },
           "description": "Required. Dict describing each security scheme recognized by your OpenAPI spec.\n\nKeys are scheme names (e.g. \"OAuth2\", \"ApiKeyAuth\") and values are their definitions."
+        }
+      },
+      "required": []
+    },
+    "CheckpointerConfig": {
+      "title": "CheckpointerConfig",
+      "description": "Configuration for the built-in checkpointer, which handles checkpointing of state.\n\n    If omitted, no checkpointer is set up (the object store will still be present, however).",
+      "type": "object",
+      "properties": {
+        "ttl": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ThreadTTLConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": []
+    },
+    "ThreadTTLConfig": {
+      "title": "ThreadTTLConfig",
+      "description": "Configure a default TTL for checkpointed data within threads.",
+      "type": "object",
+      "properties": {
+        "default_ttl": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "strategy": {
+          "enum": [
+            "delete"
+          ]
+        },
+        "sweep_interval_minutes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": []
