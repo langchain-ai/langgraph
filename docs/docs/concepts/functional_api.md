@@ -25,7 +25,6 @@ Below we demonstrate a simple application that writes an essay and [interrupts](
 ```python
 from langgraph.func import entrypoint, task
 from langgraph.types import interrupt
-from langgraph.checkpoint.memory import MemorySaver
 
 
 @task
