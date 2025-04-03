@@ -163,6 +163,7 @@ These guides show how to use the prebuilt ReAct agent:
 - [How to add human-in-the-loop processes to a ReAct agent](create-react-agent-hitl.ipynb)
 - [How to return structured output from a ReAct agent](create-react-agent-structured-output.ipynb)
 - [How to add semantic search for long-term memory to a ReAct agent](memory/semantic-search.ipynb#using-in-create-react-agent)
+- [How to manage message history in a ReAct agent](create-react-agent-manage-message-history.ipynb)
 
 Interested in further customizing the ReAct agent? This guide provides an
 overview of its underlying implementation to help you customize for your own needs:

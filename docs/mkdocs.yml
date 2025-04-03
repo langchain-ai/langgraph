@@ -185,6 +185,7 @@ nav:
               - how-tos/create-react-agent-system-prompt.ipynb
               - how-tos/create-react-agent-hitl.ipynb
               - how-tos/create-react-agent-structured-output.ipynb
+              - how-tos/create-react-agent-manage-message-history.ipynb
               - how-tos/react-agent-from-scratch.ipynb
               - how-tos/react-agent-from-scratch-functional.ipynb
         - LangGraph Platform:
