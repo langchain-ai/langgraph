@@ -19,7 +19,7 @@ export type StreamEvent =
 
 export interface Send {
   node: string;
-  input: Record<string, unknown> | null;
+  input: unknown | null;
 }
 
 export interface Command {
