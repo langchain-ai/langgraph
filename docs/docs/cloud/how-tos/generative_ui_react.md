@@ -80,12 +80,12 @@ CSS and Tailwind 4.x is also supported out of the box, so you can freely use Tai
     from langchain_openai import ChatOpenAI
     from langgraph.graph import StateGraph
     from langgraph.graph.message import add_messages
-    from langgraph.graph.ui import AnyUIMessage, add_ui_messages, push_ui_message
+    from langgraph.graph.ui import AnyUIMessage, ui_message_reducer, push_ui_message
 
 
     class AgentState(TypedDict):  # noqa: D101
         messages: Annotated[Sequence[BaseMessage], add_messages]
-        ui: Annotated[Sequence[AnyUIMessage], add_ui_messages]
+        ui: Annotated[Sequence[AnyUIMessage], ui_message_reducer]
 
 
     async def weather(state: AgentState):
@@ -342,13 +342,13 @@ Similar to how messages can be removed from the state by appending a RemoveMessa
 === "Python"
 
     ```python
-    from langgraph.graph.ui import push_ui_message, remove_ui_message
+    from langgraph.graph.ui import push_ui_message, delete_ui_message
 
     # push message
     message = push_ui_message("weather", {"city": "London"})
 
     # remove said message
-    remove_ui_message(message["id"])
+    delete_ui_message(message["id"])
     ```
 
 === "JS"

@@ -115,7 +115,7 @@ def push_ui_message(
     return evt
 
 
-def remove_ui_message(id: str, *, state_key: str = "ui") -> RemoveUIMessage:
+def delete_ui_message(id: str, *, state_key: str = "ui") -> RemoveUIMessage:
     """Delete a UI message by ID from the UI state.
 
     This function creates and sends a message to remove a UI component from the current state.
@@ -132,7 +132,7 @@ def remove_ui_message(id: str, *, state_key: str = "ui") -> RemoveUIMessage:
 
     .. code-block:: python
 
-        remove_ui_message("message-123")
+        delete_ui_message("message-123")
 
     """
     writer = get_stream_writer()
@@ -146,14 +146,14 @@ def remove_ui_message(id: str, *, state_key: str = "ui") -> RemoveUIMessage:
     return evt
 
 
-def add_ui_messages(
+def ui_message_reducer(
     left: Union[list[AnyUIMessage], AnyUIMessage],
     right: Union[list[AnyUIMessage], AnyUIMessage],
 ) -> list[AnyUIMessage]:
     """Merge two lists of UI messages, supporting removing UI messages.
 
     This function combines two lists of UI messages, handling both regular UI messages
-    and remove-ui messages. When a remove-ui message is encountered, it removes any
+    and `remove-ui` messages. When a `remove-ui` message is encountered, it removes any
     UI message with the matching ID from the current state.
 
     Args:
@@ -167,7 +167,7 @@ def add_ui_messages(
 
     .. code-block:: python
 
-        messages = reduce_ui_messages(
+        messages = ui_message_reducer(
             [{"type": "ui", "id": "1", "name": "Chat", "props": {}}],
             {"type": "remove-ui", "id": "1"}
         )
