@@ -12,10 +12,6 @@ Generative user interfaces (Generative UI) allows agents to go beyond text and g
 
 LangGraph Platform supports colocating your React components with your graph code. This allows you to focus on building specific UI components for your graph while easily plugging into existing chat interfaces such as [Agent Chat](https://agentchat.vercel.app) and loading the code only when actually needed.
 
-!!! warning "LangGraph.js only"
-
-    Currently only LangGraph.js supports Generative UI. Support for Python is coming soon.
-
 ## Tutorial
 
 ### 1. Define and configure UI components
@@ -74,58 +70,105 @@ CSS and Tailwind 4.x is also supported out of the box, so you can freely use Tai
 
 ### 2. Send the UI components in your graph
 
-Use the `typedUi` utility to emit UI elements from your agent nodes:
+=== "Python"
 
-```typescript title="src/agent/index.ts"
-import {
-  typedUi,
-  uiMessageReducer,
-} from "@langchain/langgraph-sdk/react-ui/server";
+    ```python title="src/agent.py"
+    import uuid
+    from typing import Annotated, Sequence, TypedDict
 
-import { ChatOpenAI } from "@langchain/openai";
-import { v4 as uuidv4 } from "uuid";
-import { z } from "zod";
+    from langchain_core.messages import AIMessage, BaseMessage
+    from langchain_openai import ChatOpenAI
+    from langgraph.graph import StateGraph
+    from langgraph.graph.message import add_messages
+    from langgraph.graph.ui import AnyUIMessage, ui_message_reducer, push_ui_message
 
-import type ComponentMap from "./ui.js";
 
-import {
-  Annotation,
-  MessagesAnnotation,
-  StateGraph,
-  type LangGraphRunnableConfig,
-} from "@langchain/langgraph";
+    class AgentState(TypedDict):  # noqa: D101
+        messages: Annotated[Sequence[BaseMessage], add_messages]
+        ui: Annotated[Sequence[AnyUIMessage], ui_message_reducer]
 
-const AgentState = Annotation.Root({
-  ...MessagesAnnotation.spec,
-  ui: Annotation({ reducer: uiMessageReducer, default: () => [] }),
-});
 
-export const graph = new StateGraph(AgentState)
-  .addNode("weather", async (state, config) => {
-    // Provide the type of the component map to ensure
-    // type safety of `ui.push()` calls as well as
-    // pushing the messages to the `ui` and sending a custom event as well.
-    const ui = typedUi<typeof ComponentMap>(config);
+    async def weather(state: AgentState):
+        class WeatherOutput(TypedDict):
+            city: str
 
-    const weather = await new ChatOpenAI({ model: "gpt-4o-mini" })
-      .withStructuredOutput(z.object({ city: z.string() }))
-      .withConfig({ tags: ["langsmith:nostream"] })
-      .invoke(state.messages);
+        weather: WeatherOutput = (
+            await ChatOpenAI(model="gpt-4o-mini")
+            .with_structured_output(WeatherOutput)
+            .with_config({"tags": ["nostream"]})
+            .ainvoke(state["messages"])
+        )
 
-    const response = {
-      id: uuidv4(),
-      type: "ai",
-      content: `Here's the weather for ${weather.city}`,
-    };
+        message = AIMessage(
+            id=str(uuid.uuid4()),
+            content=f"Here's the weather for {weather['city']}",
+        )
 
-    // Emit UI elements with associated AI message
-    ui.push({ name: "weather", props: weather }, { message: response });
+        # Emit UI elements associated with the message
+        push_ui_message("weather", weather, message=message)
+        return {"messages": [message]}
 
-    return { messages: [response] };
-  })
-  .addEdge("__start__", "weather")
-  .compile();
-```
+
+    workflow = StateGraph(AgentState)
+    workflow.add_node(weather)
+    workflow.add_edge("__start__", "weather")
+    graph = workflow.compile()
+    ```
+
+=== "JS"
+
+    Use the `typedUi` utility to emit UI elements from your agent nodes:
+
+    ```typescript title="src/agent/index.ts"
+    import {
+      typedUi,
+      uiMessageReducer,
+    } from "@langchain/langgraph-sdk/react-ui/server";
+
+    import { ChatOpenAI } from "@langchain/openai";
+    import { v4 as uuidv4 } from "uuid";
+    import { z } from "zod";
+
+    import type ComponentMap from "./ui.js";
+
+    import {
+      Annotation,
+      MessagesAnnotation,
+      StateGraph,
+      type LangGraphRunnableConfig,
+    } from "@langchain/langgraph";
+
+    const AgentState = Annotation.Root({
+      ...MessagesAnnotation.spec,
+      ui: Annotation({ reducer: uiMessageReducer, default: () => [] }),
+    });
+
+    export const graph = new StateGraph(AgentState)
+      .addNode("weather", async (state, config) => {
+        // Provide the type of the component map to ensure
+        // type safety of `ui.push()` calls as well as
+        // pushing the messages to the `ui` and sending a custom event as well.
+        const ui = typedUi<typeof ComponentMap>(config);
+
+        const weather = await new ChatOpenAI({ model: "gpt-4o-mini" })
+          .withStructuredOutput(z.object({ city: z.string() }))
+          .withConfig({ tags: ["nostream"] })
+          .invoke(state.messages);
+
+        const response = {
+          id: uuidv4(),
+          type: "ai",
+          content: `Here's the weather for ${weather.city}`,
+        };
+
+        // Emit UI elements associated with the AI message
+        ui.push({ name: "weather", props: weather }, { message: response });
+
+        return { messages: [response] };
+      })
+      .addEdge("__start__", "weather")
+      .compile();
+    ```
 
 ### 3. Handle UI elements in your React application
 
@@ -294,18 +337,29 @@ const { thread, submit } = useStream({
 
 ### Remove UI messages from state
 
-Similar to how messages can be removed from the state by appending a RemoveMessage you can remove an UI message from the state by calling `ui.delete` with the ID of the UI message.
+Similar to how messages can be removed from the state by appending a RemoveMessage you can remove an UI message from the state by calling `remove_ui_message` / `ui.delete` with the ID of the UI message.
 
-```tsx
-// pushed message
-const message = ui.push({ name: "weather", props: { city: "London" } });
+=== "Python"
 
-// remove said message
-ui.delete(message.id);
+    ```python
+    from langgraph.graph.ui import push_ui_message, delete_ui_message
 
-// return new state to persist changes
-return { ui: ui.items };
-```
+    # push message
+    message = push_ui_message("weather", {"city": "London"})
+
+    # remove said message
+    delete_ui_message(message["id"])
+    ```
+
+=== "JS"
+
+    ```tsx
+    // push message
+    const message = ui.push({ name: "weather", props: { city: "London" } });
+
+    // remove said message
+    ui.delete(message.id);
+    ```
 
 ## Learn more
 
