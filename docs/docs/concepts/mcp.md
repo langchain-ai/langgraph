@@ -26,6 +26,3 @@ To use MCP, you need to install the following dependencies:
 The MCP endpoint is protected by the same authentication as the rest of the LangGraph API.
 
 Please read the [authentication documentation](./auth.md) for more information on how to set up authentication for your LangGraph server.
-
-
-
