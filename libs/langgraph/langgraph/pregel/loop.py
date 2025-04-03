@@ -736,7 +736,7 @@ class PregelLoop(LoopProtocol):
             self.checkpoint, self.channels if do_checkpoint else None, self.step
         )
         # bail if no checkpointer
-        if do_checkpoint:
+        if do_checkpoint and self._checkpointer_put_after_previous is not None:
             for k, v in self.config["metadata"].items():
                 if k in EXCLUDED_METADATA_KEYS:
                     continue
