@@ -84,7 +84,6 @@ def push_ui_message(
         )
 
     """
-
     writer = get_stream_writer()
     config = get_config()
 
@@ -147,7 +146,7 @@ def remove_ui_message(id: str, *, state_key: str = "ui") -> RemoveUIMessage:
     return evt
 
 
-def reduce_ui_messages(
+def add_ui_messages(
     left: Union[list[AnyUIMessage], AnyUIMessage],
     right: Union[list[AnyUIMessage], AnyUIMessage],
 ) -> list[AnyUIMessage]:
@@ -180,11 +179,28 @@ def reduce_ui_messages(
     if not isinstance(right, list):
         right = [right]
 
-    new_state = left.copy()
-    for m in right:
-        if m.get("type") == "remove-ui":
-            new_state = [m for m in new_state if m.get("id") != m.get("id")]
-        else:
-            new_state.append(m)
+    # merge messages
+    merged = left.copy()
+    merged_by_id = {m.get("id"): i for i, m in enumerate(merged)}
+    ids_to_remove = set()
 
-    return new_state
+    for msg in right:
+        msg_id = msg.get("id")
+
+        if (existing_idx := merged_by_id.get(msg_id)) is not None:
+            if msg.get("type") == "remove-ui":
+                ids_to_remove.add(msg_id)
+            else:
+                ids_to_remove.discard(msg_id)
+                merged[existing_idx] = msg
+        else:
+            if msg.get("type") == "remove-ui":
+                raise ValueError(
+                    f"Attempting to delete an UI message with an ID that doesn't exist ('{msg_id}')"
+                )
+
+            merged_by_id[msg_id] = len(merged)
+            merged.append(msg)
+
+    merged = [m for m in merged if m.get("id") not in ids_to_remove]
+    return merged
