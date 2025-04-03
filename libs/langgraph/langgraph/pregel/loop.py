@@ -155,7 +155,7 @@ class PregelLoop(LoopProtocol):
     manager: Union[None, AsyncParentRunManager, ParentRunManager]
     interrupt_after: Union[All, Sequence[str]]
     interrupt_before: Union[All, Sequence[str]]
-    checkpoint_every_step: bool
+    checkpoint_during: bool
     debug: bool
 
     checkpointer_get_next_version: GetNextVersion
@@ -215,7 +215,7 @@ class PregelLoop(LoopProtocol):
         debug: bool = False,
         migrate_checkpoint: Optional[Callable[[Checkpoint], None]] = None,
         trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
-        checkpoint_every_step: bool = True,
+        checkpoint_during: bool = True,
     ) -> None:
         super().__init__(
             step=0,
@@ -241,7 +241,7 @@ class PregelLoop(LoopProtocol):
         )
         self._migrate_checkpoint = migrate_checkpoint
         self.trigger_to_nodes = trigger_to_nodes
-        self.checkpoint_every_step = checkpoint_every_step
+        self.checkpoint_during = checkpoint_during
         self.debug = debug
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
@@ -709,10 +709,13 @@ class PregelLoop(LoopProtocol):
             )
         return updated_channels
 
-    def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
+    def _put_checkpoint(
+        self, metadata: CheckpointMetadata, force: bool = False
+    ) -> None:
         # assign step and parents
         metadata["step"] = self.step
         metadata["parents"] = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
+        self.checkpoint_metadata = metadata
         # debug flag
         if self.debug:
             print_step_checkpoint(
@@ -724,18 +727,20 @@ class PregelLoop(LoopProtocol):
                     else self.stream_keys
                 ),
             )
+        # do checkpoint?
+        do_checkpoint = self._checkpointer_put_after_previous is not None and (
+            force or self.checkpoint_during
+        )
+        # create new checkpoint
+        self.checkpoint = create_checkpoint(
+            self.checkpoint, self.channels if do_checkpoint else None, self.step
+        )
         # bail if no checkpointer
-        if self._checkpointer_put_after_previous is not None:
+        if do_checkpoint:
             for k, v in self.config["metadata"].items():
                 if k in EXCLUDED_METADATA_KEYS:
                     continue
                 metadata.setdefault(k, v)  # type: ignore
-
-            # create new checkpoint
-            self.checkpoint = create_checkpoint(
-                self.checkpoint, self.channels, self.step
-            )
-            self.checkpoint_metadata = metadata
 
             self.prev_checkpoint_config = (
                 self.checkpoint_config
@@ -789,6 +794,8 @@ class PregelLoop(LoopProtocol):
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
+        if not self.checkpoint_during:
+            self._put_checkpoint(self.checkpoint_metadata, force=True)
         # suppress interrupt
         suppress = isinstance(exc_value, GraphInterrupt) and not self.is_nested
         if suppress:
@@ -907,6 +914,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         debug: bool = False,
         migrate_checkpoint: Optional[Callable[[Checkpoint], None]] = None,
         trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
+        checkpoint_during: bool = True,
     ) -> None:
         super().__init__(
             input,
@@ -925,6 +933,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             debug=debug,
             migrate_checkpoint=migrate_checkpoint,
             trigger_to_nodes=trigger_to_nodes,
+            checkpoint_during=checkpoint_during,
         )
         self.stack = ExitStack()
         if checkpointer:
@@ -1054,6 +1063,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         debug: bool = False,
         migrate_checkpoint: Optional[Callable[[Checkpoint], None]] = None,
         trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
+        checkpoint_during: bool = True,
     ) -> None:
         super().__init__(
             input,
@@ -1072,6 +1082,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             debug=debug,
             migrate_checkpoint=migrate_checkpoint,
             trigger_to_nodes=trigger_to_nodes,
+            checkpoint_during=checkpoint_during,
         )
         self.stack = AsyncExitStack()
         if checkpointer:

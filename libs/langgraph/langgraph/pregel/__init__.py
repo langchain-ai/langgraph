@@ -2094,6 +2094,7 @@ class Pregel(PregelProtocol):
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        checkpoint_during: bool = True,
         debug: Optional[bool] = None,
         subgraphs: bool = False,
     ) -> Iterator[Union[dict[str, Any], Any]]:
@@ -2115,6 +2116,7 @@ class Pregel(PregelProtocol):
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
+            checkpoint_during: Whether to checkpoint intermediate steps, defaults to True. If False, only the final checkpoint is saved.
             debug: Whether to print debug information during execution, defaults to False.
             subgraphs: Whether to stream subgraphs, defaults to False.
 
@@ -2291,6 +2293,7 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
                 debug=debug,
+                checkpoint_during=checkpoint_during,
                 trigger_to_nodes=self.trigger_to_nodes,
                 migrate_checkpoint=self._migrate_checkpoint,
             ) as loop:
@@ -2373,6 +2376,7 @@ class Pregel(PregelProtocol):
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        checkpoint_during: bool = True,
         debug: Optional[bool] = None,
         subgraphs: bool = False,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
@@ -2394,6 +2398,7 @@ class Pregel(PregelProtocol):
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
+            checkpoint_during: Whether to checkpoint intermediate steps, defaults to True. If False, only the final checkpoint is saved.
             debug: Whether to print debug information during execution, defaults to False.
             subgraphs: Whether to stream subgraphs, defaults to False.
 
@@ -2586,6 +2591,7 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
                 debug=debug,
+                checkpoint_during=checkpoint_during,
                 trigger_to_nodes=self.trigger_to_nodes,
                 migrate_checkpoint=self._migrate_checkpoint,
             ) as loop:
@@ -2661,6 +2667,7 @@ class Pregel(PregelProtocol):
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        checkpoint_during: bool = True,
         debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
@@ -2692,6 +2699,7 @@ class Pregel(PregelProtocol):
             output_keys=output_keys,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
+            checkpoint_during=checkpoint_during,
             debug=debug,
             **kwargs,
         ):
@@ -2713,6 +2721,7 @@ class Pregel(PregelProtocol):
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        checkpoint_during: bool = True,
         debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
@@ -2745,6 +2754,7 @@ class Pregel(PregelProtocol):
             output_keys=output_keys,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
+            checkpoint_during=checkpoint_during,
             debug=debug,
             **kwargs,
         ):
