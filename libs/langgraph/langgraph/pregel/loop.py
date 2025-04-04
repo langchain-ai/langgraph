@@ -358,16 +358,6 @@ class PregelLoop(LoopProtocol):
         by_task = defaultdict(list)
         for task_id, channel, value in self.checkpoint_pending_writes:
             by_task[task_id].append((channel, value))
-        # patch config with checkpoint id
-        config = patch_configurable(
-            self.checkpoint_config,
-            {
-                CONFIG_KEY_CHECKPOINT_NS: self.config[CONF].get(
-                    CONFIG_KEY_CHECKPOINT_NS, ""
-                ),
-                CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
-            },
-        )
         # submit writes to checkpointer
         for task_id, writes in by_task.items():
             if self.checkpointer_put_writes_accepts_task_path and hasattr(
@@ -376,7 +366,7 @@ class PregelLoop(LoopProtocol):
                 task = self.tasks.get(task_id)
                 self.submit(
                     self.checkpointer_put_writes,
-                    config,
+                    self.checkpoint_config,
                     writes,
                     task_id,
                     task_path_str(task.path) if task else "",
@@ -384,7 +374,7 @@ class PregelLoop(LoopProtocol):
             else:
                 self.submit(
                     self.checkpointer_put_writes,
-                    config,
+                    self.checkpoint_config,
                     writes,
                     task_id,
                 )
@@ -749,31 +739,34 @@ class PregelLoop(LoopProtocol):
             )
         return updated_channels
 
-    def _put_checkpoint(
-        self, metadata: CheckpointMetadata, force: bool = False
-    ) -> None:
+    def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
         # assign step and parents
-        metadata["step"] = self.step
-        metadata["parents"] = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
-        self.checkpoint_metadata = metadata
-        # debug flag
-        if self.debug:
-            print_step_checkpoint(
-                metadata,
-                self.channels,
-                (
-                    [self.stream_keys]
-                    if isinstance(self.stream_keys, str)
-                    else self.stream_keys
-                ),
-            )
+        exiting = metadata is self.checkpoint_metadata
+        if not exiting:
+            metadata["step"] = self.step
+            metadata["parents"] = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
+            self.checkpoint_metadata = metadata
+            # debug flag
+            if self.debug:
+                print_step_checkpoint(
+                    metadata,
+                    self.channels,
+                    (
+                        [self.stream_keys]
+                        if isinstance(self.stream_keys, str)
+                        else self.stream_keys
+                    ),
+                )
         # do checkpoint?
         do_checkpoint = self._checkpointer_put_after_previous is not None and (
-            force or self.checkpoint_during
+            exiting or self.checkpoint_during
         )
         # create new checkpoint
         self.checkpoint = create_checkpoint(
-            self.checkpoint, self.channels if do_checkpoint else None, self.step
+            self.checkpoint,
+            self.channels if do_checkpoint else None,
+            self.step,
+            id=self.checkpoint["id"] if exiting else None,
         )
         # bail if no checkpointer
         if do_checkpoint and self._checkpointer_put_after_previous is not None:
@@ -822,8 +815,9 @@ class PregelLoop(LoopProtocol):
                     CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
                 },
             }
-        # increment step
-        self.step += 1
+        if not exiting:
+            # increment step
+            self.step += 1
 
     def _update_mv(self, key: str, values: Sequence[Any]) -> None:
         raise NotImplementedError
@@ -836,8 +830,8 @@ class PregelLoop(LoopProtocol):
     ) -> Optional[bool]:
         # persist current checkpoint and writes
         if not self.checkpoint_during:
+            self._put_checkpoint(self.checkpoint_metadata)
             self._put_pending_writes()
-            self._put_checkpoint(self.checkpoint_metadata, force=True)
         # suppress interrupt
         suppress = isinstance(exc_value, GraphInterrupt) and not self.is_nested
         if suppress:
