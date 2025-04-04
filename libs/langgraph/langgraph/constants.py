@@ -83,6 +83,8 @@ CONFIG_KEY_PREVIOUS = sys.intern("__pregel_previous")
 # holds the previous return value from a stateful Pregel graph.
 CONFIG_KEY_RUNNER_SUBMIT = sys.intern("__pregel_runner_submit")
 # holds a function that receives tasks from runner, executes them and returns results
+CONFIG_KEY_CHECKPOINT_DURING = sys.intern("__pregel_checkpoint_during")
+# holds a boolean indicating whether to checkpoint during the run (or only at the end)
 
 # --- Other constants ---
 PUSH = sys.intern("__pregel_push")

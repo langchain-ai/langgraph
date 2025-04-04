@@ -54,6 +54,7 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.constants import (
     CONF,
+    CONFIG_KEY_CHECKPOINT_DURING,
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
@@ -2094,7 +2095,7 @@ class Pregel(PregelProtocol):
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        checkpoint_during: bool = True,
+        checkpoint_during: Optional[bool] = None,
         debug: Optional[bool] = None,
         subgraphs: bool = False,
     ) -> Iterator[Union[dict[str, Any], Any]]:
@@ -2278,6 +2279,9 @@ class Pregel(PregelProtocol):
                 config[CONF][CONFIG_KEY_STREAM_WRITER] = lambda c: stream.put(
                     ((), "custom", c)
                 )
+            # set checkpointing mode for subgraphs
+            if checkpoint_during is not None:
+                config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
             with SyncPregelLoop(
                 input,
                 input_model=self.input_model,
@@ -2293,7 +2297,9 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
                 debug=debug,
-                checkpoint_during=checkpoint_during,
+                checkpoint_during=checkpoint_during
+                if checkpoint_during is not None
+                else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, True),
                 trigger_to_nodes=self.trigger_to_nodes,
                 migrate_checkpoint=self._migrate_checkpoint,
             ) as loop:
@@ -2376,7 +2382,7 @@ class Pregel(PregelProtocol):
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        checkpoint_during: bool = True,
+        checkpoint_during: Optional[bool] = None,
         debug: Optional[bool] = None,
         subgraphs: bool = False,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
@@ -2576,6 +2582,9 @@ class Pregel(PregelProtocol):
                         stream.put_nowait, ((), "custom", c)
                     )
                 )
+            # set checkpointing mode for subgraphs
+            if checkpoint_during is not None:
+                config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
             async with AsyncPregelLoop(
                 input,
                 input_model=self.input_model,
@@ -2591,7 +2600,9 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
                 debug=debug,
-                checkpoint_during=checkpoint_during,
+                checkpoint_during=checkpoint_during
+                if checkpoint_during is not None
+                else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, True),
                 trigger_to_nodes=self.trigger_to_nodes,
                 migrate_checkpoint=self._migrate_checkpoint,
             ) as loop:
@@ -2667,7 +2678,7 @@ class Pregel(PregelProtocol):
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        checkpoint_during: bool = True,
+        checkpoint_during: Optional[bool] = None,
         debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
@@ -2721,7 +2732,7 @@ class Pregel(PregelProtocol):
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        checkpoint_during: bool = True,
+        checkpoint_during: Optional[bool] = None,
         debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
