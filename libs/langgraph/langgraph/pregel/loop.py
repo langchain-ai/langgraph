@@ -316,7 +316,7 @@ class PregelLoop(LoopProtocol):
                 self.checkpoint_pending_writes[idx] = (task_id, c, v)
             else:
                 self.checkpoint_pending_writes.append((task_id, c, v))
-        if self.checkpointer_put_writes is not None:
+        if self.checkpoint_during and self.checkpointer_put_writes is not None:
             config = patch_configurable(
                 self.checkpoint_config,
                 {
@@ -348,6 +348,46 @@ class PregelLoop(LoopProtocol):
         # output writes
         if hasattr(self, "tasks"):
             self._output_writes(task_id, writes)
+
+    def _put_pending_writes(self) -> None:
+        if self.checkpointer_put_writes is None:
+            return
+        if not self.checkpoint_pending_writes:
+            return
+        # group by task id
+        by_task = defaultdict(list)
+        for task_id, channel, value in self.checkpoint_pending_writes:
+            by_task[task_id].append((channel, value))
+        # patch config with checkpoint id
+        config = patch_configurable(
+            self.checkpoint_config,
+            {
+                CONFIG_KEY_CHECKPOINT_NS: self.config[CONF].get(
+                    CONFIG_KEY_CHECKPOINT_NS, ""
+                ),
+                CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
+            },
+        )
+        # submit writes to checkpointer
+        for task_id, writes in by_task.items():
+            if self.checkpointer_put_writes_accepts_task_path and hasattr(
+                self, "tasks"
+            ):
+                task = self.tasks.get(task_id)
+                self.submit(
+                    self.checkpointer_put_writes,
+                    config,
+                    writes,
+                    task_id,
+                    task_path_str(task.path) if task else "",
+                )
+            else:
+                self.submit(
+                    self.checkpointer_put_writes,
+                    config,
+                    writes,
+                    task_id,
+                )
 
     def accept_push(
         self, task: PregelExecutableTask, write_idx: int, call: Optional[Call] = None
@@ -794,7 +834,9 @@ class PregelLoop(LoopProtocol):
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
+        # persist current checkpoint and writes
         if not self.checkpoint_during:
+            self._put_pending_writes()
             self._put_checkpoint(self.checkpoint_metadata, force=True)
         # suppress interrupt
         suppress = isinstance(exc_value, GraphInterrupt) and not self.is_nested
