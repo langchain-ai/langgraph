@@ -90,8 +90,4 @@ docs/
 
 ---
 
-## 🙏 Request
 
-Would appreciate if the LangGraph team considers expanding documentation in these areas or allows community contributions to enhance this!
-
-Thanks for the awesome work on LangGraph ❤️
