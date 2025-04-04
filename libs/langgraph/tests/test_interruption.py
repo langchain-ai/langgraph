@@ -3,8 +3,8 @@ from typing_extensions import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from tests.conftest import (
-    ALL_CHECKPOINTERS_ASYNC,
-    ALL_CHECKPOINTERS_SYNC,
+    REGULAR_CHECKPOINTERS_ASYNC,
+    REGULAR_CHECKPOINTERS_SYNC,
     awith_checkpointer,
 )
 
@@ -12,7 +12,7 @@ pytestmark = pytest.mark.anyio
 
 
 @pytest.mark.parametrize("checkpoint_during", [True, False])
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_SYNC)
 def test_interruption_without_state_updates(
     request: pytest.FixtureRequest, checkpointer_name: str, checkpoint_during: bool
 ) -> None:
@@ -42,16 +42,22 @@ def test_interruption_without_state_updates(
 
     graph.invoke(initial_input, thread, checkpoint_during=checkpoint_during)
     assert graph.get_state(thread).next == ("step_2",)
+    n_checkpoints = len([c for c in graph.get_state_history(thread)])
+    assert n_checkpoints == (3 if checkpoint_during else 1)
 
     graph.invoke(None, thread, checkpoint_during=checkpoint_during)
     assert graph.get_state(thread).next == ("step_3",)
+    n_checkpoints = len([c for c in graph.get_state_history(thread)])
+    assert n_checkpoints == (4 if checkpoint_during else 2)
 
     graph.invoke(None, thread, checkpoint_during=checkpoint_during)
     assert graph.get_state(thread).next == ()
+    n_checkpoints = len([c for c in graph.get_state_history(thread)])
+    assert n_checkpoints == (5 if checkpoint_during else 3)
 
 
 @pytest.mark.parametrize("checkpoint_during", [True, False])
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_interruption_without_state_updates_async(
     checkpointer_name: str, checkpoint_during: bool
 ) -> None:
@@ -81,9 +87,15 @@ async def test_interruption_without_state_updates_async(
 
         await graph.ainvoke(initial_input, thread, checkpoint_during=checkpoint_during)
         assert (await graph.aget_state(thread)).next == ("step_2",)
+        n_checkpoints = len([c async for c in graph.aget_state_history(thread)])
+        assert n_checkpoints == (3 if checkpoint_during else 1)
 
         await graph.ainvoke(None, thread, checkpoint_during=checkpoint_during)
         assert (await graph.aget_state(thread)).next == ("step_3",)
+        n_checkpoints = len([c async for c in graph.aget_state_history(thread)])
+        assert n_checkpoints == (4 if checkpoint_during else 2)
 
         await graph.ainvoke(None, thread, checkpoint_during=checkpoint_during)
         assert (await graph.aget_state(thread)).next == ()
+        n_checkpoints = len([c async for c in graph.aget_state_history(thread)])
+        assert n_checkpoints == (5 if checkpoint_during else 3)
