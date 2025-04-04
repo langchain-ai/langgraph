@@ -1115,10 +1115,14 @@ def test_invoke_checkpoint_two(
     assert checkpoint["channel_values"].get("total") == 5
 
 
+@pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_pending_writes_resume(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    request: pytest.FixtureRequest, checkpointer_name: str, checkpoint_during: bool
 ) -> None:
+    if not checkpoint_during and "shallow" in checkpointer_name:
+        pytest.skip("Checkpointing during execution not supported")
+
     checkpointer: BaseCheckpointSaver = request.getfixturevalue(
         f"checkpointer_{checkpointer_name}"
     )
@@ -1144,17 +1148,19 @@ def test_pending_writes_resume(
             self.calls = 0
 
     one = AwhileMaker(0.1, {"value": 2})
-    two = AwhileMaker(0.3, ConnectionError("I'm not good"))
+    two = AwhileMaker(0.2, ConnectionError("I'm not good"))
     builder = StateGraph(State)
     builder.add_node("one", one)
-    builder.add_node("two", two, retry=RetryPolicy(max_attempts=2))
+    builder.add_node(
+        "two", two, retry=RetryPolicy(max_attempts=2, initial_interval=0, jitter=False)
+    )
     builder.add_edge(START, "one")
     builder.add_edge(START, "two")
     graph = builder.compile(checkpointer=checkpointer)
 
     thread1: RunnableConfig = {"configurable": {"thread_id": "1"}}
     with pytest.raises(ConnectionError, match="I'm not good"):
-        graph.invoke({"value": 1}, thread1)
+        graph.invoke({"value": 1}, thread1, checkpoint_during=checkpoint_during)
 
     # both nodes should have been called once
     assert one.calls == 1
@@ -1200,7 +1206,7 @@ def test_pending_writes_resume(
 
     # resume execution
     with pytest.raises(ConnectionError, match="I'm not good"):
-        graph.invoke(None, thread1)
+        graph.invoke(None, thread1, checkpoint_during=checkpoint_during)
 
     # node "one" succeeded previously, so shouldn't be called again
     assert one.calls == 1
@@ -1214,7 +1220,9 @@ def test_pending_writes_resume(
     # resume execution, without exception
     two.rtn = {"value": 3}
     # both the pending write and the new write were applied, 1 + 2 + 3 = 6
-    assert graph.invoke(None, thread1) == {"value": 6}
+    assert graph.invoke(None, thread1, checkpoint_during=checkpoint_during) == {
+        "value": 6
+    }
 
     if "shallow" in checkpointer_name:
         assert len(list(checkpointer.list(thread1))) == 1
@@ -1223,7 +1231,7 @@ def test_pending_writes_resume(
     # check all final checkpoints
     checkpoints = [c for c in checkpointer.list(thread1)]
     # we should have 3
-    assert len(checkpoints) == 3
+    assert len(checkpoints) == (3 if checkpoint_during else 2)
     # the last one not too interesting for this test
     assert checkpoints[0] == CheckpointTuple(
         config={
@@ -1327,13 +1335,24 @@ def test_pending_writes_resume(
                 "checkpoint_ns": "",
                 "checkpoint_id": checkpoints[2].config["configurable"]["checkpoint_id"],
             }
-        },
+        }
+        if checkpoint_during
+        else None,
         pending_writes=UnsortedSequence(
             (AnyStr(), "value", 2),
             (AnyStr(), "__error__", 'ConnectionError("I\'m not good")'),
             (AnyStr(), "value", 3),
+        )
+        if checkpoint_during
+        else UnsortedSequence(
+            (AnyStr(), "value", 2),
+            (AnyStr(), "__error__", 'ConnectionError("I\'m not good")'),
+            # the write against the previous checkpoint is not saved, as it is
+            # produced in a run where only the next checkpoint (the last) is saved
         ),
     )
+    if not checkpoint_during:
+        return
     assert checkpoints[2] == CheckpointTuple(
         config={
             "configurable": {

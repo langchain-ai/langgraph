@@ -180,6 +180,7 @@ class PregelLoop(LoopProtocol):
     channels: Mapping[str, BaseChannel]
     managed: ManagedValueMapping
     checkpoint: Checkpoint
+    checkpoint_id_saved: str
     checkpoint_ns: tuple[str, ...]
     checkpoint_config: RunnableConfig
     checkpoint_metadata: CheckpointMetadata
@@ -297,25 +298,12 @@ class PregelLoop(LoopProtocol):
         # deduplicate writes to special channels, last write wins
         if all(w[0] in WRITES_IDX_MAP for w in writes):
             writes = list({w[0]: w for w in writes}.values())
+        # remove existing writes for this task
+        self.checkpoint_pending_writes = [
+            w for w in self.checkpoint_pending_writes if w[0] != task_id
+        ]
         # save writes
-        for c, v in writes:
-            if (
-                c in WRITES_IDX_MAP
-                and (
-                    idx := next(
-                        (
-                            i
-                            for i, w in enumerate(self.checkpoint_pending_writes)
-                            if w[0] == task_id and w[1] == c
-                        ),
-                        None,
-                    )
-                )
-                is not None
-            ):
-                self.checkpoint_pending_writes[idx] = (task_id, c, v)
-            else:
-                self.checkpoint_pending_writes.append((task_id, c, v))
+        self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
         if self.checkpoint_during and self.checkpointer_put_writes is not None:
             config = patch_configurable(
                 self.checkpoint_config,
@@ -742,6 +730,9 @@ class PregelLoop(LoopProtocol):
     def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
         # assign step and parents
         exiting = metadata is self.checkpoint_metadata
+        if exiting and self.checkpoint["id"] == self.checkpoint_id_saved:
+            # checkpoint already saved
+            return
         if not exiting:
             metadata["step"] = self.step
             metadata["parents"] = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
@@ -1049,6 +1040,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             },
         }
         self.prev_checkpoint_config = saved.parent_config
+        self.checkpoint_id_saved = saved.checkpoint["id"]
         self.checkpoint = saved.checkpoint
         self.checkpoint_metadata = saved.metadata
         self.checkpoint_pending_writes = (
@@ -1198,6 +1190,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             },
         }
         self.prev_checkpoint_config = saved.parent_config
+        self.checkpoint_id_saved = saved.checkpoint["id"]
         self.checkpoint = saved.checkpoint
         self.checkpoint_metadata = saved.metadata
         self.checkpoint_pending_writes = (
