@@ -2230,7 +2230,7 @@ async def test_pending_writes_resume(
 
 @pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_run_from_checkpoint_id_retains_previous_writes(
-    request: pytest.FixtureRequest, checkpointer_name: str, mocker: MockerFixture
+    checkpointer_name: str,
 ) -> None:
     class MyState(TypedDict):
         myval: Annotated[int, operator.add]
@@ -2275,8 +2275,8 @@ async def test_run_from_checkpoint_id_retains_previous_writes(
         history = [c async for c in graph.aget_state_history(thread1)]
 
         assert len(history) == 4
-        assert history[-1].values == {"myval": 0}
         assert history[0].values == {"myval": 4, "otherval": False}
+        assert history[-1].values == {"myval": 0}
 
         second_run_config = {
             **thread1,
@@ -2453,8 +2453,12 @@ async def test_send_sequences(checkpointer_name: str) -> None:
 
 
 @NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_imp_task(checkpointer_name: str) -> None:
+async def test_imp_task(checkpointer_name: str, checkpoint_during: bool) -> None:
+    if not checkpoint_during and "shallow" in checkpointer_name:
+        pytest.skip("Checkpointing during execution not supported")
+
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         mapper_calls = 0
 
@@ -2474,7 +2478,12 @@ async def test_imp_task(checkpointer_name: str) -> None:
 
         tracer = FakeTracer()
         thread1 = {"configurable": {"thread_id": "1"}, "callbacks": [tracer]}
-        assert [c async for c in graph.astream([0, 1], thread1)] == [
+        assert [
+            c
+            async for c in graph.astream(
+                [0, 1], thread1, checkpoint_during=checkpoint_during
+            )
+        ] == [
             {"mapper": "00"},
             {"mapper": "11"},
             {
@@ -2498,7 +2507,9 @@ async def test_imp_task(checkpointer_name: str) -> None:
         assert any(r.inputs == {"input": 0} for r in mapper_runs)
         assert any(r.inputs == {"input": 1} for r in mapper_runs)
 
-        assert await graph.ainvoke(Command(resume="answer"), thread1) == [
+        assert await graph.ainvoke(
+            Command(resume="answer"), thread1, checkpoint_during=checkpoint_during
+        ) == [
             "00answer",
             "11answer",
         ]

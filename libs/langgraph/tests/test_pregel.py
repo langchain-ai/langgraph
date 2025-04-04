@@ -1510,8 +1510,14 @@ def test_send_sequences() -> None:
     ]
 
 
+@pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_imp_task(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
+def test_imp_task(
+    request: pytest.FixtureRequest, checkpointer_name: str, checkpoint_during: bool
+) -> None:
+    if not checkpoint_during and "shallow" in checkpointer_name:
+        pytest.skip("Checkpointing during execution not supported")
+
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
     mapper_calls = 0
 
@@ -1577,7 +1583,7 @@ def test_imp_task(request: pytest.FixtureRequest, checkpointer_name: str) -> Non
     }
 
     thread1 = {"configurable": {"thread_id": "1"}}
-    assert [*graph.stream([0, 1], thread1)] == [
+    assert [*graph.stream([0, 1], thread1, checkpoint_during=checkpoint_during)] == [
         {"mapper": "00"},
         {"mapper": "11"},
         {
@@ -1593,7 +1599,9 @@ def test_imp_task(request: pytest.FixtureRequest, checkpointer_name: str) -> Non
     ]
     assert mapper_calls == 2
 
-    assert graph.invoke(Command(resume="answer"), thread1) == [
+    assert graph.invoke(
+        Command(resume="answer"), thread1, checkpoint_during=checkpoint_during
+    ) == [
         "00answer",
         "11answer",
     ]
