@@ -77,6 +77,12 @@ def run_with_retry(
             elif callable(retry_policy.retry_on):
                 if not retry_policy.retry_on(exc):  # type: ignore[call-arg]
                     raise
+            elif isinstance(retry_policy.retry_on, dict):
+                exception_handler = retry_policy.retry_on.get(type(exc), False)
+                if callable(exception_handler):
+                    exception_handler(task.input, exc)
+                else:
+                    raise
             else:
                 raise TypeError(
                     "retry_on must be an Exception class, a list or tuple of Exception classes, or a callable"
@@ -164,6 +170,12 @@ async def arun_with_retry(
                     raise
             elif callable(retry_policy.retry_on):
                 if not retry_policy.retry_on(exc):  # type: ignore[call-arg]
+                    raise
+            elif isinstance(retry_policy.retry_on, dict):
+                exception_handler = retry_policy.retry_on.get(type(exc), False)
+                if callable(exception_handler):
+                    exception_handler(task.input, exc)
+                else:
                     raise
             else:
                 raise TypeError(
