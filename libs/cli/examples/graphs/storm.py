@@ -3,7 +3,7 @@ import json
 from typing import Annotated, List, Optional
 
 from langchain_community.retrievers import WikipediaRetriever
-from langchain_community.tools.tavily_search import TavilySearchResults
+from langchain_tavily import TavilySearchResults
 from langchain_community.vectorstores import SKLearnVectorStore
 from langchain_core.documents import Document
 from langchain_core.messages import (
