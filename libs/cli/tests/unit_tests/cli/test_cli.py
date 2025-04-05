@@ -196,6 +196,50 @@ def test_dockerfile_command_basic() -> None:
         assert save_path.exists()
 
 
+def test_dockerfile_command_new_style_config() -> None:
+    """Test `dockerfile` command with a new style config.
+
+    This config format allows specifying agent data as a dictionary.
+    {
+        "graphs": {
+            "agent1": {
+                "path": ... # path to graph definition,
+                ... # other fields
+            }
+        }
+    }
+    """
+    runner = CliRunner()
+    config_content = {
+        "dependencies": ["./my_agent"],
+        "graphs": {
+            "agent": {
+                "path": "./my_agent/agent.py:graph",
+                "description": "This is a test agent",
+            }
+        },
+        "env": ".env",
+    }
+    with temporary_config_folder(config_content) as temp_dir:
+        save_path = temp_dir / "Dockerfile"
+        # Add agent.py file
+        agent_path = temp_dir / "my_agent" / "agent.py"
+        agent_path.parent.mkdir(parents=True, exist_ok=True)
+        agent_path.touch()
+
+        result = runner.invoke(
+            cli,
+            ["dockerfile", str(save_path), "--config", str(temp_dir / "config.json")],
+        )
+
+        # Assert command was successful
+        assert result.exit_code == 0, result.output
+        assert "✅ Created: Dockerfile" in result.output
+
+        # Check if Dockerfile was created
+        assert save_path.exists()
+
+
 def test_dockerfile_command_with_docker_compose() -> None:
     """Test the 'dockerfile' command with Docker Compose configuration."""
     runner = CliRunner()

@@ -778,7 +778,22 @@ def _update_graph_paths(
         FileNotFoundError: If the local file (module) does not actually exist on disk.
         IsADirectoryError: If `module_str` points to a directory instead of a file.
     """
-    for graph_id, import_str in config["graphs"].items():
+    for graph_id, data in config["graphs"].items():
+        if isinstance(data, dict):
+            # Then we're looking for a 'path' key
+            if "path" not in data:
+                raise ValueError(
+                    f"Graph '{graph_id}' must contain a 'path' key if "
+                    f" it is a dictionary."
+                )
+            import_str = data["path"]
+        elif isinstance(data, str):
+            import_str = data
+        else:
+            raise ValueError(
+                f"Graph '{graph_id}' must be a string or a dictionary with a 'path' key."
+            )
+
         module_str, _, attr_str = import_str.partition(":")
         if not module_str or not attr_str:
             message = (
@@ -818,7 +833,10 @@ def _update_graph_paths(
                             "Add its containing package to 'dependencies' list."
                         )
             # update the config
-            config["graphs"][graph_id] = f"{module_str}:{attr_str}"
+            if isinstance(data, dict):
+                config["graphs"][graph_id]["path"] = f"{module_str}:{attr_str}"
+            else:
+                config["graphs"][graph_id] = f"{module_str}:{attr_str}"
 
 
 def _update_auth_path(
