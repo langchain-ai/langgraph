@@ -386,6 +386,18 @@ nav:
           - troubleshooting/errors/INVALID_LICENSE.md
       - LangGraph Academy Course: https://academy.langchain.com/courses/intro-to-langgraph
 
+  - Agents:
+    - agents/agents.md
+    - agents/streaming.md
+    - agents/tools.md
+    - agents/mcp.md
+    - agents/context.md
+    - agents/memory.md
+    - agents/human-in-the-loop.md
+    - agents/handoffs.md
+    - agents/multi-agent.md
+    - agents/ui.md
+    - agents/deployment.md
   - API reference:
     - Library:
       - Graphs: reference/graphs.md
