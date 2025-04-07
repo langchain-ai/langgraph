@@ -14,6 +14,7 @@ export const config = {
   entrypoints: {
     index: "index",
     client: "client",
+    auth: "auth/index",
     react: "react/index",
     "react-ui": "react-ui/index",
     "react-ui/server": "react-ui/server/index",
