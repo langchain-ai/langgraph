@@ -7258,9 +7258,10 @@ def test_branch_then(
     )
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+@pytest.mark.parametrize("checkpoint_during", [True, False])
+@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_SYNC)
 def test_send_dedupe_on_resume(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    request: pytest.FixtureRequest, checkpointer_name: str, checkpoint_during: bool
 ) -> None:
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
@@ -7316,7 +7317,7 @@ def test_send_dedupe_on_resume(
 
     graph = builder.compile(checkpointer=checkpointer)
     thread1 = {"configurable": {"thread_id": "1"}}
-    assert graph.invoke(["0"], thread1, debug=1) == [
+    assert graph.invoke(["0"], thread1, checkpoint_during=checkpoint_during) == [
         "0",
         "1",
         "3.1",
@@ -7333,12 +7334,11 @@ def test_send_dedupe_on_resume(
         pytest.xfail("TODO: shallow checkpointer reports wrong next set")
     assert state.next == ("flaky",)
     # check history
-    if "shallow" not in checkpointer_name:
-        history = [c for c in graph.get_state_history(thread1)]
-        assert len(history) == 4
+    history = [c for c in graph.get_state_history(thread1)]
+    assert len(history) == (4 if checkpoint_during else 1)
 
     # resume execution
-    assert graph.invoke(None, thread1, debug=1) == [
+    assert graph.invoke(None, thread1, checkpoint_during=checkpoint_during) == [
         "0",
         "1",
         "3.1",
@@ -7358,6 +7358,7 @@ def test_send_dedupe_on_resume(
     assert state.next == ()
     # check history
     history = [c for c in graph.get_state_history(thread1)]
+    assert len(history) == (6 if checkpoint_during else 2)
     expected_history = [
         StateSnapshot(
             values=[
@@ -7494,13 +7495,9 @@ def test_send_dedupe_on_resume(
                     name="flaky",
                     path=("__pregel_push", 1),
                     error=None,
-                    interrupts=(
-                        Interrupt(
-                            value="Bahh", resumable=False, ns=None, when="during"
-                        ),
-                    ),
+                    interrupts=(Interrupt(value="Bahh", resumable=False, ns=None),),
                     state=None,
-                    result=["flaky|4"],
+                    result=["flaky|4"] if checkpoint_during else None,
                 ),
                 PregelTask(
                     id=AnyStr(),
@@ -7637,10 +7634,11 @@ def test_send_dedupe_on_resume(
             ),
         ),
     ]
-    if "shallow" in checkpointer_name:
-        expected_history = expected_history[:1]
-
-    assert history == expected_history
+    if checkpoint_during:
+        assert history == expected_history
+    else:
+        assert history[0] == expected_history[0]
+        assert history[1] == expected_history[2]
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)

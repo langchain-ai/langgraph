@@ -63,6 +63,7 @@ from langgraph.constants import (
     RESUME,
     SCHEDULED,
     TAG_HIDDEN,
+    TASKS,
 )
 from langgraph.errors import (
     CheckpointNotLatest,
@@ -295,6 +296,7 @@ class PregelLoop(LoopProtocol):
         """Put writes for a task, to be read by the next tick."""
         if not writes:
             return
+        checkpoint_during = self.checkpoint_during or any(w[0] == TASKS for w in writes)
         # deduplicate writes to special channels, last write wins
         if all(w[0] in WRITES_IDX_MAP for w in writes):
             writes = list({w[0]: w for w in writes}.values())
@@ -304,7 +306,7 @@ class PregelLoop(LoopProtocol):
         ]
         # save writes
         self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
-        if self.checkpoint_during and self.checkpointer_put_writes is not None:
+        if checkpoint_during and self.checkpointer_put_writes is not None:
             config = patch_configurable(
                 self.checkpoint_config,
                 {
@@ -342,6 +344,16 @@ class PregelLoop(LoopProtocol):
             return
         if not self.checkpoint_pending_writes:
             return
+        # patch config
+        config = patch_configurable(
+            self.checkpoint_config,
+            {
+                CONFIG_KEY_CHECKPOINT_NS: self.config[CONF].get(
+                    CONFIG_KEY_CHECKPOINT_NS, ""
+                ),
+                CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
+            },
+        )
         # group by task id
         by_task = defaultdict(list)
         for task_id, channel, value in self.checkpoint_pending_writes:
@@ -354,7 +366,7 @@ class PregelLoop(LoopProtocol):
                 task = self.tasks.get(task_id)
                 self.submit(
                     self.checkpointer_put_writes,
-                    self.checkpoint_config,
+                    config,
                     writes,
                     task_id,
                     task_path_str(task.path) if task else "",
@@ -362,7 +374,7 @@ class PregelLoop(LoopProtocol):
             else:
                 self.submit(
                     self.checkpointer_put_writes,
-                    self.checkpoint_config,
+                    config,
                     writes,
                     task_id,
                 )
@@ -748,6 +760,7 @@ class PregelLoop(LoopProtocol):
                         else self.stream_keys
                     ),
                 )
+            self.checkpoint_id_prev = self.checkpoint["id"] if self.step > -1 else None
         # do checkpoint?
         do_checkpoint = self._checkpointer_put_after_previous is not None and (
             exiting or self.checkpoint_during
@@ -776,6 +789,7 @@ class PregelLoop(LoopProtocol):
                 **self.checkpoint_config,
                 CONF: {
                     **self.checkpoint_config[CONF],
+                    CONFIG_KEY_CHECKPOINT_ID: self.checkpoint_id_prev,
                     CONFIG_KEY_CHECKPOINT_NS: self.config[CONF].get(
                         CONFIG_KEY_CHECKPOINT_NS, ""
                     ),
