@@ -665,11 +665,15 @@ def create_react_agent(
             else AgentState
         )
 
+    # This is a list of tools that are available directly through the LLM provider
+    llm_builtin_tools = []
     if isinstance(tools, ToolNode):
         tool_classes = list(tools.tools_by_name.values())
         tool_node = tools
     else:
-        tool_node = ToolNode(tools)
+        llm_builtin_tools = [t for t in tools if isinstance(t, dict)]
+        non_llm_builtin_tools = [t for t in tools if not isinstance(t, dict)]
+        tool_node = ToolNode(non_llm_builtin_tools)
         # get the tool functions wrapped in a tool class from the ToolNode
         tool_classes = list(tool_node.tools_by_name.values())
 
@@ -685,10 +689,15 @@ def create_react_agent(
 
         model = cast(BaseChatModel, init_chat_model(model))
 
+    # This determines whether we have a simple chatbot graph
+    # or a full tool-calling loop. If all of the tools are LLM built-ins,
+    # we will just use the model directly and skip the tool-calling loop.
     tool_calling_enabled = len(tool_classes) > 0
 
-    if _should_bind_tools(model, tool_classes) and tool_calling_enabled:
-        model = cast(BaseChatModel, model).bind_tools(tool_classes)
+    if (_should_bind_tools(model, tool_classes) and tool_calling_enabled) or len(
+        llm_builtin_tools
+    ) > 0:
+        model = cast(BaseChatModel, model).bind_tools(tool_classes + llm_builtin_tools)
 
     model_runnable = _get_prompt_runnable(prompt) | model
 
