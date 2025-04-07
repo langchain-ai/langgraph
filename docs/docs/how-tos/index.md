@@ -5,7 +5,7 @@ description: How to accomplish common tasks in LangGraph
 
 # How-to Guides
 
-Here you’ll find answers to “How do I...?” types of questions. These guides are **goal-oriented** and concrete; they're meant to help you complete a specific task. For conceptual explanations see the [Conceptual guide](../concepts/index.md). For end-to-end walk-throughs see [Tutorials](../tutorials/index.md). For comprehensive descriptions of every class and function see the [API Reference](../reference/index.md).
+Here you'll find answers to "How do I...? " types of questions. These guides are **goal-oriented** and concrete; they're meant to help you complete a specific task. For conceptual explanations see the [Conceptual guide](../concepts/index.md). For end-to-end walk-throughs see [Tutorials](../tutorials/index.md). For comprehensive descriptions of every class and function see the [API Reference](../reference/index.md).
 
 ## LangGraph
 
@@ -262,10 +262,11 @@ Streaming the results of your LLM application is vital for ensuring a good user 
 
 ### Frontend and Generative UI
 
-With LangGraph Platform you can integrate LangGraph agents into your React applications and colocate UI components with your agent code. 
+With LangGraph Platform you can integrate LangGraph agents into your React applications and colocate UI components with your agent code.
 
 - [How to integrate LangGraph into your React application](../cloud/how-tos/use_stream_react.md)
 - [How to implement Generative User Interfaces with LangGraph](../cloud/how-tos/generative_ui_react.md)
+- [How to use CopilotKit with LangGraph](../cloud/how-tos/generative_ui_using_copilotkit_react.md)
 
 ### Human-in-the-loop
 
