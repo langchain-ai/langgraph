@@ -69,7 +69,11 @@ def _get_branch_path_input_schema(
         elif callable(path):
             callable_ = path
 
-        if callable_ is not None and (hints := get_type_hints(callable_)):
+        try:
+            hints = get_type_hints(callable_)
+        except NameError:
+            hints = {}
+        if callable_ is not None and hints:
             first_parameter_name = next(
                 iter(signature(cast(FunctionType, callable_)).parameters.keys())
             )
