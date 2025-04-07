@@ -162,6 +162,13 @@ def get_client(
                 transport = httpx.ASGITransport(app, root_path="/noauth")
             except Exception:
                 url = "http://localhost:8123"
+        try:
+            from langgraph_api.config import HTTP_CONFIG
+
+            if prefix := HTTP_CONFIG.get("mount_prefix"):
+                url = f"{url}{prefix}"
+        except ImportError:
+            pass
 
     if transport is None:
         transport = httpx.AsyncHTTPTransport(retries=5)
