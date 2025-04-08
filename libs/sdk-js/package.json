@@ -72,6 +72,15 @@
       "import": "./client.js",
       "require": "./client.cjs"
     },
+    "./auth": {
+      "types": {
+        "import": "./auth.d.ts",
+        "require": "./auth.d.cts",
+        "default": "./auth.d.ts"
+      },
+      "import": "./auth.js",
+      "require": "./auth.cjs"
+    },
     "./react": {
       "types": {
         "import": "./react.d.ts",
@@ -111,6 +120,10 @@
     "client.js",
     "client.d.ts",
     "client.d.cts",
+    "auth.cjs",
+    "auth.js",
+    "auth.d.ts",
+    "auth.d.cts",
     "react.cjs",
     "react.js",
     "react.d.ts",
