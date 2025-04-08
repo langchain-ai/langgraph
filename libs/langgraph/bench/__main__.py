@@ -26,6 +26,7 @@ async def arun(graph: Pregel, input: dict):
                     "configurable": {"thread_id": str(uuid4())},
                     "recursion_limit": 1000000000,
                 },
+                checkpoint_during=False,
             )
         ]
     )
@@ -42,6 +43,7 @@ async def arun_first_event_latency(graph: Pregel, input: dict) -> None:
             "configurable": {"thread_id": str(uuid4())},
             "recursion_limit": 1000000000,
         },
+        checkpoint_during=False,
     )
 
     try:
@@ -61,6 +63,7 @@ def run(graph: Pregel, input: dict):
                     "configurable": {"thread_id": str(uuid4())},
                     "recursion_limit": 1000000000,
                 },
+                checkpoint_during=False,
             )
         ]
     )
@@ -77,6 +80,7 @@ def run_first_event_latency(graph: Pregel, input: dict) -> None:
             "configurable": {"thread_id": str(uuid4())},
             "recursion_limit": 1000000000,
         },
+        checkpoint_during=False,
     )
 
     try:
