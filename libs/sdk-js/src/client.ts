@@ -340,6 +340,7 @@ export class AssistantsClient extends BaseClient {
     assistantId?: string;
     ifExists?: OnConflictBehavior;
     name?: string;
+    description?: string;
   }): Promise<Assistant> {
     return this.fetch<Assistant>("/assistants", {
       method: "POST",
@@ -350,6 +351,7 @@ export class AssistantsClient extends BaseClient {
         assistant_id: payload.assistantId,
         if_exists: payload.ifExists,
         name: payload.name,
+        description: payload.description,
       },
     });
   }
@@ -367,6 +369,7 @@ export class AssistantsClient extends BaseClient {
       config?: Config;
       metadata?: Metadata;
       name?: string;
+      description?: string;
     },
   ): Promise<Assistant> {
     return this.fetch<Assistant>(`/assistants/${assistantId}`, {
@@ -376,6 +379,7 @@ export class AssistantsClient extends BaseClient {
         config: payload.config,
         metadata: payload.metadata,
         name: payload.name,
+        description: payload.description,
       },
     });
   }
