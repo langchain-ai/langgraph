@@ -406,6 +406,13 @@ class Config(TypedDict, total=False):
     """
 
 
+PIP_CLEANUP_LINES = """# -- Removing pip from the final image ~<:===~~~ --
+RUN pip uninstall -y pip setuptools wheel && \
+    rm -rf /usr/local/lib/python*/site-packages/pip* /usr/local/lib/python*/site-packages/setuptools* /usr/local/lib/python*/site-packages/wheel* && \
+    find /usr/local/bin -name "pip*" -delete
+# -- End of pip removal --"""
+
+
 def _parse_version(version_str: str) -> tuple[int, int]:
     """Parse a version string into a tuple of (major, minor)."""
     try:
@@ -1140,6 +1147,8 @@ ADD {relpath} /deps/{name}
         os.linesep.join(env_vars),
         "",
         ui_inst_str,
+        "",
+        PIP_CLEANUP_LINES,  # Add pip cleanup after all installations are complete
         "",
         f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
     ]
