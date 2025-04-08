@@ -296,6 +296,8 @@ class PregelLoop(LoopProtocol):
         """Put writes for a task, to be read by the next tick."""
         if not writes:
             return
+        # always checkpoint writes containing Send, as they are fetched from the
+        # parent checkpoint, not the current one
         checkpoint_during = self.checkpoint_during or any(w[0] == TASKS for w in writes)
         # deduplicate writes to special channels, last write wins
         if all(w[0] in WRITES_IDX_MAP for w in writes):
@@ -789,6 +791,7 @@ class PregelLoop(LoopProtocol):
                 **self.checkpoint_config,
                 CONF: {
                     **self.checkpoint_config[CONF],
+                    # this is guaranteed to be set by code above
                     CONFIG_KEY_CHECKPOINT_ID: self.checkpoint_id_prev,
                     CONFIG_KEY_CHECKPOINT_NS: self.config[CONF].get(
                         CONFIG_KEY_CHECKPOINT_NS, ""
