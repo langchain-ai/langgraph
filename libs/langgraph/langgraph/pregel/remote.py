@@ -654,9 +654,10 @@ class RemoteGraph(PregelProtocol):
             # raise interrupt or errors
             if chunk.event.startswith("updates"):
                 if isinstance(chunk.data, dict) and INTERRUPT in chunk.data:
-                    raise GraphInterrupt(
-                        [Interrupt(**i) for i in chunk.data[INTERRUPT]]
-                    )
+                    if caller_ns:
+                        raise GraphInterrupt(
+                            [Interrupt(**i) for i in chunk.data[INTERRUPT]]
+                        )
             elif chunk.event.startswith("error"):
                 raise RemoteException(chunk.data)
             # filter for what was actually requested
@@ -748,9 +749,10 @@ class RemoteGraph(PregelProtocol):
             # raise interrupt or errors
             if chunk.event.startswith("updates"):
                 if isinstance(chunk.data, dict) and INTERRUPT in chunk.data:
-                    raise GraphInterrupt(
-                        [Interrupt(**i) for i in chunk.data[INTERRUPT]]
-                    )
+                    if caller_ns:
+                        raise GraphInterrupt(
+                            [Interrupt(**i) for i in chunk.data[INTERRUPT]]
+                        )
             elif chunk.event.startswith("error"):
                 raise RemoteException(chunk.data)
             # filter for what was actually requested
