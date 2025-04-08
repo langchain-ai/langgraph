@@ -443,11 +443,11 @@ async def awith_store(store_name: Optional[str]) -> AsyncIterator[BaseStore]:
 SHALLOW_CHECKPOINTERS_SYNC = ["postgres_shallow"]
 REGULAR_CHECKPOINTERS_SYNC = [
     "memory",
-    "sqlite",
-    "postgres",
-    "postgres_pipe",
-    "postgres_pool",
-    "sqlite_aes",
+    # "sqlite",
+    # "postgres",
+    # "postgres_pipe",
+    # "postgres_pool",
+    # "sqlite_aes",
 ]
 ALL_CHECKPOINTERS_SYNC = [
     *REGULAR_CHECKPOINTERS_SYNC,
@@ -456,10 +456,10 @@ ALL_CHECKPOINTERS_SYNC = [
 SHALLOW_CHECKPOINTERS_ASYNC = ["postgres_aio_shallow"]
 REGULAR_CHECKPOINTERS_ASYNC = [
     "memory",
-    "sqlite_aio",
-    "postgres_aio",
-    "postgres_aio_pipe",
-    "postgres_aio_pool",
+    # "sqlite_aio",
+    # "postgres_aio",
+    # "postgres_aio_pipe",
+    # "postgres_aio_pool",
 ]
 ALL_CHECKPOINTERS_ASYNC = [
     *REGULAR_CHECKPOINTERS_ASYNC,

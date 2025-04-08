@@ -1,3 +1,4 @@
+import functools
 import logging
 import weakref
 from inspect import isclass
@@ -19,61 +20,6 @@ from typing_extensions import Annotated
 __all__ = ["SchemaCoercionMapper"]
 
 logger = logging.getLogger(__name__)
-
-
-try:
-    # Pydantic v2.
-    from pydantic import TypeAdapter
-
-    try:
-        import pydantic.v1.types as v1_types
-        from pydantic.v1 import parse_obj_as
-
-        v1_types = tuple(v for k, v in vars(v1_types).items() if k in v1_types.__all__)
-    except ImportError:
-        v1_types = ()
-
-        def parse_obj_as(tp: Any, v: Any) -> Any:  # noqa: D401
-            return v
-
-    def _adapter_for(tp: Any) -> Callable[[Any], Any]:  # noqa: D401
-        if tp in v1_types:
-            return lambda v: parse_obj_as(tp, v)
-        try:
-            return TypeAdapter(tp).validate_python
-        except TypeError:
-            return lambda v: parse_obj_as(tp, v)
-
-except ImportError:  # Pydantic V1
-    from pydantic import parse_obj_as
-
-    def _adapter_for(tp: Any) -> Callable[[Any], Any]:  # noqa: D401
-        return lambda v: parse_obj_as(tp, v)
-
-
-_adapter_cache: dict[Any, Callable[[Any], Any]] = {}
-
-
-def _get_adapter(tp: Any) -> Callable[[Any], Any]:
-    try:
-        return _adapter_cache[tp]
-    except KeyError:
-        fn = _adapter_for(tp)
-        _adapter_cache[tp] = fn
-        return fn
-
-
-_IDENTITY_TYPES: tuple[type[Any], ...] = (
-    int,
-    float,
-    str,
-    bool,
-    bytes,
-    bytearray,
-    complex,
-    memoryview,
-    type(None),
-)
 
 
 _cache: weakref.WeakKeyDictionary[Type[Any], dict[int, "SchemaCoercionMapper"]] = (
@@ -105,7 +51,7 @@ class SchemaCoercionMapper:
         *,
         max_depth: int = 12,
     ) -> None:
-        if getattr(self, "_initialised", False):
+        if hasattr(self, "_initialised"):
             return
         self._initialised = True
 
@@ -115,18 +61,20 @@ class SchemaCoercionMapper:
             schema, localns={schema.__name__: schema}
         )
 
-        if issubclass(schema, BaseModel):
-            self._fields = {
-                n: self.type_hints.get(n, f.annotation)
-                for n, f in schema.model_fields.items()
-            }
-            self._construct: Callable[..., Any] = schema.model_construct
-        elif issubclass(schema, BaseModelV1):
+        if issubclass(schema, BaseModelV1):
             self._fields = {
                 n: self.type_hints.get(n, f.annotation)
                 for n, f in schema.__fields__.items()
             }
             self._construct = schema.construct
+
+        elif issubclass(schema, BaseModel):
+            self._fields = {
+                n: self.type_hints.get(n, f.annotation)
+                for n, f in schema.model_fields.items()  # type: ignore[attr-defined]
+            }
+            self._construct: Callable[..., Any] = schema.model_construct  # type: ignore[attr-defined,no-redef]
+
         else:
             raise TypeError("Schema is neither a Pydantic v1 nor v2 model.")
 
@@ -154,7 +102,7 @@ class SchemaCoercionMapper:
 
     def _build_coercer(
         self, field_type: Any, depth: int, *, throw: bool = False
-    ) -> Callable[[Any, int], Any]:
+    ) -> Callable[[Any, Any], Any]:
         if depth == 0:
             return self._passthrough
 
@@ -169,20 +117,22 @@ class SchemaCoercionMapper:
             return lambda v, d: sub(v, d)
 
         if isclass(field_type):
+            # This is needed bcs. of issubclass issues on older versions of python
+            is_class_ = True
             try:
                 is_bm_v2 = issubclass(field_type, BaseModel)
             except TypeError:
+                # python < 3.11 issue.
+                is_class_ = False
                 is_bm_v2 = False
-            if is_bm_v2 or (
-                isclass(field_type) and issubclass(field_type, BaseModelV1)
-            ):
+            if is_bm_v2 or (is_class_ and issubclass(field_type, BaseModelV1)):
                 mapper = SchemaCoercionMapper(field_type, max_depth=depth - 1)
                 return lambda v, d: mapper.coerce(v, d) if isinstance(v, dict) else v
 
         if origin in (list, set):
             args = get_args(field_type)
             if len(args) != 1:
-                return self._oreferrer
+                return self._passthrough
             sub = self._build_coercer(args[0], depth - 1)
 
             def list_coercer(v: Any, d: Any) -> Any:
@@ -273,3 +223,90 @@ class SchemaCoercionMapper:
     @staticmethod
     def _passthrough(v: Any, _d: Any) -> Any:  # noqa: D401
         return v
+
+
+_adapter_cache: dict[Any, Callable[[Any], Any]] = {}
+
+
+_IDENTITY_TYPES: tuple[type[Any], ...] = (
+    int,
+    float,
+    str,
+    bool,
+    bytes,
+    bytearray,
+    complex,
+    memoryview,
+    type(None),
+)
+
+try:
+    # Pydantic v2.
+    from pydantic import TypeAdapter
+
+    try:
+        import pydantic.v1.types as v1_types_
+        from pydantic.v1 import parse_obj_as
+
+        v1_types = tuple(
+            v for k, v in vars(v1_types_).items() if k in v1_types_.__all__
+        )
+    except ImportError:
+        v1_types = ()
+
+        def parse_obj_as(tp: Any, v: Any) -> Any:  # type: ignore
+            return v
+
+    try:
+        from pydantic.v1.main import create_model
+    except ImportError:
+        create_model = None  # type: ignore
+
+    def _get_v1_parser(tp: Any) -> Any:
+        if create_model is not None:
+            try:
+                parser = create_model(
+                    f"ParsingModel[{tp}]",
+                    __root__=(tp, ...),
+                    __config__={"arbitrary_types_allowed": True},
+                )
+                return lambda v: parser(__root__=v).__root__
+            except RuntimeError:
+                return lambda v: v
+        return lambda v: parse_obj_as(tp, v)
+
+    @functools.lru_cache(maxsize=2048)
+    def _adapter_for(tp: Any) -> Callable[[Any], Any]:  # noqa: D401
+        if tp in v1_types:
+            return _get_v1_parser(tp)
+        try:
+            return TypeAdapter(
+                tp, config={"arbitrary_types_allowed": True}
+            ).validate_python
+        except TypeError:
+            # Delayed classes like ConstrainedList
+            return _get_v1_parser(tp)
+
+except ImportError:
+    # Pydantic V1
+    from pydantic.v1.main import create_model
+
+    @functools.lru_cache(maxsize=2048)
+    def _adapter_for(tp: Any) -> Callable[[Any], Any]:  # noqa: D401
+        try:
+            parser = create_model(
+                f"ParsingModel[{tp}]",
+                __root__=(tp, ...),
+            )
+            return lambda v: parser(__root__=v).__root__
+        except RuntimeError:
+            return lambda v: v
+
+
+def _get_adapter(tp: Any) -> Callable[[Any], Any]:
+    try:
+        return _adapter_cache[tp]
+    except KeyError:
+        fn = _adapter_for(tp)
+        _adapter_cache[tp] = fn
+        return fn

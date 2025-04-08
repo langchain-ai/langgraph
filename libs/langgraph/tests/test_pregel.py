@@ -23,7 +23,6 @@ from typing import (
     Annotated,
     Any,
     Dict,
-    FrozenSet,
     Generator,
     Iterator,
     List,
@@ -2742,6 +2741,9 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
     checkpointer_name: str,
 ) -> None:
     from pydantic import BaseModel, ConfigDict, Field, ValidationError
+    from pydantic.v1 import BaseModel as BaseModelV1
+
+    IS_V1 = BaseModel is BaseModelV1
 
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
     setup = mocker.Mock()
@@ -2780,14 +2782,28 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
     class InnerObject(BaseModel):
         yo: int
 
-    class State(BaseModel):
-        model_config = ConfigDict(arbitrary_types_allowed=True)
+    if IS_V1:
 
-        query: str
-        inner: Annotated[InnerObject, lambda x, y: y]
-        answer: Optional[str] = None
-        docs: Annotated[list[str], sorted_add]
-        client: Annotated[httpx.Client, Context(make_httpx_client)]
+        class State(BaseModel):
+            class Config:
+                arbitrary_types_allowed = True
+
+            query: str
+            inner: Annotated[InnerObject, lambda x, y: y]
+            answer: Optional[str] = None
+            docs: Annotated[list[str], sorted_add]
+            client: Annotated[httpx.Client, Context(make_httpx_client)]
+
+    else:
+
+        class State(BaseModel):
+            model_config = ConfigDict(arbitrary_types_allowed=True)
+
+            query: str
+            inner: Annotated[InnerObject, lambda x, y: y]
+            answer: Optional[str] = None
+            docs: Annotated[list[str], sorted_add]
+            client: Annotated[httpx.Client, Context(make_httpx_client)]
 
     class StateUpdate(BaseModel):
         query: Optional[str] = None
@@ -3070,6 +3086,10 @@ def test_nested_pydantic_models(version: str) -> None:
             conlist,
             constr,
         )
+        from pydantic.v1 import BaseModel as BaseModelV1
+
+        if BaseModel is BaseModelV1:
+            pytest.skip("Cannot test pydantic v2 using installed version < 2")
 
     class NestedModel(BaseModel):
         value: int
@@ -3117,6 +3137,7 @@ def test_nested_pydantic_models(version: str) -> None:
         nested: NestedModel
         optional_nested: Annotated[Optional[NestedModel], lambda x, y: y, "Foo"]
         dict_nested: dict[str, NestedModel]
+        simple_str_list: list[str]
         list_nested: Annotated[
             Union[dict, list[dict[str, NestedModel]]], lambda x, y: (x or []) + [y]
         ]
@@ -3177,6 +3198,7 @@ def test_nested_pydantic_models(version: str) -> None:
         "list_nested": [{"a": {"value": 6, "name": "b"}}],
         "tuple_nested": ["tuple-key", {"value": 7, "name": "tuple-value"}],
         "tuple_list_nested": [[1, {"value": 8, "name": "tuple-in-list"}]],
+        "simple_str_list": ["siss", "boom", "bah"],
         "complex_tuple": [
             "complex",
             {"nested": [9, {"value": 10, "name": "deep"}]},

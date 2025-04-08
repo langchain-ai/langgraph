@@ -776,13 +776,13 @@ class CompiledStateGraph(CompiledGraph):
                 return updates
             elif (t := type(input)) and get_type_hints(t):
                 # Pydantic v2
-                if isinstance(input, BaseModel):
+                if isinstance(input, BaseModelV1):
+                    keep = input.__fields_set__
+                    defaults = {k: v.default for k, v in t.__fields__.items()}
+                elif isinstance(input, BaseModel):
                     keep: Optional[set[str]] = input.model_fields_set
                     defaults = {k: v.default for k, v in input.model_fields.items()}
                 # Pydantic v1
-                elif isinstance(input, BaseModelV1):
-                    keep = input.__fields_set__
-                    defaults = {k: v.default for k, v in t.__fields__.items()}
                 else:
                     keep = None
                     defaults = {}
