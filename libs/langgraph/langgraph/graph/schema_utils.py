@@ -22,12 +22,29 @@ logger = logging.getLogger(__name__)
 
 
 try:
-    from pydantic import TypeAdapter  # v2
+    # Pydantic v2.
+    from pydantic import TypeAdapter
+
+    try:
+        import pydantic.v1.types as v1_types
+        from pydantic.v1 import parse_obj_as
+
+        v1_types = tuple(v for k, v in vars(v1_types).items() if k in v1_types.__all__)
+    except ImportError:
+        v1_types = ()
+
+        def parse_obj_as(tp: Any, v: Any) -> Any:  # noqa: D401
+            return v
 
     def _adapter_for(tp: Any) -> Callable[[Any], Any]:  # noqa: D401
-        return TypeAdapter(tp).validate_python
+        if tp in v1_types:
+            return lambda v: parse_obj_as(tp, v)
+        try:
+            return TypeAdapter(tp).validate_python
+        except TypeError:
+            return lambda v: parse_obj_as(tp, v)
 
-except ImportError:  # v1a
+except ImportError:  # Pydantic V1
     from pydantic import parse_obj_as
 
     def _adapter_for(tp: Any) -> Callable[[Any], Any]:  # noqa: D401
@@ -165,7 +182,7 @@ class SchemaCoercionMapper:
         if origin in (list, set):
             args = get_args(field_type)
             if len(args) != 1:
-                return lambda v, d: v
+                return self._oreferrer
             sub = self._build_coercer(args[0], depth - 1)
 
             def list_coercer(v: Any, d: Any) -> Any:
@@ -178,7 +195,7 @@ class SchemaCoercionMapper:
         if origin is set or field_type is set:
             args = get_args(field_type)
             if len(args) != 1:
-                return lambda v, d: v
+                return self._passthrough
             sub = self._build_coercer(args[0], depth - 1)
 
             def set_coercer(v: Any, d: Any) -> Any:
@@ -254,5 +271,5 @@ class SchemaCoercionMapper:
         return lambda v, _d: adapter_fn(v)
 
     @staticmethod
-    def _passthrough(v: Any, _d: int) -> Any:  # noqa: D401
+    def _passthrough(v: Any, _d: Any) -> Any:  # noqa: D401
         return v
