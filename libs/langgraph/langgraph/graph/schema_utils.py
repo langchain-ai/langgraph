@@ -133,7 +133,7 @@ class SchemaCoercionMapper:
         self._field_coercers: Optional[dict[str, Callable[[Any, int], Any]]] = None
 
     def __call__(self, input_data: Any, depth: Optional[int] = None) -> Any:
-        return self.coerce(input_data, depth)
+        return self.schema(**input_data)
 
     def coerce(self, input_data: Any, depth: Optional[int] = None) -> Any:
         if depth is None:
