@@ -5502,6 +5502,7 @@ async def test_subgraph_checkpoint_true(
         ]
 
 
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_subgraph_checkpoint_true_interrupt(
@@ -5534,7 +5535,7 @@ async def test_subgraph_checkpoint_true_interrupt(
         return {"foo": "hi! " + state["foo"]}
 
     async def node_2(state: ParentState, config: RunnableConfig):
-        response = await subgraph.ainvoke({"bar": state["foo"]}, config)
+        response = await subgraph.ainvoke({"bar": state["foo"]})
         return {"foo": response["bar"]}
 
     builder = StateGraph(ParentState)
