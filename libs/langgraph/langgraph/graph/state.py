@@ -1060,7 +1060,7 @@ def _pick_mapper(
         if issubclass(schema, dict):
             return None
         if issubclass(schema, (BaseModel, BaseModelV1)):
-            return SchemaCoercionMapper(schema, type_hints)
+            return SchemaCoercionMapper(schema)
     return partial(_coerce_state, schema)
 
 
