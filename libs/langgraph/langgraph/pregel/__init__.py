@@ -127,7 +127,7 @@ from langgraph.utils.queue import AsyncQueue, SyncQueue  # type: ignore[attr-def
 try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler
 except ImportError:
-    _StreamingCallbackHandler = None
+    _StreamingCallbackHandler = None  # type: ignore
 
 WriteValue = Union[Callable[[Input], Output], Any]
 
@@ -2536,7 +2536,7 @@ class Pregel(PregelProtocol):
         do_stream = (
             next(
                 (
-                    cast(_StreamingCallbackHandler, h)  # type: ignore
+                    cast(_StreamingCallbackHandler, h)
                     for h in run_manager.handlers
                     if isinstance(h, _StreamingCallbackHandler)
                 ),

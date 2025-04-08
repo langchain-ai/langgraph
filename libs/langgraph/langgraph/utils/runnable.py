@@ -56,7 +56,7 @@ from langgraph.utils.config import (
 try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler
 except ImportError:
-    _StreamingCallbackHandler = None
+    _StreamingCallbackHandler = None  # type: ignore
 
 
 def _set_config_context(
@@ -690,7 +690,7 @@ class RunnableSeq(Runnable):
             if _StreamingCallbackHandler is not None and (
                 stream_handler := next(
                     (
-                        cast(_StreamingCallbackHandler, h)  # type: ignore
+                        cast(_StreamingCallbackHandler, h)
                         for h in run_manager.handlers
                         if isinstance(h, _StreamingCallbackHandler)
                     ),
@@ -758,7 +758,7 @@ class RunnableSeq(Runnable):
                 if _StreamingCallbackHandler is not None and (
                     stream_handler := next(
                         (
-                            cast(_StreamingCallbackHandler, h)  # type: ignore
+                            cast(_StreamingCallbackHandler, h)
                             for h in run_manager.handlers
                             if isinstance(h, _StreamingCallbackHandler)
                         ),

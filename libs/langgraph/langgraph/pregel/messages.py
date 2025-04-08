@@ -23,7 +23,7 @@ from langgraph.types import StreamChunk
 try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler
 except ImportError:
-    _StreamingCallbackHandler = object
+    _StreamingCallbackHandler = object  # type: ignore
 
 T = TypeVar("T")
 Meta = tuple[tuple[str, ...], dict[str, Any]]
