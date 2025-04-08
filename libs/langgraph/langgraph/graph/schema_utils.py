@@ -57,8 +57,11 @@ class SchemaCoercionMapper:
 
         self.schema = schema
         self.max_depth = max_depth
-        self.type_hints = type_hints or get_type_hints(
-            schema, localns={schema.__name__: schema}
+
+        self.type_hints = (
+            type_hints
+            if type_hints is not None
+            else get_type_hints(schema, localns={schema.__name__: schema})
         )
 
         if issubclass(schema, BaseModelV1):
@@ -71,9 +74,9 @@ class SchemaCoercionMapper:
         elif issubclass(schema, BaseModel):
             self._fields = {
                 n: self.type_hints.get(n, f.annotation)
-                for n, f in schema.model_fields.items()  # type: ignore[attr-defined]
+                for n, f in schema.model_fields.items()
             }
-            self._construct: Callable[..., Any] = schema.model_construct  # type: ignore[attr-defined,no-redef]
+            self._construct: Callable[..., Any] = schema.model_construct  # type: ignore
 
         else:
             raise TypeError("Schema is neither a Pydantic v1 nor v2 model.")
@@ -129,7 +132,7 @@ class SchemaCoercionMapper:
                 mapper = SchemaCoercionMapper(field_type, max_depth=depth - 1)
                 return lambda v, d: mapper.coerce(v, d) if isinstance(v, dict) else v
 
-        if origin in (list, set):
+        if origin is list:
             args = get_args(field_type)
             if len(args) != 1:
                 return self._passthrough
@@ -144,13 +147,18 @@ class SchemaCoercionMapper:
 
         if origin is set or field_type is set:
             args = get_args(field_type)
-            if len(args) != 1:
+            if len(args) > 1:
                 return self._passthrough
-            sub = self._build_coercer(args[0], depth - 1)
+            elif len(args) == 1:
+                sub = self._build_coercer(args[0], depth - 1)
+            else:
+                sub = None  # type: ignore
 
             def set_coercer(v: Any, d: Any) -> Any:
                 if not isinstance(v, (list, tuple, set)):
                     return v
+                if sub is None:
+                    return set(v)
                 return {sub(x, d - 1) for x in v}
 
             return set_coercer
@@ -258,6 +266,7 @@ try:
             return v
 
     try:
+        from pydantic.v1 import parse_obj_as
         from pydantic.v1.main import create_model
     except ImportError:
         create_model = None  # type: ignore
@@ -268,9 +277,8 @@ try:
                 parser = create_model(
                     f"ParsingModel[{tp}]",
                     __root__=(tp, ...),
-                    __config__={"arbitrary_types_allowed": True},
                 )
-                return lambda v: parser(__root__=v).__root__
+                return lambda v: parser(__root__=v).__root__  # type: ignore
             except RuntimeError:
                 return lambda v: v
         return lambda v: parse_obj_as(tp, v)
@@ -298,7 +306,7 @@ except ImportError:
                 f"ParsingModel[{tp}]",
                 __root__=(tp, ...),
             )
-            return lambda v: parser(__root__=v).__root__
+            return lambda v: parser(__root__=v).__root__  # type: ignore
         except RuntimeError:
             return lambda v: v
 
