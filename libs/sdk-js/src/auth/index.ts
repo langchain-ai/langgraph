@@ -13,8 +13,6 @@ export class Auth<
   TAuthReturn extends BaseAuthReturn = BaseAuthReturn,
   TUser extends BaseUser = ToUserLike<TAuthReturn>,
 > {
-  extra: TExtra;
-
   "~handlerCache": {
     authenticate?: AuthenticateCallback<BaseAuthReturn>;
     callbacks?: Record<string, AnyCallback>;
