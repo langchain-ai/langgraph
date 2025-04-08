@@ -60,7 +60,7 @@ See all streaming modes supported by LangGraph [here](../how-tos/index.md#stream
         tools=[get_weather],
     )
     # highlight-next-line
-    for token, metadata in agent.astream(
+    for token, metadata in agent.stream(
         {"messages": "what is the weather in sf"},
         # highlight-next-line
         stream_mode="messages"

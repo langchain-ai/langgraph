@@ -37,7 +37,7 @@ from langchain_core.runnables import RunnableConfig
 
 def prompt(state: AgentState, config: RunnableConfig):
     user_name = config.get("configurable", {}).get("user_name")
-    system_msg = f"You are a helpful assistant. User's name is {user_name}"
+    system_msg = f"You are a helpful assistant. Address the user as {user_name}."
     return [{"role": "system", "content": system_msg}] + state["messages"]
 
 agent = create_react_agent(
@@ -48,7 +48,7 @@ agent = create_react_agent(
 )
 
 agent.invoke(
-    ...,
+    {"messages": "what is the weather in sf"},
     # highlight-next-line
     config={"configurable": {"user_name": "John Smith"}}
 )
