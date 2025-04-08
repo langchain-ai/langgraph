@@ -1,3 +1,4 @@
+import warnings
 from dataclasses import asdict
 from typing import (
     Any,
@@ -620,6 +621,13 @@ class RemoteGraph(PregelProtocol):
             stream_mode, config
         )
         if isinstance(input, Command):
+            if input.resume and "thread_id" not in sanitized_config["configurable"]:
+                warnings.warn(
+                    "Trying to resume interrupted graph without `thread_id` in the config. "
+                    "This will likely lead to downstream errors. Please provide a valid config in the following form: "
+                    "{'configurable': {'thread_id': '...'}}."
+                )
+
             command: Optional[CommandSDK] = cast(CommandSDK, asdict(input))
             input = None
         else:
@@ -715,6 +723,13 @@ class RemoteGraph(PregelProtocol):
             stream_mode, config
         )
         if isinstance(input, Command):
+            if input.resume and "thread_id" not in sanitized_config["configurable"]:
+                warnings.warn(
+                    "Trying to resume interrupted graph without `thread_id` in the config. "
+                    "This will likely lead to downstream errors. Please provide a valid config in the following form: "
+                    "{'configurable': {'thread_id': '...'}}."
+                )
+
             command: Optional[CommandSDK] = cast(CommandSDK, asdict(input))
             input = None
         else:
