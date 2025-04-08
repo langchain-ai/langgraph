@@ -65,10 +65,16 @@ const HTTP_STATUS_MAPPING: { [key: number]: string } = {
 
 export class HTTPException extends Error {
   status: number;
-  constructor(status: number, options?: { message?: string; cause?: Error }) {
+  headers: HeadersInit;
+
+  constructor(
+    status: number,
+    options?: { message?: string; headers?: HeadersInit; cause?: unknown },
+  ) {
     super(options?.message ?? HTTP_STATUS_MAPPING[status] ?? "Unknown error", {
       cause: options?.cause,
     });
     this.status = status;
+    this.headers = options?.headers ?? {};
   }
 }
