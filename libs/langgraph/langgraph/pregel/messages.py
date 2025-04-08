@@ -7,6 +7,7 @@ from typing import (
     List,
     Optional,
     Sequence,
+    TypeVar,
     Union,
     cast,
 )
@@ -15,11 +16,16 @@ from uuid import UUID, uuid4
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGenerationChunk, LLMResult
-from langchain_core.tracers._streaming import T, _StreamingCallbackHandler
 
 from langgraph.constants import NS_SEP, TAG_HIDDEN, TAG_NOSTREAM
 from langgraph.types import StreamChunk
 
+try:
+    from langchain_core.tracers._streaming import _StreamingCallbackHandler
+except ImportError:
+    _StreamingCallbackHandler = object
+
+T = TypeVar("T")
 Meta = tuple[tuple[str, ...], dict[str, Any]]
 
 

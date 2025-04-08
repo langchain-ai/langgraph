@@ -36,7 +36,6 @@ from langchain_core.runnables.config import (
     var_child_runnable_config,
 )
 from langchain_core.runnables.utils import Input, Output
-from langchain_core.tracers._streaming import _StreamingCallbackHandler
 from typing_extensions import TypeGuard
 
 from langgraph.constants import (
@@ -53,6 +52,11 @@ from langgraph.utils.config import (
     get_callback_manager_for_config,
     patch_config,
 )
+
+try:
+    from langchain_core.tracers._streaming import _StreamingCallbackHandler
+except ImportError:
+    _StreamingCallbackHandler = None
 
 
 def _set_config_context(
@@ -683,13 +687,15 @@ class RunnableSeq(Runnable):
                     iterator = step.stream(input, config, **kwargs)
                 else:
                     iterator = step.transform(iterator, config)
-            if stream_handler := next(
-                (
-                    cast(_StreamingCallbackHandler, h)
-                    for h in run_manager.handlers
-                    if isinstance(h, _StreamingCallbackHandler)
-                ),
-                None,
+            if _StreamingCallbackHandler is not None and (
+                stream_handler := next(
+                    (
+                        cast(_StreamingCallbackHandler, h)  # type: ignore
+                        for h in run_manager.handlers
+                        if isinstance(h, _StreamingCallbackHandler)
+                    ),
+                    None,
+                )
             ):
                 # populates streamed_output in astream_log() output if needed
                 iterator = stream_handler.tap_output_iter(run_manager.run_id, iterator)
@@ -749,13 +755,15 @@ class RunnableSeq(Runnable):
                         aiterator = step.atransform(aiterator, config)
                     if hasattr(aiterator, "aclose"):
                         stack.push_async_callback(aiterator.aclose)
-                if stream_handler := next(
-                    (
-                        cast(_StreamingCallbackHandler, h)
-                        for h in run_manager.handlers
-                        if isinstance(h, _StreamingCallbackHandler)
-                    ),
-                    None,
+                if _StreamingCallbackHandler is not None and (
+                    stream_handler := next(
+                        (
+                            cast(_StreamingCallbackHandler, h)  # type: ignore
+                            for h in run_manager.handlers
+                            if isinstance(h, _StreamingCallbackHandler)
+                        ),
+                        None,
+                    )
                 ):
                     # populates streamed_output in astream_log() output if needed
                     aiterator = stream_handler.tap_output_aiter(

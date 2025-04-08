@@ -39,11 +39,6 @@ from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
     get_unique_config_specs,
 )
-
-try:
-    from langchain_core.tracers._streaming import _StreamingCallbackHandler
-except ImportError:
-    _StreamingCallbackHandler = None
 from pydantic import BaseModel
 from typing_extensions import Self
 
@@ -128,6 +123,11 @@ from langgraph.utils.config import (
 from langgraph.utils.fields import get_enhanced_type_hints
 from langgraph.utils.pydantic import create_model, is_supported_by_pydantic
 from langgraph.utils.queue import AsyncQueue, SyncQueue  # type: ignore[attr-defined]
+
+try:
+    from langchain_core.tracers._streaming import _StreamingCallbackHandler
+except ImportError:
+    _StreamingCallbackHandler = None
 
 WriteValue = Union[Callable[[Input], Output], Any]
 
