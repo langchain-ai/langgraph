@@ -10,7 +10,6 @@ from typing import (
     cast,
 )
 
-import orjson
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.graph import (
     Edge as DrawableEdge,
@@ -35,6 +34,8 @@ from typing_extensions import Self
 from langgraph.checkpoint.base import CheckpointMetadata
 from langgraph.constants import (
     CONF,
+    CONFIG_KEY_CHECKPOINT_ID,
+    CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_STREAM,
     INTERRUPT,
@@ -45,6 +46,14 @@ from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.types import All, PregelTask, StateSnapshot, StreamMode
 from langgraph.types import Command, Interrupt, StreamProtocol
 from langgraph.utils.config import merge_configs
+
+CONF_DROPLIST = frozenset(
+    (
+        CONFIG_KEY_CHECKPOINT_MAP,
+        CONFIG_KEY_CHECKPOINT_ID,
+        CONFIG_KEY_CHECKPOINT_NS,
+    ),
+)
 
 
 class RemoteException(Exception):
@@ -290,47 +299,26 @@ class RemoteGraph(PregelProtocol):
         }
 
     def _sanitize_config(self, config: RunnableConfig) -> RunnableConfig:
-        reserved_configurable_keys = frozenset(
-            [
-                "callbacks",
-                "checkpoint_map",
-                "checkpoint_id",
-                "checkpoint_ns",
-            ]
-        )
-
-        def _sanitize_obj(obj: Any) -> Any:
-            """Remove non-JSON serializable fields from the given object."""
-            if isinstance(obj, dict):
-                return {k: _sanitize_obj(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [_sanitize_obj(v) for v in obj]
-            else:
-                try:
-                    orjson.dumps(obj)
-                    return obj
-                except orjson.JSONEncodeError:
-                    return None
-
-        # Remove non-JSON serializable fields from the config.
-        config = _sanitize_obj(config)
-
-        # Only include configurable keys that are not reserved and
-        # not starting with "__pregel_" prefix.
-        new_configurable = {
-            k: v
-            for k, v in config["configurable"].items()
-            if k not in reserved_configurable_keys and not k.startswith("__pregel_")
-        }
-
-        sanitized: RunnableConfig = {
-            "tags": config.get("tags") or [],
-            "metadata": config.get("metadata") or {},
-            "configurable": new_configurable,
-        }
+        """Sanitize the config to remove non-serializable fields."""
+        sanitized: RunnableConfig = {}
         if "recursion_limit" in config:
             sanitized["recursion_limit"] = config["recursion_limit"]
-
+        if "tags" in config:
+            sanitized["tags"] = [tag for tag in config["tags"] if isinstance(tag, str)]
+        if "metadata" in config:
+            sanitized["metadata"] = {}
+            for k, v in config["metadata"].items():
+                if isinstance(k, str) and isinstance(v, (str, int, float, bool)):
+                    sanitized["metadata"][k] = v
+        if "configurable" in config:
+            sanitized["configurable"] = {}
+            for k, v in config["configurable"].items():
+                if (
+                    isinstance(k, str)
+                    and k not in CONF_DROPLIST
+                    and isinstance(v, (str, int, float, bool))
+                ):
+                    sanitized["configurable"][k] = v
         return sanitized
 
     def get_state(
