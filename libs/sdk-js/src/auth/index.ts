@@ -27,7 +27,10 @@ export class Auth<
 
   on<T extends CallbackEvent>(event: T, callback: OnCallback<T, TUser>): this {
     this["~handlerCache"].callbacks ??= {};
-    this["~handlerCache"].callbacks[event as string] = callback as AnyCallback;
+    const events: string[] = Array.isArray(event) ? event : [event];
+    for (const event of events) {
+      this["~handlerCache"].callbacks[event] = callback as AnyCallback;
+    }
     return this;
   }
 }
