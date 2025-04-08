@@ -23,7 +23,6 @@ from typing import (
     Annotated,
     Any,
     Dict,
-    FrozenSet,
     Generator,
     Iterator,
     List,
