@@ -39,7 +39,6 @@ from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
     get_unique_config_specs,
 )
-from langchain_core.tracers._streaming import _StreamingCallbackHandler
 from pydantic import BaseModel
 from typing_extensions import Self
 
@@ -124,6 +123,11 @@ from langgraph.utils.config import (
 from langgraph.utils.fields import get_enhanced_type_hints
 from langgraph.utils.pydantic import create_model, is_supported_by_pydantic
 from langgraph.utils.queue import AsyncQueue, SyncQueue  # type: ignore[attr-defined]
+
+try:
+    from langchain_core.tracers._streaming import _StreamingCallbackHandler
+except ImportError:
+    _StreamingCallbackHandler = None  # type: ignore
 
 WriteValue = Union[Callable[[Input], Output], Any]
 
@@ -2529,13 +2533,17 @@ class Pregel(PregelProtocol):
             run_id=config.get("run_id"),
         )
         # if running from astream_log() run each proc with streaming
-        do_stream = next(
-            (
-                cast(_StreamingCallbackHandler, h)
-                for h in run_manager.handlers
-                if isinstance(h, _StreamingCallbackHandler)
-            ),
-            None,
+        do_stream = (
+            next(
+                (
+                    cast(_StreamingCallbackHandler, h)
+                    for h in run_manager.handlers
+                    if isinstance(h, _StreamingCallbackHandler)
+                ),
+                None,
+            )
+            if _StreamingCallbackHandler is not None
+            else False
         )
         try:
             # assign defaults
