@@ -5533,8 +5533,8 @@ async def test_subgraph_checkpoint_true_interrupt(
     def node_1(state: ParentState):
         return {"foo": "hi! " + state["foo"]}
 
-    async def node_2(state: ParentState):
-        response = await subgraph.ainvoke({"bar": state["foo"]})
+    async def node_2(state: ParentState, config: RunnableConfig):
+        response = await subgraph.ainvoke({"bar": state["foo"]}, config)
         return {"foo": response["bar"]}
 
     builder = StateGraph(ParentState)
