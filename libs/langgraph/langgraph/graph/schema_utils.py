@@ -26,10 +26,12 @@ try:
     from pydantic import TypeAdapter
 
     try:
-        import pydantic.v1.types as v1_types
+        import pydantic.v1.types as v1_types_
         from pydantic.v1 import parse_obj_as
 
-        v1_types = tuple(v for k, v in vars(v1_types).items() if k in v1_types.__all__)
+        v1_types = tuple(
+            v for k, v in vars(v1_types_).items() if k in v1_types_.__all__
+        )
     except ImportError:
         v1_types = ()
 
@@ -182,7 +184,7 @@ class SchemaCoercionMapper:
         if origin in (list, set):
             args = get_args(field_type)
             if len(args) != 1:
-                return self._oreferrer
+                return self._passthrough
             sub = self._build_coercer(args[0], depth - 1)
 
             def list_coercer(v: Any, d: Any) -> Any:
