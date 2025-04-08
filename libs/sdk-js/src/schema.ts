@@ -113,6 +113,9 @@ export interface AssistantBase {
 
   /** The name of the assistant */
   name: string;
+
+  /** The description of the assistant */
+  description?: string;
 }
 
 export interface AssistantVersion extends AssistantBase {}
