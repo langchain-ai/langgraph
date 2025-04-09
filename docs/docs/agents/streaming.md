@@ -30,6 +30,7 @@ To stream agent progress, you can call `agent.stream()` (or `.astream()`) method
         stream_mode="updates"
     ):
         print(chunk)
+        print("\n")
     ```
 
 === "Async"
@@ -46,6 +47,7 @@ To stream agent progress, you can call `agent.stream()` (or `.astream()`) method
         stream_mode="updates"
     ):
         print(chunk)
+        print("\n")
     ```
 
 See all streaming modes supported by LangGraph [here](../how-tos/index.md#streaming).
@@ -69,6 +71,7 @@ To stream LLM tokens, switch the streaming mode to `stream_mode="messages"`:
     ):
         print("Token", token)
         print("Metadata", metadata)
+        print("\n")
     ```
 
 === "Async"
@@ -86,6 +89,7 @@ To stream LLM tokens, switch the streaming mode to `stream_mode="messages"`:
     ):
         print("Token", token)
         print("Metadata", metadata)
+        print("\n")
     ```
 
 ## Streaming updates from tools
@@ -122,6 +126,7 @@ To stream updates from inside the tools as they are executed, you can use LangGr
         stream_mode="custom"
     ):
         print(chunk)
+        print("\n")
     ```
 
 === "Async"
@@ -149,4 +154,5 @@ To stream updates from inside the tools as they are executed, you can use LangGr
         stream_mode="custom"
     ):
         print(chunk)
+        print("\n")
     ```

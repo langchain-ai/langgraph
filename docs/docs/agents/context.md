@@ -65,7 +65,7 @@ def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
     ...
 ```
 
-### Via state
+### Via state {#via-state-prompt}
 
 This is especially useful for accessing any information that is dynamically updated inside the agent (for example, via [tools that update state](../how-tos/update-state-from-tools.ipynb)).
 
@@ -96,7 +96,7 @@ agent.invoke({
 })
 ```
 
-### Via config
+### Via config {#via-config-prompt}
 
 This is useful for accessing static data that is passed at agent invocation.
 
@@ -125,10 +125,9 @@ agent.invoke(
 
 You can pass context to tools via additional tool function parameters. To ensure that an LLM doesn't try 
 to populate those parameters in the tool calls, you need to add special type annotations: 
-`RunnableConfig` for config and `Annotated[StateSchema, InjectedState]` for agent state. All parameters with these annotations
-will be excluded the JSON schema passed to the LLM.
+`RunnableConfig` for config and `Annotated[StateSchema, InjectedState]` for agent state. All parameters with these annotations will be excluded the JSON schema passed to the LLM.
 
-### Via state
+### Via state {#via-state-tools}
 
 ```python
 from typing import Annotated
@@ -161,7 +160,7 @@ agent.invoke({
 })
 ```
 
-### Via config
+### Via config {#via-config-tools}
 
 ```python
 def get_user_info(
