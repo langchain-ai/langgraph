@@ -152,7 +152,7 @@ interface RunsCreate {
   kwargs: Record<string, unknown>;
 }
 
-export interface ResourceActionType {
+export interface EventValueMap {
   ["threads:create"]: ThreadCreate;
   ["threads:read"]: ThreadRead;
   ["threads:update"]: ThreadUpdate;
@@ -264,11 +264,13 @@ export type ToUserLike<T extends BaseAuthReturn> = T extends string
     };
 
 type CallbackParameter<
+  Event extends string = string,
   Resource extends string = string,
   Action extends string = string,
   Value extends unknown = unknown,
   TUser extends BaseUser = BaseUser,
 > = {
+  event: Event;
   resource: Resource;
   action: Action;
   value: Value;
@@ -277,10 +279,11 @@ type CallbackParameter<
 };
 
 type ContextMap = {
-  [ActionType in keyof ResourceActionType]: CallbackParameter<
-    ActionType extends `${infer Resource}:${string}` ? Resource : never,
-    ActionType,
-    ResourceActionType[ActionType],
+  [EventType in keyof EventValueMap]: CallbackParameter<
+    EventType,
+    EventType extends `${infer Resource}:${string}` ? Resource : never,
+    EventType extends `${string}:${infer Action}` ? Action : never,
+    EventValueMap[EventType],
     BaseUser
   >;
 };
@@ -290,7 +293,7 @@ type ActionCallbackParameter<
   TUser extends BaseUser = BaseUser,
 > = ContextMap[ActionType[T]] & { user: TUser };
 type AuthCallbackParameter<
-  T extends keyof ResourceActionType,
+  T extends keyof EventValueMap,
   TUser extends BaseUser = BaseUser,
 > = ContextMap[T] & { user: TUser };
 type ResourceCallbackParameter<
@@ -306,7 +309,7 @@ export interface AuthenticateCallback<T extends BaseAuthReturn> {
   (request: Request): PromiseMaybe<T>;
 }
 
-type OnKey = keyof ResourceType | keyof ActionType | keyof ResourceActionType;
+type OnKey = keyof ResourceType | keyof ActionType | keyof EventValueMap;
 
 type OnSingleParameter<
   T extends OnKey,
@@ -315,7 +318,7 @@ type OnSingleParameter<
   ? ResourceCallbackParameter<T, TUser>
   : T extends keyof ActionType
     ? ActionCallbackParameter<T, TUser>
-    : T extends keyof ResourceActionType
+    : T extends keyof EventValueMap
       ? AuthCallbackParameter<T, TUser>
       : never;
 
@@ -325,7 +328,7 @@ type OnParameter<
 > = T extends OnKey[]
   ? OnSingleParameter<T[number], TUser>
   : T extends "*"
-    ? AuthCallbackParameter<keyof ResourceActionType, TUser>
+    ? AuthCallbackParameter<keyof EventValueMap, TUser>
     : T extends OnKey
       ? OnSingleParameter<T, TUser>
       : never;

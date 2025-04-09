@@ -35,5 +35,8 @@ export class Auth<
   }
 }
 
-export type { Filters, ResourceActionType } from "./types.js";
+export type {
+  Filters as AuthFilters,
+  EventValueMap as AuthEventValueMap,
+} from "./types.js";
 export { HTTPException } from "./error.js";
