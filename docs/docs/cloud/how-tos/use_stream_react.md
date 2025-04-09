@@ -2,7 +2,8 @@
 
 !!! info "Prerequisites" 
 
-    - [LangGraph Platform](../../concepts/langgraph_platform.md) - [LangGraph Server](../../concepts/langgraph_server.md)
+    - [LangGraph Platform](../../concepts/langgraph_platform.md) 
+    - [LangGraph Server](../../concepts/langgraph_server.md)
 
 The `useStream()` React hook provides a seamless way to integrate LangGraph into your React applications. It handles all the complexities of streaming, state management, and branching logic, letting you focus on building great chat experiences.
 
