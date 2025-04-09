@@ -2,13 +2,14 @@ import json
 import pathlib
 import shutil
 import tempfile
+import textwrap
 from contextlib import contextmanager
 from pathlib import Path
 
 from click.testing import CliRunner
 
 from langgraph_cli.cli import cli, prepare_args_and_stdin
-from langgraph_cli.config import Config, validate_config
+from langgraph_cli.config import PIP_CLEANUP_LINES, Config, validate_config
 from langgraph_cli.docker import DEFAULT_POSTGRES_URI, DockerCapabilities, Version
 from langgraph_cli.util import clean_empty_lines
 
@@ -143,6 +144,7 @@ services:
                 RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "agent.py:graph"}}'
+{textwrap.indent(textwrap.dedent(PIP_CLEANUP_LINES), "                ")}
                 WORKDIR /deps/cli
         
         develop:

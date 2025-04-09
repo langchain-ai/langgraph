@@ -1947,10 +1947,14 @@ async def test_invoke_checkpoint(mocker: MockerFixture, checkpointer_name: str) 
         assert checkpoint["channel_values"].get("total") == 5
 
 
+@pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_pending_writes_resume(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    checkpointer_name: str, checkpoint_during: bool
 ) -> None:
+    if not checkpoint_during and "shallow" in checkpointer_name:
+        pytest.skip("Checkpointing during execution not supported")
+
     class State(TypedDict):
         value: Annotated[int, operator.add]
 
@@ -1972,10 +1976,12 @@ async def test_pending_writes_resume(
             self.calls = 0
 
     one = AwhileMaker(0.1, {"value": 2})
-    two = AwhileMaker(0.3, ConnectionError("I'm not good"))
+    two = AwhileMaker(0.2, ConnectionError("I'm not good"))
     builder = StateGraph(State)
     builder.add_node("one", one)
-    builder.add_node("two", two, retry=RetryPolicy(max_attempts=2))
+    builder.add_node(
+        "two", two, retry=RetryPolicy(max_attempts=2, initial_interval=0, jitter=False)
+    )
     builder.add_edge(START, "one")
     builder.add_edge(START, "two")
     async with awith_checkpointer(checkpointer_name) as checkpointer:
@@ -1983,7 +1989,9 @@ async def test_pending_writes_resume(
 
         thread1: RunnableConfig = {"configurable": {"thread_id": "1"}}
         with pytest.raises(ConnectionError, match="I'm not good"):
-            await graph.ainvoke({"value": 1}, thread1)
+            await graph.ainvoke(
+                {"value": 1}, thread1, checkpoint_during=checkpoint_during
+            )
 
         # both nodes should have been called once
         assert one.calls == 1
@@ -2034,7 +2042,7 @@ async def test_pending_writes_resume(
 
         # resume execution
         with pytest.raises(ConnectionError, match="I'm not good"):
-            await graph.ainvoke(None, thread1)
+            await graph.ainvoke(None, thread1, checkpoint_during=checkpoint_during)
 
         # node "one" succeeded previously, so shouldn't be called again
         assert one.calls == 1
@@ -2048,7 +2056,9 @@ async def test_pending_writes_resume(
         # resume execution, without exception
         two.rtn = {"value": 3}
         # both the pending write and the new write were applied, 1 + 2 + 3 = 6
-        assert await graph.ainvoke(None, thread1) == {"value": 6}
+        assert await graph.ainvoke(
+            None, thread1, checkpoint_during=checkpoint_during
+        ) == {"value": 6}
 
         if "shallow" in checkpointer_name:
             assert len([c async for c in checkpointer.alist(thread1)]) == 1
@@ -2057,7 +2067,7 @@ async def test_pending_writes_resume(
         # check all final checkpoints
         checkpoints = [c async for c in checkpointer.alist(thread1)]
         # we should have 3
-        assert len(checkpoints) == 3
+        assert len(checkpoints) == (3 if checkpoint_during else 2)
         # the last one not too interesting for this test
         assert checkpoints[0] == CheckpointTuple(
             config={
@@ -2163,15 +2173,26 @@ async def test_pending_writes_resume(
                     "checkpoint_ns": "",
                     "checkpoint_id": checkpoints[2].config["configurable"][
                         "checkpoint_id"
-                    ],
+                    ]
+                    if checkpoint_during
+                    else AnyStr(),
                 }
             },
             pending_writes=UnsortedSequence(
                 (AnyStr(), "value", 2),
                 (AnyStr(), "__error__", 'ConnectionError("I\'m not good")'),
                 (AnyStr(), "value", 3),
+            )
+            if checkpoint_during
+            else UnsortedSequence(
+                (AnyStr(), "value", 2),
+                (AnyStr(), "__error__", 'ConnectionError("I\'m not good")'),
+                # the write against the previous checkpoint is not saved, as it is
+                # produced in a run where only the next checkpoint (the last) is saved
             ),
         )
+        if not checkpoint_during:
+            return
         assert checkpoints[2] == CheckpointTuple(
             config={
                 "configurable": {
@@ -2209,7 +2230,7 @@ async def test_pending_writes_resume(
 
 @pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_run_from_checkpoint_id_retains_previous_writes(
-    request: pytest.FixtureRequest, checkpointer_name: str, mocker: MockerFixture
+    checkpointer_name: str,
 ) -> None:
     class MyState(TypedDict):
         myval: Annotated[int, operator.add]
@@ -2254,8 +2275,8 @@ async def test_run_from_checkpoint_id_retains_previous_writes(
         history = [c async for c in graph.aget_state_history(thread1)]
 
         assert len(history) == 4
-        assert history[-1].values == {"myval": 0}
         assert history[0].values == {"myval": 4, "otherval": False}
+        assert history[-1].values == {"myval": 0}
 
         second_run_config = {
             **thread1,
@@ -2432,8 +2453,12 @@ async def test_send_sequences(checkpointer_name: str) -> None:
 
 
 @NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_imp_task(checkpointer_name: str) -> None:
+async def test_imp_task(checkpointer_name: str, checkpoint_during: bool) -> None:
+    if not checkpoint_during and "shallow" in checkpointer_name:
+        pytest.skip("Checkpointing during execution not supported")
+
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         mapper_calls = 0
 
@@ -2453,7 +2478,12 @@ async def test_imp_task(checkpointer_name: str) -> None:
 
         tracer = FakeTracer()
         thread1 = {"configurable": {"thread_id": "1"}, "callbacks": [tracer]}
-        assert [c async for c in graph.astream([0, 1], thread1)] == [
+        assert [
+            c
+            async for c in graph.astream(
+                [0, 1], thread1, checkpoint_during=checkpoint_during
+            )
+        ] == [
             {"mapper": "00"},
             {"mapper": "11"},
             {
@@ -2477,7 +2507,9 @@ async def test_imp_task(checkpointer_name: str) -> None:
         assert any(r.inputs == {"input": 0} for r in mapper_runs)
         assert any(r.inputs == {"input": 1} for r in mapper_runs)
 
-        assert await graph.ainvoke(Command(resume="answer"), thread1) == [
+        assert await graph.ainvoke(
+            Command(resume="answer"), thread1, checkpoint_during=checkpoint_during
+        ) == [
             "00answer",
             "11answer",
         ]
@@ -2485,8 +2517,12 @@ async def test_imp_task(checkpointer_name: str) -> None:
 
 
 @NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_imp_nested(checkpointer_name: str) -> None:
+async def test_imp_nested(checkpointer_name: str, checkpoint_during: bool) -> None:
+    if not checkpoint_during and "shallow" in checkpointer_name:
+        pytest.skip("Checkpointing during execution not supported")
+
     async def mynode(input: list[str]) -> list[str]:
         return [it + "a" for it in input]
 
@@ -2526,7 +2562,12 @@ async def test_imp_nested(checkpointer_name: str) -> None:
         }
 
         thread1 = {"configurable": {"thread_id": "1"}}
-        assert [c async for c in graph.astream([0, 1], thread1)] == [
+        assert [
+            c
+            async for c in graph.astream(
+                [0, 1], thread1, checkpoint_during=checkpoint_during
+            )
+        ] == [
             {"submapper": "0"},
             {"mapper": "00"},
             {"submapper": "1"},
@@ -2543,15 +2584,21 @@ async def test_imp_nested(checkpointer_name: str) -> None:
             },
         ]
 
-        assert await graph.ainvoke(Command(resume="answer"), thread1) == [
+        assert await graph.ainvoke(
+            Command(resume="answer"), thread1, checkpoint_during=checkpoint_during
+        ) == [
             "00answera",
             "11answera",
         ]
 
 
 @NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_imp_task_cancel(checkpointer_name: str) -> None:
+async def test_imp_task_cancel(checkpointer_name: str, checkpoint_during: bool) -> None:
+    if not checkpoint_during and "shallow" in checkpointer_name:
+        pytest.skip("Checkpointing during execution not supported")
+
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         mapper_calls = 0
         mapper_cancels = 0
@@ -2577,7 +2624,12 @@ async def test_imp_task_cancel(checkpointer_name: str) -> None:
             return [m + answer for m in mapped]
 
         thread1 = {"configurable": {"thread_id": "1"}}
-        assert [c async for c in graph.astream([0, 1], thread1)] == [
+        assert [
+            c
+            async for c in graph.astream(
+                [0, 1], thread1, checkpoint_during=checkpoint_during
+            )
+        ] == [
             {"mapper": "00"},
             {
                 "__interrupt__": (
@@ -2593,7 +2645,9 @@ async def test_imp_task_cancel(checkpointer_name: str) -> None:
         assert mapper_calls == 2
         assert mapper_cancels == 1
 
-        assert await graph.ainvoke(Command(resume="answer"), thread1) == [
+        assert await graph.ainvoke(
+            Command(resume="answer"), thread1, checkpoint_during=checkpoint_during
+        ) == [
             "00answer",
         ]
         assert mapper_calls == 3
@@ -2601,8 +2655,14 @@ async def test_imp_task_cancel(checkpointer_name: str) -> None:
 
 
 @NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_imp_sync_from_async(checkpointer_name: str) -> None:
+async def test_imp_sync_from_async(
+    checkpointer_name: str, checkpoint_during: bool
+) -> None:
+    if not checkpoint_during and "shallow" in checkpointer_name:
+        pytest.skip("Checkpointing during execution not supported")
+
     async with awith_checkpointer(checkpointer_name) as checkpointer:
 
         @task()
@@ -2625,7 +2685,12 @@ async def test_imp_sync_from_async(checkpointer_name: str) -> None:
             return fut_baz.result()
 
         thread1 = {"configurable": {"thread_id": "1"}}
-        assert [c async for c in graph.astream({"a": "0"}, thread1)] == [
+        assert [
+            c
+            async for c in graph.astream(
+                {"a": "0"}, thread1, checkpoint_during=checkpoint_during
+            )
+        ] == [
             {"foo": {"a": "0foo", "b": "bar"}},
             {"bar": {"a": "0foobar", "c": "bark"}},
             {"baz": {"a": "0foobarbaz", "c": "something else"}},
@@ -2634,8 +2699,14 @@ async def test_imp_sync_from_async(checkpointer_name: str) -> None:
 
 
 @NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_imp_stream_order(checkpointer_name: str) -> None:
+async def test_imp_stream_order(
+    checkpointer_name: str, checkpoint_during: bool
+) -> None:
+    if not checkpoint_during and "shallow" in checkpointer_name:
+        pytest.skip("Checkpointing during execution not supported")
+
     async with awith_checkpointer(checkpointer_name) as checkpointer:
 
         @task()
@@ -2659,7 +2730,12 @@ async def test_imp_stream_order(checkpointer_name: str) -> None:
             return await fut_baz
 
         thread1 = {"configurable": {"thread_id": "1"}}
-        assert [c async for c in graph.astream({"a": "0"}, thread1)] == [
+        assert [
+            c
+            async for c in graph.astream(
+                {"a": "0"}, thread1, checkpoint_during=checkpoint_during
+            )
+        ] == [
             {"foo": {"a": "0foo", "b": "bar"}},
             {"bar": {"a": "0foobar", "c": "bark"}},
             {"baz": {"a": "0foobarbaz", "c": "something else"}},
@@ -2667,8 +2743,11 @@ async def test_imp_stream_order(checkpointer_name: str) -> None:
         ]
 
 
+@pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
-async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
+async def test_send_dedupe_on_resume(
+    checkpointer_name: str, checkpoint_during: bool
+) -> None:
     class InterruptOnce:
         ticks: int = 0
 
@@ -2719,7 +2798,9 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         graph = builder.compile(checkpointer=checkpointer)
         thread1 = {"configurable": {"thread_id": "1"}}
-        assert await graph.ainvoke(["0"], thread1, debug=1) == [
+        assert await graph.ainvoke(
+            ["0"], thread1, checkpoint_during=checkpoint_during
+        ) == [
             "0",
             "1",
             "3.1",
@@ -2731,7 +2812,9 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
         assert builder.nodes["2"].runnable.func.ticks == 3
         assert builder.nodes["flaky"].runnable.func.ticks == 1
         # resume execution
-        assert await graph.ainvoke(None, thread1, debug=1) == [
+        assert await graph.ainvoke(
+            None, thread1, checkpoint_during=checkpoint_during
+        ) == [
             "0",
             "1",
             "3.1",
@@ -2748,7 +2831,8 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
         assert builder.nodes["flaky"].runnable.func.ticks == 2
         # check history
         history = [c async for c in graph.aget_state_history(thread1)]
-        assert history == [
+        assert len(history) == (6 if checkpoint_during else 2)
+        expected_history = [
             StateSnapshot(
                 values=[
                     "0",
@@ -2884,13 +2968,9 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                         name="flaky",
                         path=("__pregel_push", 1),
                         error=None,
-                        interrupts=(
-                            Interrupt(
-                                value="Bahh", resumable=False, ns=None, when="during"
-                            ),
-                        ),
+                        interrupts=(Interrupt(value="Bahh", resumable=False, ns=None),),
                         state=None,
-                        result=["flaky|4"],
+                        result=["flaky|4"] if checkpoint_during else None,
                     ),
                     PregelTask(
                         id=AnyStr(),
@@ -3027,6 +3107,11 @@ async def test_send_dedupe_on_resume(checkpointer_name: str) -> None:
                 ),
             ),
         ]
+        if checkpoint_during:
+            assert history == expected_history
+        else:
+            assert history[0] == expected_history[0]
+            assert history[1] == expected_history[2]
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
@@ -5348,6 +5433,132 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     assert times_called == 1
 
 
+@pytest.mark.parametrize("checkpoint_during", [True, False])
+@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
+async def test_subgraph_checkpoint_true(
+    checkpointer_name: str, checkpoint_during: bool
+) -> None:
+    class InnerState(TypedDict):
+        my_key: Annotated[str, operator.add]
+        my_other_key: str
+
+    def inner_1(state: InnerState):
+        return {"my_key": " got here", "my_other_key": state["my_key"]}
+
+    def inner_2(state: InnerState):
+        return {"my_key": " and there"}
+
+    inner = StateGraph(InnerState)
+    inner.add_node("inner_1", inner_1)
+    inner.add_node("inner_2", inner_2)
+    inner.add_edge("inner_1", "inner_2")
+    inner.set_entry_point("inner_1")
+    inner.set_finish_point("inner_2")
+
+    class State(TypedDict):
+        my_key: str
+
+    graph = StateGraph(State)
+    graph.add_node("inner", inner.compile(checkpointer=True))
+    graph.add_edge(START, "inner")
+    graph.add_conditional_edges(
+        "inner", lambda s: "inner" if s["my_key"].count("there") < 2 else END
+    )
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        app = graph.compile(checkpointer=checkpointer)
+
+        config = {"configurable": {"thread_id": "2"}}
+        assert [
+            c
+            async for c in app.astream(
+                {"my_key": ""},
+                config,
+                subgraphs=True,
+                checkpoint_during=checkpoint_during,
+            )
+        ] == [
+            (("inner",), {"inner_1": {"my_key": " got here", "my_other_key": ""}}),
+            (("inner",), {"inner_2": {"my_key": " and there"}}),
+            ((), {"inner": {"my_key": " got here and there"}}),
+            (
+                ("inner",),
+                {
+                    "inner_1": {
+                        "my_key": " got here",
+                        "my_other_key": " got here and there got here and there",
+                    }
+                },
+            ),
+            (("inner",), {"inner_2": {"my_key": " and there"}}),
+            (
+                (),
+                {
+                    "inner": {
+                        "my_key": " got here and there got here and there got here and there"
+                    }
+                },
+            ),
+        ]
+
+
+@NEEDS_CONTEXTVARS
+@pytest.mark.parametrize("checkpoint_during", [True, False])
+@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
+async def test_subgraph_checkpoint_true_interrupt(
+    checkpointer_name: str, checkpoint_during: bool
+) -> None:
+    # Define subgraph
+    class SubgraphState(TypedDict):
+        # note that none of these keys are shared with the parent graph state
+        bar: str
+        baz: str
+
+    def subgraph_node_1(state: SubgraphState):
+        baz_value = interrupt("Provide baz value")
+        return {"baz": baz_value}
+
+    def subgraph_node_2(state: SubgraphState):
+        return {"bar": state["bar"] + state["baz"]}
+
+    subgraph_builder = StateGraph(SubgraphState)
+    subgraph_builder.add_node(subgraph_node_1)
+    subgraph_builder.add_node(subgraph_node_2)
+    subgraph_builder.add_edge(START, "subgraph_node_1")
+    subgraph_builder.add_edge("subgraph_node_1", "subgraph_node_2")
+    subgraph = subgraph_builder.compile(checkpointer=True)
+
+    class ParentState(TypedDict):
+        foo: str
+
+    def node_1(state: ParentState):
+        return {"foo": "hi! " + state["foo"]}
+
+    async def node_2(state: ParentState, config: RunnableConfig):
+        response = await subgraph.ainvoke({"bar": state["foo"]})
+        return {"foo": response["bar"]}
+
+    builder = StateGraph(ParentState)
+    builder.add_node("node_1", node_1)
+    builder.add_node("node_2", node_2)
+    builder.add_edge(START, "node_1")
+    builder.add_edge("node_1", "node_2")
+
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        graph = builder.compile(checkpointer=checkpointer)
+        config = {"configurable": {"thread_id": "1"}}
+
+        assert await graph.ainvoke(
+            {"foo": "foo"}, config, checkpoint_during=checkpoint_during
+        ) == {"foo": "hi! foo"}
+        assert (await graph.aget_state(config, subgraphs=True)).tasks[
+            0
+        ].state.values == {"bar": "hi! foo"}
+        assert await graph.ainvoke(
+            Command(resume="baz"), config, checkpoint_during=checkpoint_during
+        ) == {"foo": "hi! foobaz"}
+
+
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_stream_subgraphs_during_execution(checkpointer_name: str) -> None:
     class InnerState(TypedDict):
@@ -5456,8 +5667,11 @@ async def test_stream_buffering_single_node(checkpointer_name: str) -> None:
         ]
 
 
+@pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_nested_graph_interrupts_parallel(checkpointer_name: str) -> None:
+async def test_nested_graph_interrupts_parallel(
+    checkpointer_name: str, checkpoint_during: bool
+) -> None:
     class InnerState(TypedDict):
         my_key: Annotated[str, operator.add]
         my_other_key: str
@@ -5506,11 +5720,13 @@ async def test_nested_graph_interrupts_parallel(checkpointer_name: str) -> None:
 
         # test invoke w/ nested interrupt
         config = {"configurable": {"thread_id": "1"}}
-        assert await app.ainvoke({"my_key": ""}, config, debug=True) == {
+        assert await app.ainvoke(
+            {"my_key": ""}, config, checkpoint_during=checkpoint_during
+        ) == {
             "my_key": " and parallel",
         }
 
-        assert await app.ainvoke(None, config, debug=True) == {
+        assert await app.ainvoke(None, config, checkpoint_during=checkpoint_during) == {
             "my_key": "got here and there and parallel and back again",
         }
 
@@ -5520,7 +5736,13 @@ async def test_nested_graph_interrupts_parallel(checkpointer_name: str) -> None:
         # test stream updates w/ nested interrupt
         config = {"configurable": {"thread_id": "2"}}
         assert [
-            c async for c in app.astream({"my_key": ""}, config, subgraphs=True)
+            c
+            async for c in app.astream(
+                {"my_key": ""},
+                config,
+                subgraphs=True,
+                checkpoint_during=checkpoint_during,
+            )
         ] == [
             # we got to parallel node first
             ((), {"outer_1": {"my_key": " and parallel"}}),
@@ -5530,7 +5752,12 @@ async def test_nested_graph_interrupts_parallel(checkpointer_name: str) -> None:
             ),
             ((), {"__interrupt__": ()}),
         ]
-        assert [c async for c in app.astream(None, config)] == [
+        assert [
+            c
+            async for c in app.astream(
+                None, config, checkpoint_during=checkpoint_during
+            )
+        ] == [
             {"outer_1": {"my_key": " and parallel"}, "__metadata__": {"cached": True}},
             {"inner": {"my_key": "got here and there"}},
             {"outer_2": {"my_key": " and back again"}},
@@ -5539,12 +5766,23 @@ async def test_nested_graph_interrupts_parallel(checkpointer_name: str) -> None:
         # test stream values w/ nested interrupt
         config = {"configurable": {"thread_id": "3"}}
         assert [
-            c async for c in app.astream({"my_key": ""}, config, stream_mode="values")
+            c
+            async for c in app.astream(
+                {"my_key": ""},
+                config,
+                stream_mode="values",
+                checkpoint_during=checkpoint_during,
+            )
         ] == [
             {"my_key": ""},
             {"my_key": " and parallel"},
         ]
-        assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        assert [
+            c
+            async for c in app.astream(
+                None, config, stream_mode="values", checkpoint_during=checkpoint_during
+            )
+        ] == [
             {"my_key": ""},
             {"my_key": "got here and there and parallel"},
             {"my_key": "got here and there and parallel and back again"},
@@ -5554,16 +5792,32 @@ async def test_nested_graph_interrupts_parallel(checkpointer_name: str) -> None:
         app = graph.compile(checkpointer=checkpointer, interrupt_before=["outer_1"])
         config = {"configurable": {"thread_id": "4"}}
         assert [
-            c async for c in app.astream({"my_key": ""}, config, stream_mode="values")
+            c
+            async for c in app.astream(
+                {"my_key": ""},
+                config,
+                stream_mode="values",
+                checkpoint_during=checkpoint_during,
+            )
         ] == [
             {"my_key": ""},
         ]
         # while we're waiting for the node w/ interrupt inside to finish
-        assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        assert [
+            c
+            async for c in app.astream(
+                None, config, stream_mode="values", checkpoint_during=checkpoint_during
+            )
+        ] == [
             {"my_key": ""},
             {"my_key": " and parallel"},
         ]
-        assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        assert [
+            c
+            async for c in app.astream(
+                None, config, stream_mode="values", checkpoint_during=checkpoint_during
+            )
+        ] == [
             {"my_key": ""},
             {"my_key": "got here and there and parallel"},
             {"my_key": "got here and there and parallel and back again"},
@@ -5573,23 +5827,42 @@ async def test_nested_graph_interrupts_parallel(checkpointer_name: str) -> None:
         app = graph.compile(checkpointer=checkpointer, interrupt_after=["outer_1"])
         config = {"configurable": {"thread_id": "5"}}
         assert [
-            c async for c in app.astream({"my_key": ""}, config, stream_mode="values")
+            c
+            async for c in app.astream(
+                {"my_key": ""},
+                config,
+                stream_mode="values",
+                checkpoint_during=checkpoint_during,
+            )
         ] == [
             {"my_key": ""},
             {"my_key": " and parallel"},
         ]
-        assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        assert [
+            c
+            async for c in app.astream(
+                None, config, stream_mode="values", checkpoint_during=checkpoint_during
+            )
+        ] == [
             {"my_key": ""},
             {"my_key": "got here and there and parallel"},
         ]
-        assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        assert [
+            c
+            async for c in app.astream(
+                None, config, stream_mode="values", checkpoint_during=checkpoint_during
+            )
+        ] == [
             {"my_key": "got here and there and parallel"},
             {"my_key": "got here and there and parallel and back again"},
         ]
 
 
+@pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_doubly_nested_graph_interrupts(checkpointer_name: str) -> None:
+async def test_doubly_nested_graph_interrupts(
+    checkpointer_name: str, checkpoint_during: bool
+) -> None:
     class State(TypedDict):
         my_key: str
 
@@ -5642,11 +5915,13 @@ async def test_doubly_nested_graph_interrupts(checkpointer_name: str) -> None:
 
         # test invoke w/ nested interrupt
         config = {"configurable": {"thread_id": "1"}}
-        assert await app.ainvoke({"my_key": "my value"}, config, debug=True) == {
+        assert await app.ainvoke(
+            {"my_key": "my value"}, config, checkpoint_during=checkpoint_during
+        ) == {
             "my_key": "hi my value",
         }
 
-        assert await app.ainvoke(None, config, debug=True) == {
+        assert await app.ainvoke(None, config, checkpoint_during=checkpoint_during) == {
             "my_key": "hi my value here and there and back again",
         }
 
@@ -5655,12 +5930,22 @@ async def test_doubly_nested_graph_interrupts(checkpointer_name: str) -> None:
         config = {
             "configurable": {"thread_id": "2", CONFIG_KEY_NODE_FINISHED: nodes.append}
         }
-        assert [c async for c in app.astream({"my_key": "my value"}, config)] == [
+        assert [
+            c
+            async for c in app.astream(
+                {"my_key": "my value"}, config, checkpoint_during=checkpoint_during
+            )
+        ] == [
             {"parent_1": {"my_key": "hi my value"}},
             {"__interrupt__": ()},
         ]
         assert nodes == ["parent_1", "grandchild_1"]
-        assert [c async for c in app.astream(None, config)] == [
+        assert [
+            c
+            async for c in app.astream(
+                None, config, checkpoint_during=checkpoint_during
+            )
+        ] == [
             {"child": {"my_key": "hi my value here and there"}},
             {"parent_2": {"my_key": "hi my value here and there and back again"}},
         ]
@@ -5678,13 +5963,21 @@ async def test_doubly_nested_graph_interrupts(checkpointer_name: str) -> None:
         assert [
             c
             async for c in app.astream(
-                {"my_key": "my value"}, config, stream_mode="values"
+                {"my_key": "my value"},
+                config,
+                stream_mode="values",
+                checkpoint_during=checkpoint_during,
             )
         ] == [
             {"my_key": "my value"},
             {"my_key": "hi my value"},
         ]
-        assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        assert [
+            c
+            async for c in app.astream(
+                None, config, stream_mode="values", checkpoint_during=checkpoint_during
+            )
+        ] == [
             {"my_key": "hi my value"},
             {"my_key": "hi my value here and there"},
             {"my_key": "hi my value here and there and back again"},
