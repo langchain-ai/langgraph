@@ -20,7 +20,7 @@ description = "High level compatibility layer for multiple asynchronous event lo
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
-markers = "python_version >= \"3.11\" and extra == \"inmem\""
+markers = "python_version >= \"3.11\""
 files = [
     {file = "anyio-4.8.0-py3-none-any.whl", hash = "sha256:b5011f270ab5eb0abf13385f851315585cc37ef330dd88e27ec3d34d651fd47a"},
     {file = "anyio-4.8.0.tar.gz", hash = "sha256:1d9fe889df5212298c0c0723fa20479d1b94883a2df44bd3897aa91083316f7a"},
@@ -59,7 +59,7 @@ description = "Python package for providing Mozilla's CA Bundle."
 optional = true
 python-versions = ">=3.6"
 groups = ["main"]
-markers = "python_version >= \"3.11\" and extra == \"inmem\""
+markers = "python_version >= \"3.11\""
 files = [
     {file = "certifi-2025.1.31-py3-none-any.whl", hash = "sha256:ca78db4565a652026a4db2bcdf68f2fb589ea80d0be70e03929ed730746b84fe"},
     {file = "certifi-2025.1.31.tar.gz", hash = "sha256:3d5da6925056f6f18f119200434a4780a94263f10d1c21d032a6f6b2baa20651"},
@@ -405,7 +405,7 @@ description = "A pure-Python, bring-your-own-I/O implementation of HTTP/1.1"
 optional = true
 python-versions = ">=3.7"
 groups = ["main"]
-markers = "python_version >= \"3.11\" and extra == \"inmem\""
+markers = "python_version >= \"3.11\""
 files = [
     {file = "h11-0.14.0-py3-none-any.whl", hash = "sha256:e3fe4ac4b851c468cc8363d500db52c2ead036020723024a109d37346efaa761"},
     {file = "h11-0.14.0.tar.gz", hash = "sha256:8f19fbbe99e72420ff35c00b27a34cb9937e902a8b810e2c88300c6f0a3b699d"},
@@ -418,7 +418,7 @@ description = "A minimal low-level HTTP client."
 optional = true
 python-versions = ">=3.8"
 groups = ["main"]
-markers = "python_version >= \"3.11\" and extra == \"inmem\""
+markers = "python_version >= \"3.11\""
 files = [
     {file = "httpcore-1.0.7-py3-none-any.whl", hash = "sha256:a3fff8f43dc260d5bd363d9f9cf1830fa3a458b332856f34282de498ed420edd"},
     {file = "httpcore-1.0.7.tar.gz", hash = "sha256:8551cb62a169ec7162ac7be8d4817d561f60e08eaa485234898414bb5a8a0b4c"},
@@ -441,7 +441,7 @@ description = "The next generation HTTP client."
 optional = true
 python-versions = ">=3.8"
 groups = ["main"]
-markers = "python_version >= \"3.11\" and extra == \"inmem\""
+markers = "python_version >= \"3.11\""
 files = [
     {file = "httpx-0.28.1-py3-none-any.whl", hash = "sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad"},
     {file = "httpx-0.28.1.tar.gz", hash = "sha256:75e98c5f16b0f35b567856f597f06ff2270a374470a5c2392242528e3e3e42fc"},
@@ -467,7 +467,7 @@ description = "Internationalized Domain Names in Applications (IDNA)"
 optional = true
 python-versions = ">=3.6"
 groups = ["main"]
-markers = "python_version >= \"3.11\" and extra == \"inmem\""
+markers = "python_version >= \"3.11\""
 files = [
     {file = "idna-3.10-py3-none-any.whl", hash = "sha256:946d195a0d259cbba61165e88e65941f16e9b36ea6ddb97f00452bae8b1287d3"},
     {file = "idna-3.10.tar.gz", hash = "sha256:12f65c9b470abda6dc35cf8e63cc574b1c52b11df2c86030af0ac09b01b13ea9"},
@@ -614,27 +614,27 @@ langgraph-sdk = ">=0.1.42,<0.2.0"
 
 [[package]]
 name = "langgraph-api"
-version = "0.0.42"
+version = "0.1.0"
 description = ""
 optional = true
 python-versions = "<4.0,>=3.11.0"
 groups = ["main"]
 markers = "python_version >= \"3.11\" and extra == \"inmem\""
 files = [
-    {file = "langgraph_api-0.0.42-py3-none-any.whl", hash = "sha256:19f69d9d39efde60a9bd3eeae6dc7dbe8d04b1b6fccf4ddf51d7e6b7187cc6ea"},
-    {file = "langgraph_api-0.0.42.tar.gz", hash = "sha256:a0a18545c73f9703d5d5907fc030e4a0acb79d1e6b79d4e38b3cac2bfb470e97"},
+    {file = "langgraph_api-0.1.0-py3-none-any.whl", hash = "sha256:93eb369849d5ea0dd6076f0a36fe0a9669415c46e95fcb28ccf30c73e13e5e01"},
+    {file = "langgraph_api-0.1.0.tar.gz", hash = "sha256:d02201d34172f3020af8f21c4560142b302474cee4a27f4335fbd950ab22f22f"},
 ]
 
 [package.dependencies]
 blockbuster = ">=1.5.24,<2.0.0"
 cloudpickle = ">=3.0.0,<4.0.0"
-cryptography = ">=43.0.3,<44.0.0"
+cryptography = ">=42.0.0,<45.0"
 httpx = ">=0.25.0"
 jsonschema-rs = ">=0.20.0,<0.30"
 langchain-core = ">=0.2.38,<0.4.0"
 langgraph = ">=0.2.56,<0.4.0"
 langgraph-checkpoint = ">=2.0.23,<3.0"
-langgraph-sdk = ">=0.1.59,<0.2.0"
+langgraph-sdk = ">=0.1.61,<0.2.0"
 langsmith = ">=0.1.63,<0.4.0"
 orjson = ">=3.9.7"
 pyjwt = ">=2.9.0,<3.0.0"
@@ -680,16 +680,29 @@ langchain-core = ">=0.2.43,<0.3.0 || >0.3.0,<0.3.1 || >0.3.1,<0.3.2 || >0.3.2,<0
 langgraph-checkpoint = ">=2.0.10,<3.0.0"
 
 [[package]]
+name = "langgraph-runtime-inmem"
+version = "0.0.1"
+description = "Inmem implementation for the LangGraph API server."
+optional = true
+python-versions = ">=3.11"
+groups = ["main"]
+markers = "python_version >= \"3.11\" and extra == \"inmem\""
+files = [
+    {file = "langgraph_runtime_inmem-0.0.1-py3-none-any.whl", hash = "sha256:a25ec8e3219f2fd60450de38412d24c83fbf0b2521c13871cc26ce9a68ead496"},
+    {file = "langgraph_runtime_inmem-0.0.1.tar.gz", hash = "sha256:144bf5217efec4969f7f9c5e8279d6914cc5133d4b1a19e466b4966fa05f00c5"},
+]
+
+[[package]]
 name = "langgraph-sdk"
-version = "0.1.60"
+version = "0.1.61"
 description = "SDK for interacting with LangGraph API"
 optional = true
 python-versions = "<4.0.0,>=3.9.0"
 groups = ["main"]
-markers = "python_version >= \"3.11\" and extra == \"inmem\""
+markers = "python_version >= \"3.11\""
 files = [
-    {file = "langgraph_sdk-0.1.60-py3-none-any.whl", hash = "sha256:953df85b0a6cc3a106f0496ce8f950a65d88b3ba8198c3b4bb58a54469b256a9"},
-    {file = "langgraph_sdk-0.1.60.tar.gz", hash = "sha256:7857a4a2a20a6a4c9934d1e7b5145eda92e3bc7286121813de2464d071050f88"},
+    {file = "langgraph_sdk-0.1.61-py3-none-any.whl", hash = "sha256:f2d774b12497c428862993090622d51e0dbc3f53e0cee3d74a13c7495d835cc6"},
+    {file = "langgraph_sdk-0.1.61.tar.gz", hash = "sha256:87dd1f07ab82da8875ac343268ece8bf5414632017ebc9d1cef4b523962fd601"},
 ]
 
 [package.dependencies]
@@ -851,7 +864,7 @@ description = "Fast, correct Python JSON library supporting dataclasses, datetim
 optional = true
 python-versions = ">=3.8"
 groups = ["main"]
-markers = "python_version >= \"3.11\" and extra == \"inmem\""
+markers = "python_version >= \"3.11\""
 files = [
     {file = "orjson-3.10.15-cp310-cp310-macosx_10_15_x86_64.macosx_11_0_arm64.macosx_10_15_universal2.whl", hash = "sha256:552c883d03ad185f720d0c09583ebde257e41b9521b74ff40e08b7dec4559c04"},
     {file = "orjson-3.10.15-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:616e3e8d438d02e4854f70bfdc03a6bcdb697358dbaa6bcd19cbe24d24ece1f8"},
@@ -1414,7 +1427,7 @@ description = "Sniff out which async library your code is running under"
 optional = true
 python-versions = ">=3.7"
 groups = ["main"]
-markers = "python_version >= \"3.11\" and extra == \"inmem\""
+markers = "python_version >= \"3.11\""
 files = [
     {file = "sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2"},
     {file = "sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc"},
@@ -1550,7 +1563,7 @@ files = [
     {file = "typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d"},
     {file = "typing_extensions-4.12.2.tar.gz", hash = "sha256:1a7ead55c7e559dd4dee8856e3a88b41225abfe1ce8df57b7c13915fe121ffb8"},
 ]
-markers = {main = "python_version >= \"3.11\" and extra == \"inmem\""}
+markers = {main = "python_version >= \"3.11\" and (python_version < \"3.13\" or extra == \"inmem\")"}
 
 [[package]]
 name = "urllib3"
@@ -1834,9 +1847,9 @@ cffi = {version = ">=1.11", markers = "platform_python_implementation == \"PyPy\
 cffi = ["cffi (>=1.11)"]
 
 [extras]
-inmem = ["langgraph-api", "python-dotenv"]
+inmem = ["langgraph-api", "langgraph-runtime-inmem", "python-dotenv"]
 
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.9.0,<4.0"
-content-hash = "4a45d739795019ae00e18ba8b0d366209deca9c5a5e65e9f387e5cf1d5aef187"
+content-hash = "afc2f8776b4b6144bd1197df49ba34089889e2a1110b8470d8f1b212e0b08380"
