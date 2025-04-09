@@ -1,9 +1,14 @@
+import datetime
+import decimal
 import enum
 import functools
 import gc
+import ipaddress
 import json
 import logging
 import operator
+import pathlib
+import re
 import threading
 import time
 import uuid
@@ -12,6 +17,7 @@ from collections import Counter, deque
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from enum import Enum
 from random import randrange
 from typing import (
     Annotated,
@@ -2775,6 +2781,9 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
     checkpointer_name: str,
 ) -> None:
     from pydantic import BaseModel, ConfigDict, Field, ValidationError
+    from pydantic.v1 import BaseModel as BaseModelV1
+
+    IS_V1 = BaseModel is BaseModelV1
 
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
     setup = mocker.Mock()
@@ -2813,14 +2822,28 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
     class InnerObject(BaseModel):
         yo: int
 
-    class State(BaseModel):
-        model_config = ConfigDict(arbitrary_types_allowed=True)
+    if IS_V1:
 
-        query: str
-        inner: Annotated[InnerObject, lambda x, y: y]
-        answer: Optional[str] = None
-        docs: Annotated[list[str], sorted_add]
-        client: Annotated[httpx.Client, Context(make_httpx_client)]
+        class State(BaseModel):
+            class Config:
+                arbitrary_types_allowed = True
+
+            query: str
+            inner: Annotated[InnerObject, lambda x, y: y]
+            answer: Optional[str] = None
+            docs: Annotated[list[str], sorted_add]
+            client: Annotated[httpx.Client, Context(make_httpx_client)]
+
+    else:
+
+        class State(BaseModel):
+            model_config = ConfigDict(arbitrary_types_allowed=True)
+
+            query: str
+            inner: Annotated[InnerObject, lambda x, y: y]
+            answer: Optional[str] = None
+            docs: Annotated[list[str], sorted_add]
+            client: Annotated[httpx.Client, Context(make_httpx_client)]
 
     class StateUpdate(BaseModel):
         query: Optional[str] = None
@@ -3079,14 +3102,48 @@ def test_nested_pydantic_models(version: str) -> None:
     """Test that nested Pydantic models are properly constructed from leaf nodes up."""
 
     # Define nested Pydantic models
+    # Import necessary modules
+
     if version == "v1":
-        from pydantic.v1 import BaseModel, Field
+        from pydantic.v1 import (  # type: ignore
+            BaseModel,
+            ByteSize,
+            Field,
+            SecretStr,
+            confloat,
+            conint,
+            conlist,
+            constr,
+        )
     else:
-        from pydantic import BaseModel, Field
+        from pydantic import (  # type: ignore
+            BaseModel,
+            ByteSize,
+            Field,
+            SecretStr,
+            confloat,
+            conint,
+            conlist,
+            constr,
+        )
+        from pydantic.v1 import BaseModel as BaseModelV1
+
+        if BaseModel is BaseModelV1:
+            pytest.skip("Cannot test pydantic v2 using installed version < 2")
 
     class NestedModel(BaseModel):
         value: int
         name: str
+
+    # For constrained types
+    PositiveInt = Annotated[int, Field(gt=0)]
+    NonNegativeFloat = Annotated[float, Field(ge=0)]
+
+    # Enum type
+    class UserRole(Enum):
+        ADMIN = "admin"
+        USER = "user"
+        GUEST = "guest"
 
     # Forward reference model
     class RecursiveModel(BaseModel):
@@ -3108,12 +3165,19 @@ def test_nested_pydantic_models(version: str) -> None:
         name: str
         friends: list[str] = Field(default_factory=list)  # IDs of friends
 
+    if version == "v2":
+        conlist_type = conlist(item_type=int, min_length=2, max_length=5)
+    else:
+        conlist_type = conlist(item_type=int, min_items=2, max_items=5)
+
     class State(BaseModel):
         # Basic nested model tests
         top_level: str
+        auuid: uuid.UUID
         nested: NestedModel
         optional_nested: Annotated[Optional[NestedModel], lambda x, y: y, "Foo"]
         dict_nested: dict[str, NestedModel]
+        simple_str_list: list[str]
         list_nested: Annotated[
             Union[dict, list[dict[str, NestedModel]]], lambda x, y: (x or []) + [y]
         ]
@@ -3130,15 +3194,51 @@ def test_nested_pydantic_models(version: str) -> None:
         # Cyclic reference test
         people: dict[str, Person]  # Map of ID -> Person
 
+        # Rich type adapters
+        ip_address: ipaddress.IPv4Address
+        ip_address_v6: ipaddress.IPv6Address
+        amount: decimal.Decimal
+        file_path: pathlib.Path
+        timestamp: datetime.datetime
+        date_only: datetime.date
+        time_only: datetime.time
+        duration: datetime.timedelta
+        immutable_set: frozenset[int]
+        binary_data: bytes
+        pattern: re.Pattern
+        secret: SecretStr
+        file_size: ByteSize
+
+        # Constrained types
+        positive_value: PositiveInt
+        non_negative: NonNegativeFloat
+        limited_string: constr(min_length=3, max_length=10)
+        bounded_int: conint(ge=10, le=100)
+        restricted_float: confloat(gt=0, lt=1)
+        required_list: conlist_type
+
+        # Enum & Literal
+        role: UserRole
+        status: Literal["active", "inactive", "pending"]
+
+        # Annotated & NewType
+        validated_age: Annotated[int, Field(gt=0, lt=120)]
+
+        # Generic containers with validators
+        decimal_list: List[decimal.Decimal]
+        id_tuple: tuple[uuid.UUID, uuid.UUID]
+
     inputs = {
         # Basic nested models
         "top_level": "initial",
+        "auuid": str(uuid.uuid4()),
         "nested": {"value": 42, "name": "test"},
         "optional_nested": {"value": 10, "name": "optional"},
         "dict_nested": {"a": {"value": 5, "name": "a"}},
         "list_nested": [{"a": {"value": 6, "name": "b"}}],
         "tuple_nested": ["tuple-key", {"value": 7, "name": "tuple-value"}],
         "tuple_list_nested": [[1, {"value": 8, "name": "tuple-in-list"}]],
+        "simple_str_list": ["siss", "boom", "bah"],
         "complex_tuple": [
             "complex",
             {"nested": [9, {"value": 10, "name": "deep"}]},
@@ -3165,6 +3265,35 @@ def test_nested_pydantic_models(version: str) -> None:
                 "friends": ["1", "2"],  # Charlie is friends with Alice and Bob
             },
         },
+        # Rich type adapters
+        "ip_address": "192.168.1.1",
+        "ip_address_v6": "2001:db8::1",
+        "amount": "123.45",
+        "file_path": "/tmp/test.txt",
+        "timestamp": "2025-04-07T10:58:04",
+        "date_only": "2025-04-07",
+        "time_only": "10:58:04",
+        "duration": 3600,  # seconds
+        "immutable_set": [1, 2, 3, 4],
+        "binary_data": b"hello world",
+        "pattern": "^test$",
+        "secret": "password123",
+        "file_size": 1024,
+        # Constrained types
+        "positive_value": 42,
+        "non_negative": 0.0,
+        "limited_string": "test",
+        "bounded_int": 50,
+        "restricted_float": 0.5,
+        "required_list": [10, 20, 30],
+        # Enum & Literal
+        "role": "admin",
+        "status": "active",
+        # Annotated & NewType
+        "validated_age": 30,
+        # Generic containers with validators
+        "decimal_list": ["10.5", "20.75", "30.25"],
+        "id_tuple": [str(uuid.uuid4()), str(uuid.uuid4())],
     }
 
     update = {"top_level": "updated", "nested": {"value": 100, "name": "updated"}}
@@ -3172,7 +3301,42 @@ def test_nested_pydantic_models(version: str) -> None:
     expected = State(**inputs)
 
     def node_fn(state: State) -> dict:
+        # Basic assertions
+        assert isinstance(state.auuid, uuid.UUID)
         assert state == expected
+
+        # Rich type assertions
+        assert isinstance(state.ip_address, ipaddress.IPv4Address)
+        assert isinstance(state.ip_address_v6, ipaddress.IPv6Address)
+        assert isinstance(state.amount, decimal.Decimal)
+        assert isinstance(state.file_path, pathlib.Path)
+        assert isinstance(state.timestamp, datetime.datetime)
+        assert isinstance(state.date_only, datetime.date)
+        assert isinstance(state.time_only, datetime.time)
+        assert isinstance(state.duration, datetime.timedelta)
+        assert isinstance(state.immutable_set, frozenset)
+        assert isinstance(state.binary_data, bytes)
+        assert isinstance(state.pattern, re.Pattern)
+
+        # Constrained types
+        assert state.positive_value > 0
+        assert state.non_negative >= 0
+        assert 3 <= len(state.limited_string) <= 10
+        assert 10 <= state.bounded_int <= 100
+        assert 0 < state.restricted_float < 1
+        assert 2 <= len(state.required_list) <= 5
+
+        # Enum & Literal
+        assert state.role == UserRole.ADMIN
+        assert state.status == "active"
+
+        # Annotated
+        assert 0 < state.validated_age < 120
+
+        # Generic containers
+        assert len(state.decimal_list) == 3
+        assert len(state.id_tuple) == 2
+
         return update
 
     builder = StateGraph(State)

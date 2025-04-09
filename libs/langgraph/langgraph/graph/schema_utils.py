@@ -1,3 +1,4 @@
+import functools
 import logging
 import weakref
 from inspect import isclass
@@ -16,6 +17,8 @@ from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import Annotated
 
+__all__ = ["SchemaCoercionMapper"]
+
 logger = logging.getLogger(__name__)
 
 
@@ -25,54 +28,60 @@ _cache: weakref.WeakKeyDictionary[Type[Any], dict[int, "SchemaCoercionMapper"]] 
 
 
 class SchemaCoercionMapper:
+    """Lightweight coercion of *dict* → *BaseModel* instances."""
+
     def __new__(
         cls,
         schema: Type[Any],
         type_hints: Optional[dict[str, Any]] = None,
+        *,
         max_depth: int = 12,
     ) -> "SchemaCoercionMapper":
-        if schema not in _cache:
-            _cache[schema] = {}
-        if max_depth in _cache[schema]:
-            return _cache[schema][max_depth]
-
+        by_depth = _cache.setdefault(schema, {})
+        if max_depth in by_depth:
+            return by_depth[max_depth]
         inst = super().__new__(cls)
-        _cache[schema][max_depth] = inst
+        by_depth[max_depth] = inst
         return inst
 
     def __init__(
         self,
         schema: Type[Any],
         type_hints: Optional[dict[str, Any]] = None,
+        *,
         max_depth: int = 12,
-    ):
-        if hasattr(self, "_inited"):
+    ) -> None:
+        if hasattr(self, "_initialised"):
             return
-        self._inited = True
+        self._initialised = True
+
         self.schema = schema
+        self.max_depth = max_depth
+
         self.type_hints = (
             type_hints
             if type_hints is not None
             else get_type_hints(schema, localns={schema.__name__: schema})
         )
-        self.max_depth = max_depth
 
-        if issubclass(schema, BaseModel):
-            self._fields = {
-                n: self.type_hints.get(n, f.annotation)
-                for n, f in schema.model_fields.items()
-            }
-            self._construct: Callable[..., Any] = schema.model_construct
-
-        elif issubclass(schema, BaseModelV1):
+        if issubclass(schema, BaseModelV1):
             self._fields = {
                 n: self.type_hints.get(n, f.annotation)
                 for n, f in schema.__fields__.items()
             }
             self._construct = schema.construct
+
+        elif issubclass(schema, BaseModel):
+            self._fields = {
+                n: self.type_hints.get(n, f.annotation)
+                for n, f in schema.model_fields.items()
+            }
+            self._construct: Callable[..., Any] = schema.model_construct  # type: ignore
+
         else:
-            raise TypeError("Schema is neither valid Pydantic v1 nor v2 model.")
-        self._field_coercers: Optional[dict[str, Callable[[Any, Any], Any]]] = None
+            raise TypeError("Schema is neither a Pydantic v1 nor v2 model.")
+
+        self._field_coercers: Optional[dict[str, Callable[[Any, int], Any]]] = None
 
     def __call__(self, input_data: Any, depth: Optional[int] = None) -> Any:
         return self.coerce(input_data, depth)
@@ -82,45 +91,51 @@ class SchemaCoercionMapper:
             depth = self.max_depth
         if not isinstance(input_data, dict) or depth <= 0:
             return input_data
-        processed = {}
+
         if self._field_coercers is None:
             self._field_coercers = {
                 n: self._build_coercer(t, depth - 1) for n, t in self._fields.items()
             }
+
+        processed: dict[str, Any] = {}
         for k, v in input_data.items():
             fn = self._field_coercers.get(k)
             processed[k] = fn(v, depth - 1) if fn else v
         return self._construct(**processed)
 
     def _build_coercer(
-        self, field_type: Any, depth: int, throw: bool = False
+        self, field_type: Any, depth: int, *, throw: bool = False
     ) -> Callable[[Any, Any], Any]:
         if depth == 0:
             return self._passthrough
+
         origin = get_origin(field_type)
+
+        if (field_type in _IDENTITY_TYPES) or (origin in _IDENTITY_TYPES):
+            return self._passthrough
 
         if origin is Annotated:
             real_type, *_ = get_args(field_type)
             sub = self._build_coercer(real_type, depth - 1)
             return lambda v, d: sub(v, d)
+
         if isclass(field_type):
+            # This is needed bcs. of issubclass issues on older versions of python
             is_class_ = True
             try:
-                is_base_model = issubclass(field_type, BaseModel)
+                is_bm_v2 = issubclass(field_type, BaseModel)
             except TypeError:
+                # python < 3.11 issue.
                 is_class_ = False
-                is_base_model = False
+                is_bm_v2 = False
+            if is_bm_v2 or (is_class_ and issubclass(field_type, BaseModelV1)):
+                mapper = SchemaCoercionMapper(field_type, max_depth=depth - 1)
+                return lambda v, d: mapper.coerce(v, d) if isinstance(v, dict) else v
 
-            if is_base_model:
-                mapper = SchemaCoercionMapper(field_type, max_depth=depth - 1)
-                return lambda v, d: mapper.coerce(v, d) if isinstance(v, dict) else v
-            if is_class_ and issubclass(field_type, BaseModelV1):
-                mapper = SchemaCoercionMapper(field_type, max_depth=depth - 1)
-                return lambda v, d: mapper.coerce(v, d) if isinstance(v, dict) else v
-        if origin is list or field_type is list:
+        if origin is list:
             args = get_args(field_type)
             if len(args) != 1:
-                return lambda v, d: v
+                return self._passthrough
             sub = self._build_coercer(args[0], depth - 1)
 
             def list_coercer(v: Any, d: Any) -> Any:
@@ -129,15 +144,21 @@ class SchemaCoercionMapper:
                 return [sub(x, d - 1) for x in v]
 
             return list_coercer
+
         if origin is set or field_type is set:
             args = get_args(field_type)
-            if len(args) != 1:
-                return lambda v, d: v
-            sub = self._build_coercer(args[0], depth - 1)
+            if len(args) > 1:
+                return self._passthrough
+            elif len(args) == 1:
+                sub = self._build_coercer(args[0], depth - 1)
+            else:
+                sub = None  # type: ignore
 
             def set_coercer(v: Any, d: Any) -> Any:
                 if not isinstance(v, (list, tuple, set)):
                     return v
+                if sub is None:
+                    return set(v)
                 return {sub(x, d - 1) for x in v}
 
             return set_coercer
@@ -165,20 +186,19 @@ class SchemaCoercionMapper:
             return dict_coercer
 
         if origin is tuple:
-            targs = get_args(field_type)
-            if not targs:
-                return lambda v, d: v
-            subs = [self._build_coercer(a, depth - 1) for a in targs]
+            elem_types = get_args(field_type)
+            if not elem_types:
+                return self._passthrough
+            subs = [self._build_coercer(t, depth - 1) for t in elem_types]
+            return lambda v, d: (
+                tuple(
+                    subs[i](v[i] if i < len(v) else None, d - 1)
+                    for i in range(len(subs))
+                )
+                if isinstance(v, (list, tuple))
+                else v
+            )
 
-            def tuple_coercer(v: Any, d: Any) -> Any:
-                if not isinstance(v, (list, tuple)):
-                    return v
-                out = []
-                for i, sp in enumerate(subs):
-                    out.append(sp(v[i] if i < len(v) else None, d - 1))
-                return tuple(out)
-
-            return tuple_coercer
         if origin is Union:
             uargs = get_args(field_type)
             subs, none_in_union = [], False
@@ -204,7 +224,97 @@ class SchemaCoercionMapper:
                 return v
 
             return union_coercer
-        return self._passthrough
 
-    def _passthrough(self, v: Any, d: Any) -> Any:
+        adapter_fn = _get_adapter(field_type)
+        return lambda v, _d: adapter_fn(v)
+
+    @staticmethod
+    def _passthrough(v: Any, _d: Any) -> Any:  # noqa: D401
         return v
+
+
+_adapter_cache: dict[Any, Callable[[Any], Any]] = {}
+
+
+_IDENTITY_TYPES: tuple[type[Any], ...] = (
+    int,
+    float,
+    str,
+    bool,
+    bytes,
+    bytearray,
+    complex,
+    memoryview,
+    type(None),
+)
+
+try:
+    # Pydantic v2.
+    from pydantic import TypeAdapter
+
+    try:
+        import pydantic.v1.types as v1_types_
+        from pydantic.v1 import parse_obj_as
+
+        v1_types = tuple(
+            v for k, v in vars(v1_types_).items() if k in v1_types_.__all__
+        )
+    except ImportError:
+        v1_types = ()
+
+        def parse_obj_as(tp: Any, v: Any) -> Any:  # type: ignore
+            return v
+
+    try:
+        from pydantic.v1 import parse_obj_as
+        from pydantic.v1.main import create_model
+    except ImportError:
+        create_model = None  # type: ignore
+
+    def _get_v1_parser(tp: Any) -> Any:
+        if create_model is not None:
+            try:
+                parser = create_model(
+                    f"ParsingModel[{tp}]",
+                    __root__=(tp, ...),
+                )
+                return lambda v: parser(__root__=v).__root__  # type: ignore
+            except RuntimeError:
+                return lambda v: v
+        return lambda v: parse_obj_as(tp, v)
+
+    @functools.lru_cache(maxsize=2048)
+    def _adapter_for(tp: Any) -> Callable[[Any], Any]:  # noqa: D401
+        if tp in v1_types:
+            return _get_v1_parser(tp)
+        try:
+            return TypeAdapter(
+                tp, config={"arbitrary_types_allowed": True}
+            ).validate_python
+        except TypeError:
+            # Delayed classes like ConstrainedList
+            return _get_v1_parser(tp)
+
+except ImportError:
+    # Pydantic V1
+    from pydantic.v1.main import create_model
+
+    @functools.lru_cache(maxsize=2048)
+    def _adapter_for(tp: Any) -> Callable[[Any], Any]:  # noqa: D401
+        try:
+            parser = create_model(
+                f"ParsingModel[{tp}]",
+                __root__=(tp, ...),
+            )
+            return lambda v: parser(__root__=v).__root__  # type: ignore
+        except RuntimeError:
+            return lambda v: v
+
+
+def _get_adapter(tp: Any) -> Callable[[Any], Any]:
+    try:
+        return _adapter_cache[tp]
+    except KeyError:
+        fn = _adapter_for(tp)
+        _adapter_cache[tp] = fn
+        return fn
