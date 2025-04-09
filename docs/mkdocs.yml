@@ -228,6 +228,7 @@ nav:
                 - cloud/how-tos/use_stream_react.md
                 - cloud/how-tos/generative_ui_react.md
                 - cloud/how-tos/use_copilotkit_react.md
+                - cloud/how-tos/use_langgraph_interrupt.md
             - Human-in-the-loop:
                 - cloud/how-tos/human_in_the_loop_breakpoint.md
                 - cloud/how-tos/human_in_the_loop_user_input.md

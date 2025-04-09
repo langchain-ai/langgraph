@@ -270,6 +270,7 @@ With LangGraph Platform you can integrate LangGraph agents into your React appli
 - [How to integrate LangGraph into your React application](../cloud/how-tos/use_stream_react.md)
 - [How to implement Generative User Interfaces with LangGraph](../cloud/how-tos/generative_ui_react.md)
 - [How to use LangGraph with CopilotKit in React](../cloud/how-tos/use_copilotkit_react.md)
+- [How to Build Interruptible Agent with LangGraph and Copilotkit](../cloud/how-tos/use_langgraph_interrupt.md)
 
 ### Human-in-the-loop {#human-in-the-loop-1}
 
