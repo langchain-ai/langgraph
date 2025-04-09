@@ -35,7 +35,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          poetry install --with test
+          poetry install --with test --no-root
           poetry run pip install jupyter
 
       - name: Start services
