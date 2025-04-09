@@ -8,12 +8,12 @@ Streaming is key to building responsive agent apps. There are a few types of dat
 
 ## Streaming agent progress
 
-The easiest way to stream agent progress is by using `.stream` (or `.astream`) method with [`stream_mode="updates"`](../../how-tos/streaming#updates). This will emit a new event after every agent step. For example, in a tool-calling loop with a single tool call you should see the following updates:
+To stream agent progress, you can call `agent.stream()` (or `.astream()`) method with [`stream_mode="updates"`](../../how-tos/streaming#updates). This will emit a new event after every agent step. For example, in a tool-calling loop with a single tool call you should see the following updates:
 
 ```
 - update from LLM-calling node, returning an AI message with tool calls
 - update from tool node, returning a tool message with tool execution results
-- update from LLM-calling mode, returning an AI message with a final response
+- update from LLM-calling node, returning an AI message with a final response
 ```
 
 === "Sync"
@@ -51,6 +51,8 @@ The easiest way to stream agent progress is by using `.stream` (or `.astream`) m
 See all streaming modes supported by LangGraph [here](../how-tos/index.md#streaming).
 
 ## Streaming LLM tokens
+
+To stream LLM tokens, switch the streaming mode to `stream_mode="messages"`:
 
 === "Sync"
 
@@ -101,6 +103,7 @@ To stream updates from inside the tools as they are executed, you can use LangGr
     from langgraph.config import get_stream_writer
 
     def get_weather(city: str) -> str:
+        """Get weather for a given city."""
         # highlight-next-line
         writer = get_stream_writer()
         # stream any arbitrary data
@@ -114,7 +117,7 @@ To stream updates from inside the tools as they are executed, you can use LangGr
     )
 
     for chunk in agent.stream(
-        inputs,
+        {"messages": "what is the weather in sf"},
         # highlight-next-line
         stream_mode="custom"
     ):
@@ -141,7 +144,7 @@ To stream updates from inside the tools as they are executed, you can use LangGr
     )
 
     async for chunk in agent.astream(
-        inputs,
+        {"messages": "what is the weather in sf"},
         # highlight-next-line
         stream_mode="custom"
     ):

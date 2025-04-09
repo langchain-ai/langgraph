@@ -1,5 +1,9 @@
 # Agents
 
+An agent is a system that uses an LLM to decide the control flow of an application. The most common form of an agent is a tool-calling agent: an LLM with tools that calls those tools in a loop.
+
+In LangGraph you can create tool-calling agents with the prebuilt [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent].
+
 ## Basic setup
 
 The most important things to configure when you create an agent are:
@@ -25,6 +29,22 @@ agent = create_react_agent(
 
 # Run the agent
 agent.invoke({"messages": "what is the weather in sf"})
+```
+
+## Customizing models
+
+If you want to customize the model parameters, you can pass a `ChatModel` instance as `model`:
+
+```python
+from langchain_anthropic import ChatAnthropic
+# highlight-next-line
+model = ChatAnthropic(model="claude-3-7-sonnet-latest", temperature=0.7)
+
+agent = create_react_agent(
+    # highlight-next-line
+    model=model,
+    tools=[get_weather],
+)
 ```
 
 ## Dynamic instructions
@@ -58,7 +78,7 @@ See more on how to manage context in your agent [here](./context.md).
 
 ## Structured output
 
-By default the final agent response is simply an AI message with text content. However, you might want to return agent's response in a structured output that conforms to a given schema. To do so, you can provide the desired output schema via `response_format` parameter. The schema can be a Pydantic model or a `TypedDict` object:
+By default, the final agent response is simply an AI message with text content. However, you might want to return the agent's response in a structured output that conforms to a given schema. To do so, you can provide the desired output schema via the `response_format` parameter. The schema can be a Pydantic model or a `TypedDict` object:
 
 ```python
 from langgraph.prebuilt.chat_agent_executor import AgentState
@@ -80,22 +100,5 @@ response = agent.invoke({"messages": "what is the weather in sf"})
 # highlight-next-line
 response["structured_response"]
 ```
-
 !!! Note
     To return structured output, `create_react_agent` makes an additional LLM call at the end of the tool-calling loop.
-
-## Customizing models
-
-If you want to customize the model parameters, you can pass a `ChatModel` instance as `model`:
-
-```python
-from langchain_anthropic import ChatAnthropic
-# highlight-next-line
-model = ChatAnthropic(model="claude-3-7-sonnet-latest", temperature=0.7)
-
-agent = create_react_agent(
-    # highlight-next-line
-    model=model,
-    tools=[get_weather],
-)
-```

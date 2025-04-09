@@ -1,9 +1,21 @@
 # Context
 
-You can provide context to the agent in two ways:
+The **most important** thing when building agents is how the information is propagated inside an agent (and [between agents](./handoffs.md)). During agent execution, the underlying LLM only has access to a list of messages. These include:
 
-- via the config. You can think of this as static data that is passed once on agent invocation and is propagated through the agent execution
-- via the agent graph [state](../concepts/low_level.md#state). You can think of this as any data that can be dynamically updated from inside the agent. For example, an agent can call a tool that looks up some data and writes that data to its state.
+- user's input message
+- LLM's responses requesting to call tools
+- tool execution results
+- LLM's final responses
+
+However, agentic applications require more complex information beyond messages:
+
+- you might want to pass additional, non-message information to the agent's tools and prompt (e.g., user information, authorization, DB connections, etc.)
+- you might want the agent to *update* some information, to be used in the next iterations of the tool-calling loop or in the next conversation turns
+
+We will refer to this information broadly as **context**. You can provide this context to an agent in two ways:
+
+- [via a config](#context-passing-via-config): use this to pass static data that is passed once on agent invocation and is propagated throughout the agent execution
+- [via agent state](#context-passing-via-state): use this to pass any data that can be dynamically updated from inside the agent. For example, an agent can call a tool that looks up some data and writes that data to its [state](../concepts/low_level.md#state).
 
 ## Context passing via config
 
@@ -42,7 +54,7 @@ agent.invoke({
 
 ## Accessing context in prompt
 
-You might want to include the context information in agent's system prompt. For example, you might want to pass user information. To do so, you can define a prompt as a function. This function takes the agent state and config and returns a list of messages to send to the chat model.
+You might want to include context in agent's system prompt (for example, user information). To do so, you can define a prompt as a function. This function takes the agent state and config and returns a list of messages to send to the chat model:
 
 ```python
 from langgraph.prebuilt.chat_agent_executor import AgentState
@@ -168,6 +180,6 @@ agent = create_react_agent(
 agent.invoke(
     {"messages": "look up user information"},
     # highlight-next-line
-    config={"configurable": {"user_id": "user_id"}}
+    config={"configurable": {"user_id": "user_123"}}
 )
 ```

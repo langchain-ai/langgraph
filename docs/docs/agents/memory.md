@@ -1,11 +1,13 @@
 # Memory
 
-There are two types of memory that are relevant when working with the agents:
+There are two types of memory that are relevant when working with agents:
 
 - short-term memory — memory of all of the interactions (e.g., messages) in the same conversation or session (**thread**). This memory is used to enable multi-turn conversations with an agent.
 - long-term memory — memory available across different conversations or sessions (**cross-thread**). Useful for storing facts about users, past agent actions, custom agent instructions and more.
 
 ## Short-term memory
+
+To enable multi-turn conversations with an agent, you can provide a [checkpointer](../concepts/persistence.md) when creating an agent:
 
 ```python
 from langgraph.prebuilt import create_react_agent
@@ -41,6 +43,8 @@ ny_response = agent.invoke(
 ```
 
 ## Long-term memory
+
+To access and update long-term memory from inside an agent, you can provide a [store](../how-tos/cross-thread-persistence.ipynb) when creating an agent:
 
 ### Accessing
 
