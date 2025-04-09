@@ -4,7 +4,7 @@ on:
   workflow_call:
 
 env:
-  POETRY_VERSION: "1.7.1"
+  POETRY_VERSION: "2.1.2"
 
 jobs:
   build:
@@ -71,4 +71,3 @@ jobs:
         working-directory: libs/cli/js-examples
         run: |
           langgraph build -t langgraph-test-e
-  

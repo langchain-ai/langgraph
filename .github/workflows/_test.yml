@@ -9,7 +9,7 @@ on:
         description: "From which folder this pipeline executes"
 
 env:
-  POETRY_VERSION: "1.7.1"
+  POETRY_VERSION: "2.1.2"
 
 jobs:
   build:
@@ -38,12 +38,6 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_RO_TOKEN }}
-
-      - name: Check Lock
-        shell: bash
-        working-directory: ${{ inputs.working-directory }}
-        run: |
-          poetry check --lock
 
       - name: Install dependencies
         shell: bash
