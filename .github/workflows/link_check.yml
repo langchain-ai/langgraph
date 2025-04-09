@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 env:
-  POETRY_VERSION: "1.7.1"
+  POETRY_VERSION: "2.1.2"
 
 jobs:
   markdown-link-check:
@@ -42,8 +42,8 @@ jobs:
 
       - name: Check README.md is in sync
         run: |
-            if ! diff -q README.md libs/langgraph/README.md >/dev/null; then
-            echo "README.md is out of sync with libs/langgraph/README.md"
-            diff -C 3 README.md libs/langgraph/README.md
-            exit 1
-            fi
+          if ! diff -q README.md libs/langgraph/README.md >/dev/null; then
+          echo "README.md is out of sync with libs/langgraph/README.md"
+          diff -C 3 README.md libs/langgraph/README.md
+          exit 1
+          fi
