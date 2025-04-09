@@ -1,5 +1,6 @@
 import asyncio
 import threading
+import warnings
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager, contextmanager
 from typing import Any, Optional
@@ -150,7 +151,7 @@ def _dump_blobs(
     checkpoint_ns: str,
     values: dict[str, Any],
     versions: ChannelVersions,
-) -> list[tuple[str, str, str, str, str, Optional[bytes]]]:
+) -> list[tuple[str, str, str, str, Optional[bytes]]]:
     if not versions:
         return []
 
@@ -188,6 +189,12 @@ class ShallowPostgresSaver(BasePostgresSaver):
         pipe: Optional[Pipeline] = None,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
+        warnings.warn(
+            "ShallowPostgresSaver is deprecated as of version 2.0.20 and will be removed in 3.0.0. "
+            "Use PostgresSaver instead, and invoke the graph with `graph.invoke(..., checkpoint_during=False)`.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         super().__init__(serde=serde)
         if isinstance(conn, ConnectionPool) and pipe is not None:
             raise ValueError(
@@ -528,6 +535,12 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         pipe: Optional[AsyncPipeline] = None,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
+        warnings.warn(
+            "AsyncShallowPostgresSaver is deprecated as of version 2.0.20 and will be removed in 3.0.0. "
+            "Use AsyncPostgresSaver instead, and invoke the graph with `await graph.ainvoke(..., checkpoint_during=False)`.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         super().__init__(serde=serde)
         if isinstance(conn, AsyncConnectionPool) and pipe is not None:
             raise ValueError(
