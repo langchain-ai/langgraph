@@ -1,16 +1,14 @@
 # Agents
 
-An agent is a system that uses an LLM to decide the control flow of an application. The most common form of an agent is a tool-calling agent: an LLM with tools that calls those tools in a loop.
+An agent is a system that uses an LLM to control the flow of an application. The most common form of an agent is an LLM that calls tools in a loop.
 
-In LangGraph you can create tool-calling agents with the prebuilt [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent].
+Use [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent] to create a tool-calling agent.
 
 ## Basic setup
 
 The most important things to configure when you create an agent are:
 
-- `model`: a [chat model](https://python.langchain.com/docs/concepts/chat_models/) that the agent will use. Can be one of the following:
-    - a string `<model_provider>:<model_name>` (e.g., `openai:gpt-4o`). See [docs](https://python.langchain.com/api_reference/langchain/chat_models/langchain.chat_models.base.init_chat_model.html) for more information about supported models.
-    - a `ChatModel` instance, e.g., [`ChatOpenAI`](https://python.langchain.com/docs/integrations/chat/openai/), [`ChatAnthropic`](https://python.langchain.com/docs/integrations/chat/anthropic/), etc.
+- `model`: a [chat model](https://python.langchain.com/docs/concepts/chat_models/) that the agent will use.
 - `tools`: a list of [tools](https://python.langchain.com/docs/concepts/tools/) for the agent to use.
 - `prompt`: string or system message with instructions for the agent.
 
@@ -31,7 +29,7 @@ agent = create_react_agent(
 agent.invoke({"messages": "what is the weather in sf"})
 ```
 
-## Customizing models
+## Customize models
 
 If you want to customize the model parameters, you can pass a `ChatModel` instance as `model`:
 
@@ -47,9 +45,9 @@ agent = create_react_agent(
 )
 ```
 
-## Dynamic instructions
+## Customize prompt
 
-You might want to construct the system prompt dynamically. For example, you might want to include some information from the agent context (e.g., user information). To do so, you can define a prompt as a function:
+You can include context (e.g., user information) in the prompt:
 
 ```python
 from langgraph.prebuilt.chat_agent_executor import AgentState
@@ -78,7 +76,7 @@ See more on how to manage context in your agent [here](./context.md).
 
 ## Structured output
 
-By default, the final agent response is simply an AI message with text content. However, you might want to return the agent's response in a structured output that conforms to a given schema. To do so, you can provide the desired output schema via the `response_format` parameter. The schema can be a Pydantic model or a `TypedDict` object:
+By default, the final agent response is simply an AI message with text content. To return the agent's response in a structured output that conforms to a given schema, you can provide the schema via the `response_format` parameter. The schema can be a Pydantic model or a `TypedDict` object:
 
 ```python
 from langgraph.prebuilt.chat_agent_executor import AgentState

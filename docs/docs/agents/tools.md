@@ -17,7 +17,7 @@ create_react_agent(
 
 `create_react_agent` automatically converts tool functions to [LangChain tools](https://python.langchain.com/docs/concepts/tools/#tool-interface) and infers the input JSON schemas.
 
-## Customizing tools
+## Customize tools
 
 If you want more control over how the tool is created, you can use `@tool` decorator:
 
@@ -101,7 +101,7 @@ agent = create_react_agent(
 agent.invoke({"messages": "what's 3 + 5 and 4 * 7? make both calculations in parallel"})
 ```
 
-## Returning tool results directly
+## Return tool results directly
 
 `create_react_agent` allows you to return tool response directly and end the tool-calling loop early. To do so, you must specify `return_direct=True` when creating your tool:
 
@@ -122,7 +122,7 @@ agent = create_react_agent(
 agent.invoke({"messages": "what's 3 + 5?"})
 ```
 
-## Forcing tool use
+## Force tool use
 
 Similar to parallel tool calling, certain providers allow users to specify `tool_choice`, indicating if the agent is always required to call a certain tools (or any tool). You can similarly control this via `model.bind_tools()`.
 

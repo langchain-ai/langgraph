@@ -2,8 +2,12 @@
 
 There are two types of memory that are relevant when working with agents:
 
-- short-term memory — memory of all of the interactions (e.g., messages) in the same conversation or session (**thread**). This memory is used to enable multi-turn conversations with an agent.
-- long-term memory — memory available across different conversations or sessions (**cross-thread**). Useful for storing facts about users, past agent actions, custom agent instructions and more.
+- short-term memory — allows an agent to remember the current conversation across multiple turns.
+- long-term memory — allows an agent to remember information across different conversations.
+
+!!! Note
+    - short-term memory in LangGraph is referred to as **thread**-level persistence
+    - long-term memory in LangGraph is referred to **cross-thread** persistence
 
 ## Short-term memory
 
@@ -42,11 +46,49 @@ ny_response = agent.invoke(
 )
 ```
 
+### Managing conversation history
+
+Message history can grow quickly and exceed LLM context window size in an agent with many conversation turns or numerous tool calls. To manage message history in `create_react_agent`, you need to define a `pre_model_hook` function or runnable that takes graph state an returns a state update. Below is an example that implements message summarization (using LangMem's prebuilt `SummarizationNode`):
+
+```python
+from langchain_anthropic import ChatAnthropic
+from langmem.short_term import SummarizationNode
+from langchain_core.messages.utils import count_tokens_approximately
+from langgraph.prebuilt.chat_agent_executor import AgentState
+from langgraph.checkpoint.memory import InMemorySaver
+from typing import Any
+
+model = ChatAnthropic(model="claude-3-7-sonnet-latest")
+
+summarization_node = SummarizationNode(
+    token_counter=count_tokens_approximately,
+    model=model,
+    max_tokens=384,
+    max_summary_tokens=128,
+    output_messages_key="llm_input_messages",
+)
+
+class State(AgentState):
+    # NOTE: we're adding this key to keep track of previous summary information
+    # to make sure we're not summarizing on every LLM call
+    context: dict[str, Any]
+
+
+checkpointer = InMemorySaver()
+graph = create_react_agent(
+    model=model,
+    tools=tools,
+    pre_model_hook=summarization_node,
+    state_schema=State,
+    checkpointer=checkpointer,
+)
+```
+
 ## Long-term memory
 
 To access and update long-term memory from inside an agent, you can provide a [store](../how-tos/cross-thread-persistence.ipynb) when creating an agent:
 
-### Accessing
+### Access
 
 ```python
 from langgraph.prebuilt import create_react_agent
@@ -83,7 +125,7 @@ agent.invoke(
 )
 ```
 
-### Updating
+### Update
 
 ```python
 from typing import TypedDict
@@ -120,7 +162,7 @@ agent.invoke(
 store.get(("users",), "user_123").value
 ```
 
-## LangMem
+### LangMem
 
 [LangMem](https://langchain-ai.github.io/langmem/) is a prebuilt library that offers utilities for both long-term and short-term memory management.
 
@@ -198,41 +240,3 @@ agent.invoke(
 ```
 
 See [LangMem docs]([LangMem](https://langchain-ai.github.io/langmem/)) for more examples and guides.
-
-## Managing conversation history
-
-Message history can grow quickly and exceed LLM context window size in an agent with many conversation turns or numerous tool calls. To manage message history in `create_react_agent`, you need to define a `pre_model_hook` function or runnable that takes graph state an returns a state update. Below is an example that implements message summarization (using LangMem's prebuilt `SummarizationNode`):
-
-```python
-from langchain_anthropic import ChatAnthropic
-from langmem.short_term import SummarizationNode
-from langchain_core.messages.utils import count_tokens_approximately
-from langgraph.prebuilt.chat_agent_executor import AgentState
-from langgraph.checkpoint.memory import InMemorySaver
-from typing import Any
-
-model = ChatAnthropic(model="claude-3-7-sonnet-latest")
-
-summarization_node = SummarizationNode(
-    token_counter=count_tokens_approximately,
-    model=model,
-    max_tokens=384,
-    max_summary_tokens=128,
-    output_messages_key="llm_input_messages",
-)
-
-class State(AgentState):
-    # NOTE: we're adding this key to keep track of previous summary information
-    # to make sure we're not summarizing on every LLM call
-    context: dict[str, Any]
-
-
-checkpointer = InMemorySaver()
-graph = create_react_agent(
-    model=model,
-    tools=tools,
-    pre_model_hook=summarization_node,
-    state_schema=State,
-    checkpointer=checkpointer,
-)
-```
