@@ -172,7 +172,7 @@ class PregelExecutableTask:
     writes: deque[tuple[str, Any]]
     config: RunnableConfig
     triggers: Sequence[str]
-    retry_policy: Optional[Union[RetryPolicy, list[RetryPolicy]]]
+    retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]]
     cache_policy: Optional[CachePolicy]
     id: str
     path: tuple[Union[str, int, tuple], ...]

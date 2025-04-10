@@ -22,7 +22,7 @@ def test_should_retry_on_single_exception():
 
 def test_should_retry_on_sequence_of_exceptions():
     """Test retry with a sequence of exception types."""
-    policy = RetryPolicy(retry_on=[ValueError, KeyError])
+    policy = RetryPolicy(retry_on=(ValueError, KeyError))
 
     # Should retry on listed exceptions
     assert _should_retry_on(policy, ValueError("test error")) is True
@@ -72,7 +72,7 @@ def test_should_retry_on_invalid_type():
 
 def test_should_retry_on_empty_sequence():
     """Test retry with an empty sequence."""
-    policy = RetryPolicy(retry_on=[])
+    policy = RetryPolicy(retry_on=())
 
     # Should not retry when sequence is empty
     assert _should_retry_on(policy, ValueError("test error")) is False
@@ -282,7 +282,9 @@ def test_graph_with_multiple_retry_policies():
     graph = (
         StateGraph(State)
         .add_node(
-            "failing_node", failing_node, retry=[value_error_policy, key_error_policy]
+            "failing_node",
+            failing_node,
+            retry=(value_error_policy, key_error_policy),
         )
         .add_edge(START, "failing_node")
         .compile()

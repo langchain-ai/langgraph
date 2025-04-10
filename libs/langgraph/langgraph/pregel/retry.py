@@ -22,7 +22,7 @@ SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
 
 def run_with_retry(
     task: PregelExecutableTask,
-    retry_policy: Optional[Union[RetryPolicy, list[RetryPolicy]]],
+    retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]],
     configurable: Optional[dict[str, Any]] = None,
 ) -> None:
     """Run a task with retries."""
@@ -64,8 +64,8 @@ def run_with_retry(
                 raise
 
             # Handle single RetryPolicy case
-            if not isinstance(retry_policy, list):
-                retry_policies = [retry_policy]
+            if isinstance(retry_policy, RetryPolicy):
+                retry_policies: Sequence[RetryPolicy] = [retry_policy]
             else:
                 retry_policies = retry_policy
 
@@ -109,7 +109,7 @@ def run_with_retry(
 
 async def arun_with_retry(
     task: PregelExecutableTask,
-    retry_policy: Optional[RetryPolicy | list[RetryPolicy]],
+    retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]],
     stream: bool = False,
     configurable: Optional[dict[str, Any]] = None,
 ) -> None:
@@ -158,8 +158,8 @@ async def arun_with_retry(
                 raise
 
             # Handle single RetryPolicy case
-            if not isinstance(retry_policy, list):
-                retry_policies = [retry_policy]
+            if isinstance(retry_policy, RetryPolicy):
+                retry_policies: Sequence[RetryPolicy] = [retry_policy]
             else:
                 retry_policies = retry_policy
 

@@ -140,7 +140,7 @@ class PregelRunner:
         *,
         reraise: bool = True,
         timeout: Optional[float] = None,
-        retry_policy: Optional[Union[RetryPolicy, list[RetryPolicy]]] = None,
+        retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
         get_waiter: Optional[Callable[[], concurrent.futures.Future[None]]] = None,
     ) -> Iterator[None]:
         tasks = tuple(tasks)
@@ -269,7 +269,7 @@ class PregelRunner:
         *,
         reraise: bool = True,
         timeout: Optional[float] = None,
-        retry_policy: Optional[Union[RetryPolicy, list[RetryPolicy]]] = None,
+        retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
         get_waiter: Optional[Callable[[], asyncio.Future[None]]] = None,
     ) -> AsyncIterator[None]:
         loop = asyncio.get_event_loop()
@@ -519,7 +519,7 @@ def _call(
     func: Callable[[Any], Union[Awaitable[Any], Any]],
     input: Any,
     *,
-    retry: Optional[Union[RetryPolicy, list[RetryPolicy]]] = None,
+    retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
     callbacks: Callbacks = None,
     futures: weakref.ref[FuturesDict],
     schedule_task: weakref.ref[
@@ -600,7 +600,7 @@ def _acall(
     func: Callable[[Any], Union[Awaitable[Any], Any]],
     input: Any,
     *,
-    retry: Optional[Union[RetryPolicy, list[RetryPolicy]]] = None,
+    retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
     callbacks: Callbacks = None,
     # injected dependencies
     futures: weakref.ref[FuturesDict],
