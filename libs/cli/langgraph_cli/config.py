@@ -1235,7 +1235,7 @@ def node_config_to_docker(
 
 
 def config_to_docker(
-    config_path: pathlib.Path, config: Config, base_image: str | None = None
+    config_path: pathlib.Path, config: Config, base_image: Optional[str] = None
 ) -> tuple[str, dict[str, str]]:
     base_image = base_image or (
         "langchain/langgraphjs-api"
