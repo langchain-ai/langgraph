@@ -394,7 +394,6 @@ nav:
     - agents/context.md
     - agents/memory.md
     - agents/human-in-the-loop.md
-    - agents/handoffs.md
     - agents/multi-agent.md
     - agents/ui.md
     - agents/deployment.md

@@ -8,7 +8,7 @@ Streaming is key to building responsive agent apps. There are a few types of dat
 
 ## Stream agent progress
 
-To stream agent progress, you can call `agent.stream()` (or `.astream()`) method with [`stream_mode="updates"`](../../how-tos/streaming#updates). This will emit a new event after every agent step. For example, in a tool-calling loop with a single tool call you should see the following updates:
+To stream agent progress, you can call `agent.stream()` (or `.astream()`) method with [`stream_mode="updates"`](https://langchain-ai.github.io/langgraph/how-tos/streaming/#updates). This will emit a new event after every agent step. For example, in a tool-calling loop with a single tool call you should see the following updates:
 
 ```
 - update from LLM-calling node, returning an AI message with tool calls

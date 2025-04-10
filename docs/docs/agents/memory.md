@@ -241,4 +241,4 @@ agent.invoke(
 )
 ```
 
-See [LangMem docs]([LangMem](https://langchain-ai.github.io/langmem/)) for more examples and guides.
+See [LangMem docs](https://langchain-ai.github.io/langmem/) for more examples and guides.
