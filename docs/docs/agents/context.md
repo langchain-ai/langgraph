@@ -1,60 +1,45 @@
 # Context
 
-The **most important** thing when building agents is how the information is propagated inside an agent (and [between agents](./handoffs.md)). During agent execution, the underlying LLM only has access to a list of messages. These include:
+Information is propagagated inside an agent via a list of messages. However, agents need access to information beyond messages. We will refer to this information broadly as **context**. You can provide context to an agent in two ways:
 
-- user's input message
-- LLM's responses requesting to call tools
-- tool execution results
-- LLM's final responses
+- [via a config](#context-passing-via-config): pass static information to the agent's tools and prompt (e.g., user information, authorization, DB connections, etc.)
 
-However, agentic applications require more complex information beyond messages:
+    ```python
+    agent = create_react_agent(...)
 
-- you might want to pass additional, non-message information to the agent's tools and prompt (e.g., user information, authorization, DB connections, etc.)
-- you might want the agent to *update* some information, to be used in the next iterations of the tool-calling loop or in the next conversation turns
+    agent.invoke(
+        {"messages": "hi!"},
+        # highlight-next-line
+        {"configurable": {"custom_data": "my custom data"}}
+    )
+    ```
 
-We will refer to this information broadly as **context**. You can provide this context to an agent in two ways:
+- [via agent state](#context-passing-via-state): pass any data that the agent can *update* during its execution. For example, an agent can call a tool that looks up some data and writes that data to its [state](../concepts/low_level.md#state).
 
-- [via a config](#context-passing-via-config): use this to pass static data that is passed once on agent invocation and is propagated throughout the agent execution
-- [via agent state](#context-passing-via-state): use this to pass any data that can be dynamically updated from inside the agent. For example, an agent can call a tool that looks up some data and writes that data to its [state](../concepts/low_level.md#state).
+    ```python
+    from langgraph.prebuilt.chat_agent_executor import AgentState
 
-## Context passing via config
+    class CustomState(AgentState):
+        # highlight-next-line
+        custom_data: str
 
-```python
-agent = create_react_agent(...)
+    agent = create_react_agent(
+        model="anthropic:claude-3-7-sonnet-latest",
+        tools=[...],
+        # highlight-next-line
+        state_schema=CustomState
+    )
 
-agent.invoke(
-    {"messages": "hi!"},
-    # highlight-next-line
-    {"configurable": {"custom_data": "my custom data"}}
-)
-```
+    agent.invoke({
+        "messages": "hi!",
+        # highlight-next-line
+        "custom_data": "my custom data"
+    })
+    ```
 
-## Context passing via state
+## Access context in prompt
 
-```python
-from langgraph.prebuilt.chat_agent_executor import AgentState
-
-class CustomState(AgentState):
-    # highlight-next-line
-    custom_data: str
-
-agent = create_react_agent(
-    model="anthropic:claude-3-7-sonnet-latest",
-    tools=[...],
-    # highlight-next-line
-    state_schema=CustomState
-)
-
-agent.invoke({
-    "messages": "hi!",
-    # highlight-next-line
-    "custom_data": "my custom data"
-})
-```
-
-## Accessing context in prompt
-
-You might want to include context in agent's system prompt (for example, user information). To do so, you can define a prompt as a function. This function takes the agent state and config and returns a list of messages to send to the chat model:
+To include context in agent's system prompt (for example, user information), you can define a prompt as a function. This function takes the agent state and config and returns a list of messages to send to the chat model:
 
 ```python
 from langgraph.prebuilt.chat_agent_executor import AgentState
@@ -121,7 +106,7 @@ agent.invoke(
 )
 ```
 
-## Accessing context in tools
+## Access context in tools
 
 You can pass context to tools via additional tool function parameters. To ensure that an LLM doesn't try 
 to populate those parameters in the tool calls, you need to add special type annotations: 

@@ -2,7 +2,9 @@
 
 [Tools](https://python.langchain.com/docs/concepts/tools/) are a way to encapsulate a function and its input schema in a way that can be passed to a chat model that supports tool calling. This allows the model to request the execution of this function with specific inputs.
 
-Simplest way to define a tool for `create_react_agent` is via a Python function that has a docstring with the tool description and type hints for the arguments:
+## Create tools
+
+You can pass a vanilla function to `create_react_agent` to use as a tool:
 
 ```python
 def multiply(a: int, b: int) -> int:
@@ -15,7 +17,7 @@ create_react_agent(
 )
 ```
 
-`create_react_agent` automatically converts tool functions to [LangChain tools](https://python.langchain.com/docs/concepts/tools/#tool-interface) and infers the input JSON schemas.
+`create_react_agent` automatically converts vanilla functions to [LangChain tools](https://python.langchain.com/docs/concepts/tools/#tool-interface).
 
 ## Customize tools
 
@@ -26,9 +28,15 @@ If you want more control over how the tool is created, you can use `@tool` decor
 from langchain_core.tools import tool
 
 # highlight-next-line
-@tool("multiply_tool", description="Multiply two numbers.")
+@tool("multiply_tool", parse_docstring=True)
 def multiply(a: int, b: int) -> int:
-   return a * b
+    """Multiply two numbers.
+
+    Args:
+        a: First operand
+        b: Second operand
+    """
+    return a * b
 ```
 
 A common pattern is defining a custom tool input schema as a Pydantic model:
@@ -79,7 +87,7 @@ def my_tool(
 Some model providers allow their models to request execution of several tools at once and allow users to explicitly enable or disable parallel tool calling. You can control this in `create_react_agent` via passing a `ChatModel` instance with bound tools:
 
 ```python
-from langchain_anthropic import ChatAnthropic
+from langchain.chat_models import init_chat_model
 
 def add(a: int, b: int) -> int:
     """Add two numbers"""
@@ -89,7 +97,7 @@ def multiply(a: int, b: int) -> int:
    """Multiply two numbers."""
    return a * b
 
-model = ChatAnthropic(model="claude-3-5-sonnet-latest")
+model = init_chat_model("anthropic:claude-3-5-sonnet-latest", temperature=0)
 tools = [add, multiply]
 agent = create_react_agent(
     # disable parallel tool calls

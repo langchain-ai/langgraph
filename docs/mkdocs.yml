@@ -395,8 +395,8 @@ nav:
     - agents/memory.md
     - agents/human-in-the-loop.md
     - agents/multi-agent.md
-    - agents/ui.md
     - agents/deployment.md
+    - agents/ui.md
   - API reference:
     - Library:
       - Graphs: reference/graphs.md

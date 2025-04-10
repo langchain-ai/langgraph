@@ -5,7 +5,7 @@ There are two types of memory that are relevant when working with agents:
 - short-term memory — allows an agent to remember the current conversation across multiple turns.
 - long-term memory — allows an agent to remember information across different conversations.
 
-!!! Note
+!!! Terminology
     - short-term memory in LangGraph is referred to as **thread**-level persistence
     - long-term memory in LangGraph is referred to **cross-thread** persistence
 
@@ -46,7 +46,7 @@ ny_response = agent.invoke(
 )
 ```
 
-### Managing conversation history
+### Summarize conversation history
 
 Message history can grow quickly and exceed LLM context window size in an agent with many conversation turns or numerous tool calls. To manage message history in `create_react_agent`, you need to define a `pre_model_hook` function or runnable that takes agent state an returns a state update. Below is an example that implements message summarization (using LangMem's prebuilt `SummarizationNode`):
 
@@ -90,7 +90,7 @@ agent = create_react_agent(
 
 To access and update long-term memory from inside an agent, you can provide a [store](../how-tos/cross-thread-persistence.ipynb) when creating an agent:
 
-### Access
+### Read
 
 ```python
 from langgraph.prebuilt import create_react_agent

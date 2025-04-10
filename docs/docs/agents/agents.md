@@ -4,7 +4,7 @@ An agent is a system that uses an LLM to control the flow of an application. The
 
 Use [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent] to create a tool-calling agent.
 
-## Quickstart
+## Create an agent
 
 The most important things to configure when you create an agent are:
 
@@ -34,9 +34,9 @@ agent.invoke({"messages": "what is the weather in sf"})
 If you want to customize the model parameters, you can pass a `ChatModel` instance as `model`:
 
 ```python
-from langchain_anthropic import ChatAnthropic
+from langchain.chat_models import init_chat_model
 # highlight-next-line
-model = ChatAnthropic(model="claude-3-7-sonnet-latest", temperature=0.7)
+model = init_chat_model("anthropic:claude-3-7-sonnet-latest", temperature=0)
 
 agent = create_react_agent(
     # highlight-next-line
@@ -72,11 +72,11 @@ agent.invoke(
 )
 ```
 
-See more on how to manage context in your agent [here](./context.md).
+See the [context](./context.md) page for more information.
 
 ## Structured output
 
-By default, the final agent response is simply an AI message with text content. To return the agent's response in a structured output that conforms to a given schema, you can provide the schema via the `response_format` parameter. The schema can be a Pydantic model or a `TypedDict` object:
+To return the agent's response in a structured output that conforms to a given schema, you can provide the schema via the `response_format` parameter. The schema can be a Pydantic model or a `TypedDict` object:
 
 ```python
 from langgraph.prebuilt.chat_agent_executor import AgentState
@@ -98,5 +98,6 @@ response = agent.invoke({"messages": "what is the weather in sf"})
 # highlight-next-line
 response["structured_response"]
 ```
+
 !!! Note
     To return structured output, `create_react_agent` makes an additional LLM call at the end of the tool-calling loop.

@@ -2,6 +2,8 @@
 
 To review, edit and approve tool calls in an agent you can use LangGraph's built-in [human-in-the-loop](../concepts/human_in_the_loop.md) features, specifically the [`interrupt()`][langgraph.types.interrupt] primitive.
 
+## Add interrupts
+
 To add human-in-the-loop to your tools you need to:
 
 1. Call `interrupt()` inside your tool. Then invoke the agent as usual.
@@ -9,11 +11,64 @@ To add human-in-the-loop to your tools you need to:
 
 See more information in the [concept guide](../concepts/human_in_the_loop.md).
 
-Here is an example of adding interrupts to your tools:
+```python
+def add(a: int, b: int):
+    """Add two numbers"""
+    # highlight-next-line
+    response = interrupt(
+        f"Trying to call `add` with args {{'a': {a}, 'b': {b}}}. "
+        "Please approve or suggest edits."
+    )
+    if response["type"] == "accept":
+        return a + b
+    elif response["type"] == "edit":
+        a = response["args"]["a"]
+        b = response["args"]["b"]
+        return a + b
+    else:
+        raise ValueError(f"Uknown response type: {response['type']}")
+
+def multiply(a: int, b: int):
+    """Multiply two numbers"""
+    return a * b
+
+# highlight-next-line
+checkpointer = InMemorySaver()
+agent = create_react_agent(
+    model="anthropic:claude-3-5-sonnet-latest",
+    tools=[add, multiply],
+    # highlight-next-line
+    checkpointer=checkpointer,
+    # highlight-next-line
+    version="v2"
+)
+config = {"configurable": {"thread_id": "1"}}
+for chunk in agent.stream(
+    {"messages": "what's 2 + 3 and 5 x 7? make both calculations in parallel"},
+    # highlight-next-line
+    config
+):
+    print(chunk)
+    print("\n")
+
+for chunk in agent.stream(
+    # highlight-next-line
+    Command(resume={"type": "accept"}),
+    # Command(resume={"type": "edit", "args": {"a": 3, "b": 2}}),
+    config
+):
+    print(chunk)
+    print("\n")
+```
+
+## Using with Agent Inbox
+
+You can create a wrapper to add interrupts to *any* tools. Below is an example implementation that also makes interrupts compatible with [Agent Inbox UI](https://github.com/langchain-ai/agent-inbox) and [Agent Chat UI](https://github.com/langchain-ai/agent-chat-ui):
 
 ```python
 from typing import Callable
 from langchain_core.tools import BaseTool, tool as create_tool
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import interrupt, Command
 from langgraph.prebuilt.interrupt import HumanInterruptConfig
@@ -66,20 +121,11 @@ def add_human_in_the_loop(
 
     return call_tool_with_interrupt
 
-def add(a: int, b: int):
-    """Add two numbers"""
-    return a + b
-
-def multiply(a: int, b: int):
-    """Multiply two numbers"""
-    return a * b
-
 # highlight-next-line
 checkpointer = InMemorySaver()
 agent = create_react_agent(
     model="anthropic:claude-3-5-sonnet-latest",
     tools=[
-        # Always interrupt for human feedback when the model calls `add` tool
         # highlight-next-line
         add_human_in_the_loop(add),
         multiply
@@ -89,6 +135,7 @@ agent = create_react_agent(
     # highlight-next-line
     version="v2"
 )
+
 config = {"configurable": {"thread_id": "1"}}
 for chunk in agent.stream(
     {"messages": "what's 2 + 3 and 5 x 7? make both calculations in parallel"},
@@ -101,11 +148,9 @@ for chunk in agent.stream(
 for chunk in agent.stream(
     # highlight-next-line
     Command(resume=[{"type": "accept"}]),
+    # Command(resume=[{"type": "edit", "args": {"args": {"a": 3, "b": 2}}}]),
     config
 ):
     print(chunk)
     print("\n")
 ```
-
-!!! Tip
-    This human-in-the-loop implementation works with [Agent Inbox UI](https://github.com/langchain-ai/agent-inbox)

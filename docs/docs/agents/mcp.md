@@ -6,6 +6,8 @@
 pip install langchain-mcp-adapters
 ```
 
+## Use MCP tools
+
 `langchain-mcp-adapters` allows you to connect your agent to tools defined across multiple MCP servers:
 
 ```python
@@ -36,6 +38,12 @@ async with MultiServerMCPClient(
     )
     math_response = await agent.ainvoke({"messages": "what's (3 + 5) x 12?"})
     weather_response = await agent.ainvoke({"messages": "what is the weather in nyc?"})
+```
+
+## Create MCP tool servers
+
+```bash
+pip install mcp
 ```
 
 Here are reference servers you can use to run the above example:
