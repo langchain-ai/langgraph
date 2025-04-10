@@ -443,8 +443,12 @@ def _parse_node_version(version_str: str) -> int:
         ) from None
 
 
-def _is_python_graph(spec: str) -> bool:
+def _is_python_graph(spec: str | dict) -> bool:
     """Check if a graph is a Python graph based on the file extension."""
+
+    # handle new style config
+    if isinstance(spec, dict):
+        spec = spec.get("path")
 
     file_path = spec.split(":")[0]
     file_ext = os.path.splitext(file_path)[1]
