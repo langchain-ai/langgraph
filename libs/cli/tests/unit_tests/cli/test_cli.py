@@ -178,8 +178,9 @@ def test_dockerfile_command_basic() -> None:
     """Test the 'dockerfile' command with basic configuration."""
     runner = CliRunner()
     config_content = {
-        "node_version": "20",  # Add any other necessary configuration fields
+        "python_version": "3.11",
         "graphs": {"agent": "agent.py:graph"},
+        "dependencies": ["."],
     }
 
     with temporary_config_folder(config_content) as temp_dir:

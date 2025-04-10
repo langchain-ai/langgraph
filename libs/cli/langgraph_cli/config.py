@@ -8,7 +8,10 @@ from typing import Any, Literal, NamedTuple, Optional, TypedDict, Union
 import click
 
 MIN_NODE_VERSION = "20"
+DEFAULT_NODE_VERSION = "20"
+
 MIN_PYTHON_VERSION = "3.11"
+DEFAULT_PYTHON_VERSION = "3.11"
 
 
 class TTLConfig(TypedDict, total=False):
@@ -440,38 +443,48 @@ def _parse_node_version(version_str: str) -> int:
         ) from None
 
 
+def _is_python_graph(spec: Union[str, dict]) -> bool:
+    """Check if a graph is a Python graph based on the file extension."""
+
+    # handle new style config
+    if isinstance(spec, dict):
+        spec = spec.get("path")
+
+    file_path = spec.split(":")[0]
+    file_ext = os.path.splitext(file_path)[1]
+    return file_ext in [".py", ".pyx", ".pyd", ".pyi"]
+
+
 def validate_config(config: Config) -> Config:
     """Validate a configuration dictionary."""
-    config = (
-        {
-            "node_version": config.get("node_version"),
-            "dockerfile_lines": config.get("dockerfile_lines", []),
-            "dependencies": config.get("dependencies", []),
-            "graphs": config.get("graphs", {}),
-            "env": config.get("env", {}),
-            "store": config.get("store"),
-            "auth": config.get("auth"),
-            "http": config.get("http"),
-            "checkpointer": config.get("checkpointer"),
-            "ui": config.get("ui"),
-            "ui_config": config.get("ui_config"),
-        }
-        if config.get("node_version")
-        else {
-            "python_version": config.get("python_version", "3.11"),
-            "pip_config_file": config.get("pip_config_file"),
-            "dockerfile_lines": config.get("dockerfile_lines", []),
-            "dependencies": config.get("dependencies", []),
-            "graphs": config.get("graphs", {}),
-            "env": config.get("env", {}),
-            "store": config.get("store"),
-            "auth": config.get("auth"),
-            "http": config.get("http"),
-            "checkpointer": config.get("checkpointer"),
-            "ui": config.get("ui"),
-            "ui_config": config.get("ui_config"),
-        }
+
+    graphs = config.get("graphs", {})
+
+    some_python = any(_is_python_graph(spec) for spec in graphs.values())
+    some_node = any(not _is_python_graph(spec) for spec in graphs.values())
+
+    node_version = config.get(
+        "node_version", DEFAULT_NODE_VERSION if some_node else None
     )
+    python_version = config.get(
+        "python_version", DEFAULT_PYTHON_VERSION if some_python else None
+    )
+
+    config = {
+        "node_version": node_version,
+        "python_version": python_version,
+        "pip_config_file": config.get("pip_config_file"),
+        "dependencies": config.get("dependencies", []),
+        "dockerfile_lines": config.get("dockerfile_lines", []),
+        "graphs": config.get("graphs", {}),
+        "env": config.get("env", {}),
+        "store": config.get("store"),
+        "auth": config.get("auth"),
+        "http": config.get("http"),
+        "checkpointer": config.get("checkpointer"),
+        "ui": config.get("ui"),
+        "ui_config": config.get("ui_config"),
+    }
 
     if config.get("node_version"):
         node_version = config["node_version"]
@@ -1085,26 +1098,11 @@ ADD {relpath} /deps/{name}
         for fullpath, (relpath, name) in local_deps.real_pkgs.items()
     )
 
-    ui_inst_str: str = ""
-    install_node_str: str = ""
-
-    if config.get("ui") and local_deps.working_dir:
-        install_node_str = "RUN /storage/install-node.sh"
-
-        ui_inst: list[str] = []
-        ui_inst.append(f"ENV LANGGRAPH_UI='{json.dumps(config['ui'])}'")
-        if config.get("ui_config"):
-            ui_inst.append(
-                f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(config['ui_config'])}'"
-            )
-
-        ui_inst.append(
-            f"RUN cd {local_deps.working_dir} && {_get_node_pm_install_cmd(config_path, config)} && tsx /api/langgraph_api/js/build.mts",
-        )
-
-        ui_inst_str = f"""# -- Installing UI dependencies --
-{os.linesep.join(ui_inst)}
-# -- End of UI dependencies install --"""
+    install_node_str: str = (
+        "RUN /storage/install-node.sh"
+        if (config.get("ui") or config.get("node_version")) and local_deps.working_dir
+        else ""
+    )
 
     installs = f"{os.linesep}{os.linesep}".join(
         filter(
@@ -1136,8 +1134,24 @@ ADD {relpath} /deps/{name}
             f"ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'"
         )
 
-    graphs = config["graphs"]
-    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(graphs)}'")
+    if (ui := config.get("ui")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_UI='{json.dumps(ui)}'")
+
+    if (ui_config := config.get("ui_config")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(ui_config)}'")
+
+    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
+
+    js_inst_str: str = ""
+    if (config.get("ui") or config.get("node_version")) and local_deps.working_dir:
+        js_inst_str = os.linesep.join(
+            [
+                "# -- Installing JS dependencies --",
+                f"ENV NODE_VERSION={config.get('node_version') or DEFAULT_NODE_VERSION}",
+                f"RUN cd {local_deps.working_dir} && {_get_node_pm_install_cmd(config_path, config)} && tsx /api/langgraph_api/js/build.mts",
+                "# -- End of JS dependencies install --",
+            ]
+        )
 
     docker_file_contents = [
         f"FROM {base_image}:{config['python_version']}",
@@ -1151,7 +1165,7 @@ ADD {relpath} /deps/{name}
         "# -- End of local dependencies install --",
         os.linesep.join(env_vars),
         "",
-        ui_inst_str,
+        js_inst_str,
         "",
         PIP_CLEANUP_LINES,  # Add pip cleanup after all installations are complete
         "",
@@ -1176,51 +1190,70 @@ def node_config_to_docker(
 ) -> tuple[str, dict[str, str]]:
     faux_path = f"/deps/{config_path.parent.name}"
     install_cmd = _get_node_pm_install_cmd(config_path, config)
-    store_config = config.get("store")
-    env_additional_config = (
-        ""
-        if not store_config
-        else f"""
-ENV LANGGRAPH_STORE='{json.dumps(store_config)}'
-"""
-    )
+
+    env_vars: list[str] = []
+
+    if (store_config := config.get("store")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_STORE='{json.dumps(store_config)}'")
+
     if (auth_config := config.get("auth")) is not None:
-        env_additional_config += f"""
-ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'
-"""
+        env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
+
     if (http_config := config.get("http")) is not None:
-        env_additional_config += f"""
-ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'
-"""
+        env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
+
     if (checkpointer_config := config.get("checkpointer")) is not None:
-        env_additional_config += f"""
-ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'
-"""
+        env_vars.append(
+            f"ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'"
+        )
 
-    return (
-        f"""FROM {base_image}:{config['node_version']}
+    if ui := config.get("ui"):
+        env_vars.append(f"ENV LANGGRAPH_UI='{json.dumps(ui)}'")
 
-{os.linesep.join(config["dockerfile_lines"])}
+    if ui_config := config.get("ui_config"):
+        env_vars.append(f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(ui_config)}'")
 
-ADD . {faux_path}
+    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
 
-RUN cd {faux_path} && {install_cmd}
-{env_additional_config}
-ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
-{f"ENV LANGGRAPH_UI='{json.dumps(config['ui'])}'" if config.get("ui") else ""}
-{f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(config['ui_config'])}'" if config.get("ui_config") else ""}
+    docker_file_contents = [
+        f"FROM {base_image}:{config['node_version']}",
+        "",
+        os.linesep.join(config["dockerfile_lines"]),
+        "",
+        f"ADD . {faux_path}",
+        "",
+        f"RUN cd {faux_path} && {install_cmd}",
+        "",
+        os.linesep.join(env_vars),
+        "",
+        f"WORKDIR {faux_path}",
+        "",
+        'RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts',
+    ]
 
-WORKDIR {faux_path}
+    return os.linesep.join(docker_file_contents), {}
 
-RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts""",
-        {},
-    )
+
+def default_base_image(config: Config) -> str:
+    if config.get("node_version") and not config.get("python_version"):
+        return "langchain/langgraphjs-api"
+    return "langchain/langgraph-api"
+
+
+def docker_tag(config: Config, base_image: Optional[str] = None) -> str:
+    base_image = base_image or default_base_image(config)
+
+    if config.get("node_version") and not config.get("python_version"):
+        return f"{base_image}:{config['node_version']}"
+    return f"{base_image}:{config['python_version']}"
 
 
 def config_to_docker(
-    config_path: pathlib.Path, config: Config, base_image: str
+    config_path: pathlib.Path, config: Config, base_image: Optional[str] = None
 ) -> tuple[str, dict[str, str]]:
-    if config.get("node_version"):
+    base_image = base_image or default_base_image(config)
+
+    if config.get("node_version") and not config.get("python_version"):
         return node_config_to_docker(config_path, config, base_image)
 
     return python_config_to_docker(config_path, config, base_image)
@@ -1229,9 +1262,11 @@ def config_to_docker(
 def config_to_compose(
     config_path: pathlib.Path,
     config: Config,
-    base_image: str,
+    base_image: Optional[str] = None,
     watch: bool = False,
 ) -> str:
+    base_image = base_image or default_base_image(config)
+
     env_vars = config["env"].items() if isinstance(config["env"], dict) else {}
     env_vars_str = "\n".join(f'            {k}: "{v}"' for k, v in env_vars)
     env_file_str = (
