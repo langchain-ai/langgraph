@@ -48,7 +48,7 @@ ny_response = agent.invoke(
 
 ### Managing conversation history
 
-Message history can grow quickly and exceed LLM context window size in an agent with many conversation turns or numerous tool calls. To manage message history in `create_react_agent`, you need to define a `pre_model_hook` function or runnable that takes graph state an returns a state update. Below is an example that implements message summarization (using LangMem's prebuilt `SummarizationNode`):
+Message history can grow quickly and exceed LLM context window size in an agent with many conversation turns or numerous tool calls. To manage message history in `create_react_agent`, you need to define a `pre_model_hook` function or runnable that takes agent state an returns a state update. Below is an example that implements message summarization (using LangMem's prebuilt `SummarizationNode`):
 
 ```python
 from langchain_anthropic import ChatAnthropic
@@ -75,10 +75,12 @@ class State(AgentState):
 
 
 checkpointer = InMemorySaver()
-graph = create_react_agent(
+agent = create_react_agent(
     model=model,
     tools=tools,
+    # highlight-next-line
     pre_model_hook=summarization_node,
+    # highlight-next-line
     state_schema=State,
     checkpointer=checkpointer,
 )
