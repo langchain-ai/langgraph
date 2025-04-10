@@ -1234,14 +1234,24 @@ def node_config_to_docker(
     return os.linesep.join(docker_file_contents), {}
 
 
+def default_base_image(config: Config) -> str:
+    if config.get("node_version") and not config.get("python_version"):
+        return "langchain/langgraphjs-api"
+    return "langchain/langgraph-api"
+
+
+def docker_tag(config: Config, base_image: Optional[str] = None) -> str:
+    base_image = base_image or default_base_image(config)
+
+    if config.get("node_version") and not config.get("python_version"):
+        return f"{base_image}:{config['node_version']}"
+    return f"{base_image}:{config['python_version']}"
+
+
 def config_to_docker(
     config_path: pathlib.Path, config: Config, base_image: Optional[str] = None
 ) -> tuple[str, dict[str, str]]:
-    base_image = base_image or (
-        "langchain/langgraphjs-api"
-        if config.get("node_version") and not config.get("python_version")
-        else "langchain/langgraph-api"
-    )
+    base_image = base_image or default_base_image(config)
 
     if config.get("node_version") and not config.get("python_version"):
         return node_config_to_docker(config_path, config, base_image)
@@ -1252,9 +1262,11 @@ def config_to_docker(
 def config_to_compose(
     config_path: pathlib.Path,
     config: Config,
-    base_image: str,
+    base_image: Optional[str] = None,
     watch: bool = False,
 ) -> str:
+    base_image = base_image or default_base_image(config)
+
     env_vars = config["env"].items() if isinstance(config["env"], dict) else {}
     env_vars_str = "\n".join(f'            {k}: "{v}"' for k, v in env_vars)
     env_file_str = (

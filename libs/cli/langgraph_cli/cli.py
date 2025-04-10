@@ -280,11 +280,7 @@ def _build(
             subp_exec(
                 "docker",
                 "pull",
-                (
-                    f"{base_image}:{config_json['node_version']}"
-                    if config_json.get("node_version")
-                    else f"{base_image}:{config_json['python_version']}"
-                ),
+                langgraph_cli.config.docker_tag(config_json, base_image),
                 verbose=True,
             )
         )
@@ -709,11 +705,7 @@ def prepare_args_and_stdin(
         config_path,
         config,
         watch=watch,
-        base_image=(
-            "langchain/langgraphjs-api"
-            if config.get("node_version") and not config.get("python_version")
-            else "langchain/langgraph-api"
-        ),
+        base_image=langgraph_cli.config.default_base_image(config),
     )
     return args, stdin
 
@@ -740,12 +732,7 @@ def prepare(
             subp_exec(
                 "docker",
                 "pull",
-                (
-                    f"langchain/langgraphjs-api:{config_json['node_version']}"
-                    if config_json.get("node_version")
-                    and not config_json.get("python_version")
-                    else f"langchain/langgraph-api:{config_json['python_version']}"
-                ),
+                langgraph_cli.config.docker_tag(config_json),
                 verbose=verbose,
             )
         )
