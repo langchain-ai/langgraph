@@ -12,31 +12,30 @@ To add human-in-the-loop to your tools you need to:
 See more information in the [concept guide](../concepts/human_in_the_loop.md).
 
 ```python
-def add(a: int, b: int):
-    """Add two numbers"""
+def book_hotel(hotel_name: str):
+    """Book a hotel"""
     # highlight-next-line
     response = interrupt(
-        f"Trying to call `add` with args {{'a': {a}, 'b': {b}}}. "
+        f"Trying to call `book_hotel` with args {{'hotel_name': {hotel_name}}}. "
         "Please approve or suggest edits."
     )
     if response["type"] == "accept":
-        return a + b
+        pass
     elif response["type"] == "edit":
-        a = response["args"]["a"]
-        b = response["args"]["b"]
-        return a + b
+        hotel_name = response["args"]["hotel_name"]
     else:
         raise ValueError(f"Unknown response type: {response['type']}")
+    return f"Successfully booked a stay at {hotel_name}."
 
-def multiply(a: int, b: int):
-    """Multiply two numbers"""
-    return a * b
+def book_flight(from_airport: str, to_airport: str):
+    """Book a flight"""
+    return f"Successfully booked a flight from {from_airport} to {to_airport}."
 
 # highlight-next-line
 checkpointer = InMemorySaver()
 agent = create_react_agent(
     model="anthropic:claude-3-5-sonnet-latest",
-    tools=[add, multiply],
+    tools=[book_hotel, book_flight],
     # highlight-next-line
     checkpointer=checkpointer,
     # highlight-next-line
@@ -44,7 +43,7 @@ agent = create_react_agent(
 )
 config = {"configurable": {"thread_id": "1"}}
 for chunk in agent.stream(
-    {"messages": "what's 2 + 3 and 5 x 7? make both calculations in parallel"},
+    {"messages": "book a flight from bos to jfk and a stay at McKittrick hotel"},
     # highlight-next-line
     config
 ):
@@ -54,7 +53,7 @@ for chunk in agent.stream(
 for chunk in agent.stream(
     # highlight-next-line
     Command(resume={"type": "accept"}),
-    # Command(resume={"type": "edit", "args": {"a": 3, "b": 2}}),
+    # Command(resume={"type": "edit", "args": {"hotel_name": "McKittrick Hotel"}}),
     config
 ):
     print(chunk)
@@ -121,14 +120,22 @@ def add_human_in_the_loop(
 
     return call_tool_with_interrupt
 
+def book_hotel(hotel_name: str):
+    """Book a hotel"""
+    return f"Successfully booked a stay at {hotel_name}."
+
+def book_flight(from_airport: str, to_airport: str):
+    """Book a flight"""
+    return f"Successfully booked a flight from {from_airport} to {to_airport}."
+
 # highlight-next-line
 checkpointer = InMemorySaver()
 agent = create_react_agent(
     model="anthropic:claude-3-5-sonnet-latest",
     tools=[
         # highlight-next-line
-        add_human_in_the_loop(add),
-        multiply
+        add_human_in_the_loop(book_hotel),
+        book_flight
     ],
     # highlight-next-line
     checkpointer=checkpointer,
@@ -138,7 +145,7 @@ agent = create_react_agent(
 
 config = {"configurable": {"thread_id": "1"}}
 for chunk in agent.stream(
-    {"messages": "what's 2 + 3 and 5 x 7? make both calculations in parallel"},
+    {"messages": "book a flight from bos to jfk and a stay at McKittrick hotel"},
     # highlight-next-line
     config
 ):
@@ -148,7 +155,7 @@ for chunk in agent.stream(
 for chunk in agent.stream(
     # highlight-next-line
     Command(resume=[{"type": "accept"}]),
-    # Command(resume=[{"type": "edit", "args": {"args": {"a": 3, "b": 2}}}]),
+    # Command(resume=[{"type": "edit", "args": {"args": {"hotel_name": "McKittrick Hotel"}}}]),
     config
 ):
     print(chunk)
