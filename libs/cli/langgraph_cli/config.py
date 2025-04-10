@@ -443,7 +443,7 @@ def _parse_node_version(version_str: str) -> int:
         ) from None
 
 
-def _is_python_graph(spec: str | dict) -> bool:
+def _is_python_graph(spec: Union[str, dict]) -> bool:
     """Check if a graph is a Python graph based on the file extension."""
 
     # handle new style config
