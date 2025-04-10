@@ -2,10 +2,6 @@
 
 LangGraph Platform provides a flexible authentication and authorization system that can integrate with most authentication schemes.
 
-!!! note "Python only"
-
-    We currently only support custom authentication and authorization in Python deployments with `langgraph-api>=0.0.11`. Support for LangGraph.JS will be added soon.
-
 ## Core Concepts
 
 ### Authentication vs Authorization
@@ -146,7 +142,7 @@ The returned user information is available:
 
 After authentication, LangGraph calls your [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) handlers to control access to specific resources (e.g., threads, assistants, crons). These handlers can:
 
-1. Add metadata to be saved during resource creation by mutating the `value["metadata"]` dictionary directly. See the [supported actions table](##supported-actions) for the list of types the value can take for each action.
+1. Add metadata to be saved during resource creation by mutating the `value["metadata"]` dictionary directly. See the [supported actions table](#supported-actions) for the list of types the value can take for each action.
 2. Filter resources by metadata during search/list or read operations by returning a [filter dictionary](#filter-operations).
 3. Raise an HTTP exception if access is denied.
 
@@ -289,7 +285,7 @@ async def on_assistant_create(
         )
 ```
 
-Notice that we are mixing global and resource-specific handlers in the above example. Since each request is handled by the most specific handler, a request to create a `thread` would match the `on_thread_create` handler but NOT the `reject_unhandled_requests` handler. A request to `update` a thread, however would be handled by the global handler, since we don't have a more specific handler for that resource and action. Requests to create, update, 
+Notice that we are mixing global and resource-specific handlers in the above example. Since each request is handled by the most specific handler, a request to create a `thread` would match the `on_thread_create` handler but NOT the `reject_unhandled_requests` handler. A request to `update` a thread, however would be handled by the global handler, since we don't have a more specific handler for that resource and action.
 
 ### Filter Operations {#filter-operations}
 
