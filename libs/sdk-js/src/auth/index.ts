@@ -13,6 +13,10 @@ export class Auth<
   TAuthReturn extends BaseAuthReturn = BaseAuthReturn,
   TUser extends BaseUser = ToUserLike<TAuthReturn>,
 > {
+  /**
+   * @internal
+   * @ignore
+   */
   "~handlerCache": {
     authenticate?: AuthenticateCallback<BaseAuthReturn>;
     callbacks?: Record<string, AnyCallback>;
