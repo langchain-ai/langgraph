@@ -274,12 +274,6 @@ def _build(
     tag: str,
     passthrough: Sequence[str] = (),
 ):
-    base_image = base_image or (
-        "langchain/langgraphjs-api"
-        if config_json.get("node_version")
-        else "langchain/langgraph-api"
-    )
-
     # pull latest images
     if pull:
         runner.run(
@@ -717,7 +711,7 @@ def prepare_args_and_stdin(
         watch=watch,
         base_image=(
             "langchain/langgraphjs-api"
-            if config.get("node_version")
+            if config.get("node_version") and not config.get("python_version")
             else "langchain/langgraph-api"
         ),
     )
@@ -749,6 +743,7 @@ def prepare(
                 (
                     f"langchain/langgraphjs-api:{config_json['node_version']}"
                     if config_json.get("node_version")
+                    and not config_json.get("python_version")
                     else f"langchain/langgraph-api:{config_json['python_version']}"
                 ),
                 verbose=verbose,
