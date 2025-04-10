@@ -89,7 +89,7 @@ def run_with_retry(
             # Apply backoff factor based on attempt count
             interval = min(
                 matching_policy.max_interval,
-                interval * matching_policy.backoff_factor,
+                interval * (matching_policy.backoff_factor ** (attempts - 1)),
             )
 
             # Apply jitter if configured
@@ -183,7 +183,7 @@ async def arun_with_retry(
             # Apply backoff factor based on attempt count
             interval = min(
                 matching_policy.max_interval,
-                interval * matching_policy.backoff_factor,
+                interval * (matching_policy.backoff_factor ** (attempts - 1)),
             )
 
             # Apply jitter if configured

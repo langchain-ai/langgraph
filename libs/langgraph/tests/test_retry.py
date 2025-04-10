@@ -1,5 +1,9 @@
-import pytest
+from unittest.mock import Mock, patch
 
+import pytest
+from typing_extensions import TypedDict
+
+from langgraph.graph import START, StateGraph
 from langgraph.pregel.retry import _should_retry_on
 from langgraph.types import RetryPolicy
 
@@ -76,8 +80,6 @@ def test_should_retry_on_empty_sequence():
 
 def test_should_retry_default_retry_on():
     """Test the default retry_on function."""
-    from unittest.mock import Mock
-
     import httpx
     import requests
 
@@ -141,3 +143,198 @@ def test_should_retry_default_retry_on():
         pass
 
     assert _should_retry_on(policy, CustomException("custom error")) is True
+
+
+def test_graph_with_single_retry_policy():
+    """Test a simple graph with a single RetryPolicy for a node."""
+
+    class State(TypedDict):
+        foo: str
+
+    attempt_count = 0
+
+    def failing_node(state: State):
+        nonlocal attempt_count
+        attempt_count += 1
+        if attempt_count < 3:  # Fail the first two attempts
+            raise ValueError("Intentional failure")
+        return {"foo": "success"}
+
+    def other_node(state: State):
+        return {"foo": "other_node"}
+
+    # Create a retry policy with specific parameters
+    retry_policy = RetryPolicy(
+        max_attempts=3,
+        initial_interval=0.01,  # Short interval for tests
+        backoff_factor=2.0,
+        jitter=False,  # Disable jitter for predictable timing
+        retry_on=ValueError,
+    )
+
+    # Create and compile the graph
+    graph = (
+        StateGraph(State)
+        .add_node("failing_node", failing_node, retry=retry_policy)
+        .add_node("other_node", other_node)
+        .add_edge(START, "failing_node")
+        .add_edge("failing_node", "other_node")
+        .compile()
+    )
+
+    with patch("time.sleep") as mock_sleep:
+        result = graph.invoke({"foo": ""})
+
+    # Verify retry behavior
+    assert attempt_count == 3  # The node should have been tried 3 times
+    assert result["foo"] == "other_node"  # Final result should be from other_node
+
+    # Verify the sleep intervals
+    call_args_list = [args[0][0] for args in mock_sleep.call_args_list]
+    assert call_args_list == [0.01, 0.02]
+
+
+def test_graph_with_jitter_retry_policy():
+    """Test a graph with a RetryPolicy that uses jitter."""
+
+    class State(TypedDict):
+        foo: str
+
+    attempt_count = 0
+
+    def failing_node(state):
+        nonlocal attempt_count
+        attempt_count += 1
+        if attempt_count < 2:  # Fail the first attempt
+            raise ValueError("Intentional failure")
+        return {"foo": "success"}
+
+    # Create a retry policy with jitter enabled
+    retry_policy = RetryPolicy(
+        max_attempts=3,
+        initial_interval=0.01,
+        jitter=True,  # Enable jitter for randomized backoff
+        retry_on=ValueError,
+    )
+
+    # Create and compile the graph
+    graph = (
+        StateGraph(State)
+        .add_node("failing_node", failing_node, retry=retry_policy)
+        .add_edge(START, "failing_node")
+        .compile()
+    )
+
+    # Test graph execution with mocked random and sleep
+    with patch("random.uniform", return_value=0.05) as mock_random, patch(
+        "time.sleep"
+    ) as mock_sleep:
+        result = graph.invoke({"foo": ""})
+
+    # Verify retry behavior
+    assert attempt_count == 2  # The node should have been tried twice
+    assert result["foo"] == "success"
+
+    # Verify jitter was applied
+    mock_random.assert_called_with(0, 1)  # Jitter should use random.uniform(0, 1)
+    mock_sleep.assert_called_with(0.01 + 0.05)  # Sleep should include jitter
+
+
+def test_graph_with_multiple_retry_policies():
+    """Test a graph with multiple retry policies for a node."""
+
+    class State(TypedDict):
+        foo: str
+        error_type: str
+
+    attempt_counts = {"value_error": 0, "key_error": 0}
+
+    def failing_node(state):
+        error_type = state["error_type"]
+
+        if error_type == "value_error":
+            attempt_counts["value_error"] += 1
+            if attempt_counts["value_error"] < 2:
+                raise ValueError("Value error")
+        elif error_type == "key_error":
+            attempt_counts["key_error"] += 1
+            if attempt_counts["key_error"] < 3:
+                raise KeyError("Key error")
+
+        return {"foo": f"recovered_from_{error_type}"}
+
+    # Create multiple retry policies
+    value_error_policy = RetryPolicy(
+        max_attempts=2,
+        initial_interval=0.01,
+        jitter=False,
+        retry_on=ValueError,
+    )
+
+    key_error_policy = RetryPolicy(
+        max_attempts=3,
+        initial_interval=0.02,
+        jitter=False,
+        retry_on=KeyError,
+    )
+
+    # Create and compile the graph with a list of retry policies
+    graph = (
+        StateGraph(State)
+        .add_node(
+            "failing_node", failing_node, retry=[value_error_policy, key_error_policy]
+        )
+        .add_edge(START, "failing_node")
+        .compile()
+    )
+
+    # Test ValueError scenario
+    with patch("time.sleep"):
+        result_value_error = graph.invoke({"foo": "", "error_type": "value_error"})
+
+    assert attempt_counts["value_error"] == 2
+    assert result_value_error["foo"] == "recovered_from_value_error"
+
+    # Reset attempt counts
+    attempt_counts = {"value_error": 0, "key_error": 0}
+
+    # Test KeyError scenario
+    with patch("time.sleep"):
+        result_key_error = graph.invoke({"foo": "", "error_type": "key_error"})
+
+    assert attempt_counts["key_error"] == 3
+    assert result_key_error["foo"] == "recovered_from_key_error"
+
+
+def test_graph_with_max_attempts_exceeded():
+    """Test a graph where max_attempts is exceeded."""
+
+    class State(TypedDict):
+        foo: str
+
+    def always_failing_node(state):
+        raise ValueError("Always fails")
+
+    # Create a retry policy with limited attempts
+    retry_policy = RetryPolicy(
+        max_attempts=2,
+        initial_interval=0.01,
+        jitter=False,
+        retry_on=ValueError,
+    )
+
+    # Create and compile the graph
+    graph = (
+        StateGraph(State)
+        .add_node("always_failing", always_failing_node, retry=retry_policy)
+        .add_edge(START, "always_failing")
+        .compile()
+    )
+
+    # Test graph execution
+    with patch("time.sleep") as mock_sleep, pytest.raises(
+        ValueError, match="Always fails"
+    ):
+        graph.invoke({"foo": ""})
+
+    mock_sleep.assert_called_with(0.01)
