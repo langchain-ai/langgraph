@@ -1,0 +1,40 @@
+set shell := ["bash", "-c"]
+set dotenv-load
+set dotenv-filename := "../../.local_atlas_uri"
+
+# Default target executed when no arguments are given.
+[private]
+default:
+  @just --list
+
+install:
+	uv sync --frozen
+
+[group('test')]
+integration_tests *args="":
+	uv run pytest tests/integration_tests/ {{args}}
+
+[group('test')]
+unit_tests *args="":
+	uv run pytest tests/unit_tests {{args}}
+
+[group('test')]
+tests *args="":
+	uv run pytest {{args}}
+
+[group('test')]
+test_watch filename:
+	uv run ptw --snapshot-update --now . -- -vv {{filename}}
+
+[group('lint')]
+lint:
+	git ls-files -- '*.py' | xargs uv run pre-commit run ruff --files
+	git ls-files -- '*.py' | xargs uv run pre-commit run ruff-format --files
+
+[group('lint')]
+typing:
+	uv run mypy .
+
+[group('lint')]
+codespell:
+	git ls-files -- '*.py' | xargs uv run pre-commit run --hook-stage manual codespell --files

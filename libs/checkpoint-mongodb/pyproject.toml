@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling>1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "langgraph-checkpoint-mongodb"
+version = "0.1.3"
+description = "Library with a MongoDB implementation of LangGraph checkpoint saver."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "langgraph-checkpoint>=2.0.23,<3.0.0",
+    "pymongo>=4.10,<4.12",
+    "motor>3.6.0",
+]
+
+[dependency-groups]
+dev = [
+    "anyio>=4.4.0",
+    "langchain-core>=0.3.29",
+    "langgraph-checkpoint>=2.0.9",
+    "pytest-asyncio>=0.21.1",
+    "pytest>=7.2.1",
+    "pytest-mock>=3.11.1",
+    "pytest-watch>=4.2.0",
+    "pytest-repeat>=0.9.3",
+    "syrupy>=4.0.2",
+    "pre-commit>=4.0",
+    "mypy>=1.10.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["langgraph"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --strict-config --durations=5 -vv"
+markers = [
+    "requires: mark tests as requiring a specific library",
+    "compile: mark placeholder test used to compile integration tests without running them",
+]
+
+
+[tool.ruff]
+lint.select = [
+  "E",  # pycodestyle
+  "F",  # Pyflakes
+  "UP", # pyupgrade
+  "B",  # flake8-bugbear
+  "I",  # isort
+]
+lint.ignore = ["E501", "B008", "UP007", "UP006"]
+
+[tool.mypy]
+# https://mypy.readthedocs.io/en/stable/config_file.html
+disallow_untyped_defs = true
+explicit_package_bases = true
+warn_no_return = false
+warn_unused_ignores = true
+warn_redundant_casts = true
+allow_redefinition = true
+disable_error_code = "typeddict-item, return-value"
