@@ -26,7 +26,7 @@ def add(a: int, b: int):
         b = response["args"]["b"]
         return a + b
     else:
-        raise ValueError(f"Uknown response type: {response['type']}")
+        raise ValueError(f"Unknown response type: {response['type']}")
 
 def multiply(a: int, b: int):
     """Multiply two numbers"""
