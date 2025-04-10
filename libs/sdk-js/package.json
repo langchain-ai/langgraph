@@ -11,7 +11,7 @@
     "format": "prettier --write src",
     "lint": "prettier --check src && tsc --noEmit",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --testPathIgnorePatterns=\\.int\\.test.ts",
-    "typedoc": "typedoc && typedoc src/react/index.ts --out docs/react --options typedoc.react.json"
+    "typedoc": "typedoc && typedoc src/react/index.ts --out docs/react --options typedoc.react.json && typedoc src/auth/index.ts --out docs/auth --options typedoc.auth.json"
   },
   "main": "index.js",
   "license": "MIT",

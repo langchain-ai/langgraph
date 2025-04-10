@@ -419,6 +419,7 @@ Here are all the supported action handlers:
 | | `@auth.on.crons.search` | Listing cron jobs | [`CronsSearch`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.CronsSearch) |
 
 ???+ note "About Runs"
+
     Runs are scoped to their parent thread for access control. This means permissions are typically inherited from the thread, reflecting the conversational nature of the data model. All run operations (reading, listing) except creation are controlled by the thread's handlers.
     There is a specific `create_run` handler for creating new runs because it had more arguments that you can view in the handler.
 

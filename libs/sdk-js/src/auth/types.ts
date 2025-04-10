@@ -11,6 +11,9 @@ interface AssistantConfig {
   }>;
 }
 
+/**
+ * @inline
+ */
 interface AssistantCreate {
   assistant_id?: Maybe<string>;
   metadata?: Maybe<Record<string, unknown>>;
@@ -20,11 +23,17 @@ interface AssistantCreate {
   graph_id: string;
 }
 
+/**
+ * @inline
+ */
 interface AssistantRead {
   assistant_id: string;
   metadata?: Maybe<Record<string, unknown>>;
 }
 
+/**
+ * @inline
+ */
 interface AssistantUpdate {
   assistant_id: string;
   metadata?: Maybe<Record<string, unknown>>;
@@ -34,10 +43,16 @@ interface AssistantUpdate {
   version?: Maybe<number>;
 }
 
+/**
+ * @inline
+ */
 interface AssistantDelete {
   assistant_id: string;
 }
 
+/**
+ * @inline
+ */
 interface AssistantSearch {
   graph_id?: Maybe<string>;
   metadata?: Maybe<Record<string, unknown>>;
@@ -45,27 +60,42 @@ interface AssistantSearch {
   offset?: Maybe<number>;
 }
 
+/**
+ * @inline
+ */
 interface ThreadCreate {
   thread_id?: Maybe<string>;
   metadata?: Maybe<Record<string, unknown>>;
   if_exists?: Maybe<"raise" | "do_nothing">;
 }
 
+/**
+ * @inline
+ */
 interface ThreadRead {
   thread_id?: Maybe<string>;
 }
 
+/**
+ * @inline
+ */
 interface ThreadUpdate {
   thread_id?: Maybe<string>;
   metadata?: Maybe<Record<string, unknown>>;
   action?: Maybe<"interrupt" | "rollback">;
 }
 
+/**
+ * @inline
+ */
 interface ThreadDelete {
   thread_id?: Maybe<string>;
   run_id?: Maybe<string>;
 }
 
+/**
+ * @inline
+ */
 interface ThreadSearch {
   thread_id?: Maybe<string>;
   status?: Maybe<"idle" | "busy" | "interrupted" | "error" | (string & {})>;
@@ -75,6 +105,9 @@ interface ThreadSearch {
   offset?: Maybe<number>;
 }
 
+/**
+ * @inline
+ */
 interface CronCreate {
   payload?: Maybe<Record<string, unknown>>;
   schedule: string;
@@ -84,20 +117,32 @@ interface CronCreate {
   end_time?: Maybe<string>;
 }
 
+/**
+ * @inline
+ */
 interface CronRead {
   cron_id: string;
 }
 
+/**
+ * @inline
+ */
 interface CronUpdate {
   cron_id: string;
   payload?: Maybe<Record<string, unknown>>;
   schedule?: Maybe<string>;
 }
 
+/**
+ * @inline
+ */
 interface CronDelete {
   cron_id: string;
 }
 
+/**
+ * @inline
+ */
 interface CronSearch {
   assistant_id?: Maybe<string>;
   thread_id?: Maybe<string>;
@@ -105,17 +150,26 @@ interface CronSearch {
   offset?: Maybe<number>;
 }
 
+/**
+ * @inline
+ */
 interface StorePut {
   namespace: string[];
   key: string;
   value: Record<string, unknown>;
 }
 
+/**
+ * @inline
+ */
 interface StoreGet {
   namespace: Maybe<string[]>;
   key: string;
 }
 
+/**
+ * @inline
+ */
 interface StoreSearch {
   namespace?: Maybe<string[]>;
   filter?: Maybe<Record<string, unknown>>;
@@ -124,6 +178,9 @@ interface StoreSearch {
   query?: Maybe<string>;
 }
 
+/**
+ * @inline
+ */
 interface StoreListNamespaces {
   namespace?: Maybe<string[]>;
   suffix?: Maybe<string[]>;
@@ -132,11 +189,17 @@ interface StoreListNamespaces {
   offset?: Maybe<number>;
 }
 
+/**
+ * @inline
+ */
 interface StoreDelete {
   namespace?: Maybe<string[]>;
   key: string;
 }
 
+/**
+ * @inline
+ */
 interface RunsCreate {
   thread_id?: Maybe<string>;
   assistant_id: string;
