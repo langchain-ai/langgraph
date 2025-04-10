@@ -59,7 +59,7 @@ This will start up the LangGraph API server locally. If this runs successfully, 
 >     
 >    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
 
-See this [tutorial](../../tutorials/langgraph-platform/local-server/) to learn more about running LangGraph app locally.
+See this [tutorial](https://langchain-ai.github.io/langgraph/tutorials/langgraph-platform/local-server/) to learn more about running LangGraph app locally.
 
 ## LangGraph Studio Web UI
 
@@ -71,6 +71,6 @@ LangGraph Studio Web is a specialized UI that you can connect to LangGraph API s
 
 Now that you have a LangGraph app running locally, check out these guides for how you can deploy it:
 
-- **[LangGraph Cloud Quickstart](../../cloud/quick_start.md)**: Deploy your LangGraph app using LangGraph Cloud.
-- **[LangGraph Platform](../../concepts/index.md#langgraph-platform)**: Understand the foundational concepts of the LangGraph Platform.
-- **[LangGraph Platform How-to Guides](../../how-tos/index.md#langgraph-platform)**: Discover step-by-step guides to build and deploy applications.
+- **[LangGraph Cloud Quickstart](https://langchain-ai.github.io/langgraph/cloud/quick_start/)**: Deploy your LangGraph app using LangGraph Cloud.
+- **[LangGraph Platform](https://langchain-ai.github.io/langgraph/concepts/#langgraph-platform)**: Understand the foundational concepts of the LangGraph Platform.
+- **[LangGraph Platform How-to Guides](https://langchain-ai.github.io/langgraph/how-tos/#langgraph-platform)**: Discover step-by-step guides to build and deploy applications.
