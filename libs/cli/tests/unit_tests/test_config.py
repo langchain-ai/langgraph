@@ -494,6 +494,7 @@ def test_config_to_docker_nodejs():
                 "node_version": "20",
                 "graphs": graphs,
                 "dockerfile_lines": ["ARG meow", "ARG foo"],
+                "auth": {"path": "./graphs/auth.mts:auth"},
                 "ui": {"agent": "./graphs/agent.ui.jsx"},
                 "ui_config": {"shared": ["nuqs"]},
             }
@@ -505,6 +506,7 @@ ARG meow
 ARG foo
 ADD . /deps/unit_tests
 RUN cd /deps/unit_tests && npm i
+ENV LANGGRAPH_AUTH='{"path": "./graphs/auth.mts:auth"}'
 ENV LANGSERVE_GRAPHS='{"agent": "./graphs/agent.js:graph"}'
 ENV LANGGRAPH_UI='{"agent": "./graphs/agent.ui.jsx"}'
 ENV LANGGRAPH_UI_CONFIG='{"shared": ["nuqs"]}'

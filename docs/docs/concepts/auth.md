@@ -2,10 +2,6 @@
 
 LangGraph Platform provides a flexible authentication and authorization system that can integrate with most authentication schemes.
 
-!!! note "Python only"
-
-    We currently only support custom authentication and authorization in Python deployments with `langgraph-api>=0.0.11`. Support for LangGraph.JS will be added soon.
-
 ## Core Concepts
 
 ### Authentication vs Authorization
