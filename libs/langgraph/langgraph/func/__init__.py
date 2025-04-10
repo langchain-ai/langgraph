@@ -38,7 +38,7 @@ from langgraph.types import _DC_KWARGS, RetryPolicy, StreamMode
 def task(
     *,
     name: Optional[str] = None,
-    retry: Optional[RetryPolicy] = None,
+    retry: Optional[Union[RetryPolicy, list[RetryPolicy]]] = None,
 ) -> Callable[
     [Union[Callable[P, Awaitable[T]], Callable[P, T]]],
     Callable[P, SyncAsyncFuture[T]],
@@ -55,7 +55,7 @@ def task(
     __func_or_none__: Optional[Union[Callable[P, Awaitable[T]], Callable[P, T]]] = None,
     *,
     name: Optional[str] = None,
-    retry: Optional[RetryPolicy] = None,
+    retry: Optional[Union[RetryPolicy, list[RetryPolicy]]] = None,
 ) -> Union[
     Callable[
         [Union[Callable[P, Awaitable[T]], Callable[P, T]]],

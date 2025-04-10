@@ -498,7 +498,7 @@ class Pregel(PregelProtocol):
     store: Optional[BaseStore] = None
     """Memory store to use for SharedValues. Defaults to None."""
 
-    retry_policy: Optional[RetryPolicy] = None
+    retry_policy: Optional[Union[RetryPolicy, list[RetryPolicy]]] = None
     """Retry policy to use when running tasks. Set to None to disable."""
 
     config_type: Optional[Type[Any]] = None

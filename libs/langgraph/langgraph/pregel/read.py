@@ -144,7 +144,7 @@ class PregelNode(Runnable):
     """The main logic of the node. This will be invoked with the input from 
     `channels`."""
 
-    retry_policy: Optional[RetryPolicy]
+    retry_policy: Optional[Union[RetryPolicy, list[RetryPolicy]]]
     """The retry policy to use when invoking the node."""
 
     tags: Optional[Sequence[str]]
@@ -166,7 +166,7 @@ class PregelNode(Runnable):
         tags: Optional[list[str]] = None,
         metadata: Optional[Mapping[str, Any]] = None,
         bound: Optional[Runnable[Any, Any]] = None,
-        retry_policy: Optional[RetryPolicy] = None,
+        retry_policy: Optional[Union[RetryPolicy, list[RetryPolicy]]] = None,
         subgraphs: Optional[Sequence[PregelProtocol]] = None,
     ) -> None:
         self.channels = channels
