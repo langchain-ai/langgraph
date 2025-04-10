@@ -1,6 +1,6 @@
 ---
 hide_comments: true
-title: Home
+title: ""
 ---
 
 <script>

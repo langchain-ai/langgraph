@@ -4,7 +4,7 @@ An agent is a system that uses an LLM to control the flow of an application. The
 
 Use [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent] to create a tool-calling agent.
 
-## Basic setup
+## Quickstart
 
 The most important things to configure when you create an agent are:
 
