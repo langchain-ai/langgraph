@@ -2,7 +2,7 @@
 
 To review, edit and approve tool calls in an agent you can use LangGraph's built-in [human-in-the-loop](../concepts/human_in_the_loop.md) features, specifically the [`interrupt()`][langgraph.types.interrupt] primitive.
 
-## Add interrupts
+## Review tool calls
 
 To add human-in-the-loop to your tools you need to:
 
