@@ -27,8 +27,10 @@ def test_validate_config():
             "agent": "./agent.py:graph",
         },
     }
+    actual_config = validate_config(expected_config)
     expected_config = {
         "python_version": "3.11",
+        "node_version": None,
         "pip_config_file": None,
         "dockerfile_lines": [],
         "env": {},
@@ -40,13 +42,13 @@ def test_validate_config():
         "ui_config": None,
         **expected_config,
     }
-    actual_config = validate_config(expected_config)
     assert actual_config == expected_config
 
     # full config
     env = ".env"
     expected_config = {
         "python_version": "3.12",
+        "node_version": None,
         "pip_config_file": "pipconfig.txt",
         "dockerfile_lines": ["ARG meow"],
         "dependencies": [".", "langchain"],
@@ -69,16 +71,12 @@ def test_validate_config():
 
     # check wrong python version raises
     with pytest.raises(click.UsageError):
-        validate_config(
-            {
-                "python_version": "3.9",
-            }
-        )
+        validate_config({"python_version": "3.9"})
 
     # check missing dependencies key raises
     with pytest.raises(click.UsageError):
         validate_config(
-            {"python_version": "3.9", "graphs": {"agent": "./agent.py:graph"}},
+            {"python_version": "3.9", "graphs": {"agent": "./agent.py:graph"}}
         )
 
     # check missing graphs key raises
@@ -194,6 +192,47 @@ def test_validate_config_file():
                 else:
                     f.write(package_content)
             validate_config_file(config_path)
+
+
+def test_validate_config_multiplatform():
+    # default node
+    config = validate_config(
+        {"dependencies": ["."], "graphs": {"js": "./js.mts:graph"}}
+    )
+    assert config["node_version"] == "20"
+    assert config["python_version"] is None
+
+    # default multiplatform
+    config = validate_config(
+        {
+            "node_version": "22",
+            "python_version": "3.12",
+            "dependencies": ["."],
+            "graphs": {"python": "./python.py:graph", "js": "./js.mts:graph"},
+        }
+    )
+    assert config["node_version"] == "22"
+    assert config["python_version"] == "3.12"
+
+    # default multiplatform (full infer)
+    graphs = {"python": "./python.py:graph", "js": "./js.mts:graph"}
+    config = validate_config({"dependencies": ["."], "graphs": graphs})
+    assert config["node_version"] == "20"
+    assert config["python_version"] == "3.11"
+
+    # default multiplatform (partial node)
+    config = validate_config(
+        {"node_version": "22", "dependencies": ["."], "graphs": graphs}
+    )
+    assert config["node_version"] == "22"
+    assert config["python_version"] == "3.11"
+
+    # default multiplatform (partial python)
+    config = validate_config(
+        {"python_version": "3.12", "dependencies": ["."], "graphs": graphs}
+    )
+    assert config["node_version"] == "20"
+    assert config["python_version"] == "3.12"
 
 
 # config_to_docker
@@ -507,9 +546,9 @@ ARG foo
 ADD . /deps/unit_tests
 RUN cd /deps/unit_tests && npm i
 ENV LANGGRAPH_AUTH='{"path": "./graphs/auth.mts:auth"}'
-ENV LANGSERVE_GRAPHS='{"agent": "./graphs/agent.js:graph"}'
 ENV LANGGRAPH_UI='{"agent": "./graphs/agent.ui.jsx"}'
 ENV LANGGRAPH_UI_CONFIG='{"shared": ["nuqs"]}'
+ENV LANGSERVE_GRAPHS='{"agent": "./graphs/agent.js:graph"}'
 WORKDIR /deps/unit_tests
 RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts"""
 
@@ -548,12 +587,54 @@ RUN set -ex && \\
 # -- Installing all local dependencies --
 RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
 # -- End of local dependencies install --
-ENV LANGSERVE_GRAPHS='{{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}}'
-# -- Installing UI dependencies --
 ENV LANGGRAPH_UI='{{"agent": "./graphs/agent.ui.jsx"}}'
 ENV LANGGRAPH_UI_CONFIG='{{"shared": ["nuqs"]}}'
+ENV LANGSERVE_GRAPHS='{{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}}'
+# -- Installing JS dependencies --
+ENV NODE_VERSION=20
 RUN cd /deps/__outer_unit_tests/unit_tests && npm i && tsx /api/langgraph_api/js/build.mts
-# -- End of UI dependencies install --
+# -- End of JS dependencies install --
+{PIP_CLEANUP_LINES}
+WORKDIR /deps/__outer_unit_tests/unit_tests"""
+
+    assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
+    assert additional_contexts == {}
+
+
+def test_config_to_docker_multiplatform():
+    graphs = {
+        "python": "./multiplatform/python.py:graph",
+        "js": "./multiplatform/js.mts:graph",
+    }
+    actual_docker_stdin, additional_contexts = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {"node_version": "22", "dependencies": ["."], "graphs": graphs}
+        ),
+        "langchain/langgraph-api",
+    )
+
+    expected_docker_stdin = f"""FROM langchain/langgraph-api:3.11
+RUN /storage/install-node.sh
+# -- Adding non-package dependency unit_tests --
+ADD . /deps/__outer_unit_tests/unit_tests
+RUN set -ex && \\
+    for line in '[project]' \\
+                'name = "unit_tests"' \\
+                'version = "0.1"' \\
+                '[tool.setuptools.package-data]' \\
+                '"*" = ["**/*"]'; do \\
+        echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
+    done
+# -- End of non-package dependency unit_tests --
+# -- Installing all local dependencies --
+RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
+# -- End of local dependencies install --
+ENV LANGSERVE_GRAPHS='{{"python": "/deps/__outer_unit_tests/unit_tests/multiplatform/python.py:graph", "js": "/deps/__outer_unit_tests/unit_tests/multiplatform/js.mts:graph"}}'
+# -- Installing JS dependencies --
+ENV NODE_VERSION=22
+RUN cd /deps/__outer_unit_tests/unit_tests && npm i && tsx /api/langgraph_api/js/build.mts
+# -- End of JS dependencies install --
 {PIP_CLEANUP_LINES}
 WORKDIR /deps/__outer_unit_tests/unit_tests"""
 

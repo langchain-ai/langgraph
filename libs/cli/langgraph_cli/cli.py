@@ -450,11 +450,7 @@ def dockerfile(save_path: str, config: pathlib.Path, add_docker_compose: bool) -
     dockerfile, additional_contexts = langgraph_cli.config.config_to_docker(
         config,
         config_json,
-        (
-            "langchain/langgraphjs-api"
-            if config_json.get("node_version")
-            else "langchain/langgraph-api"
-        ),
+        None,
     )
     with open(str(save_path), "w", encoding="utf-8") as f:
         f.write(dockerfile)
