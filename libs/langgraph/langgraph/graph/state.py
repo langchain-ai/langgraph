@@ -43,7 +43,6 @@ from langgraph.constants import (
     MISSING,
     NS_END,
     NS_SEP,
-    SELF,
     TAG_HIDDEN,
 )
 from langgraph.errors import (
@@ -671,9 +670,9 @@ class StateGraph(Graph):
         for key, node in self.nodes.items():
             compiled.attach_node(key, node)
 
-        compiled.attach_branch(START, SELF, CONTROL_BRANCH, with_reader=False)
-        for key, node in self.nodes.items():
-            compiled.attach_branch(key, SELF, CONTROL_BRANCH, with_reader=False)
+        compiled.nodes[START].writers.append(CONTROL_BRANCH_PATH)
+        for key in self.nodes:
+            compiled.nodes[key].writers.append(CONTROL_BRANCH_PATH)
 
         for start, end in self.edges:
             compiled.attach_edge(start, end)
@@ -734,28 +733,6 @@ class CompiledStateGraph(CompiledGraph):
                 for k, v in self.builder.managed.items()
                 if is_writable_managed_value(v)
             ]
-
-        def _get_root(input: Any) -> Optional[Sequence[tuple[str, Any]]]:
-            if isinstance(input, Command):
-                if input.graph == Command.PARENT:
-                    return ()
-                return input._update_as_tuples()
-            elif (
-                isinstance(input, (list, tuple))
-                and input
-                and any(isinstance(i, Command) for i in input)
-            ):
-                updates: list[tuple[str, Any]] = []
-                for i in input:
-                    if isinstance(i, Command):
-                        if i.graph == Command.PARENT:
-                            continue
-                        updates.extend(i._update_as_tuples())
-                    else:
-                        updates.append(("__root__", i))
-                return updates
-            elif input is not None:
-                return [("__root__", input)]
 
         def _get_updates(
             input: Union[None, dict, Any],
@@ -1085,9 +1062,10 @@ def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
     return schema(**input)
 
 
-def _control_branch(value: Any) -> Sequence[Union[str, Send]]:
+def _control_branch(value: Any, config: RunnableConfig) -> Any:
     if isinstance(value, Send):
-        return [value]
+        ChannelWrite.do_write(config, (value,))
+        return value
     commands: list[Command] = []
     if isinstance(value, Command):
         commands.append(value)
@@ -1095,22 +1073,30 @@ def _control_branch(value: Any) -> Sequence[Union[str, Send]]:
         for cmd in value:
             if isinstance(cmd, Command):
                 commands.append(cmd)
-    rtn: list[Union[str, Send]] = []
+    rtn: list[Union[ChannelWriteEntry, Send]] = []
     for command in commands:
         if command.graph == Command.PARENT:
             raise ParentCommand(command)
         if isinstance(command.goto, Send):
             rtn.append(command.goto)
         elif isinstance(command.goto, str):
-            rtn.append(command.goto)
+            rtn.append(ChannelWriteEntry(CHANNEL_BRANCH_TO.format(command.goto), None))
         else:
-            rtn.extend(command.goto)
-    return rtn
+            rtn.extend(
+                go
+                if isinstance(go, Send)
+                else ChannelWriteEntry(CHANNEL_BRANCH_TO.format(go), None)
+                for go in command.goto
+            )
+    if rtn:
+        ChannelWrite.do_write(config, rtn)
+    return value
 
 
-async def _acontrol_branch(value: Any) -> Sequence[Union[str, Send]]:
+async def _acontrol_branch(value: Any, config: RunnableConfig) -> Any:
     if isinstance(value, Send):
-        return [value]
+        ChannelWrite.do_write(config, (value,))
+        return value
     commands: list[Command] = []
     if isinstance(value, Command):
         commands.append(value)
@@ -1118,17 +1104,24 @@ async def _acontrol_branch(value: Any) -> Sequence[Union[str, Send]]:
         for cmd in value:
             if isinstance(cmd, Command):
                 commands.append(cmd)
-    rtn: list[Union[str, Send]] = []
+    rtn: list[Union[ChannelWriteEntry, Send]] = []
     for command in commands:
         if command.graph == Command.PARENT:
             raise ParentCommand(command)
         if isinstance(command.goto, Send):
             rtn.append(command.goto)
         elif isinstance(command.goto, str):
-            rtn.append(command.goto)
+            rtn.append(ChannelWriteEntry(CHANNEL_BRANCH_TO.format(command.goto), None))
         else:
-            rtn.extend(command.goto)
-    return rtn
+            rtn.extend(
+                go
+                if isinstance(go, Send)
+                else ChannelWriteEntry(CHANNEL_BRANCH_TO.format(go), None)
+                for go in command.goto
+            )
+    if rtn:
+        ChannelWrite.do_write(config, rtn)
+    return value
 
 
 CONTROL_BRANCH_PATH = RunnableCallable(
@@ -1137,9 +1130,32 @@ CONTROL_BRANCH_PATH = RunnableCallable(
     tags=[TAG_HIDDEN],
     trace=False,
     recurse=False,
-    func_accepts_config=False,
+    set_context=False,
+    func_accepts_config=True,
 )
-CONTROL_BRANCH = Branch(CONTROL_BRANCH_PATH, None)
+
+
+def _get_root(input: Any) -> Optional[Sequence[tuple[str, Any]]]:
+    if isinstance(input, Command):
+        if input.graph == Command.PARENT:
+            return ()
+        return input._update_as_tuples()
+    elif (
+        isinstance(input, (list, tuple))
+        and input
+        and any(isinstance(i, Command) for i in input)
+    ):
+        updates: list[tuple[str, Any]] = []
+        for i in input:
+            if isinstance(i, Command):
+                if i.graph == Command.PARENT:
+                    continue
+                updates.extend(i._update_as_tuples())
+            else:
+                updates.append(("__root__", i))
+        return updates
+    elif input is not None:
+        return [("__root__", input)]
 
 
 def _get_channels(

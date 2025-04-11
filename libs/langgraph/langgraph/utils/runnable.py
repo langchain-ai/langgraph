@@ -254,6 +254,7 @@ class RunnableCallable(Runnable):
         tags: Optional[Sequence[str]] = None,
         trace: bool = True,
         recurse: bool = True,
+        set_context: bool = True,
         explode_args: bool = False,
         func_accepts_config: Optional[bool] = None,
         **kwargs: Any,
@@ -277,6 +278,7 @@ class RunnableCallable(Runnable):
         self.kwargs = kwargs
         self.trace = trace
         self.recurse = recurse
+        self.set_context = set_context
         self.explode_args = explode_args
         # check signature
         if func is None and afunc is None:
@@ -363,17 +365,22 @@ class RunnableCallable(Runnable):
             )
             try:
                 child_config = patch_config(config, callbacks=run_manager.get_child())
-                with set_config_context(child_config) as context:
-                    ret = context.run(self.func, *args, **kwargs)
+                if self.set_context:
+                    with set_config_context(child_config) as context:
+                        ret = context.run(self.func, *args, **kwargs)
+                else:
+                    ret = self.func(*args, **kwargs)
             except BaseException as e:
                 run_manager.on_chain_error(e)
                 raise
             else:
                 run_manager.on_chain_end(ret)
-        else:
+        elif self.set_context:
             with set_config_context(config) as context:
                 ret = context.run(self.func, *args, **kwargs)
-        if isinstance(ret, Runnable) and self.recurse:
+        else:
+            ret = self.func(*args, **kwargs)
+        if self.recurse and isinstance(ret, Runnable):
             return ret.invoke(input, config)
         return ret
 
@@ -417,25 +424,24 @@ class RunnableCallable(Runnable):
             )
             try:
                 child_config = patch_config(config, callbacks=run_manager.get_child())
-                with set_config_context(child_config) as context:
-                    coro = cast(Coroutine[None, None, Any], self.afunc(*args, **kwargs))
-                    if ASYNCIO_ACCEPTS_CONTEXT:
+                coro = cast(Coroutine[None, None, Any], self.afunc(*args, **kwargs))
+                if ASYNCIO_ACCEPTS_CONTEXT and self.set_context:
+                    with set_config_context(child_config) as context:
                         ret = await asyncio.create_task(coro, context=context)
-                    else:
-                        ret = await coro
+                else:
+                    ret = await coro
             except BaseException as e:
                 await run_manager.on_chain_error(e)
                 raise
             else:
                 await run_manager.on_chain_end(ret)
-        else:
+        elif ASYNCIO_ACCEPTS_CONTEXT and self.set_context:
             with set_config_context(config) as context:
-                if ASYNCIO_ACCEPTS_CONTEXT:
-                    coro = cast(Coroutine[None, None, Any], self.afunc(*args, **kwargs))
-                    ret = await asyncio.create_task(coro, context=context)
-                else:
-                    ret = await self.afunc(*args, **kwargs)
-        if isinstance(ret, Runnable) and self.recurse:
+                coro = cast(Coroutine[None, None, Any], self.afunc(*args, **kwargs))
+                ret = await asyncio.create_task(coro, context=context)
+        else:
+            ret = await self.afunc(*args, **kwargs)
+        if self.recurse and isinstance(ret, Runnable):
             return await ret.ainvoke(input, config)
         return ret
 
