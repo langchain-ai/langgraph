@@ -387,6 +387,7 @@ nav:
       - LangGraph Academy Course: https://academy.langchain.com/courses/intro-to-langgraph
 
   - Agents:
+    - agents/overview.md
     - agents/agents.md
     - agents/streaming.md
     - agents/tools.md
