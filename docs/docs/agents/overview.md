@@ -2,7 +2,7 @@
 
 ## What is an agent?
 
-An agent is a building block of applications that use Large Language Models (LLMs). 
+An agent is a system that uses an LLM to control the flow of an application.
 
 A basic agent is composed of a Large Language Model (LLM), a set of tools and a prompt
 that instructs the LLM on how to behave.
