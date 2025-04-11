@@ -234,6 +234,17 @@ def test_validate_config_multiplatform():
     assert config["node_version"] == "20"
     assert config["python_version"] == "3.12"
 
+    # no known extension (assumes python)
+    config = validate_config(
+        {
+            "dependencies": ["./local", "./shared_utils"],
+            "graphs": {"agent": "local.workflow:graph"},
+            "env": ".env",
+        }
+    )
+    assert config["node_version"] is None
+    assert config["python_version"] == "3.11"
+
 
 # config_to_docker
 def test_config_to_docker_simple():
