@@ -120,6 +120,10 @@ def task(
         await add_one.ainvoke([1, 2, 3])  # Returns [2, 3, 4]
         ```
     """
+    if isinstance(retry, RetryPolicy):
+        retry_policies: Optional[Sequence[RetryPolicy]] = [retry]
+    else:
+        retry_policies = retry
 
     def decorator(
         func: Union[Callable[P, Awaitable[T]], Callable[P, T]],
@@ -138,7 +142,7 @@ def task(
                 # handle regular functions / partials / callable classes, etc.
                 func.__name__ = name
 
-        call_func = functools.partial(call, func, retry=retry)
+        call_func = functools.partial(call, func, retry=retry_policies)
         object.__setattr__(call_func, "_is_pregel_task", True)
         return functools.update_wrapper(call_func, func)
 

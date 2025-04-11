@@ -39,6 +39,7 @@ from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
     get_unique_config_specs,
 )
+from langchain_core.tracers._streaming import _StreamingCallbackHandler
 from pydantic import BaseModel
 from typing_extensions import Self
 
@@ -53,7 +54,6 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.constants import (
     CONF,
-    CONFIG_KEY_CHECKPOINT_DURING,
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
@@ -124,11 +124,6 @@ from langgraph.utils.config import (
 from langgraph.utils.fields import get_enhanced_type_hints
 from langgraph.utils.pydantic import create_model, is_supported_by_pydantic
 from langgraph.utils.queue import AsyncQueue, SyncQueue  # type: ignore[attr-defined]
-
-try:
-    from langchain_core.tracers._streaming import _StreamingCallbackHandler
-except ImportError:
-    _StreamingCallbackHandler = None  # type: ignore
 
 WriteValue = Union[Callable[[Input], Output], Any]
 
@@ -498,8 +493,8 @@ class Pregel(PregelProtocol):
     store: Optional[BaseStore] = None
     """Memory store to use for SharedValues. Defaults to None."""
 
-    retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None
-    """Retry policy to use when running tasks. Set to None to disable."""
+    retry_policy: Optional[Sequence[RetryPolicy]] = None
+    """Retry policies to use when running tasks. Set to None to disable."""
 
     config_type: Optional[Type[Any]] = None
 
@@ -528,7 +523,7 @@ class Pregel(PregelProtocol):
         debug: Optional[bool] = None,
         checkpointer: Optional[BaseCheckpointSaver] = None,
         store: Optional[BaseStore] = None,
-        retry_policy: Optional[RetryPolicy] = None,
+        retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
         config_type: Optional[Type[Any]] = None,
         input_model: Optional[Type[BaseModel]] = None,
         config: Optional[RunnableConfig] = None,
@@ -548,7 +543,10 @@ class Pregel(PregelProtocol):
         self.debug = debug if debug is not None else get_debug()
         self.checkpointer = checkpointer
         self.store = store
-        self.retry_policy = retry_policy
+        if isinstance(retry_policy, RetryPolicy):
+            self.retry_policy: Sequence[RetryPolicy] = [retry_policy]
+        else:
+            self.retry_policy = retry_policy
         self.config_type = config_type
         self.input_model = input_model
         self.config = config
@@ -2099,7 +2097,6 @@ class Pregel(PregelProtocol):
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        checkpoint_during: Optional[bool] = None,
         debug: Optional[bool] = None,
         subgraphs: bool = False,
     ) -> Iterator[Union[dict[str, Any], Any]]:
@@ -2121,7 +2118,6 @@ class Pregel(PregelProtocol):
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
-            checkpoint_during: Whether to checkpoint intermediate steps, defaults to True. If False, only the final checkpoint is saved.
             debug: Whether to print debug information during execution, defaults to False.
             subgraphs: Whether to stream subgraphs, defaults to False.
 
@@ -2283,9 +2279,6 @@ class Pregel(PregelProtocol):
                 config[CONF][CONFIG_KEY_STREAM_WRITER] = lambda c: stream.put(
                     ((), "custom", c)
                 )
-            # set checkpointing mode for subgraphs
-            if checkpoint_during is not None:
-                config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
             with SyncPregelLoop(
                 input,
                 input_model=self.input_model,
@@ -2301,9 +2294,6 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
                 debug=debug,
-                checkpoint_during=checkpoint_during
-                if checkpoint_during is not None
-                else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, True),
                 trigger_to_nodes=self.trigger_to_nodes,
                 migrate_checkpoint=self._migrate_checkpoint,
             ) as loop:
@@ -2386,7 +2376,6 @@ class Pregel(PregelProtocol):
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        checkpoint_during: Optional[bool] = None,
         debug: Optional[bool] = None,
         subgraphs: bool = False,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
@@ -2408,7 +2397,6 @@ class Pregel(PregelProtocol):
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
-            checkpoint_during: Whether to checkpoint intermediate steps, defaults to True. If False, only the final checkpoint is saved.
             debug: Whether to print debug information during execution, defaults to False.
             subgraphs: Whether to stream subgraphs, defaults to False.
 
@@ -2544,17 +2532,13 @@ class Pregel(PregelProtocol):
             run_id=config.get("run_id"),
         )
         # if running from astream_log() run each proc with streaming
-        do_stream = (
-            next(
-                (
-                    cast(_StreamingCallbackHandler, h)
-                    for h in run_manager.handlers
-                    if isinstance(h, _StreamingCallbackHandler)
-                ),
-                None,
-            )
-            if _StreamingCallbackHandler is not None
-            else False
+        do_stream = next(
+            (
+                cast(_StreamingCallbackHandler, h)
+                for h in run_manager.handlers
+                if isinstance(h, _StreamingCallbackHandler)
+            ),
+            None,
         )
         try:
             # assign defaults
@@ -2590,9 +2574,6 @@ class Pregel(PregelProtocol):
                         stream.put_nowait, ((), "custom", c)
                     )
                 )
-            # set checkpointing mode for subgraphs
-            if checkpoint_during is not None:
-                config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
             async with AsyncPregelLoop(
                 input,
                 input_model=self.input_model,
@@ -2608,9 +2589,6 @@ class Pregel(PregelProtocol):
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
                 debug=debug,
-                checkpoint_during=checkpoint_during
-                if checkpoint_during is not None
-                else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, True),
                 trigger_to_nodes=self.trigger_to_nodes,
                 migrate_checkpoint=self._migrate_checkpoint,
             ) as loop:
@@ -2686,7 +2664,6 @@ class Pregel(PregelProtocol):
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        checkpoint_during: Optional[bool] = None,
         debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
@@ -2718,7 +2695,6 @@ class Pregel(PregelProtocol):
             output_keys=output_keys,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
-            checkpoint_during=checkpoint_during,
             debug=debug,
             **kwargs,
         ):
@@ -2740,7 +2716,6 @@ class Pregel(PregelProtocol):
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        checkpoint_during: Optional[bool] = None,
         debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
@@ -2773,7 +2748,6 @@ class Pregel(PregelProtocol):
             output_keys=output_keys,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
-            checkpoint_during=checkpoint_during,
             debug=debug,
             **kwargs,
         ):

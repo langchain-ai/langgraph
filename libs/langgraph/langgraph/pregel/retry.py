@@ -4,7 +4,7 @@ import random
 import sys
 import time
 from dataclasses import replace
-from typing import Any, Optional, Sequence, Union
+from typing import Any, Optional, Sequence
 
 from langgraph.constants import (
     CONF,
@@ -22,7 +22,7 @@ SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
 
 def run_with_retry(
     task: PregelExecutableTask,
-    retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]],
+    retry_policy: Optional[Sequence[RetryPolicy]],
     configurable: Optional[dict[str, Any]] = None,
 ) -> None:
     """Run a task with retries."""
@@ -63,15 +63,9 @@ def run_with_retry(
             if retry_policy is None:
                 raise
 
-            # Handle single RetryPolicy case
-            if isinstance(retry_policy, RetryPolicy):
-                retry_policies: Sequence[RetryPolicy] = [retry_policy]
-            else:
-                retry_policies = retry_policy
-
             # Check which retry policy applies to this exception
             matching_policy = None
-            for policy in retry_policies:
+            for policy in retry_policy:
                 if _should_retry_on(policy, exc):
                     matching_policy = policy
                     break
@@ -109,12 +103,12 @@ def run_with_retry(
 
 async def arun_with_retry(
     task: PregelExecutableTask,
-    retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]],
+    retry_policies: Optional[Sequence[RetryPolicy]],
     stream: bool = False,
     configurable: Optional[dict[str, Any]] = None,
 ) -> None:
     """Run a task asynchronously with retries."""
-    retry_policy = task.retry_policy or retry_policy
+    retry_policies = task.retry_policy or retry_policies
     attempts = 0
     config = task.config
     if configurable is not None:
@@ -154,14 +148,8 @@ async def arun_with_retry(
         except Exception as exc:
             if SUPPORTS_EXC_NOTES:
                 exc.add_note(f"During task with name '{task.name}' and id '{task.id}'")
-            if retry_policy is None:
+            if retry_policies is None:
                 raise
-
-            # Handle single RetryPolicy case
-            if isinstance(retry_policy, RetryPolicy):
-                retry_policies: Sequence[RetryPolicy] = [retry_policy]
-            else:
-                retry_policies = retry_policy
 
             # Check which retry policy applies to this exception
             matching_policy = None

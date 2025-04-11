@@ -5,17 +5,7 @@ import functools
 import inspect
 import sys
 import types
-from typing import (
-    Any,
-    Callable,
-    Generator,
-    Generic,
-    Optional,
-    Sequence,
-    TypeVar,
-    Union,
-    cast,
-)
+from typing import Any, Callable, Generator, Generic, Optional, Sequence, TypeVar, cast
 
 from langchain_core.runnables import Runnable
 from typing_extensions import ParamSpec
@@ -234,7 +224,7 @@ class SyncAsyncFuture(Generic[T], concurrent.futures.Future[T]):
 def call(
     func: Callable[P, T],
     *args: Any,
-    retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
+    retry: Optional[Sequence[RetryPolicy]] = None,
     **kwargs: Any,
 ) -> SyncAsyncFuture[T]:
     config = get_config()
