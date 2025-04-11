@@ -121,7 +121,7 @@ def task(
         ```
     """
     if isinstance(retry, RetryPolicy):
-        retry_policies: Optional[Sequence[RetryPolicy]] = [retry]
+        retry_policies: Optional[Sequence[RetryPolicy]] = (retry,)
     else:
         retry_policies = retry
 

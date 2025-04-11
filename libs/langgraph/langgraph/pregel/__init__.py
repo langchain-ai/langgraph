@@ -549,7 +549,7 @@ class Pregel(PregelProtocol):
         self.checkpointer = checkpointer
         self.store = store
         if isinstance(retry_policy, RetryPolicy):
-            self.retry_policy: Sequence[RetryPolicy] = [retry_policy]
+            self.retry_policy: Sequence[RetryPolicy] = (retry_policy,)
         else:
             self.retry_policy = retry_policy
         self.config_type = config_type

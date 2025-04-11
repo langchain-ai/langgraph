@@ -175,7 +175,7 @@ class PregelNode(Runnable):
         self.writers = writers or []
         self.bound = bound if bound is not None else DEFAULT_BOUND
         if isinstance(retry_policy, RetryPolicy):
-            self.retry_policy: Sequence[RetryPolicy] = [retry_policy]
+            self.retry_policy: Sequence[RetryPolicy] = (retry_policy,)
         else:
             self.retry_policy = retry_policy
         self.tags = tags
