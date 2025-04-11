@@ -1,4 +1,3 @@
-import asyncio
 from inspect import (
     isfunction,
     ismethod,
@@ -178,7 +177,7 @@ class Branch(NamedTuple):
         ],
     ) -> Runnable:
         if reader:
-            value = await asyncio.to_thread(reader, config)
+            value = reader(config)
             # passthrough additional keys from node to branch
             # only doable when using dict states
             if (
