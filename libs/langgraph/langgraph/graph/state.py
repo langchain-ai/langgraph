@@ -733,28 +733,6 @@ class CompiledStateGraph(CompiledGraph):
                 if is_writable_managed_value(v)
             ]
 
-        def _get_root(input: Any) -> Optional[Sequence[tuple[str, Any]]]:
-            if isinstance(input, Command):
-                if input.graph == Command.PARENT:
-                    return ()
-                return input._update_as_tuples()
-            elif (
-                isinstance(input, (list, tuple))
-                and input
-                and any(isinstance(i, Command) for i in input)
-            ):
-                updates: list[tuple[str, Any]] = []
-                for i in input:
-                    if isinstance(i, Command):
-                        if i.graph == Command.PARENT:
-                            continue
-                        updates.extend(i._update_as_tuples())
-                    else:
-                        updates.append(("__root__", i))
-                return updates
-            elif input is not None:
-                return [("__root__", input)]
-
         def _get_updates(
             input: Union[None, dict, Any],
         ) -> Optional[Sequence[tuple[str, Any]]]:
@@ -1083,7 +1061,7 @@ def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
     return schema(**input)
 
 
-def _control_branch(value: Any, config: RunnableConfig) -> Sequence[Union[str, Send]]:
+def _control_branch(value: Any, config: RunnableConfig) -> Any:
     if isinstance(value, Send):
         ChannelWrite.do_write(config, (value,))
         return value
@@ -1114,9 +1092,7 @@ def _control_branch(value: Any, config: RunnableConfig) -> Sequence[Union[str, S
     return value
 
 
-async def _acontrol_branch(
-    value: Any, config: RunnableConfig
-) -> Sequence[Union[str, Send]]:
+async def _acontrol_branch(value: Any, config: RunnableConfig) -> Any:
     if isinstance(value, Send):
         ChannelWrite.do_write(config, (value,))
         return value
@@ -1156,6 +1132,29 @@ CONTROL_BRANCH_PATH = RunnableCallable(
     set_context=False,
     func_accepts_config=True,
 )
+
+
+def _get_root(input: Any) -> Optional[Sequence[tuple[str, Any]]]:
+    if isinstance(input, Command):
+        if input.graph == Command.PARENT:
+            return ()
+        return input._update_as_tuples()
+    elif (
+        isinstance(input, (list, tuple))
+        and input
+        and any(isinstance(i, Command) for i in input)
+    ):
+        updates: list[tuple[str, Any]] = []
+        for i in input:
+            if isinstance(i, Command):
+                if i.graph == Command.PARENT:
+                    continue
+                updates.extend(i._update_as_tuples())
+            else:
+                updates.append(("__root__", i))
+        return updates
+    elif input is not None:
+        return [("__root__", input)]
 
 
 def _get_channels(
