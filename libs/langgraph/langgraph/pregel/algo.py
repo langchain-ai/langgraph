@@ -3,13 +3,13 @@ import itertools
 import sys
 import threading
 from collections import defaultdict, deque
+from copy import copy
 from functools import partial
 from hashlib import sha1
 from typing import (
     Any,
     Callable,
     Iterable,
-    Iterator,
     Literal,
     Mapping,
     NamedTuple,
@@ -49,6 +49,7 @@ from langgraph.constants import (
     EMPTY_SEQ,
     ERROR,
     INTERRUPT,
+    MISSING,
     NO_WRITES,
     NS_END,
     NS_SEP,
@@ -63,12 +64,12 @@ from langgraph.constants import (
     TASKS,
     Send,
 )
-from langgraph.errors import EmptyChannelError, InvalidUpdateError
+from langgraph.errors import InvalidUpdateError
 from langgraph.managed.base import ManagedValueMapping
 from langgraph.pregel.call import get_runnable_for_task
-from langgraph.pregel.io import read_channel, read_channels
+from langgraph.pregel.io import read_channels
 from langgraph.pregel.log import logger
-from langgraph.pregel.read import PregelNode
+from langgraph.pregel.read import INPUT_CACHE_KEY_TYPE, PregelNode
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
@@ -423,6 +424,7 @@ def prepare_next_tasks(
         are the tasks themselves. This is the union of all PUSH tasks (Sends)
         and PULL tasks (nodes triggered by edges).
     """
+    input_cache: dict[tuple[Callable[..., Any]], tuple[str, ...]] = {}
     checkpoint_id_bytes = binascii.unhexlify(checkpoint["id"].replace("-", ""))
     null_version = checkpoint_null_version(checkpoint)
     tasks: list[Union[PregelTask, PregelExecutableTask]] = []
@@ -444,6 +446,7 @@ def prepare_next_tasks(
             store=store,
             checkpointer=checkpointer,
             manager=manager,
+            input_cache=input_cache,
         ):
             tasks.append(task)
 
@@ -486,6 +489,7 @@ def prepare_next_tasks(
             store=store,
             checkpointer=checkpointer,
             manager=manager,
+            input_cache=input_cache,
         ):
             tasks.append(task)
     return {t.id: t for t in tasks}
@@ -511,6 +515,7 @@ def prepare_single_task(
     store: Optional[BaseStore] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
+    input_cache: Optional[dict[tuple[Callable[..., Any]], tuple[str, ...]]] = None,
 ) -> Union[None, PregelTask, PregelExecutableTask]:
     """Prepares a single task for the next Pregel step, given a task path, which
     uniquely identifies a PUSH or PULL task within the graph."""
@@ -729,11 +734,15 @@ def prepare_single_task(
         ):
             triggers = tuple(sorted(proc.triggers))
             try:
-                val = next(
-                    _proc_input(proc, managed, channels, for_execution=for_execution)
+                val = _proc_input(
+                    proc,
+                    managed,
+                    channels,
+                    for_execution=for_execution,
+                    input_cache=input_cache,
                 )
-            except StopIteration:
-                return
+                if val is MISSING:
+                    return
             except Exception as exc:
                 if SUPPORTS_EXC_NOTES:
                     exc.add_note(
@@ -926,34 +935,32 @@ def _proc_input(
     channels: Mapping[str, BaseChannel],
     *,
     for_execution: bool,
-) -> Iterator[Any]:
+    input_cache: Optional[dict[INPUT_CACHE_KEY_TYPE, Any]],
+) -> Any:
     """Prepare input for a PULL task, based on the process's channels and triggers."""
+    # if in cache return shallow copy
+    if input_cache is not None and proc.input_cache_key in input_cache:
+        return copy(input_cache[proc.input_cache_key])
     # If all trigger channels subscribed by this process are not empty
     # then invoke the process with the values of all non-empty channels
     if isinstance(proc.channels, dict):
-        try:
-            val: dict[str, Any] = {}
-            for k, chan in proc.channels.items():
-                if chan in proc.triggers:
-                    val[k] = read_channel(channels, chan, catch=False)
-                elif chan in channels:
-                    try:
-                        val[k] = read_channel(channels, chan, catch=False)
-                    except EmptyChannelError:
-                        continue
-                else:
-                    val[k] = managed[k]()
-        except EmptyChannelError:
-            return
+        val: dict[str, Any] = {}
+        for k, chan in proc.channels.items():
+            if chan in channels:
+                if channels[chan].is_available():
+                    val[k] = channels[chan].get()
+            else:
+                val[k] = managed[k]()
     elif isinstance(proc.channels, list):
         for chan in proc.channels:
-            try:
-                val = read_channel(channels, chan, catch=False)
-                break
-            except EmptyChannelError:
-                pass
+            if chan in channels:
+                if channels[chan].is_available():
+                    val = channels[chan].get()
+                    break
+            else:
+                val[k] = managed[k]()
         else:
-            return
+            return MISSING
     else:
         raise RuntimeError(
             "Invalid channels type, expected list or dict, got {proc.channels}"
@@ -963,7 +970,11 @@ def _proc_input(
     if for_execution and proc.mapper is not None:
         val = proc.mapper(val)
 
-    yield val
+    # Cache the input value
+    if input_cache is not None:
+        input_cache[proc.input_cache_key] = val
+
+    return val
 
 
 def _uuid5_str(namespace: bytes, *parts: str) -> str:

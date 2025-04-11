@@ -638,6 +638,7 @@ class StateGraph(Graph):
 
         compiled = CompiledStateGraph(
             builder=self,
+            schema_to_mapper={},
             config_type=self.config_schema,
             input_model=(
                 self.input
@@ -688,6 +689,16 @@ class StateGraph(Graph):
 
 class CompiledStateGraph(CompiledGraph):
     builder: StateGraph
+    schema_to_mapper: dict[Type[Any], Optional[Callable[[Any], Any]]]
+
+    def __init__(
+        self,
+        *,
+        schema_to_mapper: dict[Type[Any], Optional[Callable[[Any], Any]]],
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.schema_to_mapper = schema_to_mapper
 
     def get_input_schema(
         self, config: Optional[RunnableConfig] = None
@@ -827,6 +838,15 @@ class CompiledStateGraph(CompiledGraph):
             input_schema = node.input if node else self.builder.schema
             input_values = {k: k for k in self.builder.schemas[input_schema]}
             is_single_input = len(input_values) == 1 and "__root__" in input_values
+            if input_schema in self.schema_to_mapper:
+                mapper = self.schema_to_mapper[input_schema]
+            else:
+                mapper = _pick_mapper(
+                    list(input_values),
+                    input_schema,
+                    self.builder.type_hints[input_schema],
+                )
+                self.schema_to_mapper[input_schema] = mapper
 
             branch_channel = CHANNEL_BRANCH_TO.format(key)
             self.channels[branch_channel] = EphemeralValue(Any, guard=False)
@@ -835,11 +855,7 @@ class CompiledStateGraph(CompiledGraph):
                 # read state keys and managed values
                 channels=(list(input_values) if is_single_input else input_values),
                 # coerce state dict to schema class (eg. pydantic model)
-                mapper=_pick_mapper(
-                    list(input_values),
-                    input_schema,
-                    self.builder.type_hints[input_schema],
-                ),
+                mapper=mapper,
                 # publish to state keys
                 writers=[ChannelWrite(write_entries, tags=[TAG_HIDDEN])],
                 metadata=node.metadata,
