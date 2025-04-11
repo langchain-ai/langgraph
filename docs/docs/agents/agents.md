@@ -1,12 +1,11 @@
 # Agents
 
-## Create an agent
+An *agent* is composed of a **Large Language Model (LLM)**, a set of **tools** that the *agent* can use to perform actions, and a
+set of instructions in the form of a **prompt**.
 
-To create a tool-calling agent, use LangGraph's prebuilt [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent]. The most important things to configure when you create an agent are:
+## Basic Configuration
 
-- `model`: a [chat model](https://python.langchain.com/docs/concepts/chat_models/) that the agent will use.
-- `tools`: a list of [tools](https://python.langchain.com/docs/concepts/tools/) for the agent to use.
-- `prompt`: string or system message with instructions for the agent.
+Use the [`create_react_agent`](https://python.langchain.com/docs/api_reference/langgraph.prebuilt.chat_agent_executor/#create-react-agent) function to create an agent:
 
 ```python
 from langgraph.prebuilt import create_react_agent
@@ -25,12 +24,14 @@ agent = create_react_agent(
 agent.invoke({"messages": "what is the weather in sf"})
 ```
 
-## Customize models
+## Configure the LLM
 
-If you want to customize the model parameters, you can pass a `ChatModel` instance as `model`:
+Use [init_chat_model](https://python.langchain.com/api_reference/langchain/chat_models/langchain.chat_models.base.init_chat_model.html) to initialize an LLM with a specific configuration. For example, you can set the temperature, max tokens, etc.
 
 ```python
 from langchain.chat_models import init_chat_model
+from langgraph.prebuilt import create_react_agent
+
 # highlight-next-line
 model = init_chat_model("anthropic:claude-3-7-sonnet-latest", temperature=0)
 
@@ -41,9 +42,11 @@ agent = create_react_agent(
 )
 ```
 
-## Customize prompt
+## Prompt
 
-You can include context (e.g., user information) in the prompt:
+A prompt consists of a series of messages that instruct the LLM on how to behave. 
+
+You can provide a prompt as a string or a list of messages. The prompt can be static or dynamic, depending on your use case.
 
 ```python
 from langgraph.prebuilt.chat_agent_executor import AgentState
@@ -75,8 +78,6 @@ See the [context](./context.md) page for more information.
 To return the agent's response in a structured output that conforms to a given schema, you can provide the schema via the `response_format` parameter. The schema can be a Pydantic model or a `TypedDict` object:
 
 ```python
-from langgraph.prebuilt.chat_agent_executor import AgentState
-from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 
 class WeatherResponse(BaseModel):
@@ -96,4 +97,4 @@ response["structured_response"]
 ```
 
 !!! Note
-    To return structured output, `create_react_agent` makes an additional LLM call at the end of the tool-calling loop.
+    To return structured output, the agent makes an additional call to the LLM to format the final response.
