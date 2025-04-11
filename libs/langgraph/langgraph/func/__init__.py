@@ -19,7 +19,7 @@ from typing import (
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.constants import END, PREVIOUS, START, TAG_HIDDEN
+from langgraph.constants import END, PREVIOUS, START
 from langgraph.pregel import Pregel
 from langgraph.pregel.call import (
     P,
@@ -429,8 +429,7 @@ class entrypoint:
                             [
                                 ChannelWriteEntry(END, mapper=_pluck_return_value),
                                 ChannelWriteEntry(PREVIOUS, mapper=_pluck_save_value),
-                            ],
-                            tags=[TAG_HIDDEN],
+                            ]
                         )
                     ],
                 )

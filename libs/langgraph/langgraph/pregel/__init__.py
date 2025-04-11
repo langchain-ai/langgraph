@@ -2547,11 +2547,12 @@ class Pregel(PregelProtocol):
         do_stream = (
             next(
                 (
-                    cast(_StreamingCallbackHandler, h)
+                    True
                     for h in run_manager.handlers
                     if isinstance(h, _StreamingCallbackHandler)
+                    and not isinstance(h, StreamMessagesHandler)
                 ),
-                None,
+                False,
             )
             if _StreamingCallbackHandler is not None
             else False
@@ -2621,7 +2622,7 @@ class Pregel(PregelProtocol):
                     ),
                     put_writes=weakref.WeakMethod(loop.put_writes),
                     schedule_task=weakref.WeakMethod(loop.accept_push),
-                    use_astream=do_stream is not None,
+                    use_astream=do_stream,
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
                 )
                 # enable subgraph streaming

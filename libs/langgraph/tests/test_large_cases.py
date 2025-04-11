@@ -4660,7 +4660,7 @@ def test_root_graph(
                     content="result for query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                    id="00000000-0000-4000-8000-000000000033",
+                    id="00000000-0000-4000-8000-000000000024",
                 )
             ]
         },
@@ -4683,7 +4683,7 @@ def test_root_graph(
                     content="result for another",
                     name="search_api",
                     tool_call_id="tool_call456",
-                    id="00000000-0000-4000-8000-000000000041",
+                    id="00000000-0000-4000-8000-000000000030",
                 )
             ]
         },
@@ -5387,7 +5387,7 @@ def test_root_graph(
         "__root__": [
             HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000070",
+                id="00000000-0000-4000-8000-000000000051",
             ),
             AIMessage(
                 content="",
@@ -5407,7 +5407,7 @@ def test_root_graph(
             ),
             AIMessage(content="answer", id="ai2"),
             AIMessage(
-                content="an extra message", id="00000000-0000-4000-8000-000000000091"
+                content="an extra message", id="00000000-0000-4000-8000-000000000066"
             ),
             HumanMessage(content="what is weather in la"),
         ],
