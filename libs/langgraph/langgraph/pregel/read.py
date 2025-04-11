@@ -30,6 +30,7 @@ from langgraph.utils.config import merge_configs
 from langgraph.utils.runnable import RunnableCallable, RunnableSeq
 
 READ_TYPE = Callable[[Union[str, Sequence[str]], bool], Union[Any, dict[str, Any]]]
+INPUT_CACHE_KEY_TYPE = tuple[Callable[..., Any], tuple[str, ...]]
 
 
 class ChannelRead(RunnableCallable):
@@ -230,6 +231,17 @@ class PregelNode(Runnable):
             return RunnableSeq(self.bound, *writers)
         else:
             return self.bound
+
+    @cached_property
+    def input_cache_key(self) -> INPUT_CACHE_KEY_TYPE:
+        """Get a cache key for the input to the node.
+        This is used to avoid calculating the same input multiple times."""
+        return (
+            self.mapper,
+            tuple(f"{key}:{value}" for key, value in self.channels.items())
+            if isinstance(self.channels, dict)
+            else tuple(self.channels),
+        )
 
     def join(self, channels: Sequence[str]) -> PregelNode:
         assert isinstance(channels, list) or isinstance(

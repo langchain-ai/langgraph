@@ -639,6 +639,7 @@ class StateGraph(Graph):
 
         compiled = CompiledStateGraph(
             builder=self,
+            schema_to_mapper={},
             config_type=self.config_schema,
             input_model=(
                 self.input
@@ -689,6 +690,16 @@ class StateGraph(Graph):
 
 class CompiledStateGraph(CompiledGraph):
     builder: StateGraph
+    schema_to_mapper: dict[Type[Any], Optional[Callable[[Any], Any]]]
+
+    def __init__(
+        self,
+        *,
+        schema_to_mapper: dict[Type[Any], Optional[Callable[[Any], Any]]],
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.schema_to_mapper = schema_to_mapper
 
     def get_input_schema(
         self, config: Optional[RunnableConfig] = None
@@ -828,6 +839,15 @@ class CompiledStateGraph(CompiledGraph):
             input_schema = node.input if node else self.builder.schema
             input_values = {k: k for k in self.builder.schemas[input_schema]}
             is_single_input = len(input_values) == 1 and "__root__" in input_values
+            if input_schema in self.schema_to_mapper:
+                mapper = self.schema_to_mapper[input_schema]
+            else:
+                mapper = _pick_mapper(
+                    list(input_values),
+                    input_schema,
+                    self.builder.type_hints[input_schema],
+                )
+                self.schema_to_mapper[input_schema] = mapper
 
             branch_channel = CHANNEL_BRANCH_TO.format(key)
             self.channels[branch_channel] = EphemeralValue(Any, guard=False)
@@ -836,11 +856,7 @@ class CompiledStateGraph(CompiledGraph):
                 # read state keys and managed values
                 channels=(list(input_values) if is_single_input else input_values),
                 # coerce state dict to schema class (eg. pydantic model)
-                mapper=_pick_mapper(
-                    list(input_values),
-                    input_schema,
-                    self.builder.type_hints[input_schema],
-                ),
+                mapper=mapper,
                 # publish to state keys
                 writers=[ChannelWrite(write_entries, tags=[TAG_HIDDEN])],
                 metadata=node.metadata,
@@ -901,19 +917,33 @@ class CompiledStateGraph(CompiledGraph):
                     config, cast(Sequence[Union[Send, ChannelWriteEntry]], writes)
                 )
 
-        schema = branch.input_schema or (
-            self.builder.nodes[start].input
-            if start in self.builder.nodes
-            else self.builder.schema
-        )
+        if with_reader:
+            # get schema
+            schema = branch.input_schema or (
+                self.builder.nodes[start].input
+                if start in self.builder.nodes
+                else self.builder.schema
+            )
+            channels = list(self.builder.schemas[schema])
+            # get mapper
+            if schema in self.schema_to_mapper:
+                mapper = self.schema_to_mapper[schema]
+            else:
+                mapper = _pick_mapper(channels, schema, self.builder.type_hints[schema])
+                self.schema_to_mapper[schema] = mapper
+            # create reader
+            reader: Optional[Callable[[RunnableConfig], Any]] = partial(
+                ChannelRead.do_read,
+                select=channels[0] if channels == ["__root__"] else channels,
+                fresh=True,
+                # coerce state dict to schema class (eg. pydantic model)
+                mapper=mapper,
+            )
+        else:
+            reader = None
 
         # attach branch publisher
-        self.nodes[start].writers.append(
-            branch.run(
-                branch_writer,
-                _get_state_reader(self.builder, schema) if with_reader else None,
-            )
-        )
+        self.nodes[start].writers.append(branch.run(branch_writer, reader))
 
         # attach then subscriber
         if branch.then and branch.then != END:
@@ -1036,20 +1066,6 @@ class CompiledStateGraph(CompiledGraph):
                     # pop interrupt seen
                     if INTERRUPT in seen:
                         seen[INTERRUPT].pop(k, MISSING)
-
-
-def _get_state_reader(
-    builder: StateGraph, schema: Type[Any]
-) -> Callable[[RunnableConfig], Any]:
-    state_keys = list(builder.channels)
-    select = list(builder.schemas[schema])
-    return partial(
-        ChannelRead.do_read,
-        select=select[0] if select == ["__root__"] else select,
-        fresh=True,
-        # coerce state dict to schema class (eg. pydantic model)
-        mapper=_pick_mapper(state_keys, schema, builder.type_hints[schema]),
-    )
 
 
 def _pick_mapper(
