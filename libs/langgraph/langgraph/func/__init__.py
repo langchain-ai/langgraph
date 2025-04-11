@@ -9,6 +9,7 @@ from typing import (
     Callable,
     Generic,
     Optional,
+    Sequence,
     TypeVar,
     Union,
     get_args,
@@ -38,7 +39,7 @@ from langgraph.types import _DC_KWARGS, RetryPolicy, StreamMode
 def task(
     *,
     name: Optional[str] = None,
-    retry: Optional[RetryPolicy] = None,
+    retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
 ) -> Callable[
     [Union[Callable[P, Awaitable[T]], Callable[P, T]]],
     Callable[P, SyncAsyncFuture[T]],
@@ -55,7 +56,7 @@ def task(
     __func_or_none__: Optional[Union[Callable[P, Awaitable[T]], Callable[P, T]]] = None,
     *,
     name: Optional[str] = None,
-    retry: Optional[RetryPolicy] = None,
+    retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
 ) -> Union[
     Callable[
         [Union[Callable[P, Awaitable[T]], Callable[P, T]]],
@@ -119,6 +120,10 @@ def task(
         await add_one.ainvoke([1, 2, 3])  # Returns [2, 3, 4]
         ```
     """
+    if isinstance(retry, RetryPolicy):
+        retry_policies: Optional[Sequence[RetryPolicy]] = (retry,)
+    else:
+        retry_policies = retry
 
     def decorator(
         func: Union[Callable[P, Awaitable[T]], Callable[P, T]],
@@ -137,7 +142,7 @@ def task(
                 # handle regular functions / partials / callable classes, etc.
                 func.__name__ = name
 
-        call_func = functools.partial(call, func, retry=retry)
+        call_func = functools.partial(call, func, retry=retry_policies)
         object.__setattr__(call_func, "_is_pregel_task", True)
         return functools.update_wrapper(call_func, func)
 

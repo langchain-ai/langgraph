@@ -75,6 +75,10 @@ def default_retry_on(exc: Exception) -> bool:
 
     if isinstance(exc, ConnectionError):
         return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return 500 <= exc.response.status_code < 600
+    if isinstance(exc, requests.HTTPError):
+        return 500 <= exc.response.status_code < 600 if exc.response else True
     if isinstance(
         exc,
         (
@@ -93,10 +97,6 @@ def default_retry_on(exc: Exception) -> bool:
         ),
     ):
         return False
-    if isinstance(exc, httpx.HTTPStatusError):
-        return 500 <= exc.response.status_code < 600
-    if isinstance(exc, requests.HTTPError):
-        return 500 <= exc.response.status_code < 600 if exc.response else True
     return True
 
 
@@ -172,7 +172,7 @@ class PregelExecutableTask:
     writes: deque[tuple[str, Any]]
     config: RunnableConfig
     triggers: Sequence[str]
-    retry_policy: Optional[RetryPolicy]
+    retry_policy: Optional[Sequence[RetryPolicy]]
     cache_policy: Optional[CachePolicy]
     id: str
     path: tuple[Union[str, int, tuple], ...]

@@ -115,7 +115,7 @@ class Call:
 
     func: Callable
     input: Any
-    retry: Optional[RetryPolicy]
+    retry: Optional[Sequence[RetryPolicy]]
     callbacks: Callbacks
 
     def __init__(
@@ -123,7 +123,7 @@ class Call:
         func: Callable,
         input: Any,
         *,
-        retry: Optional[RetryPolicy],
+        retry: Optional[Sequence[RetryPolicy]],
         callbacks: Callbacks,
     ) -> None:
         self.func = func

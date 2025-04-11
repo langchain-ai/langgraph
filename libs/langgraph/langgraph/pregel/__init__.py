@@ -498,8 +498,8 @@ class Pregel(PregelProtocol):
     store: Optional[BaseStore] = None
     """Memory store to use for SharedValues. Defaults to None."""
 
-    retry_policy: Optional[RetryPolicy] = None
-    """Retry policy to use when running tasks. Set to None to disable."""
+    retry_policy: Optional[Sequence[RetryPolicy]] = None
+    """Retry policies to use when running tasks. Set to None to disable."""
 
     config_type: Optional[Type[Any]] = None
 
@@ -528,7 +528,7 @@ class Pregel(PregelProtocol):
         debug: Optional[bool] = None,
         checkpointer: Optional[BaseCheckpointSaver] = None,
         store: Optional[BaseStore] = None,
-        retry_policy: Optional[RetryPolicy] = None,
+        retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
         config_type: Optional[Type[Any]] = None,
         input_model: Optional[Type[BaseModel]] = None,
         config: Optional[RunnableConfig] = None,
@@ -548,7 +548,10 @@ class Pregel(PregelProtocol):
         self.debug = debug if debug is not None else get_debug()
         self.checkpointer = checkpointer
         self.store = store
-        self.retry_policy = retry_policy
+        if isinstance(retry_policy, RetryPolicy):
+            self.retry_policy: Sequence[RetryPolicy] = (retry_policy,)
+        else:
+            self.retry_policy = retry_policy
         self.config_type = config_type
         self.input_model = input_model
         self.config = config
