@@ -58,7 +58,7 @@ In the future, the autoscaling implementation may evolve to accommodate other me
 ### Static IP Addresses
 
 !!! info "Only for Cloud SaaS"
-    Static IP addresses are only available for [Cloud SaaS](../concepts/langgraph_cloud.md).
+    Static IP addresses are only available for [Cloud SaaS](../concepts/langgraph_cloud.md) deployments.
 
 All traffic from deployments created after January 6th 2025 will come through a NAT gateway. This NAT gateway will have several static IP addresses depending on the data region. Refer to the table below for the list of static IP addresses:
 
