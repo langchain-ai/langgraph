@@ -164,7 +164,7 @@ agent.invoke(
 store.get(("users",), "user_123").value
 ```
 
-### LangMem
+### Memory tools
 
 [LangMem](https://langchain-ai.github.io/langmem/) is a prebuilt library that offers utilities for both long-term and short-term memory management.
 

@@ -1,12 +1,8 @@
 # Agents
 
-An agent is a system that uses an LLM to control the flow of an application. The most common form of an agent is an LLM that calls tools in a loop.
-
-Use [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent] to create a tool-calling agent.
-
 ## Create an agent
 
-The most important things to configure when you create an agent are:
+To create a tool-calling agent, use LangGraph's prebuilt [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent]. The most important things to configure when you create an agent are:
 
 - `model`: a [chat model](https://python.langchain.com/docs/concepts/chat_models/) that the agent will use.
 - `tools`: a list of [tools](https://python.langchain.com/docs/concepts/tools/) for the agent to use.
