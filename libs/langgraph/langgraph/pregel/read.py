@@ -9,7 +9,6 @@ from typing import (
     Mapping,
     Optional,
     Sequence,
-    TypeAlias,
     Union,
 )
 
@@ -31,7 +30,7 @@ from langgraph.utils.config import merge_configs
 from langgraph.utils.runnable import RunnableCallable, RunnableSeq
 
 READ_TYPE = Callable[[Union[str, Sequence[str]], bool], Union[Any, dict[str, Any]]]
-INPUT_CACHE_KEY_TYPE: TypeAlias = tuple[Callable[..., Any], tuple[str, ...]]
+INPUT_CACHE_KEY_TYPE = tuple[Callable[..., Any], tuple[str, ...]]
 
 
 class ChannelRead(RunnableCallable):
