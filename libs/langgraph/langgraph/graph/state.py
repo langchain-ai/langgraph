@@ -916,19 +916,33 @@ class CompiledStateGraph(CompiledGraph):
                     config, cast(Sequence[Union[Send, ChannelWriteEntry]], writes)
                 )
 
-        schema = branch.input_schema or (
-            self.builder.nodes[start].input
-            if start in self.builder.nodes
-            else self.builder.schema
-        )
+        if with_reader:
+            # get schema
+            schema = branch.input_schema or (
+                self.builder.nodes[start].input
+                if start in self.builder.nodes
+                else self.builder.schema
+            )
+            channels = list(self.builder.schemas[schema])
+            # get mapper
+            if schema in self.schema_to_mapper:
+                mapper = self.schema_to_mapper[schema]
+            else:
+                mapper = _pick_mapper(channels, schema, self.builder.type_hints[schema])
+                self.schema_to_mapper[schema] = mapper
+            # create reader
+            reader: Optional[Callable[[RunnableConfig], Any]] = partial(
+                ChannelRead.do_read,
+                select=channels[0] if channels == ["__root__"] else channels,
+                fresh=True,
+                # coerce state dict to schema class (eg. pydantic model)
+                mapper=mapper,
+            )
+        else:
+            reader = None
 
         # attach branch publisher
-        self.nodes[start].writers.append(
-            branch.run(
-                branch_writer,
-                _get_state_reader(self.builder, schema) if with_reader else None,
-            )
-        )
+        self.nodes[start].writers.append(branch.run(branch_writer, reader))
 
         # attach then subscriber
         if branch.then and branch.then != END:
@@ -1051,20 +1065,6 @@ class CompiledStateGraph(CompiledGraph):
                     # pop interrupt seen
                     if INTERRUPT in seen:
                         seen[INTERRUPT].pop(k, MISSING)
-
-
-def _get_state_reader(
-    builder: StateGraph, schema: Type[Any]
-) -> Callable[[RunnableConfig], Any]:
-    state_keys = list(builder.channels)
-    select = list(builder.schemas[schema])
-    return partial(
-        ChannelRead.do_read,
-        select=select[0] if select == ["__root__"] else select,
-        fresh=True,
-        # coerce state dict to schema class (eg. pydantic model)
-        mapper=_pick_mapper(state_keys, schema, builder.type_hints[schema]),
-    )
 
 
 def _pick_mapper(
