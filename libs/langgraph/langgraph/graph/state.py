@@ -1153,9 +1153,9 @@ CONTROL_BRANCH_PATH = RunnableCallable(
     tags=[TAG_HIDDEN],
     trace=False,
     recurse=False,
+    set_context=False,
     func_accepts_config=True,
 )
-CONTROL_BRANCH = Branch(CONTROL_BRANCH_PATH, None)
 
 
 def _get_channels(
