@@ -114,4 +114,4 @@ LangGraph Server is automatically configured to perform license key validation. 
 
 | Cloud SaaS | Self-Hosted Data Plane | Self-Hosted Control Plane | Standalone Container |
 |------------|------------------------|---------------------------|----------------------|
-| LangSmith API Key validated against LangSmith SaaS. | LangSmith API Key validated against LangSmith SaaS. | Air-gapped license key or LangGraph Platform License Key. | Air-gapped license key or LangGraph Platform License Key. |
+| LangSmith API Key validated against LangSmith SaaS. | LangSmith API Key validated against LangSmith SaaS. | Air-gapped license key or LangGraph Platform License Key validated against LangSmith SaaS. | Air-gapped license key or LangGraph Platform License Key validated against LangSmith SaaS. |
