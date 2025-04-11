@@ -20,6 +20,8 @@ from typing import (
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
+from pydantic import BaseModel
+from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import Self
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
@@ -67,6 +69,11 @@ if sys.version_info >= (3, 10):
     _DC_KWARGS = {"kw_only": True, "slots": True, "frozen": True}
 else:
     _DC_KWARGS = {"frozen": True}
+
+
+# NOTE: this is redefined here separately from langgraph.constants
+# to avoid a circular import
+MISSING = object()
 
 
 def default_retry_on(exc: Exception) -> bool:
@@ -318,7 +325,28 @@ class Command(Generic[N], ToolOutputMixin):
         ):
             return self.update
         elif hints := get_type_hints(type(self.update)):
-            return [(k, getattr(self.update, k)) for k in hints]
+            # Pydantic v1
+            if isinstance(self.update, BaseModelV1):
+                keep: Optional[set[str]] = self.update.__fields_set__
+                defaults = {k: v.default for k, v in self.update.__fields__.items()}
+            # Pydantic v2
+            elif isinstance(self.update, BaseModel):
+                keep = self.update.model_fields_set
+                defaults = {k: v.default for k, v in self.update.model_fields.items()}
+            else:
+                keep = None
+                defaults = {}
+
+            return [
+                (k, value)
+                for k in hints
+                if (value := getattr(self.update, k, MISSING)) is not MISSING
+                and (
+                    value is not None
+                    or defaults.get(k, MISSING) is not None
+                    or (keep is not None and k in keep)
+                )
+            ]
         elif self.update is not None:
             return [("__root__", self.update)]
         else:
