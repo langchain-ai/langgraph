@@ -68,6 +68,7 @@ class ChannelRead(RunnableCallable):
             afunc=self._aread,
             tags=tags,
             name=None,
+            trace=False,
             func_accepts_config=True,
         )
         self.fresh = fresh

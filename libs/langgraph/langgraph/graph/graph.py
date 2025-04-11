@@ -366,16 +366,14 @@ class CompiledGraph(Pregel):
         self.nodes[key] = (
             PregelNode(channels=[], triggers=[], metadata=node.metadata)
             | node.runnable
-            | ChannelWrite([ChannelWriteEntry(key)], tags=[TAG_HIDDEN])
+            | ChannelWrite([ChannelWriteEntry(key)])
         )
         cast(list[str], self.stream_channels).append(key)
 
     def attach_edge(self, start: str, end: str) -> None:
         if end == END:
             # publish to end channel
-            self.nodes[start].writers.append(
-                ChannelWrite([ChannelWriteEntry(END)], tags=[TAG_HIDDEN])
-            )
+            self.nodes[start].writers.append(ChannelWrite([ChannelWriteEntry(END)]))
         else:
             # subscribe to start channel
             self.nodes[end].triggers.append(start)
@@ -393,10 +391,7 @@ class CompiledGraph(Pregel):
                 )
                 for p in packets
             ]
-            return ChannelWrite(
-                cast(Sequence[Union[ChannelWriteEntry, Send]], writes),
-                tags=[TAG_HIDDEN],
-            )
+            return ChannelWrite(cast(Sequence[Union[ChannelWriteEntry, Send]], writes))
 
         # add hidden start node
         if start == START and start not in self.nodes:
