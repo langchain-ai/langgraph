@@ -1,8 +1,4 @@
-# How to Deploy Self-Hosted Control Plane
-
-!!! info "Alpha"
-
-    The <b>Self-Hosted Control Plane</b> deployment option is currently in <b>alpha</b> stage.
+# How to Deploy Self-Hosted Control Plane (Beta)
 
 Before deploying, review the [conceptual guide for the Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md) deployment option.
 
