@@ -75,7 +75,7 @@ See the [context](./context.md) page for more information.
 
 ## Structured output
 
-To return the agent's response in a structured output that conforms to a given schema, you can provide the schema via the `response_format` parameter. The schema can be a Pydantic model or a `TypedDict` object:
+To return the agent's response in a structured output that conforms to a given schema, you can provide the schema via the `response_format` parameter. The schema can be a Pydantic model or a `TypedDict` object. Structured output will be returned in a separate `structured_response` field:
 
 ```python
 from pydantic import BaseModel
