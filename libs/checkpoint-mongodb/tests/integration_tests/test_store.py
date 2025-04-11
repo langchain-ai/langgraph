@@ -220,3 +220,22 @@ def test_ttl():
         new_updated_at = store.collection.find_one({})['updated_at']
         assert new_updated_at == orig_updated_at
         assert res.updated_at == new_updated_at
+
+
+def test_put(store:MongoDBStore):
+    n = store.collection.count_documents({})
+    store.put(namespace=("a",), key=f"id_{n}", value={"data": f"value_{n:02d}"})
+    assert store.collection.count_documents({}) == n + 1
+    store.put(namespace=("a",), key=f"id_{n}", value={"data": f"value_{n:02d}"})
+    assert store.collection.count_documents({}) == n + 1
+
+    with pytest.raises(NotImplementedError):
+        store.put(("a",), "idx", {"data": "val"}, index=['idx'])
+
+
+def test_delete(store:MongoDBStore):
+    n_items = store.collection.count_documents({})
+    store.delete(namespace=("a", "b", "c"), key="id_0")
+    assert store.collection.count_documents({}) == n_items - 1
+    store.delete(namespace=("a", "b", "c"), key="id_0")
+    assert store.collection.count_documents({}) == n_items - 1
