@@ -44,6 +44,13 @@ Set this environment variable to have a BYOC deployment send traces to a self-ho
 
 `SELF_HOSTED_LANGSMITH_HOSTNAME` is the hostname of the self-hosted LangSmith instance. It must be accessible to the BYOC deployment. `LANGSMITH_API_KEY` is a LangSmith API generated from the self-hosted LangSmith instance.
 
+## `LANGSMITH_TRACING`
+
+!!! info "Only for Self-Hosted Data Plane, Self-Hosted Control Plane, and Standalone Container"
+    Disabling LangSmith tracing is only available for [Self-Hosted Data Plane](../../concepts/langgraph_self_hosted_data_plane.md), [Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md), and [Standalone Container](../../concepts/langgraph_standalone_container.md) deployments.
+
+Set `LANGSMITH_TRACING` to `false` to disable tracing to LangSmith.
+
 ## `LOG_LEVEL`
 
 Configure [log level](https://docs.python.org/3/library/logging.html#logging-levels). Defaults to `INFO`.
