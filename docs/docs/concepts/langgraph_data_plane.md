@@ -91,3 +91,27 @@ A custom Redis instance can be used instead of the one automatically created by 
 
 
 Multiple deployments can share the same Redis instance. For example, for `Deployment A`, `REDIS_URI_CUSTOM` can be set to `redis://<hostname_1>:<port>/1` and for `Deployment B`, `REDIS_URI_CUSTOM` can be set to `redis://<hostname_1>:<port>/2`. `1` and `2` are different database numbers within the same instance, but `<hostname_1>` is shared. **The same database number cannot be used for separate deployments**.
+
+### LangSmith Tracing
+
+LangGraph Server is automatically configured to send traces to LangSmith. See the table below for details with respect to each deployment option.
+
+| Cloud SaaS | Self-Hosted Data Plane | Self-Hosted Control Plane | Standalone Container |
+|------------|------------------------|---------------------------|----------------------|
+| Required<br><br>Trace to LangSmith SaaS. | Optional<br><br>Disable tracing or trace to LangSmith SaaS. | Optional<br><br>Disable tracing or trace to Self-Hosted LangSmith. | Optional<br><br>Disable tracing, trace to LangSmith SaaS, or trace to Self-Hosted LangSmith. |
+
+### Telemetry
+
+LangGraph Server is automatically configured to report telemetry metadata for billing purposes. See the table below for details with respect to each deployment option.
+
+| Cloud SaaS | Self-Hosted Data Plane | Self-Hosted Control Plane | Standalone Container |
+|------------|------------------------|---------------------------|----------------------|
+| Telemetry sent to LangSmith SaaS. | Telemetry sent to LangSmith SaaS. | Self-reported usage (audit) for air-gapped license key.<br><br>Telemetry sent to LangSmith SaaS for LangGraph Platform License Key. | Self-reported usage (audit) for air-gapped license key.<br><br>Telemetry sent to LangSmith SaaS for LangGraph Platform License Key. |
+
+### Licensing
+
+LangGraph Server is automatically configured to perform license key validation. See the table below for details with respect to each deployment option.
+
+| Cloud SaaS | Self-Hosted Data Plane | Self-Hosted Control Plane | Standalone Container |
+|------------|------------------------|---------------------------|----------------------|
+| LangSmith API Key validated against LangSmith SaaS. | LangSmith API Key validated against LangSmith SaaS. | Air-gapped license key or LangGraph Platform License Key. | Air-gapped license key or LangGraph Platform License Key. |
