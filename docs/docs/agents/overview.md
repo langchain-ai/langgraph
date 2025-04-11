@@ -2,11 +2,20 @@
 
 ## What is an agent?
 
-An agent is a system that uses an LLM to control the flow of an application. The most common form of an agent is tool-calling agent.
+An agent is a building block of applications that use Large Language Models (LLMs). 
 
-In a tool-calling agent, an LLM is called repeatedly in a while-loop. At each step the LLM decides which tools to call, and what the inputs to those tools should be. Those tools are then executed, and the outputs are fed back into the LLM as observations. The while-loop terminates when the agent decides it has enough information to solve the user request and it is not worth calling any more tools.
+A basic agent is composed of a Large Language Model (LLM), a set of tools and a prompt
+that instructs the LLM on how to behave.
 
-![Agent](./agent.png)
+The LLM is called in a loop until a stopping condition is reached. At each step, the LLM
+decides which tools to call, and what the inputs to those tools should be. The tools are
+then executed, and the outputs are fed back into the LLM as observations. The loop
+terminates when the agent has enough information to answer the user request.
+
+<figure markdown="1">
+![image](./agent.png){: style="max-height:400px"}
+<figcaption>An agent with a single tool that runs in a loop until a stopping condition is reached.</figcaption>
+</figure>
 
 ## Why LangGraph?
 
