@@ -17,14 +17,20 @@ Get started deploying your LangGraph applications locally or on the cloud with
 
 ## Deployment Options
 
-- [Cloud SaaS](../concepts/langgraph_cloud.md): Connect to your GitHub repositories and deploy LangGraph Servers to LangChain's cloud. We manage everything.
-- [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md): Create deployments from the [Control Plane UI](../concepts/langgraph_control_plane.md#control-plane-ui) and deploy LangGraph Servers to your cloud. We manage the [control plane](../concepts/langgraph_control_plane.md), you manage the deployments.
-- [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md#control-plane-ui): Create deployments from a self-hosted [Control Plane UI](../concepts/langgraph_control_plane.md) and deploy LangGraph Servers to your cloud. You manage everything.
+- [Cloud SaaS](../concepts/langgraph_cloud.md)*: Connect to your GitHub repositories and deploy LangGraph Servers to LangChain's cloud. We manage everything.
+- [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md)**: Create deployments from the [Control Plane UI](../concepts/langgraph_control_plane.md#control-plane-ui) and deploy LangGraph Servers to your cloud. We manage the [control plane](../concepts/langgraph_control_plane.md), you manage the deployments.
+- [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md#control-plane-ui)**: Create deployments from a self-hosted [Control Plane UI](../concepts/langgraph_control_plane.md) and deploy LangGraph Servers to your cloud. You manage everything.
 - [Standalone Container](../concepts/langgraph_standalone_container.md): Deploy LangGraph Server Docker images however you like.
+
+!!! info "Alpha and Beta"
+
+    *The <b>Cloud SaaS</b> deployment option is currently in open <b>beta</b> stage.
+
+    **The <b>Self-Hosted Data Plane</b> and <b>Self-Hosted Control Plane</b> deployment options are currently in <b>alpha</b> stage.
 
 A quick comparison...
 
-|                      | **Cloud SaaS** | **Self-Hosted [Data Plane](../concepts/langgraph_data_plane.md)** | **Self-Hosted [Control Plane](../concepts/langgraph_control_plane.md)** | **Standalone Container** |
+|                      | **Cloud SaaS*** | **Self-Hosted [Data Plane](../concepts/langgraph_data_plane.md)**** | **Self-Hosted [Control Plane](../concepts/langgraph_control_plane.md)**** | **Standalone Container** |
 |----------------------|----------------|----------------------------|-------------------------------|--------------------------|
 | **[Control Plane UI/API](../concepts/langgraph_control_plane.md)** | Yes | Yes | Yes | No |
 | **CI/CD** | Managed internally by platform | Managed externally by you | Managed externally by you | Managed externally by you |

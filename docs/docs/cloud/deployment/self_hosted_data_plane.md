@@ -1,5 +1,9 @@
 # How to Deploy Self-Hosted Data Plane
 
+!!! info "Alpha"
+
+    The <b>Self-Hosted Data Plane</b> deployment option is currently in <b>alpha</b> stage.
+
 Before deploying, review the [conceptual guide for the Self-Hosted Data Plane](../../concepts/langgraph_self_hosted_data_plane.md) deployment option.
 
 ## Prerequisites
