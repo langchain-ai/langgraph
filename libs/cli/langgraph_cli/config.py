@@ -443,16 +443,22 @@ def _parse_node_version(version_str: str) -> int:
         ) from None
 
 
-def _is_python_graph(spec: Union[str, dict]) -> bool:
-    """Check if a graph is a Python graph based on the file extension."""
-
-    # handle new style config
+def _is_node_graph(spec: Union[str, dict]) -> bool:
+    """Check if a graph is a Node.js graph based on the file extension."""
     if isinstance(spec, dict):
         spec = spec.get("path")
 
     file_path = spec.split(":")[0]
     file_ext = os.path.splitext(file_path)[1]
-    return file_ext in [".py", ".pyx", ".pyd", ".pyi"]
+
+    return file_ext in [
+        ".ts",
+        ".mts",
+        ".cts",
+        ".js",
+        ".mjs",
+        ".cjs",
+    ]
 
 
 def validate_config(config: Config) -> Config:
@@ -460,8 +466,8 @@ def validate_config(config: Config) -> Config:
 
     graphs = config.get("graphs", {})
 
-    some_python = any(_is_python_graph(spec) for spec in graphs.values())
-    some_node = any(not _is_python_graph(spec) for spec in graphs.values())
+    some_node = any(_is_node_graph(spec) for spec in graphs.values())
+    some_python = any(not _is_node_graph(spec) for spec in graphs.values())
 
     node_version = config.get(
         "node_version", DEFAULT_NODE_VERSION if some_node else None
