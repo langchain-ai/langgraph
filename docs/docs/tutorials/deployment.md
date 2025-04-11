@@ -24,7 +24,7 @@ Get started deploying your LangGraph applications locally or on the cloud with
 
 A quick comparison...
 
-|                      | **Cloud SaaS<sup>(Beta)</sup>** | **Self-Hosted [Data Plane](../concepts/langgraph_data_plane.md)<sup>(Beta)</sup>** | **Self-Hosted [Control Plane](../concepts/langgraph_control_plane.md)<sup>(Beta)</sup>** | **Standalone Container** |
+|                      | **Cloud SaaS** | **Self-Hosted [Data Plane](../concepts/langgraph_data_plane.md)** | **Self-Hosted [Control Plane](../concepts/langgraph_control_plane.md)** | **Standalone Container** |
 |----------------------|----------------|----------------------------|-------------------------------|--------------------------|
 | **[Control Plane UI/API](../concepts/langgraph_control_plane.md)** | Yes | Yes | Yes | No |
 | **CI/CD** | Managed internally by platform | Managed externally by you | Managed externally by you | Managed externally by you |
