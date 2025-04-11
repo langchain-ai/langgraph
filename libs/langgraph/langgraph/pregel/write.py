@@ -54,14 +54,14 @@ class ChannelWrite(RunnableCallable):
         self,
         writes: Sequence[Union[ChannelWriteEntry, ChannelWriteTupleEntry, Send]],
         *,
-        tags: Optional[Sequence[str]] = None,
+        tags: Optional[Sequence[str]] = None,  # ignored
         require_at_least_one_of: Optional[Sequence[str]] = None,  # ignored
     ):
         super().__init__(
             func=self._write,
             afunc=self._awrite,
             name=None,
-            tags=tags,
+            trace=False,
             func_accepts_config=True,
         )
         self.writes = cast(
@@ -152,6 +152,8 @@ class ChannelWrite(RunnableCallable):
                 tuples.append((w.channel, value))
             else:
                 raise ValueError(f"Invalid write entry: {w}")
+        # if we want to persist writes found before hitting a ParentCommand
+        # can move this to a finally block
         write: TYPE_SEND = config[CONF][CONFIG_KEY_SEND]
         write(tuples)
 

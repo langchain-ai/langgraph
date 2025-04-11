@@ -808,7 +808,7 @@ class CompiledStateGraph(CompiledGraph):
                 tags=[TAG_HIDDEN],
                 triggers=[START],
                 channels=[START],
-                writers=[ChannelWrite(write_entries, tags=[TAG_HIDDEN])],
+                writers=[ChannelWrite(write_entries)],
             )
         elif node is not None:
             input_schema = node.input if node else self.builder.schema
@@ -833,7 +833,7 @@ class CompiledStateGraph(CompiledGraph):
                 # coerce state dict to schema class (eg. pydantic model)
                 mapper=mapper,
                 # publish to state keys
-                writers=[ChannelWrite(write_entries, tags=[TAG_HIDDEN])],
+                writers=[ChannelWrite(write_entries)],
                 metadata=node.metadata,
                 retry_policy=node.retry_policy,
                 bound=node.runnable,
@@ -859,9 +859,7 @@ class CompiledStateGraph(CompiledGraph):
             # publish to channel
             for start in starts:
                 self.nodes[start].writers.append(
-                    ChannelWrite(
-                        (ChannelWriteEntry(channel_name, start),), tags=[TAG_HIDDEN]
-                    )
+                    ChannelWrite((ChannelWriteEntry(channel_name, start),))
                 )
 
     def attach_branch(
@@ -933,9 +931,7 @@ class CompiledStateGraph(CompiledGraph):
             for end in ends:
                 if end != END:
                     self.nodes[end].writers.append(
-                        ChannelWrite(
-                            (ChannelWriteEntry(channel_name, end),), tags=[TAG_HIDDEN]
-                        )
+                        ChannelWrite((ChannelWriteEntry(channel_name, end),))
                     )
 
     def _migrate_checkpoint(self, checkpoint: Checkpoint) -> None:
