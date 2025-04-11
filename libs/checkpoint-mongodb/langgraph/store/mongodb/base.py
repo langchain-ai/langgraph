@@ -20,6 +20,7 @@ from pymongo import (
 from pymongo.collection import Collection
 from pymongo.driver_info import DriverInfo
 from pymongo.errors import OperationFailure
+from pymongo.collection import ReturnDocument
 
 from langgraph.store.base import (
     NOT_PROVIDED,
@@ -113,9 +114,9 @@ class MongoDBStore(BaseStore):
         op = UpdateOne(
             filter={"namespace": list(namespace), "key": key},
             update={
-                "$set": {"value": value, "updated_at": self.get_time()},
+                "$set": {"value": value, "updated_at": datetime.now(tz=timezone.utc)},
                 "$setOnInsert": {
-                    "created_at": self.get_time(),
+                    "created_at": datetime.now(tz=timezone.utc),
                 },
             },
             upsert=True,
@@ -141,11 +142,16 @@ class MongoDBStore(BaseStore):
         Returns:
             The retrieved item or None if not found.
         """
-
-        res = self._collection.find_one_and_update(
-            filter={"namespace": namespace, "key": key},
-            update={"updated_at": self.get_time()},
-        )
+        if refresh_ttl is False:
+            res = self._collection.find_one(
+                filter={"namespace": namespace, "key": key},
+            )
+        else:
+            res = self._collection.find_one_and_update(
+                filter={"namespace": namespace, "key": key},
+                update={"$set": {"updated_at": datetime.now(tz=timezone.utc)}},
+                return_document=ReturnDocument.AFTER,
+            )
         if res:
             return Item(
                 value=res["value"],
