@@ -424,7 +424,7 @@ def prepare_next_tasks(
         are the tasks themselves. This is the union of all PUSH tasks (Sends)
         and PULL tasks (nodes triggered by edges).
     """
-    input_cache: dict[tuple[Callable[..., Any]], tuple[str, ...]] = {}
+    input_cache: dict[INPUT_CACHE_KEY_TYPE, Any] = {}
     checkpoint_id_bytes = binascii.unhexlify(checkpoint["id"].replace("-", ""))
     null_version = checkpoint_null_version(checkpoint)
     tasks: list[Union[PregelTask, PregelExecutableTask]] = []
@@ -515,7 +515,7 @@ def prepare_single_task(
     store: Optional[BaseStore] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
-    input_cache: Optional[dict[tuple[Callable[..., Any]], tuple[str, ...]]] = None,
+    input_cache: Optional[dict[INPUT_CACHE_KEY_TYPE, Any]] = None,
 ) -> Union[None, PregelTask, PregelExecutableTask]:
     """Prepares a single task for the next Pregel step, given a task path, which
     uniquely identifies a PUSH or PULL task within the graph."""
