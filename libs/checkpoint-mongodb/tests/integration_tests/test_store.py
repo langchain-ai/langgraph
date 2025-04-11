@@ -5,7 +5,7 @@ from typing import Generator
 import pytest
 from pymongo import MongoClient
 
-from langgraph.store.base import Item
+from langgraph.store.base import Item, TTLConfig
 from langgraph.store.mongodb import MongoDBStore
 
 MONGODB_URI = os.environ.get("MONGODB_URI", "mongodb://localhost:27017")
@@ -31,7 +31,7 @@ def store(ttl) -> Generator:
 
     mdbstore = MongoDBStore(
         collection,
-        ttl=ttl,
+        ttl_config=TTLConfig(default_ttl=ttl, refresh_on_read=True),
     )
 
     namespaces = [
@@ -54,109 +54,82 @@ def store(ttl) -> Generator:
         client.close()
 
 
-def test_list_namespaces():
-    client = MongoClient(MONGODB_URI)
-    collection = client[DB_NAME][COLLECTION_NAME]
-    collection.delete_many({})
-    collection.drop_indexes()
+def test_list_namespaces(store):
+    result = store.list_namespaces(prefix=("a", "b"))
+    expected = [
+        ("a", "b", "c"),
+        ("a", "b", "d", "e"),
+        ("a", "b", "d", "i"),
+        ("a", "b", "f"),
+    ]
+    assert sorted(result) == sorted(expected)
 
-    with MongoDBStore.from_conn_string(
-        conn_string=MONGODB_URI,
-        db_name=DB_NAME,
-        collection_name=COLLECTION_NAME,
-        ttl=3600,  # 1 hour
-    ) as store:
-        # Following the data structure of test_list_namespaces_basic
-        namespaces = [
-            ("a", "b", "c"),
-            ("a", "b", "d", "e"),
-            ("a", "b", "d", "i"),
-            ("a", "b", "f"),
-            ("a", "c", "f"),
-            ("b", "a", "f"),
-            ("users", "123"),
-            ("users", "456", "settings"),
-            ("admin", "users", "789"),
-        ]
+    result = store.list_namespaces(suffix=("f",))
+    expected = [
+        ("a", "b", "f"),
+        ("a", "c", "f"),
+        ("b", "a", "f"),
+    ]
+    assert sorted(result) == sorted(expected)
 
-        for i, ns in enumerate(namespaces):
-            store.put(namespace=ns, key=f"id_{i}", value={"data": f"value_{i:02d}"})
+    result = store.list_namespaces(prefix=("a",), suffix=("f",))
+    expected = [
+        ("a", "b", "f"),
+        ("a", "c", "f"),
+    ]
+    assert sorted(result) == sorted(expected)
 
-        result = store.list_namespaces(prefix=("a", "b"))
-        expected = [
-            ("a", "b", "c"),
-            ("a", "b", "d", "e"),
-            ("a", "b", "d", "i"),
-            ("a", "b", "f"),
-        ]
-        assert sorted(result) == sorted(expected)
+    result = store.list_namespaces(
+        prefix=("a",),
+        suffix=(
+            "b",
+            "f",
+        ),
+    )
+    expected = [("a", "b", "f")]
+    assert sorted(result) == sorted(expected)
 
-        result = store.list_namespaces(suffix=("f",))
-        expected = [
-            ("a", "b", "f"),
-            ("a", "c", "f"),
-            ("b", "a", "f"),
-        ]
-        assert sorted(result) == sorted(expected)
+    # Test max_depth and deduplication
+    result = store.list_namespaces(prefix=("a", "b"), max_depth=3)
+    expected = [
+        ("a", "b", "c"),
+        ("a", "b", "d"),
+        ("a", "b", "f"),
+    ]
+    assert sorted(result) == sorted(expected)
 
-        result = store.list_namespaces(prefix=("a",), suffix=("f",))
-        expected = [
-            ("a", "b", "f"),
-            ("a", "c", "f"),
-        ]
-        assert sorted(result) == sorted(expected)
+    result = store.list_namespaces(prefix=("a", "*", "f"))
+    expected = [
+        ("a", "b", "f"),
+        ("a", "c", "f"),
+    ]
+    assert sorted(result) == sorted(expected)
 
-        result = store.list_namespaces(
-            prefix=("a",),
-            suffix=(
-                "b",
-                "f",
-            ),
-        )
-        expected = [("a", "b", "f")]
-        assert sorted(result) == sorted(expected)
+    result = store.list_namespaces(prefix=("*", "*", "f"))
+    expected = [("a", "c", "f"), ("b", "a", "f"), ("a", "b", "f")]
+    assert sorted(result) == sorted(expected)
 
-        # Test max_depth and deduplication
-        result = store.list_namespaces(prefix=("a", "b"), max_depth=3)
-        expected = [
-            ("a", "b", "c"),
-            ("a", "b", "d"),
-            ("a", "b", "f"),
-        ]
-        assert sorted(result) == sorted(expected)
+    result = store.list_namespaces(suffix=("*", "f"))
+    expected = [
+        ("a", "b", "f"),
+        ("a", "c", "f"),
+        ("b", "a", "f"),
+    ]
+    assert sorted(result) == sorted(expected)
 
-        result = store.list_namespaces(prefix=("a", "*", "f"))
-        expected = [
-            ("a", "b", "f"),
-            ("a", "c", "f"),
-        ]
-        assert sorted(result) == sorted(expected)
+    result = store.list_namespaces(prefix=("a", "b"), suffix=("d", "i"))
+    expected = [("a", "b", "d", "i")]
+    assert sorted(result) == sorted(expected)
 
-        result = store.list_namespaces(prefix=("*", "*", "f"))
-        expected = [("a", "c", "f"), ("b", "a", "f"), ("a", "b", "f")]
-        assert sorted(result) == sorted(expected)
+    result = store.list_namespaces(prefix=("a", "b"), suffix=("i"))
+    expected = [("a", "b", "d", "i")]
+    assert sorted(result) == sorted(expected)
 
-        result = store.list_namespaces(suffix=("*", "f"))
-        expected = [
-            ("a", "b", "f"),
-            ("a", "c", "f"),
-            ("b", "a", "f"),
-        ]
-        assert sorted(result) == sorted(expected)
+    result = store.list_namespaces(prefix=("nonexistent",))
+    assert result == []
 
-        result = store.list_namespaces(prefix=("a", "b"), suffix=("d", "i"))
-        expected = [("a", "b", "d", "i")]
-        assert sorted(result) == sorted(expected)
-
-        result = store.list_namespaces(prefix=("a", "b"), suffix=("i"))
-        expected = [("a", "b", "d", "i")]
-        assert sorted(result) == sorted(expected)
-
-        result = store.list_namespaces(prefix=("nonexistent",))
-        assert result == []
-
-        result = store.list_namespaces()
-        assert len(result) == store._collection.count_documents({})
+    result = store.list_namespaces()
+    assert len(result) == store.collection.count_documents({})
 
 
 def test_get(store: MongoDBStore):
@@ -175,9 +148,75 @@ def test_get(store: MongoDBStore):
     assert result is None
 
     # Test case: refresh_ttl is False
-    expected_updated_at = store._collection.find_one(
+    expected_updated_at = store.collection.find_one(
         dict(namespace=["a", "b", "d", "i"], key="id_2")
     )["updated_at"]
 
     result = store.get(namespace=("a", "b", "d", "i"), key="id_2", refresh_ttl=False)
     assert result.updated_at == expected_updated_at
+
+
+def test_ttl():
+    namespace = ("a", "b", "c", "d", "e")
+    key = "thread"
+    value = {"human": "What is the weather in SF?", "ai": "It's always sunny in SF."}
+
+    # refresh_on_read is True
+    with MongoDBStore.from_conn_string(
+        conn_string=MONGODB_URI,
+        db_name=DB_NAME,
+        collection_name=COLLECTION_NAME,
+        ttl_config=TTLConfig(default_ttl=3600, refresh_on_read=True)
+    ) as store:
+        store.collection.delete_many({})
+        store.put(namespace=namespace, key=key, value=value)
+        orig_updated_at = store.collection.find_one({})['updated_at']
+        res = store.get(namespace=namespace, key=key)
+        new_updated_at = store.collection.find_one({})['updated_at']
+        assert new_updated_at > orig_updated_at
+        assert res.updated_at == new_updated_at
+
+    # refresh_on_read is False
+    with MongoDBStore.from_conn_string(
+        conn_string=MONGODB_URI,
+        db_name=DB_NAME,
+        collection_name=COLLECTION_NAME,
+        ttl_config=TTLConfig(default_ttl=3600, refresh_on_read=False)
+    ) as store:
+        store.collection.delete_many({})
+        store.put(namespace=namespace, key=key, value=value)
+        orig_updated_at = store.collection.find_one({})['updated_at']
+        res = store.get(namespace=namespace, key=key)
+        new_updated_at = store.collection.find_one({})['updated_at']
+        assert new_updated_at == orig_updated_at
+        assert res.updated_at == new_updated_at
+
+    # ttl_config is None
+    with MongoDBStore.from_conn_string(
+        conn_string=MONGODB_URI,
+        db_name=DB_NAME,
+        collection_name=COLLECTION_NAME,
+        ttl_config=None
+    ) as store:
+        store.collection.delete_many({})
+        store.put(namespace=namespace, key=key, value=value)
+        orig_updated_at = store.collection.find_one({})['updated_at']
+        res = store.get(namespace=namespace, key=key)
+        new_updated_at = store.collection.find_one({})['updated_at']
+        assert new_updated_at > orig_updated_at
+        assert res.updated_at == new_updated_at
+
+    # refresh_on_read is True but refresh_ttl=False in get()
+    with MongoDBStore.from_conn_string(
+        conn_string=MONGODB_URI,
+        db_name=DB_NAME,
+        collection_name=COLLECTION_NAME,
+        ttl_config=TTLConfig(default_ttl=3600, refresh_on_read=True)
+    ) as store:
+        store.collection.delete_many({})
+        store.put(namespace=namespace, key=key, value=value)
+        orig_updated_at = store.collection.find_one({})['updated_at']
+        res = store.get(refresh_ttl=False, namespace=namespace, key=key)
+        new_updated_at = store.collection.find_one({})['updated_at']
+        assert new_updated_at == orig_updated_at
+        assert res.updated_at == new_updated_at

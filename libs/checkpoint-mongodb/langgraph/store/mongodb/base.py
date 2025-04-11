@@ -45,41 +45,42 @@ class MongoDBStore(BaseStore):
 
     Supports semantic search capabilities through
     an optional `index` configuration.
-
     """
-
     supports_ttl: True
-    # TODO - Do this via TTL Indexes (these are specified in seconds, not minutes.)
-
-    ttl_config: Optional[TTLConfig] = (
-        None  # TODO - Create index via this. This may be sufficient
-    )
-
-    """Database _collection backing the store."""
+    """TTL is supported by a TTL index of field: updated_at."""
 
     def __init__(
         self,
-        collection=Collection,
-        ttl: Optional[float] = None,
+        collection: Collection,
+        ttl_config: Optional[TTLConfig] = None,
         **kwargs: Any,
     ):
-        self._collection = collection
+        """Construct store and its indexes.
 
+        Args:
+            collection: Collection of Items backing the store.
+            ttl_config: Optionally define a TTL and whether to update on reads(get/search).
+
+        Returns:
+            Instance of MongoDBStore.
+        """
+        self.collection = collection
+        self.ttl_config = ttl_config
         # Create indexes if not present
         # Create a unique index, akin to primary key, on namespace + key
-        idx_keys = [idx["key"] for idx in self._collection.list_indexes()]
+        idx_keys = [idx["key"] for idx in self.collection.list_indexes()]
         if SON([("namespace", 1), ("key", 1)]) not in idx_keys:
-            self._collection.create_index(keys=["namespace", "key"], unique=True)
+            self.collection.create_index(keys=["namespace", "key"], unique=True)
 
         # Optionally, expire values using [TTL Index](https://www.mongodb.com/docs/manual/core/index-ttl/)
-        if ttl is not None and SON([("updated_at", 1)]) not in idx_keys:
-            self.ttl = float(ttl)
-            self._collection.create_index("updated_at", expireAfterSeconds=ttl)
+        if self.ttl_config is not None and SON([("updated_at", 1)]) not in idx_keys:
+            self.ttl = float(self.ttl_config["default_ttl"])
+            self.collection.create_index("updated_at", expireAfterSeconds=self.ttl)
 
     def get_time(self) -> float:  # TODO - Not sure if we want floats
         """Get the current server time as a timestamp."""
         try:
-            server_info = self._collection.database.command("hostInfo")
+            server_info = self.collection.database.command("hostInfo")
             local_time = server_info["system"]["currentTime"]
             timestamp = local_time.timestamp()
         except OperationFailure:
@@ -89,7 +90,7 @@ class MongoDBStore(BaseStore):
                     "Could not get high-resolution timestamp, falling back to low-resolution",
                     stacklevel=2,
                 )
-            ping = self._collection.database.command("ping")
+            ping = self.collection.database.command("ping")
             local_time = ping["operationTime"]
             timestamp = float(local_time.time)
         return timestamp
@@ -121,7 +122,7 @@ class MongoDBStore(BaseStore):
             },
             upsert=True,
         )
-        self._collection.bulk_write([op])
+        self.collection.bulk_write([op])
 
     def get(
         self,
@@ -142,12 +143,14 @@ class MongoDBStore(BaseStore):
         Returns:
             The retrieved item or None if not found.
         """
-        if refresh_ttl is False:
-            res = self._collection.find_one(
+        if refresh_ttl is False or (
+            self.ttl_config and not self.ttl_config["refresh_on_read"]
+        ):
+            res = self.collection.find_one(
                 filter={"namespace": namespace, "key": key},
             )
         else:
-            res = self._collection.find_one_and_update(
+            res = self.collection.find_one_and_update(
                 filter={"namespace": namespace, "key": key},
                 update={"$set": {"updated_at": datetime.now(tz=timezone.utc)}},
                 return_document=ReturnDocument.AFTER,
@@ -168,7 +171,7 @@ class MongoDBStore(BaseStore):
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
         """
-        self._collection.delete_one({"namespace": list(namespace), "key": key})
+        self.collection.delete_one({"namespace": list(namespace), "key": key})
 
     @staticmethod
     def _match_prefix(prefix: NamespacePath):
@@ -260,7 +263,7 @@ class MongoDBStore(BaseStore):
         if offset:
             raise NotImplementedError("offset is not implemented")
 
-        results = self._collection.aggregate(pipeline)
+        results = self.collection.aggregate(pipeline)
         return [tuple(res["namespace"]) for res in results]
 
     def batch(self, ops: Iterable[Op]) -> list[Result]:
@@ -302,7 +305,7 @@ class MongoDBStore(BaseStore):
         conn_string: Optional[str] = None,
         db_name: str = "checkpointing_db",
         collection_name: str = "persistent-store",
-        ttl: Optional[float] = None,
+        ttl_config: Optional[TTLConfig] = None,
         **kwargs: Any,
     ) -> Iterator["MongoDBStore"]:
         """Context manager to create a persistent MongoDB key-value store.
@@ -320,7 +323,7 @@ class MongoDBStore(BaseStore):
             conn_string: MongoDB connection string. See [class:~pymongo.MongoClient].
             db_name: Database name. It will be created if it doesn't exist.
             collection_name: Collection name backing the store. Created if it doesn't exist.
-            ttl: If provided, documents will be removed after this *number of seconds*.
+            ttl_config: Defines a TTL (in seconds) and whether to update on reads(get/search).
         Yields: A new MongoDBStore.
         """
         client: Optional[MongoClient] = None
@@ -337,8 +340,8 @@ class MongoDBStore(BaseStore):
             collection = client[db_name][collection_name]
 
             yield MongoDBStore(
-                collection,
-                ttl=ttl,
+                collection=collection,
+                ttl_config=ttl_config,
                 **kwargs,
             )
         finally:
