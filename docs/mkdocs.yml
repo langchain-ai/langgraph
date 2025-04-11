@@ -84,7 +84,7 @@ plugins:
                 - "!^_"
 
 nav:
-  - Home:
+  - LangGraph:
     - index.md
     - Get started:
       - Learn the basics: tutorials/introduction.ipynb
@@ -386,6 +386,18 @@ nav:
           - troubleshooting/errors/INVALID_LICENSE.md
       - LangGraph Academy Course: https://academy.langchain.com/courses/intro-to-langgraph
 
+  - Agents:
+    - agents/overview.md
+    - agents/agents.md
+    - agents/streaming.md
+    - agents/tools.md
+    - agents/mcp.md
+    - agents/context.md
+    - agents/memory.md
+    - agents/human-in-the-loop.md
+    - agents/multi-agent.md
+    - agents/deployment.md
+    - agents/ui.md
   - API reference:
     - Library:
       - Graphs: reference/graphs.md
