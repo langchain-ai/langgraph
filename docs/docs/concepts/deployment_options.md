@@ -10,11 +10,11 @@
 
 There are 4 main options for deploying with the LangGraph Platform:
 
-1. **[Cloud SaaS](#cloud-saas)**: Available for **Plus** and **Enterprise** plans.
+1. **<a href="#cloud-saas">Cloud SaaS<sup>(Beta)</sup></a>**: Available for **Plus** and **Enterprise** plans.
 
-1. **[Self-Hosted Data Plane](#self-hosted-data-plane)**: Available for the **Enterprise** plan.
+1. **<a href="#self-hosted-data-plane">Self-Hosted Data Plane<sup>(Beta)</sup></a>**: Available for the **Enterprise** plan.
 
-1. **[Self-Hosted Control Plane](#self-hosted-control-plane)**: Available for the **Enterprise** plan.
+1. **<a href="#self-hosted-control-plane">Self-Hosted Control Plane<sup>(Beta)</sup></a>**: Available for the **Enterprise** plan.
 
 1. **[Standalone Container](#standalone-container)**: Available for all plans.
 
