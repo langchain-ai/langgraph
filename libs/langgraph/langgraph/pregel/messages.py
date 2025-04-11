@@ -18,7 +18,7 @@ from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGenerationChunk, LLMResult
 
 from langgraph.constants import NS_SEP, TAG_HIDDEN, TAG_NOSTREAM
-from langgraph.types import StreamChunk
+from langgraph.types import Command, StreamChunk
 
 try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler
@@ -153,32 +153,35 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         **kwargs: Any,
     ) -> Any:
         if meta := self.metadata.pop(run_id, None):
-            if isinstance(response, BaseMessage):
-                self._emit(meta, response, dedupe=True)
-            elif isinstance(response, Sequence):
-                for value in response:
-                    if isinstance(value, BaseMessage):
-                        self._emit(meta, value, dedupe=True)
-            elif isinstance(response, dict):
-                for value in response.values():
-                    if isinstance(value, BaseMessage):
-                        self._emit(meta, value, dedupe=True)
-                    elif isinstance(value, Sequence):
-                        for item in value:
-                            if isinstance(item, BaseMessage):
-                                self._emit(meta, item, dedupe=True)
-            elif hasattr(response, "__dir__") and callable(response.__dir__):
-                for key in dir(response):
-                    try:
-                        value = getattr(response, key)
-                        if isinstance(value, BaseMessage):
-                            self._emit(meta, value, dedupe=True)
-                        elif isinstance(value, Sequence):
-                            for item in value:
-                                if isinstance(item, BaseMessage):
-                                    self._emit(meta, item, dedupe=True)
-                    except AttributeError:
-                        pass
+            self._process_response(response, meta, set())
+
+    def _process_response(self, response: Any, meta: Meta, visited: set[int]) -> None:
+        """Recursively process a response to find and emit BaseMessage instances."""
+        if response is None or id(response) in visited:
+            return
+
+        visited.add(id(response))
+
+        if isinstance(response, BaseMessage):
+            self._emit(meta, response, dedupe=True)
+        elif isinstance(response, dict):
+            for value in response.values():
+                self._process_response(value, meta, visited)
+        elif isinstance(response, Sequence) and not isinstance(response, str):
+            for item in response:
+                self._process_response(item, meta, visited)
+        elif hasattr(response, "__dir__") and callable(response.__dir__):
+            for key in dir(response):
+                # Skip magic methods and properties to reduce recursion depth
+                if key.startswith("__") and key.endswith("__"):
+                    continue
+                try:
+                    value = getattr(response, key)
+                    self._process_response(value, meta, visited)
+                except AttributeError:
+                    pass
+        elif isinstance(response, Command):
+            self._process_response(response.update, meta, visited)
 
     def on_chain_error(
         self,
