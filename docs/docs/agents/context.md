@@ -52,7 +52,7 @@ def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
 
 ### Via state {#via-state-prompt}
 
-This is especially useful for accessing any information that is dynamically updated inside the agent (for example, via [tools that update state](../how-tos/update-state-from-tools.ipynb)).
+This is especially useful for accessing any information that is [dynamically updated inside the agent](#update-context-from-tools).
 
 ```python
 class CustomState(AgentState):
@@ -167,3 +167,66 @@ agent.invoke(
     config={"configurable": {"user_id": "user_123"}}
 )
 ```
+
+## Update context from tools
+
+You can update context ([state](../concepts/low_level.md#state)) of the agent from tools. This is useful if the agent needs to load some data during execution and wants to make it available for later use in the prompt or other tools.
+
+```python
+from typing import Annotated
+from langchain_core.tools import InjectedToolCallId
+from langchain_core.messages import ToolMessage
+from langgraph.prebuilt import InjectedState
+from langgraph.types import Command
+
+class CustomState(AgentState):
+    # highlight-next-line
+    user_name: str
+
+def get_user_info(
+    # highlight-next-line
+    tool_call_id: Annotated[str, InjectedToolCallId],
+    # highlight-next-line
+    config: RunnableConfig
+) -> Command:
+    """Look up user info."""
+    # highlight-next-line
+    user_id = config.get("configurable", {}).get("user_id")
+    name = "John Smith" if user_id == "user_123" else "Unknown user"
+    return Command(update={
+        # highlight-next-line
+        "user_name": name,
+        # update the message history
+        # highlight-next-line
+        "messages": [
+            ToolMessage(
+                "Successfully looked up user information",
+                # highlight-next-line
+                tool_call_id=tool_call_id
+            )
+        ]
+    })
+
+def greet(
+    # highlight-next-line
+    state: Annotated[CustomState, InjectedState]
+) -> str:
+    """Use this to greet the user once you found their info."""
+    user_name = state["user_name"]
+    return f"Hello {user_name}!"
+
+agent = create_react_agent(
+    model="anthropic:claude-3-7-sonnet-latest",
+    tools=[get_user_info, greet],
+    # highlight-next-line
+    state_schema=CustomState
+)
+
+agent.invoke(
+    {"messages": "greet the user"},
+    # highlight-next-line
+    config={"configurable": {"user_id": "user_123"}}
+)
+```
+
+See [how to update state from tools](../how-tos/update-state-from-tools.ipynb) for more information.
