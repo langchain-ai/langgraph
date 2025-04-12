@@ -1,27 +1,20 @@
-import warnings
-from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Iterator, Sequence
+import logging
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from importlib.metadata import version
-from typing import Any, Generic, Iterable, Literal, Optional, TypeVar, Union
+from typing import Any, Iterable, Literal, Optional, TypeVar, Union
 
 from bson import SON
-from langchain_core.exceptions import LangChainException
-from langchain_core.runnables import run_in_executor
 from pymongo import (
-    DeleteMany,
     DeleteOne,
     MongoClient,
-    ReplaceOne,
-    UpdateMany,
     UpdateOne,
 )
-from pymongo.collection import Collection
+from pymongo.collection import Collection, ReturnDocument
 from pymongo.driver_info import DriverInfo
-from pymongo.errors import OperationFailure
-from pymongo.collection import ReturnDocument
 
+from langchain_core.runnables import run_in_executor
 from langgraph.store.base import (
     NOT_PROVIDED,
     BaseStore,
@@ -30,12 +23,13 @@ from langgraph.store.base import (
     Op,
     PutOp,
     Result,
-    TTLConfig,
+    TTLConfig, GetOp, SearchOp, ListNamespacesOp,
 )
 
 K = TypeVar("K")
 V = TypeVar("V")
 
+logger = logging.getLogger(__name__)
 
 class MongoDBStore(BaseStore):
     """MongoDB's persistent key-value stores for long-term memory.
@@ -77,24 +71,6 @@ class MongoDBStore(BaseStore):
             self.ttl = float(self.ttl_config["default_ttl"])
             self.collection.create_index("updated_at", expireAfterSeconds=self.ttl)
 
-    def get_time(self) -> float:  # TODO - Not sure if we want floats
-        """Get the current server time as a timestamp."""
-        try:
-            server_info = self.collection.database.command("hostInfo")
-            local_time = server_info["system"]["currentTime"]
-            timestamp = local_time.timestamp()
-        except OperationFailure:
-            with warnings.catch_warnings():
-                warnings.simplefilter("once")
-                warnings.warn(
-                    "Could not get high-resolution timestamp, falling back to low-resolution",
-                    stacklevel=2,
-                )
-            ping = self.collection.database.command("ping")
-            local_time = ping["operationTime"]
-            timestamp = float(local_time.time)
-        return timestamp
-
     def put(
         self,
         namespace: tuple[str, ...],
@@ -109,8 +85,11 @@ class MongoDBStore(BaseStore):
 
         """
 
+        if ttl:
+            logger.warning("ttl argument ignored. MongoDBStore TTL behavior is performed via a TTL Index.")
+
         if index:
-            raise NotImplementedError()  # TODO
+            raise NotImplementedError()  #TODO
 
         op = UpdateOne(
             filter={"namespace": list(namespace), "key": key},
@@ -175,6 +154,7 @@ class MongoDBStore(BaseStore):
 
     @staticmethod
     def _match_prefix(prefix: NamespacePath):
+        """Helper for list_namespaces."""
         if not prefix or prefix == "*":
             return {}
         if "*" not in prefix:
@@ -187,6 +167,7 @@ class MongoDBStore(BaseStore):
 
     @staticmethod
     def _match_suffix(suffix: NamespacePath):
+        """Helper for list_namespaces."""
         if not suffix or suffix == "*":
             return {}
         if "*" not in suffix:
@@ -218,13 +199,7 @@ class MongoDBStore(BaseStore):
         limit: int = 100,
         offset: int = 0,
     ) -> list[tuple[str, ...]]:
-        """List and filter namespaces in the store.
-
-        # TODO - Determine wildcards: slicing vs iterating on namespace.i or *
-        # TODO  It seems like we can loop over prefix and add $match $and {"$namespace.i": prefix[i]
-        #NamespacePath =  tuple[Union[str, Literal["*"]], ...]
-
-        """
+        """List and filter namespaces in the store."""
         pipeline = []
         expr = {}
         if prefix:
@@ -269,22 +244,81 @@ class MongoDBStore(BaseStore):
     def batch(self, ops: Iterable[Op]) -> list[Result]:
         """Execute multiple operations synchronously in a single batch.
 
-
-        PostGres Version:
-            1. Groups the operations, then appears to deduplicate and run by type!
-            get, search, list, put - seems unusual, but no magic. See _group_ops
-
-
-        TTL: We need to create index on updated_at field, with a constant TTL
-
         Args:
             ops: An iterable of operations to execute.
 
         Returns:
             A list of results, where each result corresponds to an operation in the input.
             The order of results matches the order of input operations.
+            The length of output may not match the input as PutOp returns None.
         """
-        raise NotImplementedError()
+        results = []
+        curr_batch = []
+        for op in ops:
+            if isinstance(op, PutOp):
+                if op.value is None:
+                    # mark the item for deletion.
+                    curr_batch.append(DeleteOne(
+                        filter={"namespace": list(op.namespace), "key": op.key}
+                    ))
+                else:
+                    # Add or Upsert the value
+                    curr_batch.append(UpdateOne(
+                        filter={"namespace": list(op.namespace), "key": op.key},
+                        update={
+                            "$set": {"value": op.value, "updated_at": datetime.now(tz=timezone.utc)},
+                            "$setOnInsert": {
+                                "created_at": datetime.now(tz=timezone.utc),
+                            },
+                        },
+                        upsert=True,
+                    ))
+            elif isinstance(op, GetOp):
+                if curr_batch:
+                    self.collection.bulk_write(curr_batch)
+                    curr_batch = []
+                results.append(self.get(
+                    namespace=list(op.namespace),
+                    key=op.key,
+                    refresh_ttl=op.refresh_ttl
+                ))
+            elif isinstance(op, SearchOp):
+                if curr_batch:
+                    self.collection.bulk_write(curr_batch)
+                    curr_batch = []
+                results.append(self.search(
+                    list(op.namespace_prefix),
+                    query=op.query,
+                    filter=op.filter,
+                    limit=op.limit,
+                    offset=op.offset,
+                    refresh_ttl=op.refresh_ttl
+                ))
+            elif isinstance(op, ListNamespacesOp):
+                if curr_batch:
+                    self.collection.bulk_write(curr_batch)
+                    curr_batch = []
+
+                prefix = None
+                suffix = None
+                if op.match_conditions:
+                    for cond in op.match_conditions:
+                        if cond.match_type == "prefix":
+                            prefix = cond.path
+                        elif cond.match_type == "suffix":
+                            suffix = cond.path
+                        else:
+                            raise ValueError(f"Match type {cond.match_type} must be prefix or suffix.")
+                results.append(self.list_namespaces(
+                    prefix=prefix,
+                    suffix=suffix,
+                    max_depth=op.max_depth,
+                    limit=op.limit,
+                    offset=op.offset,
+                ))
+        if curr_batch:
+            self.collection.bulk_write(curr_batch)
+        return results
 
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:
         """Execute multiple operations asynchronously in a single batch.
@@ -296,7 +330,7 @@ class MongoDBStore(BaseStore):
             A list of results, where each result corresponds to an operation in the input.
             The order of results matches the order of input operations.
         """
-        raise NotImplementedError()
+        await run_in_executor(None, self.batch, ops)
 
     @classmethod
     @contextmanager
@@ -347,6 +381,3 @@ class MongoDBStore(BaseStore):
         finally:
             if client:
                 client.close()
-
-
-# TODO

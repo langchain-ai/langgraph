@@ -5,7 +5,7 @@ from typing import Generator
 import pytest
 from pymongo import MongoClient
 
-from langgraph.store.base import Item, TTLConfig
+from langgraph.store.base import Item, TTLConfig, PutOp, GetOp, ListNamespacesOp, MatchCondition
 from langgraph.store.mongodb import MongoDBStore
 
 MONGODB_URI = os.environ.get("MONGODB_URI", "mongodb://localhost:27017")
@@ -222,7 +222,7 @@ def test_ttl():
         assert res.updated_at == new_updated_at
 
 
-def test_put(store:MongoDBStore):
+def test_put(store: MongoDBStore):
     n = store.collection.count_documents({})
     store.put(namespace=("a",), key=f"id_{n}", value={"data": f"value_{n:02d}"})
     assert store.collection.count_documents({}) == n + 1
@@ -233,9 +233,54 @@ def test_put(store:MongoDBStore):
         store.put(("a",), "idx", {"data": "val"}, index=['idx'])
 
 
-def test_delete(store:MongoDBStore):
+def test_delete(store: MongoDBStore):
     n_items = store.collection.count_documents({})
     store.delete(namespace=("a", "b", "c"), key="id_0")
     assert store.collection.count_documents({}) == n_items - 1
     store.delete(namespace=("a", "b", "c"), key="id_0")
     assert store.collection.count_documents({}) == n_items - 1
+
+
+def test_batch(store: MongoDBStore):
+    """
+
+    Cases:
+    PutOp
+    GetOp
+    ListNameSpaces after PutOp
+    PutOp as delete after PutOp
+
+    raises:
+    match_condition stuff
+
+    - check state after ops in different order
+    """
+    namespace = ("a", "b", "c", "d", "e")
+    key = "thread"
+    value = {"human": "What is the weather in SF?", "ai": "It's always sunny in SF."}
+
+    op_put = PutOp(namespace=namespace, key=key, value=value)
+    op_del = PutOp(namespace=namespace, key=key, value=None)
+    op_get = GetOp(namespace=namespace, key=key)
+    cond_pre = MatchCondition(match_type="prefix", path=("a", "b"))
+    cond_suf = MatchCondition(match_type="suffix", path=("d", "e"))
+    op_list = ListNamespacesOp(match_conditions=(cond_pre, cond_suf))
+
+    with MongoDBStore.from_conn_string(
+        conn_string=MONGODB_URI,
+        db_name=DB_NAME,
+        collection_name=COLLECTION_NAME,
+        ttl_config=TTLConfig(default_ttl=3600, refresh_on_read=True)
+    ) as store:
+        #1. Add 1, read it, list namespaces, and delete one item.
+        store.collection.delete_many({})
+        results = store.batch([op_put, op_get, op_list, op_del])
+        assert store.collection.count_documents({}) == 0
+        assert len(results) == 2
+        assert isinstance(results[0], Item)
+        assert isinstance(results[1], list) and isinstance(results[1][0], tuple)
+
+        # 2. ops only include writes
+        results = store.batch([op_put, op_del])
+        assert store.collection.count_documents({}) == 0
+        assert len(results) == 0
