@@ -19,17 +19,22 @@ from langgraph.store.base import (
     NOT_PROVIDED,
     BaseStore,
     Item,
+    GetOp,
+    ListNamespacesOp,
     NamespacePath,
     Op,
     PutOp,
     Result,
-    TTLConfig, GetOp, SearchOp, ListNamespacesOp,
+    SearchItem,
+    SearchOp,
+    TTLConfig,
 )
 
 K = TypeVar("K")
 V = TypeVar("V")
 
 logger = logging.getLogger(__name__)
+
 
 class MongoDBStore(BaseStore):
     """MongoDB's persistent key-value stores for long-term memory.
@@ -40,6 +45,7 @@ class MongoDBStore(BaseStore):
     Supports semantic search capabilities through
     an optional `index` configuration.
     """
+
     supports_ttl: True
     """TTL is supported by a TTL index of field: updated_at."""
 
@@ -86,10 +92,12 @@ class MongoDBStore(BaseStore):
         """
 
         if ttl:
-            logger.warning("ttl argument ignored. MongoDBStore TTL behavior is performed via a TTL Index.")
+            logger.warning(
+                "ttl argument ignored. MongoDBStore TTL behavior is performed via a TTL Index."
+            )
 
         if index:
-            raise NotImplementedError()  #TODO
+            raise NotImplementedError()  # TODO
 
         op = UpdateOne(
             filter={"namespace": list(namespace), "key": key},
@@ -258,42 +266,53 @@ class MongoDBStore(BaseStore):
             if isinstance(op, PutOp):
                 if op.value is None:
                     # mark the item for deletion.
-                    curr_batch.append(DeleteOne(
-                        filter={"namespace": list(op.namespace), "key": op.key}
-                    ))
+                    curr_batch.append(
+                        DeleteOne(
+                            filter={"namespace": list(op.namespace), "key": op.key}
+                        )
+                    )
                 else:
                     # Add or Upsert the value
-                    curr_batch.append(UpdateOne(
-                        filter={"namespace": list(op.namespace), "key": op.key},
-                        update={
-                            "$set": {"value": op.value, "updated_at": datetime.now(tz=timezone.utc)},
-                            "$setOnInsert": {
-                                "created_at": datetime.now(tz=timezone.utc),
+                    curr_batch.append(
+                        UpdateOne(
+                            filter={"namespace": list(op.namespace), "key": op.key},
+                            update={
+                                "$set": {
+                                    "value": op.value,
+                                    "updated_at": datetime.now(tz=timezone.utc),
+                                },
+                                "$setOnInsert": {
+                                    "created_at": datetime.now(tz=timezone.utc),
+                                },
                             },
-                        },
-                        upsert=True,
-                    ))
+                            upsert=True,
+                        )
+                    )
             elif isinstance(op, GetOp):
                 if curr_batch:
                     self.collection.bulk_write(curr_batch)
                     curr_batch = []
-                results.append(self.get(
-                    namespace=list(op.namespace),
-                    key=op.key,
-                    refresh_ttl=op.refresh_ttl
-                ))
+                results.append(
+                    self.get(
+                        namespace=list(op.namespace),
+                        key=op.key,
+                        refresh_ttl=op.refresh_ttl,
+                    )
+                )
             elif isinstance(op, SearchOp):
                 if curr_batch:
                     self.collection.bulk_write(curr_batch)
                     curr_batch = []
-                results.append(self.search(
-                    list(op.namespace_prefix),
-                    query=op.query,
-                    filter=op.filter,
-                    limit=op.limit,
-                    offset=op.offset,
-                    refresh_ttl=op.refresh_ttl
-                ))
+                results.append(
+                    self.search(
+                        list(op.namespace_prefix),
+                        query=op.query,
+                        filter=op.filter,
+                        limit=op.limit,
+                        offset=op.offset,
+                        refresh_ttl=op.refresh_ttl,
+                    )
+                )
             elif isinstance(op, ListNamespacesOp):
                 if curr_batch:
                     self.collection.bulk_write(curr_batch)
@@ -308,14 +327,18 @@ class MongoDBStore(BaseStore):
                         elif cond.match_type == "suffix":
                             suffix = cond.path
                         else:
-                            raise ValueError(f"Match type {cond.match_type} must be prefix or suffix.")
-                results.append(self.list_namespaces(
-                    prefix=prefix,
-                    suffix=suffix,
-                    max_depth=op.max_depth,
-                    limit=op.limit,
-                    offset=op.offset,
-                ))
+                            raise ValueError(
+                                f"Match type {cond.match_type} must be prefix or suffix."
+                            )
+                results.append(
+                    self.list_namespaces(
+                        prefix=prefix,
+                        suffix=suffix,
+                        max_depth=op.max_depth,
+                        limit=op.limit,
+                        offset=op.offset,
+                    )
+                )
         if curr_batch:
             self.collection.bulk_write(curr_batch)
         return results
@@ -381,3 +404,106 @@ class MongoDBStore(BaseStore):
         finally:
             if client:
                 client.close()
+
+    def search(
+        self,
+        namespace_prefix: tuple[str, ...],
+        /,
+        *,
+        query: Optional[str] = None,
+        filter: Optional[dict[str, Any]] = None,
+        limit: int = 10,
+        offset: int = 0,
+        refresh_ttl: Optional[bool] = None,
+    ) -> list[SearchItem]:
+        """Search for items within a namespace prefix.
+
+        Values are stored in the collection as a document of name 'value'.
+        One uses dot notation to access embedded fields. For example,
+        `value.text`, `value.address.city` and for arrays `value.titles.3`.
+
+        Args:
+            namespace_prefix: Hierarchical path prefix to search within.
+            query: Optional query for natural language search.
+            filter: Key-value pairs to filter results.
+            limit: Maximum number of items to return.
+            offset: Number of items to skip before returning results.
+            refresh_ttl: TTL is not supported for search. Use get if needed.
+
+        Returns:
+            List of items matching the search criteria.
+
+        ???+ example "Examples"
+            Basic filtering:
+            ```python
+            # Search for documents with specific metadata
+            results = store.search(
+                ("docs",),
+                filter={"value.type": "article", "value.status": "published"}
+            )
+            ```
+
+            Natural language search (requires vector store implementation):
+            ```python
+            # Initialize store with embedding configuration
+            store = YourStore( # e.g., InMemoryStore, AsyncPostgresStore
+                index={
+                    "dims": 1536,  # embedding dimensions
+                    "embed": your_embedding_function,  # function to create embeddings
+                    "fields": ["text"]  # fields to embed. Defaults to ["$"]
+                }
+            )
+
+        """
+
+        if query:
+            raise NotImplementedError("Natural language search not yet implemented.")
+
+        if offset:
+            logger.warning("offset is not implemented in MongoDBStore")
+
+        pipeline = []
+        match_cond = {}
+        if namespace_prefix:
+            match_cond = {"$expr": self._match_prefix(namespace_prefix)}
+        if filter:
+            filter_cond = [{k: v} for k, v in filter.items()]
+            match_cond = {"$and": [match_cond] + filter_cond}
+        pipeline.append({"$match": match_cond})
+
+        if limit:
+            pipeline.append({"$limit": limit})
+
+        """
+        if refresh_ttl is True or (
+            self.ttl_config
+            and refresh_ttl is None
+            and self.ttl_config["refresh_on_read"]
+        ):
+            pipeline.append({"$set": {"updated_at": "$$NOW"}})
+
+            
+            pipeline.append(
+                {
+                    "$merge": {
+                        "into": self.collection.name,
+                        "on": "_id",  # compound key
+                        "whenMatched": "merge",  # merge with existing document
+                        "whenNotMatched": "fail",    # or "insert" if you want to add new docs
+                    }
+                }
+            )
+        """
+        results = self.collection.aggregate(pipeline)
+
+        return [
+            SearchItem(
+                namespace=tuple(res["namespace"]),
+                key=res["key"],
+                value=res["value"],
+                created_at=res["created_at"],
+                updated_at=res["updated_at"],
+                score=res.get("score"),
+            )
+            for res in results
+        ]

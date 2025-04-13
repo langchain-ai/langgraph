@@ -284,3 +284,14 @@ def test_batch(store: MongoDBStore):
         results = store.batch([op_put, op_del])
         assert store.collection.count_documents({}) == 0
         assert len(results) == 0
+
+
+def test_search(store: MongoDBStore):
+    result = store.search(("a", "b"))
+    assert len(result) == 4
+    assert all(isinstance(res, Item) for res in result)
+
+    namespace = ("a", "b", "c"),
+    store.put(namespace=namespace, key=f"id_foo", value={"data": f"value_foo"})
+    result = store.search(namespace, filter={"value.data": "value_foo"})
+    assert len(result) == 1
