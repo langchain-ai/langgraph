@@ -7168,6 +7168,52 @@ def test_tags_stream_mode_messages() -> None:
     ]
 
 
+def test_stream_mode_messages_command() -> None:
+    from langchain_core.messages import HumanMessage
+
+    def my_node(state):
+        return {"messages": HumanMessage(content="foo")}
+
+    def my_other_node(state):
+        return Command(update={"messages": HumanMessage(content="bar")})
+
+    graph = (
+        StateGraph(MessagesState)
+        .add_sequence([my_node, my_other_node])
+        .add_edge(START, "my_node")
+        .compile()
+    )
+    assert list(
+        graph.stream(
+            {
+                "messages": [],
+            },
+            stream_mode="messages",
+        )
+    ) == [
+        (
+            _AnyIdHumanMessage(content="foo"),
+            {
+                "langgraph_step": 1,
+                "langgraph_node": "my_node",
+                "langgraph_triggers": ("branch:to:my_node",),
+                "langgraph_path": ("__pregel_pull", "my_node"),
+                "langgraph_checkpoint_ns": AnyStr("my_node:"),
+            },
+        ),
+        (
+            _AnyIdHumanMessage(content="bar"),
+            {
+                "langgraph_step": 2,
+                "langgraph_node": "my_other_node",
+                "langgraph_triggers": ("branch:to:my_other_node",),
+                "langgraph_path": ("__pregel_pull", "my_other_node"),
+                "langgraph_checkpoint_ns": AnyStr("my_other_node:"),
+            },
+        ),
+    ]
+
+
 def test_node_destinations() -> None:
     class State(TypedDict):
         foo: Annotated[str, operator.add]

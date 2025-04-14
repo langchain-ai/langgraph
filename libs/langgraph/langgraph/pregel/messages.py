@@ -18,7 +18,7 @@ from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGenerationChunk, LLMResult
 
 from langgraph.constants import NS_SEP, TAG_HIDDEN, TAG_NOSTREAM
-from langgraph.types import StreamChunk
+from langgraph.types import Command, StreamChunk
 
 try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler
@@ -153,6 +153,17 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         **kwargs: Any,
     ) -> Any:
         if meta := self.metadata.pop(run_id, None):
+            if isinstance(response, Command):
+                response = response.update
+
+            if isinstance(response, Sequence) and any(
+                isinstance(value, Command) for value in response
+            ):
+                response = [
+                    value.update if isinstance(value, Command) else value
+                    for value in response
+                ]
+
             if isinstance(response, BaseMessage):
                 self._emit(meta, response, dedupe=True)
             elif isinstance(response, Sequence):
