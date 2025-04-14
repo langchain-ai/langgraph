@@ -77,7 +77,7 @@ from langgraph.pregel.write import (
 )
 from langgraph.store.base import BaseStore
 from langgraph.types import All, Checkpointer, Command, RetryPolicy
-from langgraph.utils.fields import get_field_default
+from langgraph.utils.fields import get_field_default, get_update_as_tuples
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.runnable import RunnableLike, coerce_to_runnable
 
@@ -761,32 +761,7 @@ class CompiledStateGraph(CompiledGraph):
                         updates.extend(_get_updates(i) or ())
                 return updates
             elif (t := type(input)) and get_type_hints(t):
-                # Pydantic v2
-                if isinstance(input, BaseModelV1):
-                    keep: Optional[set[str]] = input.__fields_set__
-                    defaults = {k: v.default for k, v in t.__fields__.items()}
-                elif isinstance(input, BaseModel):
-                    keep = input.model_fields_set
-                    defaults = {k: v.default for k, v in input.model_fields.items()}
-                # Pydantic v1
-                else:
-                    keep = None
-                    defaults = {}
-
-                # NOTE: This behavior for Pydantic is somewhat inelegant,
-                # but we keep around for backwards compatibility
-                # if input is a Pydantic model, only update values
-                # that are different from the default values or in the keep set
-                return [
-                    (k, value)
-                    for k in output_keys
-                    if (value := getattr(input, k, MISSING)) is not MISSING
-                    and (
-                        value is not None
-                        or defaults.get(k, MISSING) is not None
-                        or (keep is not None and k in keep)
-                    )
-                ]
+                return get_update_as_tuples(input, output_keys)
             else:
                 msg = create_error_message(
                     message=f"Expected dict, got {input}",

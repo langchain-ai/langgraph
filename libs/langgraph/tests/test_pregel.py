@@ -7246,6 +7246,39 @@ def test_pydantic_none_state_update() -> None:
     assert graph.invoke({"foo": ""}) == {"foo": None}
 
 
+def test_pydantic_state_update_command() -> None:
+    from pydantic import BaseModel
+
+    class State(BaseModel):
+        foo: Optional[str]
+
+    def node_a(state: State) -> State:
+        return Command(update=State(foo=None))
+
+    graph = StateGraph(State).add_node(node_a).add_edge(START, "node_a").compile()
+    assert graph.invoke({"foo": ""}) == {"foo": None}
+
+    class State(BaseModel):
+        foo: Optional[str] = None
+        bar: Optional[str] = None
+
+    def node_a(state: State):
+        return State(foo="foo")
+
+    def node_b(state: State):
+        return Command(update=State(bar="bar"))
+
+    builder = StateGraph(State)
+    builder.add_node(node_a)
+    builder.add_node(node_b)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+    builder.add_edge("node_b", END)
+    graph = builder.compile()
+
+    assert graph.invoke(State()) == {"foo": "foo", "bar": "bar"}
+
+
 def test_pydantic_state_mutation() -> None:
     from pydantic import BaseModel, Field
 
@@ -7274,6 +7307,40 @@ def test_pydantic_state_mutation() -> None:
         state.inner.a = 5
         state.outer = 10
         return state
+
+    graph = StateGraph(State).add_node(my_node).add_edge(START, "my_node").compile()
+
+    assert graph.invoke({"outer": 1}) == {"outer": 10, "inner": Inner(a=5)}
+
+
+def test_pydantic_state_mutation_command() -> None:
+    from pydantic import BaseModel, Field
+
+    class Inner(BaseModel):
+        a: int = 0
+
+    class State(BaseModel):
+        inner: Inner = Inner()
+        outer: int = 0
+
+    def my_node(state: State) -> State:
+        state.inner.a = 5
+        state.outer = 10
+        return Command(update=state)
+
+    graph = StateGraph(State).add_node(my_node).add_edge(START, "my_node").compile()
+
+    assert graph.invoke({"outer": 1}) == {"outer": 10, "inner": Inner(a=5)}
+
+    # test w/ default_factory
+    class State(BaseModel):
+        inner: Inner = Field(default_factory=Inner)
+        outer: int = 0
+
+    def my_node(state: State) -> State:
+        state.inner.a = 5
+        state.outer = 10
+        return Command(update=state)
 
     graph = StateGraph(State).add_node(my_node).add_edge(START, "my_node").compile()
 
