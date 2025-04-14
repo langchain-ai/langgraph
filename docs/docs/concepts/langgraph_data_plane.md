@@ -54,7 +54,7 @@ For CPU utilization, the autoscaler targets 75% utilization. This means the auto
 
 For number of pending runs, the autoscaler targets 10 pending runs. For example, if the current number of containers is 1, but the number of pending runs in 20, the autoscaler will scale up the deployment to 2 containers (20 pending runs / 2 containers = 10 pending runs per container).
 
-Each metric is computed independently and the autoscaler will determine the scaling action based on the metric that results in the most number of containers. In other words, the autoscaler is aggresive when scaling up.
+Each metric is computed independently and the autoscaler will determine the scaling action based on the metric that results in the most number of containers.
 
 Scale down actions are delayed for 30 minutes before any action is taken. In other words, if the autoscaler decides to scale down a deployment, it will first wait for 30 minutes before scaling down. After 30 minutes, the metrics are recomputed and the deployment will scale down if the recomputed metrics result in a lower number of containers than the current number. Otherwise, the deployment remains scaled up. This "cool down" period ensures that deployments do not scale up and down too frequently.
 
