@@ -153,37 +153,43 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         **kwargs: Any,
     ) -> Any:
         if meta := self.metadata.pop(run_id, None):
-            self._process_response(response, meta, 0)
+            if isinstance(response, Command):
+                response = response.update
 
-    def _process_response(self, response: Any, meta: Meta, depth: int = 0) -> None:
-        """Recursively process a response to find and emit BaseMessage instances."""
-        if response is None:
-            return
+            if isinstance(response, Sequence) and any(
+                isinstance(value, Command) for value in response
+            ):
+                response = [
+                    value.update if isinstance(value, Command) else value
+                    for value in response
+                ]
 
-        # Cap recursion depth at 3
-        if depth >= 3:
-            return
-
-        if isinstance(response, BaseMessage):
-            self._emit(meta, response, dedupe=True)
-        elif isinstance(response, dict):
-            for value in response.values():
-                self._process_response(value, meta, depth + 1)
-        elif isinstance(response, Sequence) and not isinstance(response, str):
-            for item in response:
-                self._process_response(item, meta, depth + 1)
-        elif hasattr(response, "__dir__") and callable(response.__dir__):
-            for key in dir(response):
-                # Skip magic methods and properties to reduce recursion depth
-                if key.startswith("__") and key.endswith("__"):
-                    continue
-                try:
-                    value = getattr(response, key)
-                    self._process_response(value, meta, depth + 1)
-                except AttributeError:
-                    pass
-        elif isinstance(response, Command):
-            self._process_response(response.update, meta, depth + 1)
+            if isinstance(response, BaseMessage):
+                self._emit(meta, response, dedupe=True)
+            elif isinstance(response, Sequence):
+                for value in response:
+                    if isinstance(value, BaseMessage):
+                        self._emit(meta, value, dedupe=True)
+            elif isinstance(response, dict):
+                for value in response.values():
+                    if isinstance(value, BaseMessage):
+                        self._emit(meta, value, dedupe=True)
+                    elif isinstance(value, Sequence):
+                        for item in value:
+                            if isinstance(item, BaseMessage):
+                                self._emit(meta, item, dedupe=True)
+            elif hasattr(response, "__dir__") and callable(response.__dir__):
+                for key in dir(response):
+                    try:
+                        value = getattr(response, key)
+                        if isinstance(value, BaseMessage):
+                            self._emit(meta, value, dedupe=True)
+                        elif isinstance(value, Sequence):
+                            for item in value:
+                                if isinstance(item, BaseMessage):
+                                    self._emit(meta, item, dedupe=True)
+                    except AttributeError:
+                        pass
 
     def on_chain_error(
         self,
