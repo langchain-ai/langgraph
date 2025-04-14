@@ -160,8 +160,8 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         if response is None:
             return
 
-        # Cap recursion depth at 5
-        if depth >= 5:
+        # Cap recursion depth at 3
+        if depth >= 3:
             return
 
         if isinstance(response, BaseMessage):
