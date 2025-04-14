@@ -11,7 +11,7 @@ There are two types of memory that are relevant when working with agents:
 
 ## Short-term memory
 
-To enable multi-turn conversations with an agent, you can provide a [checkpointer](../concepts/persistence.md) when creating an agent:
+To enable multi-turn conversations with an agent, you need to enable LangGraph's [persistence](../concepts/persistence.md) by providing a `checkpointer` when creating an agent:
 
 ```python
 from langgraph.prebuilt import create_react_agent
@@ -48,7 +48,7 @@ ny_response = agent.invoke(
 
 ### Summarize conversation history
 
-Message history can grow quickly and exceed LLM context window size in an agent with many conversation turns or numerous tool calls. To manage message history in `create_react_agent`, you need to define a `pre_model_hook` function or runnable that takes agent state an returns a state update. Below is an example that implements message summarization (using LangMem's prebuilt `SummarizationNode`):
+Message history can grow quickly and exceed LLM context window size in an agent with many conversation turns or numerous tool calls. To shorten the message history in `create_react_agent`, you need to provide [`pre_model_hook`][langgraph.prebuilt.chat_agent_executor.create_react_agent] parameter. For example, you can shorten it by creating a running summary of the conversation:
 
 ```python
 from langchain_anthropic import ChatAnthropic
@@ -166,79 +166,4 @@ store.get(("users",), "user_123").value
 
 ### Memory tools
 
-[LangMem](https://langchain-ai.github.io/langmem/) is a prebuilt library that offers utilities for both long-term and short-term memory management.
-
-Below is an example of how you can use LangMem's prebuilt tool for creating, updating and deleting long-term semantic memories (`create_manage_memory_tool`) together with `create_react_agent`:
-
-```python
-from langgraph.prebuilt import create_react_agent
-from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.store.memory import InMemoryStore
-from langgraph.config import get_store
-# Lets agent create, update, and delete memories
-# highlight-next-line
-from langmem import create_manage_memory_tool
-
-
-def prompt(state):
-    """Prepare the messages for the LLM."""
-    # Same as that provided to `create_react_agent`
-    # highlight-next-line
-    store = get_store()
-    memories = store.search(
-        # Search within the same namespace as the one
-        # we've configured for the agent
-        ("memories",),
-        query=state["messages"][-1].content,
-    )
-    system_msg = f"""You are a helpful assistant.
-
-## Memories
-<memories>
-{memories}
-</memories>
-"""
-    return [{"role": "system", "content": system_msg}, *state["messages"]]
-
-
-store = InMemoryStore(
-    index={ # Store extracted memories
-        "dims": 1536,
-        "embed": "openai:text-embedding-3-small",
-    }
-)
-checkpointer = InMemorySaver()
-
-agent = create_react_agent(
-    model="anthropic:claude-3-7-sonnet-latest",
-    tools=[
-        # The agent can call "manage_memory" to
-        # create, update, and delete memories by ID
-        # Namespaces add scope to memories. To
-        # scope memories per-user, do ("memories", "{user_id}"):
-        # highlight-next-line
-        create_manage_memory_tool(namespace=("memories",)),
-    ],
-    prompt=prompt,
-    # Our memories will be stored in this provided BaseStore instance
-    store=store,
-    checkpointer=checkpointer,
-)
-
-config = {"configurable": {"thread_id": "1"}}
-agent.invoke(
-    {"messages": "I prefer dark display mode. Remember that."},
-    config=config,
-)
-
-# New thread = new conversation!
-# highlight-next-line
-new_config = {"configurable": {"thread_id": "2"}}
-agent.invoke(
-    {"messages": "Hey there. Do you remember me? What are my preferences?"},
-    # highlight-next-line
-    config=new_config,
-)
-```
-
-See [LangMem docs](https://langchain-ai.github.io/langmem/) for more examples and guides.
+**LangMem** is a prebuilt library that offers tools for managing long-term memories in your agent. See [LangMem docs](https://langchain-ai.github.io/langmem/) for more examples and guides.

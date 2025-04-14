@@ -12,6 +12,12 @@ To add human-in-the-loop to your tools you need to:
 See more information in the [concept guide](../concepts/human_in_the_loop.md).
 
 ```python
+from typing import Callable
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import interrupt, Command
+from langgraph.prebuilt import create_react_agent
+
+# An example of a sensitive tool that requires human review / approval
 def book_hotel(hotel_name: str):
     """Book a hotel"""
     # highlight-next-line
@@ -27,23 +33,17 @@ def book_hotel(hotel_name: str):
         raise ValueError(f"Unknown response type: {response['type']}")
     return f"Successfully booked a stay at {hotel_name}."
 
-def book_flight(from_airport: str, to_airport: str):
-    """Book a flight"""
-    return f"Successfully booked a flight from {from_airport} to {to_airport}."
-
 # highlight-next-line
 checkpointer = InMemorySaver()
 agent = create_react_agent(
     model="anthropic:claude-3-5-sonnet-latest",
-    tools=[book_hotel, book_flight],
+    tools=[book_hotel],
     # highlight-next-line
     checkpointer=checkpointer,
-    # highlight-next-line
-    version="v2"
 )
 config = {"configurable": {"thread_id": "1"}}
 for chunk in agent.stream(
-    {"messages": "book a flight from bos to jfk and a stay at McKittrick hotel"},
+    {"messages": "book a stay at McKittrick hotel"},
     # highlight-next-line
     config
 ):
@@ -88,7 +88,11 @@ def add_human_in_the_loop(
             "allow_respond": True,
         }
 
-    @create_tool(tool.name, description=tool.description, args_schema=tool.args_schema)
+    @create_tool(
+        tool.name,
+        description=tool.description,
+        args_schema=tool.args_schema
+    )
     def call_tool_with_interrupt(config: RunnableConfig, **tool_input):
         request = {
             "action_request": {
@@ -119,14 +123,14 @@ def add_human_in_the_loop(
         return tool_response
 
     return call_tool_with_interrupt
+```
 
+You can use the `add_human_in_the_loop` wrapper to add `interrupt()` to any tool without having to add it *inside* the tool:
+
+```python
 def book_hotel(hotel_name: str):
     """Book a hotel"""
     return f"Successfully booked a stay at {hotel_name}."
-
-def book_flight(from_airport: str, to_airport: str):
-    """Book a flight"""
-    return f"Successfully booked a flight from {from_airport} to {to_airport}."
 
 # highlight-next-line
 checkpointer = InMemorySaver()
@@ -135,17 +139,14 @@ agent = create_react_agent(
     tools=[
         # highlight-next-line
         add_human_in_the_loop(book_hotel),
-        book_flight
     ],
     # highlight-next-line
     checkpointer=checkpointer,
-    # highlight-next-line
-    version="v2"
 )
 
 config = {"configurable": {"thread_id": "1"}}
 for chunk in agent.stream(
-    {"messages": "book a flight from bos to jfk and a stay at McKittrick hotel"},
+    {"messages": "book a stay at McKittrick hotel"},
     # highlight-next-line
     config
 ):

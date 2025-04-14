@@ -2,7 +2,7 @@
 
 A single agent might struggle if it needs to specialize in multiple domains or manage many tools. To tackle this, you can break your agent into smaller, independent agents and composing them into a [multi-agent system](../concepts/multi_agent.md).
 
-In multi-agent systems, agents need to communicate between each other. They do so via [handoffs](#handoffs) - a primitive that describes which agent to hand control to and the payload to send to that agent.
+In multi-agent systems, agents need to communicate between each other. They do so via [handoffs](#handoffs) — a primitive that describes which agent to hand control to and the payload to send to that agent.
 
 Two of the most popular multi-agent architectures are:
 

@@ -1,9 +1,21 @@
 # Agents
 
+## What is an agent?
+
 An *agent* is composed of a **Large Language Model (LLM)**, a set of **tools** that the *agent* can use to perform actions, and a
 set of instructions in the form of a **prompt**.
 
-## Basic Configuration
+The LLM is called in a loop until a stopping condition is reached. At each step, the LLM
+decides which tools to call, and what the inputs to those tools should be. The tools are
+then executed, and the outputs are fed back into the LLM as observations. The loop
+terminates when the agent has enough information to answer the user request.
+
+<figure markdown="1">
+![image](./agent.png){: style="max-height:400px"}
+<figcaption>An agent with a single tool that runs in a loop until a stopping condition is reached.</figcaption>
+</figure>
+
+## Basic configuration
 
 Use the [`create_react_agent`](https://python.langchain.com/docs/api_reference/langgraph.prebuilt.chat_agent_executor/#create-react-agent) function to create an agent:
 

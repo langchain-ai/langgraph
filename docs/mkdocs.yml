@@ -390,12 +390,14 @@ nav:
     - agents/overview.md
     - agents/agents.md
     - agents/streaming.md
+    - agents/models.md
     - agents/tools.md
     - agents/mcp.md
     - agents/context.md
     - agents/memory.md
     - agents/human-in-the-loop.md
     - agents/multi-agent.md
+    - agents/evals.md
     - agents/deployment.md
     - agents/ui.md
   - API reference:
