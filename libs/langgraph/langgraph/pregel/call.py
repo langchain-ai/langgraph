@@ -10,7 +10,7 @@ from typing import Any, Callable, Generator, Generic, Optional, Sequence, TypeVa
 from langchain_core.runnables import Runnable
 from typing_extensions import ParamSpec
 
-from langgraph.constants import CONF, CONFIG_KEY_CALL, RETURN, TAG_HIDDEN
+from langgraph.constants import CONF, CONFIG_KEY_CALL, RETURN
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.types import RetryPolicy
 from langgraph.utils.config import get_config
@@ -197,7 +197,7 @@ def get_runnable_for_task(func: Callable[..., Any]) -> RunnableSeq:
             )
         seq = RunnableSeq(
             run,
-            ChannelWrite([ChannelWriteEntry(RETURN)], tags=[TAG_HIDDEN]),
+            ChannelWrite([ChannelWriteEntry(RETURN)]),
             name=name,
             trace_inputs=functools.partial(
                 _explode_args_trace_inputs, inspect.signature(func)

@@ -1,4 +1,4 @@
-# Self-Hosted Control Plane
+# Self-Hosted Control Plane (Beta)
 
 To deploy a [LangGraph Server](../concepts/langgraph_server.md), follow the how-to guide for [how to deploy the Self-Hosted Control Plane](../cloud/deployment/self_hosted_control_plane.md).
 

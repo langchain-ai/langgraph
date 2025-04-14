@@ -1,4 +1,4 @@
-# Self-Hosted Data Plane
+# Self-Hosted Data Plane (Beta)
 
 To deploy a [LangGraph Server](../concepts/langgraph_server.md), follow the how-to guide for [how to deploy the Self-Hosted Data Plane](../cloud/deployment/self_hosted_data_plane.md).
 
