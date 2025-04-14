@@ -1,6 +1,6 @@
 # Environment Variables
 
-The LangGraph Cloud Server supports specific environment variables for configuring a deployment.
+The LangGraph Server supports specific environment variables for configuring a deployment.
 
 ## `BG_JOB_ISOLATED_LOOPS`
 
@@ -32,7 +32,7 @@ See <a href="https://docs.smith.langchain.com/how_to_guides/tracing/sample_trace
 
 ## `LANGGRAPH_AUTH_TYPE`
 
-Type of authentication for the LangGraph Cloud Server deployment. Valid values: `langsmith`, `noop`.
+Type of authentication for the LangGraph Server deployment. Valid values: `langsmith`, `noop`.
 
 For deployments to LangGraph Cloud, this environment variable is set automatically. For local development or deployments where authentication is handled externally (e.g. self-hosted), set this environment variable to `noop`.
 
@@ -44,19 +44,27 @@ Set this environment variable to have a BYOC deployment send traces to a self-ho
 
 `SELF_HOSTED_LANGSMITH_HOSTNAME` is the hostname of the self-hosted LangSmith instance. It must be accessible to the BYOC deployment. `LANGSMITH_API_KEY` is a LangSmith API generated from the self-hosted LangSmith instance.
 
+## `LANGSMITH_TRACING`
+
+!!! info "Only for Self-Hosted Data Plane, Self-Hosted Control Plane, and Standalone Container"
+    Disabling LangSmith tracing is only available for [Self-Hosted Data Plane](../../concepts/langgraph_self_hosted_data_plane.md), [Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md), and [Standalone Container](../../concepts/langgraph_standalone_container.md) deployments.
+
+Set `LANGSMITH_TRACING` to `false` to disable tracing to LangSmith.
+
 ## `LOG_LEVEL`
 
 Configure [log level](https://docs.python.org/3/library/logging.html#logging-levels). Defaults to `INFO`.
 
 ## `N_JOBS_PER_WORKER`
 
-Number of jobs per worker for the LangGraph Cloud task queue. Defaults to `10`.
+Number of jobs per worker for the LangGraph Server task queue. Defaults to `10`.
 
 ## `POSTGRES_URI_CUSTOM`
 
-For [Bring Your Own Cloud (BYOC)](../../concepts/bring_your_own_cloud.md) deployments only.
+!!! info "Only for Self-Hosted Data Plane and Self-Hosted Control Plane"
+    Custom Postgres instances are only available for [Self-Hosted Data Plane](../../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md) deployments.
 
-Specify `POSTGRES_URI_CUSTOM` to use an externally managed Postgres instance. The value of `POSTGRES_URI_CUSTOM` must be a valid [Postgres connection URI](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING-URIS).
+Specify `POSTGRES_URI_CUSTOM` to use a custom Postgres instance. The value of `POSTGRES_URI_CUSTOM` must be a valid [Postgres connection URI](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING-URIS).
 
 Postgres:
 
@@ -73,11 +81,11 @@ Control Plane Functionality:
 
 Database Connectivity:
 
-- The externally managed Postgres instance must be accessible by the LangGraph Server service in the ECS cluster. The BYOC user is responsible for ensuring connectivity.
-- For example, if an AWS RDS Postgres instance is provisioned, it can be provisioned in the same VPC (`langgraph-cloud-vpc`) as the ECS cluster with the `langgraph-cloud-service-sg` security group to ensure connectivity.
+- The custom Postgres instance must be accessible by the LangGraph Server. The user is responsible for ensuring connectivity.
 
 ## `REDIS_URI_CUSTOM`
 
-For [Bring Your Own Cloud (BYOC)](../../concepts/bring_your_own_cloud.md) deployments only.
+!!! info "Only for Self-Hosted Data Plane and Self-Hosted Control Plane"
+    Custom Redis instances are only available for [Self-Hosted Data Plane](../../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md) deployments.
 
-Specify `REDIS_URI_CUSTOM` to use an externally managed Redis instance. The value of `REDIS_URI_CUSTOM` must be a valid [Redis connection URI](https://redis-py.readthedocs.io/en/stable/connections.html#redis.Redis.from_url).
+Specify `REDIS_URI_CUSTOM` to use a custom Redis instance. The value of `REDIS_URI_CUSTOM` must be a valid [Redis connection URI](https://redis-py.readthedocs.io/en/stable/connections.html#redis.Redis.from_url).
