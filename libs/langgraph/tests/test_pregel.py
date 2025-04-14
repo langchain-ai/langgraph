@@ -7259,8 +7259,8 @@ def test_pydantic_state_update_command() -> None:
     assert graph.invoke({"foo": ""}) == {"foo": None}
 
     class State(BaseModel):
-        foo: str | None = None
-        bar: str | None = None
+        foo: Optional[str] = None
+        bar: Optional[str] = None
 
     def node_a(state: State):
         return State(foo="foo")
