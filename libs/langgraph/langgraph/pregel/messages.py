@@ -153,23 +153,25 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         **kwargs: Any,
     ) -> Any:
         if meta := self.metadata.pop(run_id, None):
-            self._process_response(response, meta, set())
+            self._process_response(response, meta, 0)
 
-    def _process_response(self, response: Any, meta: Meta, visited: set[int]) -> None:
+    def _process_response(self, response: Any, meta: Meta, depth: int = 0) -> None:
         """Recursively process a response to find and emit BaseMessage instances."""
-        if response is None or id(response) in visited:
+        if response is None:
             return
 
-        visited.add(id(response))
+        # Cap recursion depth at 5
+        if depth >= 5:
+            return
 
         if isinstance(response, BaseMessage):
             self._emit(meta, response, dedupe=True)
         elif isinstance(response, dict):
             for value in response.values():
-                self._process_response(value, meta, visited)
+                self._process_response(value, meta, depth + 1)
         elif isinstance(response, Sequence) and not isinstance(response, str):
             for item in response:
-                self._process_response(item, meta, visited)
+                self._process_response(item, meta, depth + 1)
         elif hasattr(response, "__dir__") and callable(response.__dir__):
             for key in dir(response):
                 # Skip magic methods and properties to reduce recursion depth
@@ -177,11 +179,11 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
                     continue
                 try:
                     value = getattr(response, key)
-                    self._process_response(value, meta, visited)
+                    self._process_response(value, meta, depth + 1)
                 except AttributeError:
                     pass
         elif isinstance(response, Command):
-            self._process_response(response.update, meta, visited)
+            self._process_response(response.update, meta, depth + 1)
 
     def on_chain_error(
         self,
