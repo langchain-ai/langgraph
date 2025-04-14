@@ -213,8 +213,8 @@ nav:
                 - how-tos/ttl/configure_ttl.md
             - Authentication & Access Control:
                 - Authentication & Access Control: how-tos#authentication-access-control
-                - cloud/how-tos/auth/custom_auth_new.md
-                - cloud/how-tos/auth/openapi_security_new.md
+                - how-tos/auth/custom_auth.md
+                - how-tos/auth/openapi_security.md
             - Assistants:
                 - Assistants: how-tos#assistants
                 - cloud/how-tos/configuration_cloud.md
@@ -256,6 +256,11 @@ nav:
                 - cloud/how-tos/webhooks.md
             - Cron Jobs:
                 - cloud/how-tos/cron_jobs.md
+            - Modifying the API:
+                - Modifying the API: how-tos#modifying-the-api
+                - how-tos/http/custom_lifespan.md
+                - how-tos/http/custom_middleware.md
+                - how-tos/http/custom_routes.md
             - LangGraph Studio:
                 - LangGraph Studio: how-tos#langgraph-studio
                 - cloud/how-tos/test_deployment.md
@@ -265,6 +270,7 @@ nav:
                 - cloud/how-tos/datasets_studio.md
                 - cloud/how-tos/iterate_graph_studio.md
                 - cloud/how-tos/clone_traces_studio.md
+                - how-tos/local-studio.md
       - Concepts:
         - concepts/index.md
         - LangGraph:
@@ -273,8 +279,9 @@ nav:
           - concepts/low_level.md
           - concepts/agentic_concepts.md
           - concepts/multi_agent.md
-          - concepts/breakpoints
+          - concepts/breakpoints.md
           - concepts/human_in_the_loop.md
+          - concepts/v0-human-in-the-loop.md
           - concepts/time-travel.md
           - concepts/persistence.md
           - concepts/memory.md
@@ -287,7 +294,10 @@ nav:
           - High Level:
             - High Level: concepts#high-level
             - concepts/langgraph_platform.md
+            - concepts/platform_architecture.md
+            - concepts/scalability_and_resilience.md
             - concepts/deployment_options.md
+            - concepts/bring_your_own_cloud.md
             - concepts/plans.md
             - concepts/template_applications.md
           - Components:
@@ -311,6 +321,7 @@ nav:
             - concepts/langgraph_self_hosted_data_plane.md
             - concepts/langgraph_self_hosted_control_plane.md
             - concepts/langgraph_standalone_container.md
+            - concepts/self_hosted.md
       - Tutorials:
         - tutorials/index.md
         - Quick Start:
@@ -387,6 +398,7 @@ nav:
       - LangGraph Academy Course: https://academy.langchain.com/courses/intro-to-langgraph
 
   - API reference:
+    - reference/index.md
     - Library:
       - Graphs: reference/graphs.md
       - Checkpointing: reference/checkpoints.md
@@ -497,13 +509,8 @@ extra:
             Thanks for your feedback! Please help us improve this page by adding to the discussion below.
 validation:
   # https://www.mkdocs.org/user-guide/configuration/
-  # We're `ignoring` nav.omitted_files because we are going to rely
-  # on files being properly links to from the index pages of:
-  # - tutorials
-  # - concepts
-  # - how-tos
-  # - reference
-  omitted_files: ignore
+  # We are still raising for omitted files because they determine the breadcrumbs for pages.
+  omitted_files: warn 
   absolute_links: warn
   unrecognized_links: warn
   # TODO: figure out how to enable 'warn' for this
