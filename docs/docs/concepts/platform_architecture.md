@@ -4,7 +4,7 @@
 
 ## How we use Postgres
 
-Postgres is the persistence layer for all user and run data in LGP. This stores both checkpoints (see more info [here](./persistence.md)) as well as the server resources (threads, runs, assistants and crons).
+Postgres is the persistence layer for all user, run, and long-term memory data in LGP. This stores both checkpoints (see more info [here](./persistence.md)), server resources (threads, runs, assistants and crons), as well as items saved in the long-term memory store (see more info [here](./persistence.md#memory-store)).
 
 ## How we use Redis
 
