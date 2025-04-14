@@ -23,7 +23,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from typing_extensions import Self
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
-from langgraph.utils.pydantic import get_update_as_tuples
+from langgraph.utils.fields import get_update_as_tuples
 
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol

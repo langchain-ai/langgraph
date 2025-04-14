@@ -1,7 +1,13 @@
 import dataclasses
-from typing import Any, Generator, Optional, Type, Union, get_type_hints
+from typing import Any, Generator, Optional, Sequence, Type, Union, get_type_hints
 
+from pydantic import BaseModel
+from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import Annotated, NotRequired, ReadOnly, Required, get_origin
+
+# NOTE: this is redefined here separately from langgraph.constants
+# to avoid a circular import
+MISSING = object()
 
 
 def _is_optional_type(type_: Any) -> bool:
@@ -147,3 +153,33 @@ def get_enhanced_type_hints(
             pass
 
         yield name, typ, default, description
+
+
+def get_update_as_tuples(input: Any, keys: Sequence[str]) -> list[tuple[str, Any]]:
+    """Get Pydantic state update as a list of (key, value) tuples."""
+    # Pydantic v1
+    if isinstance(input, BaseModelV1):
+        keep: Optional[set[str]] = input.__fields_set__
+        defaults = {k: v.default for k, v in input.__fields__.items()}
+    # Pydantic v2
+    elif isinstance(input, BaseModel):
+        keep = input.model_fields_set
+        defaults = {k: v.default for k, v in input.model_fields.items()}
+    else:
+        keep = None
+        defaults = {}
+
+    # NOTE: This behavior for Pydantic is somewhat inelegant,
+    # but we keep around for backwards compatibility
+    # if input is a Pydantic model, only update values
+    # that are different from the default values or in the keep set
+    return [
+        (k, value)
+        for k in keys
+        if (value := getattr(input, k, MISSING)) is not MISSING
+        and (
+            value is not None
+            or defaults.get(k, MISSING) is not None
+            or (keep is not None and k in keep)
+        )
+    ]
