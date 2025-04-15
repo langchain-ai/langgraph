@@ -43,5 +43,4 @@ To switch the model your agent uses, you can simply change the model name string
     )
     ```
 
-To learn more about how to use `init_chat_model`, check out [this guide](https://python.langchain.com/docs/how_to/chat_models_universal_init/).
-
+As a next step, check out [available model integrations](https://python.langchain.com/docs/integrations/chat/) and learn [how to use `init_chat_model`](https://python.langchain.com/docs/how_to/chat_models_universal_init/).

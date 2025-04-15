@@ -1,7 +1,6 @@
 # Evals
 
-To evaluate your agent's performance you can use `LangSmith` [evaluations](https://docs.smith.langchain.com/evaluation). You would need to first define an 
-evaluator function to compare agent's outputs against reference outputs.
+To evaluate your agent's performance you can use `LangSmith` [evaluations](https://docs.smith.langchain.com/evaluation). You would need to first define an evaluator function to judge the results from an agent, such as final outputs or trajectory. Depending on your evaluation technique, this may or may not involve a reference output:
 
 ```python
 def evaluator(*, outputs: dict, reference_outputs: dict):
@@ -72,6 +71,8 @@ result = evaluator(
     outputs=outputs, reference_outputs=reference_outputs
 )
 ```
+
+As a next step, learn more about how to [customize trajectory match evaluator](https://github.com/langchain-ai/agentevals?tab=readme-ov-file#agent-trajectory-match).
 
 ### LLM-as-a-judge
 
