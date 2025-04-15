@@ -61,7 +61,7 @@ agent = create_react_agent(
 
 !!! note "Illustrative example" 
 
-    The example above uses ChatAnthropic, which is already supported by init_chat_model. This pattern is shown to illustrate how to manually instantiate a model not available through init_chat_model.
+    The example above uses `ChatAnthropic`, which is already supported by `init_chat_model`. This pattern is shown to illustrate how to manually instantiate a model not available through init_chat_model.
 
 ## Additional resources
 
