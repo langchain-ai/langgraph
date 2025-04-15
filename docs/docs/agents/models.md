@@ -4,7 +4,7 @@ This document describes how to configure the chat model used by an agent.
 
 ## Tool calling support
 
-To enable tool-using agents, the underlying LLM must support [tool calling](https://python.langchain.com/docs/concepts/tool_calling/).
+To enable tool-calling agents, the underlying LLM must support [tool calling](https://python.langchain.com/docs/concepts/tool_calling/).
 
 Compatible models can be found in the [LangChain integrations directory](https://python.langchain.com/docs/integrations/chat/).
 
