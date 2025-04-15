@@ -57,12 +57,16 @@ plugins:
       separator: '[\s\u200b\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;'
   - autorefs
   - mkdocstrings:
+      custom_templates: templates
       handlers:
         python:
           import:
             - https://docs.python.org/3/objects.inv
             - https://python.langchain.com/api_reference/objects.inv
           options:
+            preload_modules:
+              - langchain
+              - langchain_core
             enable_inventory: true
             members_order: source
             allow_inspection: true
@@ -75,7 +79,10 @@ plugins:
               docstring_style: google
             docstring_section_style: list
             show_root_toc_entry: false
+            show_signature: true
             show_signature_annotations: true
+            separate_signature: true
+            line_length: 60
             show_symbol_type_heading: true
             show_symbol_type_toc: true
             signature_crossrefs: true
