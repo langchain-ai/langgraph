@@ -1,4 +1,4 @@
-# Chat model configuration
+# Models
 
 ## Tool calling support
 
