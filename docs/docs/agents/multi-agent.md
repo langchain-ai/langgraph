@@ -1,4 +1,4 @@
-# Multi-agent
+ Multi-agent
 
 A single agent might struggle if it needs to specialize in multiple domains or manage many tools. To tackle this, you can break your agent into smaller, independent agents and composing them into a [multi-agent system](../concepts/multi_agent.md).
 
@@ -25,29 +25,40 @@ from langgraph.prebuilt import create_react_agent
 # highlight-next-line
 from langgraph_supervisor import create_supervisor
 
-alice = create_react_agent(
+def book_hotel(hotel_name: str):
+    """Book a hotel"""
+    return f"Successfully booked a stay at {hotel_name}."
+
+def book_flight(from_airport: str, to_airport: str):
+    """Book a flight"""
+    return f"Successfully booked a flight from {from_airport} to {to_airport}."
+
+flight_assistant = create_react_agent(
     model="openai:gpt-4o",
-    tools=[add],
-    prompt="You only know how to add, do not perform any other operations.",
+    tools=[book_flight],
+    prompt="You are a flight booking assistant",
     # highlight-next-line
-    name="alice"
+    name="flight_assistant"
 )
 
-bob = create_react_agent(
+hotel_assistant = create_react_agent(
     model="openai:gpt-4o",
-    tools=[multiply],
-    prompt="You only know how to multiply, do not perform any other operations.",
+    tools=[book_hotel],
+    prompt="You are a hotel booking assistant",
     # highlight-next-line
-    name="bob"
+    name="hotel_assistant"
 )
 
+# highlight-next-line
 supervisor = create_supervisor(
-    agents=[alice, bob],
+    agents=[flight_assistant, hotel_assistant],
     model=ChatOpenAI(model="gpt-4o"),
-    prompt="You manage Alice (knows how to add) and Bob (knows how to multiply). Assign work to them."
+    prompt="You manage a hotel booking assistant and a flight booking assistant. Assign work to them."
 ).compile()
 
-for chunk in supervisor.stream({"messages": "what's (3 x 7) + 15?"}):
+for chunk in supervisor.stream({
+    "messages": "book a flight from BOS to JFK and a stay at McKittrick Hotel"
+}):
     print(chunk)
     print("\n")
 ```
@@ -67,42 +78,41 @@ from langgraph.prebuilt import create_react_agent
 # highlight-next-line
 from langgraph_swarm import create_swarm, create_handoff_tool
 
-alice = create_react_agent(
-    model="anthropic:claude-3-5-sonnet-latest",
-    tools=[
-        add,
-        # highlight-next-line
-        create_handoff_tool(
-            agent_name="bob",
-            description="Ask Bob, multiplication expert, for help."
-        )
-    ],
-    prompt="You only know how to add, do not perform any other operations.",
-    # highlight-next-line
-    name="alice"
+transfer_to_hotel_assistant = create_handoff_tool(
+    agent_name="hotel_assistant",
+    description="Transfer user to the hotel-booking assistant.",
+)
+transfer_to_flight_assistant = create_handoff_tool(
+    agent_name="flight_assistant",
+    description="Transfer user to the flight-booking assistant.",
 )
 
-bob = create_react_agent(
+flight_assistant = create_react_agent(
     model="anthropic:claude-3-5-sonnet-latest",
-    tools=[
-        multiply,
-        # highlight-next-line
-        create_handoff_tool(
-            agent_name="alice",
-            description="Ask Alice, addition expert, for help."
-        )
-    ],
-    prompt="You only know how to multiply, do not perform any other operations.",
     # highlight-next-line
-    name="bob"
+    tools=[book_flight, transfer_to_hotel_assistant],
+    prompt="You are a flight booking assistant",
+    # highlight-next-line
+    name="flight_assistant"
+)
+hotel_assistant = create_react_agent(
+    model="anthropic:claude-3-5-sonnet-latest",
+    # highlight-next-line
+    tools=[book_hotel, transfer_to_flight_assistant],
+    prompt="You are a hotel booking assistant",
+    # highlight-next-line
+    name="hotel_assistant"
 )
 
+# highlight-next-line
 swarm = create_swarm(
-    agents=[alice, bob],
-    default_active_agent="alice"
+    agents=[flight_assistant, hotel_assistant],
+    default_active_agent="flight_assistant"
 ).compile()
 
-for chunk in swarm.stream({"messages": "what's (3 x 7) + 15?"}):
+for chunk in supervisor.stream({
+    "messages": "book a flight from BOS to JFK and a stay at McKittrick Hotel"
+}):
     print(chunk)
     print("\n")
 ```
@@ -140,23 +150,27 @@ To implement handoffs with `create_react_agent`, you need to:
 1. Create individual agents that have access to handoff tools:
 
     ```python
-    alice = create_react_agent(..., tools=[add, transfer_to_bob])
-    bob = create_react_agent(..., tools=[multiply, transfer_to_alice])
+    flight_assistant = create_react_agent(
+        ..., tools=[book_flight, transfer_to_hotel_assistant]
+    )
+    hotel_assistant = create_react_agent(
+        ..., tools=[book_hotel, transfer_to_flight_assistant]
+    )
     ```
 
 1. Define a parent graph that contains individual agents as nodes:
 
     ```python
-    from langgraph.graph import StateGraph, START, MessagesState
+    from langgraph.graph import StateGraph, MessagesState
     multi_agent_graph = (
         StateGraph(MessagesState)
-        .add_node(alice)
-        .add_node(bob)
+        .add_node(flight_assistant)
+        .add_node(hotel_assistant)
         ...
     )
     ```
 
-Putting this together, here is how you can implement a simple multi-agent system with two agents - Alice and Bob:
+Putting this together, here is how you can implement a simple multi-agent system with two agents — a flight booking assistant and a hotel booking assistant:
 
 ```python
 from typing import Annotated
@@ -199,53 +213,55 @@ def create_handoff_tool(*, agent_name: str, description: str | None = None):
     return handoff_tool
 
 # Handoffs
-transfer_to_alice = create_handoff_tool(
-    agent_name="alice",
-    description="Ask Alice, addition expert, for help."
+transfer_to_hotel_assistant = create_handoff_tool(
+    agent_name="hotel_assistant",
+    description="Transfer user to the hotel-booking assistant.",
 )
-transfer_to_bob = create_handoff_tool(
-    agent_name="bob",
-    description="Ask Bob, multiplication expert, for help."
+transfer_to_flight_assistant = create_handoff_tool(
+    agent_name="flight_assistant",
+    description="Transfer user to the flight-booking assistant.",
 )
 
 # Simple agent tools
-def add(a: int, b: int) -> int:
-    """Add two numbers"""
-    return a + b
+def book_hotel(hotel_name: str):
+    """Book a hotel"""
+    return f"Successfully booked a stay at {hotel_name}."
 
-def multiply(a: int, b: int) -> int:
-   """Multiply two numbers."""
-   return a * b
+def book_flight(from_airport: str, to_airport: str):
+    """Book a flight"""
+    return f"Successfully booked a flight from {from_airport} to {to_airport}."
 
 # Define agents
-alice = create_react_agent(
+flight_assistant = create_react_agent(
     model="anthropic:claude-3-5-sonnet-latest",
     # highlight-next-line
-    tools=[add, transfer_to_bob],
-    prompt="You only know how to add, do not perform any other operations.",
+    tools=[book_flight, transfer_to_hotel_assistant],
+    prompt="You are a flight booking assistant",
     # highlight-next-line
-    name="alice"
+    name="flight_assistant"
 )
-bob = create_react_agent(
+hotel_assistant = create_react_agent(
     model="anthropic:claude-3-5-sonnet-latest",
     # highlight-next-line
-    tools=[multiply, transfer_to_alice],
-    prompt="You only know how to multiply, do not perform any other operations.",
+    tools=[book_hotel, transfer_to_flight_assistant],
+    prompt="You are a hotel booking assistant",
     # highlight-next-line
-    name="bob"
+    name="hotel_assistant"
 )
 
 # Define multi-agent graph
 multi_agent_graph = (
     StateGraph(MessagesState)
-    .add_node(alice)
-    .add_node(bob)
-    .add_edge(START, "alice")
+    .add_node(flight_assistant)
+    .add_node(hotel_assistant)
+    .add_edge(START, "flight_assistant")
     .compile()
 )
 
-# Tun the multi-agent graph
-for chunk in multi_agent_graph.stream({"messages": "what's (3 x 7) + 15?"}):
+# Run the multi-agent graph
+for chunk in multi_agent_graph.stream({
+    "messages": "book a flight from BOS to JFK and a stay at McKittrick Hotel"
+}):
     print(chunk)
     print("\n")
 ```
@@ -255,3 +271,5 @@ for chunk in multi_agent_graph.stream({"messages": "what's (3 x 7) + 15?"}):
 
     - each agent receives overall message history (across all agents) in the multi-agent system as its input
     - each agent outputs its internal messages history to the overall message history of the multi-agent system
+
+    Check out LangGraph [supervisor](https://github.com/langchain-ai/langgraph-supervisor-py#customizing-handoff-tools) and [swarm](https://github.com/langchain-ai/langgraph-swarm-py#customizing-handoff-tools) documentation to learn how to customize handoffs.
