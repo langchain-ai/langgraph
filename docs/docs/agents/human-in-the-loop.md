@@ -21,7 +21,7 @@ from langgraph.prebuilt import create_react_agent
 def book_hotel(hotel_name: str):
     """Book a hotel"""
     # highlight-next-line
-    response = interrupt(
+    response = interrupt(  # (1)!
         f"Trying to call `book_hotel` with args {{'hotel_name': {hotel_name}}}. "
         "Please approve or suggest edits."
     )
@@ -52,13 +52,16 @@ for chunk in agent.stream(
 
 for chunk in agent.stream(
     # highlight-next-line
-    Command(resume={"type": "accept"}),
+    Command(resume={"type": "accept"}),  # (2)!
     # Command(resume={"type": "edit", "args": {"hotel_name": "McKittrick Hotel"}}),
     config
 ):
     print(chunk)
     print("\n")
 ```
+
+1. The [`interrupt` function][langgraph.types.interrupt] pauses the agent graph at a specific node. In this case, we call `interrupt()` at the beginning of the tool function, which pauses the graph at the node that executes the tool. The information inside `interrupt()` (e.g., tool calls) can be presented to a human, and the graph can be resumed with the user input (tool call approval, edit or feedback).
+2. The [`interrupt` function][langgraph.types.interrupt] is used in conjunction with the [`Command`](../reference/types.md#langgraph.types.Command) object to resume the graph with a value provided by the human.
 
 ## Using with Agent Inbox
 

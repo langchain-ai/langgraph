@@ -217,7 +217,7 @@ def update_markdown_with_imports(markdown: str, path: str) -> str:
         path: The path of the file where the markdown content originated.
 
     Returns:
-        Updated markdown with API reference links appended to Python code blocks.
+        Updated markdown with API reference links prepended to Python code blocks.
 
     Example:
         Given a markdown with a Python code block:
@@ -240,7 +240,7 @@ def update_markdown_with_imports(markdown: str, path: str) -> str:
             match (re.Match): The regex match object containing the code block.
 
         Returns:
-            str: The modified code block with API reference links appended if applicable.
+            str: The modified code block with API reference links prepended if applicable.
         """
         indent = match.group("indent")
         code_block = match.group("code")
@@ -256,8 +256,8 @@ def update_markdown_with_imports(markdown: str, path: str) -> str:
         api_links = " | ".join(
             f'<a href="{imp["docs"]}">{imp["imported"]}</a>' for imp in imports
         )
-        # Return the code block with appended API reference links
-        return f"{original_code_block}\n\n{indent}API Reference: {api_links}"
+        # Return the code block with prepended API reference links
+        return f"{indent}API Reference: {api_links}\n\n{original_code_block}"
 
     # Apply the replace_code_block function to all matches in the markdown
     updated_markdown = code_block_pattern.sub(replace_code_block, markdown)
