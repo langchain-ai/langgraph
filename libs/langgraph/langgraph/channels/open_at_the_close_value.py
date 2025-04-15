@@ -1,4 +1,4 @@
-from typing import Any, Generic, Optional, Sequence, Type
+from typing import Any, Generic, Sequence, Type
 
 from typing_extensions import Self
 
@@ -38,7 +38,7 @@ class OpenAtTheCloseValue(
             return MISSING
         return (self.value, self.finished)
 
-    def from_checkpoint(self, checkpoint: Optional[tuple[Value, bool]]) -> Self:
+    def from_checkpoint(self, checkpoint: tuple[Value, bool]) -> Self:
         empty = self.__class__(self.typ)
         empty.key = self.key
         if checkpoint is not MISSING:
