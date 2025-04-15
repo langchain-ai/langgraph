@@ -1,0 +1,121 @@
+{#- Template for Python functions.
+   
+This template renders a Python function or method.
+
+Context:
+  function (griffe.Function): The function to render.
+  root (bool): Whether this is the root object, injected with `:::` in a Markdown page.
+  heading_level (int): The HTML heading level to use.
+  config (dict): The configuration options.
+-#}
+
+{% block logs scoped %}
+  {{ log.debug("Rendering " + function.path) }}
+{% endblock logs %}
+
+{% import "language"|get_template as lang with context %}
+{#- Language module providing the `t` translation method. -#}
+
+<div class="doc doc-object doc-function">
+  {% with obj = function, html_id = function.path %}
+    {% if root %}
+      {% set show_full_path = config.show_root_full_path %}
+      {% set root_members = True %}
+    {% elif root_members %}
+      {% set show_full_path = config.show_root_members_full_path or config.show_object_full_path %}
+      {% set root_members = False %}
+    {% else %}
+      {% set show_full_path = config.show_object_full_path %}
+    {% endif %}
+
+    {% set function_name = function.path if show_full_path else function.name %}
+    {#- Brief or full function name depending on configuration. -#}
+    {% set symbol_type = "method" if function.parent.is_class else "function" %}
+    {#- Symbol type: method when parent is a class, function otherwise. -#}
+
+    {% if not root or config.show_root_heading %}
+      {% filter heading(
+          heading_level,
+          role="function",
+          id=html_id,
+          class="doc doc-heading",
+          toc_label=(('<code class="doc-symbol doc-symbol-toc doc-symbol-' + symbol_type + '"></code>&nbsp;')|safe if config.show_symbol_type_toc else '') + function.name,
+        ) %}
+      
+        {% block heading scoped %}
+          {% if config.show_symbol_type_heading %}<code class="doc-symbol doc-symbol-heading doc-symbol-{{ symbol_type }}"></code>{% endif %}
+          {% if config.separate_signature %}
+            <span class="doc doc-object-name doc-function-name">{{ config.heading if config.heading and root else function_name }}</span>
+          {% else %}
+            {%+ filter highlight(language="python", inline=True) %}
+              {{ function_name }}{% include "signature"|get_template with context %}
+            {% endfilter %}
+          {% endif %}
+        {% endblock heading %}
+
+        {% block labels scoped %}
+          {% with labels = function.labels %}
+            {% include "labels"|get_template with context %}
+          {% endwith %}
+        {% endblock labels %}
+
+      {% endfilter %}
+
+      {% block signature scoped %}
+        {#- Signature block.
+        
+        This block renders only the main signature and deliberately omits the overloads.
+        -#}
+        {% if config.separate_signature %}
+          {% filter format_signature(function, config.line_length, crossrefs=config.signature_crossrefs) %}
+            {{ function.name }}
+          {% endfilter %}
+        {% endif %}
+      {% endblock signature %}
+
+    {% else %}
+
+      {% if config.show_root_toc_entry %}
+        {% filter heading(
+            heading_level,
+            role="function",
+            id=html_id,
+            toc_label=(('<code class="doc-symbol doc-symbol-toc doc-symbol-' + symbol_type + '"></code>&nbsp;')|safe if config.show_symbol_type_toc else '') + (config.toc_label if config.toc_label and root else function.name),
+            hidden=True,
+          ) %}
+        {% endfilter %}
+      {% endif %}
+      {% set heading_level = heading_level - 1 %}
+    {% endif %}
+
+    <div class="doc doc-contents {% if root %}first{% endif %}">
+      {% block contents scoped %}
+        {#- Contents block.
+        
+        This block renders the function’s docstring and source.
+        -#}
+        {% block docstring scoped %}
+          {% with docstring_sections = function.docstring.parsed %}
+            {% include "docstring"|get_template with context %}
+          {% endwith %}
+        {% endblock docstring %}
+
+        {% block source scoped %}
+          {% if config.show_source and function.source %}
+            <details class="quote">
+              <summary>{{ lang.t("Source code in") }} <code>
+                {%- if function.relative_filepath.is_absolute() -%}
+                  {{ function.relative_package_filepath }}
+                {%- else -%}
+                  {{ function.relative_filepath }}
+                {%- endif -%}
+              </code></summary>
+              {{ function.source|highlight(language="python", linestart=function.lineno or 0, linenums=True) }}
+            </details>
+          {% endif %}
+        {% endblock source %}
+      {% endblock contents %}
+    </div>
+
+  {% endwith %}
+</div>
