@@ -12,9 +12,9 @@ You can stream [more than one type of data](#stream-everything) at a time.
 
 To stream agent progress, use the [`stream()`][CompiledGraph.stream] or [`astream()`][CompiledGraph.astream] methods with [`stream_mode="updates"`](https://langchain-ai.github.io/langgraph/how-tos/streaming/#updates). This emits an event after every agent step.
 
-Typical sequence of streamed events:
+For example, if you have an agent that calls a tool once, you should see the following updates:
 
-* **LLM node**: AI message with tool calls
+* **LLM node**: AI message with tool call requests
 * **Tool node**: Tool message with execution result
 * **LLM node**: Final AI response
 
