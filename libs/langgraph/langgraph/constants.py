@@ -69,6 +69,8 @@ CONFIG_KEY_ENSURE_LATEST = sys.intern("__pregel_ensure_latest")
 # (for distributed mode)
 CONFIG_KEY_DELEGATE = sys.intern("__pregel_delegate")
 # holds a boolean indicating whether to delegate subgraphs (for distributed mode)
+CONFIG_KEY_THREAD_ID = sys.intern("thread_id")
+# holds the thread ID for the current invocation
 CONFIG_KEY_CHECKPOINT_MAP = sys.intern("checkpoint_map")
 # holds a mapping of checkpoint_ns -> checkpoint_id for parent graphs
 CONFIG_KEY_CHECKPOINT_ID = sys.intern("checkpoint_id")

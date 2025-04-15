@@ -52,6 +52,7 @@ from langgraph.constants import (
     CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_TASK_ID,
+    CONFIG_KEY_THREAD_ID,
     EMPTY_SEQ,
     ERROR,
     INPUT,
@@ -285,6 +286,12 @@ class PregelLoop(LoopProtocol):
             )
         else:
             self.checkpoint_config = self.config
+        if thread_id := config[CONF].get(CONFIG_KEY_THREAD_ID):
+            if not isinstance(thread_id, str):
+                self.checkpoint_config = patch_configurable(
+                    self.checkpoint_config,
+                    {CONFIG_KEY_THREAD_ID: str(thread_id)},
+                )
         self.checkpoint_ns = (
             tuple(cast(str, self.config[CONF][CONFIG_KEY_CHECKPOINT_NS]).split(NS_SEP))
             if self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS)

@@ -6156,7 +6156,7 @@ def test_falsy_return_from_task(
         falsy_task().result()
         interrupt("test")
 
-    configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    configurable = {"configurable": {"thread_id": uuid.uuid4()}}
     assert [
         chunk for chunk in graph.stream({"a": 5}, configurable, stream_mode="debug")
     ] == [
