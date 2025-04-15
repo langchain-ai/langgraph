@@ -19,7 +19,7 @@ LangGraph includes several capabilities essential for building robust, productio
 
 ## High-level building blocks
 
-The `langgraph-prebuilt` package provides reusable components that implement common agent behaviors and control patterns. These abstractions are built on top of LangGraph's lower-level tools, offering a faster path to production while remaining flexible for advanced customization.
+LangGraph comes with a set of prebuilt components that implement common agent behaviors and workflows. These abstractions are built on top of the LangGraph framework, offering a faster path to production while remaining flexible for advanced customization.
 
 Using LangGraph for agent development allows you to focus on your application's logic and behavior, instead of building and maintaining the supporting infrastructure for state, memory, and human feedback.
 
