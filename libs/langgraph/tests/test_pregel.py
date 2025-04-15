@@ -6169,7 +6169,7 @@ def test_falsy_return_from_task(
                         "checkpoint_ns": "",
                         "thread_id": AnyStr(),
                     },
-                    "metadata": configurable["configurable"],
+                    "metadata": {},
                     "recursion_limit": 25,
                     "tags": [],
                 },
@@ -6177,7 +6177,6 @@ def test_falsy_return_from_task(
                     "parents": {},
                     "source": "input",
                     "step": -1,
-                    "thread_id": AnyStr(),
                     "writes": {
                         "__start__": {
                             "a": 5,
@@ -6268,6 +6267,7 @@ def test_falsy_return_from_task(
             "type": "task_result",
         },
     ]
+    print(type(configurable["configurable"]["thread_id"]))
     assert [
         c
         for c in graph.stream(Command(resume="123"), configurable, stream_mode="debug")
@@ -6281,7 +6281,7 @@ def test_falsy_return_from_task(
                         "checkpoint_ns": "",
                         "thread_id": AnyStr(),
                     },
-                    "metadata": configurable["configurable"],
+                    "metadata": {},
                     "recursion_limit": 25,
                     "tags": [],
                 },
@@ -6376,7 +6376,7 @@ def test_falsy_return_from_task(
                         "checkpoint_ns": "",
                         "thread_id": AnyStr(),
                     },
-                    "metadata": configurable["configurable"],
+                    "metadata": {},
                     "recursion_limit": 25,
                     "tags": [],
                 },
@@ -6384,7 +6384,6 @@ def test_falsy_return_from_task(
                     "parents": {},
                     "source": "loop",
                     "step": 0,
-                    "thread_id": AnyStr(),
                     "writes": {
                         "falsy_task": False,
                         "graph": None,
@@ -6398,7 +6397,7 @@ def test_falsy_return_from_task(
                         "checkpoint_ns": "",
                         "thread_id": AnyStr(),
                     },
-                    "metadata": configurable["configurable"],
+                    "metadata": {},
                     "recursion_limit": 25,
                     "tags": [],
                 },

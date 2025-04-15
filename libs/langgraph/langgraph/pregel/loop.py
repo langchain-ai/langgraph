@@ -286,7 +286,7 @@ class PregelLoop(LoopProtocol):
             )
         else:
             self.checkpoint_config = self.config
-        if thread_id := config[CONF].get(CONFIG_KEY_THREAD_ID):
+        if thread_id := self.checkpoint_config[CONF].get(CONFIG_KEY_THREAD_ID):
             if not isinstance(thread_id, str):
                 self.checkpoint_config = patch_configurable(
                     self.checkpoint_config,
@@ -1050,16 +1050,16 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             saved = None
         if saved is None:
             saved = CheckpointTuple(
-                self.config, empty_checkpoint(), {"step": -2}, None, []
+                self.checkpoint_config, empty_checkpoint(), {"step": -2}, None, []
             )
         elif self._migrate_checkpoint is not None:
             self._migrate_checkpoint(saved.checkpoint)
         self.checkpoint_config = {
-            **self.config,
+            **self.checkpoint_config,
             **saved.config,
             CONF: {
                 CONFIG_KEY_CHECKPOINT_NS: "",
-                **self.config.get(CONF, {}),
+                **self.checkpoint_config.get(CONF, {}),
                 **saved.config.get(CONF, {}),
             },
         }
@@ -1200,16 +1200,16 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             saved = None
         if saved is None:
             saved = CheckpointTuple(
-                self.config, empty_checkpoint(), {"step": -2}, None, []
+                self.checkpoint_config, empty_checkpoint(), {"step": -2}, None, []
             )
         elif self._migrate_checkpoint is not None:
             self._migrate_checkpoint(saved.checkpoint)
         self.checkpoint_config = {
-            **self.config,
+            **self.checkpoint_config,
             **saved.config,
             CONF: {
                 CONFIG_KEY_CHECKPOINT_NS: "",
-                **self.config.get(CONF, {}),
+                **self.checkpoint_config.get(CONF, {}),
                 **saved.config.get(CONF, {}),
             },
         }
