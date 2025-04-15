@@ -55,12 +55,35 @@ agent = create_react_agent(
 )
 ```
 
+See the [models](./models.md) page for more information on how to configure LLMs.
+
 ## Custom Prompts
 
 Prompts instruct the LLM how to behave. They can be:
 
 * **Static**: A fixed string or list of [messages](https://python.langchain.com/docs/concepts/messages/)
 * **Dynamic**: a list of messages generated at **runtime** based on input or configuration
+ 
+ 
+### Static prompts
+
+Define a fixed prompt string or list of messages.
+
+```python
+from langgraph.prebuilt import create_react_agent
+
+agent = create_react_agent(
+    model="anthropic:claude-3-7-sonnet-latest",
+    tools=[get_weather],
+    # A static prompt that never changes
+    # highlight-next-line
+    prompt="Never answer questions about the weather."
+)
+
+agent.invoke(
+    {"messages": "what is the weather in sf"},
+)
+```
 
 ### Dynamic prompts
 
@@ -91,26 +114,6 @@ agent.invoke(
 ```
 
 See the [context](./context.md) page for more information.
-
-### Static prompts
-
-Define a fixed prompt string or list of messages. 
-
-```python
-from langgraph.prebuilt import create_react_agent
-
-agent = create_react_agent(
-    model="anthropic:claude-3-7-sonnet-latest",
-    tools=[get_weather],
-    # A static prompt that never changes
-    # highlight-next-line
-    prompt="Never answer questions about the weather."
-)
-
-agent.invoke(
-    {"messages": "what is the weather in sf"},
-)
-```
 
 ## Structured output
 
