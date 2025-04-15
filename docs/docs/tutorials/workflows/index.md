@@ -222,7 +222,7 @@ As noted in the Anthropic blog on `Building Effective Agents`:
 
 
     @entrypoint()
-    def parallel_workflow(topic: str):
+    def prompt_chaining_workflow(topic: str):
         original_joke = generate_joke(topic).result()
         if check_punchline(original_joke) == "Pass":
             return original_joke
@@ -231,7 +231,7 @@ As noted in the Anthropic blog on `Building Effective Agents`:
         return polish_joke(improved_joke).result()
 
     # Invoke
-    for step in parallel_workflow.stream("cats", stream_mode="updates"):
+    for step in prompt_chaining_workflow.stream("cats", stream_mode="updates"):
         print(step)
         print("\n")
     ```
