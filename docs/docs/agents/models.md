@@ -16,6 +16,7 @@ You can configure an agent with a model name string:
 from langgraph.prebuilt import create_react_agent
 
 agent = create_react_agent(
+    # highlight-next-line
     model="anthropic:claude-3-7-sonnet-latest",
     # other parameters
 )
@@ -52,6 +53,7 @@ model = ChatAnthropic(
 )
 
 agent = create_react_agent(
+    # highlight-next-line
     model=model,
     # other parameters
 )
