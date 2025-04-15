@@ -3387,14 +3387,14 @@ tenacity = ">=8.1.0,<8.4.0 || >8.4.0,<10"
 
 [[package]]
 name = "langchain-core"
-version = "0.3.48"
+version = "0.3.52"
 description = "Building applications with LLMs through composability"
 optional = false
 python-versions = "<4.0,>=3.9"
 groups = ["docs", "test"]
 files = [
-    {file = "langchain_core-0.3.48-py3-none-any.whl", hash = "sha256:21e4fe84262b9c7ad8aefe7816439ede130893f8a64b8c965cd9695c2be91c73"},
-    {file = "langchain_core-0.3.48.tar.gz", hash = "sha256:be4b2fe36d8a11fb4b6b13e0808b12aea9f25e345624ffafe1d606afb6059f21"},
+    {file = "langchain_core-0.3.52-py3-none-any.whl", hash = "sha256:cd137109c1e3d04f5a582c2cae9539b2cd5e4b795f486b58969dbc3d0387fe7c"},
+    {file = "langchain_core-0.3.52.tar.gz", hash = "sha256:f1981ec9efa4fceb11ff5ca57f5f9c8e22859cea3a94f8a044e6de8815afbd57"},
 ]
 
 [package.dependencies]
@@ -3530,7 +3530,7 @@ langchain-core = ">=0.3.45,<1.0.0"
 
 [[package]]
 name = "langgraph"
-version = "0.3.23"
+version = "0.3.30"
 description = "Building stateful, multi-actor applications with LLMs"
 optional = false
 python-versions = ">=3.9.0,<4.0"
@@ -3551,7 +3551,7 @@ url = "../libs/langgraph"
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.0.23"
+version = "2.0.24"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -3624,7 +3624,7 @@ url = "../libs/checkpoint-sqlite"
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "0.1.7"
+version = "0.1.8"
 description = "Library with high-level APIs for creating and executing LangGraph agents and tools."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -3642,7 +3642,7 @@ url = "../libs/prebuilt"
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.1.60"
+version = "0.1.61"
 description = "SDK for interacting with LangGraph API"
 optional = false
 python-versions = "^3.9.0,<4.0"
