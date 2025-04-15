@@ -11,7 +11,7 @@ Two of the most popular multi-agent architectures are:
 
 ## Supervisor
 
-![Supervisor](./supervisor.png)
+![Supervisor](./assets/supervisor.png)
 
 Use [`langgraph-supervisor`](https://github.com/langchain-ai/langgraph-supervisor-py) library to create a supervisor multi-agent system:
 
@@ -54,7 +54,7 @@ for chunk in supervisor.stream({"messages": "what's (3 x 7) + 15?"}):
 
 ## Swarm
 
-![Swarm](./swarm.png)
+![Swarm](./assets/swarm.png)
 
 Use [`langgraph-swarm`](https://github.com/langchain-ai/langgraph-swarm-py) library to create a swarm multi-agent system:
 

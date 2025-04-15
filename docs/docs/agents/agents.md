@@ -11,7 +11,7 @@ then executed, and the outputs are fed back into the LLM as observations. The lo
 terminates when the agent has enough information to answer the user request.
 
 <figure markdown="1">
-![image](./agent.png){: style="max-height:400px"}
+![image](./assets/agent.png){: style="max-height:400px"}
 <figcaption>An agent with a single tool that runs in a loop until a stopping condition is reached.</figcaption>
 </figure>
 

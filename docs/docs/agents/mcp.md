@@ -2,7 +2,7 @@
 
 [Model Context Protocol](https://modelcontextprotocol.io/introduction) (MCP) is an open protocol that standardizes how applications provide tools and context to LLMs. LangGraph's `create_react_agent` supports tools defined in MCP servers via using `langchain-mcp-adapters` library.
 
-![MCP](./mcp.png)
+![MCP](./assets/mcp.png)
 
 ```bash
 pip install langchain-mcp-adapters

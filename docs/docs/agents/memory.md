@@ -5,7 +5,7 @@ There are two types of memory that are relevant when working with agents:
 - short-term memory — allows an agent to remember the current conversation across multiple turns.
 - long-term memory — allows an agent to remember information across different conversations.
 
-![Memory](./memory.png)
+![Memory](./assets/memory.png)
 
 !!! Terminology
     - short-term memory in LangGraph is referred to as **thread**-level persistence
@@ -50,7 +50,7 @@ ny_response = agent.invoke(
 
 ### Summarize conversation history
 
-![Summary](./summary.png)
+![Summary](./assets/summary.png)
 
 Message history can grow quickly and exceed LLM context window size in an agent with many conversation turns or numerous tool calls. To shorten the message history in `create_react_agent`, you need to provide [`pre_model_hook`][langgraph.prebuilt.chat_agent_executor.create_react_agent] parameter. For example, you can shorten it by creating a running summary of the conversation:
 
