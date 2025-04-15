@@ -29,7 +29,7 @@ Using LangGraph for agent development allows you to focus on your application's 
 |--------------------------------------------|-----------------------------------------------------------------------------|-----------------------------------------|
 | `langgraph-prebuilt` (part of `langgraph`) | Prebuilt components to [**create agents**](./agents.md)                     | `pip install -U langgraph langchain`    |
 | `langgraph-supervisor`                     | Tools for building [**supervisor**](./multi-agent.md#supervisor) agents     | `pip install -U langgraph-supervisor`   |
-| `langgraph-swarm`                          | Tools for building [**swarm**](./multi-agent.md#swarm) agents               | `pip install -U langgraph-swarm`        |
+| `langgraph-swarm`                          | Tools for building a [**swarm**](./multi-agent.md#swarm) multi-agent system  | `pip install -U langgraph-swarm`        |
 | `langchain-mcp-adapters`                   | Interfaces to [**MCP servers**](./mcp.md) for tool and resource integration | `pip install -U langchain-mcp-adapters` |
 | `langmem`                                  | Agent memory management: [**short-term and long-term**](./memory.md)        | `pip install -U langmem`                |
 | `agentevals`                               | Utilities to [**evaluate agent performance**](./evals.md)                   | `pip install -U agentevals`             |
