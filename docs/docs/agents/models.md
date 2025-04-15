@@ -1,6 +1,6 @@
 # Models
 
-This document describes how to configure the chat model used by an agent.
+This page describes how to configure the chat model used by an agent.
 
 ## Tool calling support
 
