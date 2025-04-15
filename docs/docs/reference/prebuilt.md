@@ -17,3 +17,12 @@
     options:
       members:
         - ValidationNode
+
+
+::: langgraph.prebuilt.interrupt
+    options:
+      members:
+        - HumanInterruptConfig
+        - ActionRequest
+        - HumanInterrupt
+        - HumanResponse
