@@ -35,13 +35,13 @@ class OpenAtTheCloseValue(
 
     def checkpoint(self) -> tuple[Value, bool]:
         if self.value is MISSING:
-            raise EmptyChannelError()
+            return MISSING
         return (self.value, self.finished)
 
     def from_checkpoint(self, checkpoint: Optional[tuple[Value, bool]]) -> Self:
         empty = self.__class__(self.typ)
         empty.key = self.key
-        if checkpoint is not None:
+        if checkpoint is not MISSING:
             empty.value, empty.finished = checkpoint
         return empty
 
