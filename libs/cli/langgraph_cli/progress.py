@@ -44,7 +44,7 @@ class Progress:
             sys.stdout.flush()
 
     def __enter__(self) -> Callable[[str], None]:
-        if not sys.stdout.isatty():
+        if sys.stdout.isatty():
             self.thread = threading.Thread(target=self.spinner_task)
             self.thread.start()
 
