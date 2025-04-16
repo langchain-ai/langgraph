@@ -61,9 +61,8 @@ reference_outputs = [
 
 # Create the evaluator
 evaluator = create_trajectory_match_evaluator(
-    # specify how the trajectories will be compared
     # highlight-next-line
-    trajectory_match_mode="superset",
+    trajectory_match_mode="superset",  # (1)!
 )
 
 # Run the evaluator
@@ -71,6 +70,9 @@ result = evaluator(
     outputs=outputs, reference_outputs=reference_outputs
 )
 ```
+
+1. Specify how the trajectories will be compared. `superset` will accept output trajectory as valid if it's a superset of the reference one. Other options include: [strict](https://github.com/langchain-ai/agentevals?tab=readme-ov-file#strict-match), [unordered](https://github.com/langchain-ai/agentevals?tab=readme-ov-file#unordered-match) and [subset](https://github.com/langchain-ai/agentevals?tab=readme-ov-file#subset-and-superset-match)
+
 
 As a next step, learn more about how to [customize trajectory match evaluator](https://github.com/langchain-ai/agentevals?tab=readme-ov-file#agent-trajectory-match).
 
