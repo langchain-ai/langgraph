@@ -63,8 +63,37 @@ Prompts instruct the LLM how to behave. They can be:
 
 * **Static**: A fixed string or list of [messages](https://python.langchain.com/docs/concepts/messages/)
 * **Dynamic**: a list of messages generated at **runtime** based on input or configuration
- 
- 
+
+### Dynamic prompts
+
+Define a function that returns a message list based on the agent's state and configuration:
+
+```python
+from langchain_core.runnables import RunnableConfig
+from langgraph.prebuilt.chat_agent_executor import AgentState
+from langgraph.prebuilt import create_react_agent
+
+def prompt(state: AgentState, config: RunnableConfig):
+    user_name = config.get("configurable", {}).get("user_name")
+    system_msg = f"You are a helpful assistant. Address the user as {user_name}."
+    return [{"role": "system", "content": system_msg}] + state["messages"]
+
+agent = create_react_agent(
+    model="anthropic:claude-3-7-sonnet-latest",
+    tools=[get_weather],
+    # highlight-next-line
+    prompt=prompt
+)
+
+agent.invoke(
+    {"messages": "what is the weather in sf"},
+    # highlight-next-line
+    config={"configurable": {"user_name": "John Smith"}}
+)
+```
+
+See the [context](./context.md) page for more information.
+
 ### Static prompts
 
 Define a fixed prompt string or list of messages.
@@ -115,6 +144,46 @@ agent.invoke(
 
 See the [context](./context.md) page for more information.
 
+## Memory
+
+To allow multi-turn conversations with an agent, you need to enable [persistence](../concepts/persistence.md) by providing a `checkpointer` when creating an agent. At runtime you need to provide a config containing `thread_id` — a unique identifier for the conversation (session):
+
+```python
+from langgraph.prebuilt import create_react_agent
+from langgraph.checkpoint.memory import InMemorySaver
+
+# highlight-next-line
+checkpointer = InMemorySaver()
+
+agent = create_react_agent(
+    model="anthropic:claude-3-7-sonnet-latest",
+    tools=[get_weather],
+    # highlight-next-line
+    checkpointer=checkpointer
+)
+
+# Run the agent
+# highlight-next-line
+config = {"configurable": {"thread_id": "1"}}
+sf_response = agent.invoke(
+    {"messages": "what is the weather in sf"},
+    # highlight-next-line
+    config
+)
+ny_response = agent.invoke(
+    {"messages": "what about new york?"},
+    # highlight-next-line
+    config
+)
+```
+
+When you enable the checkpointer, it stores agent state at every step in the provided checkpointer database (or in memory, if using `InMemorySaver`).
+
+Note that in the above example, when the agent is invoked the second time with the same `thread_id`, the original message history from the first conversation is automatically included, together with the new user input.
+
+Please see the [memory guide](./memory.md) for more details on how to work with memory.
+
+
 ## Structured output
 
 To produce structured responses conforming to a schema, use the `response_format` parameter. The schema can be defined with a `Pydantic` model or `TypedDict`. The result will be accessible via the `structured_response` field.
@@ -130,7 +199,7 @@ agent = create_react_agent(
     model="anthropic:claude-3-7-sonnet-latest",
     tools=[get_weather],
     # highlight-next-line
-    response_format=WeatherResponse
+    response_format=WeatherResponse  # (1)!
 )
 
 response = agent.invoke({"messages": "what is the weather in sf"})
@@ -138,6 +207,8 @@ response = agent.invoke({"messages": "what is the weather in sf"})
 # highlight-next-line
 response["structured_response"]
 ```
+
+1. To provide a system prompt when generating structured response, use a tuple `(prompt, schema)`, e.g., `response_format=(prompt, WeatherResponse)`.
 
 !!! Note "LLM post-processing"
 

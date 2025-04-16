@@ -389,6 +389,7 @@ nav:
   - Agents:
     - agents/overview.md
     - agents/agents.md
+    - agents/run_agents.md
     - agents/streaming.md
     - agents/models.md
     - agents/tools.md
