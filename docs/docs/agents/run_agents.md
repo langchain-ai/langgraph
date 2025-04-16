@@ -33,3 +33,59 @@ When you invoke the agent with `agent.invoke({"messages": ...})`, the agent will
 - original input messages
 - messages from the tool-calling loop — assistant messages with tool calls and tool messages with tool results
 - final agent response (assistant message)
+
+## Streaming
+
+[Streaming](./streaming.md) is key to building responsive applications. With LangGraph agents you can stream [agent progress](./streaming.md#agent-progress), [LLM tokens](./streaming.md#llm-tokens), [tool updates](./streaming.md#tool-updates) and more.
+
+## Max iterations
+
+To abort an agent run that exceeds a specified number of iterations you can set `recursion_limit`, which controls maximum number of LangGraph steps an agent can take before raising a `GraphRecursionError`. You can configure `recursion_limit` at runtime or when defining agent via `.with_config()`:
+
+=== "Runtime"
+
+    ```python
+    from langgraph.errors import GraphRecursionError
+    from langgraph.prebuilt import create_react_agent
+
+    max_iterations = 3
+    # highlight-next-line
+    recursion_limit = 2 * max_iterations + 1
+    agent = create_react_agent(
+        model="anthropic:claude-3-5-haiku-latest",
+        tools=[get_weather]
+    )
+
+    try:
+        response = agent.invoke(
+            {"messages": "what's the weather in sf"},
+            # highlight-next-line
+            {"recursion_limit": recursion_limit},
+        )
+    except GraphRecursionError:
+        print("Agent stopped due to max iterations.")
+    ```
+
+=== "`.with_config()`"
+
+    ```python
+    from langgraph.errors import GraphRecursionError
+    from langgraph.prebuilt import create_react_agent
+
+    max_iterations = 3
+    # highlight-next-line
+    recursion_limit = 2 * max_iterations + 1
+    agent = create_react_agent(
+        model="anthropic:claude-3-5-haiku-latest",
+        tools=[get_weather]
+    )
+    # highlight-next-line
+    agent_with_recursion_limit = agent.with_config(recursion_limit=recursion_limit)
+
+    try:
+        response = agent_with_recursion_limit.invoke(
+            {"messages": "what's the weather in sf"},
+        )
+    except GraphRecursionError:
+        print("Agent stopped due to max iterations.")
+    ```
