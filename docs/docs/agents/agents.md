@@ -114,7 +114,7 @@ agent.invoke(
 
 ## Memory
 
-To allow multi-turn conversations with an agent, you need to enable LangGraph's [persistence](../concepts/persistence.md) by providing a `checkpointer` when creating an agent:
+To allow multi-turn conversations with an agent, you need to enable [persistence](../concepts/persistence.md) by providing a `checkpointer` when creating an agent. At runtime you need to provide a config containing `thread_id` — a unique identifier for the conversation (session):
 
 ```python
 from langgraph.prebuilt import create_react_agent
@@ -145,25 +145,11 @@ ny_response = agent.invoke(
 )
 ```
 
-## Inputs and outputs
+When you enable the checkpointer, it stores agent state at every step in the provided checkpointer database (or in memory, if using `InMemorySaver`).
 
-Agent operates on a list of messages via `messages` key in its [state](https://langchain-ai.github.io/langgraph/concepts/low_level/#working-with-messages-in-graph-state).
+Note that in the above example, when the agent is invoked the second time with the same `thread_id`, the original message history from the first conversation is automatically included, together with the new user input.
 
-### Inputs
-
-To run the agent (via `.invoke()` or `.stream()`), you need to provide messages as an input:
-
-- a message string: `{"messages": "My input"}`
-- a message: `{"messages": {"role": "user", "content": "hi"}}`
-- a list of messages: `{"messages": [{"role": "user", "content": "hi"}]}`
-
-### Outputs
-
-When you invoke the agent with `agent.invoke({"messages": ...})`, the agent will return `{"messages": [...list of messages]}` that contains:
-
-- original input messages
-- messages from the tool-calling loop — assistant messages with tool calls and tool messages with tool results
-- final agent response (assistant message)
+Please see the [memory guide](./memory.md) for more details on how to work with memory.
 
 ## Structured output
 

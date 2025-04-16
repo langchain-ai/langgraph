@@ -13,7 +13,7 @@ There are two types of memory that are relevant when working with agents:
 
 ## Short-term memory
 
-To allow multi-turn conversations with an agent, you need to enable LangGraph's [persistence](../concepts/persistence.md) by providing a `checkpointer` when creating an agent:
+To allow multi-turn conversations with an agent, you need to enable [persistence](../concepts/persistence.md) by providing a `checkpointer` when creating an agent. At runtime you need to provide a config containing `thread_id` — a unique identifier for the conversation (session):
 
 ```python
 from langgraph.prebuilt import create_react_agent
@@ -47,6 +47,14 @@ ny_response = agent.invoke(
     config
 )
 ```
+
+When you enable the checkpointer, it stores agent state at every step in the provided checkpointer database (or in memory, if using `InMemorySaver`).
+
+Note that in the above example, when the agent is invoked the second time with the same `thread_id`, the original message history from the first conversation is automatically included, together with the new user input.
+
+!!! Note "Not needed for LangGraph API users"
+
+    If you're using [LangGraph API](./deployment.md), you needn't to provide a checkpointer. The API automatically handles checkpointing for you.
 
 ### Summarize conversation history
 
