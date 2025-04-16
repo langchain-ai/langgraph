@@ -263,7 +263,7 @@ for chunk in multi_agent_graph.stream({
 1. Access agent's state
 2. The `Command` primitive allows specifying a state update and a node transition as a single operation, making it useful for implementing handoffs.
 3. Name of the agent or node to hand off to.
-4. Take individual agent's messages and **add** them to the parent multi-agent graph's **state**, as part of the handoff. The next agent will see the updated multi-agent graph state.
+4. Take the agent's messages and **add** them to the parent's **state** as part of the handoff. The next agent will see the parent state.
 5. Indicate to LangGraph that we need to navigate to agent node in a **parent** multi-agent graph.
 
 !!! Note
