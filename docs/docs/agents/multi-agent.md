@@ -185,9 +185,8 @@ def create_handoff_tool(*, agent_name: str, description: str | None = None):
 
     @tool(name, description=description)
     def handoff_tool(
-        # access individual agent's state
         # highlight-next-line
-        state: Annotated[MessagesState, InjectedState],
+        state: Annotated[MessagesState, InjectedState], # (1)!
         # highlight-next-line
         tool_call_id: Annotated[str, InjectedToolCallId],
     ) -> Command:
@@ -197,18 +196,13 @@ def create_handoff_tool(*, agent_name: str, description: str | None = None):
             "name": name,
             "tool_call_id": tool_call_id,
         }
-        return Command(
+        return Command(  # (2)!
             # highlight-next-line
-            goto=agent_name,
-            # Take individual agent's messages and add them to the
-            # parent, multi-agent graph, as part of the handoff.
-            # The next agent will see the updated multi-agent graph state.
+            goto=agent_name,  # (3)!
             # highlight-next-line
-            update={"messages": state["messages"] + [tool_message]},
-            # indicate to LangGraph that we need to navigate to 
-            # agent node in a parent, multi-agent graph
+            update={"messages": state["messages"] + [tool_message]},  # (4)!
             # highlight-next-line
-            graph=Command.PARENT,
+            graph=Command.PARENT,  # (5)!
         )
     return handoff_tool
 
@@ -265,6 +259,12 @@ for chunk in multi_agent_graph.stream({
     print(chunk)
     print("\n")
 ```
+
+1. Access individual agent's state
+2. `Command` objects allow you to combine navigation (destination) and state updates (payload), which makes them very useful for implementing handoffs.
+3. This is the name of the agent (node) to hand off to.
+4. Take individual agent's messages and **add** them to the parent multi-agent graph's **state**, as part of the handoff. The next agent will see the updated multi-agent graph state.
+5. Indicate to LangGraph that we need to navigate to agent node in a **parent** multi-agent graph.
 
 !!! Note
     This handoff implementation assumes that:

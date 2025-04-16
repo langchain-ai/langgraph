@@ -73,7 +73,7 @@ from langchain_core.tools import BaseTool, tool as create_tool
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import interrupt, Command
-from langgraph.prebuilt.interrupt import HumanInterruptConfig
+from langgraph.prebuilt.interrupt import HumanInterruptConfig, HumanInterrupt
 from langgraph.prebuilt import create_react_agent
 
 def add_human_in_the_loop(
@@ -91,13 +91,13 @@ def add_human_in_the_loop(
             "allow_respond": True,
         }
 
-    @create_tool(
+    @create_tool(  # (1)!
         tool.name,
         description=tool.description,
         args_schema=tool.args_schema
     )
     def call_tool_with_interrupt(config: RunnableConfig, **tool_input):
-        request = {
+        request: HumanInterrupt = {
             "action_request": {
                 "action": tool.name,
                 "args": tool_input
@@ -105,10 +105,8 @@ def add_human_in_the_loop(
             "config": interrupt_config,
             "description": "Please review the tool call"
         }
-        # NOTE: we're passing data to interrupt() in this format
-        # to also support Agent Inbox UI
         # highlight-next-line
-        response = interrupt([request])[0]
+        response = interrupt([request])[0]  # (2)!
         # approve the tool call
         if response["type"] == "accept":
             tool_response = tool.invoke(tool_input, config)
@@ -127,6 +125,11 @@ def add_human_in_the_loop(
 
     return call_tool_with_interrupt
 ```
+
+1. This wrapper creates a new tool that calls `interrupt()` **before** executing the wrapped tool.
+2. `interrupt()` is using special input and output format that's expected by [Agent Inbox UI](https://github.com/langchain-ai/agent-inbox):
+    - a list of [`HumanInterrupt`][langgraph.prebuilt.interrupt.HumanInterrupt] objects is sent to `AgentInbox` render interrupt information to the end user
+    - resume value is provided by `AgentInbox` as a list (i.e., `Command(resume=[...])`)
 
 You can use the `add_human_in_the_loop` wrapper to add `interrupt()` to any tool without having to add it *inside* the tool:
 

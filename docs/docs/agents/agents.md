@@ -127,7 +127,7 @@ agent = create_react_agent(
     model="anthropic:claude-3-7-sonnet-latest",
     tools=[get_weather],
     # highlight-next-line
-    response_format=WeatherResponse
+    response_format=WeatherResponse  # (1)!
 )
 
 response = agent.invoke({"messages": "what is the weather in sf"})
@@ -135,6 +135,8 @@ response = agent.invoke({"messages": "what is the weather in sf"})
 # highlight-next-line
 response["structured_response"]
 ```
+
+1. To provide a system prompt when generating structured response, use a tuple `(prompt, schema)`, e.g., `response_format=(prompt, WeatherResponse)`.
 
 !!! Note "LLM post-processing"
 
