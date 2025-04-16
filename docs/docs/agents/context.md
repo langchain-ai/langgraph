@@ -8,12 +8,13 @@ Context includes *any* data outside the message list that can shape agent behavi
 - Internal state updated during a multi-step reasoning process.
 - Persistent memory or facts from previous interactions.
 
-LangGraph provides two primary mechanisms for supplying context:
+LangGraph provides **three** primary ways to supply context:
 
-| Type       | Description                                   | Mutable? | Lifetime                | Accessed in    |
-|------------|-----------------------------------------------|----------|-------------------------|----------------|
-| **Config** | data passed at the start of a run             | ❌        | per run                 | tools, prompts |
-| **State**  | dynamic data that can change during execution | ✅        | per run or conversation | tools, prompts |
+| Type                         | Description                                   | Mutable? | Lifetime                |
+|------------------------------|-----------------------------------------------|----------|-------------------------|
+| **Config**                   | data passed at the start of a run             | ❌        | per run                 |
+| **State**                    | dynamic data that can change during execution | ✅        | per run or conversation |
+| **Long-term Memory (Store)** | data that can be shared between conversations | ✅        | across conversations    |
 
 You can use context to:
 
@@ -27,9 +28,8 @@ Use this when you need to inject data into an agent at runtime.
 
 ### Config (static context)
 
-- For immutable values like user metadata, access tokens, environment settings
-- Passed once when running agent
-- Available in tools and prompt functions via `config`
+Config is for immutable data like user metadata or API keys. Use
+when you have values that don't change mid-run.
 
 Pass information via the `config` argument. The information should be using the "configurable" key, which is reserved key for this purpose.
 
@@ -43,9 +43,7 @@ agent.invoke(
 
 ### State (mutable context)
 
-* Acts as working memory during execution
-* Can persist across steps or runs (if checkpointer is enabled)
-* Define a custom schema to track specific fields
+State acts as short-term memory during a run. It holds dynamic data that can evolve during execution, such as values derived from tools or LLM outputs.
 
 ```python
 class CustomState(AgentState):
@@ -57,6 +55,17 @@ agent.invoke({
     "user_name": "Jane"
 })
 ```
+
+!!! tip "Turning on memory"
+
+    Please see the [memory guide](./memory.md) for more details on how to enable memory. This is a powerful feature that allows you to persist the agent's state across multiple invocations.
+    Otherwise, the state is scoped only to a single agent run.
+
+
+
+### Long-Term Memory (cross-conversation context)
+
+For context that spans *across* conversations or sessions, LangGraph allows access to **long-term memory** via a `store`. This can be used to read or update persistent facts (e.g., user profiles, preferences, prior interactions). For more, see the [Memory guide](./memory.md).
 
 ## Customizing Prompts with Context
 
