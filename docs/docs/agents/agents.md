@@ -112,6 +112,59 @@ agent.invoke(
 )
 ```
 
+## Memory
+
+To enable multi-turn conversations with an agent, you need to enable LangGraph's [persistence](../concepts/persistence.md) by providing a `checkpointer` when creating an agent:
+
+```python
+from langgraph.prebuilt import create_react_agent
+from langgraph.checkpoint.memory import InMemorySaver
+
+# highlight-next-line
+checkpointer = InMemorySaver()
+
+agent = create_react_agent(
+    model="anthropic:claude-3-7-sonnet-latest",
+    tools=[get_weather],
+    # highlight-next-line
+    checkpointer=checkpointer
+)
+
+# Run the agent
+# highlight-next-line
+config = {"configurable": {"thread_id": "1"}}
+sf_response = agent.invoke(
+    {"messages": "what is the weather in sf"},
+    # highlight-next-line
+    config
+)
+ny_response = agent.invoke(
+    {"messages": "what about new york?"},
+    # highlight-next-line
+    config
+)
+```
+
+## Inputs and outputs
+
+Agent operates on a list of messages via `messages` key in its [state](https://langchain-ai.github.io/langgraph/concepts/low_level/#working-with-messages-in-graph-state).
+
+### Inputs
+
+To run the agent (via `.invoke()` or `.stream()`), you need to provide messages as an input:
+
+- a message string: `{"messages": "My input"}`
+- a message: `{"messages": {"role": "user", "content": "hi"}}`
+- a list of messages: `{"messages": [{"role": "user", "content": "hi"}]}`
+
+### Outputs
+
+When you invoke the agent with `agent.invoke({"messages": ...})`, the agent will return `{"messages": [...list of messages]}` that contains:
+
+- original input messages
+- messages from the tool-calling loop — assistant messages with tool calls and tool messages with tool results
+- final agent response (assistant message)
+
 ## Structured output
 
 To produce structured responses conforming to a schema, use the `response_format` parameter. The schema can be defined with a `Pydantic` model or `TypedDict`. The result will be accessible via the `structured_response` field.
