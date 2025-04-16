@@ -40,9 +40,8 @@ agent.invoke(
 )
 ```
 
-!!! Tip "Workflows and agents"
-
-    Check out [this guide](https://langchain-ai.github.io/langgraph/tutorials/workflows/) that walks through implementing common patterns (workflows and agents) in LangGraph. 
+> [!TIP]
+> Check out [this guide](https://langchain-ai.github.io/langgraph/tutorials/workflows/) that walks through implementing common patterns (workflows and agents) in LangGraph. 
 
 ## Why use LangGraph?
 
