@@ -61,38 +61,8 @@ See the [models](./models.md) page for more information on how to configure LLMs
 
 Prompts instruct the LLM how to behave. They can be:
 
-* **Static**: A fixed string or list of [messages](https://python.langchain.com/docs/concepts/messages/)
+* **Static**: A string is interpreted as a **system message**
 * **Dynamic**: a list of messages generated at **runtime** based on input or configuration
-
-### Dynamic prompts
-
-Define a function that returns a message list based on the agent's state and configuration:
-
-```python
-from langchain_core.runnables import RunnableConfig
-from langgraph.prebuilt.chat_agent_executor import AgentState
-from langgraph.prebuilt import create_react_agent
-
-def prompt(state: AgentState, config: RunnableConfig):
-    user_name = config.get("configurable", {}).get("user_name")
-    system_msg = f"You are a helpful assistant. Address the user as {user_name}."
-    return [{"role": "system", "content": system_msg}] + state["messages"]
-
-agent = create_react_agent(
-    model="anthropic:claude-3-7-sonnet-latest",
-    tools=[get_weather],
-    # highlight-next-line
-    prompt=prompt
-)
-
-agent.invoke(
-    {"messages": "what is the weather in sf"},
-    # highlight-next-line
-    config={"configurable": {"user_name": "John Smith"}}
-)
-```
-
-See the [context](./context.md) page for more information.
 
 ### Static prompts
 
@@ -123,6 +93,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.prebuilt.chat_agent_executor import AgentState
 from langgraph.prebuilt import create_react_agent
 
+# highlight-next-line
 def prompt(state: AgentState, config: RunnableConfig):
     user_name = config.get("configurable", {}).get("user_name")
     system_msg = f"You are a helpful assistant. Address the user as {user_name}."
