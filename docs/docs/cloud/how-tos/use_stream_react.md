@@ -158,7 +158,7 @@ export default function HomePage() {
 }
 ```
 
-Under the hood, the `useStream()` hook will use the `streamMode: "messages-key"` to receive a stream of messages (i.e. individual LLM tokens) from any LangChain chat model invocations inside your graph nodes. Learn more about messages streaming in the [How to stream messages from your graph](./stream_messages.md) guide.
+Under the hood, the `useStream()` hook will use the `streamMode: "messages-tuple"` to receive a stream of messages (i.e. individual LLM tokens) from any LangChain chat model invocations inside your graph nodes. Learn more about messages streaming in the [How to stream messages from your graph](./stream_messages.md) guide.
 
 ### Interrupts
 
