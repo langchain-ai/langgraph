@@ -18,19 +18,24 @@ Use [`create_react_agent`](https://python.langchain.com/docs/api_reference/langg
 ```python
 from langgraph.prebuilt import create_react_agent
 
-def get_weather(city: str) -> str:
+def get_weather(city: str) -> str:  # (1)!
     """Get weather for a given city."""
     return f"It's always sunny in {city}!"
 
 agent = create_react_agent(
-    model="anthropic:claude-3-7-sonnet-latest",
-    tools=[get_weather],
-    prompt="You are a helpful assistant"
+    model="anthropic:claude-3-7-sonnet-latest",  # (2)!
+    tools=[get_weather],  # (3)!
+    prompt="You are a helpful assistant"  # (4)!
 )
 
 # Run the agent
 agent.invoke({"messages": "what is the weather in sf"})
 ```
+
+1. Define a tool for the agent to use. Tools can be defined as vanilla Python functions. For more advanced tool usage and customization, check the [tools](./tools.md) page.
+2. Provide a language model for the agent to use. To learn more about configuring language models for the agents, check the [models](./models.md) page.
+3. Provide a list of tools for the model to use.
+4. Provide a system prompt (instructions) to the language model used by the agent.
 
 ## LLM configuration
 
@@ -89,12 +94,13 @@ agent.invoke(
 Define a function that returns a message list based on the agent's state and configuration:
 
 ```python
+from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.prebuilt.chat_agent_executor import AgentState
 from langgraph.prebuilt import create_react_agent
 
 # highlight-next-line
-def prompt(state: AgentState, config: RunnableConfig):
+def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:  # (1)!
     user_name = config.get("configurable", {}).get("user_name")
     system_msg = f"You are a helpful assistant. Address the user as {user_name}."
     return [{"role": "system", "content": system_msg}] + state["messages"]
@@ -113,6 +119,13 @@ agent.invoke(
 )
 ```
 
+1. Dynamic prompts allow including non-message [context](./context.md) when constructing an input to the LLM, such as:
+
+    - Information passed at runtime, like a `user_id` or API credentials (using `config`).
+    - Internal agent state updated during a multi-step reasoning process (using `state`).
+
+    Dynamic prompts can be defined as functions that take `state` and `config` and return a list of messages to send to the LLM.
+
 See the [context](./context.md) page for more information.
 
 ## Memory
@@ -130,7 +143,7 @@ agent = create_react_agent(
     model="anthropic:claude-3-7-sonnet-latest",
     tools=[get_weather],
     # highlight-next-line
-    checkpointer=checkpointer
+    checkpointer=checkpointer  # (1)!
 )
 
 # Run the agent
@@ -139,7 +152,7 @@ config = {"configurable": {"thread_id": "1"}}
 sf_response = agent.invoke(
     {"messages": "what is the weather in sf"},
     # highlight-next-line
-    config
+    config  # (2)!
 )
 ny_response = agent.invoke(
     {"messages": "what about new york?"},
@@ -147,6 +160,9 @@ ny_response = agent.invoke(
     config
 )
 ```
+
+1. `checkpointer` allows the agent to store its state at every step in the tool calling loop. This enables [short-term memory](./memory.md#short-term-memory) and [human-in-the-loop](./human-in-the-loop.md) capabilities.
+2. Pass configuration with `thread_id` to be able to resume the same conversation on future agent invocations.
 
 When you enable the checkpointer, it stores agent state at every step in the provided checkpointer database (or in memory, if using `InMemorySaver`).
 
@@ -179,7 +195,9 @@ response = agent.invoke({"messages": "what is the weather in sf"})
 response["structured_response"]
 ```
 
-1. To provide a system prompt when generating structured response, use a tuple `(prompt, schema)`, e.g., `response_format=(prompt, WeatherResponse)`.
+1. When `response_format` is provided, a separate step is added at the end of the agent loop: agent message history is passed to an LLM with structured output to generate a structured response.
+
+    To provide a system prompt to this LLM, use a tuple `(prompt, schema)`, e.g., `response_format=(prompt, WeatherResponse)`.
 
 !!! Note "LLM post-processing"
 
