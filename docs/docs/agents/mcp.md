@@ -1,8 +1,10 @@
 # MCP Integration
 
-[Model Context Protocol](https://modelcontextprotocol.io/introduction) (MCP) is an open protocol that standardizes how applications provide tools and context to LLMs. LangGraph's `create_react_agent` supports tools defined in MCP servers via using `langchain-mcp-adapters` library.
+[Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) is an open protocol that standardizes how applications provide tools and context to language models. LangGraph supports integration with MCP-defined tools through the `langchain-mcp-adapters` library.
 
 ![MCP](./assets/mcp.png)
+
+Install the `langchain-mcp-adapters` library to use MCP tools in LangGraph:
 
 ```bash
 pip install langchain-mcp-adapters
@@ -10,9 +12,9 @@ pip install langchain-mcp-adapters
 
 ## Use MCP tools
 
-`langchain-mcp-adapters` allows you to connect your agent to tools defined across multiple MCP servers:
+The `langchain-mcp-adapters` package enables agents to use tools defined across one or more MCP servers.
 
-```python
+```python title="Agent using tools defined on MCP servers"
 # highlight-next-line
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.prebuilt import create_react_agent
@@ -22,12 +24,12 @@ async with MultiServerMCPClient(
     {
         "math": {
             "command": "python",
-            # Make sure to update to the full absolute path to your math_server.py file
+            # Replace with absolute path to your math_server.py file
             "args": ["/path/to/math_server.py"],
             "transport": "stdio",
         },
         "weather": {
-            # make sure you start your weather server on port 8000
+            # Ensure your start your weather server on port 8000
             "url": "http://localhost:8000/sse",
             "transport": "sse",
         }
@@ -42,50 +44,51 @@ async with MultiServerMCPClient(
     weather_response = await agent.ainvoke({"messages": "what is the weather in nyc?"})
 ```
 
-## Create MCP tool servers
+## Custom MCP servers
+
+To create your own MCP servers, you can use the `mcp` library. This library provides a simple way to define tools and run them as servers.
+
+Install the MCP library:
 
 ```bash
 pip install mcp
 ```
+Use the following reference implementations to test your agent with MCP tool servers.
 
-Here are reference servers you can use to run the above example:
+```python title="Example Math Server (stdio transport)"
+from mcp.server.fastmcp import FastMCP
 
-* a math server that the client communicates with via stdio
+mcp = FastMCP("Math")
 
-    ```python
-    # math_server.py
-    from mcp.server.fastmcp import FastMCP
+@mcp.tool()
+def add(a: int, b: int) -> int:
+    """Add two numbers"""
+    return a + b
 
-    mcp = FastMCP("Math")
+@mcp.tool()
+def multiply(a: int, b: int) -> int:
+    """Multiply two numbers"""
+    return a * b
 
-    @mcp.tool()
-    def add(a: int, b: int) -> int:
-        """Add two numbers"""
-        return a + b
+if __name__ == "__main__":
+    mcp.run(transport="stdio")
+```
 
-    @mcp.tool()
-    def multiply(a: int, b: int) -> int:
-        """Multiply two numbers"""
-        return a * b
+```python title="Example Weather Server (SSE transport)"
+from mcp.server.fastmcp import FastMCP
 
-    if __name__ == "__main__":
-        mcp.run(transport="stdio")
-    ```
+mcp = FastMCP("Weather")
 
-* a weather server that the client communicates with via HTTP + SSE
+@mcp.tool()
+async def get_weather(location: str) -> str:
+    """Get weather for location."""
+    return "It's always sunny in New York"
 
-    ```python
-    # weather_server.py
-    from typing import List
-    from mcp.server.fastmcp import FastMCP
+if __name__ == "__main__":
+    mcp.run(transport="sse")
+```
 
-    mcp = FastMCP("Weather")
+## Additional resources
 
-    @mcp.tool()
-    async def get_weather(location: str) -> str:
-        """Get weather for location."""
-        return "It's always sunny in New York"
-
-    if __name__ == "__main__":
-        mcp.run(transport="sse")
-    ```
+- [MCP documentation](https://modelcontextprotocol.io/introduction)
+- [MCP Transport documentation](https://modelcontextprotocol.io/docs/concepts/transports)
