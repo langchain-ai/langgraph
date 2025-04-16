@@ -55,12 +55,34 @@ agent = create_react_agent(
 )
 ```
 
+See the [models](./models.md) page for more information on how to configure LLMs.
+
 ## Custom Prompts
 
 Prompts instruct the LLM how to behave. They can be:
 
-* **Static**: A fixed string or list of [messages](https://python.langchain.com/docs/concepts/messages/)
+* **Static**: A string is interpreted as a **system message**
 * **Dynamic**: a list of messages generated at **runtime** based on input or configuration
+
+### Static prompts
+
+Define a fixed prompt string or list of messages.
+
+```python
+from langgraph.prebuilt import create_react_agent
+
+agent = create_react_agent(
+    model="anthropic:claude-3-7-sonnet-latest",
+    tools=[get_weather],
+    # A static prompt that never changes
+    # highlight-next-line
+    prompt="Never answer questions about the weather."
+)
+
+agent.invoke(
+    {"messages": "what is the weather in sf"},
+)
+```
 
 ### Dynamic prompts
 
@@ -71,6 +93,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.prebuilt.chat_agent_executor import AgentState
 from langgraph.prebuilt import create_react_agent
 
+# highlight-next-line
 def prompt(state: AgentState, config: RunnableConfig):
     user_name = config.get("configurable", {}).get("user_name")
     system_msg = f"You are a helpful assistant. Address the user as {user_name}."
@@ -91,26 +114,6 @@ agent.invoke(
 ```
 
 See the [context](./context.md) page for more information.
-
-### Static prompts
-
-Define a fixed prompt string or list of messages. 
-
-```python
-from langgraph.prebuilt import create_react_agent
-
-agent = create_react_agent(
-    model="anthropic:claude-3-7-sonnet-latest",
-    tools=[get_weather],
-    # A static prompt that never changes
-    # highlight-next-line
-    prompt="Never answer questions about the weather."
-)
-
-agent.invoke(
-    {"messages": "what is the weather in sf"},
-)
-```
 
 ## Memory
 
@@ -150,6 +153,7 @@ When you enable the checkpointer, it stores agent state at every step in the pro
 Note that in the above example, when the agent is invoked the second time with the same `thread_id`, the original message history from the first conversation is automatically included, together with the new user input.
 
 Please see the [memory guide](./memory.md) for more details on how to work with memory.
+
 
 ## Structured output
 
