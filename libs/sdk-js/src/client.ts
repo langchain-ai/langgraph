@@ -84,18 +84,37 @@ class BaseClient {
   protected defaultHeaders: Record<string, string | null | undefined>;
 
   constructor(config?: ClientConfig) {
-    this.asyncCaller = new AsyncCaller({
+    const callerOptions = {
       maxRetries: 4,
       maxConcurrency: 4,
       ...config?.callerOptions,
-    });
+    };
 
+    let defaultApiUrl = "http://localhost:8123";
+    if (
+      !config?.apiUrl &&
+      typeof globalThis === "object" &&
+      globalThis != null
+    ) {
+      const fetchSmb = Symbol.for("langgraph_api:fetch");
+      const urlSmb = Symbol.for("langgraph_api:url");
+
+      const global = globalThis as unknown as {
+        [fetchSmb]?: typeof fetch;
+        [urlSmb]?: string;
+      };
+
+      if (global[fetchSmb]) callerOptions.fetch ??= global[fetchSmb];
+      if (global[urlSmb]) defaultApiUrl = global[urlSmb];
+    }
+
+    this.asyncCaller = new AsyncCaller(callerOptions);
     this.timeoutMs = config?.timeoutMs;
 
     // default limit being capped by Chrome
     // https://github.com/nodejs/undici/issues/1373
     // Regex to remove trailing slash, if present
-    this.apiUrl = config?.apiUrl?.replace(/\/$/, "") || "http://localhost:8123";
+    this.apiUrl = config?.apiUrl?.replace(/\/$/, "") || defaultApiUrl;
     this.defaultHeaders = config?.defaultHeaders || {};
     const apiKey = getApiKey(config?.apiKey);
     if (apiKey) {

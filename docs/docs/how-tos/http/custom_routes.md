@@ -8,10 +8,6 @@ Defining a custom app object lets you add any routes you'd like, so you can do a
 
 Below is an example using FastAPI.
 
-???+ note "Python only"
-
-    We currently only support custom authentication and authorization in Python deployments with `langgraph-api>=0.0.26`.
-
 ## Create app
 
 Starting from an **existing** LangGraph Platform application, add the following custom route code to your `webapp.py` file. If you are starting from scratch, you can create a new app from a template using the CLI.
