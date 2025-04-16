@@ -10,11 +10,11 @@ Context includes *any* data outside the message list that can shape agent behavi
 
 LangGraph provides **three** primary ways to supply context:
 
-| Type                         | Description                                   | Mutable? | Lifetime                |
-|------------------------------|-----------------------------------------------|----------|-------------------------|
-| **Config**                   | data passed at the start of a run             | ❌        | per run                 |
-| **State**                    | dynamic data that can change during execution | ✅        | per run or conversation |
-| **Long-term Memory (Store)** | data that can be shared between conversations | ✅        | across conversations    |
+| Type                                                                         | Description                                   | Mutable? | Lifetime                |
+|------------------------------------------------------------------------------|-----------------------------------------------|----------|-------------------------|
+| [**Config**](#config-static-context)                                         | data passed at the start of a run             | ❌        | per run                 |
+| [**State**](#state-mutable-context)                                          | dynamic data that can change during execution | ✅        | per run or conversation |
+| [**Long-term Memory (Store)**](#long-term-memory-cross-conversation-context) | data that can be shared between conversations | ✅        | across conversations    |
 
 You can use context to:
 
@@ -31,7 +31,8 @@ Use this when you need to inject data into an agent at runtime.
 Config is for immutable data like user metadata or API keys. Use
 when you have values that don't change mid-run.
 
-Pass information via the `config` argument. The information should be using the "configurable" key, which is reserved key for this purpose.
+Specify configuration using a key called **"configurable"** which is reserved
+for this purpose:
 
 ```python
 agent.invoke(
@@ -49,6 +50,12 @@ State acts as short-term memory during a run. It holds dynamic data that can evo
 class CustomState(AgentState):
     # highlight-next-line
     user_name: str
+
+agent = create_react_agent(
+    # Other agent parameters...
+    # highlight-next-line
+    state_schema=CustomState,
+)
 
 agent.invoke({
     "messages": "hi!",
@@ -77,24 +84,19 @@ Common use cases:
 - Role or goal customization
 - Conditional behavior (e.g., user is admin)
 
-```python title="Define a custom prompt function"
-from langgraph.prebuilt.chat_agent_executor import AgentState
-from langchain_core.runnables import RunnableConfig
-from langchain_core.messages import AnyMessage
-
-def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
-    # Generate a prompt based on the agent's state or config
-    ...
-```
-
 === "Using config"
 
     ```python
+    from langchain_core.messages import AnyMessage
+    from langchain_core.runnables import RunnableConfig
+    from langgraph.prebuilt import create_react_agent
+    from langgraph.prebuilt.chat_agent_executor import AgentState
+
     def prompt(
         state: AgentState,
         # highlight-next-line
         config: RunnableConfig,
-    ):
+    ) -> list[AnyMessage]:
         # highlight-next-line
         user_name = config.get("configurable", {}).get("user_name")
         system_msg = f"You are a helpful assistant. User's name is {user_name}"
@@ -117,6 +119,11 @@ def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
 === "Using state"
 
     ```python
+    from langchain_core.messages import AnyMessage
+    from langchain_core.runnables import RunnableConfig
+    from langgraph.prebuilt import create_react_agent
+    from langgraph.prebuilt.chat_agent_executor import AgentState
+
     class CustomState(AgentState):
         # highlight-next-line
         user_name: str
@@ -124,7 +131,7 @@ def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
     def prompt(
         # highlight-next-line
         state: CustomState
-    ):
+    ) -> list[AnyMessage]:
         # highlight-next-line
         user_name = state["user_name"]
         system_msg = f"You are a helpful assistant. User's name is {user_name}"
