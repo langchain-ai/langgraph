@@ -112,6 +112,45 @@ agent.invoke(
 )
 ```
 
+## Memory
+
+To allow multi-turn conversations with an agent, you need to enable [persistence](../concepts/persistence.md) by providing a `checkpointer` when creating an agent. At runtime you need to provide a config containing `thread_id` — a unique identifier for the conversation (session):
+
+```python
+from langgraph.prebuilt import create_react_agent
+from langgraph.checkpoint.memory import InMemorySaver
+
+# highlight-next-line
+checkpointer = InMemorySaver()
+
+agent = create_react_agent(
+    model="anthropic:claude-3-7-sonnet-latest",
+    tools=[get_weather],
+    # highlight-next-line
+    checkpointer=checkpointer
+)
+
+# Run the agent
+# highlight-next-line
+config = {"configurable": {"thread_id": "1"}}
+sf_response = agent.invoke(
+    {"messages": "what is the weather in sf"},
+    # highlight-next-line
+    config
+)
+ny_response = agent.invoke(
+    {"messages": "what about new york?"},
+    # highlight-next-line
+    config
+)
+```
+
+When you enable the checkpointer, it stores agent state at every step in the provided checkpointer database (or in memory, if using `InMemorySaver`).
+
+Note that in the above example, when the agent is invoked the second time with the same `thread_id`, the original message history from the first conversation is automatically included, together with the new user input.
+
+Please see the [memory guide](./memory.md) for more details on how to work with memory.
+
 ## Structured output
 
 To produce structured responses conforming to a schema, use the `response_format` parameter. The schema can be defined with a `Pydantic` model or `TypedDict`. The result will be accessible via the `structured_response` field.
