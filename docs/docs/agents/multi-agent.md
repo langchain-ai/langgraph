@@ -260,7 +260,7 @@ for chunk in multi_agent_graph.stream({
     print("\n")
 ```
 
-1. Access individual agent's state
+1. Access agent's state
 2. `Command` objects allow you to combine navigation (destination) and state updates (payload), which makes them very useful for implementing handoffs.
 3. This is the name of the agent (node) to hand off to.
 4. Take individual agent's messages and **add** them to the parent multi-agent graph's **state**, as part of the handoff. The next agent will see the updated multi-agent graph state.
