@@ -13,7 +13,7 @@ There are two types of memory that are relevant when working with agents:
 
 ## Short-term memory
 
-To enable multi-turn conversations with an agent, you need to enable LangGraph's [persistence](../concepts/persistence.md) by providing a `checkpointer` when creating an agent:
+To allow multi-turn conversations with an agent, you need to enable LangGraph's [persistence](../concepts/persistence.md) by providing a `checkpointer` when creating an agent:
 
 ```python
 from langgraph.prebuilt import create_react_agent

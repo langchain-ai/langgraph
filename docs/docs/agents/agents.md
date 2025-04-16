@@ -114,7 +114,7 @@ agent.invoke(
 
 ## Memory
 
-To enable multi-turn conversations with an agent, you need to enable LangGraph's [persistence](../concepts/persistence.md) by providing a `checkpointer` when creating an agent:
+To allow multi-turn conversations with an agent, you need to enable LangGraph's [persistence](../concepts/persistence.md) by providing a `checkpointer` when creating an agent:
 
 ```python
 from langgraph.prebuilt import create_react_agent
