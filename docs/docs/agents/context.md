@@ -1,61 +1,120 @@
 # Context
 
-Information is propagagated inside an agent via a list of messages. However, agents need access to information beyond messages. We will refer to this information broadly as **context**. You can provide context to an agent in two ways:
+Agents often require more than a list of messages to function effectively. They need **context**.
 
-- **via agent state**: pass any data that the agent can *update* during its execution. For example, an agent can call a tool that looks up some data and writes that data to its [state](../concepts/low_level.md#state).
-- **via a config**: pass static information to the agent's tools and prompt (e.g., user information, authorization, DB connections, etc.)
+Context includes *any* data outside the message list that can shape agent behavior or tool execution. This can be:
 
-=== "Via state"
+- Information passed at runtime, like a `user_id` or API credentials.
+- Internal state updated during a multi-step reasoning process.
+- Persistent memory or facts from previous interactions.
 
-    ```python
-    from langgraph.prebuilt.chat_agent_executor import AgentState
+LangGraph provides **three** primary ways to supply context:
 
-    class CustomState(AgentState):
-        # highlight-next-line
-        custom_data: str
+| Type                         | Description                                   | Mutable? | Lifetime                |
+|------------------------------|-----------------------------------------------|----------|-------------------------|
+| **Config**                   | data passed at the start of a run             | ❌        | per run                 |
+| **State**                    | dynamic data that can change during execution | ✅        | per run or conversation |
+| **Long-term Memory (Store)** | data that can be shared between conversations | ✅        | across conversations    |
 
-    agent = create_react_agent(
-        model="anthropic:claude-3-7-sonnet-latest",
-        tools=[...],
-        # highlight-next-line
-        state_schema=CustomState
-    )
+You can use context to:
 
-    agent.invoke({
-        "messages": "hi!",
-        # highlight-next-line
-        "custom_data": "my custom data"
-    })
-    ```
+- Adjust the system prompt the model sees
+- Feed tools with necessary inputs
+- Track facts during an ongoing conversation
 
-=== "Via config"
+## Providing Runtime Context
 
-    ```python
-    agent = create_react_agent(...)
+Use this when you need to inject data into an agent at runtime.
 
-    agent.invoke(
-        {"messages": "hi!"},
-        # highlight-next-line
-        {"configurable": {"custom_data": "my custom data"}}
-    )
-    ```
+### Config (static context)
 
-## Prompt
+Config is for immutable data like user metadata or API keys. Use
+when you have values that don't change mid-run.
 
-To include context in agent's system prompt (for example, user information), you can define a prompt as a function. This function takes the agent state and config and returns a list of messages to send to the chat model:
+Pass information via the `config` argument. The information should be using the "configurable" key, which is reserved key for this purpose.
 
 ```python
+agent.invoke(
+    {"messages": "hi!"},
+    # highlight-next-line
+    config={"configurable": {"user_id": "user_123"}}
+)
+```
+
+### State (mutable context)
+
+State acts as short-term memory during a run. It holds dynamic data that can evolve during execution, such as values derived from tools or LLM outputs.
+
+```python
+class CustomState(AgentState):
+    # highlight-next-line
+    user_name: str
+
+agent.invoke({
+    "messages": "hi!",
+    "user_name": "Jane"
+})
+```
+
+!!! tip "Turning on memory"
+
+    Please see the [memory guide](./memory.md) for more details on how to enable memory. This is a powerful feature that allows you to persist the agent's state across multiple invocations.
+    Otherwise, the state is scoped only to a single agent run.
+
+
+
+### Long-Term Memory (cross-conversation context)
+
+For context that spans *across* conversations or sessions, LangGraph allows access to **long-term memory** via a `store`. This can be used to read or update persistent facts (e.g., user profiles, preferences, prior interactions). For more, see the [Memory guide](./memory.md).
+
+## Customizing Prompts with Context
+
+Prompts define how the agent behaves. To incorporate runtime context, you can dynamically generate prompts based on the agent's state or config.
+
+Common use cases:
+
+- Personalization
+- Role or goal customization
+- Conditional behavior (e.g., user is admin)
+
+```python title="Define a custom prompt function"
 from langgraph.prebuilt.chat_agent_executor import AgentState
 from langchain_core.runnables import RunnableConfig
 from langchain_core.messages import AnyMessage
 
 def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
+    # Generate a prompt based on the agent's state or config
     ...
 ```
 
-=== "Via state"
+=== "Using config"
 
-    This is especially useful for accessing any information that is [dynamically updated inside the agent](#update-context-from-tools).
+    ```python
+    def prompt(
+        state: AgentState,
+        # highlight-next-line
+        config: RunnableConfig,
+    ):
+        # highlight-next-line
+        user_name = config.get("configurable", {}).get("user_name")
+        system_msg = f"You are a helpful assistant. User's name is {user_name}"
+        return [{"role": "system", "content": system_msg}] + state["messages"]
+
+    agent = create_react_agent(
+        model="anthropic:claude-3-7-sonnet-latest",
+        tools=[get_weather],
+        # highlight-next-line
+        prompt=prompt
+    )
+
+    agent.invoke(
+        ...,
+        # highlight-next-line
+        config={"configurable": {"user_name": "John Smith"}}
+    )
+    ```
+
+=== "Using state"
 
     ```python
     class CustomState(AgentState):
@@ -87,42 +146,43 @@ def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
     })
     ```
 
-=== "Via config"
+## Tools
 
-    This is useful for accessing static data that is passed at agent invocation.
+Tools can access context through special parameter **annotations**.
+
+* Use `RunnableConfig` for config access
+* Use `Annotated[StateSchema, InjectedState]` for agent state
+
+
+!!! tip 
+
+    These annotations prevent LLMs from attempting to fill in the values. These parameters will be **hidden** from the LLM.
+
+=== "Using config"
 
     ```python
-    def prompt(
-        state: AgentState,
+    def get_user_info(
         # highlight-next-line
         config: RunnableConfig,
-    ):
+    ) -> str:
+        """Look up user info."""
         # highlight-next-line
-        user_name = config.get("configurable", {}).get("user_name")
-        system_msg = f"You are a helpful assistant. User's name is {user_name}"
-        return [{"role": "system", "content": system_msg}] + state["messages"]
+        user_id = config.get("configurable", {}).get("user_id")
+        return "User is John Smith" if user_id == "user_123" else "Unknown user"
 
     agent = create_react_agent(
         model="anthropic:claude-3-7-sonnet-latest",
-        tools=[get_weather],
-        # highlight-next-line
-        prompt=prompt
+        tools=[get_user_info],
     )
 
     agent.invoke(
-        ...,
+        {"messages": "look up user information"},
         # highlight-next-line
-        config={"configurable": {"user_name": "John Smith"}}
+        config={"configurable": {"user_id": "user_123"}}
     )
     ```
 
-## Tools
-
-You can pass context to tools via additional tool function parameters. To ensure that an LLM doesn't try 
-to populate those parameters in the tool calls, you need to add special type annotations: 
-`RunnableConfig` for config and `Annotated[StateSchema, InjectedState]` for agent state. All parameters with these annotations will be excluded the JSON schema passed to the LLM.
-
-=== "Via state"
+=== "Using State"
 
     ```python
     from typing import Annotated
@@ -155,33 +215,10 @@ to populate those parameters in the tool calls, you need to add special type ann
     })
     ```
 
-=== "Via config"
-
-    ```python
-    def get_user_info(
-        # highlight-next-line
-        config: RunnableConfig,
-    ) -> str:
-        """Look up user info."""
-        # highlight-next-line
-        user_id = config.get("configurable", {}).get("user_id")
-        return "User is John Smith" if user_id == "user_123" else "Unknown user"
-
-    agent = create_react_agent(
-        model="anthropic:claude-3-7-sonnet-latest",
-        tools=[get_user_info],
-    )
-
-    agent.invoke(
-        {"messages": "look up user information"},
-        # highlight-next-line
-        config={"configurable": {"user_id": "user_123"}}
-    )
-    ```
 
 ## Update context from tools
 
-You can update context ([state](../concepts/low_level.md#state)) of the agent from tools. This is useful if the agent needs to load some data during execution and wants to make it available for later use in the prompt or other tools.
+Tools can modify the agent's state during execution. This is useful for persisting intermediate results or making information accessible to subsequent tools or prompts.
 
 ```python
 from typing import Annotated
@@ -240,4 +277,4 @@ agent.invoke(
 )
 ```
 
-See [how to update state from tools](../how-tos/update-state-from-tools.ipynb) for more information.
+For more details, see [how to update state from tools](../how-tos/update-state-from-tools.ipynb).
