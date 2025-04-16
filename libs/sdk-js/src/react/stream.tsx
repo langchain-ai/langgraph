@@ -405,7 +405,7 @@ type GetCustomEventType<Bag extends BagTemplate> = Bag extends {
   ? Bag["CustomEventType"]
   : unknown;
 
-interface UseStreamOptions<
+export interface UseStreamOptions<
   StateType extends Record<string, unknown> = Record<string, unknown>,
   Bag extends BagTemplate = BagTemplate,
 > {
