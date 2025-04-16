@@ -1,10 +1,6 @@
----
-title: Context
----
-
 # Context
 
-Agents often need more than a list of messages to work effectively — they need **context**.
+Agents often require more than a list of messages to function effectively. They need **context**.
 
 Context includes *any* data outside the message list that can shape agent behavior or tool execution. This can be:
 
@@ -19,7 +15,7 @@ LangGraph provides two primary mechanisms for supplying context:
 | **Config** | data passed at the start of a run             | ❌        | per run                 | tools, prompts |
 | **State**  | dynamic data that can change during execution | ✅        | per run or conversation | tools, prompts |
 
-These values can be used to:
+You can use context to:
 
 - Adjust the system prompt the model sees
 - Feed tools with necessary inputs
@@ -29,7 +25,7 @@ These values can be used to:
 
 Use this when you need to inject data into an agent at runtime.
 
-### Using Config
+### Config (static context)
 
 - For immutable values like user metadata, access tokens, environment settings
 - Passed once when running agent
@@ -45,12 +41,11 @@ agent.invoke(
 )
 ```
 
-### Using State 
+### State (mutable context)
 
-- The state represents the agent's "working" memory. By default the state is accessible across the entire agent run.
-- By enabling the checkpointer, the state is persisted across runs and can be retained across an entire conversation.
-- Mutable "short-term memory" the agent can update across steps
-- Define a custom state schema to track additional data
+* Acts as working memory during execution
+* Can persist across steps or runs (if checkpointer is enabled)
+* Define a custom schema to track specific fields
 
 ```python
 class CustomState(AgentState):
@@ -65,16 +60,15 @@ agent.invoke({
 
 ## Customizing Prompts with Context
 
-Prompts define how the agent behaves. To incorporate runtime context, you can dynamically generate prompts
-by creating a function that takes the agent state and config as arguments.
+Prompts define how the agent behaves. To incorporate runtime context, you can dynamically generate prompts based on the agent's state or config.
 
-Use this for:
+Common use cases:
 
 - Personalization
-- Role/goal customization
+- Role or goal customization
 - Conditional behavior (e.g., user is admin)
 
-```python title="Dynamic Prompt"
+```python title="Define a custom prompt function"
 from langgraph.prebuilt.chat_agent_executor import AgentState
 from langchain_core.runnables import RunnableConfig
 from langchain_core.messages import AnyMessage
@@ -86,9 +80,7 @@ def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
 
 === "Using config"
 
-    This is useful for accessing static data that is passed at agent invocation.
-
-    ```python title="Prompt from Config"
+    ```python
     def prompt(
         state: AgentState,
         # highlight-next-line
@@ -115,9 +107,7 @@ def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
 
 === "Using state"
 
-    This is especially useful for accessing any information that is [dynamically updated inside the agent](#update-context-from-tools).
-
-    ```python title="Prompt from AgentState"
+    ```python
     class CustomState(AgentState):
         # highlight-next-line
         user_name: str
@@ -149,9 +139,15 @@ def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
 
 ## Tools
 
-You can pass context to tools via additional tool function parameters. To ensure that an LLM doesn't try 
-to populate those parameters in the tool calls, you need to add special type annotations: 
-`RunnableConfig` for config and `Annotated[StateSchema, InjectedState]` for agent state. All parameters with these annotations will be excluded the JSON schema passed to the LLM.
+Tools can access context through special parameter **annotations**.
+
+* Use `RunnableConfig` for config access
+* Use `Annotated[StateSchema, InjectedState]` for agent state
+
+
+!!! tip 
+
+    These annotations prevent LLMs from attempting to fill in the values. These parameters will be **hidden** from the LLM.
 
 === "Using config"
 
@@ -272,4 +268,4 @@ agent.invoke(
 )
 ```
 
-See [how to update state from tools](../how-tos/update-state-from-tools.ipynb) for more information.
+For more details, see [how to update state from tools](../how-tos/update-state-from-tools.ipynb).
