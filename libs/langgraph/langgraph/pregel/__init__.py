@@ -66,6 +66,7 @@ from langgraph.constants import (
     CONFIG_KEY_STREAM,
     CONFIG_KEY_STREAM_WRITER,
     CONFIG_KEY_TASK_ID,
+    CONFIG_KEY_THREAD_ID,
     END,
     ERROR,
     INPUT,
@@ -1044,6 +1045,9 @@ class Pregel(PregelProtocol):
             config = merge_configs(
                 config, {CONF: {CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(ns)}}
             )
+        thread_id = config[CONF][CONFIG_KEY_THREAD_ID]
+        if not isinstance(thread_id, str):
+            config[CONF][CONFIG_KEY_THREAD_ID] = str(thread_id)
 
         saved = checkpointer.get_tuple(config)
         return self._prepare_state_snapshot(
@@ -1083,6 +1087,9 @@ class Pregel(PregelProtocol):
             config = merge_configs(
                 config, {CONF: {CONFIG_KEY_CHECKPOINT_NS: recast_checkpoint_ns(ns)}}
             )
+        thread_id = config[CONF][CONFIG_KEY_THREAD_ID]
+        if not isinstance(thread_id, str):
+            config[CONF][CONFIG_KEY_THREAD_ID] = str(thread_id)
 
         saved = await checkpointer.aget_tuple(config)
         return await self._aprepare_state_snapshot(
@@ -1128,7 +1135,12 @@ class Pregel(PregelProtocol):
         config = merge_configs(
             self.config,
             config,
-            {CONF: {CONFIG_KEY_CHECKPOINT_NS: checkpoint_ns}},
+            {
+                CONF: {
+                    CONFIG_KEY_CHECKPOINT_NS: checkpoint_ns,
+                    CONFIG_KEY_THREAD_ID: str(config[CONF][CONFIG_KEY_THREAD_ID]),
+                }
+            },
         )
         # eagerly consume list() to avoid holding up the db cursor
         for checkpoint_tuple in list(
@@ -1175,7 +1187,12 @@ class Pregel(PregelProtocol):
         config = merge_configs(
             self.config,
             config,
-            {CONF: {CONFIG_KEY_CHECKPOINT_NS: checkpoint_ns}},
+            {
+                CONF: {
+                    CONFIG_KEY_CHECKPOINT_NS: checkpoint_ns,
+                    CONFIG_KEY_THREAD_ID: str(config[CONF][CONFIG_KEY_THREAD_ID]),
+                }
+            },
         )
         # eagerly consume list() to avoid holding up the db cursor
         for checkpoint_tuple in [
@@ -1595,7 +1612,9 @@ class Pregel(PregelProtocol):
 
             return patch_checkpoint_map(next_config, saved.metadata if saved else None)
 
-        current_config = config
+        current_config = patch_configurable(
+            config, {CONFIG_KEY_THREAD_ID: str(config[CONF][CONFIG_KEY_THREAD_ID])}
+        )
         for superstep in supersteps:
             current_config = perform_superstep(current_config, superstep)
         return current_config
@@ -2005,7 +2024,9 @@ class Pregel(PregelProtocol):
                     await checkpointer.aput_writes(next_config, push_writes, task_id)
             return patch_checkpoint_map(next_config, saved.metadata if saved else None)
 
-        current_config = config
+        current_config = patch_configurable(
+            config, {CONFIG_KEY_THREAD_ID: str(config[CONF][CONFIG_KEY_THREAD_ID])}
+        )
         for superstep in supersteps:
             current_config = await aperform_superstep(current_config, superstep)
         return current_config
