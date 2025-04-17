@@ -254,7 +254,7 @@ store.get(("users",), "user_123").value
 
 ### Prebuilt memory tools
 
-**LangMem** is a LangChain maintained library that offers tools for managing long-term memories in your agent. See the [LangMem documentation](https://langchain-ai.github.io/langmem/) for usage examples.
+**LangMem** is a LangChain-maintained library that offers tools for managing long-term memories in your agent. See the [LangMem documentation](https://langchain-ai.github.io/langmem/) for usage examples.
 
 
 ## Additional resources
