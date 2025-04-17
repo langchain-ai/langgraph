@@ -273,6 +273,7 @@ def _build(
     pull: bool,
     tag: str,
     passthrough: Sequence[str] = (),
+    base_docker_tag: Optional[str] = None,
 ):
     # pull latest images
     if pull:
@@ -280,10 +281,13 @@ def _build(
             subp_exec(
                 "docker",
                 "pull",
-                langgraph_cli.config.docker_tag(config_json, base_image),
+                langgraph_cli.config.docker_tag(
+                    config_json, base_image, base_docker_tag
+                ),
                 verbose=True,
             )
         )
+
     set("Building...")
     # apply options
     args = [
@@ -294,7 +298,7 @@ def _build(
     ]
     # apply config
     stdin, additional_contexts = langgraph_cli.config.config_to_docker(
-        config, config_json, base_image
+        config, config_json, base_image, base_docker_tag
     )
     # add additional_contexts
     if additional_contexts:
@@ -355,7 +359,15 @@ def build(
             raise click.UsageError("Docker not installed") from None
         config_json = langgraph_cli.config.validate_config_file(config)
         _build(
-            runner, set, config, config_json, base_image, pull, tag, docker_build_args
+            runner,
+            set,
+            config,
+            config_json,
+            base_image,
+            pull,
+            tag,
+            docker_build_args,
+            config_json.get("_INTERNAL_docker_tag"),
         )
 
 
