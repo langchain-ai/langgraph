@@ -54,7 +54,7 @@ pip install -U "langgraph-cli[inmem]"
 
 ### `up`
 
-The `langgraph up` command starts an instance of the [LangGraph API server](./langgraph_server.md) locally in a docker container. This requires thedocker server to be running locally. It also requires a LangSmith API key for local development or a license key for production use.
+The `langgraph up` command starts an instance of the [LangGraph API server](./langgraph_server.md) locally in a docker container. This requires the docker server to be running locally. It also requires a LangSmith API key for local development or a license key for production use.
 
 The server includes all API endpoints for your graph's runs, threads, assistants, etc. as well as the other services required to run your agent, including a managed database for checkpointing and storage.
 
