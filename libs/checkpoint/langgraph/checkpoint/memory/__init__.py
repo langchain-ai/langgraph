@@ -69,7 +69,7 @@ class InMemorySaver(
         ],
     ]
     writes: defaultdict[
-        tuple[str, str, str],
+        tuple[str, str, str],  # thread ID, checkpoint NS, checkpoint ID
         dict[tuple[str, int], tuple[str, str, tuple[str, bytes], str]],
     ]
     blobs: dict[
@@ -451,6 +451,24 @@ class InMemorySaver(
                 task_path,
             )
 
+    def delete_thread(self, thread_id: str) -> None:
+        """Delete all checkpoints and writes associated with a thread ID.
+
+        Args:
+            thread_id (str): The thread ID to delete.
+
+        Returns:
+            None
+        """
+        if thread_id in self.storage:
+            del self.storage[thread_id]
+        for k in list(self.writes.keys()):
+            if k[0] == thread_id:
+                del self.writes[k]
+        for k in list(self.blobs.keys()):
+            if k[0] == thread_id:
+                del self.blobs[k]
+
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Asynchronous version of get_tuple.
 
@@ -529,6 +547,17 @@ class InMemorySaver(
             None
         """
         return self.put_writes(config, writes, task_id, task_path)
+
+    async def adelete_thread(self, thread_id: str) -> None:
+        """Delete all checkpoints and writes associated with a thread ID.
+
+        Args:
+            thread_id (str): The thread ID to delete.
+
+        Returns:
+            None
+        """
+        return self.delete_thread(thread_id)
 
     def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
         if current is None:
@@ -615,4 +644,4 @@ class PersistentDict(defaultdict):
                 except Exception:
                     logging.error(f"Failed to load file: {fileobj.name}")
                     raise
-            raise ValueError("File not in a supported f ormat")
+            raise ValueError("File not in a supported format")
