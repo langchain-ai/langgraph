@@ -326,6 +326,10 @@ class Config(TypedDict, total=False):
     Must be >= 20 if provided.
     """
 
+    _INTERNAL_docker_tag: Optional[str]
+    """Optional. Internal use only.
+    """
+
     pip_config_file: Optional[str]
     """Optional. Path to a pip config file (e.g., "/etc/pip.conf" or "pip.ini") for controlling
     package installation (custom indices, credentials, etc.).
@@ -480,6 +484,7 @@ def validate_config(config: Config) -> Config:
         "node_version": node_version,
         "python_version": python_version,
         "pip_config_file": config.get("pip_config_file"),
+        "_INTERNAL_docker_tag": config.get("_INTERNAL_docker_tag"),
         "dependencies": config.get("dependencies", []),
         "dockerfile_lines": config.get("dockerfile_lines", []),
         "graphs": config.get("graphs", {}),
@@ -1025,7 +1030,9 @@ def _get_node_pm_install_cmd(config_path: pathlib.Path, config: Config) -> str:
 
 
 def python_config_to_docker(
-    config_path: pathlib.Path, config: Config, base_image: str
+    config_path: pathlib.Path,
+    config: Config,
+    base_image: str,
 ) -> tuple[str, dict[str, str]]:
     """Generate a Dockerfile from the configuration."""
     # configure pip
@@ -1039,6 +1046,8 @@ def python_config_to_docker(
         if config.get("pip_config_file")
         else ""
     )
+
+    docker_tag = config.get("_INTERNAL_docker_tag") or config["python_version"]
 
     # collect dependencies
     pypi_deps = [dep for dep in config["dependencies"] if not dep.startswith(".")]
@@ -1160,7 +1169,7 @@ ADD {relpath} /deps/{name}
         )
 
     docker_file_contents = [
-        f"FROM {base_image}:{config['python_version']}",
+        f"FROM {base_image}:{docker_tag}",
         "",
         os.linesep.join(config["dockerfile_lines"]),
         "",
@@ -1192,10 +1201,13 @@ ADD {relpath} /deps/{name}
 
 
 def node_config_to_docker(
-    config_path: pathlib.Path, config: Config, base_image: str
+    config_path: pathlib.Path,
+    config: Config,
+    base_image: str,
 ) -> tuple[str, dict[str, str]]:
     faux_path = f"/deps/{config_path.parent.name}"
     install_cmd = _get_node_pm_install_cmd(config_path, config)
+    docker_tag = config.get("_INTERNAL_docker_tag") or config["node_version"]
 
     env_vars: list[str] = []
 
@@ -1222,7 +1234,7 @@ def node_config_to_docker(
     env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
 
     docker_file_contents = [
-        f"FROM {base_image}:{config['node_version']}",
+        f"FROM {base_image}:{docker_tag}",
         "",
         os.linesep.join(config["dockerfile_lines"]),
         "",
@@ -1246,8 +1258,13 @@ def default_base_image(config: Config) -> str:
     return "langchain/langgraph-api"
 
 
-def docker_tag(config: Config, base_image: Optional[str] = None) -> str:
+def docker_tag(
+    config: Config,
+    base_image: Optional[str] = None,
+) -> str:
     base_image = base_image or default_base_image(config)
+    if config.get("_INTERNAL_docker_tag"):
+        return f"{base_image}:{config['_INTERNAL_docker_tag']}"
 
     if config.get("node_version") and not config.get("python_version"):
         return f"{base_image}:{config['node_version']}"
@@ -1255,7 +1272,9 @@ def docker_tag(config: Config, base_image: Optional[str] = None) -> str:
 
 
 def config_to_docker(
-    config_path: pathlib.Path, config: Config, base_image: Optional[str] = None
+    config_path: pathlib.Path,
+    config: Config,
+    base_image: Optional[str] = None,
 ) -> tuple[str, dict[str, str]]:
     base_image = base_image or default_base_image(config)
 
