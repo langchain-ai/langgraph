@@ -3387,14 +3387,14 @@ tenacity = ">=8.1.0,<8.4.0 || >8.4.0,<10"
 
 [[package]]
 name = "langchain-core"
-version = "0.3.52"
+version = "0.3.54"
 description = "Building applications with LLMs through composability"
 optional = false
 python-versions = "<4.0,>=3.9"
 groups = ["docs", "test"]
 files = [
-    {file = "langchain_core-0.3.52-py3-none-any.whl", hash = "sha256:cd137109c1e3d04f5a582c2cae9539b2cd5e4b795f486b58969dbc3d0387fe7c"},
-    {file = "langchain_core-0.3.52.tar.gz", hash = "sha256:f1981ec9efa4fceb11ff5ca57f5f9c8e22859cea3a94f8a044e6de8815afbd57"},
+    {file = "langchain_core-0.3.54-py3-none-any.whl", hash = "sha256:cd42155d9089e2fd4695ee02a4b2bc6daf55b9d4e1a37639647cf2455ed4fa04"},
+    {file = "langchain_core-0.3.54.tar.gz", hash = "sha256:55ce38939038e19b1271f36f512335462d7f64057b531598b3651d2b403e1b42"},
 ]
 
 [package.dependencies]
@@ -3530,7 +3530,7 @@ langchain-core = ">=0.3.45,<1.0.0"
 
 [[package]]
 name = "langgraph"
-version = "0.3.30"
+version = "0.3.31"
 description = "Building stateful, multi-actor applications with LLMs"
 optional = false
 python-versions = ">=3.9.0,<4.0"
@@ -3541,7 +3541,7 @@ develop = true
 [package.dependencies]
 langchain-core = ">=0.1,<0.4"
 langgraph-checkpoint = "^2.0.10"
-langgraph-prebuilt = ">=0.1.1,<0.2"
+langgraph-prebuilt = ">=0.1.8,<0.2"
 langgraph-sdk = "^0.1.42"
 xxhash = "^3.5.0"
 
@@ -5987,7 +5987,6 @@ optional = false
 python-versions = ">=3.8"
 groups = ["test"]
 files = [
-    {file = "pyasn1-0.6.1-py3-none-any.whl", hash = "sha256:0d632f46f2ba09143da3a8afe9e33fb6f92fa2320ab7e886e2d0f7672af84629"},
     {file = "pyasn1-0.6.1.tar.gz", hash = "sha256:6f580d2bdd84365380830acf45550f2511469f673cb4a5ae3857a3170128b034"},
 ]
 
@@ -5999,7 +5998,6 @@ optional = false
 python-versions = ">=3.8"
 groups = ["test"]
 files = [
-    {file = "pyasn1_modules-0.4.1-py3-none-any.whl", hash = "sha256:49bfa96b45a292b711e986f222502c1c9a5e1f4e568fc30e2574a6c7d07838fd"},
     {file = "pyasn1_modules-0.4.1.tar.gz", hash = "sha256:c28e2dbf9c06ad61c71a075c7e0f9fd0f1b0bb2d2ad4377f240d33ac2ab60a7c"},
 ]
 
@@ -8902,4 +8900,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "45bbc644a3b878063f5cbb75eed56540423315784f8dd42cfd3937c910dfc9c5"
+content-hash = "36d7e4c4eba50d5e4dfb2e99964d7b51fe17d36238a912765cca8fc360216079"
