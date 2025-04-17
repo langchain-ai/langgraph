@@ -9,9 +9,11 @@ You can either [define your own tools](#define-simple-tools) or use [prebuilt in
 You can pass a vanilla function to `create_react_agent` to use as a tool:
 
 ```python
+from langgraph.prebuilt import create_react_agent
+
 def multiply(a: int, b: int) -> int:
-   """Multiply two numbers."""
-   return a * b
+    """Multiply two numbers."""
+    return a * b
 
 create_react_agent(
     model="anthropic:claude-3-7-sonnet",
@@ -102,8 +104,8 @@ def add(a: int, b: int) -> int:
     return a + b
 
 def multiply(a: int, b: int) -> int:
-   """Multiply two numbers."""
-   return a * b
+    """Multiply two numbers."""
+    return a * b
 
 model = init_chat_model("anthropic:claude-3-5-sonnet-latest", temperature=0)
 tools = [add, multiply]
@@ -168,6 +170,85 @@ agent.invoke({"messages": "Hi, I am Bob"})
 
     - Mark the tool with [`return_direct=True`](#return-tool-results-directly) to end the loop after execution.
     - Set [`recursion_limit`](../concepts/low_level.md#recursion-limit) to restrict the number of execution steps.
+
+## Handle tool errors
+
+By default, the agent will catch all exceptions raised during tool calls and will pass those as tool messages to the LLM. To control how the errors are handled, you can use the prebuilt [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] — the node that executes tools inside `create_react_agent` — via its `handle_tool_errors` parameter:
+
+=== "Enable error handling (default)"
+
+    ```python
+    from langgraph.prebuilt import create_react_agent, ToolNode
+
+    def multiply(a: int, b: int) -> int:
+        """Multiply two numbers."""
+        if a == 42:
+            raise ValueError("The ultimate error")
+        return a * b
+
+    # Run with error handling (default)
+    agent = create_react_agent(
+        model="anthropic:claude-3-7-sonnet-latest",
+        tools=[multiply]
+    )
+    agent.invoke({"messages": "what's 42 x 7?"})
+    ```
+
+=== "Disable error handling"
+
+    ```python
+    from langgraph.prebuilt import create_react_agent, ToolNode
+
+    def multiply(a: int, b: int) -> int:
+        """Multiply two numbers."""
+        if a == 42:
+            raise ValueError("The ultimate error")
+        return a * b
+
+    # highlight-next-line
+    tool_node = ToolNode(
+        [multiply],
+        # highlight-next-line
+        handle_tool_errors=False  # (1)!
+    )
+    agent_no_error_handling = create_react_agent(
+        model="anthropic:claude-3-7-sonnet-latest",
+        tools=tool_node
+    )
+    agent_no_error_handling.invoke({"messages": "what's 42 x 7?"})
+    ```
+
+    1. This disables error handling (enabled by default). See all available strategies in the [API reference][langgraph.prebuilt.tool_node.ToolNode].
+
+=== "Custom error handling"
+
+    ```python
+    from langgraph.prebuilt import create_react_agent, ToolNode
+
+    def multiply(a: int, b: int) -> int:
+        """Multiply two numbers."""
+        if a == 42:
+            raise ValueError("The ultimate error")
+        return a * b
+
+    # highlight-next-line
+    tool_node = ToolNode(
+        [multiply],
+        # highlight-next-line
+        handle_tool_errors=(
+            "Can't use 42 as a first operand, you must switch operands!"  # (1)!
+        )
+    )
+    agent_custom_error_handling = create_react_agent(
+        model="anthropic:claude-3-7-sonnet-latest",
+        tools=tool_node
+    )
+    agent_custom_error_handling.invoke({"messages": "what's 42 x 7?"})
+    ```
+
+    1. This provides a custom message to send to the LLM in case of an exception. See all available strategies in the [API reference][langgraph.prebuilt.tool_node.ToolNode].
+
+See [API reference][langgraph.prebuilt.tool_node.ToolNode] for more information on different tool error handling options.
 
 ## Prebuilt tools
 
