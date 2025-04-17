@@ -88,6 +88,13 @@ def has_blocklisted_command(code: str, metadata: dict) -> bool:
     return False
 
 
+def add_mermaid_retries(code: str) -> str:
+    return code.replace(
+        "draw_mermaid_png()",
+        "draw_mermaid_png(max_retries=3)"
+    )
+
+
 def add_vcr_to_notebook(
     notebook: nbformat.NotebookNode, cassette_prefix: str
 ) -> nbformat.NotebookNode:
@@ -99,7 +106,8 @@ def add_vcr_to_notebook(
         if cell.cell_type != "code":
             continue
 
-        lines = cell.source.splitlines()
+        cell_source = add_mermaid_retries(cell.source)
+        lines = cell_source.splitlines()
         # skip if empty cell
         if not lines:
             continue
@@ -119,7 +127,7 @@ def add_vcr_to_notebook(
         if all(is_comment(line) or not line.strip() for line in lines):
             continue
 
-        if has_blocklisted_command(cell.source, cell.metadata):
+        if has_blocklisted_command(cell_source, cell.metadata):
             continue
 
         cell_id = cell.get("id", idx)
