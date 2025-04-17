@@ -11,7 +11,7 @@ def evaluator(*, outputs: dict, reference_outputs: dict):
     return {"key": "evaluator_score", "score": score}
 ```
 
-To get started, you can use prebuilt evalutors from `AgentEvals` package:
+To get started, you can use prebuilt evaluators from `AgentEvals` package:
 
 ```bash
 pip install -U agentevals
