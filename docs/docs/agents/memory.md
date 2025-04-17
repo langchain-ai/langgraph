@@ -2,23 +2,26 @@
 
 LangGraph supports two types of memory essential for building conversational agents:
 
-* **[Short-term memory](#short-term-memory)**: Maintains message history during a conversation.
-* **[Long-term memory](#long-term-memory)**: Stores user-specific or application-specific data across conversations.
+- **[Short-term memory](#short-term-memory)**: Tracks the ongoing conversation by maintaining message history within a session.
+- **[Long-term memory](#long-term-memory)**: Stores user-specific or application-level data across sessions.
 
-This guide explains how to configure both types and when to use them effectively.
+This guide demonstrates how to use both memory types with agents in LangGraph. For a deeper
+understanding of memory concepts, refer to the [LangGraph memory documentation](../concepts/memory.md).
 
 <figure markdown="1">
 ![image](./assets/memory.png){: style="max-height:400px"}
-<figcaption>Both <strong>short-term memory</strong> and <strong>long-term memory</strong> require persisting data across interactions with the underlying LLM. In a production setting this data is stored in a database.
-</figcaption>
+<figcaption>Both <strong>short-term</strong> and <strong>long-term</strong> memory require persistent storage to maintain continuity across LLM interactions. In production environments, this data is typically stored in a database.</figcaption>
 </figure>
 
-!!! tip "Terminology"
+!!! note "Terminology"
 
-    - Thread-level = context within a single conversation session (short-term)
-    - Cross-thread = context shared across sessions or users (long-term)
+    In LangGraph:
 
+    - *Short-term memory* is also referred to as **thread-level memory**.
+    - *Long-term memory* is also called **cross-thread memory**.
 
+    A [thread](../concepts/persistence.md#threads) represents a sequence of related runs
+    grouped by the same `thread_id`.
 
 ## Short-term memory
 
@@ -250,3 +253,8 @@ store.get(("users",), "user_123").value
 ### Prebuilt memory tools
 
 **LangMem** is a LangChain maintained library that offers tools for managing long-term memories in your agent. See the [LangMem documentation](https://langchain-ai.github.io/langmem/) for usage examples.
+
+
+## Additional resources
+
+* [Memory in LangGraph](../concepts/memory.md)
