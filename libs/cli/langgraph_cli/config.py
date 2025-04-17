@@ -1033,7 +1033,6 @@ def python_config_to_docker(
     config_path: pathlib.Path,
     config: Config,
     base_image: str,
-    base_docker_tag: Optional[str] = None,
 ) -> tuple[str, dict[str, str]]:
     """Generate a Dockerfile from the configuration."""
     # configure pip

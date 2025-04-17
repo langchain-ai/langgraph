@@ -284,7 +284,6 @@ def _build(
                 verbose=True,
             )
         )
-
     set("Building...")
     # apply options
     args = [
