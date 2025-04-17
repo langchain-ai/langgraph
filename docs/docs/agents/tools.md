@@ -178,7 +178,7 @@ By default, the agent will catch all exceptions raised during tool calls and wil
 === "Enable error handling (default)"
 
     ```python
-    from langgraph.prebuilt import create_react_agent, ToolNode
+    from langgraph.prebuilt import create_react_agent
 
     def multiply(a: int, b: int) -> int:
         """Multiply two numbers."""
