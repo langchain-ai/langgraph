@@ -14,11 +14,11 @@ from langgraph.types import interrupt
 """
 
 EXPECTED_MARKDOWN = """\
+API Reference: <a href="https://langchain-ai.github.io/langgraph/reference/types/#langgraph.types.interrupt">interrupt</a>
+
 ```python
 from langgraph.types import interrupt
 ```
-
-API Reference: <a href="https://langchain-ai.github.io/langgraph/reference/types/#langgraph.types.interrupt">interrupt</a>
 """
 
 
