@@ -19,7 +19,7 @@ build-prebuilt:
 		poetry run python -m _scripts.third_party_page.get_download_stats --fake stats.yml; \
 		set +x; \
 	fi
-	poetry run python -m _scripts.third_party_page.create_third_party_page stats.yml docs/prebuilt.md --language python
+	poetry run python -m _scripts.third_party_page.create_third_party_page stats.yml docs/agents/prebuilt.md --language python
 
 build-docs: build-typedoc build-prebuilt
 	poetry run python -m mkdocs build --clean -f mkdocs.yml --strict
