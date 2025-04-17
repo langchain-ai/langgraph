@@ -1262,11 +1262,10 @@ def default_base_image(config: Config) -> str:
 def docker_tag(
     config: Config,
     base_image: Optional[str] = None,
-    base_docker_tag: Optional[str] = None,
 ) -> str:
     base_image = base_image or default_base_image(config)
-    if base_docker_tag:
-        return f"{base_image}:{base_docker_tag}"
+    if config.get("_INTERNAL_docker_tag"):
+        return f"{base_image}:{config['_INTERNAL_docker_tag']}"
 
     if config.get("node_version") and not config.get("python_version"):
         return f"{base_image}:{config['node_version']}"
