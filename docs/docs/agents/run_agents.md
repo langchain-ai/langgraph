@@ -49,11 +49,15 @@ Agent input must be a dictionary with a `messages` key. Supported formats are:
 | String             | `{"messages": "Hello"}`  — Interpreted as a [HumanMessage](https://python.langchain.com/docs/concepts/messages/#humanmessage) |
 | Message dictionary | `{"messages": {"role": "user", "content": "Hello"}}`                                                                          |
 | List of messages   | `{"messages": [{"role": "user", "content": "Hello"}]}`                                                                        |
-
+| With custom state  | `{"messages": [{"role": "user", "content": "Hello"}], "user_name": "Alice"}` — If using a custom `state_schema`               |
 
 Messages are automatically converted into LangChain's internal message format. You can read
 more about [LangChain messages](https://python.langchain.com/docs/concepts/messages/#langchain-messages) in the LangChain documentation.
 
+!!! tip "Using custom agent state"
+
+    You can provide additional fields defined in your agent’s state schema directly in the input dictionary. This allows dynamic behavior based on runtime data or prior tool outputs.  
+    See the [context guide](./context.md) for full details.
 
 !!! note
 
@@ -62,11 +66,13 @@ more about [LangChain messages](https://python.langchain.com/docs/concepts/messa
 
 ## Output format
 
-Agent output is a dictionary with a `messages` key containing:
+Agent output is a dictionary containing:
 
-- The original user input.
-- Intermediate assistant and tool messages from the tool-calling loop.
-- The final assistant message with the agent's response.
+- `messages`: A list of all messages exchanged during execution (user input, assistant replies, tool invocations).
+- Optionally, `structured_response` if [structured output](./agents.md#structured-output) is configured.
+- If using a custom `state_schema`, additional keys corresponding to your defined fields may also be present in the output. These can hold updated state values from tool execution or prompt logic.
+
+See the [context guide](./context.md) for more details on working with custom state schemas and accessing context.
 
 ## Streaming output
 
