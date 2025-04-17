@@ -87,7 +87,6 @@ def has_blocklisted_command(code: str, metadata: dict) -> bool:
             return True
     return False
 
-
 def add_mermaid_retries(code: str) -> str:
     return code.replace(
         "draw_mermaid_png()",
@@ -106,8 +105,7 @@ def add_vcr_to_notebook(
         if cell.cell_type != "code":
             continue
 
-        cell_source = add_mermaid_retries(cell.source)
-        lines = cell_source.splitlines()
+        lines = cell.source.splitlines()
         # skip if empty cell
         if not lines:
             continue
@@ -127,7 +125,7 @@ def add_vcr_to_notebook(
         if all(is_comment(line) or not line.strip() for line in lines):
             continue
 
-        if has_blocklisted_command(cell_source, cell.metadata):
+        if has_blocklisted_command(cell.source, cell.metadata):
             continue
 
         cell_id = cell.get("id", idx)
@@ -189,6 +187,15 @@ def add_vcr_to_notebook(
     return notebook
 
 
+def add_mermaid_retries_to_notebook(notebook: nbformat.NotebookNode) -> nbformat.NotebookNode:
+    for cell in notebook.cells:
+        if cell.cell_type != "code":
+            continue
+
+        cell.source = add_mermaid_retries(cell.source)
+    return notebook
+
+
 def process_notebooks(should_comment_install_cells: bool) -> None:
     for directory in NOTEBOOK_DIRS:
         for root, _, files in os.walk(directory):
@@ -209,6 +216,8 @@ def process_notebooks(should_comment_install_cells: bool) -> None:
                         notebook = add_vcr_to_notebook(
                             notebook, cassette_prefix=cassette_prefix
                         )
+
+                    notebook = add_mermaid_retries_to_notebook(notebook)
 
                     if notebook_path in NOTEBOOKS_NO_EXECUTION:
                         # Add a cell at the beginning to indicate that this notebook should not be executed
