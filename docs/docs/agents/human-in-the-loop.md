@@ -25,7 +25,7 @@ To add a human approval step to a tool:
 
 ```python
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.types import interrupt 
+from langgraph.types import interrupt
 from langgraph.prebuilt import create_react_agent
 
 # An example of a sensitive tool that requires human review / approval
