@@ -50,6 +50,8 @@ NOTEBOOKS_NO_EXECUTION = [
     "docs/tutorials/tot/tot.ipynb",
     "docs/how-tos/visualization.ipynb",
     "docs/tutorials/llm-compiler/LLMCompiler.ipynb"
+    # TODO: temp testing, remove
+    "docs/tutorials/customer-support/customer-support.ipynb"
 ]
 
 
