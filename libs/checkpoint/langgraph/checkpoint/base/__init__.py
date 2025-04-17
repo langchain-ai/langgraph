@@ -321,6 +321,17 @@ class BaseCheckpointSaver(Generic[V]):
         """
         raise NotImplementedError
 
+    def delete_thread(
+        self,
+        thread_id: str,
+    ) -> None:
+        """Delete all checkpoints and writes associated with a specific thread ID.
+
+        Args:
+            thread_id (str): The thread ID whose checkpoints should be deleted.
+        """
+        raise NotImplementedError
+
     async def aget(self, config: RunnableConfig) -> Optional[Checkpoint]:
         """Asynchronously fetch a checkpoint using the given configuration.
 
@@ -412,6 +423,17 @@ class BaseCheckpointSaver(Generic[V]):
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
+        """
+        raise NotImplementedError
+
+    async def adelete_thread(
+        self,
+        thread_id: str,
+    ) -> None:
+        """Delete all checkpoints and writes associated with a specific thread ID.
+
+        Args:
+            thread_id (str): The thread ID whose checkpoints should be deleted.
         """
         raise NotImplementedError
 

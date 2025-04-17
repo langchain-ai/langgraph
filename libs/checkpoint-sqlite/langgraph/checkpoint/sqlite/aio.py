@@ -244,6 +244,31 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
             self.aput_writes(config, writes, task_id, task_path), self.loop
         ).result()
 
+    def delete_thread(self, thread_id: str) -> None:
+        """Delete all checkpoints and writes associated with a thread ID.
+
+        Args:
+            thread_id (str): The thread ID to delete.
+
+        Returns:
+            None
+        """
+        try:
+            # check if we are in the main thread, only bg threads can block
+            # we don't check in other methods to avoid the overhead
+            if asyncio.get_running_loop() is self.loop:
+                raise asyncio.InvalidStateError(
+                    "Synchronous calls to AsyncSqliteSaver are only allowed from a "
+                    "different thread. From the main thread, use the async interface. "
+                    "For example, use `checkpointer.alist(...)` or `await "
+                    "graph.ainvoke(...)`."
+                )
+        except RuntimeError:
+            pass
+        return asyncio.run_coroutine_threadsafe(
+            self.adelete_thread(thread_id), self.loop
+        ).result()
+
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
 
@@ -532,6 +557,26 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                     )
                     for idx, (channel, value) in enumerate(writes)
                 ],
+            )
+            await self.conn.commit()
+
+    async def adelete_thread(self, thread_id: str) -> None:
+        """Delete all checkpoints and writes associated with a thread ID.
+
+        Args:
+            thread_id (str): The thread ID to delete.
+
+        Returns:
+            None
+        """
+        async with self.lock, self.conn.cursor() as cur:
+            await cur.execute(
+                "DELETE FROM checkpoints WHERE thread_id = ?",
+                (str(thread_id),),
+            )
+            await cur.execute(
+                "DELETE FROM writes WHERE thread_id = ?",
+                (str(thread_id),),
             )
             await self.conn.commit()
 
