@@ -29,6 +29,7 @@ def test_validate_config():
     }
     actual_config = validate_config(expected_config)
     expected_config = {
+        "_INTERNAL_docker_tag": None,
         "python_version": "3.11",
         "node_version": None,
         "pip_config_file": None,
@@ -47,6 +48,7 @@ def test_validate_config():
     # full config
     env = ".env"
     expected_config = {
+        "_INTERNAL_docker_tag": None,
         "python_version": "3.12",
         "node_version": None,
         "pip_config_file": "pipconfig.txt",
@@ -552,6 +554,39 @@ def test_config_to_docker_nodejs():
         "langchain/langgraphjs-api",
     )
     expected_docker_stdin = """FROM langchain/langgraphjs-api:20
+ARG meow
+ARG foo
+ADD . /deps/unit_tests
+RUN cd /deps/unit_tests && npm i
+ENV LANGGRAPH_AUTH='{"path": "./graphs/auth.mts:auth"}'
+ENV LANGGRAPH_UI='{"agent": "./graphs/agent.ui.jsx"}'
+ENV LANGGRAPH_UI_CONFIG='{"shared": ["nuqs"]}'
+ENV LANGSERVE_GRAPHS='{"agent": "./graphs/agent.js:graph"}'
+WORKDIR /deps/unit_tests
+RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts"""
+
+    assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
+    assert additional_contexts == {}
+
+
+def test_config_to_docker_nodejs_internal_docker_tag():
+    graphs = {"agent": "./graphs/agent.js:graph"}
+    actual_docker_stdin, additional_contexts = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "node_version": "20",
+                "graphs": graphs,
+                "dockerfile_lines": ["ARG meow", "ARG foo"],
+                "auth": {"path": "./graphs/auth.mts:auth"},
+                "ui": {"agent": "./graphs/agent.ui.jsx"},
+                "ui_config": {"shared": ["nuqs"]},
+                "_INTERNAL_docker_tag": "my-tag",
+            }
+        ),
+        "langchain/langgraphjs-api",
+    )
+    expected_docker_stdin = """FROM langchain/langgraphjs-api:my-tag
 ARG meow
 ARG foo
 ADD . /deps/unit_tests

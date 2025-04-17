@@ -29,6 +29,17 @@
               ],
               "description": "Optional. Path to a pip config file (e.g., \"/etc/pip.conf\" or \"pip.ini\") for controlling\npackage installation (custom indices, credentials, etc.).\n\nOnly relevant if Python dependencies are installed via pip. If omitted, default pip settings are used.\n"
             },
+            "_INTERNAL_docker_tag": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Internal use only.\n"
+            },
             "auth": {
               "anyOf": [
                 {
@@ -144,6 +155,17 @@
                 }
               ],
               "description": "Optional. Node.js version as a major version (e.g. '20'), if your deployment needs Node.\nMust be >= 20 if provided.\n"
+            },
+            "_INTERNAL_docker_tag": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Internal use only.\n"
             },
             "auth": {
               "anyOf": [
