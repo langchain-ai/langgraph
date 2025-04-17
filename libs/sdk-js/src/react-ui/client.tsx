@@ -175,7 +175,11 @@ export function LoadExternalComponent({
   }, [uiClient, uiNamespace, message.name, shadowRootId, hasClientComponent]);
 
   if (hasClientComponent) {
-    return React.createElement(clientComponent, message.props);
+    return (
+      <UseStreamContext.Provider value={{ stream, meta }}>
+        {React.createElement(clientComponent, message.props)}
+      </UseStreamContext.Provider>
+    );
   }
 
   return (
