@@ -1048,6 +1048,8 @@ def python_config_to_docker(
         else ""
     )
 
+    docker_tag = config.get("_INTERNAL_docker_tag") or config["python_version"]
+
     # collect dependencies
     pypi_deps = [dep for dep in config["dependencies"] if not dep.startswith(".")]
     local_deps = _assemble_local_deps(config_path, config)
@@ -1168,7 +1170,7 @@ ADD {relpath} /deps/{name}
         )
 
     docker_file_contents = [
-        f"FROM {base_image}:{base_docker_tag or config['python_version']}",
+        f"FROM {base_image}:{docker_tag}",
         "",
         os.linesep.join(config["dockerfile_lines"]),
         "",
@@ -1203,10 +1205,10 @@ def node_config_to_docker(
     config_path: pathlib.Path,
     config: Config,
     base_image: str,
-    base_docker_tag: Optional[str] = None,
 ) -> tuple[str, dict[str, str]]:
     faux_path = f"/deps/{config_path.parent.name}"
     install_cmd = _get_node_pm_install_cmd(config_path, config)
+    docker_tag = config.get("_INTERNAL_docker_tag") or config["node_version"]
 
     env_vars: list[str] = []
 
@@ -1233,7 +1235,7 @@ def node_config_to_docker(
     env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
 
     docker_file_contents = [
-        f"FROM {base_image}:{base_docker_tag or config['node_version']}",
+        f"FROM {base_image}:{docker_tag}",
         "",
         os.linesep.join(config["dockerfile_lines"]),
         "",
@@ -1275,14 +1277,13 @@ def config_to_docker(
     config_path: pathlib.Path,
     config: Config,
     base_image: Optional[str] = None,
-    base_docker_tag: Optional[str] = None,
 ) -> tuple[str, dict[str, str]]:
     base_image = base_image or default_base_image(config)
 
     if config.get("node_version") and not config.get("python_version"):
-        return node_config_to_docker(config_path, config, base_image, base_docker_tag)
+        return node_config_to_docker(config_path, config, base_image)
 
-    return python_config_to_docker(config_path, config, base_image, base_docker_tag)
+    return python_config_to_docker(config_path, config, base_image)
 
 
 def config_to_compose(
