@@ -1,4 +1,4 @@
-# 🚀 Prebuilt Agents
+# Community Agents
 
 To share your project, simply open a Pull Request adding an entry for your package in our [packages.yml](https://github.com/langchain-ai/langgraph/blob/main/docs/_scripts/third_party_page/packages.yml) file.
 
