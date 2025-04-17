@@ -2,23 +2,26 @@
 
 LangGraph supports two types of memory essential for building conversational agents:
 
-* **[Short-term memory](#short-term-memory)**: Maintains message history during a conversation.
-* **[Long-term memory](#long-term-memory)**: Stores user-specific or application-specific data across conversations.
+- **[Short-term memory](#short-term-memory)**: Tracks the ongoing conversation by maintaining message history within a session.
+- **[Long-term memory](#long-term-memory)**: Stores user-specific or application-level data across sessions.
 
-This guide explains how to configure both types and when to use them effectively.
+This guide demonstrates how to use both memory types with agents in LangGraph. For a deeper
+understanding of memory concepts, refer to the [LangGraph memory documentation](../concepts/memory.md).
 
 <figure markdown="1">
 ![image](./assets/memory.png){: style="max-height:400px"}
-<figcaption>Both <strong>short-term memory</strong> and <strong>long-term memory</strong> require persisting data across interactions with the underlying LLM. In a production setting this data is stored in a database.
-</figcaption>
+<figcaption>Both <strong>short-term</strong> and <strong>long-term</strong> memory require persistent storage to maintain continuity across LLM interactions. In production environments, this data is typically stored in a database.</figcaption>
 </figure>
 
-!!! tip "Terminology"
+!!! note "Terminology"
 
-    - Thread-level = context within a single conversation session (short-term)
-    - Cross-thread = context shared across sessions or users (long-term)
+    In LangGraph:
 
+    - *Short-term memory* is also referred to as **thread-level memory**.
+    - *Long-term memory* is also called **cross-thread memory**.
 
+    A [thread](../concepts/persistence.md#threads) represents a sequence of related runs
+    grouped by the same `thread_id`.
 
 ## Short-term memory
 
@@ -135,6 +138,8 @@ agent = create_react_agent(
 4. The `pre_model_hook` is set to the `SummarizationNode`. This node will summarize the message history before sending it to the LLM. The summarization node will automatically handle the summarization process and update the agent's state with the new summary. You can replace this with a custom implementation if you prefer. Please see the [create_react_agent][langgraph.prebuilt.chat_agent_executor.create_react_agent] API reference for more details.
 5. The `state_schema` is set to the `State` class, which is the custom state that contains an extra `context` key.
 
+To learn more about using `pre_model_hook` for managing message history, see this [how-to guide](../how-tos/create-react-agent-manage-message-history.ipynb)
+
 ## Long-term memory
 
 Use long-term memory to store user-specific or application-specific data across conversations. This is useful for applications like chatbots, where you want to remember user preferences or other information.
@@ -249,4 +254,9 @@ store.get(("users",), "user_123").value
 
 ### Prebuilt memory tools
 
-**LangMem** is a LangChain maintained library that offers tools for managing long-term memories in your agent. See the [LangMem documentation](https://langchain-ai.github.io/langmem/) for usage examples.
+**LangMem** is a LangChain-maintained library that offers tools for managing long-term memories in your agent. See the [LangMem documentation](https://langchain-ai.github.io/langmem/) for usage examples.
+
+
+## Additional resources
+
+* [Memory in LangGraph](../concepts/memory.md)
