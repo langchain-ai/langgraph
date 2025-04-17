@@ -202,6 +202,8 @@ for chunk in agent.stream(
     print("\n")
 ```
 
+1. The `add_human_in_the_loop` wrapper is used to add `interrupt()` to the tool. This allows the agent to pause execution and wait for human input before proceeding with the tool call.
+
 > You should see that the agent runs until it reaches the `interrupt()` call, 
 >  at which point it pauses and waits for human input.
 
@@ -219,8 +221,6 @@ for chunk in agent.stream(
     print(chunk)
     print("\n")
 ```
-
-1. The `add_human_in_the_loop` wrapper is used to add `interrupt()` to the tool. This allows the agent to pause execution and wait for human input before proceeding with the tool call.
 
 ## Additional resources
 
