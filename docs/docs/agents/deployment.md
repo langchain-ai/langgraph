@@ -1,6 +1,17 @@
 # Deployment
 
-To deploy your agent, you will need to first create a new LangGraph app.
+To deploy your LangGraph agent, create and configure a LangGraph app. This setup supports both local development and production deployments.
+
+Features: 
+
+* 🖥️ Local server for development
+* 🧩 Studio Web UI for visual debugging
+* ☁️ Cloud and 🔧 self-hosted deployment options
+* 📊 LangSmith integration for tracing and observability
+
+!!! info "Requirements" 
+
+    - ✅ You **must** have a [LangSmith account](https://www.langchain.com/langsmith). You can sign up for **free** and get started with the free tier.
 
 ## Create a LangGraph app
 
@@ -69,4 +80,4 @@ LangGraph Studio Web is a specialized UI that you can connect to LangGraph API s
 
 ## Deployment
 
-Now that you have a LangGraph app running locally, learn how you can [deploy it using LangGraph Cloud](https://langchain-ai.github.io/langgraph/cloud/quick_start/).
+Once your LangGraph app is running locally, you can deploy it using LangGraph Cloud or self-hosted options. Refer to the [deployment options guide](../tutorials/deployment.md) for detailed instructions on all supported deployment models.
