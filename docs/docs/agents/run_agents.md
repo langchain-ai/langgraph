@@ -23,17 +23,11 @@ Agents can be executed in two primary modes:
 
 === "Async invocation"
     ```python
-    import asyncio
-
     from langgraph.prebuilt import create_react_agent
 
-    async def main():
-        agent = create_react_agent(...)
-        # highlight-next-line
-        response = await agent.ainvoke({"messages": "what is the weather in sf"})
-        print(response)
-
-    asyncio.run(main())
+    agent = create_react_agent(...)
+    # highlight-next-line
+    response = await agent.ainvoke({"messages": "what is the weather in sf"})
     ```
 
 ## Inputs and outputs
