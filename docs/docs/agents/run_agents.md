@@ -1,46 +1,110 @@
 # Running agents
 
-You can run agents by calling `agent.invoke()` or or use [streaming](./streaming.md).
 
-```python
-from langgraph.prebuilt import create_react_agent
+Agents support both synchronous and asynchronous execution using either `.invoke()` / `await .invoke()` for full responses, or `.stream()` / `astream()` for **incremental** [streaming](#streaming) output. This section explains how to provide input, interpret output, enable streaming, and control execution limits.
 
-agent = create_react_agent(...)
-# highlight-next-line
-agent.invoke({"messages": "what is the weather in sf"})
-```
+
+## Basic usage
+
+Agents can be executed in two primary modes:
+
+- **Synchronous** using `.invoke()` or `.stream()`
+- **Asynchronous** using `await .invoke()` or `async for` with `.astream()`
+
+=== "Sync invocation"
+    ```python
+    from langgraph.prebuilt import create_react_agent
+
+    agent = create_react_agent(...)
+
+    # highlight-next-line
+    response = agent.invoke({"messages": "what is the weather in sf"})
+    ```
+
+=== "Async invocation"
+    ```python
+    import asyncio
+
+    from langgraph.prebuilt import create_react_agent
+
+    async def main():
+        agent = create_react_agent(...)
+        # highlight-next-line
+        response = await agent.ainvoke({"messages": "what is the weather in sf"})
+        print(response)
+
+    asyncio.run(main())
+    ```
 
 ## Inputs and outputs
 
-Agents use a language model that expects a list of messages as an input. Therefore, agent inputs and outputs are stored as a list of messages under the `messages` key in the agent [state](https://langchain-ai.github.io/langgraph/concepts/low_level/#working-with-messages-in-graph-state).
+Agents use a language model that expects a list of `messages` as an input. Therefore, agent inputs and outputs are stored as a list of `messages` under the `messages` key in the agent [state](../concepts/low_level.md#working-with-messages-in-graph-state).
 
-### Inputs
+## Input format
 
-To invoke an agent you need to provide a list of messages as an input. By default, `create_react_agent` expects a list of [LangChain messages](https://python.langchain.com/docs/concepts/messages/#langchain-messages). For convenience, you can use the following formats:
+Agent input must be a dictionary with a `messages` key. Supported formats are:
 
-- a message string: `{"messages": "My input"}` — automatically converted to LangChain [`HumanMessage`](https://python.langchain.com/docs/concepts/messages/#humanmessage)
-- a message: `{"messages": {"role": "user", "content": "hi"}}`
-- a list of messages: `{"messages": [{"role": "user", "content": "hi"}]}`
+| Format             | Example                                                                                                                       |
+|--------------------|-------------------------------------------------------------------------------------------------------------------------------|
+| String             | `{"messages": "Hello"}`  — Interpreted as a [HumanMessage](https://python.langchain.com/docs/concepts/messages/#humanmessage) |
+| Message dictionary | `{"messages": {"role": "user", "content": "Hello"}}`                                                                          |
+| List of messages   | `{"messages": [{"role": "user", "content": "Hello"}]}`                                                                        |
 
-!!! Note
 
-    This behavior is different from the `prompt` parameter in `create_react_agent`. When you pass a string as a `prompt`, it is automatically converted into a system message.
+Messages are automatically converted into LangChain's internal message format. You can read
+more about [LangChain messages](https://python.langchain.com/docs/concepts/messages/#langchain-messages) in the LangChain documentation.
 
-### Outputs
 
-When you invoke the agent with `agent.invoke({"messages": ...})`, the agent will return `{"messages": [...list of messages]}` that contains:
+!!! note
 
-- original input messages
-- messages from the tool-calling loop — assistant messages with tool calls and tool messages with tool results
-- final agent response (assistant message)
+    A string input for `messages` is converted to a [HumanMessage](https://python.langchain.com/docs/concepts/messages/#humanmessage). This behavior differs from the `prompt` parameter in `create_react_agent`, which is interpreted as a [SystemMessage](https://python.langchain.com/docs/concepts/messages/#systemmessage) when passed as a string.
 
-## Streaming
 
-[Streaming](./streaming.md) is key to building responsive applications. With LangGraph agents you can stream [agent progress](./streaming.md#agent-progress), [LLM tokens](./streaming.md#llm-tokens), [tool updates](./streaming.md#tool-updates) and more.
+## Output format
+
+Agent output is a dictionary with a `messages` key containing:
+
+- The original user input.
+- Intermediate assistant and tool messages from the tool-calling loop.
+- The final assistant message with the agent's response.
+
+## Streaming output
+
+Agents support streaming responses for more responsive applications. This includes:
+
+- **Progress updates** after each step
+- **LLM tokens** as they're generated
+- **Custom tool messages** during execution
+
+Streaming is available in both sync and async modes:
+
+=== "Sync streaming"
+
+    ```python
+    for chunk in agent.stream(
+        {"messages": "what is the weather in sf"},
+        stream_mode="updates"
+    ):
+        print(chunk)
+    ```
+
+=== "Async streaming"
+
+    ```python
+    async for chunk in agent.astream(
+        {"messages": "what is the weather in sf"},
+        stream_mode="updates"
+    ):
+        print(chunk)
+    ```
+
+!!! tip
+
+    For full details, see the [streaming guide](./streaming.md).
 
 ## Max iterations
 
-To abort an agent run that exceeds a specified number of iterations you can set `recursion_limit`, which controls maximum number of LangGraph steps an agent can take before raising a `GraphRecursionError`. You can configure `recursion_limit` at runtime or when defining agent via `.with_config()`:
+To control agent execution and avoid infinite loops, set a recursion limit. This defines the maximum number of steps the agent can take before raising a `GraphRecursionError`. You can configure `recursion_limit` at runtime or when defining agent via `.with_config()`:
 
 === "Runtime"
 
@@ -89,3 +153,7 @@ To abort an agent run that exceeds a specified number of iterations you can set 
     except GraphRecursionError:
         print("Agent stopped due to max iterations.")
     ```
+
+## Additional Resources
+
+* [Async programming in LangChain](https://python.langchain.com/docs/concepts/async)
