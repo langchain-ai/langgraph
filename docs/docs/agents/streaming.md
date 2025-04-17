@@ -8,6 +8,14 @@ Streaming is key to building responsive applications. There are a few types of d
 
 You can stream [more than one type of data](#stream-multiple-modes) at a time. 
 
+
+<figure markdown="1">
+![image](./assets/fast_parrot.png){: style="max-height:300px"}
+<figcaption>
+Waiting is for pigeons.
+</figcaption>
+</figure>
+
 ## Agent progress
 
 To stream agent progress, use the [`stream()`][langgraph.graph.state.CompiledStateGraph.stream] or [`astream()`][langgraph.graph.state.CompiledStateGraph.astream] methods with [`stream_mode="updates"`](https://langchain-ai.github.io/langgraph/how-tos/streaming/#updates). This emits an event after every agent step.
