@@ -45,6 +45,8 @@ MANUAL_API_REFERENCES_LANGGRAPH = [
     (["langgraph.constants"], "langgraph.types", "Interrupt", "types"),
     (["langgraph.constants"], "langgraph.types", "interrupt", "types"),
     (["langgraph.constants"], "langgraph.types", "Command", "types"),
+    (["langgraph.config"], "langgraph.config", "get_stream_writer", "config"),
+    (["langgraph.config"], "langgraph.config", "get_store", "config"),
     (["langgraph.func"], "langgraph.func", "entrypoint", "func"),
     (["langgraph.func"], "langgraph.func", "task", "func"),
     (["langgraph.types"], "langgraph.types", "RetryPolicy", "types"),
@@ -56,6 +58,7 @@ MANUAL_API_REFERENCES_LANGGRAPH = [
     ([], "langgraph.checkpoint.base", "SerializerProtocol", "checkpoints"),
     ([], "langgraph.checkpoint.serde.jsonplus", "JsonPlusSerializer", "checkpoints"),
     ([], "langgraph.checkpoint.memory", "MemorySaver", "checkpoints"),
+    ([], "langgraph.checkpoint.memory", "InMemorySaver", "checkpoints"),
     ([], "langgraph.checkpoint.sqlite.aio", "AsyncSqliteSaver", "checkpoints"),
     ([], "langgraph.checkpoint.sqlite", "SqliteSaver", "checkpoints"),
     ([], "langgraph.checkpoint.postgres.aio", "AsyncPostgresSaver", "checkpoints"),
@@ -214,7 +217,7 @@ def update_markdown_with_imports(markdown: str, path: str) -> str:
         path: The path of the file where the markdown content originated.
 
     Returns:
-        Updated markdown with API reference links appended to Python code blocks.
+        Updated markdown with API reference links prepended to Python code blocks.
 
     Example:
         Given a markdown with a Python code block:
@@ -237,7 +240,7 @@ def update_markdown_with_imports(markdown: str, path: str) -> str:
             match (re.Match): The regex match object containing the code block.
 
         Returns:
-            str: The modified code block with API reference links appended if applicable.
+            str: The modified code block with API reference links prepended if applicable.
         """
         indent = match.group("indent")
         code_block = match.group("code")
@@ -253,8 +256,8 @@ def update_markdown_with_imports(markdown: str, path: str) -> str:
         api_links = " | ".join(
             f'<a href="{imp["docs"]}">{imp["imported"]}</a>' for imp in imports
         )
-        # Return the code block with appended API reference links
-        return f"{original_code_block}\n\n{indent}API Reference: {api_links}"
+        # Return the code block with prepended API reference links
+        return f"{indent}API Reference: {api_links}\n\n{original_code_block}"
 
     # Apply the replace_code_block function to all matches in the markdown
     updated_markdown = code_block_pattern.sub(replace_code_block, markdown)
