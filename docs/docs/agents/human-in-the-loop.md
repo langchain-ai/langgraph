@@ -2,7 +2,7 @@
 
 To review, edit and approve tool calls in an agent you can use LangGraph's built-in [human-in-the-loop](../concepts/human_in_the_loop.md) features, specifically the [`interrupt()`][langgraph.types.interrupt] primitive.
 
-LangGraph allows you to pause execution **indefinitely**—for minutes, hours, or even days—until human input is received.
+LangGraph allows you to pause execution **indefinitely** — for minutes, hours, or even days—until human input is received.
 
 This is possible because the agent state is **checkpointed into a database**, which allows the system to persist execution context and later resume the workflow, continuing from where it left off.
 
