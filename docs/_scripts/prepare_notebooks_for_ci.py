@@ -91,7 +91,7 @@ def has_blocklisted_command(code: str, metadata: dict) -> bool:
 def add_mermaid_retries(code: str) -> str:
     return code.replace(
         "draw_mermaid_png()",
-        "draw_mermaid_png(max_retries=3)"
+        "draw_mermaid_png(max_retries=10, delay=2.0)"
     )
 
 
