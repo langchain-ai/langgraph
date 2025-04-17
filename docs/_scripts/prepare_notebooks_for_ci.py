@@ -51,6 +51,7 @@ NOTEBOOKS_NO_EXECUTION = [
     "docs/tutorials/llm-compiler/LLMCompiler.ipynb",
     "docs/how-tos/many-tools.ipynb",  # relies on openai embeddings, doesn't play well w/ VCR
     "docs/tutorials/customer-support/customer-support.ipynb",  # relies on openai embeddings, doesn't play well w/ VCR
+    "docs/how-tos/streaming-specific-nodes.ipynb"
 ]
 
 
