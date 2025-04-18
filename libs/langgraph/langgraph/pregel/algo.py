@@ -899,13 +899,10 @@ def _scratchpad(
             null_resume_write = None
 
         # find namespace and task-specific resume value
-        if parent_scratchpad is not None and parent_scratchpad.resume_map:
-            if ns in parent_scratchpad.resume_map:
-                task_resume_write = parent_scratchpad.resume_map[ns]
-                if not isinstance(task_resume_write, list):
-                    task_resume_write = [task_resume_write]
-            else:
-                task_resume_write = []
+        if resume_map and ns in resume_map:
+            task_resume_write = resume_map[ns]
+            if not isinstance(task_resume_write, list):
+                task_resume_write = [task_resume_write]
         else:
             # find task-specific resume value
             for w in pending_writes:
@@ -945,7 +942,6 @@ def _scratchpad(
         get_null_resume=get_null_resume,
         # subgraph
         subgraph_counter=LazyAtomicCounter(),
-        resume_map=resume_map,
     )
 
 

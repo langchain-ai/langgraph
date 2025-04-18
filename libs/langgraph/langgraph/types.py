@@ -384,7 +384,6 @@ class PregelScratchpad:
     resume: list[Any]
     # subgraph
     subgraph_counter: Callable[[], int]
-    resume_map: Optional[dict[str, Any]]
 
 
 def interrupt(value: Any) -> Any:
