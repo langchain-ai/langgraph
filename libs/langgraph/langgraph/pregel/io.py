@@ -92,13 +92,7 @@ def map_command(
                     (w[2] for w in pending_writes if w[0] == tid and w[1] == RESUME), []
                 )
                 existing.append(resume)
-                print(tid, RESUME, existing)
                 yield (tid, RESUME, existing)
-        # TODO: better conditional for Resume structure
-        elif isinstance(cmd.resume, list) and all('interrupt_id' in r for r in cmd.resume):
-            for resume in cmd.resume:
-                print(resume["interrupt_id"], RESUME, resume["content"])
-                yield(resume["interrupt_id"], RESUME, resume["content"])
         else:
             yield (NULL_TASK_ID, RESUME, cmd.resume)
     if cmd.update:
