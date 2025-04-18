@@ -18,6 +18,7 @@ from typing import (
     cast,
     get_type_hints,
 )
+from typing_extensions import TypedDict, Required
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from typing_extensions import Self
@@ -142,6 +143,7 @@ class Interrupt:
     resumable: bool = False
     ns: Optional[Sequence[str]] = None
     when: Literal["during"] = dataclasses.field(default="during", repr=False)
+    resume_id: Optional[str] = None
 
 
 class StateUpdate(NamedTuple):
@@ -288,6 +290,7 @@ class Command(Generic[N], ToolOutputMixin):
             - Command.PARENT: closest parent graph
         update: update to apply to the graph's state.
         resume: value to resume execution with. To be used together with [`interrupt()`][langgraph.types.interrupt].
+        resume_map: mapping of resume ids to resume values. To be used together with [`interrupt()`][langgraph.types.interrupt].
         goto: can be one of the following:
 
             - name of the node to navigate to next (any node that belongs to the specified `graph`)
@@ -298,7 +301,8 @@ class Command(Generic[N], ToolOutputMixin):
 
     graph: Optional[str] = None
     update: Optional[Any] = None
-    resume: Optional[Union[Any, dict[str, Any]]] = None
+    resume: Any = None
+    resume_map: Optional[dict[str, Any]] = None
     goto: Union[Send, Sequence[Union[Send, str]], str] = ()
 
     def __repr__(self) -> str:
@@ -380,6 +384,7 @@ class PregelScratchpad:
     resume: list[Any]
     # subgraph
     subgraph_counter: Callable[[], int]
+    resume_map: Optional[dict[str, Any]]
 
 
 def interrupt(value: Any) -> Any:
@@ -479,6 +484,7 @@ def interrupt(value: Any) -> Any:
     """
     from langgraph.constants import (
         CONFIG_KEY_CHECKPOINT_NS,
+        CONF,
         CONFIG_KEY_SCRATCHPAD,
         CONFIG_KEY_SEND,
         NS_SEP,
@@ -487,7 +493,7 @@ def interrupt(value: Any) -> Any:
     from langgraph.errors import GraphInterrupt
     from langgraph.utils.config import get_config
 
-    conf = get_config()["configurable"]
+    conf = get_config()[CONF]
     # track interrupt index
     scratchpad: PregelScratchpad = conf[CONFIG_KEY_SCRATCHPAD]
     idx = scratchpad.interrupt_counter()
@@ -509,6 +515,8 @@ def interrupt(value: Any) -> Any:
                 value=value,
                 resumable=True,
                 ns=cast(str, conf[CONFIG_KEY_CHECKPOINT_NS]).split(NS_SEP),
+                when="during",
+                resume_id=conf[CONFIG_KEY_CHECKPOINT_NS],
             ),
         )
     )

@@ -85,6 +85,8 @@ CONFIG_KEY_RUNNER_SUBMIT = sys.intern("__pregel_runner_submit")
 # holds a function that receives tasks from runner, executes them and returns results
 CONFIG_KEY_CHECKPOINT_DURING = sys.intern("__pregel_checkpoint_during")
 # holds a boolean indicating whether to checkpoint during the run (or only at the end)
+CONFIG_KEY_RESUME_MAP = sys.intern("__pregel_resume_map")
+# holds a mapping of task ns -> resume value for resuming tasks
 
 # --- Other constants ---
 PUSH = sys.intern("__pregel_push")
