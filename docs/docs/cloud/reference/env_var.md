@@ -55,6 +55,14 @@ Set `LANGSMITH_TRACING` to `false` to disable tracing to LangSmith.
 
 Configure [log level](https://docs.python.org/3/library/logging.html#logging-levels). Defaults to `INFO`.
 
+## `LOG_JSON`
+
+Set `LOG_JSON` to `true` to render all log messages as JSON objects using the configured `JSONRenderer`. This produces structured logs that can be easily parsed or ingested by log management systems. Defaults to `false`.
+
+## `LOG_COLOR`
+
+This is mainly relevant in the context of using the dev server via the `langgraph dev` command. Set `LOG_COLOR` to `true` to enable ANSI-colored console output when using the default console renderer. Disabling color output by setting this variable to `false` produces monochrome logs. Defaults to `true`.
+
 ## `N_JOBS_PER_WORKER`
 
 Number of jobs per worker for the LangGraph Server task queue. Defaults to `10`.
