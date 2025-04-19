@@ -159,6 +159,7 @@ class AsyncKafkaOrchestrator(AbstractAsyncContextManager):
             stream_keys=graph.stream_channels,
             interrupt_after=graph.interrupt_after_nodes,
             interrupt_before=graph.interrupt_before_nodes,
+            trigger_to_nodes=graph.trigger_to_nodes,
         ) as loop:
             if loop.tick(input_keys=graph.input_channels):
                 # wait for checkpoint to be saved
