@@ -1043,8 +1043,10 @@ class ThreadsClient:
         status: Optional[ThreadStatus] = None,
         limit: int = 10,
         offset: int = 0,
-        sort_by: Literal["id", "status", "created_at", "updated_at"] = "created_at",
-        sort_order: Literal["asc", "desc"] = "asc",
+        sort_by: Literal[
+            "thread_id", "status", "created_at", "updated_at"
+        ] = "created_at",
+        sort_order: Literal["asc", "desc"] = "desc",
         headers: Optional[dict[str, str]] = None,
     ) -> list[Thread]:
         """Search for threads.
@@ -1056,6 +1058,8 @@ class ThreadsClient:
                 Must be one of 'idle', 'busy', 'interrupted' or 'error'.
             limit: Limit on number of threads to return.
             offset: Offset in threads table to start search from.
+            sort_by: Sort by field.
+            sort_order: Sort order.
             headers: Optional custom headers to include with the request.
 
         Returns:

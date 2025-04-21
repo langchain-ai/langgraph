@@ -635,8 +635,8 @@ export class ThreadsClient<
         limit: query?.limit ?? 10,
         offset: query?.offset ?? 0,
         status: query?.status,
-        sort_by: query?.sortBy,
-        sort_order: query?.sortOrder,
+        sort_by: query?.sortBy ?? "created_at",
+        sort_order: query?.sortOrder ?? "desc",
       },
     });
   }
