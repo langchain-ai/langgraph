@@ -29,11 +29,16 @@ from langchain_core.runnables import (
 
 from langgraph.constants import END, START
 from langgraph.errors import InvalidUpdateError
-from langgraph.pregel.write import ChannelWrite
+from langgraph.pregel.write import PASSTHROUGH, ChannelWrite, ChannelWriteEntry
 from langgraph.types import Send
 from langgraph.utils.runnable import (
     RunnableCallable,
 )
+
+Writer = Callable[
+    [Sequence[Union[str, Send]]],
+    Sequence[Union[ChannelWriteEntry, Send]],
+]
 
 
 def _get_branch_path_input_schema(
@@ -124,9 +129,7 @@ class Branch(NamedTuple):
 
     def run(
         self,
-        writer: Callable[
-            [Sequence[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
-        ],
+        writer: Writer,
         reader: Optional[Callable[[RunnableConfig], Any]] = None,
     ) -> RunnableCallable:
         return ChannelWrite.register_writer(
@@ -138,7 +141,8 @@ class Branch(NamedTuple):
                 name=None,
                 trace=False,
                 func_accepts_config=True,
-            )
+            ),
+            writer(list(self.ends.values())) if self.ends else None,
         )
 
     def _route(
@@ -147,9 +151,7 @@ class Branch(NamedTuple):
         config: RunnableConfig,
         *,
         reader: Optional[Callable[[RunnableConfig], Any]],
-        writer: Callable[
-            [Sequence[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
-        ],
+        writer: Writer,
     ) -> Runnable:
         if reader:
             value = reader(config)
@@ -172,9 +174,7 @@ class Branch(NamedTuple):
         config: RunnableConfig,
         *,
         reader: Optional[Callable[[RunnableConfig], Any]],
-        writer: Callable[
-            [Sequence[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
-        ],
+        writer: Writer,
     ) -> Runnable:
         if reader:
             value = reader(config)
@@ -193,9 +193,7 @@ class Branch(NamedTuple):
 
     def _finish(
         self,
-        writer: Callable[
-            [Sequence[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
-        ],
+        writer: Writer,
         input: Any,
         result: Any,
         config: RunnableConfig,
@@ -212,4 +210,18 @@ class Branch(NamedTuple):
             raise ValueError("Branch did not return a valid destination")
         if any(p.node == END for p in destinations if isinstance(p, Send)):
             raise InvalidUpdateError("Cannot send a packet to the END node")
-        return writer(destinations, config) or input
+        entries = writer(destinations)
+        if not entries:
+            return input
+        else:
+            need_passthrough = False
+            for e in entries:
+                if isinstance(e, ChannelWriteEntry):
+                    if e.value is PASSTHROUGH:
+                        need_passthrough = True
+                        break
+            if need_passthrough:
+                return ChannelWrite(entries)
+            else:
+                ChannelWrite.do_write(config, entries)
+                return input

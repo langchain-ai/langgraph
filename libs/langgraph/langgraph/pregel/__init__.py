@@ -93,6 +93,7 @@ from langgraph.pregel.algo import (
 )
 from langgraph.pregel.checkpoint import create_checkpoint, empty_checkpoint
 from langgraph.pregel.debug import tasks_w_writes
+from langgraph.pregel.draw import draw_graph
 from langgraph.pregel.io import map_input, read_channels
 from langgraph.pregel.loop import AsyncPregelLoop, StreamProtocol, SyncPregelLoop
 from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
@@ -562,14 +563,87 @@ class Pregel(PregelProtocol):
             self.validate()
 
     def get_graph(
-        self, config: Optional[RunnableConfig] = None, *, xray: Union[int, bool] = False
+        self,
+        config: Optional[RunnableConfig] = None,
+        *,
+        xray: Union[int, bool] = False,
     ) -> Graph:
-        raise NotImplementedError
+        """Returns a drawable representation of the computation graph."""
+        # gather subgraphs
+        if xray:
+            subgraphs = {
+                k: v.get_graph(
+                    config,
+                    xray=xray if isinstance(xray, bool) or xray <= 0 else xray - 1,
+                )
+                for k, v in self.get_subgraphs()
+            }
+        else:
+            subgraphs = {}
+
+        return draw_graph(
+            merge_configs(self.config, config),
+            nodes=self.nodes,
+            specs=self.channels,
+            input_channels=self.input_channels,
+            interrupt_after_nodes=self.interrupt_after_nodes,
+            interrupt_before_nodes=self.interrupt_before_nodes,
+            trigger_to_nodes=self.trigger_to_nodes,
+            checkpointer=self.checkpointer,
+            subgraphs=subgraphs,
+        )
 
     async def aget_graph(
-        self, config: Optional[RunnableConfig] = None, *, xray: Union[int, bool] = False
+        self,
+        config: Optional[RunnableConfig] = None,
+        *,
+        xray: Union[int, bool] = False,
     ) -> Graph:
-        raise NotImplementedError
+        """Returns a drawable representation of the computation graph."""
+
+        # gather subgraphs
+        if xray:
+            subpregels: dict[str, PregelProtocol] = {
+                k: v async for k, v in self.aget_subgraphs()
+            }
+            subgraphs = {
+                k: v
+                for k, v in zip(
+                    subpregels,
+                    await asyncio.gather(
+                        *(
+                            p.aget_graph(
+                                config,
+                                xray=xray
+                                if isinstance(xray, bool) or xray <= 0
+                                else xray - 1,
+                            )
+                            for p in subpregels.values()
+                        )
+                    ),
+                )
+            }
+        else:
+            subgraphs = {}
+
+        return draw_graph(
+            merge_configs(self.config, config),
+            nodes=self.nodes,
+            specs=self.channels,
+            input_channels=self.input_channels,
+            interrupt_after_nodes=self.interrupt_after_nodes,
+            interrupt_before_nodes=self.interrupt_before_nodes,
+            trigger_to_nodes=self.trigger_to_nodes,
+            checkpointer=self.checkpointer,
+            subgraphs=subgraphs,
+        )
+
+    def _repr_mimebundle_(self, **kwargs: Any) -> dict[str, Any]:
+        """Mime bundle used by Jupyter to display the graph"""
+        return {
+            "text/plain": repr(self),
+            "image/png": self.get_graph().draw_mermaid_png(),
+        }
 
     def copy(self, update: Optional[dict[str, Any]] = None) -> Self:
         attrs = {**self.__dict__, **(update or {})}

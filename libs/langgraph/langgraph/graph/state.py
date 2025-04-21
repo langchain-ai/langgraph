@@ -774,7 +774,12 @@ class CompiledStateGraph(CompiledGraph):
             ChannelWriteTupleEntry(
                 mapper=_get_root if output_keys == ["__root__"] else _get_updates
             ),
-            ChannelWriteTupleEntry(mapper=_control_branch),
+            ChannelWriteTupleEntry(
+                mapper=_control_branch,
+                declared=_control_branch(Command(goto=tuple(node.ends)))
+                if node is not None and node.ends is not None
+                else None,
+            ),
         )
 
         # add node and output channel
@@ -840,9 +845,9 @@ class CompiledStateGraph(CompiledGraph):
     def attach_branch(
         self, start: str, name: str, branch: Branch, *, with_reader: bool = True
     ) -> None:
-        def branch_writer(
-            packets: Sequence[Union[str, Send]], config: RunnableConfig
-        ) -> None:
+        def get_writes(
+            packets: Sequence[Union[str, Send]],
+        ) -> Sequence[Union[ChannelWriteEntry, Send]]:
             if filtered := [p for p in packets if p != END]:
                 writes = [
                     (
@@ -861,9 +866,8 @@ class CompiledStateGraph(CompiledGraph):
                             ),
                         )
                     )
-                ChannelWrite.do_write(
-                    config, cast(Sequence[Union[Send, ChannelWriteEntry]], writes)
-                )
+                return writes
+            return []
 
         if with_reader:
             # get schema
@@ -891,7 +895,7 @@ class CompiledStateGraph(CompiledGraph):
             reader = None
 
         # attach branch publisher
-        self.nodes[start].writers.append(branch.run(branch_writer, reader))
+        self.nodes[start].writers.append(branch.run(get_writes, reader))
 
         # attach then subscriber
         if branch.then and branch.then != END:

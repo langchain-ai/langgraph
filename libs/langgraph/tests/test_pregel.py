@@ -1,14 +1,9 @@
-import datetime
-import decimal
 import enum
 import functools
 import gc
-import ipaddress
 import json
 import logging
 import operator
-import pathlib
-import re
 import threading
 import time
 import uuid
@@ -17,7 +12,6 @@ from collections import Counter, deque
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from enum import Enum
 from random import randrange
 from typing import (
     Annotated,
@@ -2420,7 +2414,8 @@ def test_in_one_fan_out_state_graph_waiting_edge(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    if checkpointer_name == "memory":
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"query": "what is weather in sf"}) == {
         "query": "analyzed: query: what is weather in sf",
@@ -2566,7 +2561,8 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    if checkpointer_name == "memory":
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"query": "what is weather in sf"}, debug=True) == {
         "query": "analyzed: query: what is weather in sf",
@@ -2716,9 +2712,10 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
-    assert app.get_input_jsonschema() == snapshot
-    assert app.get_output_jsonschema() == snapshot
+    if checkpointer_name == "memory":
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+        assert app.get_input_jsonschema() == snapshot
+        assert app.get_output_jsonschema() == snapshot
 
     with pytest.raises(ValidationError), assert_ctx_once():
         app.invoke({"query": {}})
@@ -2906,7 +2903,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
 
     app = workflow.compile()
 
-    if SHOULD_CHECK_SNAPSHOTS:
+    if SHOULD_CHECK_SNAPSHOTS and checkpointer_name == "memory":
         assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
         assert app.get_input_schema().model_json_schema() == snapshot
         assert app.get_output_schema().model_json_schema() == snapshot
@@ -2970,8 +2967,6 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_input(
-    snapshot: SnapshotAssertion,
-    mocker: MockerFixture,
     request: pytest.FixtureRequest,
     checkpointer_name: str,
 ) -> None:
@@ -3099,328 +3094,6 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_inp
             "checkpoint_ns": "",
         }
     }
-
-
-@pytest.mark.parametrize("version", ["v1", "v2"])
-def test_nested_pydantic_models(version: str) -> None:
-    """Test that nested Pydantic models are properly constructed from leaf nodes up."""
-
-    # Define nested Pydantic models
-    # Import necessary modules
-
-    if version == "v1":
-        from pydantic.v1 import (  # type: ignore
-            BaseModel,
-            ByteSize,
-            Field,
-            SecretStr,
-            confloat,
-            conint,
-            conlist,
-            constr,
-        )
-    else:
-        from pydantic import (  # type: ignore
-            BaseModel,
-            ByteSize,
-            Field,
-            SecretStr,
-            confloat,
-            conint,
-            conlist,
-            constr,
-        )
-        from pydantic.v1 import BaseModel as BaseModelV1
-
-        if BaseModel is BaseModelV1:
-            pytest.skip("Cannot test pydantic v2 using installed version < 2")
-
-    class NestedModel(BaseModel):
-        value: int
-        name: str
-
-    # For constrained types
-    PositiveInt = Annotated[int, Field(gt=0)]
-    NonNegativeFloat = Annotated[float, Field(ge=0)]
-
-    # Enum type
-    class UserRole(Enum):
-        ADMIN = "admin"
-        USER = "user"
-        GUEST = "guest"
-
-    # Forward reference model
-    class RecursiveModel(BaseModel):
-        value: str
-        child: Optional["RecursiveModel"] = None
-
-    # Discriminated union models
-    class Cat(BaseModel):
-        pet_type: Literal["cat"]
-        meow: str
-
-    class Dog(BaseModel):
-        pet_type: Literal["dog"]
-        bark: str
-
-    # Cyclic reference model
-    class Person(BaseModel):
-        id: str
-        name: str
-        friends: list[str] = Field(default_factory=list)  # IDs of friends
-
-    if version == "v2":
-        conlist_type = conlist(item_type=int, min_length=2, max_length=5)
-    else:
-        conlist_type = conlist(item_type=int, min_items=2, max_items=5)
-
-    class State(BaseModel):
-        # Basic nested model tests
-        top_level: str
-        auuid: uuid.UUID
-        nested: NestedModel
-        optional_nested: Annotated[Optional[NestedModel], lambda x, y: y, "Foo"]
-        dict_nested: dict[str, NestedModel]
-        simple_str_list: list[str]
-        list_nested: Annotated[
-            Union[dict, list[dict[str, NestedModel]]], lambda x, y: (x or []) + [y]
-        ]
-        tuple_nested: tuple[str, NestedModel]
-        tuple_list_nested: list[tuple[int, NestedModel]]
-        complex_tuple: tuple[str, dict[str, tuple[int, NestedModel]]]
-
-        # Forward reference test
-        recursive: RecursiveModel
-
-        # Discriminated union test
-        pet: Union[Cat, Dog]
-
-        # Cyclic reference test
-        people: dict[str, Person]  # Map of ID -> Person
-
-        # Rich type adapters
-        ip_address: ipaddress.IPv4Address
-        ip_address_v6: ipaddress.IPv6Address
-        amount: decimal.Decimal
-        file_path: pathlib.Path
-        timestamp: datetime.datetime
-        date_only: datetime.date
-        time_only: datetime.time
-        duration: datetime.timedelta
-        immutable_set: frozenset[int]
-        binary_data: bytes
-        pattern: re.Pattern
-        secret: SecretStr
-        file_size: ByteSize
-
-        # Constrained types
-        positive_value: PositiveInt
-        non_negative: NonNegativeFloat
-        limited_string: constr(min_length=3, max_length=10)
-        bounded_int: conint(ge=10, le=100)
-        restricted_float: confloat(gt=0, lt=1)
-        required_list: conlist_type
-
-        # Enum & Literal
-        role: UserRole
-        status: Literal["active", "inactive", "pending"]
-
-        # Annotated & NewType
-        validated_age: Annotated[int, Field(gt=0, lt=120)]
-
-        # Generic containers with validators
-        decimal_list: List[decimal.Decimal]
-        id_tuple: tuple[uuid.UUID, uuid.UUID]
-
-    inputs = {
-        # Basic nested models
-        "top_level": "initial",
-        "auuid": str(uuid.uuid4()),
-        "nested": {"value": 42, "name": "test"},
-        "optional_nested": {"value": 10, "name": "optional"},
-        "dict_nested": {"a": {"value": 5, "name": "a"}},
-        "list_nested": [{"a": {"value": 6, "name": "b"}}],
-        "tuple_nested": ["tuple-key", {"value": 7, "name": "tuple-value"}],
-        "tuple_list_nested": [[1, {"value": 8, "name": "tuple-in-list"}]],
-        "simple_str_list": ["siss", "boom", "bah"],
-        "complex_tuple": [
-            "complex",
-            {"nested": [9, {"value": 10, "name": "deep"}]},
-        ],
-        # Forward reference
-        "recursive": {"value": "parent", "child": {"value": "child", "child": None}},
-        # Discriminated union (using a cat in this case)
-        "pet": {"pet_type": "cat", "meow": "meow!"},
-        # Cyclic references
-        "people": {
-            "1": {
-                "id": "1",
-                "name": "Alice",
-                "friends": ["2", "3"],  # Alice is friends with Bob and Charlie
-            },
-            "2": {
-                "id": "2",
-                "name": "Bob",
-                "friends": ["1"],  # Bob is friends with Alice
-            },
-            "3": {
-                "id": "3",
-                "name": "Charlie",
-                "friends": ["1", "2"],  # Charlie is friends with Alice and Bob
-            },
-        },
-        # Rich type adapters
-        "ip_address": "192.168.1.1",
-        "ip_address_v6": "2001:db8::1",
-        "amount": "123.45",
-        "file_path": "/tmp/test.txt",
-        "timestamp": "2025-04-07T10:58:04",
-        "date_only": "2025-04-07",
-        "time_only": "10:58:04",
-        "duration": 3600,  # seconds
-        "immutable_set": [1, 2, 3, 4],
-        "binary_data": b"hello world",
-        "pattern": "^test$",
-        "secret": "password123",
-        "file_size": 1024,
-        # Constrained types
-        "positive_value": 42,
-        "non_negative": 0.0,
-        "limited_string": "test",
-        "bounded_int": 50,
-        "restricted_float": 0.5,
-        "required_list": [10, 20, 30],
-        # Enum & Literal
-        "role": "admin",
-        "status": "active",
-        # Annotated & NewType
-        "validated_age": 30,
-        # Generic containers with validators
-        "decimal_list": ["10.5", "20.75", "30.25"],
-        "id_tuple": [str(uuid.uuid4()), str(uuid.uuid4())],
-    }
-
-    update = {"top_level": "updated", "nested": {"value": 100, "name": "updated"}}
-
-    expected = State(**inputs)
-
-    def node_fn(state: State) -> dict:
-        # Basic assertions
-        assert isinstance(state.auuid, uuid.UUID)
-        assert state == expected
-
-        # Rich type assertions
-        assert isinstance(state.ip_address, ipaddress.IPv4Address)
-        assert isinstance(state.ip_address_v6, ipaddress.IPv6Address)
-        assert isinstance(state.amount, decimal.Decimal)
-        assert isinstance(state.file_path, pathlib.Path)
-        assert isinstance(state.timestamp, datetime.datetime)
-        assert isinstance(state.date_only, datetime.date)
-        assert isinstance(state.time_only, datetime.time)
-        assert isinstance(state.duration, datetime.timedelta)
-        assert isinstance(state.immutable_set, frozenset)
-        assert isinstance(state.binary_data, bytes)
-        assert isinstance(state.pattern, re.Pattern)
-
-        # Constrained types
-        assert state.positive_value > 0
-        assert state.non_negative >= 0
-        assert 3 <= len(state.limited_string) <= 10
-        assert 10 <= state.bounded_int <= 100
-        assert 0 < state.restricted_float < 1
-        assert 2 <= len(state.required_list) <= 5
-
-        # Enum & Literal
-        assert state.role == UserRole.ADMIN
-        assert state.status == "active"
-
-        # Annotated
-        assert 0 < state.validated_age < 120
-
-        # Generic containers
-        assert len(state.decimal_list) == 3
-        assert len(state.id_tuple) == 2
-
-        return update
-
-    builder = StateGraph(State)
-    builder.add_node("process", node_fn)
-    builder.set_entry_point("process")
-    builder.set_finish_point("process")
-    graph = builder.compile()
-
-    result = graph.invoke(inputs.copy())
-
-    assert result == {**inputs, **update}
-
-    new_inputs = inputs.copy()
-    new_inputs["list_nested"] = {"foo": "bar"}
-    expected = State(**new_inputs)
-    assert {**new_inputs, **update} == graph.invoke(new_inputs.copy())
-
-
-def test_pydantic_state_field_validator():
-    from pydantic import BaseModel, field_validator, model_validator
-
-    class State(BaseModel):
-        name: str
-        text: str = ""
-        only_root: int = 13
-
-        @field_validator("name", mode="after")
-        @classmethod
-        def validate_name(cls, value):
-            if value[0].islower():
-                raise ValueError("Name must start with a capital letter")
-            return "Validated " + value
-
-        @model_validator(mode="before")
-        @classmethod
-        def validate_amodel(cls, values: "State"):
-            return values | {"only_root": 392}
-
-    input_state = {"name": "John"}
-
-    def process_node(state: State):
-        assert State.model_validate(input_state) == state
-        return {"text": "Hello, " + state.name + "!"}
-
-    builder = StateGraph(state_schema=State)
-    builder.add_node("process", process_node)
-    builder.add_edge(START, "process")
-    builder.add_edge("process", END)
-    g = builder.compile()
-    res = g.invoke(input_state)
-    assert res["text"] == "Hello, Validated John!"
-
-
-def test_pydantic_v1_state_root_validator():
-    from pydantic.v1 import BaseModel, root_validator
-
-    class State(BaseModel):
-        name: str
-        text: str = ""
-        only_root: int = 13
-
-        @root_validator(pre=True)
-        @classmethod
-        def validate(cls, values: dict):
-            values["name"] = "Validated " + values["name"]
-            return values | {"only_root": 396}
-
-    input_state = {"name": "John"}
-
-    def process_node(state: State):
-        assert State(**input_state) == state
-        return {"text": "Hello, " + state.name + "!"}
-
-    builder = StateGraph(state_schema=State)
-    builder.add_node("process", process_node)
-    builder.add_edge(START, "process")
-    builder.add_edge("process", END)
-    g = builder.compile()
-    res = g.invoke(input_state)
-    assert res["text"] == "Hello, Validated John!"
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)

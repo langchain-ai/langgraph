@@ -242,11 +242,6 @@
   {
     "nodes": [
       {
-        "id": "__start__",
-        "type": "schema",
-        "data": "__start__"
-      },
-      {
         "id": "agent",
         "type": "runnable",
         "data": {
