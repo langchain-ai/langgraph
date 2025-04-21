@@ -1,9 +1,8 @@
-import pytest
-from typing import List, Dict, Set, Tuple, Optional, Union, TypeVar, Generic, Literal
+from typing import Dict, Generic, List, Literal, Optional, Set, Tuple, TypeVar, Union
 
-from langchain_core.messages import HumanMessage, AIMessage, AnyMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
+from pydantic import BaseModel, Discriminator, Field, Tag
 from typing_extensions import Annotated
-from pydantic import BaseModel, Field, Discriminator, Tag
 
 from langgraph.graph.schema_utils import SchemaCoercionMapper
 
@@ -12,17 +11,10 @@ def test_any_message():
     class MyMessage(BaseModel):
         msg: List[AnyMessage]
 
-
     data = {
         "msg": [
-            {
-                "type": "human",
-                "content": "Hello"
-            },
-            {
-                "type": "ai",
-                "content": "Hi there!"
-            }
+            {"type": "human", "content": "Hello"},
+            {"type": "ai", "content": "Hi there!"},
         ]
     }
 
@@ -35,6 +27,7 @@ def test_any_message():
     assert len(result.msg) == 2
     assert isinstance(result.msg[0], (HumanMessage))
     assert isinstance(result.msg[1], (AIMessage))
+
 
 # ==== 基础模型 ====
 class SimpleModel(BaseModel):
@@ -182,29 +175,13 @@ class Warehouse(BaseModel):
 
 def test_nested_optional_generic_union():
     # Box[TaggedPet]
-    data1 = {
-        "animal": {
-            "content": {
-                "type": "cat",
-                "name": "Kitty"
-            }
-        }
-    }
+    data1 = {"animal": {"content": {"type": "cat", "name": "Kitty"}}}
     mapper1 = SchemaCoercionMapper(Zoo)
     result1 = mapper1(data1)
     assert isinstance(result1.animal.content, Cat)
 
     # Crate[TaggedPet]
-    data2 = {
-        "cage": {
-            "payload": {
-                "content": {
-                    "type": "dog",
-                    "age": 8
-                }
-            }
-        }
-    }
+    data2 = {"cage": {"payload": {"content": {"type": "dog", "age": 8}}}}
     mapper2 = SchemaCoercionMapper(Warehouse)
     result2 = mapper2(data2)
     assert isinstance(result2.cage.payload.content, Dog)

@@ -5,13 +5,14 @@ from inspect import isclass
 from typing import (
     Any,
     Callable,
+    Hashable,
     Optional,
     Type,
-    get_args,
     TypeVar,
+    Union,
+    get_args,
+    get_origin,
     get_type_hints,
-    Hashable,
-    get_origin, Union,
 )
 
 from pydantic import BaseModel, Discriminator
@@ -32,11 +33,11 @@ class SchemaCoercionMapper:
     """Lightweight coercion of *dict* → *BaseModel* instances."""
 
     def __new__(
-            cls,
-            schema: Type[Any],
-            type_hints: Optional[dict[str, Any]] = None,
-            *,
-            max_depth: int = 12,
+        cls,
+        schema: Type[Any],
+        type_hints: Optional[dict[str, Any]] = None,
+        *,
+        max_depth: int = 12,
     ) -> "SchemaCoercionMapper":
         by_depth = _cache.setdefault(schema, {})
         if max_depth in by_depth:
@@ -46,11 +47,11 @@ class SchemaCoercionMapper:
         return inst
 
     def __init__(
-            self,
-            schema: Type[Any],
-            type_hints: Optional[dict[str, Any]] = None,
-            *,
-            max_depth: int = 12,
+        self,
+        schema: Type[Any],
+        type_hints: Optional[dict[str, Any]] = None,
+        *,
+        max_depth: int = 12,
     ) -> None:
         if hasattr(self, "_initialised"):
             return
@@ -62,7 +63,9 @@ class SchemaCoercionMapper:
         self.type_hints = (
             type_hints
             if type_hints is not None
-            else get_type_hints(schema, localns={schema.__name__: schema}, include_extras=True)
+            else get_type_hints(
+                schema, localns={schema.__name__: schema}, include_extras=True
+            )
         )
 
         if issubclass(schema, BaseModelV1):
@@ -123,34 +126,35 @@ class SchemaCoercionMapper:
         return self._construct(**processed)
 
     def _build_coercer(
-            self, field_type: Any, depth: int, *, throw: bool = False
+        self, field_type: Any, depth: int, *, throw: bool = False
     ) -> Callable[[Any, Any], Any]:
         if depth == 0:
             return self._passthrough
 
-        # unwrap Annotated
         field_type, metadata = self._unwrap_annotated(field_type)
         origin = get_origin(field_type)
 
         if (field_type in _IDENTITY_TYPES) or (origin in _IDENTITY_TYPES):
             return self._passthrough
 
-        # support TypeVar
         if isinstance(field_type, TypeVar):
             concrete = self.type_hints.get(field_type)  # type: ignore
             if concrete is not None:
                 return self._build_coercer(concrete, depth - 1)
             return self._passthrough
 
-        # support generics like Wrapper[int] Wrapper[AnyMessage]
-        if hasattr(field_type, "__parameters__") and hasattr(field_type, "model_fields"):
+        if hasattr(field_type, "__parameters__") and hasattr(
+            field_type, "model_fields"
+        ):
             try:
                 type_hints = self.resolve_concrete_type_hints(field_type)
 
                 def generic_model_coercer(v: Any, d: int) -> Any:
                     if not isinstance(v, dict):
                         if throw:
-                            raise TypeError(f"Expected dict for {field_type}, got {type(v)}")
+                            raise TypeError(
+                                f"Expected dict for {field_type}, got {type(v)}"
+                            )
                         return v
                     mapper = SchemaCoercionMapper(field_type, type_hints, max_depth=d)
                     return mapper.coerce(v, d)
@@ -276,7 +280,11 @@ class SchemaCoercionMapper:
                         tag = discriminator_key(v)
                     except Exception as e:
                         logger.debug(f"Failed to call discriminator func: {e}")
-                elif isinstance(v, dict) and isinstance(discriminator_key, str) and discriminator_key in v:
+                elif (
+                    isinstance(v, dict)
+                    and isinstance(discriminator_key, str)
+                    and discriminator_key in v
+                ):
                     tag = v[discriminator_key]
 
                 if tag is not None:
@@ -287,9 +295,13 @@ class SchemaCoercionMapper:
 
                         try:
                             if issubclass(base_type, (BaseModel, BaseModelV1)):
-                                return SchemaCoercionMapper(base_type, max_depth=d).coerce(v, d)
+                                return SchemaCoercionMapper(
+                                    base_type, max_depth=d
+                                ).coerce(v, d)
                         except Exception as e:
-                            logger.debug(f"Coercion with {base_type} failed for tag={tag}: {e}")
+                            logger.debug(
+                                f"Coercion with {base_type} failed for tag={tag}: {e}"
+                            )
                             continue
 
                 # fallback: try coercing each branch
