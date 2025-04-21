@@ -3,8 +3,11 @@ from typing import Any
 import pytest
 from langchain_core.runnables import RunnableConfig
 
-from langgraph.checkpoint.base import (CheckpointMetadata, create_checkpoint,
-                                       empty_checkpoint)
+from langgraph.checkpoint.base import (
+    CheckpointMetadata,
+    create_checkpoint,
+    empty_checkpoint,
+)
 
 
 @pytest.fixture(scope="session")

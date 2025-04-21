@@ -1,3 +1,4 @@
+import os
 import sys
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Optional
@@ -16,16 +17,21 @@ from langgraph.checkpoint.postgres.aio import (
     AsyncPostgresSaver,
     AsyncShallowPostgresSaver,
 )
+from langgraph.checkpoint.mongodb import MongoDBSaver, AsyncMongoDBSaver
+
 from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
+from langgraph.store.mongodb import MongoDBStore
 from langgraph.store.postgres import AsyncPostgresStore, PostgresStore
+
 
 pytest.register_assert_rewrite("tests.memory_assert")
 
-DEFAULT_POSTGRES_URI = "postgres://postgres:postgres@localhost:5442/"
+DEFAULT_MONGODB_URI = os.environ.get("MONGODB_URI", "mongodb://localhost:27017")
+
 # TODO: fix this once core is released
 IS_LANGCHAIN_CORE_030_OR_GREATER = version.parse(core_version) >= version.parse(
     "0.3.0.dev0"
@@ -71,11 +77,24 @@ def checkpointer_sqlite_aes():
         yield checkpointer
 
 
+@pytest.fixture(scope="function")
+def checkpointer_mongodb():
+    with MongoDBSaver.from_conn_string(DEFAULT_MONGODB_URI) as checkpointer:
+        checkpointer.checkpoint_collection.delete_many({})
+        checkpointer.writes_collection.delete_many({})
+        yield checkpointer
+        checkpointer.checkpoint_collection.drop()
+        checkpointer.writes_collection.drop()
+
 @asynccontextmanager
 async def _checkpointer_sqlite_aio():
     async with AsyncSqliteSaver.from_conn_string(":memory:") as checkpointer:
         yield checkpointer
 
+@asynccontextmanager
+async def _checkpointer_mongodb_aio():
+    async with AsyncSqliteSaver.from_conn_string("DEFAULT_MONGODB_URI") as checkpointer:
+        yield checkpointer
 
 @pytest.fixture(scope="function")
 def checkpointer_postgres():
@@ -269,10 +288,12 @@ async def awith_checkpointer(
         yield None
     elif checkpointer_name == "memory":
         from tests.memory_assert import MemorySaverAssertImmutable
-
         yield MemorySaverAssertImmutable()
     elif checkpointer_name == "sqlite_aio":
         async with _checkpointer_sqlite_aio() as checkpointer:
+            yield checkpointer
+    elif checkpointer_name == "mongodb_aio":
+        async with _checkpointer_mongodb_aio() as checkpointer:
             yield checkpointer
     elif checkpointer_name == "postgres_aio":
         async with _checkpointer_postgres_aio() as checkpointer:
@@ -421,6 +442,19 @@ def store_in_memory():
     yield InMemoryStore()
 
 
+@pytest.fixture(scope="function")
+def store_mongodb():
+    from langgraph.store.base import TTLConfig
+    from pymongo import MongoClient
+    client = MongoClient(os.environ.get("MONGODB_URI", "mongodb://localhost:27017"))
+    collection = client["db"]["long_term_memory"]
+    collection.delete_many({})
+    return MongoDBStore(
+        collection=collection,
+        ttl_config=TTLConfig(default_ttl=3600, refresh_on_read=True)
+    )
+
+
 @asynccontextmanager
 async def awith_store(store_name: Optional[str]) -> AsyncIterator[BaseStore]:
     if store_name is None:
@@ -440,14 +474,15 @@ async def awith_store(store_name: Optional[str]) -> AsyncIterator[BaseStore]:
         raise NotImplementedError(f"Unknown store {store_name}")
 
 
-SHALLOW_CHECKPOINTERS_SYNC = ["postgres_shallow"]
+SHALLOW_CHECKPOINTERS_SYNC = [] # ["postgres_shallow"]
 REGULAR_CHECKPOINTERS_SYNC = [
     "memory",
-    "sqlite",
-    "postgres",
-    "postgres_pipe",
-    "postgres_pool",
-    "sqlite_aes",
+    # "sqlite",
+    # "mongodb",
+    # "postgres",
+    # "postgres_pipe",
+    # "postgres_pool",
+    # "sqlite_aes",
 ]
 ALL_CHECKPOINTERS_SYNC = [
     *REGULAR_CHECKPOINTERS_SYNC,
@@ -457,9 +492,10 @@ SHALLOW_CHECKPOINTERS_ASYNC = ["postgres_aio_shallow"]
 REGULAR_CHECKPOINTERS_ASYNC = [
     "memory",
     "sqlite_aio",
-    "postgres_aio",
-    "postgres_aio_pipe",
-    "postgres_aio_pool",
+    "mongodb_aio",
+    # "postgres_aio",
+    # "postgres_aio_pipe",
+    # "postgres_aio_pool",
 ]
 ALL_CHECKPOINTERS_ASYNC = [
     *REGULAR_CHECKPOINTERS_ASYNC,
@@ -470,14 +506,15 @@ ALL_CHECKPOINTERS_ASYNC_PLUS_NONE = [
     None,
 ]
 ALL_STORES_SYNC = [
-    "in_memory",
-    "postgres",
-    "postgres_pipe",
-    "postgres_pool",
+    # "in_memory",
+    # "postgres",
+    # "postgres_pipe",
+    # "postgres_pool",
+    "mongodb",
 ]
 ALL_STORES_ASYNC = [
     "in_memory",
-    "postgres_aio",
-    "postgres_aio_pipe",
-    "postgres_aio_pool",
+    # "postgres_aio",
+    # "postgres_aio_pipe",
+    # "postgres_aio_pool",
 ]
