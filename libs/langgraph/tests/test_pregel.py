@@ -2147,7 +2147,7 @@ def test_conditional_entrypoint_to_multiple_state_graph(
 
     workflow.add_node("get_weather", get_weather)
     workflow.add_edge("get_weather", END)
-    workflow.set_conditional_entry_point(continue_to_weather)
+    workflow.set_conditional_entry_point(continue_to_weather, path_map=["get_weather"])
 
     app = workflow.compile()
 
@@ -4477,7 +4477,9 @@ def test_xray_lance(snapshot: SnapshotAssertion):
     # Flow
     interview_builder.add_edge(START, "ask_question")
     interview_builder.add_edge("ask_question", "answer_question")
-    interview_builder.add_conditional_edges("answer_question", route_messages)
+    interview_builder.add_conditional_edges(
+        "answer_question", route_messages, ["ask_question", END]
+    )
 
     # Set up memory
     memory = InMemorySaver()

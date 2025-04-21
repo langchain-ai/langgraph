@@ -776,7 +776,7 @@ class CompiledStateGraph(CompiledGraph):
             ),
             ChannelWriteTupleEntry(
                 mapper=_control_branch,
-                declared=_control_branch(Command(goto=tuple(node.ends)))
+                static=_control_static(node.ends)
                 if node is not None and node.ends is not None
                 else None,
             ),
@@ -845,6 +845,8 @@ class CompiledStateGraph(CompiledGraph):
     def attach_branch(
         self, start: str, name: str, branch: Branch, *, with_reader: bool = True
     ) -> None:
+        print(f"Attaching branch {name} to {start} {branch}")
+
         def get_writes(
             packets: Sequence[Union[str, Send]],
         ) -> Sequence[Union[ChannelWriteEntry, Send]]:
@@ -862,7 +864,10 @@ class CompiledStateGraph(CompiledGraph):
                         ChannelWriteEntry(
                             f"branch:{start}:{name}::then",
                             WaitForNames(
-                                {p.node if isinstance(p, Send) else p for p in filtered}
+                                frozenset(
+                                    p.node if isinstance(p, Send) else p
+                                    for p in filtered
+                                )
                             ),
                         )
                     )
@@ -1061,6 +1066,19 @@ def _control_branch(value: Any) -> Sequence[tuple[str, Any]]:
                 for go in command.goto
             )
     return rtn
+
+
+def _control_static(
+    ends: Union[tuple[str, ...], dict[str, str]],
+) -> Sequence[tuple[str, Any, Optional[str]]]:
+    if isinstance(ends, dict):
+        return [
+            (CHANNEL_BRANCH_TO.format(k), None, label)
+            for k, label in ends.items()
+            if k != END
+        ]
+    else:
+        return [(CHANNEL_BRANCH_TO.format(e), None, None) for e in ends if e != END]
 
 
 def _get_root(input: Any) -> Optional[Sequence[tuple[str, Any]]]:

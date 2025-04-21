@@ -3,6 +3,7 @@ from inspect import (
     ismethod,
     signature,
 )
+from itertools import zip_longest
 from types import FunctionType
 from typing import (
     Any,
@@ -132,6 +133,16 @@ class Branch(NamedTuple):
         writer: Writer,
         reader: Optional[Callable[[RunnableConfig], Any]] = None,
     ) -> RunnableCallable:
+        print(
+            list(
+                zip_longest(
+                    writer([e for e in self.ends.values() if e != END]),
+                    [la for la, e in self.ends.items() if e != END],
+                )
+            )
+            if self.ends
+            else None
+        )
         return ChannelWrite.register_writer(
             RunnableCallable(
                 func=self._route,
@@ -142,7 +153,14 @@ class Branch(NamedTuple):
                 trace=False,
                 func_accepts_config=True,
             ),
-            writer(list(self.ends.values())) if self.ends else None,
+            list(
+                zip_longest(
+                    writer([e for e in self.ends.values() if e != END]),
+                    [la for la, e in self.ends.items() if e != END],
+                )
+            )
+            if self.ends
+            else None,
         )
 
     def _route(

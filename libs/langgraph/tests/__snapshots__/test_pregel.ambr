@@ -10,11 +10,6 @@
   {
     "nodes": [
       {
-        "id": "__start__",
-        "type": "schema",
-        "data": "__start__"
-      },
-      {
         "id": "left",
         "type": "runnable",
         "data": {
@@ -41,16 +36,23 @@
         }
       },
       {
-        "id": "__end__",
-        "type": "schema",
-        "data": "__end__"
+        "id": "__start__",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnablePassthrough"
+          ],
+          "name": "__start__"
+        }
+      },
+      {
+        "id": "__end__"
       }
     ],
     "edges": [
-      {
-        "source": "right",
-        "target": "__end__"
-      },
       {
         "source": "__start__",
         "target": "left",
@@ -65,8 +67,11 @@
       },
       {
         "source": "left",
-        "target": "__end__",
-        "conditional": true
+        "target": "__end__"
+      },
+      {
+        "source": "right",
+        "target": "__end__"
       }
     ]
   }
@@ -75,10 +80,10 @@
 # name: test_conditional_entrypoint_graph.3
   '''
   graph TD;
-  	right --> __end__;
   	__start__ -. &nbsp;go-left&nbsp; .-> left;
   	__start__ -. &nbsp;go-right&nbsp; .-> right;
-  	left -.-> __end__;
+  	left --> __end__;
+  	right --> __end__;
   
   '''
 # ---
@@ -94,8 +99,16 @@
     "nodes": [
       {
         "id": "__start__",
-        "type": "schema",
-        "data": "__start__"
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnablePassthrough"
+          ],
+          "name": "__start__"
+        }
       },
       {
         "id": "left",
@@ -124,16 +137,10 @@
         }
       },
       {
-        "id": "__end__",
-        "type": "schema",
-        "data": "__end__"
+        "id": "__end__"
       }
     ],
     "edges": [
-      {
-        "source": "right",
-        "target": "__end__"
-      },
       {
         "source": "__start__",
         "target": "left",
@@ -148,8 +155,11 @@
       },
       {
         "source": "left",
-        "target": "__end__",
-        "conditional": true
+        "target": "__end__"
+      },
+      {
+        "source": "right",
+        "target": "__end__"
       }
     ]
   }
@@ -158,10 +168,10 @@
 # name: test_conditional_entrypoint_graph_state.3
   '''
   graph TD;
-  	right --> __end__;
   	__start__ -. &nbsp;go-left&nbsp; .-> left;
   	__start__ -. &nbsp;go-right&nbsp; .-> right;
-  	left -.-> __end__;
+  	left --> __end__;
+  	right --> __end__;
   
   '''
 # ---
@@ -177,8 +187,16 @@
     "nodes": [
       {
         "id": "__start__",
-        "type": "schema",
-        "data": "__start__"
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnablePassthrough"
+          ],
+          "name": "__start__"
+        }
       },
       {
         "id": "get_weather",
@@ -194,25 +212,18 @@
         }
       },
       {
-        "id": "__end__",
-        "type": "schema",
-        "data": "__end__"
+        "id": "__end__"
       }
     ],
     "edges": [
-      {
-        "source": "get_weather",
-        "target": "__end__"
-      },
       {
         "source": "__start__",
         "target": "get_weather",
         "conditional": true
       },
       {
-        "source": "__start__",
-        "target": "__end__",
-        "conditional": true
+        "source": "get_weather",
+        "target": "__end__"
       }
     ]
   }
@@ -221,9 +232,8 @@
 # name: test_conditional_entrypoint_to_multiple_state_graph.3
   '''
   graph TD;
-  	get_weather --> __end__;
   	__start__ -.-> get_weather;
-  	__start__ -.-> __end__;
+  	get_weather --> __end__;
   
   '''
 # ---
@@ -233,8 +243,16 @@
     "nodes": [
       {
         "id": "__start__",
-        "type": "schema",
-        "data": "__start__"
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnablePassthrough"
+          ],
+          "name": "__start__"
+        }
       },
       {
         "id": "A",
@@ -263,20 +281,10 @@
         }
       },
       {
-        "id": "__end__",
-        "type": "schema",
-        "data": "__end__"
+        "id": "__end__"
       }
     ],
     "edges": [
-      {
-        "source": "A",
-        "target": "__end__"
-      },
-      {
-        "source": "B",
-        "target": "__end__"
-      },
       {
         "source": "__start__",
         "target": "A"
@@ -284,6 +292,14 @@
       {
         "source": "__start__",
         "target": "B"
+      },
+      {
+        "source": "A",
+        "target": "__end__"
+      },
+      {
+        "source": "B",
+        "target": "__end__"
       }
     ]
   }
@@ -292,10 +308,10 @@
 # name: test_conditional_state_graph_with_list_edge_inputs.1
   '''
   graph TD;
-  	A --> __end__;
-  	B --> __end__;
   	__start__ --> A;
   	__start__ --> B;
+  	A --> __end__;
+  	B --> __end__;
   
   '''
 # ---
@@ -303,11 +319,11 @@
   '''
   graph TD;
   	__start__ --> rewrite_query;
-  	rewrite_query --> analyzer_one;
-  	rewrite_query --> retriever_two;
   	analyzer_one --> retriever_one;
   	retriever_one --> qa;
   	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query --> retriever_two;
   	qa --> __end__;
   
   '''
@@ -316,11 +332,11 @@
   '''
   graph TD;
   	__start__ --> rewrite_query;
-  	rewrite_query --> analyzer_one;
-  	rewrite_query -.-> retriever_two;
   	analyzer_one --> retriever_one;
   	retriever_one --> qa;
   	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
   	qa --> __end__;
   
   '''
@@ -386,11 +402,11 @@
   '''
   graph TD;
   	__start__ --> rewrite_query;
-  	rewrite_query --> analyzer_one;
-  	rewrite_query -.-> retriever_two;
   	analyzer_one --> retriever_one;
   	retriever_one --> qa;
   	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
   	qa --> __end__;
   
   '''
@@ -456,18 +472,22 @@
   '''
   graph TD;
   	__start__ --> rewrite_query;
-  	rewrite_query --> analyzer_one;
-  	rewrite_query -.-> retriever_two;
   	analyzer_one --> retriever_one;
   	retriever_one --> qa;
   	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
   	qa --> __end__;
   
   '''
 # ---
 # name: test_multiple_sinks_subgraphs
   '''
-  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  ---
+  config:
+    flowchart:
+      curve: linear
+  ---
   graph TD;
   	__start__([<p>__start__</p>]):::first
   	uno(uno)
@@ -499,7 +519,11 @@
 # ---
 # name: test_nested_graph.1
   '''
-  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  ---
+  config:
+    flowchart:
+      curve: linear
+  ---
   graph TD;
   	__start__([<p>__start__</p>]):::first
   	inner(inner)
@@ -518,6 +542,7 @@
   dict({
     'edges': list([
       dict({
+        'conditional': True,
         'source': '__start__',
         'target': '__end__',
       }),
@@ -576,23 +601,25 @@
         'type': 'runnable',
       }),
       dict({
-        'data': '__end__',
         'id': '__end__',
-        'type': 'schema',
       }),
     ]),
   })
 # ---
 # name: test_nested_graph_xray.1
   '''
-  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  ---
+  config:
+    flowchart:
+      curve: linear
+  ---
   graph TD;
   	__start__(<p>__start__</p>)
   	tool_one(tool_one)
   	tool_two(tool_two)
   	tool_three(tool_three)
   	__end__(<p>__end__</p>)
-  	__start__ --> __end__;
+  	__start__ -.-> __end__;
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
   	classDef last fill:#bfb6fc
@@ -602,15 +629,16 @@
 # name: test_repeat_condition
   '''
   graph TD;
-  	__start__ --> Researcher;
-  	Researcher -. &nbsp;continue&nbsp; .-> Chart_Generator;
-  	Researcher -. &nbsp;call_tool&nbsp; .-> Call_Tool;
-  	Researcher -. &nbsp;end&nbsp; .-> __end__;
-  	Chart_Generator -. &nbsp;continue&nbsp; .-> Researcher;
-  	Chart_Generator -. &nbsp;call_tool&nbsp; .-> Call_Tool;
-  	Chart_Generator -. &nbsp;end&nbsp; .-> __end__;
-  	Call_Tool -.-> Researcher;
   	Call_Tool -.-> Chart_Generator;
+  	Call_Tool -.-> Researcher;
+  	Chart_Generator -. &nbsp;call_tool&nbsp; .-> Call_Tool;
+  	Chart_Generator -. &nbsp;continue&nbsp; .-> Researcher;
+  	Researcher -. &nbsp;call_tool&nbsp; .-> Call_Tool;
+  	Researcher -. &nbsp;continue&nbsp; .-> Chart_Generator;
+  	__start__ --> Researcher;
+  	Call_Tool -.-> __end__;
+  	Chart_Generator -.-> __end__;
+  	Researcher -.-> __end__;
   	Researcher -. &nbsp;redo&nbsp; .-> Researcher;
   
   '''
@@ -619,12 +647,12 @@
   '''
   graph TD;
   	__start__ --> up;
-  	up --> other;
-  	up --> side;
   	side --> down;
   	up --> down;
-  	other --> __end__;
+  	up --> other;
+  	up --> side;
   	down --> __end__;
+  	other --> __end__;
   
   '''
 # ---
@@ -639,7 +667,11 @@
 # ---
 # name: test_xray_bool
   '''
-  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  ---
+  config:
+    flowchart:
+      curve: linear
+  ---
   graph TD;
   	__start__([<p>__start__</p>]):::first
   	gp_one(gp_one)
@@ -675,24 +707,28 @@
 # ---
 # name: test_xray_issue
   '''
-  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  ---
+  config:
+    flowchart:
+      curve: linear
+  ---
   graph TD;
   	__start__([<p>__start__</p>]):::first
   	p_one(p_one)
   	__end__([<p>__end__</p>]):::last
   	__start__ --> p_one;
-  	p_two___end__ --> p_one;
   	p_one -. &nbsp;0&nbsp; .-> p_two___start__;
-  	p_one -. &nbsp;1&nbsp; .-> __end__;
+  	p_two___end__ --> p_one;
+  	p_one -.-> __end__;
   	subgraph p_two
   	p_two___start__(<p>__start__</p>)
   	p_two_c_one(c_one)
   	p_two_c_two(c_two)
   	p_two___end__(<p>__end__</p>)
   	p_two___start__ --> p_two_c_one;
-  	p_two_c_two --> p_two_c_one;
   	p_two_c_one -. &nbsp;0&nbsp; .-> p_two_c_two;
-  	p_two_c_one -. &nbsp;1&nbsp; .-> p_two___end__;
+  	p_two_c_two --> p_two_c_one;
+  	p_two_c_one -.-> p_two___end__;
   	end
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
@@ -708,13 +744,13 @@
         'target': 'ask_question',
       }),
       dict({
-        'source': 'ask_question',
-        'target': 'answer_question',
-      }),
-      dict({
         'conditional': True,
         'source': 'answer_question',
         'target': 'ask_question',
+      }),
+      dict({
+        'source': 'ask_question',
+        'target': 'answer_question',
       }),
       dict({
         'conditional': True,
@@ -724,9 +760,17 @@
     ]),
     'nodes': list([
       dict({
-        'data': '__start__',
+        'data': dict({
+          'id': list([
+            'langchain',
+            'schema',
+            'runnable',
+            'RunnablePassthrough',
+          ]),
+          'name': '__start__',
+        }),
         'id': '__start__',
-        'type': 'schema',
+        'type': 'runnable',
       }),
       dict({
         'data': dict({
@@ -755,9 +799,7 @@
         'type': 'runnable',
       }),
       dict({
-        'data': '__end__',
         'id': '__end__',
-        'type': 'schema',
       }),
     ]),
   })
@@ -774,20 +816,28 @@
         'target': 'generate_sections',
       }),
       dict({
-        'source': 'generate_sections',
-        'target': '__end__',
-      }),
-      dict({
         'conditional': True,
         'source': 'generate_analysts',
         'target': 'conduct_interview',
       }),
+      dict({
+        'source': 'generate_sections',
+        'target': '__end__',
+      }),
     ]),
     'nodes': list([
       dict({
-        'data': '__start__',
+        'data': dict({
+          'id': list([
+            'langchain',
+            'schema',
+            'runnable',
+            'RunnablePassthrough',
+          ]),
+          'name': '__start__',
+        }),
         'id': '__start__',
-        'type': 'schema',
+        'type': 'runnable',
       }),
       dict({
         'data': dict({
@@ -829,9 +879,7 @@
         'type': 'runnable',
       }),
       dict({
-        'data': '__end__',
         'id': '__end__',
-        'type': 'schema',
       }),
     ]),
   })
@@ -839,24 +887,6 @@
 # name: test_xray_lance.2
   dict({
     'edges': list([
-      dict({
-        'source': 'conduct_interview:__start__',
-        'target': 'conduct_interview:ask_question',
-      }),
-      dict({
-        'source': 'conduct_interview:ask_question',
-        'target': 'conduct_interview:answer_question',
-      }),
-      dict({
-        'conditional': True,
-        'source': 'conduct_interview:answer_question',
-        'target': 'conduct_interview:ask_question',
-      }),
-      dict({
-        'conditional': True,
-        'source': 'conduct_interview:answer_question',
-        'target': 'conduct_interview:__end__',
-      }),
       dict({
         'source': '__start__',
         'target': 'generate_analysts',
@@ -866,20 +896,46 @@
         'target': 'generate_sections',
       }),
       dict({
-        'source': 'generate_sections',
-        'target': '__end__',
-      }),
-      dict({
         'conditional': True,
         'source': 'generate_analysts',
         'target': 'conduct_interview:__start__',
       }),
+      dict({
+        'source': 'generate_sections',
+        'target': '__end__',
+      }),
+      dict({
+        'source': 'conduct_interview:__start__',
+        'target': 'conduct_interview:ask_question',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'conduct_interview:answer_question',
+        'target': 'conduct_interview:ask_question',
+      }),
+      dict({
+        'source': 'conduct_interview:ask_question',
+        'target': 'conduct_interview:answer_question',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'conduct_interview:answer_question',
+        'target': 'conduct_interview:__end__',
+      }),
     ]),
     'nodes': list([
       dict({
-        'data': '__start__',
+        'data': dict({
+          'id': list([
+            'langchain',
+            'schema',
+            'runnable',
+            'RunnablePassthrough',
+          ]),
+          'name': '__start__',
+        }),
         'id': '__start__',
-        'type': 'schema',
+        'type': 'runnable',
       }),
       dict({
         'data': dict({
@@ -895,9 +951,33 @@
         'type': 'runnable',
       }),
       dict({
-        'data': 'conduct_interview:__start__',
+        'data': dict({
+          'id': list([
+            'langgraph',
+            'utils',
+            'runnable',
+            'RunnableCallable',
+          ]),
+          'name': 'generate_sections',
+        }),
+        'id': 'generate_sections',
+        'type': 'runnable',
+      }),
+      dict({
+        'id': '__end__',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langchain',
+            'schema',
+            'runnable',
+            'RunnablePassthrough',
+          ]),
+          'name': 'conduct_interview:__start__',
+        }),
         'id': 'conduct_interview:__start__',
-        'type': 'schema',
+        'type': 'runnable',
       }),
       dict({
         'data': dict({
@@ -926,28 +1006,9 @@
         'type': 'runnable',
       }),
       dict({
-        'data': 'conduct_interview:__end__',
         'id': 'conduct_interview:__end__',
-        'type': 'schema',
       }),
-      dict({
-        'data': dict({
-          'id': list([
-            'langgraph',
-            'utils',
-            'runnable',
-            'RunnableCallable',
-          ]),
-          'name': 'generate_sections',
-        }),
-        'id': 'generate_sections',
-        'type': 'runnable',
-      }),
-      dict({
-        'data': '__end__',
-        'id': '__end__',
-        'type': 'schema',
-      }),
+
     ]),
   })
 # ---

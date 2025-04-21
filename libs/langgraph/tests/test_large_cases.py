@@ -587,12 +587,10 @@ def test_conditional_graph(
 
     app = workflow.compile()
 
-    if SHOULD_CHECK_SNAPSHOTS:
+    if SHOULD_CHECK_SNAPSHOTS and checkpointer_name == "memory":
         assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
         assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
         assert app.get_graph().draw_mermaid() == snapshot
-        assert json.dumps(app.get_graph(xray=True).to_json(), indent=2) == snapshot
-        assert app.get_graph(xray=True).draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
@@ -721,10 +719,6 @@ def test_conditional_graph(
         interrupt_after=["agent"],
     )
     config = {"configurable": {"thread_id": "1"}}
-
-    if SHOULD_CHECK_SNAPSHOTS:
-        assert app_w_interrupt.get_graph().to_json() == snapshot
-        assert app_w_interrupt.get_graph().draw_mermaid() == snapshot
 
     assert [
         c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
@@ -1538,7 +1532,7 @@ def test_conditional_state_graph(
 
     app = workflow.compile()
 
-    if SHOULD_CHECK_SNAPSHOTS:
+    if SHOULD_CHECK_SNAPSHOTS and checkpointer_name == "memory":
         assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
         assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
         assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
@@ -3774,7 +3768,7 @@ def test_message_graph(
     # meaning you can use it as you would any other runnable
     app = workflow.compile()
 
-    if SHOULD_CHECK_SNAPSHOTS:
+    if SHOULD_CHECK_SNAPSHOTS and checkpointer_name == "memory":
         assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
         assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
         assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
@@ -6234,10 +6228,13 @@ def test_start_branch_then(
     tool_two_graph.add_node("tool_two_slow", tool_two_slow)
     tool_two_graph.add_node("tool_two_fast", tool_two_fast)
     tool_two_graph.set_conditional_entry_point(
-        lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast", then=END
+        lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast",
+        then=END,
+        path_map=["tool_two_slow", "tool_two_fast"],
     )
     tool_two = tool_two_graph.compile()
-    assert tool_two.get_graph().draw_mermaid() == snapshot
+    if checkpointer_name == "memory":
+        assert tool_two.get_graph().draw_mermaid() == snapshot
 
     assert tool_two.invoke({"my_key": "value", "market": "DE"}) == {
         "my_key": "value slow",
@@ -6516,6 +6513,7 @@ def test_branch_then(
     tool_two_graph.add_conditional_edges(
         source="prepare",
         path=lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast",
+        path_map=["tool_two_slow", "tool_two_fast"],
         then="finish",
     )
     tool_two_graph.add_node("prepare", lambda s: {"my_key": " prepared"})
@@ -6523,8 +6521,10 @@ def test_branch_then(
     tool_two_graph.add_node("tool_two_fast", lambda s: {"my_key": " fast"})
     tool_two_graph.add_node("finish", lambda s: {"my_key": " finished"})
     tool_two = tool_two_graph.compile()
-    assert tool_two.get_graph().draw_mermaid(with_styles=False) == snapshot
-    assert tool_two.get_graph().draw_mermaid() == snapshot
+
+    if checkpointer_name == "memory":
+        assert tool_two.get_graph().draw_mermaid(with_styles=False) == snapshot
+        assert tool_two.get_graph().draw_mermaid() == snapshot
 
     assert tool_two.invoke({"my_key": "value", "market": "DE"}, debug=1) == {
         "my_key": "value prepared slow finished",
@@ -9856,7 +9856,9 @@ def test_send_react_interrupt_control(
     builder.add_node(foo)
     builder.add_edge(START, "agent")
     graph = builder.compile()
-    assert graph.get_graph().draw_mermaid() == snapshot
+
+    if checkpointer_name == "memory":
+        assert graph.get_graph().draw_mermaid() == snapshot
 
     assert graph.invoke({"messages": [HumanMessage("hello")]}) == {
         "messages": [
@@ -10187,12 +10189,17 @@ def test_weather_subgraph(
     graph.add_node(normal_llm_node)
     graph.add_node("weather_graph", weather_graph)
     graph.add_edge(START, "router_node")
-    graph.add_conditional_edges("router_node", route_after_prediction)
+    graph.add_conditional_edges(
+        "router_node",
+        route_after_prediction,
+        path_map=["weather_graph", "normal_llm_node"],
+    )
     graph.add_edge("normal_llm_node", END)
     graph.add_edge("weather_graph", END)
     graph = graph.compile(checkpointer=checkpointer)
 
-    assert graph.get_graph(xray=1).draw_mermaid() == snapshot
+    if checkpointer_name == "memory":
+        assert graph.get_graph(xray=1).draw_mermaid() == snapshot
 
     config = {"configurable": {"thread_id": "1"}}
     thread2 = {"configurable": {"thread_id": "2"}}

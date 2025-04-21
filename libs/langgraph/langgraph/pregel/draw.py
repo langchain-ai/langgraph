@@ -6,7 +6,7 @@ from langchain_core.runnables.graph import Graph
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.constants import CONF, CONFIG_KEY_SEND, END, INPUT
+from langgraph.constants import CONF, CONFIG_KEY_SEND, END, INPUT, START
 from langgraph.managed.base import ManagedValueSpec
 from langgraph.pregel.algo import (
     PregelTaskWrites,
@@ -17,8 +17,8 @@ from langgraph.pregel.algo import (
 from langgraph.pregel.checkpoint import empty_checkpoint
 from langgraph.pregel.io import map_input
 from langgraph.pregel.manager import ChannelsManager
-from langgraph.pregel.read import DEFAULT_BOUND, PregelNode
-from langgraph.pregel.write import ChannelWrite, ChannelWriteTupleEntry
+from langgraph.pregel.read import PregelNode
+from langgraph.pregel.write import ChannelWrite
 from langgraph.types import All, Checkpointer, LoopProtocol
 
 
@@ -45,7 +45,7 @@ def draw_graph(
         The graph for this Pregel instance.
     """
     # (src, dest, is_conditional)
-    edges: list[tuple[str, str, bool]] = []
+    edges: set[tuple[str, str, bool]] = set()
 
     step = -1
     checkpoint = empty_checkpoint()
@@ -60,9 +60,9 @@ def draw_graph(
         LoopProtocol(step=step, stop=-1, config=config),
         skip_context=True,
     ) as (channels, managed):
-        declared_seen: set[Any] = set()
-        sources: dict[str, set[tuple[str, bool]]] = {}
-        step_sources: dict[str, set[tuple[str, bool]]] = {}
+        static_seen: set[Any] = set()
+        sources: dict[str, set[tuple[str, bool, Optional[str]]]] = {}
+        step_sources: dict[str, set[tuple[str, bool, Optional[str]]]] = {}
         # remove node mappers
         nodes = {
             k: v.copy(update={"mapper": None}) if v.mapper is not None else v
@@ -94,47 +94,45 @@ def draw_graph(
             trigger_to_nodes=trigger_to_nodes,
             updated_channels=updated_channels,
         )
+        start_tasks = tasks
         # run the pregel loop
         while tasks:
-            conditionals = set()
+            conditionals: dict[tuple[str, str, Any], Optional[str]] = {}
             # run task writers
             for task in tasks.values():
                 for w in task.writers:
+                    # apply regular writes
                     if isinstance(w, ChannelWrite):
                         w.invoke(None, task.config)
-                        # apply declared writes (Command)
-                        for entry in w.writes:
-                            if (
-                                isinstance(entry, ChannelWriteTupleEntry)
-                                and entry.declared
-                                and entry not in conditionals
-                            ):
-                                # visit only once
-                                declared_seen.add(entry)
-                                # apply them
-                                current_len = len(task.writes)
-                                task.config[CONF][CONFIG_KEY_SEND](entry.declared)
-                                conditionals.update(list(task.writes)[current_len:])
-                    elif w not in declared_seen:
-                        # visit only once
-                        declared_seen.add(w)
-                        # get declared writes
-                        if writes := ChannelWrite.get_declared_writes(w):
-                            # apply them
-                            current_len = len(task.writes)
-                            ChannelWrite.do_write(task.config, writes)
-                            conditionals.update(list(task.writes)[current_len:])
+                    # apply conditional writes declared for static analysis, only once
+                    if w not in static_seen:
+                        static_seen.add(w)
+                        # apply static writes
+                        if writes := ChannelWrite.get_static_writes(w):
+                            conditionals.update(
+                                {(task.name, *t[:2]): t[2] for t in writes}
+                            )
+                            task.config[CONF][CONFIG_KEY_SEND]([t[:2] for t in writes])
             # collect sources
             step_sources = {
-                task.name: {(w[0], w in conditionals) for w in task.writes}
+                task.name: {
+                    (
+                        w[0],
+                        (task.name, *w) in conditionals,
+                        conditionals.get((task.name, *w)),
+                    )
+                    for w in task.writes
+                }
                 for task in tasks.values()
             }
             sources.update(step_sources)
             # invert triggers
-            trigger_to_sources: dict[str, set[tuple[str, bool]]] = defaultdict(set)
+            trigger_to_sources: dict[str, set[tuple[str, bool, Optional[str]]]] = (
+                defaultdict(set)
+            )
             for src, triggers in sources.items():
-                for trigger, cond in triggers:
-                    trigger_to_sources[trigger].add((src, cond))
+                for trigger, cond, label in triggers:
+                    trigger_to_sources[trigger].add((src, cond, label))
             # apply writes
             _, updated_channels = apply_writes(
                 checkpoint, channels, tasks.values(), get_next_version
@@ -158,10 +156,11 @@ def draw_graph(
             # collect edges
             for task in tasks.values():
                 for trigger in task.triggers:
-                    for src, cond in sorted(trigger_to_sources[trigger]):
-                        edges.append((src, task.name, cond))
+                    for src, cond, label in sorted(trigger_to_sources[trigger]):
+                        edges.add((src, task.name, cond, label))
         # assemble the graph
         graph = Graph()
+        # add nodes
         for name, node in nodes.items():
             metadata = dict(node.metadata or {})
             if name in interrupt_before_nodes and name in interrupt_after_nodes:
@@ -170,12 +169,26 @@ def draw_graph(
                 metadata["__interrupt"] = "before"
             elif name in interrupt_after_nodes:
                 metadata["__interrupt"] = "after"
-            graph.add_node(node.bound, name, metadata=metadata)
-        for src, dest, is_conditional in edges:
-            # TODO conditional labels
+            graph.add_node(node.bound, name, metadata=metadata or None)
+        # add start node
+        if START not in nodes:
+            graph.add_node(None, START)
+            for task in start_tasks.values():
+                graph.add_edge(graph.nodes[START], graph.nodes[task.name])
+        # add discovered edges
+        for src, dest, is_conditional, label in sorted(edges):
             graph.add_edge(
-                graph.nodes[src], graph.nodes[dest], conditional=is_conditional
+                graph.nodes[src],
+                graph.nodes[dest],
+                data=label if label != dest else None,
+                conditional=is_conditional,
             )
+        # add end edges
+        if step_sources:
+            end = graph.add_node(None, END)
+            termini = {d for _, d, _, _ in edges}.difference(s for s, _, _, _ in edges)
+            for src in sorted(termini.union(step_sources)):
+                graph.add_edge(graph.nodes[src], end, conditional=src not in termini)
         # replace subgraphs
         for name, subgraph in subgraphs.items():
             subgraph.trim_first_node()
@@ -191,17 +204,8 @@ def draw_graph(
                 first, last = graph.extend(subgraph, prefix=name)
                 for idx, edge in enumerate(graph.edges):
                     if edge.source == name:
-                        graph.edges[idx] = edge.copy(source=last)
+                        graph.edges[idx] = edge.copy(source=last.id)
                     elif edge.target == name:
-                        graph.edges[idx] = edge.copy(target=first)
-        # add end edges
-        if step_sources:
-            end = graph.add_node(DEFAULT_BOUND, END)
-            for src in step_sources:
-                graph.add_edge(graph.nodes[src], end)
-            termini = set(d for _, d, _ in edges).difference((s for s, _, _ in edges))
-            for src in termini.union(step_sources):
-                # TODO conditional labels
-                graph.add_edge(graph.nodes[src], end, conditional=src not in termini)
+                        graph.edges[idx] = edge.copy(target=first.id)
 
         return graph
