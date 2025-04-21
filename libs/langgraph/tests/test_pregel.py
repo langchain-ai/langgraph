@@ -1339,22 +1339,26 @@ def test_pending_writes_resume(
             "configurable": {
                 "thread_id": "1",
                 "checkpoint_ns": "",
-                "checkpoint_id": checkpoints[2].config["configurable"]["checkpoint_id"]
-                if checkpoint_during
-                else AnyStr(),
+                "checkpoint_id": (
+                    checkpoints[2].config["configurable"]["checkpoint_id"]
+                    if checkpoint_during
+                    else AnyStr()
+                ),
             }
         },
-        pending_writes=UnsortedSequence(
-            (AnyStr(), "value", 2),
-            (AnyStr(), "__error__", 'ConnectionError("I\'m not good")'),
-            (AnyStr(), "value", 3),
-        )
-        if checkpoint_during
-        else UnsortedSequence(
-            (AnyStr(), "value", 2),
-            (AnyStr(), "__error__", 'ConnectionError("I\'m not good")'),
-            # the write against the previous checkpoint is not saved, as it is
-            # produced in a run where only the next checkpoint (the last) is saved
+        pending_writes=(
+            UnsortedSequence(
+                (AnyStr(), "value", 2),
+                (AnyStr(), "__error__", 'ConnectionError("I\'m not good")'),
+                (AnyStr(), "value", 3),
+            )
+            if checkpoint_during
+            else UnsortedSequence(
+                (AnyStr(), "value", 2),
+                (AnyStr(), "__error__", 'ConnectionError("I\'m not good")'),
+                # the write against the previous checkpoint is not saved, as it is
+                # produced in a run where only the next checkpoint (the last) is saved
+            )
         ),
     )
     if not checkpoint_during:
@@ -3353,6 +3357,70 @@ def test_nested_pydantic_models(version: str) -> None:
     new_inputs["list_nested"] = {"foo": "bar"}
     expected = State(**new_inputs)
     assert {**new_inputs, **update} == graph.invoke(new_inputs.copy())
+
+
+def test_pydantic_state_field_validator():
+    from pydantic import BaseModel, field_validator, model_validator
+
+    class State(BaseModel):
+        name: str
+        text: str = ""
+        only_root: int = 13
+
+        @field_validator("name", mode="after")
+        @classmethod
+        def validate_name(cls, value):
+            if value[0].islower():
+                raise ValueError("Name must start with a capital letter")
+            return "Validated " + value
+
+        @model_validator(mode="before")
+        @classmethod
+        def validate_amodel(cls, values: "State"):
+            return values | {"only_root": 392}
+
+    input_state = {"name": "John"}
+
+    def process_node(state: State):
+        assert State.model_validate(input_state) == state
+        return {"text": "Hello, " + state.name + "!"}
+
+    builder = StateGraph(state_schema=State)
+    builder.add_node("process", process_node)
+    builder.add_edge(START, "process")
+    builder.add_edge("process", END)
+    g = builder.compile()
+    res = g.invoke(input_state)
+    assert res["text"] == "Hello, Validated John!"
+
+
+def test_pydantic_v1_state_root_validator():
+    from pydantic.v1 import BaseModel, root_validator
+
+    class State(BaseModel):
+        name: str
+        text: str = ""
+        only_root: int = 13
+
+        @root_validator(pre=True)
+        @classmethod
+        def validate(cls, values: dict):
+            values["name"] = "Validated " + values["name"]
+            return values | {"only_root": 396}
+
+    input_state = {"name": "John"}
+
+    def process_node(state: State):
+        assert State(**input_state) == state
+        return {"text": "Hello, " + state.name + "!"}
+
+    builder = StateGraph(state_schema=State)
+    builder.add_node("process", process_node)
+    builder.add_edge(START, "process")
+    builder.add_edge("process", END)
+    g = builder.compile()
+    res = g.invoke(input_state)
+    assert res["text"] == "Hello, Validated John!"
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)

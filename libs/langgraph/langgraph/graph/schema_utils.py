@@ -70,6 +70,17 @@ class SchemaCoercionMapper:
                 for n, f in schema.__fields__.items()
             }
             self._construct = schema.construct
+            unhandled_attrs = (
+                "__pre_root_validators__",
+                "__post_root_validators__",
+                "__validators__",
+            )
+            if any(getattr(schema, c, None) for c in unhandled_attrs):
+                self.coerce: Callable[[Any, Any], Union[BaseModelV1, BaseModel]] = (
+                    lambda v, _: schema(**v)
+                )
+            else:
+                self.coerce = self._coerce
 
         elif issubclass(schema, BaseModel):
             self._fields = {
@@ -77,6 +88,13 @@ class SchemaCoercionMapper:
                 for n, f in schema.model_fields.items()
             }
             self._construct: Callable[..., Any] = schema.model_construct  # type: ignore
+            unhandled_attrs = ("validators", "field_validators", "root_validators")
+            if (decorators := getattr(schema, "__pydantic_decorators__", None)) and any(
+                getattr(decorators, attr, None) for attr in unhandled_attrs
+            ):
+                self.coerce = lambda v, _: schema.model_validate(v)
+            else:
+                self.coerce = self._coerce
 
         else:
             raise TypeError("Schema is neither a Pydantic v1 nor v2 model.")
@@ -86,7 +104,7 @@ class SchemaCoercionMapper:
     def __call__(self, input_data: Any, depth: Optional[int] = None) -> Any:
         return self.coerce(input_data, depth)
 
-    def coerce(self, input_data: Any, depth: Optional[int] = None) -> Any:
+    def _coerce(self, input_data: Any, depth: Optional[int] = None) -> Any:
         if depth is None:
             depth = self.max_depth
         if not isinstance(input_data, dict) or depth <= 0:
