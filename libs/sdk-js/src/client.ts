@@ -1,42 +1,41 @@
 import {
   Assistant,
   AssistantGraph,
+  AssistantVersion,
   CancelAction,
+  Checkpoint,
   Config,
+  Cron,
+  CronCreateForThreadResponse,
+  CronCreateResponse,
   DefaultValues,
   GraphSchema,
+  Item,
+  ListNamespaceResponse,
   Metadata,
   Run,
   RunStatus,
+  SearchItemsResponse,
+  Subgraphs,
   Thread,
   ThreadState,
-  Cron,
-  AssistantVersion,
-  Subgraphs,
-  Checkpoint,
-  SearchItemsResponse,
-  ListNamespaceResponse,
-  Item,
   ThreadStatus,
-  CronCreateResponse,
-  CronCreateForThreadResponse,
 } from "./schema.js";
-import { AsyncCaller, AsyncCallerParams } from "./utils/async_caller.js";
-import { IterableReadableStream } from "./utils/stream.js";
 import type {
+  Command,
+  CronsCreatePayload,
+  OnConflictBehavior,
   RunsCreatePayload,
   RunsStreamPayload,
   RunsWaitPayload,
   StreamEvent,
-  CronsCreatePayload,
-  OnConflictBehavior,
-  Command,
 } from "./types.js";
-import { mergeSignals } from "./utils/signals.js";
+import type { StreamMode, TypedAsyncGenerator } from "./types.stream.js";
+import { AsyncCaller, AsyncCallerParams } from "./utils/async_caller.js";
 import { getEnvironmentVariable } from "./utils/env.js";
-import { _getFetchImplementation } from "./singletons/fetch.js";
-import type { TypedAsyncGenerator, StreamMode } from "./types.stream.js";
+import { mergeSignals } from "./utils/signals.js";
 import { BytesLineDecoder, SSEDecoder } from "./utils/sse.js";
+import { IterableReadableStream } from "./utils/stream.js";
 /**
  * Get the API key from the environment.
  * Precedence:
@@ -619,6 +618,15 @@ export class ThreadsClient<
      * Must be one of 'idle', 'busy', 'interrupted' or 'error'.
      */
     status?: ThreadStatus;
+    /**
+     * Sort by.
+     */
+    sortBy?: "id" | "status" | "created_at" | "updated_at";
+    /**
+     * Sort order.
+     * Must be one of 'asc' or 'desc'.
+     */
+    sortOrder?: "asc" | "desc";
   }): Promise<Thread<ValuesType>[]> {
     return this.fetch<Thread<ValuesType>[]>("/threads/search", {
       method: "POST",
@@ -627,6 +635,8 @@ export class ThreadsClient<
         limit: query?.limit ?? 10,
         offset: query?.offset ?? 0,
         status: query?.status,
+        sort_by: query?.sortBy,
+        sort_order: query?.sortOrder,
       },
     });
   }
