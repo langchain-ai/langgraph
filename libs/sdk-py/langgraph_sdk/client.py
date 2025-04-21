@@ -1043,6 +1043,8 @@ class ThreadsClient:
         status: Optional[ThreadStatus] = None,
         limit: int = 10,
         offset: int = 0,
+        sort_by: Literal["id", "status", "created_at", "updated_at"] = "created_at",
+        sort_order: Literal["asc", "desc"] = "asc",
         headers: Optional[dict[str, str]] = None,
     ) -> list[Thread]:
         """Search for threads.
@@ -1079,6 +1081,10 @@ class ThreadsClient:
             payload["values"] = values
         if status:
             payload["status"] = status
+        if sort_by:
+            payload["sort_by"] = sort_by
+        if sort_order:
+            payload["sort_order"] = sort_order
         return await self.http.post(
             "/threads/search",
             json=payload,
