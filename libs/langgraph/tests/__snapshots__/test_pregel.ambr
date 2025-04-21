@@ -492,15 +492,21 @@
   	__start__([<p>__start__</p>]):::first
   	uno(uno)
   	dos(dos)
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> uno;
   	uno -.-> dos;
   	uno -.-> subgraph_one;
+  	dos --> __end__;
+  	subgraph___end__ --> __end__;
   	subgraph subgraph
   	subgraph_one(one)
   	subgraph_two(two)
   	subgraph_three(three)
-  	subgraph_one -.-> subgraph_two;
+  	subgraph___end__(<p>__end__</p>)
   	subgraph_one -.-> subgraph_three;
+  	subgraph_one -.-> subgraph_two;
+  	subgraph_three --> subgraph___end__;
+  	subgraph_two --> subgraph___end__;
   	end
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
@@ -677,26 +683,26 @@
   	gp_one(gp_one)
   	__end__([<p>__end__</p>]):::last
   	__start__ --> gp_one;
-  	gp_two___end__ --> gp_one;
   	gp_one -. &nbsp;0&nbsp; .-> gp_two___start__;
-  	gp_one -. &nbsp;1&nbsp; .-> __end__;
+  	gp_two___end__ --> gp_one;
+  	gp_one -.-> __end__;
   	subgraph gp_two
   	gp_two___start__(<p>__start__</p>)
   	gp_two_p_one(p_one)
   	gp_two___end__(<p>__end__</p>)
   	gp_two___start__ --> gp_two_p_one;
-  	gp_two_p_two___end__ --> gp_two_p_one;
   	gp_two_p_one -. &nbsp;0&nbsp; .-> gp_two_p_two___start__;
-  	gp_two_p_one -. &nbsp;1&nbsp; .-> gp_two___end__;
+  	gp_two_p_two___end__ --> gp_two_p_one;
+  	gp_two_p_one -.-> gp_two___end__;
   	subgraph p_two
   	gp_two_p_two___start__(<p>__start__</p>)
   	gp_two_p_two_c_one(c_one)
   	gp_two_p_two_c_two(c_two)
   	gp_two_p_two___end__(<p>__end__</p>)
   	gp_two_p_two___start__ --> gp_two_p_two_c_one;
-  	gp_two_p_two_c_two --> gp_two_p_two_c_one;
   	gp_two_p_two_c_one -. &nbsp;0&nbsp; .-> gp_two_p_two_c_two;
-  	gp_two_p_two_c_one -. &nbsp;1&nbsp; .-> gp_two_p_two___end__;
+  	gp_two_p_two_c_two --> gp_two_p_two_c_one;
+  	gp_two_p_two_c_one -.-> gp_two_p_two___end__;
   	end
   	end
   	classDef default fill:#f2f0ff,line-height:1.2
