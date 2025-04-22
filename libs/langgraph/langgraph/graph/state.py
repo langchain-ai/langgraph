@@ -845,8 +845,6 @@ class CompiledStateGraph(CompiledGraph):
     def attach_branch(
         self, start: str, name: str, branch: Branch, *, with_reader: bool = True
     ) -> None:
-        print(f"Attaching branch {name} to {start} {branch}")
-
         def get_writes(
             packets: Sequence[Union[str, Send]],
         ) -> Sequence[Union[ChannelWriteEntry, Send]]:

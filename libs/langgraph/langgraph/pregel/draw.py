@@ -44,7 +44,7 @@ def draw_graph(
     Returns:
         The graph for this Pregel instance.
     """
-    # (src, dest, is_conditional)
+    # (src, dest, is_conditional, label)
     edges: set[tuple[str, str, bool, Optional[str]]] = set()
 
     step = -1
