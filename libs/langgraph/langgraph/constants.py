@@ -1,6 +1,7 @@
 import sys
+from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Any, Literal, Mapping, cast
+from typing import Any, Literal, cast
 
 from langgraph.types import Interrupt, Send  # noqa: F401
 

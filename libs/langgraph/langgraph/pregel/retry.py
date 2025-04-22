@@ -3,8 +3,9 @@ import logging
 import random
 import sys
 import time
+from collections.abc import Sequence
 from dataclasses import replace
-from typing import Any, Optional, Sequence
+from typing import Any, Optional
 
 from langgraph.constants import (
     CONF,

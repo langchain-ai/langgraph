@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import (
     Any,
     Callable,
     NamedTuple,
-    Optional,
-    Sequence,
     TypeVar,
     Union,
     cast,
@@ -32,12 +31,12 @@ class ChannelWriteEntry(NamedTuple):
     """Value to write, or PASSTHROUGH to use the input."""
     skip_none: bool = False
     """Whether to skip writing if the value is None."""
-    mapper: Optional[Callable] = None
+    mapper: Callable | None = None
     """Function to transform the value before writing."""
 
 
 class ChannelWriteTupleEntry(NamedTuple):
-    mapper: Callable[[Any], Optional[Sequence[tuple[str, Any]]]]
+    mapper: Callable[[Any], Sequence[tuple[str, Any]] | None]
     """Function to extract tuples from value."""
     value: Any = PASSTHROUGH
     """Value to write, or PASSTHROUGH to use the input."""
@@ -47,15 +46,15 @@ class ChannelWrite(RunnableCallable):
     """Implements the logic for sending writes to CONFIG_KEY_SEND.
     Can be used as a runnable or as a static method to call imperatively."""
 
-    writes: list[Union[ChannelWriteEntry, ChannelWriteTupleEntry, Send]]
+    writes: list[ChannelWriteEntry | ChannelWriteTupleEntry | Send]
     """Sequence of write entries or Send objects to write."""
 
     def __init__(
         self,
-        writes: Sequence[Union[ChannelWriteEntry, ChannelWriteTupleEntry, Send]],
+        writes: Sequence[ChannelWriteEntry | ChannelWriteTupleEntry | Send],
         *,
-        tags: Optional[Sequence[str]] = None,  # ignored
-        require_at_least_one_of: Optional[Sequence[str]] = None,  # ignored
+        tags: Sequence[str] | None = None,  # ignored
+        require_at_least_one_of: Sequence[str] | None = None,  # ignored
     ):
         super().__init__(
             func=self._write,
@@ -68,9 +67,7 @@ class ChannelWrite(RunnableCallable):
             list[Union[ChannelWriteEntry, ChannelWriteTupleEntry, Send]], writes
         )
 
-    def get_name(
-        self, suffix: Optional[str] = None, *, name: Optional[str] = None
-    ) -> str:
+    def get_name(self, suffix: str | None = None, *, name: str | None = None) -> str:
         if not name:
             name = f"ChannelWrite<{','.join(w.channel if isinstance(w, ChannelWriteEntry) else '...' if isinstance(w, ChannelWriteTupleEntry) else w.node for w in self.writes)}>"
         return super().get_name(suffix, name=name)
@@ -120,8 +117,8 @@ class ChannelWrite(RunnableCallable):
     @staticmethod
     def do_write(
         config: RunnableConfig,
-        writes: Sequence[Union[ChannelWriteEntry, ChannelWriteTupleEntry, Send]],
-        require_at_least_one_of: Optional[Sequence[str]] = None,  # ignored
+        writes: Sequence[ChannelWriteEntry | ChannelWriteTupleEntry | Send],
+        require_at_least_one_of: Sequence[str] | None = None,  # ignored
     ) -> None:
         # validate
         for w in writes:

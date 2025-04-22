@@ -41,11 +41,12 @@ types-requests = "^2.32.0.20240914"
 pycryptodome = "^3.21.0"
 
 [tool.ruff]
-lint.select = [ "E", "F", "I", "TID251" ]
+lint.select = [ "E", "F", "I", "TID251", "UP" ]
 lint.ignore = [ "E501" ]
 line-length = 88
 indent-width = 4
 extend-include = ["*.ipynb"]
+target-version = "py39"
 
 [tool.ruff.format]
 quote-style = "double"
