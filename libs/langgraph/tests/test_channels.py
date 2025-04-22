@@ -34,7 +34,7 @@ def test_last_value() -> None:
 
 def test_topic() -> None:
     channel = Topic(str).from_checkpoint(MISSING)
-    assert channel.ValueType is Sequence[str]
+    assert channel.ValueType == Sequence[str]
     assert channel.UpdateType is Union[str, list[str]]
 
     assert channel.update(["a", "b"])
@@ -58,7 +58,7 @@ def test_topic() -> None:
 
 def test_topic_accumulate() -> None:
     channel = Topic(str, accumulate=True).from_checkpoint(MISSING)
-    assert channel.ValueType is Sequence[str]
+    assert channel.ValueType == Sequence[str]
     assert channel.UpdateType is Union[str, list[str]]
 
     assert channel.update(["a", "b"])

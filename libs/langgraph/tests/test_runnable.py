@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 import pytest
 
@@ -85,7 +85,7 @@ def test_runnable_callable_injectable_arguments() -> None:
     """
 
     # Test Optional[BaseStore] annotation.
-    def func_optional_store(inputs: Any, store: BaseStore | None) -> str:
+    def func_optional_store(inputs: Any, store: Optional[BaseStore]) -> str:
         """Test function that accepts an optional store parameter."""
         assert store is None
         return "success"
@@ -159,12 +159,12 @@ async def test_runnable_callable_injectable_arguments_async() -> None:
     """
 
     # Test Optional[BaseStore] annotation.
-    def func_optional_store(inputs: Any, store: BaseStore | None) -> str:
+    def func_optional_store(inputs: Any, store: Optional[BaseStore]) -> str:
         """Test function that accepts an optional store parameter."""
         assert store is None
         return "success"
 
-    async def afunc_optional_store(inputs: Any, store: BaseStore | None) -> str:
+    async def afunc_optional_store(inputs: Any, store: Optional[BaseStore]) -> str:
         """Async version of func_optional_store."""
         assert store is None
         return "success"
