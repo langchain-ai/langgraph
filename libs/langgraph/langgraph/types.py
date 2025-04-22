@@ -498,7 +498,7 @@ def interrupt(value: Any) -> Any:
     from langgraph.errors import GraphInterrupt
     from langgraph.utils.config import get_config
 
-    conf = get_config()[CONF]
+    conf = get_config()["configurable"]
     # track interrupt index
     scratchpad: PregelScratchpad = conf[CONFIG_KEY_SCRATCHPAD]
     idx = scratchpad.interrupt_counter()
