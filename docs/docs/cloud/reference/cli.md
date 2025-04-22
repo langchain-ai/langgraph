@@ -10,9 +10,6 @@ The LangGraph command line interface includes commands to build and run a LangGr
     === "Python"
         ```bash
         pip install langgraph-cli
-
-        # Install via Homebrew
-        brew install langgraph-cli
         ```
 
     === "JS"
@@ -298,6 +295,11 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
     | `--no-reload`                 |                  | Disable auto-reload                                                                 |
     | `--n-jobs-per-worker INTEGER` |                  | Number of jobs per worker. Default is 10                                            |
     | `--debug-port INTEGER`        |                  | Port for debugger to listen on                                                      |
+    | `--wait-for-client`           | `False`          | Wait for a debugger client to connect to the debug port before starting the server   |
+    | `--no-browser`                |                  | Skip automatically opening the browser when the server starts                       |
+    | `--studio-url TEXT`           |                  | URL of the LangGraph Studio instance to connect to. Defaults to https://smith.langchain.com |
+    | `--allow-blocking`            | `False`          | Do not raise errors for synchronous I/O blocking operations in your code (added in `0.2.6`)           |
+    | `--tunnel`                    | `False`          | Expose the local server via a public tunnel (Cloudflare) for remote frontend access. This avoids issues with browsers like Safari or networks blocking localhost connections        |
     | `--help`                      |                  | Display command documentation                                                       |
 
 
@@ -321,6 +323,11 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
     | `--no-reload`                 |                  | Disable auto-reload                                                                 |
     | `--n-jobs-per-worker INTEGER` |                  | Number of jobs per worker. Default is 10                                            |
     | `--debug-port INTEGER`        |                  | Port for debugger to listen on                                                      |
+    | `--wait-for-client`           | `False`          | Wait for a debugger client to connect to the debug port before starting the server   |
+    | `--no-browser`                |                  | Skip automatically opening the browser when the server starts                       |
+    | `--studio-url TEXT`           |                  | URL of the LangGraph Studio instance to connect to. Defaults to https://smith.langchain.com |
+    | `--allow-blocking`            | `False`          | Do not raise errors for synchronous I/O blocking operations in your code            |
+    | `--tunnel`                    | `False`          | Expose the local server via a public tunnel (Cloudflare) for remote frontend access. This avoids issues with browsers or networks blocking localhost connections        |
     | `--help`                      |                  | Display command documentation                                                       |
 
 ### `build`
