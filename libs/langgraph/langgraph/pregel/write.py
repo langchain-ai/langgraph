@@ -5,6 +5,7 @@ from typing import (
     Any,
     Callable,
     NamedTuple,
+    Optional,
     TypeVar,
     Union,
     cast,

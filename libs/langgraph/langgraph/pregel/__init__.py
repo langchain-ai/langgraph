@@ -557,7 +557,7 @@ class Pregel(PregelProtocol):
             self.validate()
 
     def get_graph(
-        self, config: RunnableConfig | None = None, *, xray: int | bool = Fals
+        self, config: RunnableConfig | None = None, *, xray: int | bool = False
     ) -> Graph:
         """Returns a drawable representation of the computation graph."""
         # gather subgraphs
@@ -585,10 +585,7 @@ class Pregel(PregelProtocol):
         )
 
     async def aget_graph(
-        self,
-        config: RunnableConfig | None = None,
-        *,
-        xray: int | bool = False
+        self, config: RunnableConfig | None = None, *, xray: int | bool = False
     ) -> Graph:
         """Returns a drawable representation of the computation graph."""
 
