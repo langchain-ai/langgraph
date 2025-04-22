@@ -1043,10 +1043,10 @@ class ThreadsClient:
         status: Optional[ThreadStatus] = None,
         limit: int = 10,
         offset: int = 0,
-        sort_by: Literal[
-            "thread_id", "status", "created_at", "updated_at"
-        ] = "created_at",
-        sort_order: Literal["asc", "desc"] = "desc",
+        sort_by: Optional[
+            Literal["thread_id", "status", "created_at", "updated_at"]
+        ] = None,
+        sort_order: Optional[Literal["asc", "desc"]] = None,
         headers: Optional[dict[str, str]] = None,
     ) -> list[Thread]:
         """Search for threads.

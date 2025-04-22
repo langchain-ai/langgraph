@@ -621,7 +621,7 @@ export class ThreadsClient<
     /**
      * Sort by.
      */
-    sortBy?: "id" | "status" | "created_at" | "updated_at";
+    sortBy?: "thread_id" | "status" | "created_at" | "updated_at";
     /**
      * Sort order.
      * Must be one of 'asc' or 'desc'.
@@ -635,8 +635,8 @@ export class ThreadsClient<
         limit: query?.limit ?? 10,
         offset: query?.offset ?? 0,
         status: query?.status,
-        sort_by: query?.sortBy ?? "created_at",
-        sort_order: query?.sortOrder ?? "desc",
+        sort_by: query?.sortBy,
+        sort_order: query?.sortOrder,
       },
     });
   }
