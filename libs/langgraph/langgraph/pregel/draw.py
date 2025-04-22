@@ -31,7 +31,7 @@ def draw_graph(
     input_channels: Union[str, Sequence[str]],
     interrupt_after_nodes: Union[All, Sequence[str]],
     interrupt_before_nodes: Union[All, Sequence[str]],
-    trigger_to_nodes: Optional[Mapping[str, Sequence[str]]],
+    trigger_to_nodes: Mapping[str, Sequence[str]],
     checkpointer: Checkpointer,
     subgraphs: dict[str, Graph],
     limit: int = 250,
@@ -79,6 +79,7 @@ def draw_graph(
                 PregelTaskWrites((), INPUT, input_writes, []),
             ],
             get_next_version,
+            trigger_to_nodes,
         )
         # prepare first tasks
         tasks = prepare_next_tasks(
@@ -144,7 +145,7 @@ def draw_graph(
                     trigger_to_sources[trigger].add((src, cond, label))
             # apply writes
             _, updated_channels = apply_writes(
-                checkpoint, channels, tasks.values(), get_next_version
+                checkpoint, channels, tasks.values(), get_next_version, trigger_to_nodes
             )
             # prepare next tasks
             tasks = prepare_next_tasks(
@@ -166,6 +167,7 @@ def draw_graph(
             for task in tasks.values():
                 for trigger in task.triggers:
                     for src, cond, label in sorted(trigger_to_sources[trigger]):
+                        print("adding edge", src, task.name, cond, label)
                         edges.add((src, task.name, cond, label))
         # assemble the graph
         graph = Graph()

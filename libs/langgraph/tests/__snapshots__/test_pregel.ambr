@@ -396,16 +396,17 @@
   
   '''
 # ---
-# name: test_in_one_fan_out_state_graph_barrier_node[memory]
+# name: test_in_one_fan_out_state_graph_barrier_node[memory-True]
   '''
   graph TD;
   	__start__ --> rewrite_query;
-  	qa --> __end__;
   	retriever_one --> analyzer_one;
   	retriever_one --> qa;
   	retriever_two --> qa;
   	rewrite_query --> retriever_one;
   	rewrite_query --> retriever_two;
+  	analyzer_one --> __end__;
+  	qa --> __end__;
   
   '''
 # ---

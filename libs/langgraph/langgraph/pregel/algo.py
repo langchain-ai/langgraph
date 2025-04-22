@@ -343,7 +343,7 @@ def apply_writes(
         and updated_channels.isdisjoint(trigger_to_nodes)
     ):
         for chan in channels:
-            if channels[chan].finish():
+            if channels[chan].finish() and get_next_version is not None:
                 updated_channels.add(chan)
                 checkpoint["channel_versions"][chan] = get_next_version(
                     max_version,
