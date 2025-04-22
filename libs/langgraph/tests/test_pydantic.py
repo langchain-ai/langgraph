@@ -6,7 +6,7 @@ import re
 import sys
 import uuid
 from enum import Enum
-from typing import Annotated, List, Literal, Optional, Union
+from typing import Annotated, Literal, Optional, Union
 
 import pytest
 
@@ -183,7 +183,7 @@ def test_nested_pydantic_models(version: str) -> None:
         validated_age: Annotated[int, Field(gt=0, lt=120)]
 
         # Generic containers with validators
-        decimal_list: List[decimal.Decimal]
+        decimal_list: list[decimal.Decimal]
         id_tuple: tuple[uuid.UUID, uuid.UUID]
 
     inputs = {

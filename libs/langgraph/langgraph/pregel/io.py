@@ -1,5 +1,6 @@
 from collections import Counter
-from typing import Any, Iterator, Literal, Mapping, Optional, Sequence, TypeVar, Union
+from collections.abc import Iterator, Mapping, Sequence
+from typing import Any, Literal, Optional, TypeVar, Union
 from uuid import UUID
 
 from langchain_core.runnables.utils import AddableDict

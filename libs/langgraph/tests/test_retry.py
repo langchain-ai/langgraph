@@ -226,9 +226,10 @@ def test_graph_with_jitter_retry_policy():
     )
 
     # Test graph execution with mocked random and sleep
-    with patch("random.uniform", return_value=0.05) as mock_random, patch(
-        "time.sleep"
-    ) as mock_sleep:
+    with (
+        patch("random.uniform", return_value=0.05) as mock_random,
+        patch("time.sleep") as mock_sleep,
+    ):
         result = graph.invoke({"foo": ""})
 
     # Verify retry behavior
@@ -334,8 +335,9 @@ def test_graph_with_max_attempts_exceeded():
     )
 
     # Test graph execution
-    with patch("time.sleep") as mock_sleep, pytest.raises(
-        ValueError, match="Always fails"
+    with (
+        patch("time.sleep") as mock_sleep,
+        pytest.raises(ValueError, match="Always fails"),
     ):
         graph.invoke({"foo": ""})
 

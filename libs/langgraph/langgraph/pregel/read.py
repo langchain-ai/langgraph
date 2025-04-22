@@ -1,14 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from functools import cached_property
 from typing import (
     Any,
-    AsyncIterator,
     Callable,
-    Iterator,
-    Mapping,
-    Optional,
-    Sequence,
     Union,
 )
 
@@ -37,11 +33,11 @@ class ChannelRead(RunnableCallable):
     """Implements the logic for reading state from CONFIG_KEY_READ.
     Usable both as a runnable as well as a static method to call imperatively."""
 
-    channel: Union[str, list[str]]
+    channel: str | list[str]
 
     fresh: bool = False
 
-    mapper: Optional[Callable[[Any], Any]] = None
+    mapper: Callable[[Any], Any] | None = None
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:
@@ -57,11 +53,11 @@ class ChannelRead(RunnableCallable):
 
     def __init__(
         self,
-        channel: Union[str, list[str]],
+        channel: str | list[str],
         *,
         fresh: bool = False,
-        mapper: Optional[Callable[[Any], Any]] = None,
-        tags: Optional[list[str]] = None,
+        mapper: Callable[[Any], Any] | None = None,
+        tags: list[str] | None = None,
     ) -> None:
         super().__init__(
             func=self._read,
@@ -75,9 +71,7 @@ class ChannelRead(RunnableCallable):
         self.mapper = mapper
         self.channel = channel
 
-    def get_name(
-        self, suffix: Optional[str] = None, *, name: Optional[str] = None
-    ) -> str:
+    def get_name(self, suffix: str | None = None, *, name: str | None = None) -> str:
         if name:
             pass
         elif isinstance(self.channel, str):
@@ -100,9 +94,9 @@ class ChannelRead(RunnableCallable):
     def do_read(
         config: RunnableConfig,
         *,
-        select: Union[str, list[str]],
+        select: str | list[str],
         fresh: bool = False,
-        mapper: Optional[Callable[[Any], Any]] = None,
+        mapper: Callable[[Any], Any] | None = None,
     ) -> Any:
         try:
             read: READ_TYPE = config[CONF][CONFIG_KEY_READ]
@@ -125,7 +119,7 @@ class PregelNode(Runnable):
     itself, but instead acts as a container for the components necessary to make
     a PregelExecutableTask for a node."""
 
-    channels: Union[list[str], Mapping[str, str]]
+    channels: list[str] | Mapping[str, str]
     """The channels that will be passed as input to `bound`.
     If a list, the node will be invoked with the first of that isn't empty.
     If a dict, the keys are the names of the channels, and the values are the keys
@@ -135,7 +129,7 @@ class PregelNode(Runnable):
     """If any of these channels is written to, this node will be triggered in
     the next step."""
 
-    mapper: Optional[Callable[[Any], Any]]
+    mapper: Callable[[Any], Any] | None
     """A function to transform the input before passing it to `bound`."""
 
     writers: list[Runnable]
@@ -146,13 +140,13 @@ class PregelNode(Runnable):
     """The main logic of the node. This will be invoked with the input from 
     `channels`."""
 
-    retry_policy: Optional[Sequence[RetryPolicy]]
+    retry_policy: Sequence[RetryPolicy] | None
     """The retry policies to use when invoking the node."""
 
-    tags: Optional[Sequence[str]]
+    tags: Sequence[str] | None
     """Tags to attach to the node for tracing."""
 
-    metadata: Optional[Mapping[str, Any]]
+    metadata: Mapping[str, Any] | None
     """Metadata to attach to the node for tracing."""
 
     subgraphs: Sequence[PregelProtocol]
@@ -161,15 +155,15 @@ class PregelNode(Runnable):
     def __init__(
         self,
         *,
-        channels: Union[list[str], Mapping[str, str]],
+        channels: list[str] | Mapping[str, str],
         triggers: Sequence[str],
-        mapper: Optional[Callable[[Any], Any]] = None,
-        writers: Optional[list[Runnable]] = None,
-        tags: Optional[list[str]] = None,
-        metadata: Optional[Mapping[str, Any]] = None,
-        bound: Optional[Runnable[Any, Any]] = None,
-        retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
-        subgraphs: Optional[Sequence[PregelProtocol]] = None,
+        mapper: Callable[[Any], Any] | None = None,
+        writers: list[Runnable] | None = None,
+        tags: list[str] | None = None,
+        metadata: Mapping[str, Any] | None = None,
+        bound: Runnable[Any, Any] | None = None,
+        retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+        subgraphs: Sequence[PregelProtocol] | None = None,
     ) -> None:
         self.channels = channels
         self.triggers = list(triggers)
@@ -219,7 +213,7 @@ class PregelNode(Runnable):
         return writers
 
     @cached_property
-    def node(self) -> Optional[Runnable[Any, Any]]:
+    def node(self) -> Runnable[Any, Any] | None:
         """Get a runnable that combines `bound` and `writers`."""
         writers = self.flat_writers
         if self.bound is DEFAULT_BOUND and not writers:
@@ -262,11 +256,9 @@ class PregelNode(Runnable):
 
     def __or__(
         self,
-        other: Union[
-            Runnable[Any, Other],
-            Callable[[Any], Other],
-            Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
-        ],
+        other: Runnable[Any, Other]
+        | Callable[[Any], Other]
+        | Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
     ) -> PregelNode:
         if isinstance(other, Runnable) and ChannelWrite.is_writer(other):
             return self.copy(update=dict(writers=[*self.writers, other]))
@@ -278,7 +270,7 @@ class PregelNode(Runnable):
     def pipe(
         self,
         *others: Runnable[Any, Other] | Callable[[Any], Other],
-        name: Optional[str] = None,
+        name: str | None = None,
     ) -> RunnableSerializable[Any, Other]:
         for other in others:
             self = self | other
@@ -286,19 +278,17 @@ class PregelNode(Runnable):
 
     def __ror__(
         self,
-        other: Union[
-            Runnable[Other, Any],
-            Callable[[Any], Other],
-            Mapping[str, Union[Runnable[Other, Any], Callable[[Other], Any]]],
-        ],
+        other: Runnable[Other, Any]
+        | Callable[[Any], Other]
+        | Mapping[str, Runnable[Other, Any] | Callable[[Other], Any]],
     ) -> RunnableSerializable:
         raise NotImplementedError()
 
     def invoke(
         self,
         input: Input,
-        config: Optional[RunnableConfig] = None,
-        **kwargs: Optional[Any],
+        config: RunnableConfig | None = None,
+        **kwargs: Any | None,
     ) -> Any:
         return self.bound.invoke(
             input,
@@ -309,8 +299,8 @@ class PregelNode(Runnable):
     async def ainvoke(
         self,
         input: Input,
-        config: Optional[RunnableConfig] = None,
-        **kwargs: Optional[Any],
+        config: RunnableConfig | None = None,
+        **kwargs: Any | None,
     ) -> Any:
         return await self.bound.ainvoke(
             input,
@@ -321,8 +311,8 @@ class PregelNode(Runnable):
     def stream(
         self,
         input: Input,
-        config: Optional[RunnableConfig] = None,
-        **kwargs: Optional[Any],
+        config: RunnableConfig | None = None,
+        **kwargs: Any | None,
     ) -> Iterator[Any]:
         yield from self.bound.stream(
             input,
@@ -333,8 +323,8 @@ class PregelNode(Runnable):
     async def astream(
         self,
         input: Input,
-        config: Optional[RunnableConfig] = None,
-        **kwargs: Optional[Any],
+        config: RunnableConfig | None = None,
+        **kwargs: Any | None,
     ) -> AsyncIterator[Any]:
         async for item in self.bound.astream(
             input,

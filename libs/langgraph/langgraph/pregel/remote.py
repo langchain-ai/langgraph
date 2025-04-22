@@ -1,11 +1,9 @@
+from collections.abc import AsyncIterator, Iterator, Sequence
 from dataclasses import asdict
 from typing import (
     Any,
-    AsyncIterator,
-    Iterator,
     Literal,
     Optional,
-    Sequence,
     Union,
     cast,
 )

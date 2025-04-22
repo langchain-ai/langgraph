@@ -1,5 +1,6 @@
 from collections import defaultdict
-from typing import Any, Mapping, Optional, Sequence, Union, cast
+from collections.abc import Mapping, Sequence
+from typing import Any, Optional, Union, cast
 
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import Graph, Node

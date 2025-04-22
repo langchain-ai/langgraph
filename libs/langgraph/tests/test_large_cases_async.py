@@ -2,11 +2,11 @@ import asyncio
 import operator
 import re
 import sys
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import (
     Annotated,
     Any,
-    AsyncIterator,
     Literal,
     Optional,
     Union,
@@ -3805,7 +3805,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
         docs: Annotated[list[str], operator.add]
 
     async def rewrite_query(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f"query: {data['query']}"}
 
     async def retriever_one(data: State) -> State:
         await asyncio.sleep(0.1)

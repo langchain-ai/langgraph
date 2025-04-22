@@ -6,17 +6,11 @@ import concurrent.futures
 import queue
 import weakref
 from collections import defaultdict, deque
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from functools import partial
 from typing import (
     Any,
-    AsyncIterator,
     Callable,
-    Dict,
-    Iterator,
-    Mapping,
-    Optional,
-    Sequence,
-    Type,
     Union,
     cast,
     get_type_hints,
@@ -142,8 +136,8 @@ class Channel:
         cls,
         channels: str,
         *,
-        key: Optional[str] = None,
-        tags: Optional[list[str]] = None,
+        key: str | None = None,
+        tags: list[str] | None = None,
     ) -> PregelNode: ...
 
     @overload
@@ -153,16 +147,16 @@ class Channel:
         channels: Sequence[str],
         *,
         key: None = None,
-        tags: Optional[list[str]] = None,
+        tags: list[str] | None = None,
     ) -> PregelNode: ...
 
     @classmethod
     def subscribe_to(
         cls,
-        channels: Union[str, Sequence[str]],
+        channels: str | Sequence[str],
         *,
-        key: Optional[str] = None,
-        tags: Optional[list[str]] = None,
+        key: str | None = None,
+        tags: list[str] | None = None,
     ) -> PregelNode:
         """Runs process.invoke() each time channels are updated,
         with a dict of the channel values as input."""
@@ -468,7 +462,7 @@ class Pregel(PregelProtocol):
 
     nodes: dict[str, PregelNode]
 
-    channels: dict[str, Union[BaseChannel, ManagedValueSpec]]
+    channels: dict[str, BaseChannel | ManagedValueSpec]
 
     stream_mode: StreamMode = "values"
     """Mode to stream output, defaults to 'values'."""
@@ -477,18 +471,18 @@ class Pregel(PregelProtocol):
     """Whether to force emitting stream events eagerly, automatically turned on
     for stream_mode "messages" and "custom"."""
 
-    output_channels: Union[str, Sequence[str]]
+    output_channels: str | Sequence[str]
 
-    stream_channels: Optional[Union[str, Sequence[str]]] = None
+    stream_channels: str | Sequence[str] | None = None
     """Channels to stream, defaults to all channels not in reserved channels"""
 
-    interrupt_after_nodes: Union[All, Sequence[str]]
+    interrupt_after_nodes: All | Sequence[str]
 
-    interrupt_before_nodes: Union[All, Sequence[str]]
+    interrupt_before_nodes: All | Sequence[str]
 
-    input_channels: Union[str, Sequence[str]]
+    input_channels: str | Sequence[str]
 
-    step_timeout: Optional[float] = None
+    step_timeout: float | None = None
     """Maximum time to wait for a step to complete, in seconds. Defaults to None."""
 
     debug: bool
@@ -497,44 +491,44 @@ class Pregel(PregelProtocol):
     checkpointer: Checkpointer = None
     """Checkpointer used to save and load graph state. Defaults to None."""
 
-    store: Optional[BaseStore] = None
+    store: BaseStore | None = None
     """Memory store to use for SharedValues. Defaults to None."""
 
-    retry_policy: Optional[Sequence[RetryPolicy]] = None
+    retry_policy: Sequence[RetryPolicy] | None = None
     """Retry policies to use when running tasks. Set to None to disable."""
 
-    config_type: Optional[Type[Any]] = None
+    config_type: type[Any] | None = None
 
-    input_model: Optional[Type[BaseModel]] = None
+    input_model: type[BaseModel] | None = None
 
-    config: Optional[RunnableConfig] = None
+    config: RunnableConfig | None = None
 
     name: str = "LangGraph"
 
-    trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None
+    trigger_to_nodes: Mapping[str, Sequence[str]] | None = None
 
     def __init__(
         self,
         *,
         nodes: dict[str, PregelNode],
-        channels: Optional[dict[str, Union[BaseChannel, ManagedValueSpec]]],
+        channels: dict[str, BaseChannel | ManagedValueSpec] | None,
         auto_validate: bool = True,
         stream_mode: StreamMode = "values",
         stream_eager: bool = False,
-        output_channels: Union[str, Sequence[str]],
-        stream_channels: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_after_nodes: Union[All, Sequence[str]] = (),
-        interrupt_before_nodes: Union[All, Sequence[str]] = (),
-        input_channels: Union[str, Sequence[str]],
-        step_timeout: Optional[float] = None,
-        debug: Optional[bool] = None,
-        checkpointer: Optional[BaseCheckpointSaver] = None,
-        store: Optional[BaseStore] = None,
-        retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
-        config_type: Optional[Type[Any]] = None,
-        input_model: Optional[Type[BaseModel]] = None,
-        config: Optional[RunnableConfig] = None,
-        trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
+        output_channels: str | Sequence[str],
+        stream_channels: str | Sequence[str] | None = None,
+        interrupt_after_nodes: All | Sequence[str] = (),
+        interrupt_before_nodes: All | Sequence[str] = (),
+        input_channels: str | Sequence[str],
+        step_timeout: float | None = None,
+        debug: bool | None = None,
+        checkpointer: BaseCheckpointSaver | None = None,
+        store: BaseStore | None = None,
+        retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+        config_type: type[Any] | None = None,
+        input_model: type[BaseModel] | None = None,
+        config: RunnableConfig | None = None,
+        trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
         name: str = "LangGraph",
     ) -> None:
         self.nodes = nodes
@@ -563,10 +557,7 @@ class Pregel(PregelProtocol):
             self.validate()
 
     def get_graph(
-        self,
-        config: Optional[RunnableConfig] = None,
-        *,
-        xray: Union[int, bool] = False,
+        self, config: RunnableConfig | None = None, *, xray: int | bool = False
     ) -> Graph:
         """Returns a drawable representation of the computation graph."""
         # gather subgraphs
@@ -594,10 +585,7 @@ class Pregel(PregelProtocol):
         )
 
     async def aget_graph(
-        self,
-        config: Optional[RunnableConfig] = None,
-        *,
-        xray: Union[int, bool] = False,
+        self, config: RunnableConfig | None = None, *, xray: int | bool = False
     ) -> Graph:
         """Returns a drawable representation of the computation graph."""
 
@@ -645,13 +633,11 @@ class Pregel(PregelProtocol):
             "image/png": self.get_graph().draw_mermaid_png(),
         }
 
-    def copy(self, update: Optional[dict[str, Any]] = None) -> Self:
+    def copy(self, update: dict[str, Any] | None = None) -> Self:
         attrs = {**self.__dict__, **(update or {})}
         return self.__class__(**attrs)
 
-    def with_config(
-        self, config: Optional[RunnableConfig] = None, **kwargs: Any
-    ) -> Self:
+    def with_config(self, config: RunnableConfig | None = None, **kwargs: Any) -> Self:
         return self.copy(
             {"config": merge_configs(self.config, config, cast(RunnableConfig, kwargs))}
         )
@@ -706,9 +692,7 @@ class Pregel(PregelProtocol):
             ]
         ]
 
-    def config_schema(
-        self, *, include: Optional[Sequence[str]] = None
-    ) -> Type[BaseModel]:
+    def config_schema(self, *, include: Sequence[str] | None = None) -> type[BaseModel]:
         # If the config type is not set explicitly, we will try to infer it.
         # If the config type is provided, but isn't directly supported by pydantic
         # (e.g., vanilla python class), we will also delegate to the parent class,
@@ -728,8 +712,8 @@ class Pregel(PregelProtocol):
         return create_model(self.get_name("Config"), field_definitions=fields)
 
     def get_config_jsonschema(
-        self, *, include: Optional[Sequence[str]] = None
-    ) -> Dict[str, Any]:
+        self, *, include: Sequence[str] | None = None
+    ) -> dict[str, Any]:
         schema = self.config_schema(include=include)
         if hasattr(schema, "model_json_schema"):
             return schema.model_json_schema()
@@ -743,9 +727,7 @@ class Pregel(PregelProtocol):
             if isinstance(channel, BaseChannel):
                 return channel.UpdateType
 
-    def get_input_schema(
-        self, config: Optional[RunnableConfig] = None
-    ) -> Type[BaseModel]:
+    def get_input_schema(self, config: RunnableConfig | None = None) -> type[BaseModel]:
         if self.input_model is not None:
             return self.input_model
         config = merge_configs(self.config, config)
@@ -762,8 +744,8 @@ class Pregel(PregelProtocol):
             )
 
     def get_input_jsonschema(
-        self, config: Optional[RunnableConfig] = None
-    ) -> Dict[str, Any]:
+        self, config: RunnableConfig | None = None
+    ) -> dict[str, Any]:
         schema = self.get_input_schema(config)
         if hasattr(schema, "model_json_schema"):
             return schema.model_json_schema()
@@ -778,8 +760,8 @@ class Pregel(PregelProtocol):
                 return channel.ValueType
 
     def get_output_schema(
-        self, config: Optional[RunnableConfig] = None
-    ) -> Type[BaseModel]:
+        self, config: RunnableConfig | None = None
+    ) -> type[BaseModel]:
         config = merge_configs(self.config, config)
         if isinstance(self.output_channels, str):
             return super().get_output_schema(config)
@@ -794,8 +776,8 @@ class Pregel(PregelProtocol):
             )
 
     def get_output_jsonschema(
-        self, config: Optional[RunnableConfig] = None
-    ) -> Dict[str, Any]:
+        self, config: RunnableConfig | None = None
+    ) -> dict[str, Any]:
         schema = self.get_output_schema(config)
         if hasattr(schema, "model_json_schema"):
             return schema.model_json_schema()
@@ -810,13 +792,13 @@ class Pregel(PregelProtocol):
         )
 
     @property
-    def stream_channels_asis(self) -> Union[str, Sequence[str]]:
+    def stream_channels_asis(self) -> str | Sequence[str]:
         return self.stream_channels or [
             k for k in self.channels if isinstance(self.channels[k], BaseChannel)
         ]
 
     def get_subgraphs(
-        self, *, namespace: Optional[str] = None, recurse: bool = False
+        self, *, namespace: str | None = None, recurse: bool = False
     ) -> Iterator[tuple[str, PregelProtocol]]:
         for name, node in self.nodes.items():
             # filter by prefix
@@ -845,7 +827,7 @@ class Pregel(PregelProtocol):
                     )
 
     async def aget_subgraphs(
-        self, *, namespace: Optional[str] = None, recurse: bool = False
+        self, *, namespace: str | None = None, recurse: bool = False
     ) -> AsyncIterator[tuple[str, PregelProtocol]]:
         for name, node in self.get_subgraphs(namespace=namespace, recurse=recurse):
             yield name, node
@@ -857,8 +839,8 @@ class Pregel(PregelProtocol):
     def _prepare_state_snapshot(
         self,
         config: RunnableConfig,
-        saved: Optional[CheckpointTuple],
-        recurse: Optional[BaseCheckpointSaver] = None,
+        saved: CheckpointTuple | None,
+        recurse: BaseCheckpointSaver | None = None,
         apply_pending_writes: bool = False,
     ) -> StateSnapshot:
         if not saved:
@@ -906,7 +888,7 @@ class Pregel(PregelProtocol):
             # get the subgraphs
             subgraphs = dict(self.get_subgraphs())
             parent_ns = saved.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
-            task_states: dict[str, Union[RunnableConfig, StateSnapshot]] = {}
+            task_states: dict[str, RunnableConfig | StateSnapshot] = {}
             for task in next_tasks.values():
                 if task.name not in subgraphs:
                     continue
@@ -973,8 +955,8 @@ class Pregel(PregelProtocol):
     async def _aprepare_state_snapshot(
         self,
         config: RunnableConfig,
-        saved: Optional[CheckpointTuple],
-        recurse: Optional[BaseCheckpointSaver] = None,
+        saved: CheckpointTuple | None,
+        recurse: BaseCheckpointSaver | None = None,
         apply_pending_writes: bool = False,
     ) -> StateSnapshot:
         if not saved:
@@ -1025,7 +1007,7 @@ class Pregel(PregelProtocol):
             # get the subgraphs
             subgraphs = {n: g async for n, g in self.aget_subgraphs()}
             parent_ns = saved.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
-            task_states: dict[str, Union[RunnableConfig, StateSnapshot]] = {}
+            task_states: dict[str, RunnableConfig | StateSnapshot] = {}
             for task in next_tasks.values():
                 if task.name not in subgraphs:
                     continue
@@ -1093,7 +1075,7 @@ class Pregel(PregelProtocol):
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot:
         """Get the current state of the graph."""
-        checkpointer: Optional[BaseCheckpointSaver] = ensure_config(config)[CONF].get(
+        checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -1135,7 +1117,7 @@ class Pregel(PregelProtocol):
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot:
         """Get the current state of the graph."""
-        checkpointer: Optional[BaseCheckpointSaver] = ensure_config(config)[CONF].get(
+        checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -1177,13 +1159,13 @@ class Pregel(PregelProtocol):
         self,
         config: RunnableConfig,
         *,
-        filter: Optional[Dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
     ) -> Iterator[StateSnapshot]:
         config = ensure_config(config)
         """Get the history of the state of the graph."""
-        checkpointer: Optional[BaseCheckpointSaver] = ensure_config(config)[CONF].get(
+        checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -1228,13 +1210,13 @@ class Pregel(PregelProtocol):
         self,
         config: RunnableConfig,
         *,
-        filter: Optional[Dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
     ) -> AsyncIterator[StateSnapshot]:
         config = ensure_config(config)
         """Get the history of the state of the graph."""
-        checkpointer: Optional[BaseCheckpointSaver] = ensure_config(config)[CONF].get(
+        checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -1299,7 +1281,7 @@ class Pregel(PregelProtocol):
             RunnableConfig: The updated config.
         """
 
-        checkpointer: Optional[BaseCheckpointSaver] = ensure_config(config)[CONF].get(
+        checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -1574,7 +1556,7 @@ class Pregel(PregelProtocol):
                         next_tasks[tid].writes.append((k, v))
                     if tasks := [t for t in next_tasks.values() if t.writes]:
                         apply_writes(checkpoint, channels, tasks, None)
-            valid_updates: list[tuple[str, Optional[dict[str, Any]]]] = []
+            valid_updates: list[tuple[str, dict[str, Any] | None]] = []
             if len(updates) == 1:
                 values, as_node = updates[0]
                 # find last node that updated the state, if not provided
@@ -1713,7 +1695,7 @@ class Pregel(PregelProtocol):
             RunnableConfig: The updated config.
         """
 
-        checkpointer: Optional[BaseCheckpointSaver] = ensure_config(config)[CONF].get(
+        checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -1988,7 +1970,7 @@ class Pregel(PregelProtocol):
                         next_tasks[tid].writes.append((k, v))
                     if tasks := [t for t in next_tasks.values() if t.writes]:
                         apply_writes(checkpoint, channels, tasks, None)
-            valid_updates: list[tuple[str, Optional[dict[str, Any]]]] = []
+            valid_updates: list[tuple[str, dict[str, Any] | None]] = []
             if len(updates) == 1:
                 values, as_node = updates[0]
                 # find last node that updated the state, if not provided
@@ -2108,8 +2090,8 @@ class Pregel(PregelProtocol):
     def update_state(
         self,
         config: RunnableConfig,
-        values: Optional[Union[dict[str, Any], Any]],
-        as_node: Optional[str] = None,
+        values: dict[str, Any] | Any | None,
+        as_node: str | None = None,
     ) -> RunnableConfig:
         """Update the state of the graph with the given values, as if they came from
         node `as_node`. If `as_node` is not provided, it will be set to the last node
@@ -2121,7 +2103,7 @@ class Pregel(PregelProtocol):
         self,
         config: RunnableConfig,
         values: dict[str, Any] | Any,
-        as_node: Optional[str] = None,
+        as_node: str | None = None,
     ) -> RunnableConfig:
         """Update the state of the graph asynchronously with the given values, as if they came from
         node `as_node`. If `as_node` is not provided, it will be set to the last node
@@ -2133,19 +2115,19 @@ class Pregel(PregelProtocol):
         self,
         config: RunnableConfig,
         *,
-        stream_mode: Optional[Union[StreamMode, list[StreamMode]]],
-        output_keys: Optional[Union[str, Sequence[str]]],
-        interrupt_before: Optional[Union[All, Sequence[str]]],
-        interrupt_after: Optional[Union[All, Sequence[str]]],
-        debug: Optional[bool],
+        stream_mode: StreamMode | list[StreamMode] | None,
+        output_keys: str | Sequence[str] | None,
+        interrupt_before: All | Sequence[str] | None,
+        interrupt_after: All | Sequence[str] | None,
+        debug: bool | None,
     ) -> tuple[
         bool,
         set[StreamMode],
-        Union[str, Sequence[str]],
-        Union[All, Sequence[str]],
-        Union[All, Sequence[str]],
-        Optional[BaseCheckpointSaver],
-        Optional[BaseStore],
+        str | Sequence[str],
+        All | Sequence[str],
+        All | Sequence[str],
+        BaseCheckpointSaver | None,
+        BaseStore | None,
     ]:
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
@@ -2163,7 +2145,7 @@ class Pregel(PregelProtocol):
             # if being called as a node in another graph, always use values mode
             stream_mode = ["values"]
         if self.checkpointer is False:
-            checkpointer: Optional[BaseCheckpointSaver] = None
+            checkpointer: BaseCheckpointSaver | None = None
         elif CONFIG_KEY_CHECKPOINTER in config.get(CONF, {}):
             checkpointer = config[CONF][CONFIG_KEY_CHECKPOINTER]
         elif self.checkpointer is True:
@@ -2175,7 +2157,7 @@ class Pregel(PregelProtocol):
                 f"Checkpointer requires one or more of the following 'configurable' keys: {[s.id for s in checkpointer.config_specs]}"
             )
         if CONFIG_KEY_STORE in config.get(CONF, {}):
-            store: Optional[BaseStore] = config[CONF][CONFIG_KEY_STORE]
+            store: BaseStore | None = config[CONF][CONFIG_KEY_STORE]
         else:
             store = self.store
         return (
@@ -2190,17 +2172,17 @@ class Pregel(PregelProtocol):
 
     def stream(
         self,
-        input: Union[dict[str, Any], Any],
-        config: Optional[RunnableConfig] = None,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
         *,
-        stream_mode: Optional[Union[StreamMode, list[StreamMode]]] = None,
-        output_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        checkpoint_during: Optional[bool] = None,
-        debug: Optional[bool] = None,
+        stream_mode: StreamMode | list[StreamMode] | None = None,
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        checkpoint_during: bool | None = None,
+        debug: bool | None = None,
         subgraphs: bool = False,
-    ) -> Iterator[Union[dict[str, Any], Any]]:
+    ) -> Iterator[dict[str, Any] | Any]:
         """Stream graph steps for a single input.
 
         Args:
@@ -2426,7 +2408,7 @@ class Pregel(PregelProtocol):
                 ):
                     # we are careful to have a single waiter live at any one time
                     # because on exit we increment semaphore count by exactly 1
-                    waiter: Optional[concurrent.futures.Future] = None
+                    waiter: concurrent.futures.Future | None = None
                     # because sync futures cannot be cancelled, we instead
                     # release the stream semaphore on exit, which will cause
                     # a pending waiter to return immediately
@@ -2477,17 +2459,17 @@ class Pregel(PregelProtocol):
 
     async def astream(
         self,
-        input: Union[dict[str, Any], Any],
-        config: Optional[RunnableConfig] = None,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
         *,
-        stream_mode: Optional[Union[StreamMode, list[StreamMode]]] = None,
-        output_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        checkpoint_during: Optional[bool] = None,
-        debug: Optional[bool] = None,
+        stream_mode: StreamMode | list[StreamMode] | None = None,
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        checkpoint_during: bool | None = None,
+        debug: bool | None = None,
         subgraphs: bool = False,
-    ) -> AsyncIterator[Union[dict[str, Any], Any]]:
+    ) -> AsyncIterator[dict[str, Any] | Any]:
         """Stream graph steps for a single input.
 
         Args:
@@ -2778,17 +2760,17 @@ class Pregel(PregelProtocol):
 
     def invoke(
         self,
-        input: Union[dict[str, Any], Any],
-        config: Optional[RunnableConfig] = None,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode = "values",
-        output_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        checkpoint_during: Optional[bool] = None,
-        debug: Optional[bool] = None,
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        checkpoint_during: bool | None = None,
+        debug: bool | None = None,
         **kwargs: Any,
-    ) -> Union[dict[str, Any], Any]:
+    ) -> dict[str, Any] | Any:
         """Run the graph with a single input and config.
 
         Args:
@@ -2807,7 +2789,7 @@ class Pregel(PregelProtocol):
         """
         output_keys = output_keys if output_keys is not None else self.output_channels
         if stream_mode == "values":
-            latest: Union[dict[str, Any], Any] = None
+            latest: dict[str, Any] | Any = None
         else:
             chunks = []
         for chunk in self.stream(
@@ -2832,17 +2814,17 @@ class Pregel(PregelProtocol):
 
     async def ainvoke(
         self,
-        input: Union[dict[str, Any], Any],
-        config: Optional[RunnableConfig] = None,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode = "values",
-        output_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        checkpoint_during: Optional[bool] = None,
-        debug: Optional[bool] = None,
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        checkpoint_during: bool | None = None,
+        debug: bool | None = None,
         **kwargs: Any,
-    ) -> Union[dict[str, Any], Any]:
+    ) -> dict[str, Any] | Any:
         """Asynchronously invoke the graph on a single input.
 
         Args:
@@ -2862,7 +2844,7 @@ class Pregel(PregelProtocol):
 
         output_keys = output_keys if output_keys is not None else self.output_channels
         if stream_mode == "values":
-            latest: Union[dict[str, Any], Any] = None
+            latest: dict[str, Any] | Any = None
         else:
             chunks = []
         async for chunk in self.astream(

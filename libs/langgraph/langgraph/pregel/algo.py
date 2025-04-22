@@ -3,19 +3,17 @@ import itertools
 import sys
 import threading
 from collections import defaultdict, deque
+from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
 from functools import partial
 from hashlib import sha1
 from typing import (
     Any,
     Callable,
-    Iterable,
     Literal,
-    Mapping,
     NamedTuple,
     Optional,
     Protocol,
-    Sequence,
     Union,
     cast,
     overload,
