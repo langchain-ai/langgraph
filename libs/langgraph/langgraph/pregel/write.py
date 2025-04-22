@@ -14,7 +14,7 @@ from typing import (
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
-from langgraph.constants import CONF, CONFIG_KEY_SEND, TASKS, Send
+from langgraph.constants import CONF, CONFIG_KEY_SEND, MISSING, TASKS, Send
 from langgraph.errors import InvalidUpdateError
 from langgraph.utils.runnable import RunnableCallable
 
@@ -41,6 +41,8 @@ class ChannelWriteTupleEntry(NamedTuple):
     """Function to extract tuples from value."""
     value: Any = PASSTHROUGH
     """Value to write, or PASSTHROUGH to use the input."""
+    static: Optional[Sequence[tuple[str, Any, Optional[str]]]] = None
+    """Optional, declared writes for static analysis."""
 
 
 class ChannelWrite(RunnableCallable):
@@ -121,6 +123,7 @@ class ChannelWrite(RunnableCallable):
     def do_write(
         config: RunnableConfig,
         writes: Sequence[Union[ChannelWriteEntry, ChannelWriteTupleEntry, Send]],
+        allow_passthrough: bool = True,
         require_at_least_one_of: Optional[Sequence[str]] = None,  # ignored
     ) -> None:
         # validate
@@ -130,46 +133,80 @@ class ChannelWrite(RunnableCallable):
                     raise InvalidUpdateError(
                         "Cannot write to the reserved channel TASKS"
                     )
-                if w.value is PASSTHROUGH:
+                if w.value is PASSTHROUGH and not allow_passthrough:
                     raise InvalidUpdateError("PASSTHROUGH value must be replaced")
             if isinstance(w, ChannelWriteTupleEntry):
-                if w.value is PASSTHROUGH:
+                if w.value is PASSTHROUGH and not allow_passthrough:
                     raise InvalidUpdateError("PASSTHROUGH value must be replaced")
-        # assemble writes
-        tuples: list[tuple[str, Any]] = []
-        for w in writes:
-            if isinstance(w, Send):
-                tuples.append((TASKS, w))
-            elif isinstance(w, ChannelWriteTupleEntry):
-                if ww := w.mapper(w.value):
-                    tuples.extend(ww)
-            elif isinstance(w, ChannelWriteEntry):
-                value = w.mapper(w.value) if w.mapper is not None else w.value
-                if value is SKIP_WRITE:
-                    continue
-                if w.skip_none and value is None:
-                    continue
-                tuples.append((w.channel, value))
-            else:
-                raise ValueError(f"Invalid write entry: {w}")
         # if we want to persist writes found before hitting a ParentCommand
         # can move this to a finally block
         write: TYPE_SEND = config[CONF][CONFIG_KEY_SEND]
-        write(tuples)
+        write(_assemble_writes(writes))
 
     @staticmethod
     def is_writer(runnable: Runnable) -> bool:
         """Used by PregelNode to distinguish between writers and other runnables."""
         return (
             isinstance(runnable, ChannelWrite)
-            or getattr(runnable, "_is_channel_writer", False) is True
+            or getattr(runnable, "_is_channel_writer", MISSING) is not MISSING
         )
 
     @staticmethod
-    def register_writer(runnable: R) -> R:
+    def get_static_writes(
+        runnable: Runnable,
+    ) -> Optional[Sequence[tuple[str, Any, Optional[str]]]]:
+        """Used to get conditional writes a writer declares for static analysis."""
+        if isinstance(runnable, ChannelWrite):
+            return [
+                w
+                for entry in runnable.writes
+                if isinstance(entry, ChannelWriteTupleEntry) and entry.static
+                for w in entry.static
+            ] or None
+        elif writes := getattr(runnable, "_is_channel_writer", MISSING):
+            if writes is not MISSING:
+                writes = cast(
+                    Sequence[tuple[Union[ChannelWriteEntry, Send], Optional[str]]],
+                    writes,
+                )
+                entries = [e for e, _ in writes]
+                labels = [la for _, la in writes]
+                return [(*t, la) for t, la in zip(_assemble_writes(entries), labels)]
+
+    @staticmethod
+    def register_writer(
+        runnable: R,
+        static: Optional[
+            Sequence[tuple[Union[ChannelWriteEntry, Send], Optional[str]]]
+        ] = None,
+    ) -> R:
         """Used to mark a runnable as a writer, so that it can be detected by is_writer.
-        Instances of ChannelWrite are automatically marked as writers."""
+        Instances of ChannelWrite are automatically marked as writers.
+        Optionally, a list of declared writes can be passed for static analysis."""
         # using object.__setattr__ to work around objects that override __setattr__
         # eg. pydantic models and dataclasses
-        object.__setattr__(runnable, "_is_channel_writer", True)
+        object.__setattr__(runnable, "_is_channel_writer", static)
         return runnable
+
+
+def _assemble_writes(
+    writes: Sequence[Union[ChannelWriteEntry, ChannelWriteTupleEntry, Send]],
+) -> list[tuple[str, Any]]:
+    """Assembles the writes into a list of tuples."""
+    tuples: list[tuple[str, Any]] = []
+    for w in writes:
+        if isinstance(w, Send):
+            tuples.append((TASKS, w))
+        elif isinstance(w, ChannelWriteTupleEntry):
+            if ww := w.mapper(w.value):
+                tuples.extend(ww)
+        elif isinstance(w, ChannelWriteEntry):
+            value = w.mapper(w.value) if w.mapper is not None else w.value
+            if value is SKIP_WRITE:
+                continue
+            if w.skip_none and value is None:
+                continue
+            tuples.append((w.channel, value))
+        else:
+            raise ValueError(f"Invalid write entry: {w}")
+    return tuples
