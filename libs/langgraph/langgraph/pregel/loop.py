@@ -916,9 +916,7 @@ class PregelLoop(LoopProtocol):
                             v
                             for w in writes
                             if w[0] == INTERRUPT
-                            for v in (
-                                w[1] if isinstance(w[1], Sequence) else (w[1],)
-                            )
+                            for v in (w[1] if isinstance(w[1], Sequence) else (w[1],))
                         )
                     }
                 ]

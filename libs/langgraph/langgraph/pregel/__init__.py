@@ -108,6 +108,7 @@ from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
     Checkpointer,
+    Interrupt,
     LoopProtocol,
     StateSnapshot,
     StateUpdate,
@@ -2749,17 +2750,15 @@ class Pregel(PregelProtocol):
             **kwargs,
         ):
             if stream_mode == "values":
-                if isinstance(chunk, dict) and (ints := chunk.get(INTERRUPT)) is not None:
-                    interrupts.extend(ints)
+                if isinstance(chunk, dict):
+                    if (ints := chunk.get(INTERRUPT)) is not None:
+                        interrupts.extend(ints)
                 latest = chunk
             else:
                 chunks.append(chunk)
+
         if stream_mode == "values":
-            if len(interrupts) > 0:
-                return {
-                    INTERRUPT: interrupts
-                }
-            return latest
+            return {INTERRUPT: interrupts} if interrupts else latest
         else:
             return chunks
 
@@ -2794,10 +2793,11 @@ class Pregel(PregelProtocol):
         """
 
         output_keys = output_keys if output_keys is not None else self.output_channels
-        if stream_mode == "values":
-            latest: Union[dict[str, Any], Any] = None
-        else:
-            chunks = []
+
+        latest: Union[dict[str, Any], Any] = None
+        chunks: list[Union[dict[str, Any], Any]] = []
+        interrupts: list[Interrupt] = []
+
         async for chunk in self.astream(
             input,
             config,
@@ -2810,11 +2810,15 @@ class Pregel(PregelProtocol):
             **kwargs,
         ):
             if stream_mode == "values":
+                if isinstance(chunk, dict):
+                    if (ints := chunk.get(INTERRUPT)) is not None:
+                        interrupts.extend(ints)
                 latest = chunk
             else:
                 chunks.append(chunk)
+
         if stream_mode == "values":
-            return latest
+            return {INTERRUPT: interrupts} if interrupts else latest
         else:
             return chunks
 
