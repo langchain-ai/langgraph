@@ -400,6 +400,7 @@ nav:
           - troubleshooting/errors/MULTIPLE_SUBGRAPHS.md
           - troubleshooting/errors/INVALID_CHAT_HISTORY.md
           - troubleshooting/errors/INVALID_LICENSE.md
+          - troubleshooting/studio.md
       - LangGraph Academy Course: https://academy.langchain.com/courses/intro-to-langgraph
 
   - Agents:
@@ -549,3 +550,4 @@ copyright: >
   Copyright &copy; 2025 LangChain, Inc | <a href="#__consent">Consent Preferences</a>
 extra_css:
   - stylesheets/version_admonitions.css
+  - stylesheets/logos.css

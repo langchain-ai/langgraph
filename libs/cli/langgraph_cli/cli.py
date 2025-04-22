@@ -572,6 +572,14 @@ def dockerfile(save_path: str, config: pathlib.Path, add_docker_compose: bool) -
     help="Don't raise errors for synchronous I/O blocking operations in your code.",
     default=False,
 )
+@click.option(
+    "--tunnel",
+    is_flag=True,
+    help="Expose the local server via a public tunnel (in this case, Cloudflare) "
+    "for remote frontend access. This avoids issues with browsers "
+    "or networks blocking localhost connections.",
+    default=False,
+)
 @cli.command(
     "dev",
     help="🏃‍♀️‍➡️ Run LangGraph API server in development mode with hot reloading and debugging support",
@@ -588,6 +596,7 @@ def dev(
     wait_for_client: bool,
     studio_url: Optional[str],
     allow_blocking: bool,
+    tunnel: bool,
 ):
     """CLI entrypoint for running the LangGraph API server."""
     try:
@@ -655,6 +664,7 @@ def dev(
         ui_config=config_json.get("ui_config"),
         studio_url=studio_url,
         allow_blocking=allow_blocking,
+        tunnel=tunnel,
     )
 
 
