@@ -1,5 +1,6 @@
 import uuid
 import warnings
+from collections.abc import Sequence
 from functools import partial
 from typing import (
     Annotated,
@@ -7,7 +8,6 @@ from typing import (
     Callable,
     Literal,
     Optional,
-    Sequence,
     Union,
     cast,
 )

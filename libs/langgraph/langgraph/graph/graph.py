@@ -1,13 +1,11 @@
 import logging
 from collections import defaultdict
+from collections.abc import Awaitable, Hashable, Sequence
 from typing import (
     Any,
-    Awaitable,
     Callable,
-    Hashable,
     NamedTuple,
     Optional,
-    Sequence,
     Union,
     cast,
     overload,

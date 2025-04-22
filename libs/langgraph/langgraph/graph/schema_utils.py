@@ -3,10 +3,10 @@ import logging
 import weakref
 from inspect import isclass
 from typing import (
+    Annotated,
     Any,
     Callable,
     Optional,
-    Type,
     Union,
     get_args,
     get_origin,
@@ -15,14 +15,13 @@ from typing import (
 
 from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
-from typing_extensions import Annotated
 
 __all__ = ["SchemaCoercionMapper"]
 
 logger = logging.getLogger(__name__)
 
 
-_cache: weakref.WeakKeyDictionary[Type[Any], dict[int, "SchemaCoercionMapper"]] = (
+_cache: weakref.WeakKeyDictionary[type[Any], dict[int, "SchemaCoercionMapper"]] = (
     weakref.WeakKeyDictionary()
 )
 
@@ -32,7 +31,7 @@ class SchemaCoercionMapper:
 
     def __new__(
         cls,
-        schema: Type[Any],
+        schema: type[Any],
         type_hints: Optional[dict[str, Any]] = None,
         *,
         max_depth: int = 12,
@@ -46,7 +45,7 @@ class SchemaCoercionMapper:
 
     def __init__(
         self,
-        schema: Type[Any],
+        schema: type[Any],
         type_hints: Optional[dict[str, Any]] = None,
         *,
         max_depth: int = 12,
@@ -187,7 +186,7 @@ class SchemaCoercionMapper:
                 def dict_coercer(v: Any, d: Any) -> Any:
                     if not isinstance(v, dict):
                         if throw:
-                            raise TypeError("Expected dict, got %s" % type(v))
+                            raise TypeError(f"Expected dict, got {type(v)}")
                     return v
 
                 return dict_coercer
@@ -197,7 +196,7 @@ class SchemaCoercionMapper:
             def dict_coercer(v: Any, d: Any) -> Any:
                 if not isinstance(v, dict):
                     if throw:
-                        raise TypeError("Expected dict, got %s" % type(v))
+                        raise TypeError(f"Expected dict, got {type(v)}")
                     return v
                 return {k_sub(k, d - 1): v_sub(val, d - 1) for k, val in v.items()}
 

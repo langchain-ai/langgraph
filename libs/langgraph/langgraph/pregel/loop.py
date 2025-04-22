@@ -3,21 +3,20 @@ import binascii
 import concurrent.futures
 import dataclasses
 from collections import defaultdict, deque
-from contextlib import AsyncExitStack, ExitStack
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import (
+    AbstractAsyncContextManager,
+    AbstractContextManager,
+    AsyncExitStack,
+    ExitStack,
+)
 from inspect import signature
 from types import TracebackType
 from typing import (
     Any,
-    AsyncContextManager,
     Callable,
-    ContextManager,
-    Iterator,
-    List,
     Literal,
-    Mapping,
     Optional,
-    Sequence,
-    Type,
     TypeVar,
     Union,
     cast,
@@ -146,7 +145,7 @@ def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
 
 class PregelLoop(LoopProtocol):
     input: Optional[Any]
-    input_model: Optional[Type[BaseModel]]
+    input_model: Optional[type[BaseModel]]
     checkpointer: Optional[BaseCheckpointSaver]
     nodes: Mapping[str, PregelNode]
     specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]]
@@ -186,7 +185,7 @@ class PregelLoop(LoopProtocol):
     checkpoint_ns: tuple[str, ...]
     checkpoint_config: RunnableConfig
     checkpoint_metadata: CheckpointMetadata
-    checkpoint_pending_writes: List[PendingWrite]
+    checkpoint_pending_writes: list[PendingWrite]
     checkpoint_previous_versions: dict[str, Union[str, float, int]]
     prev_checkpoint_config: Optional[RunnableConfig]
 
@@ -214,7 +213,7 @@ class PregelLoop(LoopProtocol):
         interrupt_after: Union[All, Sequence[str]] = EMPTY_SEQ,
         interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
-        input_model: Optional[Type[BaseModel]] = None,
+        input_model: Optional[type[BaseModel]] = None,
         debug: bool = False,
         migrate_checkpoint: Optional[Callable[[Checkpoint], None]] = None,
         trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
@@ -491,7 +490,7 @@ class PregelLoop(LoopProtocol):
             if self.input is INPUT_SHOULD_VALIDATE:
                 self.input = INPUT_DONE
                 # validate
-                cast(Type[BaseModel], self.input_model)(
+                cast(type[BaseModel], self.input_model)(
                     **read_channels(self.channels, self.stream_keys)
                 )
             # produce values output
@@ -839,7 +838,7 @@ class PregelLoop(LoopProtocol):
 
     def _suppress_interrupt(
         self,
-        exc_type: Optional[Type[BaseException]],
+        exc_type: Optional[type[BaseException]],
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
@@ -943,7 +942,7 @@ class PregelLoop(LoopProtocol):
                 )
 
 
-class SyncPregelLoop(PregelLoop, ContextManager):
+class SyncPregelLoop(PregelLoop, AbstractContextManager):
     def __init__(
         self,
         input: Optional[Any],
@@ -959,7 +958,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
         output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
-        input_model: Optional[Type[BaseModel]] = None,
+        input_model: Optional[type[BaseModel]] = None,
         debug: bool = False,
         migrate_checkpoint: Optional[Callable[[Checkpoint], None]] = None,
         trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
@@ -1085,7 +1084,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
 
     def __exit__(
         self,
-        exc_type: Optional[Type[BaseException]],
+        exc_type: Optional[type[BaseException]],
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
@@ -1093,7 +1092,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         return self.stack.__exit__(exc_type, exc_value, traceback)
 
 
-class AsyncPregelLoop(PregelLoop, AsyncContextManager):
+class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
     def __init__(
         self,
         input: Optional[Any],
@@ -1109,7 +1108,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
         output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
-        input_model: Optional[Type[BaseModel]] = None,
+        input_model: Optional[type[BaseModel]] = None,
         debug: bool = False,
         migrate_checkpoint: Optional[Callable[[Checkpoint], None]] = None,
         trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
@@ -1238,7 +1237,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
 
     async def __aexit__(
         self,
-        exc_type: Optional[Type[BaseException]],
+        exc_type: Optional[type[BaseException]],
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:

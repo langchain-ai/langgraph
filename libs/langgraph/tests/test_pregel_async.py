@@ -8,20 +8,15 @@ import random
 import sys
 import uuid
 from collections import Counter, deque
+from collections.abc import AsyncGenerator, AsyncIterator, Generator
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import replace
 from time import perf_counter
 from typing import (
     Annotated,
     Any,
-    AsyncGenerator,
-    AsyncIterator,
-    Dict,
-    Generator,
-    List,
     Literal,
     Optional,
-    Tuple,
     Union,
 )
 from uuid import UUID
@@ -113,7 +108,7 @@ async def test_checkpoint_errors() -> None:
 
     class FaultyPutWritesCheckpointer(InMemorySaver):
         async def aput_writes(
-            self, config: RunnableConfig, writes: List[Tuple[str, Any]], task_id: str
+            self, config: RunnableConfig, writes: list[tuple[str, Any]], task_id: str
         ) -> RunnableConfig:
             raise ValueError("Faulty put_writes")
 
@@ -1959,7 +1954,7 @@ async def test_pending_writes_resume(
         value: Annotated[int, operator.add]
 
     class AwhileMaker:
-        def __init__(self, sleep: float, rtn: Union[Dict, Exception]) -> None:
+        def __init__(self, sleep: float, rtn: Union[dict, Exception]) -> None:
             self.sleep = sleep
             self.rtn = rtn
             self.reset()
@@ -6249,7 +6244,7 @@ async def test_store_injected_async(checkpointer_name: str, store_name: str) -> 
         assert result == {"count": N + 1}
         returned_doc = (await the_store.aget(namespace, doc_id)).value
         assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 0}
-        assert len((await the_store.asearch(namespace))) == 1
+        assert len(await the_store.asearch(namespace)) == 1
 
         # Check results after another turn of the same thread
         result = await graph.ainvoke(
@@ -6258,7 +6253,7 @@ async def test_store_injected_async(checkpointer_name: str, store_name: str) -> 
         assert result == {"count": (N + 1) * 2}
         returned_doc = (await the_store.aget(namespace, doc_id)).value
         assert returned_doc == {**doc, "from_thread": thread_1, "some_val": N + 1}
-        assert len((await the_store.asearch(namespace))) == 1
+        assert len(await the_store.asearch(namespace)) == 1
 
         # Test with a different thread
         result = await graph.ainvoke(
@@ -6272,7 +6267,7 @@ async def test_store_injected_async(checkpointer_name: str, store_name: str) -> 
             "some_val": 0,
         }  # Overwrites the whole doc
         assert (
-            len((await the_store.asearch(namespace))) == 1
+            len(await the_store.asearch(namespace)) == 1
         )  # still overwriting the same one
 
 

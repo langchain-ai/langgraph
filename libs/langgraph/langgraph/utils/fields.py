@@ -1,9 +1,10 @@
 import dataclasses
-from typing import Any, Generator, Optional, Sequence, Type, Union, get_type_hints
+from collections.abc import Generator, Sequence
+from typing import Annotated, Any, Optional, Union, get_type_hints
 
 from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
-from typing_extensions import Annotated, NotRequired, ReadOnly, Required, get_origin
+from typing_extensions import NotRequired, ReadOnly, Required, get_origin
 
 # NOTE: this is redefined here separately from langgraph.constants
 # to avoid a circular import
@@ -68,7 +69,7 @@ def _is_readonly_type(type_: Any) -> bool:
 _DEFAULT_KEYS: frozenset[str] = frozenset()
 
 
-def get_field_default(name: str, type_: Any, schema: Type[Any]) -> Any:
+def get_field_default(name: str, type_: Any, schema: type[Any]) -> Any:
     """Determine the default value for a field in a state schema.
 
     This is based on:
@@ -115,7 +116,7 @@ def get_field_default(name: str, type_: Any, schema: Type[Any]) -> Any:
 
 
 def get_enhanced_type_hints(
-    type: Type[Any],
+    type: type[Any],
 ) -> Generator[tuple[str, Any, Any, Optional[str]], None, None]:
     """Attempt to extract default values and descriptions from provided type, used for config schema."""
     for name, typ in get_type_hints(type).items():

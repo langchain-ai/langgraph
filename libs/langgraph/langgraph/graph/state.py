@@ -3,19 +3,16 @@ import logging
 import typing
 import warnings
 from collections import defaultdict
+from collections.abc import Awaitable, Hashable, Sequence
 from functools import partial
 from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
 from typing import (
     Any,
-    Awaitable,
     Callable,
-    Hashable,
     Literal,
     NamedTuple,
     Optional,
-    Sequence,
-    Type,
     Union,
     cast,
     get_args,
@@ -84,7 +81,7 @@ from langgraph.utils.runnable import RunnableLike, coerce_to_runnable
 logger = logging.getLogger(__name__)
 
 
-def _warn_invalid_state_schema(schema: Union[Type[Any], Any]) -> None:
+def _warn_invalid_state_schema(schema: Union[type[Any], Any]) -> None:
     if isinstance(schema, type):
         return
     if typing.get_args(schema):
@@ -108,7 +105,7 @@ def _get_node_name(node: RunnableLike) -> str:
 class StateNodeSpec(NamedTuple):
     runnable: Runnable
     metadata: Optional[dict[str, Any]]
-    input: Type[Any]
+    input: type[Any]
     retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]]
     ends: Optional[Union[tuple[str, ...], dict[str, str]]] = EMPTY_SEQ
 
@@ -166,15 +163,15 @@ class StateGraph(Graph):
     nodes: dict[str, StateNodeSpec]  # type: ignore[assignment]
     channels: dict[str, BaseChannel]
     managed: dict[str, ManagedValueSpec]
-    schemas: dict[Type[Any], dict[str, Union[BaseChannel, ManagedValueSpec]]]
+    schemas: dict[type[Any], dict[str, Union[BaseChannel, ManagedValueSpec]]]
 
     def __init__(
         self,
-        state_schema: Optional[Type[Any]] = None,
-        config_schema: Optional[Type[Any]] = None,
+        state_schema: Optional[type[Any]] = None,
+        config_schema: Optional[type[Any]] = None,
         *,
-        input: Optional[Type[Any]] = None,
-        output: Optional[Type[Any]] = None,
+        input: Optional[type[Any]] = None,
+        output: Optional[type[Any]] = None,
     ) -> None:
         super().__init__()
         if state_schema is None:
@@ -195,7 +192,7 @@ class StateGraph(Graph):
         self.schemas = {}
         self.channels = {}
         self.managed = {}
-        self.type_hints: dict[Type[Any], dict[str, Any]] = {}
+        self.type_hints: dict[type[Any], dict[str, Any]] = {}
         self.schema = state_schema
         self.input = input
         self.output = output
@@ -211,7 +208,7 @@ class StateGraph(Graph):
             (start, end) for starts, end in self.waiting_edges for start in starts
         }
 
-    def _add_schema(self, schema: Type[Any], /, allow_managed: bool = True) -> None:
+    def _add_schema(self, schema: type[Any], /, allow_managed: bool = True) -> None:
         if schema not in self.schemas:
             _warn_invalid_state_schema(schema)
             channels, managed, type_hints = _get_channels(schema)
@@ -250,7 +247,7 @@ class StateGraph(Graph):
         node: RunnableLike,
         *,
         metadata: Optional[dict[str, Any]] = None,
-        input: Optional[Type[Any]] = None,
+        input: Optional[type[Any]] = None,
         retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
         destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
     ) -> Self:
@@ -275,7 +272,7 @@ class StateGraph(Graph):
         action: RunnableLike,
         *,
         metadata: Optional[dict[str, Any]] = None,
-        input: Optional[Type[Any]] = None,
+        input: Optional[type[Any]] = None,
         retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
         destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
     ) -> Self:
@@ -299,7 +296,7 @@ class StateGraph(Graph):
         action: Optional[RunnableLike] = None,
         *,
         metadata: Optional[dict[str, Any]] = None,
-        input: Optional[Type[Any]] = None,
+        input: Optional[type[Any]] = None,
         retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
         destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
     ) -> Self:
@@ -686,12 +683,12 @@ class StateGraph(Graph):
 
 class CompiledStateGraph(CompiledGraph):
     builder: StateGraph
-    schema_to_mapper: dict[Type[Any], Optional[Callable[[Any], Any]]]
+    schema_to_mapper: dict[type[Any], Optional[Callable[[Any], Any]]]
 
     def __init__(
         self,
         *,
-        schema_to_mapper: dict[Type[Any], Optional[Callable[[Any], Any]]],
+        schema_to_mapper: dict[type[Any], Optional[Callable[[Any], Any]]],
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -1022,7 +1019,7 @@ class CompiledStateGraph(CompiledGraph):
 
 
 def _pick_mapper(
-    state_keys: Sequence[str], schema: Type[Any], type_hints: Optional[dict[str, Any]]
+    state_keys: Sequence[str], schema: type[Any], type_hints: Optional[dict[str, Any]]
 ) -> Optional[Callable[[Any], Any]]:
     if state_keys == ["__root__"]:
         return None
@@ -1034,7 +1031,7 @@ def _pick_mapper(
     return partial(_coerce_state, schema)
 
 
-def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
+def _coerce_state(schema: type[Any], input: dict[str, Any]) -> dict[str, Any]:
     return schema(**input)
 
 
@@ -1103,7 +1100,7 @@ def _get_root(input: Any) -> Optional[Sequence[tuple[str, Any]]]:
 
 
 def _get_channels(
-    schema: Type[dict],
+    schema: type[dict],
 ) -> tuple[dict[str, BaseChannel], dict[str, ManagedValueSpec], dict[str, Any]]:
     if not hasattr(schema, "__annotations__"):
         return (
@@ -1157,7 +1154,7 @@ def _get_channel(
     return fallback
 
 
-def _is_field_channel(typ: Type[Any]) -> Optional[BaseChannel]:
+def _is_field_channel(typ: type[Any]) -> Optional[BaseChannel]:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
         if len(meta) >= 1 and isinstance(meta[-1], BaseChannel):
@@ -1167,7 +1164,7 @@ def _is_field_channel(typ: Type[Any]) -> Optional[BaseChannel]:
     return None
 
 
-def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
+def _is_field_binop(typ: type[Any]) -> Optional[BinaryOperatorAggregate]:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
         if len(meta) >= 1 and callable(meta[-1]):
@@ -1188,7 +1185,7 @@ def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
     return None
 
 
-def _is_field_managed_value(name: str, typ: Type[Any]) -> Optional[ManagedValueSpec]:
+def _is_field_managed_value(name: str, typ: type[Any]) -> Optional[ManagedValueSpec]:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
         if len(meta) >= 1:
@@ -1206,7 +1203,7 @@ def _is_field_managed_value(name: str, typ: Type[Any]) -> Optional[ManagedValueS
 
 
 def _get_schema(
-    typ: Type,
+    typ: type,
     schemas: dict,
     channels: dict,
     name: str,

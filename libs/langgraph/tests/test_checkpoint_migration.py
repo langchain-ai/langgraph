@@ -1575,7 +1575,7 @@ def test_migrate_checkpoints(source: str, target: str) -> None:
         # check that the migrated checkpoint matches the target checkpoint
         assert (
             migrated == target_checkpoint.checkpoint
-        ), "Checkpoint mismatch at index {}".format(idx)
+        ), f"Checkpoint mismatch at index {idx}"
 
 
 @NEEDS_CONTEXTVARS

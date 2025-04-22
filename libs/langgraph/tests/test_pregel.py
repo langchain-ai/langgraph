@@ -9,6 +9,7 @@ import time
 import uuid
 import warnings
 from collections import Counter, deque
+from collections.abc import Generator, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -16,14 +17,8 @@ from random import randrange
 from typing import (
     Annotated,
     Any,
-    Dict,
-    Generator,
-    Iterator,
-    List,
     Literal,
     Optional,
-    Sequence,
-    Tuple,
     Union,
     get_type_hints,
 )
@@ -243,7 +238,7 @@ def test_checkpoint_errors() -> None:
 
     class FaultyPutWritesCheckpointer(InMemorySaver):
         def put_writes(
-            self, config: RunnableConfig, writes: List[Tuple[str, Any]], task_id: str
+            self, config: RunnableConfig, writes: list[tuple[str, Any]], task_id: str
         ) -> RunnableConfig:
             raise ValueError("Faulty put_writes")
 
@@ -448,7 +443,7 @@ def test_reducer_before_first_node() -> None:
 
     class State(TypedDict):
         hello: str
-        messages: Annotated[List[str], add_messages]
+        messages: Annotated[list[str], add_messages]
 
     def node_a(state: State) -> State:
         assert state == {
@@ -1131,7 +1126,7 @@ def test_pending_writes_resume(
         value: Annotated[int, operator.add]
 
     class AwhileMaker:
-        def __init__(self, sleep: float, rtn: Union[Dict, Exception]) -> None:
+        def __init__(self, sleep: float, rtn: Union[dict, Exception]) -> None:
             self.sleep = sleep
             self.rtn = rtn
             self.reset()
@@ -4429,7 +4424,7 @@ def test_xray_lance(snapshot: SnapshotAssertion):
             return f"Name: {self.name}\nRole: {self.role}\nAffiliation: {self.affiliation}\nDescription: {self.description}\n"
 
     class Perspectives(BaseModel):
-        analysts: List[Analyst] = Field(
+        analysts: list[Analyst] = Field(
             description="Comprehensive list of investment analysts with their roles and affiliations.",
         )
 
@@ -4448,15 +4443,15 @@ def test_xray_lance(snapshot: SnapshotAssertion):
         )
 
     class InterviewState(TypedDict):
-        messages: Annotated[List[AnyMessage], add_messages]
+        messages: Annotated[list[AnyMessage], add_messages]
         analyst: Analyst
         section: Section
 
     class ResearchGraphState(TypedDict):
-        analysts: List[Analyst]
+        analysts: list[Analyst]
         topic: str
         max_analysts: int
-        sections: List[Section]
+        sections: list[Section]
         interviews: Annotated[list, operator.add]
 
     # Conditional edge
@@ -7435,7 +7430,7 @@ def test_parallel_interrupts(
     class ChildState(BaseModel):
         prompt: str = Field(..., description="What is going to be asked to the user?")
         human_input: Optional[str] = Field(None, description="What the human said")
-        human_inputs: Annotated[List[str], operator.add] = Field(
+        human_inputs: Annotated[list[str], operator.add] = Field(
             default_factory=list, description="All of my messages"
         )
 
@@ -7456,10 +7451,10 @@ def test_parallel_interrupts(
     # --- PARENT GRAPH ---
 
     class ParentState(BaseModel):
-        prompts: List[str] = Field(
+        prompts: list[str] = Field(
             ..., description="What is going to be asked to the user?"
         )
-        human_inputs: Annotated[List[str], operator.add] = Field(
+        human_inputs: Annotated[list[str], operator.add] = Field(
             default_factory=list, description="All of my messages"
         )
 
@@ -7612,7 +7607,7 @@ def test_parallel_interrupts_double(
     class ChildState(BaseModel):
         prompt: str = Field(..., description="What is going to be asked to the user?")
         human_input: Optional[str] = Field(None, description="What the human said")
-        human_inputs: Annotated[List[str], operator.add] = Field(
+        human_inputs: Annotated[list[str], operator.add] = Field(
             default_factory=list, description="All of my messages"
         )
 
@@ -7640,10 +7635,10 @@ def test_parallel_interrupts_double(
     # --- PARENT GRAPH ---
 
     class ParentState(BaseModel):
-        prompts: List[str] = Field(
+        prompts: list[str] = Field(
             ..., description="What is going to be asked to the user?"
         )
-        human_inputs: Annotated[List[str], operator.add] = Field(
+        human_inputs: Annotated[list[str], operator.add] = Field(
             default_factory=list, description="All of my messages"
         )
 

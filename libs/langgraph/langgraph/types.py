@@ -3,18 +3,16 @@ import hashlib
 import sys
 import uuid
 from collections import deque
+from collections.abc import Hashable, Sequence
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
     ClassVar,
     Generic,
-    Hashable,
     Literal,
     NamedTuple,
     Optional,
-    Sequence,
-    Type,
     TypeVar,
     Union,
     cast,
@@ -120,7 +118,7 @@ class RetryPolicy(NamedTuple):
     jitter: bool = True
     """Whether to add random jitter to the interval between retries."""
     retry_on: Union[
-        Type[Exception], Sequence[Type[Exception]], Callable[[Exception], bool]
+        type[Exception], Sequence[type[Exception]], Callable[[Exception], bool]
     ] = default_retry_on
     """List of exception classes that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
 

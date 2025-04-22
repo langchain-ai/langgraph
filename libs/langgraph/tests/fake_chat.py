@@ -1,5 +1,6 @@
 import re
-from typing import Any, AsyncIterator, Iterator, List, Optional, cast
+from collections.abc import AsyncIterator, Iterator
+from typing import Any, Optional, cast
 
 from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
@@ -20,8 +21,8 @@ class FakeChatModel(GenericFakeChatModel):
 
     def _generate(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
+        messages: list[BaseMessage],
+        stop: Optional[list[str]] = None,
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
@@ -42,8 +43,8 @@ class FakeChatModel(GenericFakeChatModel):
 
     def _stream(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
+        messages: list[BaseMessage],
+        stop: Optional[list[str]] = None,
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
@@ -90,8 +91,8 @@ class FakeChatModel(GenericFakeChatModel):
 
     async def _astream(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
+        messages: list[BaseMessage],
+        stop: Optional[list[str]] = None,
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:

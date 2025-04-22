@@ -4,7 +4,8 @@ import contextvars
 import inspect
 import sys
 import types
-from typing import Awaitable, Coroutine, Generator, Optional, TypeVar, Union, cast
+from collections.abc import Awaitable, Coroutine, Generator
+from typing import Optional, TypeVar, Union, cast
 
 T = TypeVar("T")
 AnyFuture = Union[asyncio.Future, concurrent.futures.Future]

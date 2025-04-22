@@ -2,11 +2,11 @@ import asyncio
 import operator
 import re
 import sys
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import (
     Annotated,
     Any,
-    AsyncIterator,
     Literal,
     Optional,
     Union,

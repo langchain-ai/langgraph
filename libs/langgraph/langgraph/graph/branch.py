@@ -1,3 +1,4 @@
+from collections.abc import Awaitable, Hashable, Sequence
 from inspect import (
     isfunction,
     ismethod,
@@ -7,14 +8,10 @@ from itertools import zip_longest
 from types import FunctionType
 from typing import (
     Any,
-    Awaitable,
     Callable,
-    Hashable,
     Literal,
     NamedTuple,
     Optional,
-    Sequence,
-    Type,
     Union,
     cast,
     get_args,
@@ -48,7 +45,7 @@ def _get_branch_path_input_schema(
         Callable[..., Awaitable[Union[Hashable, list[Hashable]]]],
         Runnable[Any, Union[Hashable, list[Hashable]]],
     ],
-) -> Optional[Type[Any]]:
+) -> Optional[type[Any]]:
     input = None
     # detect input schema annotation in the branch callable
     try:
@@ -91,7 +88,7 @@ class Branch(NamedTuple):
     path: Runnable[Any, Union[Hashable, list[Hashable]]]
     ends: Optional[dict[Hashable, str]]
     then: Optional[str] = None
-    input_schema: Optional[Type[Any]] = None
+    input_schema: Optional[type[Any]] = None
 
     @classmethod
     def from_path(
