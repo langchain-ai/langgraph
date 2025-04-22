@@ -24,6 +24,8 @@ from typing_extensions import Self
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 from langgraph.utils.fields import get_update_as_tuples
+import hashlib
+import uuid
 
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
@@ -142,6 +144,13 @@ class Interrupt:
     resumable: bool = False
     ns: Optional[Sequence[str]] = None
     when: Literal["during"] = dataclasses.field(default="during", repr=False)
+
+
+    @property
+    def interrupt_id(self) -> str:
+        """Generate a unique ID for the interrupt based on its namespace."""
+        identifier = uuid.uuid4().bytes if self.ns is None else ''.join(self.ns).encode()
+        return hashlib.sha256(identifier).hexdigest()
 
 
 class StateUpdate(NamedTuple):
@@ -483,11 +492,12 @@ def interrupt(value: Any) -> Any:
         CONFIG_KEY_SEND,
         NS_SEP,
         RESUME,
+        CONF,
     )
     from langgraph.errors import GraphInterrupt
     from langgraph.utils.config import get_config
 
-    conf = get_config()["configurable"]
+    conf = get_config()[CONF]
     # track interrupt index
     scratchpad: PregelScratchpad = conf[CONFIG_KEY_SCRATCHPAD]
     idx = scratchpad.interrupt_counter()

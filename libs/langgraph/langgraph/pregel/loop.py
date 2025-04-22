@@ -910,23 +910,23 @@ class PregelLoop(LoopProtocol):
             ):
                 return
             if writes[0][0] == INTERRUPT:
-                self._emit(
-                    "updates",
-                    lambda: iter(
-                        [
-                            {
-                                INTERRUPT: tuple(
-                                    v
-                                    for w in writes
-                                    if w[0] == INTERRUPT
-                                    for v in (
-                                        w[1] if isinstance(w[1], Sequence) else (w[1],)
-                                    )
-                                )
-                            }
-                        ]
-                    ),
-                )
+                interrupts = [
+                    {
+                        INTERRUPT: tuple(
+                            v
+                            for w in writes
+                            if w[0] == INTERRUPT
+                            for v in (
+                                w[1] if isinstance(w[1], Sequence) else (w[1],)
+                            )
+                        )
+                    }
+                ]
+                stream_modes = self.stream.modes if self.stream else []
+                if "updates" in stream_modes:
+                    self._emit("updates", lambda: iter(interrupts))
+                elif "values" in stream_modes:
+                    self._emit("values", lambda: iter(interrupts))
             elif writes[0][0] != ERROR:
                 self._emit(
                     "updates",
