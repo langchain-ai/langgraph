@@ -30,9 +30,11 @@ from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitForNames
 from langgraph.channels.ephemeral_value import EphemeralValue
-from langgraph.channels.last_value import LastValue
-from langgraph.channels.named_barrier_value import NamedBarrierValue
-from langgraph.channels.open_at_the_close_value import OpenAtTheCloseValue
+from langgraph.channels.last_value import LastValue, LastValueAfterFinish
+from langgraph.channels.named_barrier_value import (
+    NamedBarrierValue,
+    NamedBarrierValueAfterFinish,
+)
 from langgraph.checkpoint.base import Checkpoint
 from langgraph.constants import (
     EMPTY_SEQ,
@@ -789,7 +791,7 @@ class CompiledStateGraph(CompiledGraph):
 
             branch_channel = CHANNEL_BRANCH_TO.format(key)
             self.channels[branch_channel] = (
-                OpenAtTheCloseValue(Any)
+                LastValueAfterFinish(Any)
                 if node.barrier
                 else EphemeralValue(Any, guard=False)
             )
@@ -820,7 +822,12 @@ class CompiledStateGraph(CompiledGraph):
         elif end != END:
             channel_name = f"join:{'+'.join(starts)}:{end}"
             # register channel
-            self.channels[channel_name] = NamedBarrierValue(str, set(starts))
+            if self.builder.nodes[end].barrier:
+                self.channels[channel_name] = NamedBarrierValueAfterFinish(
+                    str, set(starts)
+                )
+            else:
+                self.channels[channel_name] = NamedBarrierValue(str, set(starts))
             # subscribe to channel
             self.nodes[end].triggers.append(channel_name)
             # publish to channel
