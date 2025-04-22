@@ -3932,15 +3932,21 @@ async def test_max_concurrency_control(checkpointer_name: str) -> None:
     if checkpointer_name == "memory":
         assert (
             graph.get_graph().draw_mermaid()
-            == """%%{init: {'flowchart': {'curve': 'linear'}}}%%
+            == """---
+config:
+  flowchart:
+    curve: linear
+---
 graph TD;
 	__start__([<p>__start__</p>]):::first
 	1(1)
 	2(2)
-	3([3]):::last
-	__start__ --> 1;
+	3(3)
+	__end__([<p>__end__</p>]):::last
 	1 -.-> 2;
 	2 -.-> 3;
+	__start__ --> 1;
+	3 --> __end__;
 	classDef default fill:#f2f0ff,line-height:1.2
 	classDef first fill-opacity:0
 	classDef last fill:#bfb6fc

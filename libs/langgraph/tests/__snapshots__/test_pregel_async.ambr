@@ -3,11 +3,11 @@
   '''
   graph TD;
   	__start__ --> rewrite_query;
-  	rewrite_query --> analyzer_one;
-  	rewrite_query -.-> retriever_two;
   	analyzer_one --> retriever_one;
   	retriever_one --> qa;
   	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
   	qa --> __end__;
   
   '''
@@ -122,13 +122,19 @@
 # ---
 # name: test_send_react_interrupt_control[memory]
   '''
-  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  ---
+  config:
+    flowchart:
+      curve: linear
+  ---
   graph TD;
   	__start__([<p>__start__</p>]):::first
   	agent(agent)
-  	foo([foo]):::last
+  	foo(foo)
+  	__end__([<p>__end__</p>]):::last
   	__start__ --> agent;
   	agent -.-> foo;
+  	foo --> __end__;
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
   	classDef last fill:#bfb6fc

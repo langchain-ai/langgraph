@@ -7011,6 +7011,8 @@ def test_node_destinations() -> None:
             Edge(source="__start__", target="child", data=None, conditional=False),
             Edge(source="child", target="node_b", data=None, conditional=True),
             Edge(source="child", target="node_c", data=None, conditional=True),
+            Edge(source="node_b", target="__end__", data=None, conditional=False),
+            Edge(source="node_c", target="__end__", data=None, conditional=False),
         ] == graph.edges
 
         # destinations w/ dicts
@@ -7029,6 +7031,8 @@ def test_node_destinations() -> None:
             Edge(source="__start__", target="child", data=None, conditional=False),
             Edge(source="child", target="node_b", data="foo", conditional=True),
             Edge(source="child", target="node_c", data="bar", conditional=True),
+            Edge(source="node_b", target="__end__", data=None, conditional=False),
+            Edge(source="node_c", target="__end__", data=None, conditional=False),
         ] == graph.edges
 
 
