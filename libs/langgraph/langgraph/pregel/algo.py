@@ -138,11 +138,6 @@ def should_interrupt(
     tasks: Iterable[PregelExecutableTask],
 ) -> list[PregelExecutableTask]:
     """Check if the graph should be interrupted based on current state."""
-
-    print(
-        f"Interrupt nodes: {interrupt_nodes}, Tasks: {[(t.name, t.writes) for t in tasks]}",
-    )
-
     version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
     null_version = version_type()  # type: ignore[misc]
     seen = checkpoint["versions_seen"].get(INTERRUPT, {})
