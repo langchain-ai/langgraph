@@ -2829,9 +2829,9 @@ def test_state_graph_packets(
     # Define decision-making logic
     def should_continue(data: dict) -> str:
         assert isinstance(data["session"], httpx.Client)
-        assert data["something_extra"] == "hi there", (
-            "nodes can pass extra data to their cond edges, which isn't saved in state"
-        )
+        assert (
+            data["something_extra"] == "hi there"
+        ), "nodes can pass extra data to their cond edges, which isn't saved in state"
         # Logic to decide whether to continue in the loop or exit
         if tool_calls := data["messages"][-1].tool_calls:
             return [Send("tools", tool_call) for tool_call in tool_calls]

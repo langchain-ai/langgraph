@@ -2758,7 +2758,12 @@ class Pregel(PregelProtocol):
                 chunks.append(chunk)
 
         if stream_mode == "values":
-            return {INTERRUPT: interrupts} if interrupts else latest
+            if interrupts:
+                return {
+                    **latest,
+                    INTERRUPT: interrupts,
+                }
+            return latest
         else:
             return chunks
 
@@ -2818,7 +2823,12 @@ class Pregel(PregelProtocol):
                 chunks.append(chunk)
 
         if stream_mode == "values":
-            return {INTERRUPT: interrupts} if interrupts else latest
+            if interrupts:
+                return {
+                    **latest,
+                    INTERRUPT: interrupts,
+                }
+            return latest
         else:
             return chunks
 
