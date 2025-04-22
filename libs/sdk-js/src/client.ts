@@ -621,7 +621,7 @@ export class ThreadsClient<
     /**
      * Sort by.
      */
-    sortBy?: "id" | "status" | "created_at" | "updated_at";
+    sortBy?: "thread_id" | "status" | "created_at" | "updated_at";
     /**
      * Sort order.
      * Must be one of 'asc' or 'desc'.
