@@ -1,7 +1,5 @@
 import dataclasses
-import hashlib
 import sys
-import uuid
 from collections import deque
 from collections.abc import Hashable, Sequence
 from typing import (
@@ -21,6 +19,7 @@ from typing import (
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from typing_extensions import Self
+from xxhash import xxh3_128_hexdigest
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 from langgraph.utils.fields import get_update_as_tuples
@@ -146,10 +145,9 @@ class Interrupt:
     @property
     def interrupt_id(self) -> str:
         """Generate a unique ID for the interrupt based on its namespace."""
-        identifier = (
-            uuid.uuid4().bytes if self.ns is None else "".join(self.ns).encode()
-        )
-        return hashlib.sha256(identifier).hexdigest()
+        if self.ns is None:
+            return "placeholder-id"
+        return xxh3_128_hexdigest("".join(self.ns).encode())
 
 
 class StateUpdate(NamedTuple):
@@ -486,7 +484,6 @@ def interrupt(value: Any) -> Any:
         GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
     """
     from langgraph.constants import (
-        CONF,
         CONFIG_KEY_CHECKPOINT_NS,
         CONFIG_KEY_SCRATCHPAD,
         CONFIG_KEY_SEND,

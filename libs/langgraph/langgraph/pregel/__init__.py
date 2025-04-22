@@ -2806,19 +2806,23 @@ class Pregel(PregelProtocol):
             **kwargs,
         ):
             if stream_mode == "values":
-                if isinstance(chunk, dict):
-                    if (ints := chunk.get(INTERRUPT)) is not None:
-                        interrupts.extend(ints)
-                latest = chunk
+                if (
+                    isinstance(chunk, dict)
+                    and (ints := chunk.get(INTERRUPT)) is not None
+                ):
+                    interrupts.extend(ints)
+                else:
+                    latest = chunk
             else:
                 chunks.append(chunk)
 
         if stream_mode == "values":
             if interrupts:
-                return {
-                    **latest,
-                    INTERRUPT: interrupts,
-                }
+                return (
+                    {**latest, INTERRUPT: interrupts}
+                    if isinstance(latest, dict)
+                    else {INTERRUPT: interrupts}
+                )
             return latest
         else:
             return chunks
@@ -2871,19 +2875,23 @@ class Pregel(PregelProtocol):
             **kwargs,
         ):
             if stream_mode == "values":
-                if isinstance(chunk, dict):
-                    if (ints := chunk.get(INTERRUPT)) is not None:
-                        interrupts.extend(ints)
-                latest = chunk
+                if (
+                    isinstance(chunk, dict)
+                    and (ints := chunk.get(INTERRUPT)) is not None
+                ):
+                    interrupts.extend(ints)
+                else:
+                    latest = chunk
             else:
                 chunks.append(chunk)
 
         if stream_mode == "values":
             if interrupts:
-                return {
-                    **latest,
-                    INTERRUPT: interrupts,
-                }
+                return (
+                    {**latest, INTERRUPT: interrupts}
+                    if isinstance(latest, dict)
+                    else {INTERRUPT: interrupts}
+                )
             return latest
         else:
             return chunks

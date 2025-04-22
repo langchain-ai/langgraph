@@ -5666,6 +5666,9 @@ def test_dynamic_interrupt(
     ) == {
         "my_key": "value",
         "market": "DE",
+        "__interrupt__": [
+            Interrupt(value="Just because...", resumable=True, ns=[AnyStr("tool_two:")])
+        ],
     }
     assert tool_two_node_count == 1, "interrupts aren't retried"
     assert len(tracer.runs) == 1
@@ -5712,6 +5715,9 @@ def test_dynamic_interrupt(
     assert tool_two.invoke({"my_key": "value ⛰️", "market": "DE"}, thread1) == {
         "my_key": "value ⛰️",
         "market": "DE",
+        "__interrupt__": [
+            Interrupt(value="Just because...", resumable=True, ns=[AnyStr("tool_two:")])
+        ],
     }
 
     if "shallow" not in checkpointer_name:
@@ -5840,6 +5846,9 @@ def test_copy_checkpoint(
     ) == {
         "my_key": "value one",
         "market": "DE",
+        "__interrupt__": [
+            Interrupt(value="Just because...", resumable=True, ns=[AnyStr("tool_two:")])
+        ],
     }
     assert tool_two_node_count == 1, "interrupts aren't retried"
     assert len(tracer.runs) == 1
@@ -5890,6 +5899,9 @@ def test_copy_checkpoint(
     assert tool_two.invoke({"my_key": "value ⛰️", "market": "DE"}, thread1) == {
         "my_key": "value ⛰️ one",
         "market": "DE",
+        "__interrupt__": [
+            Interrupt(value="Just because...", resumable=True, ns=[AnyStr("tool_two:")])
+        ],
     }
     if "shallow" not in checkpointer_name:
         assert [c.metadata for c in tool_two.checkpointer.list(thread1)] == [
@@ -6040,6 +6052,13 @@ def test_dynamic_interrupt_subgraph(
     ) == {
         "my_key": "value",
         "market": "DE",
+        "__interrupt__": [
+            Interrupt(
+                value="Just because...",
+                resumable=True,
+                ns=[AnyStr("tool_two:"), AnyStr("do:")],
+            )
+        ],
     }
     assert tool_two_node_count == 1, "interrupts aren't retried"
     assert len(tracer.runs) == 1
@@ -6086,6 +6105,13 @@ def test_dynamic_interrupt_subgraph(
     assert tool_two.invoke({"my_key": "value ⛰️", "market": "DE"}, thread1) == {
         "my_key": "value ⛰️",
         "market": "DE",
+        "__interrupt__": [
+            Interrupt(
+                value="Just because...",
+                resumable=True,
+                ns=[AnyStr("tool_two:"), AnyStr("do:")],
+            )
+        ],
     }
 
     if "shallow" not in checkpointer_name:
@@ -7318,15 +7344,15 @@ def test_send_dedupe_on_resume(
 
     graph = builder.compile(checkpointer=checkpointer)
     thread1 = {"configurable": {"thread_id": "1"}}
-    assert graph.invoke(["0"], thread1, checkpoint_during=checkpoint_during) == [
-        "0",
-        "1",
-        "3.1",
-        "2|Command(goto=Send(node='2', arg=3))",
-        "2|Command(goto=Send(node='flaky', arg=4))",
-        "3",
-        "2|3",
-    ]
+    assert graph.invoke(["0"], thread1, checkpoint_during=checkpoint_during) == {
+        "__interrupt__": [
+            Interrupt(
+                value="Bahh",
+                resumable=False,
+                ns=None,
+            ),
+        ],
+    }
     assert builder.nodes["2"].runnable.func.ticks == 3
     assert builder.nodes["flaky"].runnable.func.ticks == 1
     # check state
