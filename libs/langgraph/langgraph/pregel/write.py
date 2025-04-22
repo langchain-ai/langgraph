@@ -165,6 +165,10 @@ class ChannelWrite(RunnableCallable):
             ] or None
         elif writes := getattr(runnable, "_is_channel_writer", MISSING):
             if writes is not MISSING:
+                writes = cast(
+                    Sequence[tuple[Union[ChannelWriteEntry, Send], Optional[str]]],
+                    writes,
+                )
                 entries = [e for e, _ in writes]
                 labels = [la for _, la in writes]
                 return [(*t, la) for t, la in zip(_assemble_writes(entries), labels)]

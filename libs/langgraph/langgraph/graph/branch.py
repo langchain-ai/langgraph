@@ -133,16 +133,6 @@ class Branch(NamedTuple):
         writer: Writer,
         reader: Optional[Callable[[RunnableConfig], Any]] = None,
     ) -> RunnableCallable:
-        print(
-            list(
-                zip_longest(
-                    writer([e for e in self.ends.values() if e != END]),
-                    [la for la, e in self.ends.items() if e != END],
-                )
-            )
-            if self.ends
-            else None
-        )
         return ChannelWrite.register_writer(
             RunnableCallable(
                 func=self._route,
@@ -156,7 +146,7 @@ class Branch(NamedTuple):
             list(
                 zip_longest(
                     writer([e for e in self.ends.values() if e != END]),
-                    [la for la, e in self.ends.items() if e != END],
+                    [str(la) for la, e in self.ends.items() if e != END],
                 )
             )
             if self.ends

@@ -1,8 +1,8 @@
 from collections import defaultdict
-from typing import Any, Mapping, Optional, Sequence, Union
+from typing import Any, Mapping, Optional, Sequence, Union, cast
 
 from langchain_core.runnables.config import RunnableConfig
-from langchain_core.runnables.graph import Graph
+from langchain_core.runnables.graph import Graph, Node
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -45,7 +45,7 @@ def draw_graph(
         The graph for this Pregel instance.
     """
     # (src, dest, is_conditional)
-    edges: set[tuple[str, str, bool]] = set()
+    edges: set[tuple[str, str, bool, Optional[str]]] = set()
 
     step = -1
     checkpoint = empty_checkpoint()
@@ -204,8 +204,8 @@ def draw_graph(
                 first, last = graph.extend(subgraph, prefix=name)
                 for idx, edge in enumerate(graph.edges):
                     if edge.source == name:
-                        graph.edges[idx] = edge.copy(source=last.id)
+                        graph.edges[idx] = edge.copy(source=cast(Node, last).id)
                     elif edge.target == name:
-                        graph.edges[idx] = edge.copy(target=first.id)
+                        graph.edges[idx] = edge.copy(target=cast(Node, first).id)
 
         return graph
