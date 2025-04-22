@@ -284,11 +284,10 @@ class Send:
 
 
 N = TypeVar("N", bound=Hashable)
-T = TypeVar("T", bound=Hashable)
 
 
 @dataclasses.dataclass(**_DC_KWARGS)
-class Command(Generic[N, T], ToolOutputMixin):
+class Command(Generic[N], ToolOutputMixin):
     """One or more commands to update the graph's state and send messages to nodes.
 
     !!! version-added "Added in version 0.2.24."
@@ -316,7 +315,6 @@ class Command(Generic[N, T], ToolOutputMixin):
     update: Optional[Any] = None
     resume: Optional[Union[Any, dict[str, Any]]] = None
     goto: Union[Send, Sequence[Union[Send, N]], N] = ()
-    then: Optional[T] = None
 
     def __repr__(self) -> str:
         # get all non-None values
