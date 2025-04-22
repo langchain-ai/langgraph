@@ -3123,8 +3123,10 @@ def test_nested_pydantic_models(version: str) -> None:
         from pydantic import (  # type: ignore
             BaseModel,
             ByteSize,
+            Discriminator,
             Field,
             SecretStr,
+            Tag,
             confloat,
             conint,
             conlist,
@@ -3173,6 +3175,16 @@ def test_nested_pydantic_models(version: str) -> None:
         conlist_type = conlist(item_type=int, min_length=2, max_length=5)
     else:
         conlist_type = conlist(item_type=int, min_items=2, max_items=5)
+    if version == "v2":
+        FuncDiscriminatorPet = Annotated[
+            Union[
+                Annotated[Dog, Tag(tag="dog")],
+                Annotated[Cat, Tag(tag="cat")],
+            ],
+            Field(discriminator=Discriminator(lambda obj: obj.get("pet_type"))),
+        ]
+    else:
+        FuncDiscriminatorPet = Union[Dog, Cat]
 
     class State(BaseModel):
         # Basic nested model tests
@@ -3212,6 +3224,7 @@ def test_nested_pydantic_models(version: str) -> None:
         pattern: re.Pattern
         secret: SecretStr
         file_size: ByteSize
+        discriminated_pet: FuncDiscriminatorPet
 
         # Constrained types
         positive_value: PositiveInt
@@ -3283,6 +3296,7 @@ def test_nested_pydantic_models(version: str) -> None:
         "pattern": "^test$",
         "secret": "password123",
         "file_size": 1024,
+        "discriminated_pet": {"pet_type": "cat", "meow": "indubitably"},
         # Constrained types
         "positive_value": 42,
         "non_negative": 0.0,
