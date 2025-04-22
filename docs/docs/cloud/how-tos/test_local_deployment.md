@@ -1,7 +1,7 @@
 # LangGraph Studio With Local Deployment
 
 !!! warning "Browser Compatibility"
-    Viewing the studio page of a local LangGraph deployment does not work in Safari. Use Chrome instead.
+    Safari blocks `localhost` connections to Studio. To work around this, start the server with `--tunnel` and you’ll be able to access Studio from Safari via a secure tunnel.
 
 ## Setup
 
