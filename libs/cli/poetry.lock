@@ -585,15 +585,15 @@ tests = ["flask (>=2.2.5)", "hypothesis (>=6.79.4)", "pytest (>=7.4.4)"]
 
 [[package]]
 name = "langchain-core"
-version = "0.3.54"
+version = "0.3.55"
 description = "Building applications with LLMs through composability"
 optional = true
 python-versions = "<4.0,>=3.9"
 groups = ["main"]
 markers = "python_version >= \"3.11\" and extra == \"inmem\""
 files = [
-    {file = "langchain_core-0.3.54-py3-none-any.whl", hash = "sha256:cd42155d9089e2fd4695ee02a4b2bc6daf55b9d4e1a37639647cf2455ed4fa04"},
-    {file = "langchain_core-0.3.54.tar.gz", hash = "sha256:55ce38939038e19b1271f36f512335462d7f64057b531598b3651d2b403e1b42"},
+    {file = "langchain_core-0.3.55-py3-none-any.whl", hash = "sha256:b3cb36bf37755a616158a79866657c6697b43a2f7c69dd723ce425f1c76c1baa"},
+    {file = "langchain_core-0.3.55.tar.gz", hash = "sha256:0f2b3e311621116a83510c70b0ac9d959030a0a457a69483535cff18501fedc9"},
 ]
 
 [package.dependencies]
@@ -630,15 +630,15 @@ xxhash = ">=3.5.0,<4.0.0"
 
 [[package]]
 name = "langgraph-api"
-version = "0.1.9"
+version = "0.1.12"
 description = ""
 optional = true
 python-versions = "<4.0,>=3.11.0"
 groups = ["main"]
 markers = "python_version >= \"3.11\" and extra == \"inmem\""
 files = [
-    {file = "langgraph_api-0.1.9-py3-none-any.whl", hash = "sha256:f84b11b1855e68dbef9f0a78db803e325b8dc11e2e19613178ab84cb0d99627c"},
-    {file = "langgraph_api-0.1.9.tar.gz", hash = "sha256:3530d82e715b9f99eeb8753c365f4d16c99ce60533fa15530d5ad1d493aeec06"},
+    {file = "langgraph_api-0.1.12-py3-none-any.whl", hash = "sha256:0f9417052ac75f6da892902083b7cf6a515bee12dd035cfbc3f0ddb813738830"},
+    {file = "langgraph_api-0.1.12.tar.gz", hash = "sha256:1646a904121a5dc84cece6a81b9c49693ccfbd6f1a2904e0ed7aa7eb711e64fc"},
 ]
 
 [package.dependencies]
@@ -712,15 +712,15 @@ blockbuster = ">=1.5.24,<2.0.0"
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.1.61"
+version = "0.1.63"
 description = "SDK for interacting with LangGraph API"
 optional = true
 python-versions = "<4.0.0,>=3.9.0"
 groups = ["main"]
 markers = "python_version >= \"3.11\""
 files = [
-    {file = "langgraph_sdk-0.1.61-py3-none-any.whl", hash = "sha256:f2d774b12497c428862993090622d51e0dbc3f53e0cee3d74a13c7495d835cc6"},
-    {file = "langgraph_sdk-0.1.61.tar.gz", hash = "sha256:87dd1f07ab82da8875ac343268ece8bf5414632017ebc9d1cef4b523962fd601"},
+    {file = "langgraph_sdk-0.1.63-py3-none-any.whl", hash = "sha256:6fb78a7fc6a30eea43bd0d6401dbc9e3263d0d4c03f63c04035980da7e586b05"},
+    {file = "langgraph_sdk-0.1.63.tar.gz", hash = "sha256:62bf2cc31e5aa6c5b9011ee1702bcf1e36e67e142a60bd97af2611162fb58e18"},
 ]
 
 [package.dependencies]
@@ -729,15 +729,15 @@ orjson = ">=3.10.1"
 
 [[package]]
 name = "langsmith"
-version = "0.3.32"
+version = "0.3.33"
 description = "Client library to connect to the LangSmith LLM Tracing and Evaluation Platform."
 optional = true
 python-versions = "<4.0,>=3.9"
 groups = ["main"]
 markers = "python_version >= \"3.11\" and extra == \"inmem\""
 files = [
-    {file = "langsmith-0.3.32-py3-none-any.whl", hash = "sha256:d79af299038cd13db6d53f99fdc6a7171b731702536b7635f2da132555a6bebc"},
-    {file = "langsmith-0.3.32.tar.gz", hash = "sha256:3d7b1149e9fbe0f388303bc94d8deeeb822acc89cdea34f24151ea1316eb487d"},
+    {file = "langsmith-0.3.33-py3-none-any.whl", hash = "sha256:6fa453942014945e1de7e283880ed3e8031b5d84e0dc75b87d101ecedb62371b"},
+    {file = "langsmith-0.3.33.tar.gz", hash = "sha256:0f439e945528c6d14140137b918cc048aea04c6a987525926dbfda2560002924"},
 ]
 
 [package.dependencies]
@@ -1611,15 +1611,15 @@ zstd = ["zstandard (>=0.18.0)"]
 
 [[package]]
 name = "uvicorn"
-version = "0.34.1"
+version = "0.34.2"
 description = "The lightning-fast ASGI server."
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
 markers = "python_version >= \"3.11\" and extra == \"inmem\""
 files = [
-    {file = "uvicorn-0.34.1-py3-none-any.whl", hash = "sha256:984c3a8c7ca18ebaad15995ee7401179212c59521e67bfc390c07fa2b8d2e065"},
-    {file = "uvicorn-0.34.1.tar.gz", hash = "sha256:af981725fc4b7ffc5cb3b0e9eda6258a90c4b52cb2a83ce567ae0a7ae1757afc"},
+    {file = "uvicorn-0.34.2-py3-none-any.whl", hash = "sha256:deb49af569084536d269fe0a6d67e3754f104cf03aba7c11c40f01aadf33c403"},
+    {file = "uvicorn-0.34.2.tar.gz", hash = "sha256:0e929828f6186353a80b58ea719861d2629d766293b6d19baf086ba31d4f3328"},
 ]
 
 [package.dependencies]
@@ -2011,4 +2011,4 @@ inmem = ["langgraph-api", "langgraph-runtime-inmem", "python-dotenv"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.9.0,<4.0"
-content-hash = "afc2f8776b4b6144bd1197df49ba34089889e2a1110b8470d8f1b212e0b08380"
+content-hash = "6f3f275ae70749922db5bd1105711fbb0f8ac3b215982f7c75861c93d956e95d"
