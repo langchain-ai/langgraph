@@ -149,43 +149,50 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         **kwargs: Any,
     ) -> Any:
         if meta := self.metadata.pop(run_id, None):
-            if isinstance(response, Command):
-                response = response.update
 
-            if isinstance(response, Sequence) and any(
-                isinstance(value, Command) for value in response
-            ):
-                response = [
-                    value.update if isinstance(value, Command) else value
-                    for value in response
-                ]
-
-            if isinstance(response, BaseMessage):
-                self._emit(meta, response, dedupe=True)
-            elif isinstance(response, Sequence):
-                for value in response:
-                    if isinstance(value, BaseMessage):
-                        self._emit(meta, value, dedupe=True)
-            elif isinstance(response, dict):
-                for value in response.values():
-                    if isinstance(value, BaseMessage):
-                        self._emit(meta, value, dedupe=True)
-                    elif isinstance(value, Sequence):
-                        for item in value:
-                            if isinstance(item, BaseMessage):
-                                self._emit(meta, item, dedupe=True)
-            elif hasattr(response, "__dir__") and callable(response.__dir__):
-                for key in dir(response):
-                    try:
-                        value = getattr(response, key)
+            def _find_and_emit_messages(response: Any) -> None:
+                if isinstance(response, BaseMessage):
+                    self._emit(meta, response, dedupe=True)
+                elif isinstance(response, Sequence):
+                    for value in response:
+                        if isinstance(value, BaseMessage):
+                            self._emit(meta, value, dedupe=True)
+                elif isinstance(response, dict):
+                    for value in response.values():
                         if isinstance(value, BaseMessage):
                             self._emit(meta, value, dedupe=True)
                         elif isinstance(value, Sequence):
                             for item in value:
                                 if isinstance(item, BaseMessage):
                                     self._emit(meta, item, dedupe=True)
-                    except AttributeError:
-                        pass
+                elif hasattr(response, "__dir__") and callable(response.__dir__):
+                    for key in dir(response):
+                        try:
+                            value = getattr(response, key)
+                            if isinstance(value, BaseMessage):
+                                self._emit(meta, value, dedupe=True)
+                            elif isinstance(value, Sequence):
+                                for item in value:
+                                    if isinstance(item, BaseMessage):
+                                        self._emit(meta, item, dedupe=True)
+                        except AttributeError:
+                            pass
+
+            # Handle Command node updates
+            if isinstance(response, Command):
+                _find_and_emit_messages(response.update)
+            # Handle list of Command updates
+            elif isinstance(response, Sequence) and any(
+                isinstance(value, Command) for value in response
+            ):
+                for value in response:
+                    if isinstance(value, Command):
+                        _find_and_emit_messages(value.update)
+                    else:
+                        _find_and_emit_messages(value)
+            # Handle basic updates / streaming
+            else:
+                _find_and_emit_messages(response)
 
     def on_chain_error(
         self,
