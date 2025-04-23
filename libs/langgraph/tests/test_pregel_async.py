@@ -6873,7 +6873,15 @@ async def test_interrupt_task_functional(checkpointer_name: str) -> None:
 
         config = {"configurable": {"thread_id": "1"}}
         # First run, interrupted at bar
-        await graph.ainvoke({"a": ""}, config)
+        assert graph.ainvoke({"a": ""}, config) == {
+            "__interrupt__": [
+                Interrupt(
+                    value="Provide value for bar:",
+                    resumable=True,
+                    ns=[AnyStr("graph:"), AnyStr("bar:")],
+                ),
+            ]
+        }
         # Resume with an answer
         res = await graph.ainvoke(Command(resume="bar"), config)
         assert res == {"a": "foobar"}

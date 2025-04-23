@@ -5468,11 +5468,6 @@ def test_interrupt_task_functional(
                 resumable=True,
                 ns=[AnyStr("graph:"), AnyStr("bar:")],
             ),
-            Interrupt(
-                value="Provide value for bar:",
-                resumable=True,
-                ns=[AnyStr("graph:"), AnyStr("bar:")],
-            ),
         ]
     }
     # Resume with an answer
@@ -5492,11 +5487,6 @@ def test_interrupt_task_functional(
     # First run, interrupted at bar
     assert graph.invoke({"a": ""}, config) == {
         "__interrupt__": [
-            Interrupt(
-                value="Provide value for bar:",
-                resumable=True,
-                ns=[AnyStr("graph:"), AnyStr("bar:")],
-            ),
             Interrupt(
                 value="Provide value for bar:",
                 resumable=True,
