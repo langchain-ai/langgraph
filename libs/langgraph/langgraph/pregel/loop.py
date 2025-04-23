@@ -909,6 +909,11 @@ class PregelLoop(LoopProtocol):
             ):
                 return
             if writes[0][0] == INTERRUPT:
+                # in loop.py we append a bool to the PUSH task paths to indicate
+                # whether or not a call was present (that was popped). If so,
+                # we don't emit the interrupt as it'll be emitted by the parent
+                if task.path[0] == PUSH and task.path[-1] is True:
+                    return
                 self._emit(
                     "updates",
                     lambda: iter(
