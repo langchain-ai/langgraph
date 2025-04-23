@@ -8160,6 +8160,13 @@ async def test_interrupt_subgraph_reenter_checkpointer_true(
         assert await parent.ainvoke(Command(resume="bar"), config) == {
             "foo": "subgraph_2",
             "counter": 1,
+            "__interrupt__": [
+                Interrupt(
+                    value="Provide value",
+                    resumable=True,
+                    ns=[AnyStr("call_subgraph"), AnyStr("subnode_2")],
+                )
+            ],
         }
         assert await parent.ainvoke(Command(resume="qux"), config) == {
             "foo": "subgraph_2|parent",
@@ -8219,7 +8226,7 @@ async def test_handles_multiple_interrupts_from_tasks() -> None:
     config = {"configurable": {"thread_id": "1"}}
 
     result = await program.ainvoke("this is ignored", config=config)
-    assert result is None
+    assert "__interrupt__" in result
 
     state = await program.aget_state(config=config)
     assert len(state.tasks[0].interrupts) == 1
@@ -8231,7 +8238,7 @@ async def test_handles_multiple_interrupts_from_tasks() -> None:
     assert task_interrupt.value == "Hey do you want to add James?"
 
     result = await program.ainvoke(Command(resume=True), config=config)
-    assert result is None
+    assert "__interrupt__" in result
 
     state = await program.aget_state(config=config)
     assert len(state.tasks[0].interrupts) == 1
