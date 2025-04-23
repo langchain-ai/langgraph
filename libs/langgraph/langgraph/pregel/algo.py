@@ -542,6 +542,8 @@ def prepare_single_task(
             str(task_path[2]),
         )
         task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
+        # we append True to the task path to indicate that a call is being
+        # made, so we should not return interrupts from this task (responsibility lies with the parent)
         task_path = (*task_path[:3], True)
         metadata = {
             "langgraph_step": step,
@@ -638,6 +640,8 @@ def prepare_single_task(
             logger.warning(f"Ignoring invalid PUSH task path {task_path}")
             return
         task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
+        # we append False to the task path to indicate that a call is not being made
+        # so we should return interrupts from this task
         task_path = (*task_path[:3], False)
         metadata = {
             "langgraph_step": step,

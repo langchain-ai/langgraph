@@ -8190,6 +8190,67 @@ async def test_handles_multiple_interrupts_from_tasks() -> None:
     assert result[1] == "Added Will!"
 
 
+@NEEDS_CONTEXTVARS
+async def test_tasks_in_interrupts_surfaced_once() -> None:
+    @task
+    async def add_participant(name: str) -> str:
+        feedback = interrupt(f"Hey do you want to add {name}?")
+
+        if feedback is False:
+            return f"The user changed their mind and doesn't want to add {name}!"
+
+        if feedback is True:
+            return f"Added {name}!"
+
+        raise ValueError("Invalid feedback")
+
+    @entrypoint(checkpointer=MemorySaver())
+    async def program(_state: Any) -> list[str]:
+        first = await add_participant("James")
+        second = await add_participant("Will")
+        return [first, second]
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    interrupts = [
+        e
+        async for e in program.astream("this is ignored", config=config)
+        if "__interrupt__" in e
+    ]
+    assert len(interrupts) == 1
+
+    state = await program.aget_state(config=config)
+    assert len(state.tasks[0].interrupts) == 1
+    task_interrupt = state.tasks[0].interrupts[0]
+    assert task_interrupt.resumable is True
+    assert len(task_interrupt.ns) == 2
+    assert task_interrupt.ns[0].startswith("program:")
+    assert task_interrupt.ns[1].startswith("add_participant:")
+    assert task_interrupt.value == "Hey do you want to add James?"
+
+    interrupts = [
+        e
+        async for e in program.astream(Command(resume=True), config=config)
+        if "__interrupt__" in e
+    ]
+    assert len(interrupts) == 1
+
+    state = await program.aget_state(config=config)
+    assert len(state.tasks[0].interrupts) == 1
+    task_interrupt = state.tasks[0].interrupts[0]
+    assert task_interrupt.resumable is True
+    assert len(task_interrupt.ns) == 2
+    assert task_interrupt.ns[0].startswith("program:")
+    assert task_interrupt.ns[1].startswith("add_participant:")
+    assert task_interrupt.value == "Hey do you want to add Will?"
+
+    result = await program.ainvoke(Command(resume=True), config=config)
+    assert result is not None
+    assert len(result) == 2
+    assert result[0] == "Added James!"
+    assert result[1] == "Added Will!"
+
+
 async def test_pregel_loop_refcount():
     gc.collect()
     try:

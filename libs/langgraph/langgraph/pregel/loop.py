@@ -903,7 +903,6 @@ class PregelLoop(LoopProtocol):
     def _output_writes(
         self, task_id: str, writes: Sequence[tuple[str, Any]], *, cached: bool = False
     ) -> None:
-        print(f"output writes {task_id}, {writes}")
         if task := self.tasks.get(task_id):
             if task.config is not None and TAG_HIDDEN in task.config.get(
                 "tags", EMPTY_SEQ
