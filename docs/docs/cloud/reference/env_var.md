@@ -101,8 +101,8 @@ Defaults to `''`.
 
 ## `REDIS_CLUSTER`
 
-!!! info "Only for Self-Hosted Data Plane and Self-Hosted Control Plane"
-    Redis Cluster mode is only available for [Self-Hosted Data Plane](../../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md) deployments.
+!!! info "Only Allowed in Self-Hosted Deployments"
+    Redis Cluster mode is only available in Self-Hosted Deployment models, LangGraph Cloud SaaS will provision a redis instance for you by default.
 
 Set `REDIS_CLUSTER` to `True` to enable Redis Cluster mode. When enabled, the system will connect to Redis using cluster mode. This is useful when connecting to a Redis Cluster deployment.
 
