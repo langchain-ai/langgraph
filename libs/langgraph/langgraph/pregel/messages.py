@@ -46,6 +46,34 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             self.seen.add(message.id)
             self.stream((meta[0], "messages", (message, meta[1])))
 
+    def _find_and_emit_messages(self, meta: Meta, response: Any) -> None:
+        if isinstance(response, BaseMessage):
+            self._emit(meta, response, dedupe=True)
+        elif isinstance(response, Sequence):
+            for value in response:
+                if isinstance(value, BaseMessage):
+                    self._emit(meta, value, dedupe=True)
+        elif isinstance(response, dict):
+            for value in response.values():
+                if isinstance(value, BaseMessage):
+                    self._emit(meta, value, dedupe=True)
+                elif isinstance(value, Sequence):
+                    for item in value:
+                        if isinstance(item, BaseMessage):
+                            self._emit(meta, item, dedupe=True)
+        elif hasattr(response, "__dir__") and callable(response.__dir__):
+            for key in dir(response):
+                try:
+                    value = getattr(response, key)
+                    if isinstance(value, BaseMessage):
+                        self._emit(meta, value, dedupe=True)
+                    elif isinstance(value, Sequence):
+                        for item in value:
+                            if isinstance(item, BaseMessage):
+                                self._emit(meta, item, dedupe=True)
+                except AttributeError:
+                    pass
+
     def tap_output_aiter(
         self, run_id: UUID, output: AsyncIterator[T]
     ) -> AsyncIterator[T]:
@@ -149,50 +177,21 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         **kwargs: Any,
     ) -> Any:
         if meta := self.metadata.pop(run_id, None):
-
-            def _find_and_emit_messages(response: Any) -> None:
-                if isinstance(response, BaseMessage):
-                    self._emit(meta, response, dedupe=True)
-                elif isinstance(response, Sequence):
-                    for value in response:
-                        if isinstance(value, BaseMessage):
-                            self._emit(meta, value, dedupe=True)
-                elif isinstance(response, dict):
-                    for value in response.values():
-                        if isinstance(value, BaseMessage):
-                            self._emit(meta, value, dedupe=True)
-                        elif isinstance(value, Sequence):
-                            for item in value:
-                                if isinstance(item, BaseMessage):
-                                    self._emit(meta, item, dedupe=True)
-                elif hasattr(response, "__dir__") and callable(response.__dir__):
-                    for key in dir(response):
-                        try:
-                            value = getattr(response, key)
-                            if isinstance(value, BaseMessage):
-                                self._emit(meta, value, dedupe=True)
-                            elif isinstance(value, Sequence):
-                                for item in value:
-                                    if isinstance(item, BaseMessage):
-                                        self._emit(meta, item, dedupe=True)
-                        except AttributeError:
-                            pass
-
             # Handle Command node updates
             if isinstance(response, Command):
-                _find_and_emit_messages(response.update)
+                self._find_and_emit_messages(meta, response.update)
             # Handle list of Command updates
             elif isinstance(response, Sequence) and any(
                 isinstance(value, Command) for value in response
             ):
                 for value in response:
                     if isinstance(value, Command):
-                        _find_and_emit_messages(value.update)
+                        self._find_and_emit_messages(meta, value.update)
                     else:
-                        _find_and_emit_messages(value)
+                        self._find_and_emit_messages(meta, value)
             # Handle basic updates / streaming
             else:
-                _find_and_emit_messages(response)
+                self._find_and_emit_messages(meta, response)
 
     def on_chain_error(
         self,
