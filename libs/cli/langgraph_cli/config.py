@@ -1288,6 +1288,7 @@ def config_to_compose(
     config_path: pathlib.Path,
     config: Config,
     base_image: Optional[str] = None,
+    image: Optional[str] = None,
     watch: bool = False,
 ) -> str:
     base_image = base_image or default_base_image(config)
@@ -1314,19 +1315,28 @@ def config_to_compose(
 """
     else:
         watch_str = ""
+    if image:
+        return f"""
+{textwrap.indent(env_vars_str, "            ")}
+        {env_file_str}
+        {watch_str}
+"""
 
-    dockerfile, additional_contexts = config_to_docker(config_path, config, base_image)
+    else:
+        dockerfile, additional_contexts = config_to_docker(
+            config_path, config, base_image
+        )
 
-    additional_contexts_str = "\n".join(
-        f"                - {name}: {path}"
-        for name, path in additional_contexts.items()
-    )
-    if additional_contexts_str:
-        additional_contexts_str = f"""
+        additional_contexts_str = "\n".join(
+            f"                - {name}: {path}"
+            for name, path in additional_contexts.items()
+        )
+        if additional_contexts_str:
+            additional_contexts_str = f"""
             additional_contexts:
 {additional_contexts_str}"""
 
-    return f"""
+        return f"""
 {textwrap.indent(env_vars_str, "            ")}
         {env_file_str}
         pull_policy: build
