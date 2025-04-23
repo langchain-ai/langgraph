@@ -97,3 +97,21 @@ Database Connectivity:
     Custom Redis instances are only available for [Self-Hosted Data Plane](../../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md) deployments.
 
 Specify `REDIS_URI_CUSTOM` to use a custom Redis instance. The value of `REDIS_URI_CUSTOM` must be a valid [Redis connection URI](https://redis-py.readthedocs.io/en/stable/connections.html#redis.Redis.from_url).
+
+## `REDIS_KEY_PREFIX`
+
+!!! info "Available in API Server version 0.1.9+"
+    This environment variable is supported in API Server version 0.1.9 and above.
+
+Specify a prefix for Redis keys. This allows multiple LangGraph Server instances to share the same Redis instance by using different key prefixes. 
+
+Defaults to `''`.
+
+## `REDIS_CLUSTER`
+
+!!! info "Only Allowed in Self-Hosted Deployments"
+    Redis Cluster mode is only available in Self-Hosted Deployment models, LangGraph Cloud SaaS will provision a redis instance for you by default.
+
+Set `REDIS_CLUSTER` to `True` to enable Redis Cluster mode. When enabled, the system will connect to Redis using cluster mode. This is useful when connecting to a Redis Cluster deployment.
+
+Defaults to `False`.
