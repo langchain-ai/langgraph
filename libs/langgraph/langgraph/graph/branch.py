@@ -1,19 +1,17 @@
+from collections.abc import Awaitable, Hashable, Sequence
 from inspect import (
     isfunction,
     ismethod,
     signature,
 )
+from itertools import zip_longest
 from types import FunctionType
 from typing import (
     Any,
-    Awaitable,
     Callable,
-    Hashable,
     Literal,
     NamedTuple,
     Optional,
-    Sequence,
-    Type,
     Union,
     cast,
     get_args,
@@ -29,11 +27,16 @@ from langchain_core.runnables import (
 
 from langgraph.constants import END, START
 from langgraph.errors import InvalidUpdateError
-from langgraph.pregel.write import ChannelWrite
+from langgraph.pregel.write import PASSTHROUGH, ChannelWrite, ChannelWriteEntry
 from langgraph.types import Send
 from langgraph.utils.runnable import (
     RunnableCallable,
 )
+
+Writer = Callable[
+    [Sequence[Union[str, Send]]],
+    Sequence[Union[ChannelWriteEntry, Send]],
+]
 
 
 def _get_branch_path_input_schema(
@@ -42,7 +45,7 @@ def _get_branch_path_input_schema(
         Callable[..., Awaitable[Union[Hashable, list[Hashable]]]],
         Runnable[Any, Union[Hashable, list[Hashable]]],
     ],
-) -> Optional[Type[Any]]:
+) -> Optional[type[Any]]:
     input = None
     # detect input schema annotation in the branch callable
     try:
@@ -85,7 +88,7 @@ class Branch(NamedTuple):
     path: Runnable[Any, Union[Hashable, list[Hashable]]]
     ends: Optional[dict[Hashable, str]]
     then: Optional[str] = None
-    input_schema: Optional[Type[Any]] = None
+    input_schema: Optional[type[Any]] = None
 
     @classmethod
     def from_path(
@@ -124,9 +127,7 @@ class Branch(NamedTuple):
 
     def run(
         self,
-        writer: Callable[
-            [Sequence[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
-        ],
+        writer: Writer,
         reader: Optional[Callable[[RunnableConfig], Any]] = None,
     ) -> RunnableCallable:
         return ChannelWrite.register_writer(
@@ -138,7 +139,15 @@ class Branch(NamedTuple):
                 name=None,
                 trace=False,
                 func_accepts_config=True,
+            ),
+            list(
+                zip_longest(
+                    writer([e for e in self.ends.values() if e != END]),
+                    [str(la) for la, e in self.ends.items() if e != END],
+                )
             )
+            if self.ends
+            else None,
         )
 
     def _route(
@@ -147,9 +156,7 @@ class Branch(NamedTuple):
         config: RunnableConfig,
         *,
         reader: Optional[Callable[[RunnableConfig], Any]],
-        writer: Callable[
-            [Sequence[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
-        ],
+        writer: Writer,
     ) -> Runnable:
         if reader:
             value = reader(config)
@@ -172,9 +179,7 @@ class Branch(NamedTuple):
         config: RunnableConfig,
         *,
         reader: Optional[Callable[[RunnableConfig], Any]],
-        writer: Callable[
-            [Sequence[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
-        ],
+        writer: Writer,
     ) -> Runnable:
         if reader:
             value = reader(config)
@@ -193,9 +198,7 @@ class Branch(NamedTuple):
 
     def _finish(
         self,
-        writer: Callable[
-            [Sequence[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
-        ],
+        writer: Writer,
         input: Any,
         result: Any,
         config: RunnableConfig,
@@ -212,4 +215,18 @@ class Branch(NamedTuple):
             raise ValueError("Branch did not return a valid destination")
         if any(p.node == END for p in destinations if isinstance(p, Send)):
             raise InvalidUpdateError("Cannot send a packet to the END node")
-        return writer(destinations, config) or input
+        entries = writer(destinations)
+        if not entries:
+            return input
+        else:
+            need_passthrough = False
+            for e in entries:
+                if isinstance(e, ChannelWriteEntry):
+                    if e.value is PASSTHROUGH:
+                        need_passthrough = True
+                        break
+            if need_passthrough:
+                return ChannelWrite(entries)
+            else:
+                ChannelWrite.do_write(config, entries)
+                return input

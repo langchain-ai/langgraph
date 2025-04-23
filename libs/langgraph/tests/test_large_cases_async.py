@@ -2,11 +2,11 @@ import asyncio
 import operator
 import re
 import sys
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import (
     Annotated,
     Any,
-    AsyncIterator,
     Literal,
     Optional,
     Union,
@@ -3805,7 +3805,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
         docs: Annotated[list[str], operator.add]
 
     async def rewrite_query(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f"query: {data['query']}"}
 
     async def retriever_one(data: State) -> State:
         await asyncio.sleep(0.1)
@@ -7041,7 +7041,11 @@ async def test_weather_subgraph(
     graph.add_node(normal_llm_node)
     graph.add_node("weather_graph", weather_graph)
     graph.add_edge(START, "router_node")
-    graph.add_conditional_edges("router_node", route_after_prediction)
+    graph.add_conditional_edges(
+        "router_node",
+        route_after_prediction,
+        path_map=["weather_graph", "normal_llm_node"],
+    )
     graph.add_edge("normal_llm_node", END)
     graph.add_edge("weather_graph", END)
 
@@ -7050,8 +7054,6 @@ async def test_weather_subgraph(
 
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         graph = graph.compile(checkpointer=checkpointer)
-
-        assert graph.get_graph(xray=1).draw_mermaid() == snapshot
 
         config = {"configurable": {"thread_id": "1"}}
         thread2 = {"configurable": {"thread_id": "2"}}

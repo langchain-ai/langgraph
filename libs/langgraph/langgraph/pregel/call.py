@@ -5,7 +5,8 @@ import functools
 import inspect
 import sys
 import types
-from typing import Any, Callable, Generator, Generic, Optional, Sequence, TypeVar, cast
+from collections.abc import Generator, Sequence
+from typing import Any, Callable, Generic, Optional, TypeVar, cast
 
 from langchain_core.runnables import Runnable
 from typing_extensions import ParamSpec
@@ -29,16 +30,12 @@ from langgraph.utils.runnable import (
 def _getattribute(obj: Any, name: str) -> Any:
     for subpath in name.split("."):
         if subpath == "<locals>":
-            raise AttributeError(
-                "Can't get local attribute {!r} on {!r}".format(name, obj)
-            )
+            raise AttributeError(f"Can't get local attribute {name!r} on {obj!r}")
         try:
             parent = obj
             obj = getattr(obj, subpath)
         except AttributeError:
-            raise AttributeError(
-                "Can't get attribute {!r} on {!r}".format(name, obj)
-            ) from None
+            raise AttributeError(f"Can't get attribute {name!r} on {obj!r}") from None
     return obj, parent
 
 

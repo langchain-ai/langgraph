@@ -377,7 +377,7 @@ async def _create_vector_store(
             "vector_type": vector_type,
         },
         "distance_type": distance_type,
-        "text_fields": text_fields,
+        "fields": text_fields,
     }
 
     async with await AsyncConnection.connect(

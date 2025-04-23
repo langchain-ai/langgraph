@@ -1,15 +1,12 @@
 import asyncio
 import concurrent.futures
 import time
-from contextlib import ExitStack
+from collections.abc import Awaitable, Coroutine
+from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
 from contextvars import copy_context
 from types import TracebackType
 from typing import (
-    AsyncContextManager,
-    Awaitable,
     Callable,
-    ContextManager,
-    Coroutine,
     Optional,
     Protocol,
     TypeVar,
@@ -40,7 +37,7 @@ class Submit(Protocol[P, T]):
     ) -> concurrent.futures.Future[T]: ...
 
 
-class BackgroundExecutor(ContextManager):
+class BackgroundExecutor(AbstractContextManager):
     """A context manager that runs sync tasks in the background.
     Uses a thread pool executor to delegate tasks to separate threads.
     On exit,
@@ -122,7 +119,7 @@ class BackgroundExecutor(ContextManager):
                     pass
 
 
-class AsyncBackgroundExecutor(AsyncContextManager):
+class AsyncBackgroundExecutor(AbstractAsyncContextManager):
     """A context manager that runs async tasks in the background.
     Uses the current event loop to delegate tasks to asyncio tasks.
     On exit,

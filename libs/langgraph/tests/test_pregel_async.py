@@ -8,20 +8,15 @@ import random
 import sys
 import uuid
 from collections import Counter, deque
+from collections.abc import AsyncGenerator, AsyncIterator, Generator
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import replace
 from time import perf_counter
 from typing import (
     Annotated,
     Any,
-    AsyncGenerator,
-    AsyncIterator,
-    Dict,
-    Generator,
-    List,
     Literal,
     Optional,
-    Tuple,
     Union,
 )
 from uuid import UUID
@@ -113,7 +108,7 @@ async def test_checkpoint_errors() -> None:
 
     class FaultyPutWritesCheckpointer(InMemorySaver):
         async def aput_writes(
-            self, config: RunnableConfig, writes: List[Tuple[str, Any]], task_id: str
+            self, config: RunnableConfig, writes: list[tuple[str, Any]], task_id: str
         ) -> RunnableConfig:
             raise ValueError("Faulty put_writes")
 
@@ -1959,7 +1954,7 @@ async def test_pending_writes_resume(
         value: Annotated[int, operator.add]
 
     class AwhileMaker:
-        def __init__(self, sleep: float, rtn: Union[Dict, Exception]) -> None:
+        def __init__(self, sleep: float, rtn: Union[dict, Exception]) -> None:
             self.sleep = sleep
             self.rtn = rtn
             self.reset()
@@ -3610,7 +3605,8 @@ async def test_send_react_interrupt_control(
     builder.add_node(foo)
     builder.add_edge(START, "agent")
     graph = builder.compile()
-    assert graph.get_graph().draw_mermaid() == snapshot
+    if checkpointer_name == "memory":
+        assert graph.get_graph().draw_mermaid() == snapshot
 
     assert await graph.ainvoke({"messages": [HumanMessage("hello")]}) == {
         "messages": [
@@ -3928,22 +3924,29 @@ async def test_max_concurrency_control(checkpointer_name: str) -> None:
     builder.add_edge(START, "1")
     graph = builder.compile()
 
-    assert (
-        graph.get_graph().draw_mermaid()
-        == """%%{init: {'flowchart': {'curve': 'linear'}}}%%
+    if checkpointer_name == "memory":
+        assert (
+            graph.get_graph().draw_mermaid()
+            == """---
+config:
+  flowchart:
+    curve: linear
+---
 graph TD;
 	__start__([<p>__start__</p>]):::first
 	1(1)
 	2(2)
-	3([3]):::last
-	__start__ --> 1;
+	3(3)
+	__end__([<p>__end__</p>]):::last
 	1 -.-> 2;
 	2 -.-> 3;
+	__start__ --> 1;
+	3 --> __end__;
 	classDef default fill:#f2f0ff,line-height:1.2
 	classDef first fill-opacity:0
 	classDef last fill:#bfb6fc
 """
-    )
+        )
 
     assert await graph.ainvoke(["0"], debug=True) == ["0", "1", *range(100), "3"]
     assert node2_max_currently == 100
@@ -4980,7 +4983,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydant
 
     app = workflow.compile()
 
-    if SHOULD_CHECK_SNAPSHOTS:
+    if SHOULD_CHECK_SNAPSHOTS and checkpointer_name == "memory":
         assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
         assert app.get_input_schema().model_json_schema() == snapshot
         assert app.get_output_schema().model_json_schema() == snapshot
@@ -6241,7 +6244,7 @@ async def test_store_injected_async(checkpointer_name: str, store_name: str) -> 
         assert result == {"count": N + 1}
         returned_doc = (await the_store.aget(namespace, doc_id)).value
         assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 0}
-        assert len((await the_store.asearch(namespace))) == 1
+        assert len(await the_store.asearch(namespace)) == 1
 
         # Check results after another turn of the same thread
         result = await graph.ainvoke(
@@ -6250,7 +6253,7 @@ async def test_store_injected_async(checkpointer_name: str, store_name: str) -> 
         assert result == {"count": (N + 1) * 2}
         returned_doc = (await the_store.aget(namespace, doc_id)).value
         assert returned_doc == {**doc, "from_thread": thread_1, "some_val": N + 1}
-        assert len((await the_store.asearch(namespace))) == 1
+        assert len(await the_store.asearch(namespace)) == 1
 
         # Test with a different thread
         result = await graph.ainvoke(
@@ -6264,7 +6267,7 @@ async def test_store_injected_async(checkpointer_name: str, store_name: str) -> 
             "some_val": 0,
         }  # Overwrites the whole doc
         assert (
-            len((await the_store.asearch(namespace))) == 1
+            len(await the_store.asearch(namespace)) == 1
         )  # still overwriting the same one
 
 

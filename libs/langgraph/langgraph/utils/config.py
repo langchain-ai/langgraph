@@ -1,6 +1,7 @@
 from collections import ChainMap
+from collections.abc import Sequence
 from os import getenv
-from typing import Any, Optional, Sequence, cast
+from typing import Any, Optional, cast
 
 from langchain_core.callbacks import (
     AsyncCallbackManager,

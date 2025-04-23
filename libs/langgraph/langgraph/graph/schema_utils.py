@@ -3,10 +3,10 @@ import logging
 import weakref
 from inspect import isclass
 from typing import (
+    Annotated,
     Any,
     Callable,
     Optional,
-    Type,
     Union,
     get_args,
     get_origin,
@@ -15,14 +15,13 @@ from typing import (
 
 from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
-from typing_extensions import Annotated
 
 __all__ = ["SchemaCoercionMapper"]
 
 logger = logging.getLogger(__name__)
 
 
-_cache: weakref.WeakKeyDictionary[Type[Any], dict[int, "SchemaCoercionMapper"]] = (
+_cache: weakref.WeakKeyDictionary[type[Any], dict[int, "SchemaCoercionMapper"]] = (
     weakref.WeakKeyDictionary()
 )
 
@@ -32,7 +31,7 @@ class SchemaCoercionMapper:
 
     def __new__(
         cls,
-        schema: Type[Any],
+        schema: type[Any],
         type_hints: Optional[dict[str, Any]] = None,
         *,
         max_depth: int = 12,
@@ -46,7 +45,7 @@ class SchemaCoercionMapper:
 
     def __init__(
         self,
-        schema: Type[Any],
+        schema: type[Any],
         type_hints: Optional[dict[str, Any]] = None,
         *,
         max_depth: int = 12,
@@ -70,6 +69,17 @@ class SchemaCoercionMapper:
                 for n, f in schema.__fields__.items()
             }
             self._construct = schema.construct
+            unhandled_attrs = (
+                "__pre_root_validators__",
+                "__post_root_validators__",
+                "__validators__",
+            )
+            if any(getattr(schema, c, None) for c in unhandled_attrs):
+                self.coerce: Callable[[Any, Any], Union[BaseModelV1, BaseModel]] = (
+                    lambda v, _: schema(**v)
+                )
+            else:
+                self.coerce = self._coerce
 
         elif issubclass(schema, BaseModel):
             self._fields = {
@@ -77,6 +87,13 @@ class SchemaCoercionMapper:
                 for n, f in schema.model_fields.items()
             }
             self._construct: Callable[..., Any] = schema.model_construct  # type: ignore
+            unhandled_attrs = ("validators", "field_validators", "root_validators")
+            if (decorators := getattr(schema, "__pydantic_decorators__", None)) and any(
+                getattr(decorators, attr, None) for attr in unhandled_attrs
+            ):
+                self.coerce = lambda v, _: schema.model_validate(v)
+            else:
+                self.coerce = self._coerce
 
         else:
             raise TypeError("Schema is neither a Pydantic v1 nor v2 model.")
@@ -86,7 +103,7 @@ class SchemaCoercionMapper:
     def __call__(self, input_data: Any, depth: Optional[int] = None) -> Any:
         return self.coerce(input_data, depth)
 
-    def coerce(self, input_data: Any, depth: Optional[int] = None) -> Any:
+    def _coerce(self, input_data: Any, depth: Optional[int] = None) -> Any:
         if depth is None:
             depth = self.max_depth
         if not isinstance(input_data, dict) or depth <= 0:
@@ -169,7 +186,7 @@ class SchemaCoercionMapper:
                 def dict_coercer(v: Any, d: Any) -> Any:
                     if not isinstance(v, dict):
                         if throw:
-                            raise TypeError("Expected dict, got %s" % type(v))
+                            raise TypeError(f"Expected dict, got {type(v)}")
                     return v
 
                 return dict_coercer
@@ -179,7 +196,7 @@ class SchemaCoercionMapper:
             def dict_coercer(v: Any, d: Any) -> Any:
                 if not isinstance(v, dict):
                     if throw:
-                        raise TypeError("Expected dict, got %s" % type(v))
+                        raise TypeError(f"Expected dict, got {type(v)}")
                     return v
                 return {k_sub(k, d - 1): v_sub(val, d - 1) for k, val in v.items()}
 

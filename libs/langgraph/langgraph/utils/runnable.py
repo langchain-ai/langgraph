@@ -2,21 +2,22 @@ import asyncio
 import enum
 import inspect
 import sys
+from collections.abc import (
+    AsyncIterator,
+    Awaitable,
+    Coroutine,
+    Generator,
+    Iterator,
+    Sequence,
+)
 from contextlib import AsyncExitStack, contextmanager
 from contextvars import Context, Token, copy_context
 from functools import partial, wraps
 from typing import (
     Any,
-    AsyncIterator,
-    Awaitable,
     Callable,
-    Coroutine,
-    Generator,
-    Iterator,
     Optional,
     Protocol,
-    Sequence,
-    Tuple,
     Union,
     cast,
 )
@@ -278,7 +279,7 @@ class RunnableCallable(Runnable):
 
         if func_accepts_config is not None:
             self.func_accepts_config = func_accepts_config
-            self.func_accepts: dict[str, Tuple[str, Any]] = {}
+            self.func_accepts: dict[str, tuple[str, Any]] = {}
         else:
             params = inspect.signature(cast(Callable, func or afunc)).parameters
 

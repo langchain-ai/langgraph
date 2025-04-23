@@ -18,7 +18,7 @@ Agents can be executed in two primary modes:
     agent = create_react_agent(...)
 
     # highlight-next-line
-    response = agent.invoke({"messages": "what is the weather in sf"})
+    response = agent.invoke({"messages": [{"role": "user", "content": "what is the weather in sf"}]})
     ```
 
 === "Async invocation"
@@ -27,7 +27,7 @@ Agents can be executed in two primary modes:
 
     agent = create_react_agent(...)
     # highlight-next-line
-    response = await agent.ainvoke({"messages": "what is the weather in sf"})
+    response = await agent.ainvoke({"messages": [{"role": "user", "content": "what is the weather in sf"}]})
     ```
 
 ## Inputs and outputs
@@ -82,7 +82,7 @@ Streaming is available in both sync and async modes:
 
     ```python
     for chunk in agent.stream(
-        {"messages": "what is the weather in sf"},
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
         stream_mode="updates"
     ):
         print(chunk)
@@ -92,7 +92,7 @@ Streaming is available in both sync and async modes:
 
     ```python
     async for chunk in agent.astream(
-        {"messages": "what is the weather in sf"},
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
         stream_mode="updates"
     ):
         print(chunk)
@@ -122,7 +122,7 @@ To control agent execution and avoid infinite loops, set a recursion limit. This
 
     try:
         response = agent.invoke(
-            {"messages": "what's the weather in sf"},
+            {"messages": [{"role": "user", "content": "what's the weather in sf"}]},
             # highlight-next-line
             {"recursion_limit": recursion_limit},
         )
@@ -148,7 +148,7 @@ To control agent execution and avoid infinite loops, set a recursion limit. This
 
     try:
         response = agent_with_recursion_limit.invoke(
-            {"messages": "what's the weather in sf"},
+            {"messages": [{"role": "user", "content": "what's the weather in sf"}]},
         )
     except GraphRecursionError:
         print("Agent stopped due to max iterations.")

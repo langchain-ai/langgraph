@@ -169,6 +169,13 @@ def cli():
 @OPT_WATCH
 @OPT_POSTGRES_URI
 @click.option(
+    "--image",
+    type=str,
+    default=None,
+    help="Docker image to use for the langgraph-api service. If specified, skips building and uses this image directly."
+    " Useful if you want to test against an image already built using `langgraph build`.",
+)
+@click.option(
     "--wait",
     is_flag=True,
     help="Wait for services to start before returning. Implies --detach",
@@ -187,6 +194,7 @@ def up(
     debugger_port: Optional[int],
     debugger_base_url: Optional[str],
     postgres_uri: Optional[str],
+    image: Optional[str],
 ):
     click.secho("Starting LangGraph API server...", fg="green")
     click.secho(
@@ -207,6 +215,7 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
             debugger_port=debugger_port,
             debugger_base_url=debugger_base_url,
             postgres_uri=postgres_uri,
+            image=image,
         )
         # add up + options
         args.extend(["up", "--remove-orphans"])
@@ -572,6 +581,14 @@ def dockerfile(save_path: str, config: pathlib.Path, add_docker_compose: bool) -
     help="Don't raise errors for synchronous I/O blocking operations in your code.",
     default=False,
 )
+@click.option(
+    "--tunnel",
+    is_flag=True,
+    help="Expose the local server via a public tunnel (in this case, Cloudflare) "
+    "for remote frontend access. This avoids issues with browsers "
+    "or networks blocking localhost connections.",
+    default=False,
+)
 @cli.command(
     "dev",
     help="🏃‍♀️‍➡️ Run LangGraph API server in development mode with hot reloading and debugging support",
@@ -588,6 +605,7 @@ def dev(
     wait_for_client: bool,
     studio_url: Optional[str],
     allow_blocking: bool,
+    tunnel: bool,
 ):
     """CLI entrypoint for running the LangGraph API server."""
     try:
@@ -655,6 +673,7 @@ def dev(
         ui_config=config_json.get("ui_config"),
         studio_url=studio_url,
         allow_blocking=allow_blocking,
+        tunnel=tunnel,
     )
 
 
@@ -682,6 +701,7 @@ def prepare_args_and_stdin(
     debugger_port: Optional[int] = None,
     debugger_base_url: Optional[str] = None,
     postgres_uri: Optional[str] = None,
+    image: Optional[str] = None,
 ) -> Tuple[List[str], str]:
     assert config_path.exists(), f"Config file not found: {config_path}"
     # prepare args
@@ -691,6 +711,7 @@ def prepare_args_and_stdin(
         debugger_port=debugger_port,
         debugger_base_url=debugger_base_url,
         postgres_uri=postgres_uri,
+        image=image,  # Pass image to compose YAML generator
     )
     args = [
         "--project-directory",
@@ -706,6 +727,7 @@ def prepare_args_and_stdin(
         config,
         watch=watch,
         base_image=langgraph_cli.config.default_base_image(config),
+        image=image,
     )
     return args, stdin
 
@@ -723,6 +745,7 @@ def prepare(
     debugger_port: Optional[int] = None,
     debugger_base_url: Optional[str] = None,
     postgres_uri: Optional[str] = None,
+    image: Optional[str] = None,
 ) -> Tuple[List[str], str]:
     """Prepare the arguments and stdin for running the LangGraph API server."""
     config_json = langgraph_cli.config.validate_config_file(config_path)
@@ -747,5 +770,6 @@ def prepare(
         debugger_port=debugger_port,
         debugger_base_url=debugger_base_url or f"http://127.0.0.1:{port}",
         postgres_uri=postgres_uri,
+        image=image,
     )
     return args, stdin

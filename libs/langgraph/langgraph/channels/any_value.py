@@ -1,4 +1,5 @@
-from typing import Any, Generic, Sequence, Type
+from collections.abc import Sequence
+from typing import Any, Generic
 
 from typing_extensions import Self
 
@@ -21,12 +22,12 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
         return isinstance(value, AnyValue)
 
     @property
-    def ValueType(self) -> Type[Value]:
+    def ValueType(self) -> type[Value]:
         """The type of the value stored in the channel."""
         return self.typ
 
     @property
-    def UpdateType(self) -> Type[Value]:
+    def UpdateType(self) -> type[Value]:
         """The type of the update received by the channel."""
         return self.typ
 

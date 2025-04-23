@@ -1,8 +1,9 @@
 import operator
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from functools import partial
 from random import choice
-from typing import Annotated, Optional, Sequence
+from typing import Annotated, Optional
 
 from langgraph.constants import END, START
 from langgraph.graph.state import StateGraph

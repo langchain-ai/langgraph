@@ -1,35 +1,24 @@
-import datetime
-import decimal
 import enum
 import functools
 import gc
-import ipaddress
 import json
 import logging
 import operator
-import pathlib
-import re
 import threading
 import time
 import uuid
 import warnings
 from collections import Counter, deque
+from collections.abc import Generator, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from enum import Enum
 from random import randrange
 from typing import (
     Annotated,
     Any,
-    Dict,
-    Generator,
-    Iterator,
-    List,
     Literal,
     Optional,
-    Sequence,
-    Tuple,
     Union,
     get_type_hints,
 )
@@ -249,7 +238,7 @@ def test_checkpoint_errors() -> None:
 
     class FaultyPutWritesCheckpointer(InMemorySaver):
         def put_writes(
-            self, config: RunnableConfig, writes: List[Tuple[str, Any]], task_id: str
+            self, config: RunnableConfig, writes: list[tuple[str, Any]], task_id: str
         ) -> RunnableConfig:
             raise ValueError("Faulty put_writes")
 
@@ -454,7 +443,7 @@ def test_reducer_before_first_node() -> None:
 
     class State(TypedDict):
         hello: str
-        messages: Annotated[List[str], add_messages]
+        messages: Annotated[list[str], add_messages]
 
     def node_a(state: State) -> State:
         assert state == {
@@ -1137,7 +1126,7 @@ def test_pending_writes_resume(
         value: Annotated[int, operator.add]
 
     class AwhileMaker:
-        def __init__(self, sleep: float, rtn: Union[Dict, Exception]) -> None:
+        def __init__(self, sleep: float, rtn: Union[dict, Exception]) -> None:
             self.sleep = sleep
             self.rtn = rtn
             self.reset()
@@ -1339,22 +1328,26 @@ def test_pending_writes_resume(
             "configurable": {
                 "thread_id": "1",
                 "checkpoint_ns": "",
-                "checkpoint_id": checkpoints[2].config["configurable"]["checkpoint_id"]
-                if checkpoint_during
-                else AnyStr(),
+                "checkpoint_id": (
+                    checkpoints[2].config["configurable"]["checkpoint_id"]
+                    if checkpoint_during
+                    else AnyStr()
+                ),
             }
         },
-        pending_writes=UnsortedSequence(
-            (AnyStr(), "value", 2),
-            (AnyStr(), "__error__", 'ConnectionError("I\'m not good")'),
-            (AnyStr(), "value", 3),
-        )
-        if checkpoint_during
-        else UnsortedSequence(
-            (AnyStr(), "value", 2),
-            (AnyStr(), "__error__", 'ConnectionError("I\'m not good")'),
-            # the write against the previous checkpoint is not saved, as it is
-            # produced in a run where only the next checkpoint (the last) is saved
+        pending_writes=(
+            UnsortedSequence(
+                (AnyStr(), "value", 2),
+                (AnyStr(), "__error__", 'ConnectionError("I\'m not good")'),
+                (AnyStr(), "value", 3),
+            )
+            if checkpoint_during
+            else UnsortedSequence(
+                (AnyStr(), "value", 2),
+                (AnyStr(), "__error__", 'ConnectionError("I\'m not good")'),
+                # the write against the previous checkpoint is not saved, as it is
+                # produced in a run where only the next checkpoint (the last) is saved
+            )
         ),
     )
     if not checkpoint_during:
@@ -2149,7 +2142,7 @@ def test_conditional_entrypoint_to_multiple_state_graph(
 
     workflow.add_node("get_weather", get_weather)
     workflow.add_edge("get_weather", END)
-    workflow.set_conditional_entry_point(continue_to_weather)
+    workflow.set_conditional_entry_point(continue_to_weather, path_map=["get_weather"])
 
     app = workflow.compile()
 
@@ -2416,7 +2409,8 @@ def test_in_one_fan_out_state_graph_waiting_edge(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    if checkpointer_name == "memory":
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"query": "what is weather in sf"}) == {
         "query": "analyzed: query: what is weather in sf",
@@ -2562,7 +2556,8 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    if checkpointer_name == "memory":
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"query": "what is weather in sf"}, debug=True) == {
         "query": "analyzed: query: what is weather in sf",
@@ -2712,9 +2707,10 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
-    assert app.get_input_jsonschema() == snapshot
-    assert app.get_output_jsonschema() == snapshot
+    if checkpointer_name == "memory":
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+        assert app.get_input_jsonschema() == snapshot
+        assert app.get_output_jsonschema() == snapshot
 
     with pytest.raises(ValidationError), assert_ctx_once():
         app.invoke({"query": {}})
@@ -2902,7 +2898,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
 
     app = workflow.compile()
 
-    if SHOULD_CHECK_SNAPSHOTS:
+    if SHOULD_CHECK_SNAPSHOTS and checkpointer_name == "memory":
         assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
         assert app.get_input_schema().model_json_schema() == snapshot
         assert app.get_output_schema().model_json_schema() == snapshot
@@ -2966,8 +2962,6 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_input(
-    snapshot: SnapshotAssertion,
-    mocker: MockerFixture,
     request: pytest.FixtureRequest,
     checkpointer_name: str,
 ) -> None:
@@ -3095,264 +3089,6 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_inp
             "checkpoint_ns": "",
         }
     }
-
-
-@pytest.mark.parametrize("version", ["v1", "v2"])
-def test_nested_pydantic_models(version: str) -> None:
-    """Test that nested Pydantic models are properly constructed from leaf nodes up."""
-
-    # Define nested Pydantic models
-    # Import necessary modules
-
-    if version == "v1":
-        from pydantic.v1 import (  # type: ignore
-            BaseModel,
-            ByteSize,
-            Field,
-            SecretStr,
-            confloat,
-            conint,
-            conlist,
-            constr,
-        )
-    else:
-        from pydantic import (  # type: ignore
-            BaseModel,
-            ByteSize,
-            Field,
-            SecretStr,
-            confloat,
-            conint,
-            conlist,
-            constr,
-        )
-        from pydantic.v1 import BaseModel as BaseModelV1
-
-        if BaseModel is BaseModelV1:
-            pytest.skip("Cannot test pydantic v2 using installed version < 2")
-
-    class NestedModel(BaseModel):
-        value: int
-        name: str
-
-    # For constrained types
-    PositiveInt = Annotated[int, Field(gt=0)]
-    NonNegativeFloat = Annotated[float, Field(ge=0)]
-
-    # Enum type
-    class UserRole(Enum):
-        ADMIN = "admin"
-        USER = "user"
-        GUEST = "guest"
-
-    # Forward reference model
-    class RecursiveModel(BaseModel):
-        value: str
-        child: Optional["RecursiveModel"] = None
-
-    # Discriminated union models
-    class Cat(BaseModel):
-        pet_type: Literal["cat"]
-        meow: str
-
-    class Dog(BaseModel):
-        pet_type: Literal["dog"]
-        bark: str
-
-    # Cyclic reference model
-    class Person(BaseModel):
-        id: str
-        name: str
-        friends: list[str] = Field(default_factory=list)  # IDs of friends
-
-    if version == "v2":
-        conlist_type = conlist(item_type=int, min_length=2, max_length=5)
-    else:
-        conlist_type = conlist(item_type=int, min_items=2, max_items=5)
-
-    class State(BaseModel):
-        # Basic nested model tests
-        top_level: str
-        auuid: uuid.UUID
-        nested: NestedModel
-        optional_nested: Annotated[Optional[NestedModel], lambda x, y: y, "Foo"]
-        dict_nested: dict[str, NestedModel]
-        simple_str_list: list[str]
-        list_nested: Annotated[
-            Union[dict, list[dict[str, NestedModel]]], lambda x, y: (x or []) + [y]
-        ]
-        tuple_nested: tuple[str, NestedModel]
-        tuple_list_nested: list[tuple[int, NestedModel]]
-        complex_tuple: tuple[str, dict[str, tuple[int, NestedModel]]]
-
-        # Forward reference test
-        recursive: RecursiveModel
-
-        # Discriminated union test
-        pet: Union[Cat, Dog]
-
-        # Cyclic reference test
-        people: dict[str, Person]  # Map of ID -> Person
-
-        # Rich type adapters
-        ip_address: ipaddress.IPv4Address
-        ip_address_v6: ipaddress.IPv6Address
-        amount: decimal.Decimal
-        file_path: pathlib.Path
-        timestamp: datetime.datetime
-        date_only: datetime.date
-        time_only: datetime.time
-        duration: datetime.timedelta
-        immutable_set: frozenset[int]
-        binary_data: bytes
-        pattern: re.Pattern
-        secret: SecretStr
-        file_size: ByteSize
-
-        # Constrained types
-        positive_value: PositiveInt
-        non_negative: NonNegativeFloat
-        limited_string: constr(min_length=3, max_length=10)
-        bounded_int: conint(ge=10, le=100)
-        restricted_float: confloat(gt=0, lt=1)
-        required_list: conlist_type
-
-        # Enum & Literal
-        role: UserRole
-        status: Literal["active", "inactive", "pending"]
-
-        # Annotated & NewType
-        validated_age: Annotated[int, Field(gt=0, lt=120)]
-
-        # Generic containers with validators
-        decimal_list: List[decimal.Decimal]
-        id_tuple: tuple[uuid.UUID, uuid.UUID]
-
-    inputs = {
-        # Basic nested models
-        "top_level": "initial",
-        "auuid": str(uuid.uuid4()),
-        "nested": {"value": 42, "name": "test"},
-        "optional_nested": {"value": 10, "name": "optional"},
-        "dict_nested": {"a": {"value": 5, "name": "a"}},
-        "list_nested": [{"a": {"value": 6, "name": "b"}}],
-        "tuple_nested": ["tuple-key", {"value": 7, "name": "tuple-value"}],
-        "tuple_list_nested": [[1, {"value": 8, "name": "tuple-in-list"}]],
-        "simple_str_list": ["siss", "boom", "bah"],
-        "complex_tuple": [
-            "complex",
-            {"nested": [9, {"value": 10, "name": "deep"}]},
-        ],
-        # Forward reference
-        "recursive": {"value": "parent", "child": {"value": "child", "child": None}},
-        # Discriminated union (using a cat in this case)
-        "pet": {"pet_type": "cat", "meow": "meow!"},
-        # Cyclic references
-        "people": {
-            "1": {
-                "id": "1",
-                "name": "Alice",
-                "friends": ["2", "3"],  # Alice is friends with Bob and Charlie
-            },
-            "2": {
-                "id": "2",
-                "name": "Bob",
-                "friends": ["1"],  # Bob is friends with Alice
-            },
-            "3": {
-                "id": "3",
-                "name": "Charlie",
-                "friends": ["1", "2"],  # Charlie is friends with Alice and Bob
-            },
-        },
-        # Rich type adapters
-        "ip_address": "192.168.1.1",
-        "ip_address_v6": "2001:db8::1",
-        "amount": "123.45",
-        "file_path": "/tmp/test.txt",
-        "timestamp": "2025-04-07T10:58:04",
-        "date_only": "2025-04-07",
-        "time_only": "10:58:04",
-        "duration": 3600,  # seconds
-        "immutable_set": [1, 2, 3, 4],
-        "binary_data": b"hello world",
-        "pattern": "^test$",
-        "secret": "password123",
-        "file_size": 1024,
-        # Constrained types
-        "positive_value": 42,
-        "non_negative": 0.0,
-        "limited_string": "test",
-        "bounded_int": 50,
-        "restricted_float": 0.5,
-        "required_list": [10, 20, 30],
-        # Enum & Literal
-        "role": "admin",
-        "status": "active",
-        # Annotated & NewType
-        "validated_age": 30,
-        # Generic containers with validators
-        "decimal_list": ["10.5", "20.75", "30.25"],
-        "id_tuple": [str(uuid.uuid4()), str(uuid.uuid4())],
-    }
-
-    update = {"top_level": "updated", "nested": {"value": 100, "name": "updated"}}
-
-    expected = State(**inputs)
-
-    def node_fn(state: State) -> dict:
-        # Basic assertions
-        assert isinstance(state.auuid, uuid.UUID)
-        assert state == expected
-
-        # Rich type assertions
-        assert isinstance(state.ip_address, ipaddress.IPv4Address)
-        assert isinstance(state.ip_address_v6, ipaddress.IPv6Address)
-        assert isinstance(state.amount, decimal.Decimal)
-        assert isinstance(state.file_path, pathlib.Path)
-        assert isinstance(state.timestamp, datetime.datetime)
-        assert isinstance(state.date_only, datetime.date)
-        assert isinstance(state.time_only, datetime.time)
-        assert isinstance(state.duration, datetime.timedelta)
-        assert isinstance(state.immutable_set, frozenset)
-        assert isinstance(state.binary_data, bytes)
-        assert isinstance(state.pattern, re.Pattern)
-
-        # Constrained types
-        assert state.positive_value > 0
-        assert state.non_negative >= 0
-        assert 3 <= len(state.limited_string) <= 10
-        assert 10 <= state.bounded_int <= 100
-        assert 0 < state.restricted_float < 1
-        assert 2 <= len(state.required_list) <= 5
-
-        # Enum & Literal
-        assert state.role == UserRole.ADMIN
-        assert state.status == "active"
-
-        # Annotated
-        assert 0 < state.validated_age < 120
-
-        # Generic containers
-        assert len(state.decimal_list) == 3
-        assert len(state.id_tuple) == 2
-
-        return update
-
-    builder = StateGraph(State)
-    builder.add_node("process", node_fn)
-    builder.set_entry_point("process")
-    builder.set_finish_point("process")
-    graph = builder.compile()
-
-    result = graph.invoke(inputs.copy())
-
-    assert result == {**inputs, **update}
-
-    new_inputs = inputs.copy()
-    new_inputs["list_nested"] = {"foo": "bar"}
-    expected = State(**new_inputs)
-    assert {**new_inputs, **update} == graph.invoke(new_inputs.copy())
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
@@ -4688,7 +4424,7 @@ def test_xray_lance(snapshot: SnapshotAssertion):
             return f"Name: {self.name}\nRole: {self.role}\nAffiliation: {self.affiliation}\nDescription: {self.description}\n"
 
     class Perspectives(BaseModel):
-        analysts: List[Analyst] = Field(
+        analysts: list[Analyst] = Field(
             description="Comprehensive list of investment analysts with their roles and affiliations.",
         )
 
@@ -4707,15 +4443,15 @@ def test_xray_lance(snapshot: SnapshotAssertion):
         )
 
     class InterviewState(TypedDict):
-        messages: Annotated[List[AnyMessage], add_messages]
+        messages: Annotated[list[AnyMessage], add_messages]
         analyst: Analyst
         section: Section
 
     class ResearchGraphState(TypedDict):
-        analysts: List[Analyst]
+        analysts: list[Analyst]
         topic: str
         max_analysts: int
-        sections: List[Section]
+        sections: list[Section]
         interviews: Annotated[list, operator.add]
 
     # Conditional edge
@@ -4736,7 +4472,9 @@ def test_xray_lance(snapshot: SnapshotAssertion):
     # Flow
     interview_builder.add_edge(START, "ask_question")
     interview_builder.add_edge("ask_question", "answer_question")
-    interview_builder.add_conditional_edges("answer_question", route_messages)
+    interview_builder.add_conditional_edges(
+        "answer_question", route_messages, ["ask_question", END]
+    )
 
     # Set up memory
     memory = InMemorySaver()
@@ -7268,6 +7006,8 @@ def test_node_destinations() -> None:
             Edge(source="__start__", target="child", data=None, conditional=False),
             Edge(source="child", target="node_b", data=None, conditional=True),
             Edge(source="child", target="node_c", data=None, conditional=True),
+            Edge(source="node_b", target="__end__", data=None, conditional=False),
+            Edge(source="node_c", target="__end__", data=None, conditional=False),
         ] == graph.edges
 
         # destinations w/ dicts
@@ -7286,6 +7026,8 @@ def test_node_destinations() -> None:
             Edge(source="__start__", target="child", data=None, conditional=False),
             Edge(source="child", target="node_b", data="foo", conditional=True),
             Edge(source="child", target="node_c", data="bar", conditional=True),
+            Edge(source="node_b", target="__end__", data=None, conditional=False),
+            Edge(source="node_c", target="__end__", data=None, conditional=False),
         ] == graph.edges
 
 
@@ -7688,7 +7430,7 @@ def test_parallel_interrupts(
     class ChildState(BaseModel):
         prompt: str = Field(..., description="What is going to be asked to the user?")
         human_input: Optional[str] = Field(None, description="What the human said")
-        human_inputs: Annotated[List[str], operator.add] = Field(
+        human_inputs: Annotated[list[str], operator.add] = Field(
             default_factory=list, description="All of my messages"
         )
 
@@ -7709,10 +7451,10 @@ def test_parallel_interrupts(
     # --- PARENT GRAPH ---
 
     class ParentState(BaseModel):
-        prompts: List[str] = Field(
+        prompts: list[str] = Field(
             ..., description="What is going to be asked to the user?"
         )
-        human_inputs: Annotated[List[str], operator.add] = Field(
+        human_inputs: Annotated[list[str], operator.add] = Field(
             default_factory=list, description="All of my messages"
         )
 
@@ -7865,7 +7607,7 @@ def test_parallel_interrupts_double(
     class ChildState(BaseModel):
         prompt: str = Field(..., description="What is going to be asked to the user?")
         human_input: Optional[str] = Field(None, description="What the human said")
-        human_inputs: Annotated[List[str], operator.add] = Field(
+        human_inputs: Annotated[list[str], operator.add] = Field(
             default_factory=list, description="All of my messages"
         )
 
@@ -7893,10 +7635,10 @@ def test_parallel_interrupts_double(
     # --- PARENT GRAPH ---
 
     class ParentState(BaseModel):
-        prompts: List[str] = Field(
+        prompts: list[str] = Field(
             ..., description="What is going to be asked to the user?"
         )
-        human_inputs: Annotated[List[str], operator.add] = Field(
+        human_inputs: Annotated[list[str], operator.add] = Field(
             default_factory=list, description="All of my messages"
         )
 

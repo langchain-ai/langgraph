@@ -43,6 +43,7 @@ langchain-cohere = "^0.4.2"
 
 [tool.poetry.group.test.dependencies]
 langchain = "^0.3.8"
+langchain-core = "^0.3.54"
 langchain-openai = "^0.3.7"
 langchain-anthropic = "^0.3.8"
 langchain-nomic = "^0.1.3"

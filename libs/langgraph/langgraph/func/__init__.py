@@ -2,14 +2,13 @@ import asyncio
 import concurrent.futures
 import functools
 import inspect
+from collections.abc import Awaitable, Sequence
 from dataclasses import dataclass
 from typing import (
     Any,
-    Awaitable,
     Callable,
     Generic,
     Optional,
-    Sequence,
     TypeVar,
     Union,
     get_args,

@@ -1,6 +1,7 @@
 import asyncio
+from collections.abc import AsyncIterator, Iterator, Mapping
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
-from typing import AsyncIterator, Iterator, Mapping, Union
+from typing import Union
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint

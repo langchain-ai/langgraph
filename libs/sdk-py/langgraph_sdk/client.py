@@ -1043,6 +1043,10 @@ class ThreadsClient:
         status: Optional[ThreadStatus] = None,
         limit: int = 10,
         offset: int = 0,
+        sort_by: Optional[
+            Literal["thread_id", "status", "created_at", "updated_at"]
+        ] = None,
+        sort_order: Optional[Literal["asc", "desc"]] = None,
         headers: Optional[dict[str, str]] = None,
     ) -> list[Thread]:
         """Search for threads.
@@ -1054,6 +1058,8 @@ class ThreadsClient:
                 Must be one of 'idle', 'busy', 'interrupted' or 'error'.
             limit: Limit on number of threads to return.
             offset: Offset in threads table to start search from.
+            sort_by: Sort by field.
+            sort_order: Sort order.
             headers: Optional custom headers to include with the request.
 
         Returns:
@@ -1079,6 +1085,10 @@ class ThreadsClient:
             payload["values"] = values
         if status:
             payload["status"] = status
+        if sort_by:
+            payload["sort_by"] = sort_by
+        if sort_order:
+            payload["sort_order"] = sort_order
         return await self.http.post(
             "/threads/search",
             json=payload,

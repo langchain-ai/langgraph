@@ -40,8 +40,12 @@ async with MultiServerMCPClient(
         # highlight-next-line
         client.get_tools()
     )
-    math_response = await agent.ainvoke({"messages": "what's (3 + 5) x 12?"})
-    weather_response = await agent.ainvoke({"messages": "what is the weather in nyc?"})
+    math_response = await agent.ainvoke(
+        {"messages": [{"role": "user", "content": "what's (3 + 5) x 12?"}]}
+    )
+    weather_response = await agent.ainvoke(
+        {"messages": [{"role": "user", "content": "what is the weather in nyc?"}]}
+    )
 ```
 
 ## Custom MCP servers

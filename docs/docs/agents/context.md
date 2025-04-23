@@ -36,7 +36,7 @@ for this purpose:
 
 ```python
 agent.invoke(
-    {"messages": "hi!"},
+    {"messages": [{"role": "user", "content": "hi!"}]},
     # highlight-next-line
     config={"configurable": {"user_id": "user_123"}}
 )
@@ -183,7 +183,7 @@ Tools can access context through special parameter **annotations**.
     )
 
     agent.invoke(
-        {"messages": "look up user information"},
+        {"messages": [{"role": "user", "content": "look up user information"}]},
         # highlight-next-line
         config={"configurable": {"user_id": "user_123"}}
     )
@@ -278,7 +278,7 @@ agent = create_react_agent(
 )
 
 agent.invoke(
-    {"messages": "greet the user"},
+    {"messages": [{"role": "user", "content": "greet the user"}]},
     # highlight-next-line
     config={"configurable": {"user_id": "user_123"}}
 )
