@@ -59,14 +59,14 @@ config = {
 }
 
 sf_response = agent.invoke(
-    {"messages": "what is the weather in sf"},
+    {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
     # highlight-next-line
     config
 )
 
 # Continue the conversation using the same thread_id
 ny_response = agent.invoke(
-    {"messages": "what about new york?"},
+    {"messages": [{"role": "user", "content": "what about new york?"}]},
     # highlight-next-line
     config # (4)!
 )
@@ -188,7 +188,7 @@ agent = create_react_agent(
 
 # Run the agent
 agent.invoke(
-    {"messages": "look up user information"},
+    {"messages": [{"role": "user", "content": "look up user information"}]},
     # highlight-next-line
     config={"configurable": {"user_id": "user_123"}}
 )
@@ -206,7 +206,7 @@ agent.invoke(
 ### Writing
 
 ```python title="Example of a tool that updates user information"
-from typing import TypedDict
+from typing_extensions import TypedDict
 
 from langgraph.config import get_store
 from langgraph.prebuilt import create_react_agent
@@ -236,7 +236,7 @@ agent = create_react_agent(
 
 # Run the agent
 agent.invoke(
-    {"messages": "My name is John Smith"},
+    {"messages": [{"role": "user", "content": "My name is John Smith"}]},
     # highlight-next-line
     config={"configurable": {"user_id": "user_123"}} # (6)!
 )

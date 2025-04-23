@@ -116,7 +116,9 @@ agent = create_react_agent(
     tools=tools
 )
 
-agent.invoke({"messages": "what's 3 + 5 and 4 * 7? make both calculations in parallel"})
+agent.invoke(
+    {"messages": [{"role": "user", "content": "what's 3 + 5 and 4 * 7?"}]}
+)
 ```
 
 ## Return tool results directly
@@ -137,7 +139,9 @@ agent = create_react_agent(
     tools=[add]
 )
 
-agent.invoke({"messages": "what's 3 + 5?"})
+agent.invoke(
+    {"messages": [{"role": "user", "content": "what's 3 + 5?"}]}
+)
 ```
 
 ## Force tool use
@@ -161,7 +165,9 @@ agent = create_react_agent(
     tools=tools
 )
 
-agent.invoke({"messages": "Hi, I am Bob"})
+agent.invoke(
+    {"messages": [{"role": "user", "content": "Hi, I am Bob"}]}
+)
 ```
 
 !!! Warning "Avoid infinite loops"
@@ -191,7 +197,9 @@ By default, the agent will catch all exceptions raised during tool calls and wil
         model="anthropic:claude-3-7-sonnet-latest",
         tools=[multiply]
     )
-    agent.invoke({"messages": "what's 42 x 7?"})
+    agent.invoke(
+        {"messages": [{"role": "user", "content": "what's 42 x 7?"}]}
+    )
     ```
 
 === "Disable error handling"
@@ -215,7 +223,9 @@ By default, the agent will catch all exceptions raised during tool calls and wil
         model="anthropic:claude-3-7-sonnet-latest",
         tools=tool_node
     )
-    agent_no_error_handling.invoke({"messages": "what's 42 x 7?"})
+    agent_no_error_handling.invoke(
+        {"messages": [{"role": "user", "content": "what's 42 x 7?"}]}
+    )
     ```
 
     1. This disables error handling (enabled by default). See all available strategies in the [API reference][langgraph.prebuilt.tool_node.ToolNode].
@@ -243,7 +253,9 @@ By default, the agent will catch all exceptions raised during tool calls and wil
         model="anthropic:claude-3-7-sonnet-latest",
         tools=tool_node
     )
-    agent_custom_error_handling.invoke({"messages": "what's 42 x 7?"})
+    agent_custom_error_handling.invoke(
+        {"messages": [{"role": "user", "content": "what's 42 x 7?"}]}
+    )
     ```
 
     1. This provides a custom message to send to the LLM in case of an exception. See all available strategies in the [API reference][langgraph.prebuilt.tool_node.ToolNode].
