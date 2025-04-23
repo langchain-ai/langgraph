@@ -29,7 +29,9 @@ agent = create_react_agent(
 )
 
 # Run the agent
-agent.invoke({"messages": "what is the weather in sf"})
+agent.invoke(
+    {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
+)
 ```
 
 1. Define a tool for the agent to use. Tools can be defined as vanilla Python functions. For more advanced tool usage and customization, check the [tools](./tools.md) page.
@@ -85,7 +87,7 @@ agent = create_react_agent(
 )
 
 agent.invoke(
-    {"messages": "what is the weather in sf"},
+    {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
 )
 ```
 
@@ -113,7 +115,7 @@ agent = create_react_agent(
 )
 
 agent.invoke(
-    {"messages": "what is the weather in sf"},
+    {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
     # highlight-next-line
     config={"configurable": {"user_name": "John Smith"}}
 )
@@ -150,12 +152,12 @@ agent = create_react_agent(
 # highlight-next-line
 config = {"configurable": {"thread_id": "1"}}
 sf_response = agent.invoke(
-    {"messages": "what is the weather in sf"},
+    {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
     # highlight-next-line
     config  # (2)!
 )
 ny_response = agent.invoke(
-    {"messages": "what about new york?"},
+    {"messages": [{"role": "user", "content": "what about new york?"}]},
     # highlight-next-line
     config
 )
@@ -189,7 +191,9 @@ agent = create_react_agent(
     response_format=WeatherResponse  # (1)!
 )
 
-response = agent.invoke({"messages": "what is the weather in sf"})
+response = agent.invoke(
+    {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
+)
 
 # highlight-next-line
 response["structured_response"]

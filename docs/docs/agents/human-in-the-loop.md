@@ -70,7 +70,7 @@ config = {
 }
 
 for chunk in agent.stream(
-    {"messages": "book a stay at McKittrick hotel"},
+    {"messages": [{"role": "user", "content": "book a stay at McKittrick hotel"}]},
     # highlight-next-line
     config
 ):
@@ -194,7 +194,7 @@ config = {"configurable": {"thread_id": "1"}}
 
 # Run the agent
 for chunk in agent.stream(
-    {"messages": "book a stay at McKittrick hotel"},
+    {"messages": [{"role": "user", "content": "book a stay at McKittrick hotel"}]},
     # highlight-next-line
     config
 ):
