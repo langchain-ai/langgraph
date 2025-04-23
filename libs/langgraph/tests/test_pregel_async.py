@@ -8233,11 +8233,6 @@ async def test_handles_multiple_interrupts_from_tasks() -> None:
                 resumable=True,
                 ns=[AnyStr("program:"), AnyStr("add_participant:")],
             ),
-            Interrupt(
-                value="Hey do you want to add James?",
-                resumable=True,
-                ns=[AnyStr("program:"), AnyStr("add_participant:")],
-            ),
         ]
     }
 
@@ -8253,11 +8248,6 @@ async def test_handles_multiple_interrupts_from_tasks() -> None:
     result = await program.ainvoke(Command(resume=True), config=config)
     assert result == {
         "__interrupt__": [
-            Interrupt(
-                value="Hey do you want to add Will?",
-                resumable=True,
-                ns=[AnyStr("program:"), AnyStr("add_participant:")],
-            ),
             Interrupt(
                 value="Hey do you want to add Will?",
                 resumable=True,
