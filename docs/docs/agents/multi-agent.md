@@ -53,12 +53,22 @@ hotel_assistant = create_react_agent(
 supervisor = create_supervisor(
     agents=[flight_assistant, hotel_assistant],
     model=ChatOpenAI(model="gpt-4o"),
-    prompt="You manage a hotel booking assistant and a flight booking assistant. Assign work to them."
+    prompt=(
+        "You manage a hotel booking assistant and a"
+        "flight booking assistant. Assign work to them."
+    )
 ).compile()
 
-for chunk in supervisor.stream({
-    "messages": "book a flight from BOS to JFK and a stay at McKittrick Hotel"
-}):
+for chunk in supervisor.stream(
+    {
+        "messages": [
+            {
+                "role": "user",
+                "content": "book a flight from BOS to JFK and a stay at McKittrick Hotel"
+            }
+        ]
+    }
+):
     print(chunk)
     print("\n")
 ```
@@ -110,9 +120,16 @@ swarm = create_swarm(
     default_active_agent="flight_assistant"
 ).compile()
 
-for chunk in supervisor.stream({
-    "messages": "book a flight from BOS to JFK and a stay at McKittrick Hotel"
-}):
+for chunk in swarm.stream(
+    {
+        "messages": [
+            {
+                "role": "user",
+                "content": "book a flight from BOS to JFK and a stay at McKittrick Hotel"
+            }
+        ]
+    }
+):
     print(chunk)
     print("\n")
 ```
@@ -253,9 +270,16 @@ multi_agent_graph = (
 )
 
 # Run the multi-agent graph
-for chunk in multi_agent_graph.stream({
-    "messages": "book a flight from BOS to JFK and a stay at McKittrick Hotel"
-}):
+for chunk in multi_agent_graph.stream(
+    {
+        "messages": [
+            {
+                "role": "user",
+                "content": "book a flight from BOS to JFK and a stay at McKittrick Hotel"
+            }
+        ]
+    }
+):
     print(chunk)
     print("\n")
 ```
