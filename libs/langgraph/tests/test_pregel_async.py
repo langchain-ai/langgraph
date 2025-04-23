@@ -8191,7 +8191,7 @@ async def test_handles_multiple_interrupts_from_tasks() -> None:
 
 
 @NEEDS_CONTEXTVARS
-async def test_tasks_in_interrupts_surfaced_once() -> None:
+async def test_interrupts_in_tasks_surfaced_once() -> None:
     @task
     async def add_participant(name: str) -> str:
         feedback = interrupt(f"Hey do you want to add {name}?")
