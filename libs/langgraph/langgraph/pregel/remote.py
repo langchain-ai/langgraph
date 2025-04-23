@@ -54,6 +54,28 @@ CONF_DROPLIST = frozenset(
 )
 
 
+def sanitize_config_value(v: Any) -> Any:
+    """Recursively sanitize a config value to ensure it contains only primitives."""
+    if isinstance(v, (str, int, float, bool)):
+        return v
+    elif isinstance(v, dict):
+        sanitized_dict = {}
+        for k, val in v.items():
+            if isinstance(k, str):
+                sanitized_value = sanitize_config_value(val)
+                if sanitized_value is not None:
+                    sanitized_dict[k] = sanitized_value
+        return sanitized_dict
+    elif isinstance(v, (list, tuple)):
+        sanitized_list = []
+        for item in v:
+            sanitized_item = sanitize_config_value(item)
+            if sanitized_item is not None:
+                sanitized_list.append(sanitized_item)
+        return sanitized_list
+    return None
+
+
 class RemoteException(Exception):
     """Exception raised when an error occurs in the remote graph."""
 
@@ -303,20 +325,26 @@ class RemoteGraph(PregelProtocol):
             sanitized["recursion_limit"] = config["recursion_limit"]
         if "tags" in config:
             sanitized["tags"] = [tag for tag in config["tags"] if isinstance(tag, str)]
+
         if "metadata" in config:
             sanitized["metadata"] = {}
             for k, v in config["metadata"].items():
-                if isinstance(k, str) and isinstance(v, (str, int, float, bool)):
-                    sanitized["metadata"][k] = v
+                if (
+                    isinstance(k, str)
+                    and (sanitized_value := sanitize_config_value(v)) is not None
+                ):
+                    sanitized["metadata"][k] = sanitized_value
+
         if "configurable" in config:
             sanitized["configurable"] = {}
             for k, v in config["configurable"].items():
                 if (
                     isinstance(k, str)
                     and k not in CONF_DROPLIST
-                    and isinstance(v, (str, int, float, bool))
+                    and (sanitized_value := sanitize_config_value(v)) is not None
                 ):
-                    sanitized["configurable"][k] = v
+                    sanitized["configurable"][k] = sanitized_value
+
         return sanitized
 
     def get_state(
