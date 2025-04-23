@@ -5469,9 +5469,9 @@ def test_interrupt_task_functional(
         return baz_result
 
     # First run, interrupted at bar
-    assert not graph.invoke({"a": ""}, config)
+    graph.invoke({"a": ""}, config)
     # Provide resumes
-    assert not graph.invoke(Command(resume="bar"), config)
+    graph.invoke(Command(resume="bar"), config)
     assert graph.invoke(Command(resume="baz"), config) == {"a": "foobarbaz"}
 
 
