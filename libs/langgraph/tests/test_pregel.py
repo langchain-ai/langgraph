@@ -5422,7 +5422,15 @@ def test_interrupt_functional(
 
     config = {"configurable": {"thread_id": "1"}}
     # First run, interrupted at bar
-    graph.invoke({"a": ""}, config)
+    assert graph.invoke({"a": ""}, config) == {
+        "__interrupt__": [
+            Interrupt(
+                value="Provide value for bar:",
+                resumable=True,
+                ns=[AnyStr("graph:")],
+            )
+        ]
+    }
     # Resume with an answer
     res = graph.invoke(Command(resume="bar"), config)
     assert res == {"a": "foobar", "b": "bar"}
@@ -5453,7 +5461,20 @@ def test_interrupt_task_functional(
 
     config = {"configurable": {"thread_id": "1"}}
     # First run, interrupted at bar
-    graph.invoke({"a": ""}, config)
+    assert graph.invoke({"a": ""}, config) == {
+        "__interrupt__": [
+            Interrupt(
+                value="Provide value for bar:",
+                resumable=True,
+                ns=[AnyStr("graph:"), AnyStr("bar:")],
+            ),
+            Interrupt(
+                value="Provide value for bar:",
+                resumable=True,
+                ns=[AnyStr("graph:"), AnyStr("bar:")],
+            ),
+        ]
+    }
     # Resume with an answer
     res = graph.invoke(Command(resume="bar"), config)
     assert res == {"a": "foobar"}
@@ -5469,7 +5490,20 @@ def test_interrupt_task_functional(
         return baz_result
 
     # First run, interrupted at bar
-    graph.invoke({"a": ""}, config)
+    assert graph.invoke({"a": ""}, config) == {
+        "__interrupt__": [
+            Interrupt(
+                value="Provide value for bar:",
+                resumable=True,
+                ns=[AnyStr("graph:"), AnyStr("bar:")],
+            ),
+            Interrupt(
+                value="Provide value for bar:",
+                resumable=True,
+                ns=[AnyStr("graph:"), AnyStr("bar:")],
+            ),
+        ]
+    }
     # Provide resumes
     graph.invoke(Command(resume="bar"), config)
     assert graph.invoke(Command(resume="baz"), config) == {"a": "foobarbaz"}

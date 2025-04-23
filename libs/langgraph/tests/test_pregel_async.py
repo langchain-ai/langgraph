@@ -8226,7 +8226,20 @@ async def test_handles_multiple_interrupts_from_tasks() -> None:
     config = {"configurable": {"thread_id": "1"}}
 
     result = await program.ainvoke("this is ignored", config=config)
-    assert "__interrupt__" in result
+    assert result == {
+        "__interrupt__": [
+            Interrupt(
+                value="Hey do you want to add James?",
+                resumable=True,
+                ns=[AnyStr("program:"), AnyStr("add_participant:")],
+            ),
+            Interrupt(
+                value="Hey do you want to add James?",
+                resumable=True,
+                ns=[AnyStr("program:"), AnyStr("add_participant:")],
+            ),
+        ]
+    }
 
     state = await program.aget_state(config=config)
     assert len(state.tasks[0].interrupts) == 1
@@ -8238,7 +8251,20 @@ async def test_handles_multiple_interrupts_from_tasks() -> None:
     assert task_interrupt.value == "Hey do you want to add James?"
 
     result = await program.ainvoke(Command(resume=True), config=config)
-    assert "__interrupt__" in result
+    assert result == {
+        "__interrupt__": [
+            Interrupt(
+                value="Hey do you want to add Will?",
+                resumable=True,
+                ns=[AnyStr("program:"), AnyStr("add_participant:")],
+            ),
+            Interrupt(
+                value="Hey do you want to add Will?",
+                resumable=True,
+                ns=[AnyStr("program:"), AnyStr("add_participant:")],
+            ),
+        ]
+    }
 
     state = await program.aget_state(config=config)
     assert len(state.tasks[0].interrupts) == 1
