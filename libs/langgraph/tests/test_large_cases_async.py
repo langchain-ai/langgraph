@@ -2757,7 +2757,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                     ),
                 ]
             },
-            tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0)),),
+            tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0, False)),),
             next=("tools",),
             config={
                 "configurable": {
@@ -2822,7 +2822,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                     ),
                 ]
             },
-            tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0)),),
+            tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0, False)),),
             next=("tools",),
             config=tup.config,
             created_at=tup.checkpoint["ts"],
@@ -2929,8 +2929,8 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 ]
             },
             tasks=(
-                PregelTask(AnyStr(), "tools", (PUSH, 0)),
-                PregelTask(AnyStr(), "tools", (PUSH, 1)),
+                PregelTask(AnyStr(), "tools", (PUSH, 0, False)),
+                PregelTask(AnyStr(), "tools", (PUSH, 1, False)),
             ),
             next=("tools", "tools"),
             config=tup.config,
@@ -3074,7 +3074,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                     ),
                 ]
             },
-            tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0)),),
+            tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0, False)),),
             next=("tools",),
             config=tup.config,
             created_at=tup.checkpoint["ts"],
@@ -3135,7 +3135,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                     ),
                 ]
             },
-            tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0)),),
+            tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0, False)),),
             next=("tools",),
             config=tup.config,
             created_at=tup.checkpoint["ts"],
@@ -3242,8 +3242,8 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 ]
             },
             tasks=(
-                PregelTask(AnyStr(), "tools", (PUSH, 0)),
-                PregelTask(AnyStr(), "tools", (PUSH, 1)),
+                PregelTask(AnyStr(), "tools", (PUSH, 0, False)),
+                PregelTask(AnyStr(), "tools", (PUSH, 1, False)),
             ),
             next=("tools", "tools"),
             config=tup.config,

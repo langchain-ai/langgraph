@@ -542,11 +542,14 @@ def prepare_single_task(
             str(task_path[2]),
         )
         task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
+        # we append True to the task path to indicate that a call is being
+        # made, so we should not return interrupts from this task (responsibility lies with the parent)
+        task_path = (*task_path[:3], True)
         metadata = {
             "langgraph_step": step,
             "langgraph_node": name,
             "langgraph_triggers": triggers,
-            "langgraph_path": task_path[:3],
+            "langgraph_path": task_path,
             "langgraph_checkpoint_ns": task_checkpoint_ns,
         }
         if task_id_checksum is not None:
@@ -575,7 +578,7 @@ def prepare_single_task(
                             local_read,
                             channels,
                             managed,
-                            PregelTaskWrites(task_path[:3], name, writes, triggers),
+                            PregelTaskWrites(task_path, name, writes, triggers),
                         ),
                         CONFIG_KEY_STORE: (store or configurable.get(CONFIG_KEY_STORE)),
                         CONFIG_KEY_CHECKPOINTER: (
@@ -598,10 +601,10 @@ def prepare_single_task(
                 call.retry,
                 None,
                 task_id,
-                task_path[:3],
+                task_path,
             )
         else:
-            return PregelTask(task_id, name, task_path[:3])
+            return PregelTask(task_id, name, task_path)
     elif task_path[0] == PUSH:
         if len(task_path) == 2:
             # SEND tasks, executed in superstep n+1
@@ -637,11 +640,14 @@ def prepare_single_task(
             logger.warning(f"Ignoring invalid PUSH task path {task_path}")
             return
         task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
+        # we append False to the task path to indicate that a call is not being made
+        # so we should return interrupts from this task
+        task_path = (*task_path[:3], False)
         metadata = {
             "langgraph_step": step,
             "langgraph_node": packet.node,
             "langgraph_triggers": triggers,
-            "langgraph_path": task_path[:3],
+            "langgraph_path": task_path,
             "langgraph_checkpoint_ns": task_checkpoint_ns,
         }
         if task_id_checksum is not None:
@@ -678,7 +684,7 @@ def prepare_single_task(
                                 channels,
                                 managed,
                                 PregelTaskWrites(
-                                    task_path[:3], packet.node, writes, triggers
+                                    task_path, packet.node, writes, triggers
                                 ),
                             ),
                             CONFIG_KEY_STORE: (
@@ -708,12 +714,12 @@ def prepare_single_task(
                     proc.retry_policy,
                     None,
                     task_id,
-                    task_path[:3],
+                    task_path,
                     writers=proc.flat_writers,
                     subgraphs=proc.subgraphs,
                 )
         else:
-            return PregelTask(task_id, packet.node, task_path[:3])
+            return PregelTask(task_id, packet.node, task_path)
     elif task_path[0] == PULL:
         # (PULL, node name)
         name = cast(str, task_path[1])

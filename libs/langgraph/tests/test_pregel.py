@@ -6968,9 +6968,12 @@ def test_stream_mode_messages_command() -> None:
     def my_other_node(state):
         return Command(update={"messages": HumanMessage(content="bar")})
 
+    def my_last_node(state):
+        return [Command(update={"messages": HumanMessage(content="baz")})]
+
     graph = (
         StateGraph(MessagesState)
-        .add_sequence([my_node, my_other_node])
+        .add_sequence([my_node, my_other_node, my_last_node])
         .add_edge(START, "my_node")
         .compile()
     )
@@ -7000,6 +7003,16 @@ def test_stream_mode_messages_command() -> None:
                 "langgraph_triggers": ("branch:to:my_other_node",),
                 "langgraph_path": ("__pregel_pull", "my_other_node"),
                 "langgraph_checkpoint_ns": AnyStr("my_other_node:"),
+            },
+        ),
+        (
+            _AnyIdHumanMessage(content="baz"),
+            {
+                "langgraph_step": 3,
+                "langgraph_node": "my_last_node",
+                "langgraph_triggers": ("branch:to:my_last_node",),
+                "langgraph_path": ("__pregel_pull", "my_last_node"),
+                "langgraph_checkpoint_ns": AnyStr("my_last_node:"),
             },
         ),
     ]

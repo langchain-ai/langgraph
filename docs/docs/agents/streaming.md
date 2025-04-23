@@ -35,7 +35,7 @@ For example, if you have an agent that calls a tool once, you should see the fol
     )
     # highlight-next-line
     for chunk in agent.stream(
-        {"messages": "what is the weather in sf"},
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
         # highlight-next-line
         stream_mode="updates"
     ):
@@ -52,7 +52,7 @@ For example, if you have an agent that calls a tool once, you should see the fol
     )
     # highlight-next-line
     async for chunk in agent.astream(
-        {"messages": "what is the weather in sf"},
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
         # highlight-next-line
         stream_mode="updates"
     ):
@@ -73,7 +73,7 @@ To stream tokens as they are produced by the LLM, use `stream_mode="messages"`:
     )
     # highlight-next-line
     for token, metadata in agent.stream(
-        {"messages": "what is the weather in sf"},
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
         # highlight-next-line
         stream_mode="messages"
     ):
@@ -91,7 +91,7 @@ To stream tokens as they are produced by the LLM, use `stream_mode="messages"`:
     )
     # highlight-next-line
     async for token, metadata in agent.astream(
-        {"messages": "what is the weather in sf"},
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
         # highlight-next-line
         stream_mode="messages"
     ):
@@ -125,7 +125,7 @@ To stream updates from tools as they are executed, you can use [get_stream_write
     )
 
     for chunk in agent.stream(
-        {"messages": "what is the weather in sf"},
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
         # highlight-next-line
         stream_mode="custom"
     ):
@@ -154,7 +154,7 @@ To stream updates from tools as they are executed, you can use [get_stream_write
     )
 
     async for chunk in agent.astream(
-        {"messages": "what is the weather in sf"},
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
         # highlight-next-line
         stream_mode="custom"
     ):
@@ -178,7 +178,7 @@ You can specify multiple streaming modes by passing stream mode as a list: `stre
     )
 
     for stream_mode, chunk in agent.stream(
-        {"messages": "what is the weather in sf"},
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
         # highlight-next-line
         stream_mode=["updates", "messages", "custom"]
     ):
@@ -195,7 +195,7 @@ You can specify multiple streaming modes by passing stream mode as a list: `stre
     )
 
     async for stream_mode, chunk in agent.astream(
-        {"messages": "what is the weather in sf"},
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
         # highlight-next-line
         stream_mode=["updates", "messages", "custom"]
     ):
