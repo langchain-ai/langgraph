@@ -903,12 +903,18 @@ class PregelLoop(LoopProtocol):
     def _output_writes(
         self, task_id: str, writes: Sequence[tuple[str, Any]], *, cached: bool = False
     ) -> None:
+        print(f"output writes {task_id}, {writes}")
         if task := self.tasks.get(task_id):
             if task.config is not None and TAG_HIDDEN in task.config.get(
                 "tags", EMPTY_SEQ
             ):
                 return
             if writes[0][0] == INTERRUPT:
+                # in loop.py we append a bool to the PUSH task paths to indicate
+                # whether or not a call was present (that was popped). If so,
+                # we don't emit the interrupt as it'll be emitted by the parent
+                if task.path[0] == PUSH and task.path[-1] is True:
+                    return
                 self._emit(
                     "updates",
                     lambda: iter(

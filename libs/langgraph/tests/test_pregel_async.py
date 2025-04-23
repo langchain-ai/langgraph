@@ -992,7 +992,7 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
                 PregelTask(
                     AnyStr(),
                     name="tool_one",
-                    path=("__pregel_push", 0),
+                    path=("__pregel_push", 0, False),
                     error=None,
                     interrupts=(),
                     state=None,
@@ -1044,7 +1044,7 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
                 PregelTask(
                     AnyStr(),
                     "tool_one",
-                    (PUSH, 0),
+                    (PUSH, 0, False),
                     result=None,
                 ),
                 PregelTask(
@@ -2952,7 +2952,7 @@ async def test_send_dedupe_on_resume(
                     PregelTask(
                         id=AnyStr(),
                         name="2",
-                        path=("__pregel_push", 0),
+                        path=("__pregel_push", 0, False),
                         error=None,
                         interrupts=(),
                         state=None,
@@ -2961,7 +2961,7 @@ async def test_send_dedupe_on_resume(
                     PregelTask(
                         id=AnyStr(),
                         name="flaky",
-                        path=("__pregel_push", 1),
+                        path=("__pregel_push", 1, False),
                         error=None,
                         interrupts=(Interrupt(value="Bahh", resumable=False, ns=None),),
                         state=None,
@@ -3007,7 +3007,7 @@ async def test_send_dedupe_on_resume(
                     PregelTask(
                         id=AnyStr(),
                         name="2",
-                        path=("__pregel_push", 0),
+                        path=("__pregel_push", 0, False),
                         error=None,
                         interrupts=(),
                         state=None,
@@ -3016,7 +3016,7 @@ async def test_send_dedupe_on_resume(
                     PregelTask(
                         id=AnyStr(),
                         name="2",
-                        path=("__pregel_push", 1),
+                        path=("__pregel_push", 1, False),
                         error=None,
                         interrupts=(),
                         state=None,
@@ -3295,7 +3295,7 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 PregelTask(
                     id=AnyStr(),
                     name="foo",
-                    path=("__pregel_push", 0),
+                    path=("__pregel_push", 0, False),
                     error=None,
                     interrupts=(),
                     state=None,
@@ -3453,7 +3453,7 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 PregelTask(
                     id=AnyStr(),
                     name="foo",
-                    path=("__pregel_push", 0),
+                    path=("__pregel_push", 0, False),
                     error=None,
                     interrupts=(),
                     state=None,
@@ -3544,7 +3544,7 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 PregelTask(
                     id=AnyStr(),
                     name="foo",
-                    path=("__pregel_push", 0),
+                    path=("__pregel_push", 0, False),
                     error=None,
                     interrupts=(),
                     state=None,
@@ -3761,7 +3761,7 @@ async def test_send_react_interrupt_control(
                 PregelTask(
                     id=AnyStr(),
                     name="foo",
-                    path=("__pregel_push", 0),
+                    path=("__pregel_push", 0, False),
                     error=None,
                     interrupts=(),
                     state=None,

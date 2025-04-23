@@ -3034,7 +3034,7 @@ def test_state_graph_packets(
                 ),
             ]
         },
-        tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0)),),
+        tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0, False)),),
         next=("tools",),
         config={
             "configurable": {
@@ -3098,7 +3098,7 @@ def test_state_graph_packets(
                 ),
             ]
         },
-        tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0)),),
+        tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0, False)),),
         next=("tools",),
         config={
             "configurable": {
@@ -3209,8 +3209,8 @@ def test_state_graph_packets(
             ]
         },
         tasks=(
-            PregelTask(AnyStr(), "tools", (PUSH, 0)),
-            PregelTask(AnyStr(), "tools", (PUSH, 1)),
+            PregelTask(AnyStr(), "tools", (PUSH, 0, False)),
+            PregelTask(AnyStr(), "tools", (PUSH, 1, False)),
         ),
         next=("tools", "tools"),
         config={
@@ -3367,7 +3367,7 @@ def test_state_graph_packets(
                 ),
             ]
         },
-        tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0)),),
+        tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0, False)),),
         next=("tools",),
         config={
             "configurable": {
@@ -3431,7 +3431,7 @@ def test_state_graph_packets(
                 ),
             ]
         },
-        tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0)),),
+        tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0, False)),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=AnyStr(),
@@ -3536,8 +3536,8 @@ def test_state_graph_packets(
             ]
         },
         tasks=(
-            PregelTask(AnyStr(), "tools", (PUSH, 0)),
-            PregelTask(AnyStr(), "tools", (PUSH, 1)),
+            PregelTask(AnyStr(), "tools", (PUSH, 0, False)),
+            PregelTask(AnyStr(), "tools", (PUSH, 1, False)),
         ),
         next=("tools", "tools"),
         config={
@@ -5916,7 +5916,7 @@ def test_copy_checkpoint(
             PregelTask(
                 id=AnyStr(),
                 name="tool_one",
-                path=("__pregel_push", 0),
+                path=("__pregel_push", 0, False),
                 result={"my_key": " one"},
             ),
             PregelTask(
@@ -5970,7 +5970,7 @@ def test_copy_checkpoint(
             PregelTask(
                 id=AnyStr(),
                 name="tool_one",
-                path=("__pregel_push", 0),
+                path=("__pregel_push", 0, False),
             ),
             PregelTask(
                 AnyStr(),
@@ -7485,7 +7485,7 @@ def test_send_dedupe_on_resume(
                 PregelTask(
                     id=AnyStr(),
                     name="2",
-                    path=("__pregel_push", 0),
+                    path=("__pregel_push", 0, False),
                     error=None,
                     interrupts=(),
                     state=None,
@@ -7494,7 +7494,7 @@ def test_send_dedupe_on_resume(
                 PregelTask(
                     id=AnyStr(),
                     name="flaky",
-                    path=("__pregel_push", 1),
+                    path=("__pregel_push", 1, False),
                     error=None,
                     interrupts=(Interrupt(value="Bahh", resumable=False, ns=None),),
                     state=None,
@@ -7540,7 +7540,7 @@ def test_send_dedupe_on_resume(
                 PregelTask(
                     id=AnyStr(),
                     name="2",
-                    path=("__pregel_push", 0),
+                    path=("__pregel_push", 0, False),
                     error=None,
                     interrupts=(),
                     state=None,
@@ -7549,7 +7549,7 @@ def test_send_dedupe_on_resume(
                 PregelTask(
                     id=AnyStr(),
                     name="2",
-                    path=("__pregel_push", 1),
+                    path=("__pregel_push", 1, False),
                     error=None,
                     interrupts=(),
                     state=None,
@@ -9543,7 +9543,7 @@ def test_send_react_interrupt(
             PregelTask(
                 id=AnyStr(),
                 name="foo",
-                path=("__pregel_push", 0),
+                path=("__pregel_push", 0, False),
                 error=None,
                 interrupts=(),
                 state=None,
@@ -9703,7 +9703,7 @@ def test_send_react_interrupt(
             PregelTask(
                 id=AnyStr(),
                 name="foo",
-                path=("__pregel_push", 0),
+                path=("__pregel_push", 0, False),
                 error=None,
                 interrupts=(),
                 state=None,
@@ -9794,7 +9794,7 @@ def test_send_react_interrupt(
             PregelTask(
                 id=AnyStr(),
                 name="foo",
-                path=("__pregel_push", 0),
+                path=("__pregel_push", 0, False),
                 error=None,
                 interrupts=(),
                 state=None,
@@ -10013,7 +10013,7 @@ def test_send_react_interrupt_control(
             PregelTask(
                 id=AnyStr(),
                 name="foo",
-                path=("__pregel_push", 0),
+                path=("__pregel_push", 0, False),
                 error=None,
                 interrupts=(),
                 state=None,
