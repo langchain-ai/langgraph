@@ -2192,7 +2192,7 @@ class Pregel(PregelProtocol):
             stream_mode: The mode to stream output, defaults to self.stream_mode.
                 Options are:
 
-                - `"values"`: Emit all values in the state after each step.
+                - `"values"`: Emit all values in the state after each step, including interrupts.
                     When used with functional API, values are emitted once at the end of the workflow.
                 - `"updates"`: Emit only the node or task names and updates returned by the nodes or tasks after each step.
                     If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
@@ -2479,7 +2479,7 @@ class Pregel(PregelProtocol):
             stream_mode: The mode to stream output, defaults to self.stream_mode.
                 Options are:
 
-                - `"values"`: Emit all values in the state after each step.
+                - `"values"`: Emit all values in the state after each step, including interrupts.
                     When used with functional API, values are emitted once at the end of the workflow.
                 - `"updates"`: Emit only the node or task names and updates returned by the nodes or tasks after each step.
                     If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
