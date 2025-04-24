@@ -111,9 +111,9 @@ def draw_graph(
                         # apply static writes
                         if writes := ChannelWrite.get_static_writes(w):
                             # END writes are not written, but become edges directly
-                            for w in writes:
-                                if w[0] == END:
-                                    edges.add((task.name, w[0], True, w[2]))
+                            for t in writes:
+                                if t[0] == END:
+                                    edges.add((task.name, t[0], True, t[2]))
                             writes = [t for t in writes if t[0] != END]
                             conditionals.update(
                                 {(task.name, *t[:2]): t[2] for t in writes}
