@@ -2491,6 +2491,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(
             "thread_id": "2",
         },
         parent_config=expected_parent_config,
+        interrupts=(),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config, debug=1)] == [
@@ -5221,6 +5222,7 @@ def test_parent_command(request: pytest.FixtureRequest, checkpointer_name: str) 
             }
         ),
         tasks=(),
+        interrupts=(),
     )
 
 

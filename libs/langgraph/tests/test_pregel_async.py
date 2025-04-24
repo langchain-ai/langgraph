@@ -650,6 +650,13 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
                     -1
                 ].config
             ),
+            interrupts=(
+                Interrupt(
+                    value="Just because...",
+                    resumable=True,
+                    ns=[AnyStr("tool_two:")],
+                ),
+            ),
         )
 
         # clear the interrupt and next tasks
@@ -676,6 +683,7 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
                     -1
                 ].config
             ),
+            interrupts=(),
         )
 
 
@@ -848,6 +856,13 @@ async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
                     c async for c in tool_two.checkpointer.alist(thread1root, limit=2)
                 ][-1].config
             ),
+            interrupts=(
+                Interrupt(
+                    value="Just because...",
+                    resumable=True,
+                    ns=[AnyStr("tool_two:"), AnyStr("do:")],
+                ),
+            ),
         )
 
         # clear the interrupt and next tasks
@@ -874,6 +889,7 @@ async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
                     c async for c in tool_two.checkpointer.alist(thread1root, limit=2)
                 ][-1].config
             ),
+            interrupts=(),
         )
 
 
@@ -1047,6 +1063,13 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
                     -1
                 ].config
             ),
+            interrupts=(
+                Interrupt(
+                    value="Just because...",
+                    resumable=True,
+                    ns=[AnyStr("tool_two:")],
+                ),
+            ),
         )
 
         if "shallow" in checkpointer_name:
@@ -1088,6 +1111,7 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
                     -1
                 ].parent_config
             ),
+            interrupts=(),
         )
 
 
@@ -2900,6 +2924,7 @@ async def test_send_dedupe_on_resume(
                     }
                 },
                 tasks=(),
+                interrupts=(),
             ),
             StateSnapshot(
                 values=[
@@ -2946,6 +2971,7 @@ async def test_send_dedupe_on_resume(
                         result=["3"],
                     ),
                 ),
+                interrupts=(),
             ),
             StateSnapshot(
                 values=[
@@ -3013,6 +3039,7 @@ async def test_send_dedupe_on_resume(
                         result=["3"],
                     ),
                 ),
+                interrupts=(Interrupt(value="Bahh", resumable=False, ns=None),),
             ),
             StateSnapshot(
                 values=["0", "1"],
@@ -3068,6 +3095,7 @@ async def test_send_dedupe_on_resume(
                         result=["3.1"],
                     ),
                 ),
+                interrupts=(),
             ),
             StateSnapshot(
                 values=["0"],
@@ -3105,6 +3133,7 @@ async def test_send_dedupe_on_resume(
                         result=["1"],
                     ),
                 ),
+                interrupts=(),
             ),
             StateSnapshot(
                 values=[],
@@ -3136,6 +3165,7 @@ async def test_send_dedupe_on_resume(
                         result=["0"],
                     ),
                 ),
+                interrupts=(),
             ),
         ]
         if checkpoint_during:
@@ -3338,6 +3368,7 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                     result=None,
                 ),
             ),
+            interrupts=(),
         )
 
         # remove the tool call, clearing the pending task
@@ -3391,6 +3422,7 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                 }
             ),
             tasks=(),
+            interrupts=(),
         )
 
         # tool call not executed
@@ -3496,6 +3528,7 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                     result=None,
                 ),
             ),
+            interrupts=(),
         )
 
         # replace the tool call, should clear previous send, create new one
@@ -3587,6 +3620,7 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
                     result=None,
                 ),
             ),
+            interrupts=(),
         )
 
         # prev tool call not executed, new tool call is
@@ -3804,6 +3838,7 @@ async def test_send_react_interrupt_control(
                     result=None,
                 ),
             ),
+            interrupts=(),
         )
 
         # remove the tool call, clearing the pending task
@@ -3857,6 +3892,7 @@ async def test_send_react_interrupt_control(
                 }
             ),
             tasks=(),
+            interrupts=(),
         )
 
         # tool call not executed
@@ -4937,6 +4973,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
                     }
                 }
             ),
+            interrupts=(),
         )
 
         async with assert_ctx_once():
@@ -6635,6 +6672,7 @@ async def test_parent_command(checkpointer_name: str) -> None:
                 }
             ),
             tasks=(),
+            interrupts=(),
         )
 
 

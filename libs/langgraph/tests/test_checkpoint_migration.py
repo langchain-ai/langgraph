@@ -63,6 +63,7 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                 }
             },
             tasks=(),
+            interrupts=(),
         ),
         StateSnapshot(
             values={
@@ -113,6 +114,13 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                     else {"answer": "doc1,doc2,doc3,doc4"},
                 ),
             ),
+            interrupts=(
+                Interrupt(
+                    value="",
+                    resumable=True,
+                    ns=[AnyStr("qa:")],
+                ),
+            ),
         ),
         StateSnapshot(
             values={
@@ -156,6 +164,7 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                     result=None if exc_task_results else {"docs": ["doc1", "doc2"]},
                 ),
             ),
+            interrupts=(),
         ),
         StateSnapshot(
             values={"query": "query: what is weather in sf", "docs": []},
@@ -206,6 +215,7 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                     else {"docs": ["doc3", "doc4"]},
                 ),
             ),
+            interrupts=(),
         ),
         StateSnapshot(
             values={"query": "what is weather in sf", "docs": []},
@@ -245,6 +255,7 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                     else {"query": "query: what is weather in sf"},
                 ),
             ),
+            interrupts=(),
         ),
         StateSnapshot(
             values={"docs": []},
@@ -276,6 +287,7 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                     result={"query": "what is weather in sf"},
                 ),
             ),
+            interrupts=(),
         ),
     ]
 
@@ -1731,6 +1743,7 @@ def test_saved_checkpoint_state_graph(
             created_at=AnyStr(),
             parent_config=latest_state.parent_config,
             tasks=latest_state.tasks,
+            interrupts=latest_state.interrupts,
         )
         == history[0]
     )
@@ -1802,6 +1815,7 @@ async def test_saved_checkpoint_state_graph_async(
                 created_at=AnyStr(),
                 parent_config=latest_state.parent_config,
                 tasks=latest_state.tasks,
+                interrupts=latest_state.interrupts,
             )
             == history[0]
         )

@@ -192,19 +192,21 @@ class StateSnapshot(NamedTuple):
     """Snapshot of the state of the graph at the beginning of a step."""
 
     values: Union[dict[str, Any], Any]
-    """Current values of channels"""
+    """Current values of channels."""
     next: tuple[str, ...]
     """The name of the node to execute in each task for this step."""
     config: RunnableConfig
-    """Config used to fetch this snapshot"""
+    """Config used to fetch this snapshot."""
     metadata: Optional[CheckpointMetadata]
-    """Metadata associated with this snapshot"""
+    """Metadata associated with this snapshot."""
     created_at: Optional[str]
-    """Timestamp of snapshot creation"""
+    """Timestamp of snapshot creation."""
     parent_config: Optional[RunnableConfig]
-    """Config used to fetch the parent snapshot, if any"""
+    """Config used to fetch the parent snapshot, if any."""
     tasks: tuple[PregelTask, ...]
     """Tasks to execute in this step. If already attempted, may contain an error."""
+    interrupts: tuple[Interrupt, ...]
+    """Interrupts that occurred in this step that are pending resolution."""
 
 
 class Send:
@@ -304,7 +306,6 @@ class Command(Generic[N], ToolOutputMixin):
             - sequence of node names to navigate to next
             - `Send` object (to execute a node with the input provided)
             - sequence of `Send` objects
-        resume_map: mapping of interrupt ids to resume values. To be used together with [`interrupt()`][langgraph.types.interrupt].
     """
 
     graph: Optional[str] = None
