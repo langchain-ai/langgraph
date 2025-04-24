@@ -409,39 +409,6 @@ The `Command` primitive provides several options to control and modify the graph
 
 By leveraging `Command`, you can resume graph execution, handle user inputs, and dynamically adjust the graph's state.
 
-## Using with `invoke` and `ainvoke`
-
-When you use `stream` or `astream` to run the graph, you will receive an `Interrupt` event that let you know the `interrupt` was triggered. 
-
-`invoke` and `ainvoke` do not return the interrupt information. To access this information, you must use the [get_state](../reference/graphs.md#langgraph.graph.graph.CompiledGraph.get_state) method to retrieve the graph state after calling `invoke` or `ainvoke`.
-
-```python
-# Run the graph up to the interrupt 
-result = graph.invoke(inputs, thread_config)
-# Get the graph state to get interrupt information.
-state = graph.get_state(thread_config)
-# Print the state values
-print(state.values)
-# Print the pending tasks
-print(state.tasks)
-# Resume the graph with the user's input.
-graph.invoke(Command(resume={"age": "25"}), thread_config)
-```
-
-```pycon
-{'foo': 'bar'} # State values
-(
-    PregelTask(
-        id='5d8ffc92-8011-0c9b-8b59-9d3545b7e553', 
-        name='node_foo', 
-        path=('__pregel_pull', 'node_foo'), 
-        error=None, 
-        interrupts=(Interrupt(value='value_in_interrupt', resumable=True, ns=['node_foo:5d8ffc92-8011-0c9b-8b59-9d3545b7e553'], when='during'),), state=None, 
-        result=None
-    ),
-) # Pending tasks. interrupts 
-```
-
 ## How does resuming from an interrupt work?
 
 !!! warning

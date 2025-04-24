@@ -531,6 +531,9 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
     ) == {
         "my_key": "value",
         "market": "DE",
+        "__interrupt__": [
+            Interrupt(value="Just because...", resumable=True, ns=[AnyStr("tool_two:")])
+        ],
     }
     assert tool_two_node_count == 1, "interrupts aren't retried"
     assert len(tracer.runs) == 1
@@ -713,6 +716,13 @@ async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
     ) == {
         "my_key": "value",
         "market": "DE",
+        "__interrupt__": [
+            Interrupt(
+                value="Just because...",
+                resumable=True,
+                ns=[AnyStr("tool_two:"), AnyStr("do:")],
+            )
+        ],
     }
     assert tool_two_node_count == 1, "interrupts aren't retried"
     assert len(tracer.runs) == 1
@@ -903,6 +913,9 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
     ) == {
         "my_key": "value one",
         "market": "DE",
+        "__interrupt__": [
+            Interrupt(value="Just because...", resumable=True, ns=[AnyStr("tool_two:")])
+        ],
     }
     assert tool_two_node_count == 1, "interrupts aren't retried"
     assert len(tracer.runs) == 1
@@ -964,6 +977,13 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
         ) == {
             "my_key": "value ⛰️ one",
             "market": "DE",
+            "__interrupt__": [
+                Interrupt(
+                    value="Just because...",
+                    resumable=True,
+                    ns=[AnyStr("tool_two:")],
+                )
+            ],
         }
 
         if "shallow" not in checkpointer_name:
@@ -1108,13 +1128,29 @@ async def test_node_not_cancelled_on_other_node_interrupted(
 
         # writes from "awhile" are applied to last chunk
         assert await graph.ainvoke({"hello": "world"}, thread) == {
-            "hello": "world again"
+            "hello": "world again",
+            "__interrupt__": [
+                Interrupt(
+                    value="I am bad",
+                    resumable=True,
+                    ns=[AnyStr("bad:")],
+                )
+            ],
         }
 
         assert not inner_task_cancelled
         assert awhiles == 1
 
-        assert await graph.ainvoke(None, thread, debug=True) == {"hello": "world again"}
+        assert await graph.ainvoke(None, thread, debug=True) == {
+            "hello": "world again",
+            "__interrupt__": [
+                Interrupt(
+                    value="I am bad",
+                    resumable=True,
+                    ns=[AnyStr("bad:")],
+                )
+            ],
+        }
 
         assert not inner_task_cancelled
         assert awhiles == 1
@@ -2795,15 +2831,15 @@ async def test_send_dedupe_on_resume(
         thread1 = {"configurable": {"thread_id": "1"}}
         assert await graph.ainvoke(
             ["0"], thread1, checkpoint_during=checkpoint_during
-        ) == [
-            "0",
-            "1",
-            "3.1",
-            "2|Command(goto=Send(node='2', arg=3))",
-            "2|Command(goto=Send(node='flaky', arg=4))",
-            "3",
-            "2|3",
-        ]
+        ) == {
+            "__interrupt__": [
+                Interrupt(
+                    value="Bahh",
+                    resumable=False,
+                    ns=None,
+                ),
+            ],
+        }
         assert builder.nodes["2"].runnable.func.ticks == 3
         assert builder.nodes["flaky"].runnable.func.ticks == 1
         # resume execution
@@ -5555,7 +5591,16 @@ async def test_subgraph_checkpoint_true_interrupt(
 
         assert await graph.ainvoke(
             {"foo": "foo"}, config, checkpoint_during=checkpoint_during
-        ) == {"foo": "hi! foo"}
+        ) == {
+            "foo": "hi! foo",
+            "__interrupt__": [
+                Interrupt(
+                    value="Provide baz value",
+                    resumable=True,
+                    ns=[AnyStr("node_2"), AnyStr("subgraph_node_1:")],
+                )
+            ],
+        }
         assert (await graph.aget_state(config, subgraphs=True)).tasks[
             0
         ].state.values == {"bar": "hi! foo"}
@@ -6828,7 +6873,15 @@ async def test_interrupt_task_functional(checkpointer_name: str) -> None:
 
         config = {"configurable": {"thread_id": "1"}}
         # First run, interrupted at bar
-        await graph.ainvoke({"a": ""}, config)
+        assert await graph.ainvoke({"a": ""}, config) == {
+            "__interrupt__": [
+                Interrupt(
+                    value="Provide value for bar:",
+                    resumable=True,
+                    ns=[AnyStr("graph:"), AnyStr("bar:")],
+                ),
+            ]
+        }
         # Resume with an answer
         res = await graph.ainvoke(Command(resume="bar"), config)
         assert res == {"a": "foobar"}
@@ -8104,10 +8157,24 @@ async def test_interrupt_subgraph_reenter_checkpointer_true(
         assert await parent.ainvoke({"foo": "", "counter": 0}, config) == {
             "foo": "",
             "counter": 0,
+            "__interrupt__": [
+                Interrupt(
+                    value="Provide value",
+                    resumable=True,
+                    ns=[AnyStr("call_subgraph"), AnyStr("subnode_2:")],
+                )
+            ],
         }
         assert await parent.ainvoke(Command(resume="bar"), config) == {
             "foo": "subgraph_2",
             "counter": 1,
+            "__interrupt__": [
+                Interrupt(
+                    value="Provide value",
+                    resumable=True,
+                    ns=[AnyStr("call_subgraph"), AnyStr("subnode_2")],
+                )
+            ],
         }
         assert await parent.ainvoke(Command(resume="qux"), config) == {
             "foo": "subgraph_2|parent",
@@ -8132,6 +8199,13 @@ async def test_interrupt_subgraph_reenter_checkpointer_true(
         assert await parent.ainvoke({"foo": "meow", "counter": 0}, config) == {
             "foo": "meow",
             "counter": 0,
+            "__interrupt__": [
+                Interrupt(
+                    value="Provide value",
+                    resumable=True,
+                    ns=[AnyStr("call_subgraph"), AnyStr("subnode_2:")],
+                )
+            ],
         }
         # confirm that we preserve the state values from the previous invocation
         assert bar_values == [None, "barbaz", "quxbaz"]
@@ -8160,7 +8234,15 @@ async def test_handles_multiple_interrupts_from_tasks() -> None:
     config = {"configurable": {"thread_id": "1"}}
 
     result = await program.ainvoke("this is ignored", config=config)
-    assert result is None
+    assert result == {
+        "__interrupt__": [
+            Interrupt(
+                value="Hey do you want to add James?",
+                resumable=True,
+                ns=[AnyStr("program:"), AnyStr("add_participant:")],
+            ),
+        ]
+    }
 
     state = await program.aget_state(config=config)
     assert len(state.tasks[0].interrupts) == 1
@@ -8172,7 +8254,15 @@ async def test_handles_multiple_interrupts_from_tasks() -> None:
     assert task_interrupt.value == "Hey do you want to add James?"
 
     result = await program.ainvoke(Command(resume=True), config=config)
-    assert result is None
+    assert result == {
+        "__interrupt__": [
+            Interrupt(
+                value="Hey do you want to add Will?",
+                resumable=True,
+                ns=[AnyStr("program:"), AnyStr("add_participant:")],
+            ),
+        ]
+    }
 
     state = await program.aget_state(config=config)
     assert len(state.tasks[0].interrupts) == 1

@@ -3703,7 +3703,16 @@ def test_subgraph_checkpoint_true_interrupt(
 
     assert graph.invoke(
         {"foo": "foo"}, config, checkpoint_during=checkpoint_during
-    ) == {"foo": "hi! foo"}
+    ) == {
+        "foo": "hi! foo",
+        "__interrupt__": [
+            Interrupt(
+                value="Provide baz value",
+                resumable=True,
+                ns=[AnyStr("node_2"), AnyStr("subgraph_node_1:")],
+            )
+        ],
+    }
     assert graph.get_state(config, subgraphs=True).tasks[0].state.values == {
         "bar": "hi! foo"
     }
@@ -5413,7 +5422,15 @@ def test_interrupt_functional(
 
     config = {"configurable": {"thread_id": "1"}}
     # First run, interrupted at bar
-    graph.invoke({"a": ""}, config)
+    assert graph.invoke({"a": ""}, config) == {
+        "__interrupt__": [
+            Interrupt(
+                value="Provide value for bar:",
+                resumable=True,
+                ns=[AnyStr("graph:")],
+            )
+        ]
+    }
     # Resume with an answer
     res = graph.invoke(Command(resume="bar"), config)
     assert res == {"a": "foobar", "b": "bar"}
@@ -5444,7 +5461,15 @@ def test_interrupt_task_functional(
 
     config = {"configurable": {"thread_id": "1"}}
     # First run, interrupted at bar
-    assert not graph.invoke({"a": ""}, config)
+    assert graph.invoke({"a": ""}, config) == {
+        "__interrupt__": [
+            Interrupt(
+                value="Provide value for bar:",
+                resumable=True,
+                ns=[AnyStr("graph:"), AnyStr("bar:")],
+            ),
+        ]
+    }
     # Resume with an answer
     res = graph.invoke(Command(resume="bar"), config)
     assert res == {"a": "foobar"}
@@ -5460,9 +5485,17 @@ def test_interrupt_task_functional(
         return baz_result
 
     # First run, interrupted at bar
-    assert not graph.invoke({"a": ""}, config)
+    assert graph.invoke({"a": ""}, config) == {
+        "__interrupt__": [
+            Interrupt(
+                value="Provide value for bar:",
+                resumable=True,
+                ns=[AnyStr("graph:"), AnyStr("bar:")],
+            ),
+        ]
+    }
     # Provide resumes
-    assert not graph.invoke(Command(resume="bar"), config)
+    graph.invoke(Command(resume="bar"), config)
     assert graph.invoke(Command(resume="baz"), config) == {"a": "foobarbaz"}
 
 
@@ -7347,10 +7380,27 @@ def test_interrupt_subgraph_reenter_checkpointer_true(
     )
 
     config = {"configurable": {"thread_id": "1"}}
-    assert parent.invoke({"foo": "", "counter": 0}, config) == {"foo": "", "counter": 0}
+    assert parent.invoke({"foo": "", "counter": 0}, config) == {
+        "foo": "",
+        "counter": 0,
+        "__interrupt__": [
+            Interrupt(
+                value="Provide value",
+                resumable=True,
+                ns=[AnyStr("call_subgraph"), AnyStr("subnode_2:")],
+            )
+        ],
+    }
     assert parent.invoke(Command(resume="bar"), config) == {
         "foo": "subgraph_2",
         "counter": 1,
+        "__interrupt__": [
+            Interrupt(
+                value="Provide value",
+                resumable=True,
+                ns=[AnyStr("call_subgraph"), AnyStr("subnode_2:")],
+            )
+        ],
     }
     assert parent.invoke(Command(resume="qux"), config) == {
         "foo": "subgraph_2|parent",
@@ -7375,6 +7425,13 @@ def test_interrupt_subgraph_reenter_checkpointer_true(
     assert parent.invoke({"foo": "meow", "counter": 0}, config) == {
         "foo": "meow",
         "counter": 0,
+        "__interrupt__": [
+            Interrupt(
+                value="Provide value",
+                resumable=True,
+                ns=[AnyStr("call_subgraph"), AnyStr("subnode_2:")],
+            )
+        ],
     }
     # confirm that we preserve the state values from the previous invocation
     assert bar_values == [None, "barbaz", "quxbaz"]

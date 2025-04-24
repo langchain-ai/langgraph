@@ -672,7 +672,8 @@ def test_react_agent_parallel_tool_calls(
     for event in agent.stream(
         {"messages": [("user", query)]}, config, stream_mode="values"
     ):
-        message_types.append([message.type for message in event["messages"]])
+        if messages := event.get("messages"):
+            message_types.append([m.type for m in messages])
 
     if version == "v1":
         assert message_types == [
@@ -691,7 +692,8 @@ def test_react_agent_parallel_tool_calls(
     for event in agent.stream(
         Command(resume={"data": "Hello"}), config, stream_mode="values"
     ):
-        message_types.append([message.type for message in event["messages"]])
+        if messages := event.get("messages"):
+            message_types.append([m.type for m in messages])
 
     assert message_types == [
         ["human", "ai"],
