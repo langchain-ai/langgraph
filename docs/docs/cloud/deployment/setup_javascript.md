@@ -45,7 +45,7 @@ When deploying your app, the dependencies will be installed using the package ma
 ```
 "@langchain/core": "^0.3.42",
 "@langchain/langgraph": "^0.2.57",
-"@langchain/langgraph-checkpoint": "^0.0.16",
+"@langchain/langgraph-checkpoint": "~0.0.16",
 ```
 
 Example file directory:
