@@ -192,6 +192,10 @@ class PregelNode(Runnable):
 
     def copy(self, update: dict[str, Any]) -> PregelNode:
         attrs = {**self.__dict__, **update}
+        # Drop the cached properties
+        attrs.pop("flat_writers", None)
+        attrs.pop("node", None)
+        attrs.pop("input_cache_key", None)
         return PregelNode(**attrs)
 
     @cached_property
