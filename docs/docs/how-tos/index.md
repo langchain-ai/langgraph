@@ -249,7 +249,7 @@ LangGraph Platform supports multiple types of runs besides streaming runs.
 - [How to create cron jobs](../cloud/how-tos/cron_jobs.md)
 - [How to create stateless runs](../cloud/how-tos/stateless_runs.md)
 
-### Streaming
+### Streaming {#streaming_1}
 
 Streaming the results of your LLM application is vital for ensuring a good user experience, especially when your graph may call multiple models and take a long time to fully complete a run. Read about how to stream values from your graph in these how to guides:
 
@@ -267,7 +267,7 @@ With LangGraph Platform you can integrate LangGraph agents into your React appli
 - [How to integrate LangGraph into your React application](../cloud/how-tos/use_stream_react.md)
 - [How to implement Generative User Interfaces with LangGraph](../cloud/how-tos/generative_ui_react.md)
 
-### Human-in-the-loop
+### Human-in-the-loop {#human-in-the-loop-1}
 
 When designing complex graphs, relying entirely on the LLM for decision-making can be risky, particularly when it involves tools that interact with files, APIs, or databases. These interactions may lead to unintended data access or modifications, depending on the use case. To mitigate these risks, LangGraph allows you to integrate human-in-the-loop behavior, ensuring your LLM applications operate as intended without undesirable outcomes.
 

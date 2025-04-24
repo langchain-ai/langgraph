@@ -15,7 +15,7 @@ This guide shows a typical structure for a LangGraph application and shows how t
 
 To deploy using the LangGraph Platform, the following information should be provided:
 
-1. A [LangGraph API Configuration file](#configuration-file) (`langgraph.json`) that specifies the dependencies, graphs, environment variables to use for the application.
+1. A [LangGraph API Configuration file](#configuration-file-concepts) (`langgraph.json`) that specifies the dependencies, graphs, environment variables to use for the application.
 2. The [graphs](#graphs) that implement the logic of the application.
 3. A file that specifies [dependencies](#dependencies) required to run the application.
 4. [Environment variable](#environment-variables) that are required for the application to run.
@@ -77,7 +77,7 @@ Below are examples of directory structures for Python and JavaScript application
     The directory structure of a LangGraph application can vary depending on the programming language and the package manager used.
 
 
-## Configuration File
+## Configuration File {#configuration-file-concepts}
 
 The `langgraph.json` file is a JSON file that specifies the dependencies, graphs, environment variables, and other settings required to deploy a LangGraph application.
 
@@ -145,18 +145,18 @@ A LangGraph application may depend on other Python packages or JavaScript librar
 You will generally need to specify the following information for dependencies to be set up correctly:
 
 1. A file in the directory that specifies the dependencies (e.g., `requirements.txt`, `pyproject.toml`, or `package.json`).
-2. A `dependencies` key in the [LangGraph configuration file](#configuration-file) that specifies the dependencies required to run the LangGraph application.
-3. Any additional binaries or system libraries can be specified using `dockerfile_lines` key in the [LangGraph configuration file](#configuration-file).
+2. A `dependencies` key in the [LangGraph configuration file](#configuration-file-concepts) that specifies the dependencies required to run the LangGraph application.
+3. Any additional binaries or system libraries can be specified using `dockerfile_lines` key in the [LangGraph configuration file](#configuration-file-concepts).
 
 ## Graphs
 
-Use the `graphs` key in the [LangGraph configuration file](#configuration-file) to specify which graphs will be available in the deployed LangGraph application.
+Use the `graphs` key in the [LangGraph configuration file](#configuration-file-concepts) to specify which graphs will be available in the deployed LangGraph application.
 
 You can specify one or more graphs in the configuration file. Each graph is identified by a name (which should be unique) and a path for either: (1) the compiled graph or (2) a function that makes a graph is defined.
 
 ## Environment Variables
 
-If you're working with a deployed LangGraph application locally, you can configure environment variables in the `env` key of the [LangGraph configuration file](#configuration-file).
+If you're working with a deployed LangGraph application locally, you can configure environment variables in the `env` key of the [LangGraph configuration file](#configuration-file-concepts).
 
 For a production deployment, you will typically want to configure the environment variables in the deployment environment.
 

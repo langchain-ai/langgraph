@@ -6,7 +6,7 @@
     2. Resource Authorization (you are here) - Let users have private conversations
     3. [Production Auth](add_auth_server.md) - Add real user accounts and validate using OAuth2
 
-In this tutorial, we will extend our chatbot to give each user their own private conversations. We'll add [resource-level access control](../../concepts/auth.md#resource-level-access-control) so users can only see their own threads.
+In this tutorial, we will extend our chatbot to give each user their own private conversations. We'll add [resource-level access control](../../concepts/auth.md#single-owner-resources) so users can only see their own threads.
 
 ![Authorization handlers](./img/authorization.png)
 
@@ -35,7 +35,7 @@ langgraph dev --no-browser
 
 Recall that in the last tutorial, the [`Auth`](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth) object let us register an [authentication function](../../concepts/auth.md#authentication), which the LangGraph platform uses to validate the bearer tokens in incoming requests. Now we'll use it to register an **authorization** handler.
 
-Authorization handlers are functions that run **after** authentication succeeds. These handlers can add [metadata](../../concepts/auth.md#resource-metadata) to resources (like who owns them) and filter what each user can see.
+Authorization handlers are functions that run **after** authentication succeeds. These handlers can add [metadata](../../concepts/auth.md#filter-operations) to resources (like who owns them) and filter what each user can see.
 
 Let's update our `src/security/auth.py` and add one authorization handler that is run on every request:
 
@@ -211,7 +211,7 @@ This means:
 
 ## Adding scoped authorization handlers {#scoped-authorization}
 
-The broad `@auth.on` handler matches on all [authorization events](../../concepts/auth.md#authorization-events). This is concise, but it means the contents of the `value` dict are not well-scoped, and we apply the same user-level access control to every resource. If we want to be more fine-grained, we can also control specific actions on resources.
+The broad `@auth.on` handler matches on all [authorization events](../../concepts/auth.md#supported-resources). This is concise, but it means the contents of the `value` dict are not well-scoped, and we apply the same user-level access control to every resource. If we want to be more fine-grained, we can also control specific actions on resources.
 
 Update `src/security/auth.py` to add handlers for specific resource types:
 
@@ -290,7 +290,7 @@ Notice that instead of one global handler, we now have specific handlers for:
 2. Reading threads
 3. Accessing assistants
 
-The first three of these match specific **actions** on each resource (see [resource actions](../../concepts/auth.md#resource-actions)), while the last one (`@auth.on.assistants`) matches _any_ action on the `assistants` resource. For each request, LangGraph will run the most specific handler that matches the resource and action being accessed. This means that the four handlers above will run rather than the broadly scoped "`@auth.on`" handler.
+The first three of these match specific **actions** on each resource (see [resource actions](../../concepts/auth.md#resource-specific-handlers)), while the last one (`@auth.on.assistants`) matches _any_ action on the `assistants` resource. For each request, LangGraph will run the most specific handler that matches the resource and action being accessed. This means that the four handlers above will run rather than the broadly scoped "`@auth.on`" handler.
 
 Try adding the following test code to your test file:
 
