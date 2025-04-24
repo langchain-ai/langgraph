@@ -40,6 +40,7 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_PREVIOUS,
     CONFIG_KEY_READ,
+    CONFIG_KEY_RESUME_MAP,
     CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STORE,
@@ -594,6 +595,8 @@ def prepare_single_task(
                             config[CONF].get(CONFIG_KEY_SCRATCHPAD),
                             pending_writes,
                             task_id,
+                            xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+                            config[CONF].get(CONFIG_KEY_RESUME_MAP),
                         ),
                     },
                 ),
@@ -704,6 +707,8 @@ def prepare_single_task(
                                 config[CONF].get(CONFIG_KEY_SCRATCHPAD),
                                 pending_writes,
                                 task_id,
+                                xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+                                config[CONF].get(CONFIG_KEY_RESUME_MAP),
                             ),
                             CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
                                 PREVIOUS, None
@@ -830,6 +835,8 @@ def prepare_single_task(
                                     config[CONF].get(CONFIG_KEY_SCRATCHPAD),
                                     pending_writes,
                                     task_id,
+                                    xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+                                    config[CONF].get(CONFIG_KEY_RESUME_MAP),
                                 ),
                                 CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
                                     PREVIOUS, None
@@ -881,6 +888,8 @@ def _scratchpad(
     parent_scratchpad: Optional[PregelScratchpad],
     pending_writes: list[PendingWrite],
     task_id: str,
+    namespace_hash: str,
+    resume_map: Optional[dict[str, Any]],
 ) -> PregelScratchpad:
     if len(pending_writes) > 0:
         # find global resume value
@@ -892,17 +901,24 @@ def _scratchpad(
             # None cannot be used as a resume value, because it would be difficult to
             # distinguish from missing when used over http
             null_resume_write = None
-        # find task-specific resume value
-        for w in pending_writes:
-            if w[0] == task_id and w[1] == RESUME:
-                task_resume_write = w[2]
-                if not isinstance(task_resume_write, list):
-                    task_resume_write = [task_resume_write]
-                break
+
+        # find namespace and task-specific resume value
+        if resume_map and namespace_hash in resume_map:
+            task_resume_write = resume_map[namespace_hash]
+            if not isinstance(task_resume_write, list):
+                task_resume_write = [task_resume_write]
         else:
-            task_resume_write = []
-        # clear var
-        del w
+            # find task-specific resume value
+            for w in pending_writes:
+                if w[0] == task_id and w[1] == RESUME:
+                    task_resume_write = w[2]
+                    if not isinstance(task_resume_write, list):
+                        task_resume_write = [task_resume_write]
+                    break
+            else:
+                task_resume_write = []
+            # clear var
+            del w
     else:
         null_resume_write = None
         task_resume_write = []

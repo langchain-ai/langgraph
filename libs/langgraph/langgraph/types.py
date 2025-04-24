@@ -147,7 +147,7 @@ class Interrupt:
         """Generate a unique ID for the interrupt based on its namespace."""
         if self.ns is None:
             return "placeholder-id"
-        return xxh3_128_hexdigest("".join(self.ns).encode())
+        return xxh3_128_hexdigest("|".join(self.ns).encode())
 
 
 class StateUpdate(NamedTuple):
@@ -300,12 +300,14 @@ class Command(Generic[N], ToolOutputMixin):
             - sequence of node names to navigate to next
             - `Send` object (to execute a node with the input provided)
             - sequence of `Send` objects
+        resume_map: mapping of interrupt ids to resume values. To be used together with [`interrupt()`][langgraph.types.interrupt].
     """
 
     graph: Optional[str] = None
     update: Optional[Any] = None
     resume: Optional[Union[Any, dict[str, Any]]] = None
     goto: Union[Send, Sequence[Union[Send, str]], str] = ()
+    resume_map: Optional[dict[str, Any]] = None
 
     def __repr__(self) -> str:
         # get all non-None values
