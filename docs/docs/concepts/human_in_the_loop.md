@@ -442,22 +442,19 @@ The value of counter is: 2
 
 ### Resuming multiple interrupts with one invocation
 
-The [`Command`][langgraph.types.Command] constructor supports a [`resume_map`][langgraph.types.Command.resume_map] argument
-that you can use to specify a mapping of interrupt ids to their corresponding resume values.
+If you have multiple interrupts in the task queue, you can use `Command.resume` with a dictionary mapping
+of interrupt ids to resume values to resume multiple interrupts with a single `invoke` / `stream` call.
 
-This is helpful for the case of resuming multiple interrupts with a single invocation.
-For example, once your graph has been interrupted (multiple times, theoretically) and is paused:
+For example, once your graph has been interrupted (multiple times, theoretically) and is stalled:
 
 ```python
-resume_map: dict[str, Any] = {}
-for task in parent_graph.get_state(thread_config).tasks:
-    for i in task.interrupts:
-        resume_map[i.interrupt_id] = f"human input for prompt {i.value}"
+resume_map = {
+    i.interrupt_id: f"human input for prompt {i.value}"
+    for i in parent.get_state(thread_config).interrupts
+}
 
-parent_graph.invoke(Command(resume_map=resume_map), config=thread_config)
+parent_graph.invoke(Command(resume=resume_map), config=thread_config)
 ```
-
-Note, we plan to introduce an interrupts convenience attribute on `get_state()`'s result in the near future.
 
 ## Common Pitfalls
 

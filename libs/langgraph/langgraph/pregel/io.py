@@ -1,12 +1,10 @@
 from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any, Literal, Optional, TypeVar, Union
-from uuid import UUID
 
 from langchain_core.runnables.utils import AddableDict
 
 from langgraph.channels.base import BaseChannel, EmptyChannelError
-from langgraph.checkpoint.base import PendingWrite
 from langgraph.constants import (
     EMPTY_SEQ,
     ERROR,
