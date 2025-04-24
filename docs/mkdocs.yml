@@ -492,6 +492,9 @@ extra:
           data: 0
           note: >-
             Thanks for your feedback! Please help us improve this page by adding to the discussion below.
+  shared_analytics:
+    provider: google
+    property: G-47WX3HKKY2
 validation:
   # https://www.mkdocs.org/user-guide/configuration/
   # We are still raising for omitted files because they determine the breadcrumbs for pages.
