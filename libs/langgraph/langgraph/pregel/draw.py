@@ -187,9 +187,31 @@ def draw_graph(
         # add end edges
         if step_sources:
             end = graph.add_node(None, END)
+            # Find terminal nodes (nodes with no outgoing edges)
             termini = {d for _, d, _, _ in edges}.difference(s for s, _, _, _ in edges)
-            for src in sorted(termini.union(step_sources)):
-                graph.add_edge(graph.nodes[src], end, conditional=src not in termini)
+            
+            # Add non-conditional edges to END only for terminal nodes
+            for src in sorted(termini):
+                graph.add_edge(graph.nodes[src], end, conditional=False)
+                
+            # Find nodes that explicitly have conditional edges to END
+            explicit_end_edges = []
+            # First check edges that target END directly
+            for src, dest, is_conditional, label in edges:
+                if dest == END and is_conditional:
+                    explicit_end_edges.append((src, is_conditional, label))
+            
+            # Then check for nodes with conditional triggers to END
+            for src, triggers in sources.items():
+                for trigger, is_conditional, label in triggers:
+                    if trigger == END and is_conditional and src not in termini:
+                        if (src, is_conditional, label) not in explicit_end_edges:
+                            explicit_end_edges.append((src, is_conditional, label))
+            
+            # Add explicit conditional edges to END
+            for src, is_conditional, label in explicit_end_edges:
+                graph.add_edge(graph.nodes[src], end, conditional=is_conditional, data=label)
+        
         # replace subgraphs
         for name, subgraph in subgraphs.items():
             subgraph.trim_first_node()
