@@ -142,8 +142,8 @@ class Branch(NamedTuple):
             ),
             list(
                 zip_longest(
-                    writer([e for e in self.ends.values() if e != END]),
-                    [str(la) for la, e in self.ends.items() if e != END],
+                    writer([e for e in self.ends.values()]),
+                    [str(la) for la, e in self.ends.items()],
                 )
             )
             if self.ends
@@ -211,6 +211,7 @@ class Branch(NamedTuple):
             ]
         else:
             destinations = cast(Sequence[Union[Send, str]], result)
+        destinations = [d for d in destinations if d != END]
         if any(dest is None or dest == START for dest in destinations):
             raise ValueError("Branch did not return a valid destination")
         if any(p.node == END for p in destinations if isinstance(p, Send)):

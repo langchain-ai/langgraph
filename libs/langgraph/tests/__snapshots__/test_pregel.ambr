@@ -67,7 +67,8 @@
       },
       {
         "source": "left",
-        "target": "__end__"
+        "target": "__end__",
+        "conditional": true
       },
       {
         "source": "right",
@@ -82,7 +83,7 @@
   graph TD;
   	__start__ -. &nbsp;go-left&nbsp; .-> left;
   	__start__ -. &nbsp;go-right&nbsp; .-> right;
-  	left --> __end__;
+  	left -.-> __end__;
   	right --> __end__;
   
   '''
@@ -481,6 +482,17 @@
   
   '''
 # ---
+# name: test_migration_graph
+  '''
+  graph TD;
+  	B -. &nbsp;X&nbsp; .-> C;
+  	B -. &nbsp;Y&nbsp; .-> D;
+  	D --> B;
+  	__start__ --> B;
+  	C --> __end__;
+  
+  '''
+# ---
 # name: test_multiple_sinks_subgraphs
   '''
   ---
@@ -532,12 +544,14 @@
   ---
   graph TD;
   	__start__([<p>__start__</p>]):::first
-  	inner(inner)
   	side(side)
   	__end__([<p>__end__</p>]):::last
-  	__start__ --> inner;
-  	inner --> side;
+  	__start__ --> inner_up;
+  	inner_up --> side;
   	side --> __end__;
+  	subgraph inner
+  	inner_up(up)
+  	end
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
   	classDef last fill:#bfb6fc
@@ -550,7 +564,47 @@
       dict({
         'conditional': True,
         'source': '__start__',
+        'target': 'tool_one',
+      }),
+      dict({
+        'conditional': True,
+        'source': '__start__',
+        'target': 'tool_three',
+      }),
+      dict({
+        'conditional': True,
+        'source': '__start__',
+        'target': 'tool_two:__start__',
+      }),
+      dict({
+        'source': 'tool_one',
         'target': '__end__',
+      }),
+      dict({
+        'source': 'tool_three',
+        'target': '__end__',
+      }),
+      dict({
+        'source': 'tool_two:__end__',
+        'target': '__end__',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'tool_two:__start__',
+        'target': 'tool_two:tool_two_fast',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'tool_two:__start__',
+        'target': 'tool_two:tool_two_slow',
+      }),
+      dict({
+        'source': 'tool_two:tool_two_fast',
+        'target': 'tool_two:__end__',
+      }),
+      dict({
+        'source': 'tool_two:tool_two_slow',
+        'target': 'tool_two:__end__',
       }),
     ]),
     'nodes': list([
@@ -584,19 +638,6 @@
         'data': dict({
           'id': list([
             'langgraph',
-            'graph',
-            'state',
-            'CompiledStateGraph',
-          ]),
-          'name': 'tool_two',
-        }),
-        'id': 'tool_two',
-        'type': 'runnable',
-      }),
-      dict({
-        'data': dict({
-          'id': list([
-            'langgraph',
             'utils',
             'runnable',
             'RunnableCallable',
@@ -609,6 +650,48 @@
       dict({
         'id': '__end__',
       }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langchain',
+            'schema',
+            'runnable',
+            'RunnablePassthrough',
+          ]),
+          'name': 'tool_two:__start__',
+        }),
+        'id': 'tool_two:__start__',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            'utils',
+            'runnable',
+            'RunnableCallable',
+          ]),
+          'name': 'tool_two:tool_two_slow',
+        }),
+        'id': 'tool_two:tool_two_slow',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            'utils',
+            'runnable',
+            'RunnableCallable',
+          ]),
+          'name': 'tool_two:tool_two_fast',
+        }),
+        'id': 'tool_two:tool_two_fast',
+        'type': 'runnable',
+      }),
+      dict({
+        'id': 'tool_two:__end__',
+      }),
     ]),
   })
 # ---
@@ -620,12 +703,26 @@
       curve: linear
   ---
   graph TD;
-  	__start__(<p>__start__</p>)
+  	__start__([<p>__start__</p>]):::first
   	tool_one(tool_one)
-  	tool_two(tool_two)
   	tool_three(tool_three)
-  	__end__(<p>__end__</p>)
-  	__start__ -.-> __end__;
+  	__end__([<p>__end__</p>]):::last
+  	__start__ -.-> tool_one;
+  	__start__ -.-> tool_three;
+  	__start__ -.-> tool_two___start__;
+  	tool_one --> __end__;
+  	tool_three --> __end__;
+  	tool_two___end__ --> __end__;
+  	subgraph tool_two
+  	tool_two___start__(<p>__start__</p>)
+  	tool_two_tool_two_slow(tool_two_slow)
+  	tool_two_tool_two_fast(tool_two_fast)
+  	tool_two___end__(<p>__end__</p>)
+  	tool_two___start__ -.-> tool_two_tool_two_fast;
+  	tool_two___start__ -.-> tool_two_tool_two_slow;
+  	tool_two_tool_two_fast --> tool_two___end__;
+  	tool_two_tool_two_slow --> tool_two___end__;
+  	end
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
   	classDef last fill:#bfb6fc
@@ -642,9 +739,6 @@
   	Researcher -. &nbsp;call_tool&nbsp; .-> Call_Tool;
   	Researcher -. &nbsp;continue&nbsp; .-> Chart_Generator;
   	__start__ --> Researcher;
-  	Call_Tool -.-> __end__;
-  	Chart_Generator -.-> __end__;
-  	Researcher -.-> __end__;
   	Researcher -. &nbsp;redo&nbsp; .-> Researcher;
   
   '''
@@ -1014,7 +1108,6 @@
       dict({
         'id': 'conduct_interview:__end__',
       }),
-
     ]),
   })
 # ---
