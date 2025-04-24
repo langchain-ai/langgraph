@@ -21,17 +21,17 @@ langgraph-checkpoint-sqlite = { path = "../libs/checkpoint-sqlite", develop = tr
 langgraph-checkpoint-postgres = { path = "../libs/checkpoint-postgres", develop = true }
 langgraph-sdk = {path = "../libs/sdk-py", develop = true}
 langchain-ollama = "^0.2.3"
-mkdocs = "^1.6.0"
-mkdocs-autorefs = ">=1.0.1,<1.1.0"
-mkdocstrings = "^0.25.1"
-mkdocstrings-python = "^1.10.4"
-mkdocs-minify-plugin = "^0.8.0"
-mkdocs-rss-plugin = "^1.13.1"
-mkdocs-git-committers-plugin-2 = "^2.3.0"
-mkdocs-material = {extras = ["imaging"], version = "^9.5.27"}
-markdown-callouts = "^0.4.0"
-markdown-include = "^0.8.1"
-mkdocs-exclude = "^1.0.2"
+mkdocs = "*"
+mkdocs-autorefs = "*"
+mkdocstrings = "*"
+mkdocstrings-python = "*"
+mkdocs-minify-plugin = "*"
+mkdocs-rss-plugin = "*"
+mkdocs-git-committers-plugin-2 = "*"
+mkdocs-material = {extras = ["imaging"], version = "*"}
+markdown-callouts = "*"
+markdown-include = "*"
+mkdocs-exclude = "*"
 psycopg = {extras = ["binary"], version = "^3.2.0"}
 psycopg-pool = "^3.2.0"
 pygments-ansi-color = ">=0.3"
