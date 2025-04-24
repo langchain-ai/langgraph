@@ -1,7 +1,7 @@
 # How to stream events
 
 !!! info "Prerequisites"
-    * [Streaming](../../concepts/streaming.md#streaming-llm-tokens-and-events-astream_events)
+    * [Streaming](../../concepts/streaming.md#streaming-graph-outputs-stream-and-astream)
 
 This guide covers how to stream events from your graph (`stream_mode="events"`). Depending on the use case and user experience of your LangGraph application, your application may process event types differently.
 

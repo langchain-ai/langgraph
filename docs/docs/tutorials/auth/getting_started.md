@@ -139,7 +139,7 @@ langgraph dev --no-browser
     }
     ```
 
-Now let's try to chat with our bot. If we've implemented authentication correctly, we should only be able to access the bot if we provide a valid token in the request header. Users will still, however, be able to access each other's resources until we add [resource authorization handlers](../../concepts/auth.md#resource-authorization) in the next section of our tutorial.
+Now let's try to chat with our bot. If we've implemented authentication correctly, we should only be able to access the bot if we provide a valid token in the request header. Users will still, however, be able to access each other's resources until we add [resource authorization handlers](../../concepts/auth.md#resource-specific-handlers) in the next section of our tutorial.
 
 ![Authentication, no authorization handlers](./img/authentication.png)
 
