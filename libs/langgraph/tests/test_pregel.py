@@ -7878,6 +7878,30 @@ def test_bulk_state_updates(
         )
 
 
+def test_pregel_node_copy() -> None:
+    class State(TypedDict):
+        foo: str
+
+    def agent(state: State) -> State:
+        return {"foo": "agent"}
+
+    def tool(state: State) -> State:
+        return {"foo": "tool"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("agent", agent)
+        .add_node("tool", tool)
+        .add_edge(START, "agent")
+        .add_edge("agent", "tool")
+        .compile()
+    )
+
+    graph.invoke({"foo": "input"}, {"configurable": {"thread_id": "1"}})
+    graph.copy()
+    graph.nodes["agent"].copy({})
+
+
 @pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_SYNC)
 def test_update_as_input(
     request: pytest.FixtureRequest, checkpointer_name: str
