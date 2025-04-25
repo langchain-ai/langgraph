@@ -91,7 +91,8 @@ def has_blocklisted_command(code: str, metadata: dict) -> bool:
 def remove_mermaid(code: str) -> str:
     return code.replace(
         "display(Image(graph.get_graph().draw_mermaid_png()))",
-        ""
+        # replace with a dummy statement
+        "print()"
     )
 
 
