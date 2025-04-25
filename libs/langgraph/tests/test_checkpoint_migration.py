@@ -114,7 +114,9 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                     else {"answer": "doc1,doc2,doc3,doc4"},
                 ),
             ),
-            interrupts=(
+            interrupts=()
+            if exc_task_results
+            else (
                 Interrupt(
                     value="",
                     resumable=True,

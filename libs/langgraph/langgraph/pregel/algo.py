@@ -908,7 +908,17 @@ def _scratchpad(
             if not isinstance(task_resume_write, list):
                 task_resume_write = [task_resume_write]
         else:
-            task_resume_write = []
+            # find task-specific resume value
+            for w in pending_writes:
+                if w[0] == task_id and w[1] == RESUME:
+                    task_resume_write = w[2]
+                    if not isinstance(task_resume_write, list):
+                        task_resume_write = [task_resume_write]
+                    break
+            else:
+                task_resume_write = []
+            # clear var
+            del w
     else:
         null_resume_write = None
         task_resume_write = []
