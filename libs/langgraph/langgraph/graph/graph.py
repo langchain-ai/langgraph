@@ -374,7 +374,7 @@ class CompiledGraph(Pregel):
 
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
         def get_writes(
-            packets: Sequence[Union[str, Send]],
+            packets: Sequence[Union[str, Send]], static: bool = False
         ) -> Sequence[Union[ChannelWriteEntry, Send]]:
             return [
                 (

@@ -110,6 +110,11 @@ def draw_graph(
                         static_seen.add(w)
                         # apply static writes
                         if writes := ChannelWrite.get_static_writes(w):
+                            # END writes are not written, but become edges directly
+                            for t in writes:
+                                if t[0] == END:
+                                    edges.add((task.name, t[0], True, t[2]))
+                            writes = [t for t in writes if t[0] != END]
                             conditionals.update(
                                 {(task.name, *t[:2]): t[2] for t in writes}
                             )
@@ -175,31 +180,36 @@ def draw_graph(
         if START not in nodes:
             graph.add_node(None, START)
             for task in start_tasks.values():
-                graph.add_edge(graph.nodes[START], graph.nodes[task.name])
+                add_edge(graph, START, task.name)
         # add discovered edges
         for src, dest, is_conditional, label in sorted(edges):
-            graph.add_edge(
-                graph.nodes[src],
-                graph.nodes[dest],
+            add_edge(
+                graph,
+                src,
+                dest,
                 data=label if label != dest else None,
                 conditional=is_conditional,
             )
         # add end edges
-        if step_sources:
-            end = graph.add_node(None, END)
-            termini = {d for _, d, _, _ in edges}.difference(s for s, _, _, _ in edges)
-            for src in sorted(termini.union(step_sources)):
-                graph.add_edge(graph.nodes[src], end, conditional=src not in termini)
+        termini = {d for _, d, _, _ in edges if d != END}.difference(
+            s for s, _, _, _ in edges
+        )
+        if termini:
+            for src in sorted(termini):
+                add_edge(graph, src, END)
+        elif len(step_sources) == 1:
+            for src in sorted(step_sources):
+                add_edge(graph, src, END, conditional=True)
         # replace subgraphs
         for name, subgraph in subgraphs.items():
-            subgraph.trim_first_node()
-            subgraph.trim_last_node()
             if (
                 len(subgraph.nodes) > 1
                 and name in graph.nodes
                 and subgraph.first_node()
                 and subgraph.last_node()
             ):
+                subgraph.trim_first_node()
+                subgraph.trim_last_node()
                 # replace the node with the subgraph
                 graph.nodes.pop(name)
                 first, last = graph.extend(subgraph, prefix=name)
@@ -210,3 +220,20 @@ def draw_graph(
                         graph.edges[idx] = edge.copy(target=cast(Node, first).id)
 
         return graph
+
+
+def add_edge(
+    graph: Graph,
+    source: str,
+    target: str,
+    *,
+    data: Optional[Any] = None,
+    conditional: bool = False,
+) -> None:
+    """Add an edge to the graph."""
+    for edge in graph.edges:
+        if edge.source == source and edge.target == target:
+            return
+    if target not in graph.nodes and target == END:
+        graph.add_node(None, END)
+    graph.add_edge(graph.nodes[source], graph.nodes[target], data, conditional)

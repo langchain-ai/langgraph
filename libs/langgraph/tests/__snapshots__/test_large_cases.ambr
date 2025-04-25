@@ -88,6 +88,12 @@
       },
       {
         "source": "agent",
+        "target": "__end__",
+        "data": "exit",
+        "conditional": true
+      },
+      {
+        "source": "agent",
         "target": "tools",
         "data": "continue",
         "conditional": true
@@ -95,11 +101,6 @@
       {
         "source": "tools",
         "target": "agent"
-      },
-      {
-        "source": "agent",
-        "target": "__end__",
-        "conditional": true
       }
     ]
   }
@@ -109,9 +110,9 @@
   '''
   graph TD;
   	__start__ --> agent;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   	agent -. &nbsp;continue&nbsp; .-> tools;
   	tools --> agent;
-  	agent -.-> __end__;
   
   '''
 # ---
@@ -130,9 +131,9 @@
   	__start__([<p>__start__</p>]):::first
   	__end__([<p>__end__</p>]):::last
   	__start__ --> agent;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   	agent -. &nbsp;continue&nbsp; .-> tools;
   	tools --> agent;
-  	agent -.-> __end__;
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
   	classDef last fill:#bfb6fc

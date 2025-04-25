@@ -3491,6 +3491,7 @@ def test_nested_graph_xray(snapshot: SnapshotAssertion) -> None:
     tool_two_graph.add_node("tool_two_fast", logic)
     tool_two_graph.set_conditional_entry_point(
         lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast",
+        ["tool_two_slow", "tool_two_fast"],
         then=END,
     )
     tool_two = tool_two_graph.compile()
@@ -3499,7 +3500,9 @@ def test_nested_graph_xray(snapshot: SnapshotAssertion) -> None:
     graph.add_node("tool_one", logic)
     graph.add_node("tool_two", tool_two)
     graph.add_node("tool_three", logic)
-    graph.set_conditional_entry_point(lambda s: "tool_one", then=END)
+    graph.set_conditional_entry_point(
+        lambda s: "tool_one", ["tool_one", "tool_two", "tool_three"], then=END
+    )
     app = graph.compile()
 
     assert app.get_graph(xray=True).to_json() == snapshot
@@ -8120,3 +8123,44 @@ def test_batch_update_as_input(
     ]
 
     assert new_history == history
+
+
+def test_migration_graph(snapshot: SnapshotAssertion) -> None:
+    from pydantic import BaseModel
+
+    class DummyState(BaseModel):
+        pass_count: int = 0
+
+    def increment_pass_count(state: DummyState):
+        state.pass_count += 1
+        return state
+
+    def route_b(state: DummyState):
+        if state.pass_count == 0:
+            return "X"
+        else:
+            return "Y"
+
+    migration_graph = StateGraph(DummyState)
+
+    migration_graph.add_node("B", increment_pass_count)
+    migration_graph.add_node("C", increment_pass_count)
+    migration_graph.add_node("D", increment_pass_count)
+
+    migration_graph.add_edge(START, "B")
+
+    migration_graph.add_conditional_edges(
+        "B",
+        route_b,
+        {
+            "X": "C",
+            "Y": "D",
+        },
+    )
+
+    migration_graph.add_edge("D", "B")
+    migration_graph.add_edge("C", END)
+
+    app = migration_graph.compile()
+
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot

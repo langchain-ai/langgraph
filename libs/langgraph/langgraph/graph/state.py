@@ -843,31 +843,31 @@ class CompiledStateGraph(CompiledGraph):
         self, start: str, name: str, branch: Branch, *, with_reader: bool = True
     ) -> None:
         def get_writes(
-            packets: Sequence[Union[str, Send]],
+            packets: Sequence[Union[str, Send]], static: bool = False
         ) -> Sequence[Union[ChannelWriteEntry, Send]]:
-            if filtered := [p for p in packets if p != END]:
-                writes = [
-                    (
-                        ChannelWriteEntry(CHANNEL_BRANCH_TO.format(p), None)
-                        if not isinstance(p, Send)
-                        else p
+            writes = [
+                (
+                    ChannelWriteEntry(CHANNEL_BRANCH_TO.format(p), None)
+                    if not isinstance(p, Send)
+                    else p
+                )
+                for p in packets
+                if (True if static else p != END)
+            ]
+            if not writes:
+                return []
+            if branch.then and branch.then != END:
+                writes.append(
+                    ChannelWriteEntry(
+                        f"branch:{start}:{name}::then",
+                        WaitForNames(
+                            frozenset(
+                                p.node if isinstance(p, Send) else p for p in packets
+                            )
+                        ),
                     )
-                    for p in filtered
-                ]
-                if branch.then and branch.then != END:
-                    writes.append(
-                        ChannelWriteEntry(
-                            f"branch:{start}:{name}::then",
-                            WaitForNames(
-                                frozenset(
-                                    p.node if isinstance(p, Send) else p
-                                    for p in filtered
-                                )
-                            ),
-                        )
-                    )
-                return writes
-            return []
+                )
+            return writes
 
         if with_reader:
             # get schema
@@ -1067,13 +1067,9 @@ def _control_static(
     ends: Union[tuple[str, ...], dict[str, str]],
 ) -> Sequence[tuple[str, Any, Optional[str]]]:
     if isinstance(ends, dict):
-        return [
-            (CHANNEL_BRANCH_TO.format(k), None, label)
-            for k, label in ends.items()
-            if k != END
-        ]
+        return [(CHANNEL_BRANCH_TO.format(k), None, label) for k, label in ends.items()]
     else:
-        return [(CHANNEL_BRANCH_TO.format(e), None, None) for e in ends if e != END]
+        return [(CHANNEL_BRANCH_TO.format(e), None, None) for e in ends]
 
 
 def _get_root(input: Any) -> Optional[Sequence[tuple[str, Any]]]:
