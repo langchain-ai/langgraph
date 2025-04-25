@@ -843,7 +843,7 @@ class CompiledStateGraph(CompiledGraph):
         self, start: str, name: str, branch: Branch, *, with_reader: bool = True
     ) -> None:
         def get_writes(
-            packets: Sequence[Union[str, Send]],
+            packets: Sequence[Union[str, Send]], static: bool = False
         ) -> Sequence[Union[ChannelWriteEntry, Send]]:
             writes = [
                 (
@@ -852,7 +852,10 @@ class CompiledStateGraph(CompiledGraph):
                     else p
                 )
                 for p in packets
+                if (True if static else p != END)
             ]
+            if not writes:
+                return []
             if branch.then and branch.then != END:
                 writes.append(
                     ChannelWriteEntry(

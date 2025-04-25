@@ -34,7 +34,7 @@ from langgraph.utils.runnable import (
 )
 
 Writer = Callable[
-    [Sequence[Union[str, Send]]],
+    [Sequence[Union[str, Send]], bool],
     Sequence[Union[ChannelWriteEntry, Send]],
 ]
 
@@ -142,7 +142,7 @@ class Branch(NamedTuple):
             ),
             list(
                 zip_longest(
-                    writer([e for e in self.ends.values()]),
+                    writer([e for e in self.ends.values()], True),
                     [str(la) for la, e in self.ends.items()],
                 )
             )
@@ -211,12 +211,11 @@ class Branch(NamedTuple):
             ]
         else:
             destinations = cast(Sequence[Union[Send, str]], result)
-        destinations = [d for d in destinations if d != END]
         if any(dest is None or dest == START for dest in destinations):
             raise ValueError("Branch did not return a valid destination")
         if any(p.node == END for p in destinations if isinstance(p, Send)):
             raise InvalidUpdateError("Cannot send a packet to the END node")
-        entries = writer(destinations)
+        entries = writer(destinations, False)
         if not entries:
             return input
         else:
