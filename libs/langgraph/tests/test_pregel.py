@@ -6218,7 +6218,7 @@ def test_multiple_interrupts_functional(
         values = []
 
         for idx in [1, 2, 3]:
-            values.extend([double(idx).result(), interrupt({"a": f"boo + {idx}"})])
+            values.extend([double(idx).result(), interrupt({"a": "boo"})])
 
         return {"values": values}
 
