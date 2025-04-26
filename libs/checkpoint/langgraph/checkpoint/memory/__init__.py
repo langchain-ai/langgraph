@@ -93,6 +93,7 @@ class InMemorySaver(
         if factory is not defaultdict:
             self.stack.enter_context(self.storage)  # type: ignore[arg-type]
             self.stack.enter_context(self.writes)  # type: ignore[arg-type]
+            self.stack.enter_context(self.blobs)  # type: ignore[arg-type]
 
     def __enter__(self) -> "InMemorySaver":
         return self.stack.__enter__()
