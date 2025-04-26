@@ -269,13 +269,19 @@ With LangGraph Platform you can integrate LangGraph agents into your React appli
 
 ### Human-in-the-loop {#human-in-the-loop-1}
 
-When designing complex graphs, relying entirely on the LLM for decision-making can be risky, particularly when it involves tools that interact with files, APIs, or databases. These interactions may lead to unintended data access or modifications, depending on the use case. To mitigate these risks, LangGraph allows you to integrate human-in-the-loop behavior, ensuring your LLM applications operate as intended without undesirable outcomes.
+[Human-in-the-loop](../concepts/human_in_the_loop.md) functionality allows
+you to involve humans in the decision-making process of your graph. These how-to guides show how to implement human-in-the-loop workflows in your graph.
 
-- [How to add a breakpoint](../cloud/how-tos/human_in_the_loop_breakpoint.md)
 - [How to wait for user input](../cloud/how-tos/human_in_the_loop_user_input.md)
+- [How to review tool calls](../cloud/how-tos/human_in_the_loop_review_tool_calls.md)
+- [How to add static breakpoints](../cloud/how-tos/human_in_the_loop_breakpoint.md)
+
+### Time Travel
+
+[Time travel](../concepts/time-travel.md) allows you to replay past actions in your LangGraph application to explore alternative paths and debug issues. These how-to guides show how to use time travel in your graph.
+
 - [How to edit graph state](../cloud/how-tos/human_in_the_loop_edit_state.md)
 - [How to replay and branch from prior states](../cloud/how-tos/human_in_the_loop_time_travel.md)
-- [How to review tool calls](../cloud/how-tos/human_in_the_loop_review_tool_calls.md)
 
 ### Double-texting
 
