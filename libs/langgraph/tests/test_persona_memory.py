@@ -1,4 +1,5 @@
-"""Tests for the PersonaMemory class.
+"""
+Tests for the PersonaMemory class.
 
 This module contains tests for the PersonaMemory class, which handles memory
 management for persona-based interactions. It includes tests for trait extraction,
@@ -7,11 +8,13 @@ entity recognition, and memory updates.
 
 import pytest
 from langgraph.experimental.memory.persona_memory import PersonaMemory
+import spacy
 
 
 @pytest.fixture
 def persona_memory():
-    """Creates a fresh PersonaMemory instance for testing.
+    """
+    Creates a fresh PersonaMemory instance for testing.
 
     Returns:
         PersonaMemory: A new instance of PersonaMemory.
@@ -20,7 +23,8 @@ def persona_memory():
 
 
 def test_extract_traits_basic_emotions(persona_memory):
-    """Tests basic emotion trait extraction functionality.
+    """
+    Tests basic emotion trait extraction functionality.
 
     Args:
         persona_memory (PersonaMemory): The PersonaMemory instance to test.
@@ -43,7 +47,8 @@ def test_extract_traits_basic_emotions(persona_memory):
 
 
 def test_extract_traits_personality_traits(persona_memory):
-    """Tests personality trait extraction functionality.
+    """
+    Tests personality trait extraction functionality.
 
     Args:
         persona_memory (PersonaMemory): The PersonaMemory instance to test.
@@ -66,7 +71,8 @@ def test_extract_traits_personality_traits(persona_memory):
 
 
 def test_extract_traits_cautious_traits(persona_memory):
-    """Tests cautious trait extraction functionality.
+    """
+    Tests cautious trait extraction functionality.
 
     Args:
         persona_memory (PersonaMemory): The PersonaMemory instance to test.
@@ -80,7 +86,8 @@ def test_extract_traits_cautious_traits(persona_memory):
 
 
 def test_extract_traits_courageous_traits(persona_memory):
-    """Tests courageous trait extraction functionality.
+    """
+    Tests courageous trait extraction functionality.
 
     Args:
         persona_memory (PersonaMemory): The PersonaMemory instance to test.
@@ -94,7 +101,8 @@ def test_extract_traits_courageous_traits(persona_memory):
 
 
 def test_extract_traits_no_traits(persona_memory):
-    """Tests behavior when no traits are present in the text.
+    """
+    Tests behavior when no traits are present in the text.
 
     Args:
         persona_memory (PersonaMemory): The PersonaMemory instance to test.
@@ -109,7 +117,8 @@ def test_extract_traits_no_traits(persona_memory):
 
 
 def test_extract_entities_people(persona_memory):
-    """Tests people entity extraction functionality.
+    """
+    Tests people entity extraction functionality.
 
     Args:
         persona_memory (PersonaMemory): The PersonaMemory instance to test.
@@ -127,7 +136,8 @@ def test_extract_entities_people(persona_memory):
 
 
 def test_extract_entities_places(persona_memory):
-    """Tests place entity extraction functionality.
+    """
+    Tests place entity extraction functionality.
 
     Args:
         persona_memory (PersonaMemory): The PersonaMemory instance to test.
@@ -145,7 +155,8 @@ def test_extract_entities_places(persona_memory):
 
 
 def test_extract_entities_organizations(persona_memory):
-    """Tests organization entity extraction functionality.
+    """
+    Tests organization entity extraction functionality.
 
     Args:
         persona_memory (PersonaMemory): The PersonaMemory instance to test.
@@ -163,7 +174,8 @@ def test_extract_entities_organizations(persona_memory):
 
 
 def test_update_memory_traits(persona_memory):
-    """Tests updating memory with new traits.
+    """
+    Tests updating memory with new traits.
 
     Args:
         persona_memory (PersonaMemory): The PersonaMemory instance to test.
@@ -186,7 +198,8 @@ def test_update_memory_traits(persona_memory):
 
 
 def test_update_memory_associations(persona_memory):
-    """Tests updating memory with new entity associations.
+    """
+    Tests updating memory with new entity associations.
 
     Args:
         persona_memory (PersonaMemory): The PersonaMemory instance to test.
@@ -211,7 +224,8 @@ def test_update_memory_associations(persona_memory):
 
 
 def test_update_memory_duplicate_traits(persona_memory):
-    """Tests handling of duplicate traits in memory updates.
+    """
+    Tests handling of duplicate traits in memory updates.
 
     Args:
         persona_memory (PersonaMemory): The PersonaMemory instance to test.
@@ -227,7 +241,8 @@ def test_update_memory_duplicate_traits(persona_memory):
 
 
 def test_get_summary(persona_memory):
-    """Tests the memory summary generation functionality.
+    """
+    Tests the memory summary generation functionality.
 
     Args:
         persona_memory (PersonaMemory): The PersonaMemory instance to test.
@@ -250,3 +265,89 @@ def test_get_summary(persona_memory):
     assert summary["associations"]["Paris"]["type"] == "place"
     assert "positive" in summary["associations"]["John"]["traits"]
     assert "positive" in summary["associations"]["Paris"]["traits"]
+
+
+def simulate_api_response(content: str) -> str:
+    """
+    Simulates an API response format (e.g., OpenAI chat completions).
+
+    Args:
+        content (str): The content to simulate as an assistant's message.
+
+    Returns:
+        str: Extracted assistant message content.
+    """
+    simulated_response = {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": content
+                }
+            }
+        ]
+    }
+    return simulated_response["choices"][0]["message"]["content"]
+
+
+def test_persona_memory_full_conversation_pipeline(persona_memory):
+    """
+    Simulates a full conversation with persona memory updates.
+
+    This test simulates both user prompts and assistant API responses over time,
+    verifying that traits and associations accumulate correctly across a session.
+    """
+    
+    conversation_flow = [
+        {
+            "user_input": "Hi there! I'm thinking of visiting Paris.",
+            "assistant_output": "That's fantastic! Paris is full of excitement and beautiful sights."
+        },
+        {
+            "user_input": "I'm a bit nervous traveling alone though.",
+            "assistant_output": "That's understandable — feeling a little nervous shows you're thoughtful and careful."
+        },
+        {
+            "user_input": "Thank you! I'm feeling braver now.",
+            "assistant_output": "Wonderful to hear! You are courageous and positive."
+        },
+        {
+            "user_input": "My friend John is joining me in London.",
+            "assistant_output": "London is another amazing place! And having John with you will be great company."
+        }
+    ]
+
+    for step in conversation_flow:
+        # Normally user input could also be processed, but for now we only process assistant output
+        assistant_message = simulate_api_response(step["assistant_output"])
+        persona_memory.update_memory(assistant_message)
+
+    summary = persona_memory.get_summary()
+
+    # 1. Traits that should have been detected over conversation
+    expected_traits = {"positive", "cautious", "courageous", "friendly", "analytical"}
+    detected_traits = set(summary["traits"])
+
+    # We expect at least some (not necessarily all) traits to appear
+    assert "positive" in detected_traits
+    assert "cautious" in detected_traits
+    assert "courageous" in detected_traits
+
+    # 2. Entity associations
+    associations = summary["associations"]
+    
+    assert "Paris" in associations
+    assert associations["Paris"]["type"] == "place"
+    assert "positive" in associations["Paris"]["traits"]
+
+    assert "London" in associations
+    assert associations["London"]["type"] == "place"
+
+    assert "John" in associations
+    assert associations["John"]["type"] == "person"
+
+    # 3. Integrity checks
+    for entity_data in associations.values():
+        assert isinstance(entity_data["traits"], list)
+
+    assert isinstance(summary["traits"], list)

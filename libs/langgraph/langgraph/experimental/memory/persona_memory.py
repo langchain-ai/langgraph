@@ -54,6 +54,11 @@ class PersonaMemory(BaseModel):
             "delighted": "positive",
             "thrilled": "positive",
             "amused": "positive",
+            "fantastic": "positive",
+            "wonderful": "positive",
+            "amazing": "positive",
+            "great": "positive",
+            "beautiful": "positive",
             # Negative / cautious
             "sad": "negative",
             "angry": "negative",
@@ -71,6 +76,7 @@ class PersonaMemory(BaseModel):
             "fearless": "courageous",
             "heroic": "courageous",
             "daring": "courageous",
+            "courageous": "courageous",
             # Friendly / welcoming
             "friendly": "friendly",
             "kind": "friendly",
