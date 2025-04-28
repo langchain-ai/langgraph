@@ -7,8 +7,8 @@ entity recognition, and memory updates.
 """
 
 import pytest
+
 from langgraph.experimental.memory.persona_memory import PersonaMemory
-import spacy
 
 
 @pytest.fixture
@@ -278,14 +278,7 @@ def simulate_api_response(content: str) -> str:
         str: Extracted assistant message content.
     """
     simulated_response = {
-        "choices": [
-            {
-                "message": {
-                    "role": "assistant",
-                    "content": content
-                }
-            }
-        ]
+        "choices": [{"message": {"role": "assistant", "content": content}}]
     }
     return simulated_response["choices"][0]["message"]["content"]
 
@@ -297,24 +290,24 @@ def test_persona_memory_full_conversation_pipeline(persona_memory):
     This test simulates both user prompts and assistant API responses over time,
     verifying that traits and associations accumulate correctly across a session.
     """
-    
+
     conversation_flow = [
         {
             "user_input": "Hi there! I'm thinking of visiting Paris.",
-            "assistant_output": "That's fantastic! Paris is full of excitement and beautiful sights."
+            "assistant_output": "That's fantastic! Paris is full of excitement and beautiful sights.",
         },
         {
             "user_input": "I'm a bit nervous traveling alone though.",
-            "assistant_output": "That's understandable — feeling a little nervous shows you're thoughtful and careful."
+            "assistant_output": "That's understandable — feeling a little nervous shows you're thoughtful and careful.",
         },
         {
             "user_input": "Thank you! I'm feeling braver now.",
-            "assistant_output": "Wonderful to hear! You are courageous and positive."
+            "assistant_output": "Wonderful to hear! You are courageous and positive.",
         },
         {
             "user_input": "My friend John is joining me in London.",
-            "assistant_output": "London is another amazing place! And having John with you will be great company."
-        }
+            "assistant_output": "London is another amazing place! And having John with you will be great company.",
+        },
     ]
 
     for step in conversation_flow:
@@ -325,7 +318,6 @@ def test_persona_memory_full_conversation_pipeline(persona_memory):
     summary = persona_memory.get_summary()
 
     # 1. Traits that should have been detected over conversation
-    expected_traits = {"positive", "cautious", "courageous", "friendly", "analytical"}
     detected_traits = set(summary["traits"])
 
     # We expect at least some (not necessarily all) traits to appear
@@ -335,7 +327,7 @@ def test_persona_memory_full_conversation_pipeline(persona_memory):
 
     # 2. Entity associations
     associations = summary["associations"]
-    
+
     assert "Paris" in associations
     assert associations["Paris"]["type"] == "place"
     assert "positive" in associations["Paris"]["traits"]
@@ -351,3 +343,94 @@ def test_persona_memory_full_conversation_pipeline(persona_memory):
         assert isinstance(entity_data["traits"], list)
 
     assert isinstance(summary["traits"], list)
+
+
+def test_extract_traits_with_extra_synonyms(persona_memory):
+    """
+    Tests the extract_traits function with custom extra synonyms.
+
+    Args:
+        persona_memory (PersonaMemory): The PersonaMemory instance to test.
+
+    This test verifies that:
+        - Custom synonyms are correctly added to the trait mapping
+        - Both default and custom synonyms are properly detected
+        - The function handles the combination of default and custom traits correctly
+        - The module can track evolving traits across a conversation
+    """
+    # Define custom synonyms
+    custom_synonyms = {
+        "ecstatic": "positive",  # Adding a new synonym for existing trait
+        "innovative": "creative",  # Adding a new trait category
+        "artistic": "creative",
+        "imaginative": "creative",
+        "passionate": "positive",  # Changed to map to positive like other enthusiasm-related words
+        "determined": "persistent",
+        "resilient": "persistent",
+        "empathetic": "compassionate",
+        "understanding": "compassionate",
+        "nervous": "cautious",  # Explicitly map nervous to cautious
+        "brave": "courageous",  # Use adjective form for courageous
+    }
+
+    # Simulate a conversation between user and assistant
+    conversation = [
+        {
+            "user": "I'm feeling really excited about starting this new project!",
+            "assistant": "That's wonderful! You seem very enthusiastic and passionate about this.",
+        },
+        {
+            "user": "Yes, I've been working on some innovative ideas for the design.",
+            "assistant": "Your approach is very innovative and artistic. You're so imaginative in your thinking.",
+        },
+        {
+            "user": "I'm a bit nervous about presenting these ideas though.",
+            "assistant": "It's natural to feel nervous. Being cautious and thoughtful about the details is good.",
+        },
+        {
+            "user": "I'll be determined and resilient no matter what.",
+            "assistant": "You're so determined and brave. Your resilient attitude is admirable.",
+        },
+        {
+            "user": "I want to make sure everyone on the team feels heard and supported.",
+            "assistant": "You're very empathetic and understanding. Such a compassionate approach.",
+        },
+    ]
+
+    # Process the conversation and track traits
+    detected_traits = set()
+    for exchange in conversation:
+        # Process assistant's response
+        assistant_traits = persona_memory.extract_traits(
+            exchange["assistant"], extra_synonyms=custom_synonyms
+        )
+        detected_traits.update(assistant_traits)
+
+    # Verify the traits detected across the conversation
+    expected_traits = {
+        "positive",  # From "wonderful", "enthusiastic", "passionate"
+        "creative",  # From "innovative", "imaginative", "artistic"
+        "cautious",  # From "nervous", "cautious"
+        "persistent",  # From "determined", "resilient"
+        "courageous",  # From "brave"
+        "compassionate",  # From "empathetic", "understanding"
+        "analytical",  # From "thoughtful"
+    }
+
+    # Check that all expected traits were detected
+    assert detected_traits.issuperset(
+        expected_traits
+    ), f"Missing traits: {expected_traits - detected_traits}"
+
+    # Test that custom synonyms don't affect the default mapping
+    text = "I am happy and excited!"
+    traits = persona_memory.extract_traits(text)  # No extra_synonyms
+    assert "positive" in traits
+    assert "creative" not in traits  # Custom trait should not be present
+    assert len(traits) == 1
+
+    # Test with a text containing only custom synonyms
+    text = "She is very imaginative and innovative in her approach."
+    traits = persona_memory.extract_traits(text, extra_synonyms=custom_synonyms)
+    assert "creative" in traits
+    assert len(traits) == 1
