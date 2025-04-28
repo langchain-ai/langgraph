@@ -20,6 +20,8 @@ langgraph-checkpoint = { path = "../libs/checkpoint/", develop = true }
 langgraph-checkpoint-sqlite = { path = "../libs/checkpoint-sqlite", develop = true }
 langgraph-checkpoint-postgres = { path = "../libs/checkpoint-postgres", develop = true }
 langgraph-sdk = {path = "../libs/sdk-py", develop = true}
+langgraph-supervisor = "^0.0.17"
+langgraph-swarm = "^0.0.10"
 langchain-ollama = "^0.2.3"
 mkdocs = "*"
 mkdocs-autorefs = "*"

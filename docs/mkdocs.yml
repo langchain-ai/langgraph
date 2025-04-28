@@ -389,7 +389,9 @@ nav:
       - Graphs: reference/graphs.md
       - Checkpointing: reference/checkpoints.md
       - Storage: reference/store.md
-      - Prebuilt components: reference/prebuilt.md
+      - Agents: reference/agents.md
+      - Supervisor: reference/supervisor.md
+      - Swarm: reference/swarm.md
       - Channels: reference/channels.md
       - Errors: reference/errors.md
       - Types: reference/types.md
