@@ -853,6 +853,7 @@ class Pregel(PregelProtocol):
                 created_at=None,
                 parent_config=None,
                 tasks=(),
+                interrupts=(),
             )
 
         # migrate checkpoint if needed
@@ -937,6 +938,12 @@ class Pregel(PregelProtocol):
                     next_tasks[tid].writes.append((k, v))
                 if tasks := [t for t in next_tasks.values() if t.writes]:
                     apply_writes(saved.checkpoint, channels, tasks, None)
+            tasks_with_writes = tasks_w_writes(
+                next_tasks.values(),
+                saved.pending_writes,
+                task_states,
+                self.stream_channels_asis,
+            )
             # assemble the state snapshot
             return StateSnapshot(
                 read_channels(channels, self.stream_channels_asis),
@@ -945,12 +952,8 @@ class Pregel(PregelProtocol):
                 saved.metadata,
                 saved.checkpoint["ts"],
                 patch_checkpoint_map(saved.parent_config, saved.metadata),
-                tasks_w_writes(
-                    next_tasks.values(),
-                    saved.pending_writes,
-                    task_states,
-                    self.stream_channels_asis,
-                ),
+                tasks_with_writes,
+                tuple([i for task in tasks_with_writes for i in task.interrupts]),
             )
 
     async def _aprepare_state_snapshot(
@@ -969,6 +972,7 @@ class Pregel(PregelProtocol):
                 created_at=None,
                 parent_config=None,
                 tasks=(),
+                interrupts=(),
             )
 
         # migrate checkpoint if needed
@@ -1056,6 +1060,13 @@ class Pregel(PregelProtocol):
                     next_tasks[tid].writes.append((k, v))
                 if tasks := [t for t in next_tasks.values() if t.writes]:
                     apply_writes(saved.checkpoint, channels, tasks, None)
+
+            tasks_with_writes = tasks_w_writes(
+                next_tasks.values(),
+                saved.pending_writes,
+                task_states,
+                self.stream_channels_asis,
+            )
             # assemble the state snapshot
             return StateSnapshot(
                 read_channels(channels, self.stream_channels_asis),
@@ -1064,12 +1075,8 @@ class Pregel(PregelProtocol):
                 saved.metadata,
                 saved.checkpoint["ts"],
                 patch_checkpoint_map(saved.parent_config, saved.metadata),
-                tasks_w_writes(
-                    next_tasks.values(),
-                    saved.pending_writes,
-                    task_states,
-                    self.stream_channels_asis,
-                ),
+                tasks_with_writes,
+                tuple([i for task in tasks_with_writes for i in task.interrupts]),
             )
 
     def get_state(

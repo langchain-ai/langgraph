@@ -183,6 +183,7 @@ def test_get_state():
         created_at="timestamp",
         parent_config=None,
         tasks=(),
+        interrupts=(),
     )
 
 
@@ -240,6 +241,7 @@ async def test_aget_state():
             }
         },
         tasks=(),
+        interrupts=(),
     )
 
 
@@ -290,6 +292,7 @@ def test_get_state_history():
         created_at="timestamp",
         parent_config=None,
         tasks=(),
+        interrupts=(),
     )
 
 
@@ -343,6 +346,7 @@ async def test_aget_state_history():
         created_at="timestamp",
         parent_config=None,
         tasks=(),
+        interrupts=(),
     )
 
 

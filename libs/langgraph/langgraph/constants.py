@@ -102,6 +102,8 @@ CONF = cast(Literal["configurable"], sys.intern("configurable"))
 # key for the configurable dict in RunnableConfig
 NULL_TASK_ID = sys.intern("00000000-0000-0000-0000-000000000000")
 # the task_id to use for writes that are not associated with a task
+CONFIG_KEY_RESUME_MAP = sys.intern("__pregel_resume_map")
+# holds a mapping of task ns -> resume value for resuming tasks
 
 RESERVED = {
     TAG_HIDDEN,

@@ -216,6 +216,7 @@ nav:
                 - cloud/how-tos/same-thread.md
                 - cloud/how-tos/cron_jobs.md
                 - cloud/how-tos/stateless_runs.md
+                - cloud/how-tos/configurable_headers.md
             - Streaming:
                 - cloud/how-tos/stream_values.md
                 - cloud/how-tos/stream_updates.md

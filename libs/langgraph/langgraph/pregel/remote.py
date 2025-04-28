@@ -241,7 +241,7 @@ class RemoteGraph(PregelProtocol):
         )
 
     def _create_state_snapshot(self, state: ThreadState) -> StateSnapshot:
-        tasks = []
+        tasks: list[PregelTask] = []
         for task in state["tasks"]:
             interrupts = []
             for interrupt in task["interrupts"]:
@@ -289,6 +289,7 @@ class RemoteGraph(PregelProtocol):
             if state["parent_checkpoint"]
             else None,
             tasks=tuple(tasks),
+            interrupts=tuple([i for task in tasks for i in task.interrupts]),
         )
 
     def _get_checkpoint(self, config: Optional[RunnableConfig]) -> Optional[Checkpoint]:

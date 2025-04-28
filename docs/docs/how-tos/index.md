@@ -248,6 +248,7 @@ LangGraph Platform supports multiple types of runs besides streaming runs.
 - [How to run multiple agents in the same thread](../cloud/how-tos/same-thread.md)
 - [How to create cron jobs](../cloud/how-tos/cron_jobs.md)
 - [How to create stateless runs](../cloud/how-tos/stateless_runs.md)
+- [How to use headers as runtime configuration](../cloud/how-tos/configurable_headers.md)
 
 ### Streaming {#streaming_1}
 

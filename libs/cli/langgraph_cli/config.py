@@ -273,6 +273,33 @@ class CorsConfig(TypedDict, total=False):
     """
 
 
+class ConfigurableHeaderConfig(TypedDict):
+    """Customize which headers to include as configurable values in your runs.
+
+    By default, omits x-api-key, x-tenant-id, and x-service-key.
+
+    Exclusions (if provided) take precedence.
+
+    Each value can be a raw string with an optional wildcard.
+    """
+
+    includes: Optional[list[str]]
+    """Headers to include (if not also matches against an 'exludes' pattern.
+
+    Examples:
+        - 'user-agent'
+        - 'x-configurable-*'
+    """
+    excludes: Optional[list[str]]
+    """Headers to exclude. Applied before the 'includes' checks.
+
+    Examples:
+        - 'x-api-key'
+        - '*key*'
+        - '*token*'
+    """
+
+
 class HttpConfig(TypedDict, total=False):
     """Configuration for the built-in HTTP server that powers your deployment's routes and endpoints."""
 
@@ -311,6 +338,11 @@ class HttpConfig(TypedDict, total=False):
     """Optional. Defines CORS restrictions. If omitted, no special rules are set and 
     cross-origin behavior depends on default server settings.
     """
+    configurable_headers: Optional[ConfigurableHeaderConfig]
+    """Optional. Defines how headers are treated for a run's configuration.
+
+    You can include or exclude headers as configurable values to condition your
+    agent's behavior or permissions on a request's headers."""
 
 
 class Config(TypedDict, total=False):
