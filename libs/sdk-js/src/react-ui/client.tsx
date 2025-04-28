@@ -126,7 +126,7 @@ interface LoadExternalComponentProps
   meta?: unknown;
 
   /** Fallback to be rendered when the component is loading */
-  fallback?: React.ReactNode;
+  fallback?: React.ReactNode | Record<string, React.ReactNode>;
 
   /**
    * Map of components that can be rendered directly without fetching the UI code
@@ -134,6 +134,33 @@ interface LoadExternalComponentProps
    */
   components?: Record<string, React.FunctionComponent | React.ComponentClass>;
 }
+
+const isIterable = (value: unknown): value is Iterable<unknown> =>
+  value != null && typeof value === "object" && Symbol.iterator in value;
+
+const isPromise = (value: unknown): value is Promise<unknown> =>
+  value != null &&
+  typeof value === "object" &&
+  "then" in value &&
+  typeof value.then === "function";
+
+const isReactNode = (value: unknown): value is React.ReactNode => {
+  if (React.isValidElement(value)) return true;
+  if (value == null) return true;
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "bigint" ||
+    typeof value === "boolean"
+  ) {
+    return true;
+  }
+
+  if (isIterable(value)) return true;
+  if (isPromise(value)) return true;
+
+  return false;
+};
 
 export function LoadExternalComponent({
   stream,
@@ -156,6 +183,12 @@ export function LoadExternalComponent({
 
   const clientComponent = components?.[message.name];
   const hasClientComponent = clientComponent != null;
+
+  const fallbackComponent = isReactNode(fallback)
+    ? fallback
+    : typeof fallback === "object" && fallback != null
+      ? fallback?.[message.name]
+      : null;
 
   const uiNamespace = namespace ?? stream.assistantId;
   const uiClient = stream.client["~ui"];
@@ -192,7 +225,7 @@ export function LoadExternalComponent({
               React.createElement(state.comp, message.props),
               state.target,
             )
-          : fallback}
+          : fallbackComponent}
       </UseStreamContext.Provider>
     </>
   );
