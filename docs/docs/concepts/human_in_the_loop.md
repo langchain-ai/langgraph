@@ -440,6 +440,22 @@ Upon **resuming** the graph, the counter will be incremented a second time, resu
 The value of counter is: 2
 ```
 
+### Resuming multiple interrupts with one invocation
+
+If you have multiple interrupts in the task queue, you can use `Command.resume` with a dictionary mapping
+of interrupt ids to resume values to resume multiple interrupts with a single `invoke` / `stream` call.
+
+For example, once your graph has been interrupted (multiple times, theoretically) and is stalled:
+
+```python
+resume_map = {
+    i.interrupt_id: f"human input for prompt {i.value}"
+    for i in parent.get_state(thread_config).interrupts
+}
+
+parent_graph.invoke(Command(resume=resume_map), config=thread_config)
+```
+
 ## Common Pitfalls
 
 ### Side-effects

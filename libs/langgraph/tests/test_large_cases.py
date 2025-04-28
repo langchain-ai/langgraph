@@ -144,6 +144,7 @@ def test_invoke_two_processes_in_out_interrupt(
             },
             created_at=AnyStr(),
             parent_config=history[1].config,
+            interrupts=(),
         ),
         StateSnapshot(
             values={"inbox": 4, "output": 4, "input": 3},
@@ -165,6 +166,7 @@ def test_invoke_two_processes_in_out_interrupt(
             },
             created_at=AnyStr(),
             parent_config=history[2].config,
+            interrupts=(),
         ),
         StateSnapshot(
             values={"inbox": 21, "output": 4, "input": 3},
@@ -186,6 +188,7 @@ def test_invoke_two_processes_in_out_interrupt(
             },
             created_at=AnyStr(),
             parent_config=history[3].config,
+            interrupts=(),
         ),
         StateSnapshot(
             values={"inbox": 21, "output": 4, "input": 20},
@@ -207,6 +210,7 @@ def test_invoke_two_processes_in_out_interrupt(
             },
             created_at=AnyStr(),
             parent_config=history[4].config,
+            interrupts=(),
         ),
         StateSnapshot(
             values={"inbox": 3, "output": 4, "input": 20},
@@ -228,6 +232,7 @@ def test_invoke_two_processes_in_out_interrupt(
             },
             created_at=AnyStr(),
             parent_config=history[5].config,
+            interrupts=(),
         ),
         StateSnapshot(
             values={"inbox": 3, "output": 4, "input": 2},
@@ -249,6 +254,7 @@ def test_invoke_two_processes_in_out_interrupt(
             },
             created_at=AnyStr(),
             parent_config=history[6].config,
+            interrupts=(),
         ),
         StateSnapshot(
             values={"inbox": 3, "input": 2},
@@ -270,6 +276,7 @@ def test_invoke_two_processes_in_out_interrupt(
             },
             created_at=AnyStr(),
             parent_config=history[7].config,
+            interrupts=(),
         ),
         StateSnapshot(
             values={"input": 2},
@@ -291,6 +298,7 @@ def test_invoke_two_processes_in_out_interrupt(
             },
             created_at=AnyStr(),
             parent_config=None,
+            interrupts=(),
         ),
     ]
 
@@ -358,6 +366,7 @@ def test_fork_always_re_runs_nodes(
             },
             created_at=AnyStr(),
             parent_config=history[1].config,
+            interrupts=(),
         ),
         StateSnapshot(
             values=5,
@@ -379,6 +388,7 @@ def test_fork_always_re_runs_nodes(
             },
             created_at=AnyStr(),
             parent_config=history[2].config,
+            interrupts=(),
         ),
         StateSnapshot(
             values=4,
@@ -400,6 +410,7 @@ def test_fork_always_re_runs_nodes(
             },
             created_at=AnyStr(),
             parent_config=history[3].config,
+            interrupts=(),
         ),
         StateSnapshot(
             values=3,
@@ -421,6 +432,7 @@ def test_fork_always_re_runs_nodes(
             },
             created_at=AnyStr(),
             parent_config=history[4].config,
+            interrupts=(),
         ),
         StateSnapshot(
             values=2,
@@ -442,6 +454,7 @@ def test_fork_always_re_runs_nodes(
             },
             created_at=AnyStr(),
             parent_config=history[5].config,
+            interrupts=(),
         ),
         StateSnapshot(
             values=1,
@@ -463,6 +476,7 @@ def test_fork_always_re_runs_nodes(
             },
             created_at=AnyStr(),
             parent_config=history[6].config,
+            interrupts=(),
         ),
         StateSnapshot(
             values=0,
@@ -484,6 +498,7 @@ def test_fork_always_re_runs_nodes(
             },
             created_at=AnyStr(),
             parent_config=None,
+            interrupts=(),
         ),
     ]
 
@@ -776,6 +791,7 @@ def test_conditional_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
     assert (
         app_w_interrupt.checkpointer.get_tuple(config).config["configurable"][
@@ -838,6 +854,7 @@ def test_conditional_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -969,6 +986,7 @@ def test_conditional_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     # test state get/update methods with interrupt_before
@@ -1035,6 +1053,7 @@ def test_conditional_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     app_w_interrupt.update_state(
@@ -1091,6 +1110,7 @@ def test_conditional_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -1222,6 +1242,7 @@ def test_conditional_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     # test re-invoke to continue with interrupt_before
@@ -1288,6 +1309,7 @@ def test_conditional_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -1684,6 +1706,7 @@ def test_conditional_state_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     with assert_ctx_once():
@@ -1737,6 +1760,7 @@ def test_conditional_state_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     with assert_ctx_once():
@@ -1824,6 +1848,7 @@ def test_conditional_state_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     # test state get/update methods with interrupt_before
@@ -1886,6 +1911,7 @@ def test_conditional_state_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     app_w_interrupt.update_state(
@@ -1938,6 +1964,7 @@ def test_conditional_state_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2023,6 +2050,7 @@ def test_conditional_state_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     # test w interrupt before all
@@ -2066,6 +2094,7 @@ def test_conditional_state_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2116,6 +2145,7 @@ def test_conditional_state_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2187,6 +2217,7 @@ def test_conditional_state_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2260,6 +2291,7 @@ def test_conditional_state_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2331,6 +2363,7 @@ def test_conditional_state_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -3071,6 +3104,7 @@ def test_state_graph_packets(
             if "shallow" in checkpointer_name
             else [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
         ),
+        interrupts=(),
     )
 
     # modify ai message
@@ -3135,6 +3169,7 @@ def test_state_graph_packets(
             if "shallow" in checkpointer_name
             else [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
         ),
+        interrupts=(),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -3254,6 +3289,7 @@ def test_state_graph_packets(
             if "shallow" in checkpointer_name
             else [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
         ),
+        interrupts=(),
     )
 
     app_w_interrupt.update_state(
@@ -3315,6 +3351,7 @@ def test_state_graph_packets(
             if "shallow" in checkpointer_name
             else [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
         ),
+        interrupts=(),
     )
 
     # interrupt before tools
@@ -3404,6 +3441,7 @@ def test_state_graph_packets(
             if "shallow" in checkpointer_name
             else [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
         ),
+        interrupts=(),
     )
 
     # modify ai message
@@ -3462,6 +3500,7 @@ def test_state_graph_packets(
             if "shallow" in checkpointer_name
             else [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
         ),
+        interrupts=(),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -3579,6 +3618,7 @@ def test_state_graph_packets(
             if "shallow" in checkpointer_name
             else [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
         ),
+        interrupts=(),
     )
 
     app_w_interrupt.update_state(
@@ -3640,6 +3680,7 @@ def test_state_graph_packets(
             if "shallow" in checkpointer_name
             else [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
         ),
+        interrupts=(),
     )
 
 
@@ -3936,6 +3977,7 @@ def test_message_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     # modify ai message
@@ -3987,6 +4029,7 @@ def test_message_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -4080,6 +4123,7 @@ def test_message_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     app_w_interrupt.update_state(
@@ -4131,6 +4175,7 @@ def test_message_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     app_w_interrupt = workflow.compile(
@@ -4206,6 +4251,7 @@ def test_message_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     # modify ai message
@@ -4263,6 +4309,7 @@ def test_message_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -4356,6 +4403,7 @@ def test_message_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     app_w_interrupt.update_state(
@@ -4408,6 +4456,7 @@ def test_message_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     # add an extra message as if it came from "tools" node
@@ -4460,6 +4509,7 @@ def test_message_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
 
@@ -4759,6 +4809,7 @@ def test_root_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     # modify ai message
@@ -4810,6 +4861,7 @@ def test_root_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -4904,6 +4956,7 @@ def test_root_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     app_w_interrupt.update_state(
@@ -4956,6 +5009,7 @@ def test_root_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     app_w_interrupt = workflow.compile(
@@ -5031,6 +5085,7 @@ def test_root_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     # modify ai message
@@ -5088,6 +5143,7 @@ def test_root_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -5182,6 +5238,7 @@ def test_root_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     app_w_interrupt.update_state(
@@ -5233,6 +5290,7 @@ def test_root_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     # add an extra message as if it came from "tools" node
@@ -5285,6 +5343,7 @@ def test_root_graph(
             if "shallow" in checkpointer_name
             else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     # create new graph with one more state key, reuse previous thread history
@@ -5368,6 +5427,7 @@ def test_root_graph(
             if "shallow" in checkpointer_name
             else list(new_app.checkpointer.list(config, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     # new input is merged to old state
@@ -5775,6 +5835,13 @@ def test_dynamic_interrupt(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
         ),
+        interrupts=(
+            Interrupt(
+                value="Just because...",
+                resumable=True,
+                ns=[AnyStr("tool_two:")],
+            ),
+        ),
     )
     # clear the interrupt and next tasks
     tool_two.update_state(thread1, None, as_node=END)
@@ -5803,6 +5870,7 @@ def test_dynamic_interrupt(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
 
@@ -5964,6 +6032,13 @@ def test_copy_checkpoint(
             if "shallow" in checkpointer_name
             else [*tool_two.checkpointer.list(thread1, limit=2)][-1].config
         ),
+        interrupts=(
+            Interrupt(
+                value="Just because...",
+                resumable=True,
+                ns=[AnyStr("tool_two:")],
+            ),
+        ),
     )
 
     if "shallow" in checkpointer_name:
@@ -6009,6 +6084,7 @@ def test_copy_checkpoint(
         parent_config=(
             [*tool_two.checkpointer.list(thread1, limit=2)][-1].parent_config
         ),
+        interrupts=(),
     )
 
 
@@ -6184,6 +6260,13 @@ def test_dynamic_interrupt_subgraph(
                 )
             )[-1].config
         ),
+        interrupts=(
+            Interrupt(
+                value="Just because...",
+                resumable=True,
+                ns=[AnyStr("tool_two:"), AnyStr("do:")],
+            ),
+        ),
     )
     # clear the interrupt and next tasks
     tool_two.update_state(thread1, None, as_node=END)
@@ -6216,6 +6299,7 @@ def test_dynamic_interrupt_subgraph(
                 )
             )[-1].config
         ),
+        interrupts=(),
     )
 
 
@@ -6334,6 +6418,7 @@ def test_start_branch_then(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
         ),
+        interrupts=(),
     )
     # resume, for same result as above
     assert tool_two.invoke(None, thread1, debug=1) == {
@@ -6365,6 +6450,7 @@ def test_start_branch_then(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     thread2 = {"configurable": {"thread_id": "2", "assistant_id": "a"}}
@@ -6398,6 +6484,7 @@ def test_start_branch_then(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread2, limit=2))[-1].config
         ),
+        interrupts=(),
     )
     # resume, for same result as above
     assert tool_two.invoke(None, thread2, debug=1) == {
@@ -6429,6 +6516,7 @@ def test_start_branch_then(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread2, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     thread3 = {"configurable": {"thread_id": "3", "assistant_id": "b"}}
@@ -6462,6 +6550,7 @@ def test_start_branch_then(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread3, limit=2))[-1].config
         ),
+        interrupts=(),
     )
     # update state
     tool_two.update_state(thread3, {"my_key": "key"})  # appends to my_key
@@ -6490,6 +6579,7 @@ def test_start_branch_then(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread3, limit=2))[-1].config
         ),
+        interrupts=(),
     )
     # resume, for same result as above
     assert tool_two.invoke(None, thread3, debug=1) == {
@@ -6521,6 +6611,7 @@ def test_start_branch_then(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread3, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
 
@@ -6900,6 +6991,7 @@ def test_branch_then(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
         ),
+        interrupts=(),
     )
     # resume, for same result as above
     assert tool_two.invoke(None, thread1, debug=1) == {
@@ -6930,6 +7022,7 @@ def test_branch_then(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     thread2 = {"configurable": {"thread_id": "2"}}
@@ -6962,6 +7055,7 @@ def test_branch_then(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread2, limit=2))[-1].config
         ),
+        interrupts=(),
     )
     # resume, for same result as above
     assert tool_two.invoke(None, thread2, debug=1) == {
@@ -6992,6 +7086,7 @@ def test_branch_then(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread2, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     tool_two = tool_two_graph.compile(
@@ -7032,6 +7127,7 @@ def test_branch_then(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     # update state
@@ -7063,6 +7159,7 @@ def test_branch_then(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     tool_two = tool_two_graph.compile(
@@ -7103,6 +7200,7 @@ def test_branch_then(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
         ),
+        interrupts=(),
     )
     # resume, for same result as above
     assert tool_two.invoke(None, thread1, debug=1) == {
@@ -7133,6 +7231,7 @@ def test_branch_then(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     thread2 = {"configurable": {"thread_id": "22"}}
@@ -7165,6 +7264,7 @@ def test_branch_then(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread2, limit=2))[-1].config
         ),
+        interrupts=(),
     )
     # resume, for same result as above
     assert tool_two.invoke(None, thread2, debug=1) == {
@@ -7195,6 +7295,7 @@ def test_branch_then(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread2, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
     thread3 = {"configurable": {"thread_id": "23"}}
@@ -7221,6 +7322,7 @@ def test_branch_then(
             "thread_id": "23",
         },
         parent_config=None,
+        interrupts=(),
     )
     # run from this point
     assert tool_two.invoke(None, thread3) == {
@@ -7252,6 +7354,7 @@ def test_branch_then(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread3, limit=2))[-1].config
         ),
+        interrupts=(),
     )
     # resume, for same result as above
     assert tool_two.invoke(None, thread3, debug=1) == {
@@ -7282,6 +7385,7 @@ def test_branch_then(
             if "shallow" in checkpointer_name
             else list(tool_two.checkpointer.list(thread3, limit=2))[-1].config
         ),
+        interrupts=(),
     )
 
 
@@ -7423,6 +7527,7 @@ def test_send_dedupe_on_resume(
                 }
             },
             tasks=(),
+            interrupts=(),
         ),
         StateSnapshot(
             values=[
@@ -7469,6 +7574,7 @@ def test_send_dedupe_on_resume(
                     result=["3"],
                 ),
             ),
+            interrupts=(),
         ),
         StateSnapshot(
             values=[
@@ -7536,6 +7642,7 @@ def test_send_dedupe_on_resume(
                     result=["3"],
                 ),
             ),
+            interrupts=(Interrupt(value="Bahh", resumable=False, ns=None),),
         ),
         StateSnapshot(
             values=["0", "1"],
@@ -7591,6 +7698,7 @@ def test_send_dedupe_on_resume(
                     result=["3.1"],
                 ),
             ),
+            interrupts=(),
         ),
         StateSnapshot(
             values=["0"],
@@ -7628,6 +7736,7 @@ def test_send_dedupe_on_resume(
                     result=["1"],
                 ),
             ),
+            interrupts=(),
         ),
         StateSnapshot(
             values=[],
@@ -7648,6 +7757,7 @@ def test_send_dedupe_on_resume(
             },
             created_at=AnyStr(),
             parent_config=None,
+            interrupts=(),
             tasks=(
                 PregelTask(
                     id=AnyStr(),
@@ -7762,6 +7872,7 @@ def test_nested_graph_state(
                 }
             }
         ),
+        interrupts=(),
     )
     # now, get_state with subgraphs state
     assert app.get_state(config, subgraphs=True) == StateSnapshot(
@@ -7828,6 +7939,7 @@ def test_nested_graph_state(
                             }
                         }
                     ),
+                    interrupts=(),
                 ),
             ),
         ),
@@ -7858,6 +7970,7 @@ def test_nested_graph_state(
                 }
             }
         ),
+        interrupts=(),
     )
     # get_state_history returns outer graph checkpoints
     history = list(app.get_state_history(config))
@@ -7904,6 +8017,7 @@ def test_nested_graph_state(
                     }
                 }
             ),
+            interrupts=(),
         ),
         StateSnapshot(
             values={"my_key": "my value"},
@@ -7938,6 +8052,7 @@ def test_nested_graph_state(
                     "checkpoint_id": AnyStr(),
                 }
             },
+            interrupts=(),
         ),
         StateSnapshot(
             values={},
@@ -7966,6 +8081,7 @@ def test_nested_graph_state(
             },
             created_at=AnyStr(),
             parent_config=None,
+            interrupts=(),
         ),
     ]
 
@@ -8022,6 +8138,7 @@ def test_nested_graph_state(
                     }
                 }
             ),
+            interrupts=(),
             tasks=(PregelTask(AnyStr(), "inner_2", (PULL, "inner_2")),),
         ),
         StateSnapshot(
@@ -8071,6 +8188,7 @@ def test_nested_graph_state(
                     },
                 ),
             ),
+            interrupts=(),
         ),
         StateSnapshot(
             values={},
@@ -8099,6 +8217,7 @@ def test_nested_graph_state(
             },
             created_at=AnyStr(),
             parent_config=None,
+            interrupts=(),
             tasks=(
                 PregelTask(
                     AnyStr(),
@@ -8150,6 +8269,7 @@ def test_nested_graph_state(
                 }
             }
         ),
+        interrupts=(),
     )
     # test full history at the end
     actual_history = list(app.get_state_history(config))
@@ -8186,6 +8306,7 @@ def test_nested_graph_state(
                     }
                 }
             ),
+            interrupts=(),
         ),
         StateSnapshot(
             values={"my_key": "hi my value here and there"},
@@ -8220,6 +8341,7 @@ def test_nested_graph_state(
                     "checkpoint_id": AnyStr(),
                 }
             },
+            interrupts=(),
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
@@ -8257,6 +8379,7 @@ def test_nested_graph_state(
                     "checkpoint_id": AnyStr(),
                 }
             },
+            interrupts=(),
         ),
         StateSnapshot(
             values={"my_key": "my value"},
@@ -8291,6 +8414,7 @@ def test_nested_graph_state(
                     "checkpoint_id": AnyStr(),
                 }
             },
+            interrupts=(),
         ),
         StateSnapshot(
             values={},
@@ -8319,6 +8443,7 @@ def test_nested_graph_state(
             },
             created_at=AnyStr(),
             parent_config=None,
+            interrupts=(),
         ),
     ]
     if "shallow" in checkpointer_name:
@@ -8439,6 +8564,7 @@ def test_doubly_nested_graph_state(
                 }
             }
         ),
+        interrupts=(),
     )
     child_state = app.get_state(outer_state.tasks[0].state)
     assert child_state == StateSnapshot(
@@ -8500,6 +8626,7 @@ def test_doubly_nested_graph_state(
                 }
             }
         ),
+        interrupts=(),
     )
     grandchild_state = app.get_state(child_state.tasks[0].state)
     assert grandchild_state == StateSnapshot(
@@ -8562,6 +8689,7 @@ def test_doubly_nested_graph_state(
                 }
             }
         ),
+        interrupts=(),
     )
     # get state with subgraphs
     assert app.get_state(config, subgraphs=True) == StateSnapshot(
@@ -8649,6 +8777,7 @@ def test_doubly_nested_graph_state(
                                         }
                                     }
                                 ),
+                                interrupts=(),
                             ),
                         ),
                     ),
@@ -8690,6 +8819,7 @@ def test_doubly_nested_graph_state(
                             }
                         }
                     ),
+                    interrupts=(),
                 ),
             ),
         ),
@@ -8720,6 +8850,7 @@ def test_doubly_nested_graph_state(
                 }
             }
         ),
+        interrupts=(),
     )
     # # resume
     assert [c for c in app.stream(None, config, subgraphs=True)] == [
@@ -8767,6 +8898,7 @@ def test_doubly_nested_graph_state(
                     }
                 }
             ),
+            interrupts=(),
         )
     )
 
@@ -8804,6 +8936,7 @@ def test_doubly_nested_graph_state(
                     "checkpoint_id": AnyStr(),
                 }
             },
+            interrupts=(),
         ),
         StateSnapshot(
             values={"my_key": "hi my value here and there"},
@@ -8838,6 +8971,7 @@ def test_doubly_nested_graph_state(
                     result={"my_key": "hi my value here and there and back again"},
                 ),
             ),
+            interrupts=(),
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
@@ -8878,6 +9012,7 @@ def test_doubly_nested_graph_state(
                     "checkpoint_id": AnyStr(),
                 }
             },
+            interrupts=(),
         ),
         StateSnapshot(
             values={"my_key": "my value"},
@@ -8912,6 +9047,7 @@ def test_doubly_nested_graph_state(
                     result={"my_key": "hi my value"},
                 ),
             ),
+            interrupts=(),
         ),
         StateSnapshot(
             values={},
@@ -8932,6 +9068,7 @@ def test_doubly_nested_graph_state(
             },
             created_at=AnyStr(),
             parent_config=None,
+            interrupts=(),
             tasks=(
                 PregelTask(
                     id=AnyStr(),
@@ -8982,6 +9119,7 @@ def test_doubly_nested_graph_state(
                 }
             },
             tasks=(),
+            interrupts=(),
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
@@ -9033,6 +9171,7 @@ def test_doubly_nested_graph_state(
                     result={"my_key": "hi my value here and there"},
                 ),
             ),
+            interrupts=(),
         ),
         StateSnapshot(
             values={},
@@ -9061,6 +9200,7 @@ def test_doubly_nested_graph_state(
             },
             created_at=AnyStr(),
             parent_config=None,
+            interrupts=(),
             tasks=(
                 PregelTask(
                     id=AnyStr(),
@@ -9127,6 +9267,7 @@ def test_doubly_nested_graph_state(
                 }
             },
             tasks=(),
+            interrupts=(),
         ),
         StateSnapshot(
             values={"my_key": "hi my value here"},
@@ -9188,6 +9329,7 @@ def test_doubly_nested_graph_state(
                     result={"my_key": "hi my value here and there"},
                 ),
             ),
+            interrupts=(),
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
@@ -9249,6 +9391,7 @@ def test_doubly_nested_graph_state(
                     result={"my_key": "hi my value here"},
                 ),
             ),
+            interrupts=(),
         ),
         StateSnapshot(
             values={},
@@ -9289,6 +9432,7 @@ def test_doubly_nested_graph_state(
             },
             created_at=AnyStr(),
             parent_config=None,
+            interrupts=(),
             tasks=(
                 PregelTask(
                     id=AnyStr(),
@@ -9565,6 +9709,7 @@ def test_send_react_interrupt(
                 }
             }
         ),
+        interrupts=(),
         tasks=(
             PregelTask(
                 id=AnyStr(),
@@ -9628,6 +9773,7 @@ def test_send_react_interrupt(
                 }
             }
         ),
+        interrupts=(),
         tasks=(),
     )
 
@@ -9725,6 +9871,7 @@ def test_send_react_interrupt(
                 }
             }
         ),
+        interrupts=(),
         tasks=(
             PregelTask(
                 id=AnyStr(),
@@ -9816,6 +9963,7 @@ def test_send_react_interrupt(
                 }
             }
         ),
+        interrupts=(),
         tasks=(
             PregelTask(
                 id=AnyStr(),
@@ -10046,6 +10194,7 @@ def test_send_react_interrupt_control(
                 result=None,
             ),
         ),
+        interrupts=(),
     )
 
     # remove the tool call, clearing the pending task
@@ -10098,6 +10247,7 @@ def test_send_react_interrupt_control(
                 }
             }
         ),
+        interrupts=(),
         tasks=(),
     )
 
@@ -10300,6 +10450,7 @@ def test_weather_subgraph(
                 },
             ),
         ),
+        interrupts=(),
     )
 
     # update
@@ -10442,9 +10593,11 @@ def test_weather_subgraph(
                             path=(PULL, "weather_node"),
                         ),
                     ),
+                    interrupts=(),
                 ),
             ),
         ),
+        interrupts=(),
     )
     graph.update_state(
         state.tasks[0].state.config,
@@ -10547,10 +10700,12 @@ def test_weather_subgraph(
                             }
                         }
                     ),
+                    interrupts=(),
                     tasks=(),
                 ),
             ),
         ),
+        interrupts=(),
     )
     assert [
         c

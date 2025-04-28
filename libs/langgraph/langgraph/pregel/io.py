@@ -1,12 +1,10 @@
 from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any, Literal, Optional, TypeVar, Union
-from uuid import UUID
 
 from langchain_core.runnables.utils import AddableDict
 
 from langgraph.channels.base import BaseChannel, EmptyChannelError
-from langgraph.checkpoint.base import PendingWrite
 from langgraph.constants import (
     EMPTY_SEQ,
     ERROR,
@@ -22,15 +20,6 @@ from langgraph.constants import (
 from langgraph.errors import InvalidUpdateError
 from langgraph.pregel.log import logger
 from langgraph.types import Command, PregelExecutableTask, Send
-
-
-def is_task_id(task_id: str) -> bool:
-    """Check if a string is a valid task id."""
-    try:
-        UUID(task_id)
-    except Exception:
-        return False
-    return True
 
 
 def read_channel(
@@ -66,9 +55,7 @@ def read_channels(
         return values
 
 
-def map_command(
-    cmd: Command, pending_writes: list[PendingWrite]
-) -> Iterator[tuple[str, str, Any]]:
+def map_command(cmd: Command) -> Iterator[tuple[str, str, Any]]:
     """Map input chunk to a sequence of pending writes in the form (channel, value)."""
     if cmd.graph == Command.PARENT:
         raise InvalidUpdateError("There is no parent graph")
@@ -87,15 +74,7 @@ def map_command(
                     f"In Command.goto, expected Send/str, got {type(send).__name__}"
                 )
     if cmd.resume is not None:
-        if isinstance(cmd.resume, dict) and all(is_task_id(k) for k in cmd.resume):
-            for tid, resume in cmd.resume.items():
-                existing: list[Any] = next(
-                    (w[2] for w in pending_writes if w[0] == tid and w[1] == RESUME), []
-                )
-                existing.append(resume)
-                yield (tid, RESUME, existing)
-        else:
-            yield (NULL_TASK_ID, RESUME, cmd.resume)
+        yield (NULL_TASK_ID, RESUME, cmd.resume)
     if cmd.update:
         for k, v in cmd._update_as_tuples():
             yield (NULL_TASK_ID, k, v)

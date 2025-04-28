@@ -147,7 +147,7 @@ class Interrupt:
         """Generate a unique ID for the interrupt based on its namespace."""
         if self.ns is None:
             return "placeholder-id"
-        return xxh3_128_hexdigest("".join(self.ns).encode())
+        return xxh3_128_hexdigest("|".join(self.ns).encode())
 
 
 class StateUpdate(NamedTuple):
@@ -192,19 +192,21 @@ class StateSnapshot(NamedTuple):
     """Snapshot of the state of the graph at the beginning of a step."""
 
     values: Union[dict[str, Any], Any]
-    """Current values of channels"""
+    """Current values of channels."""
     next: tuple[str, ...]
     """The name of the node to execute in each task for this step."""
     config: RunnableConfig
-    """Config used to fetch this snapshot"""
+    """Config used to fetch this snapshot."""
     metadata: Optional[CheckpointMetadata]
-    """Metadata associated with this snapshot"""
+    """Metadata associated with this snapshot."""
     created_at: Optional[str]
-    """Timestamp of snapshot creation"""
+    """Timestamp of snapshot creation."""
     parent_config: Optional[RunnableConfig]
-    """Config used to fetch the parent snapshot, if any"""
+    """Config used to fetch the parent snapshot, if any."""
     tasks: tuple[PregelTask, ...]
     """Tasks to execute in this step. If already attempted, may contain an error."""
+    interrupts: tuple[Interrupt, ...]
+    """Interrupts that occurred in this step that are pending resolution."""
 
 
 class Send:
@@ -294,6 +296,10 @@ class Command(Generic[N], ToolOutputMixin):
             - Command.PARENT: closest parent graph
         update: update to apply to the graph's state.
         resume: value to resume execution with. To be used together with [`interrupt()`][langgraph.types.interrupt].
+            Can be one of the following:
+
+            - mapping of interrupt ids to resume values
+            - a single value with which to resume the next interrupt
         goto: can be one of the following:
 
             - name of the node to navigate to next (any node that belongs to the specified `graph`)
@@ -304,7 +310,7 @@ class Command(Generic[N], ToolOutputMixin):
 
     graph: Optional[str] = None
     update: Optional[Any] = None
-    resume: Optional[Union[Any, dict[str, Any]]] = None
+    resume: Optional[Union[dict[str, Any], Any]] = None
     goto: Union[Send, Sequence[Union[Send, str]], str] = ()
 
     def __repr__(self) -> str:

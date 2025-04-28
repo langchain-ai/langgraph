@@ -47,6 +47,7 @@ from langgraph.constants import (
     CONFIG_KEY_DEDUPE_TASKS,
     CONFIG_KEY_DELEGATE,
     CONFIG_KEY_ENSURE_LATEST,
+    CONFIG_KEY_RESUME_MAP,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_STREAM,
@@ -112,7 +113,7 @@ from langgraph.pregel.io import (
 )
 from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.read import PregelNode
-from langgraph.pregel.utils import get_new_channel_versions
+from langgraph.pregel.utils import get_new_channel_versions, is_xxh3_128_hexdigest
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
@@ -649,14 +650,21 @@ class PregelLoop(LoopProtocol):
 
         # map command to writes
         if isinstance(self.input, Command):
-            if self.input.resume is not None and not self.checkpointer:
+            if resume_is_map := (
+                (resume := self.input.resume) is not None
+                and isinstance(resume, dict)
+                and all(is_xxh3_128_hexdigest(k) for k in resume)
+            ):
+                self.config[CONF][CONFIG_KEY_RESUME_MAP] = self.input.resume
+            if resume is not None and not self.checkpointer:
                 raise RuntimeError(
                     "Cannot use Command(resume=...) without checkpointer"
                 )
             writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
             # group writes by task ID
-            for tid, c, v in map_command(self.input, self.checkpoint_pending_writes):
-                writes[tid].append((c, v))
+            for tid, c, v in map_command(cmd=self.input):
+                if not (c == RESUME and resume_is_map):
+                    writes[tid].append((c, v))
             if not writes:
                 raise EmptyInputError("Received empty Command input")
             # save writes
