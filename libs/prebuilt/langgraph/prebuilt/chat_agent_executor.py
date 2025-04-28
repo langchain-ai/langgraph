@@ -277,7 +277,7 @@ def create_react_agent(
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
-    version: Literal["v1", "v2"] = "v1",
+    version: Literal["v1", "v2"] = "v2",
     name: Optional[str] = None,
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
@@ -930,6 +930,13 @@ def create_react_agent(
                 break
             if m.name in should_return_direct:
                 return END
+
+        # handle a case of parallel tool calls where
+        # the tool w/ `return_direct` was executed in a different `Send`
+        if isinstance(m, AIMessage) and m.tool_calls:
+            if any(call["name"] in should_return_direct for call in m.tool_calls):
+                return END
+
         return entrypoint
 
     if should_return_direct:
