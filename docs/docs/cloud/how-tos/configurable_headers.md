@@ -32,3 +32,5 @@ If you'd like to opt-out of configurable headers, you can simply set a wildcard 
 ```
 
 This will exclude all headers from being added to your run's configuration.
+
+Note that exclusions take precedence over inclusions.
