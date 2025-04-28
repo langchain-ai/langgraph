@@ -63,6 +63,11 @@ MANUAL_API_REFERENCES_LANGGRAPH = [
     ([], "langgraph.checkpoint.sqlite", "SqliteSaver", "checkpoints"),
     ([], "langgraph.checkpoint.postgres.aio", "AsyncPostgresSaver", "checkpoints"),
     ([], "langgraph.checkpoint.postgres", "PostgresSaver", "checkpoints"),
+    # other prebuilts
+    (["langgraph_supervisor"], "langgraph_supervisor.supervisor", "create_supervisor", "supervisor"),
+    (["langgraph_supervisor"], "langgraph_supervisor.handoff", "create_handoff_tool", "supervisor"),
+    (["langgraph_swarm"], "langgraph_swarm.swarm", "create_swarm", "swarm"),
+    (["langgraph_swarm"], "langgraph_swarm.handoff", "create_handoff_tool", "swarm"),
 ]
 
 WELL_KNOWN_LANGGRAPH_OBJECTS = {
