@@ -141,39 +141,26 @@ async def test_no_prompt_async(checkpointer_name: str) -> None:
             assert saved.pending_writes == []
 
 
-def test_passing_two_modifiers():
-    model = FakeToolCallingModel()
-
-    with pytest.raises(ValueError):
-        create_react_agent(model, [], state_modifier="Foo", prompt="Bar")
-
-
 def test_system_message_prompt():
     prompt = SystemMessage(content="Foo")
-    for agent in (
-        create_react_agent(FakeToolCallingModel(), [], prompt=prompt),
-        create_react_agent(FakeToolCallingModel(), [], state_modifier=prompt),
-    ):
-        inputs = [HumanMessage("hi?")]
-        response = agent.invoke({"messages": inputs})
-        expected_response = {
-            "messages": inputs + [AIMessage(content="Foo-hi?", id="0", tool_calls=[])]
-        }
-        assert response == expected_response
+    agent = create_react_agent(FakeToolCallingModel(), [], prompt=prompt)
+    inputs = [HumanMessage("hi?")]
+    response = agent.invoke({"messages": inputs})
+    expected_response = {
+        "messages": inputs + [AIMessage(content="Foo-hi?", id="0", tool_calls=[])]
+    }
+    assert response == expected_response
 
 
 def test_string_prompt():
     prompt = "Foo"
-    for agent in (
-        create_react_agent(FakeToolCallingModel(), [], prompt=prompt),
-        create_react_agent(FakeToolCallingModel(), [], state_modifier=prompt),
-    ):
-        inputs = [HumanMessage("hi?")]
-        response = agent.invoke({"messages": inputs})
-        expected_response = {
-            "messages": inputs + [AIMessage(content="Foo-hi?", id="0", tool_calls=[])]
-        }
-        assert response == expected_response
+    agent = create_react_agent(FakeToolCallingModel(), [], prompt=prompt)
+    inputs = [HumanMessage("hi?")]
+    response = agent.invoke({"messages": inputs})
+    expected_response = {
+        "messages": inputs + [AIMessage(content="Foo-hi?", id="0", tool_calls=[])]
+    }
+    assert response == expected_response
 
 
 def test_callable_prompt():
@@ -181,16 +168,11 @@ def test_callable_prompt():
         modified_message = f"Bar {state['messages'][-1].content}"
         return [HumanMessage(content=modified_message)]
 
-    for agent in (
-        create_react_agent(FakeToolCallingModel(), [], prompt=prompt),
-        create_react_agent(FakeToolCallingModel(), [], state_modifier=prompt),
-    ):
-        inputs = [HumanMessage("hi?")]
-        response = agent.invoke({"messages": inputs})
-        expected_response = {
-            "messages": inputs + [AIMessage(content="Bar hi?", id="0")]
-        }
-        assert response == expected_response
+    agent = create_react_agent(FakeToolCallingModel(), [], prompt=prompt)
+    inputs = [HumanMessage("hi?")]
+    response = agent.invoke({"messages": inputs})
+    expected_response = {"messages": inputs + [AIMessage(content="Bar hi?", id="0")]}
+    assert response == expected_response
 
 
 async def test_callable_prompt_async():
@@ -198,16 +180,11 @@ async def test_callable_prompt_async():
         modified_message = f"Bar {state['messages'][-1].content}"
         return [HumanMessage(content=modified_message)]
 
-    for agent in (
-        create_react_agent(FakeToolCallingModel(), [], prompt=prompt),
-        create_react_agent(FakeToolCallingModel(), [], state_modifier=prompt),
-    ):
-        inputs = [HumanMessage("hi?")]
-        response = await agent.ainvoke({"messages": inputs})
-        expected_response = {
-            "messages": inputs + [AIMessage(content="Bar hi?", id="0")]
-        }
-        assert response == expected_response
+    agent = create_react_agent(FakeToolCallingModel(), [], prompt=prompt)
+    inputs = [HumanMessage("hi?")]
+    response = await agent.ainvoke({"messages": inputs})
+    expected_response = {"messages": inputs + [AIMessage(content="Bar hi?", id="0")]}
+    assert response == expected_response
 
 
 def test_runnable_prompt():
@@ -215,16 +192,11 @@ def test_runnable_prompt():
         lambda state: [HumanMessage(content=f"Baz {state['messages'][-1].content}")]
     )
 
-    for agent in (
-        create_react_agent(FakeToolCallingModel(), [], prompt=prompt),
-        create_react_agent(FakeToolCallingModel(), [], state_modifier=prompt),
-    ):
-        inputs = [HumanMessage("hi?")]
-        response = agent.invoke({"messages": inputs})
-        expected_response = {
-            "messages": inputs + [AIMessage(content="Baz hi?", id="0")]
-        }
-        assert response == expected_response
+    agent = create_react_agent(FakeToolCallingModel(), [], prompt=prompt)
+    inputs = [HumanMessage("hi?")]
+    response = agent.invoke({"messages": inputs})
+    expected_response = {"messages": inputs + [AIMessage(content="Baz hi?", id="0")]}
+    assert response == expected_response
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
