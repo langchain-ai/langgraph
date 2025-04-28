@@ -18,3 +18,17 @@ Here's how to customize the included and excluded headers:
 ```
 
 The `include` and `exclude` lists accept exact header names or patterns using `*` to match any number of characters. For your security, no other regex patterns are supported.
+
+If you'd like to opt-out of configurable headers, you can simply set a wildcard pattern in the `exclude` list:
+
+```json
+{
+  "http": {
+    "configurable_headers": {
+      "exclude": ["*"]
+    }
+  }
+}
+```
+
+This will exclude all headers from being added to your run's configuration.
