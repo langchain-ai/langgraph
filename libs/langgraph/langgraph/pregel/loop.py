@@ -650,19 +650,21 @@ class PregelLoop(LoopProtocol):
 
         # map command to writes
         if isinstance(self.input, Command):
-            if (resume := self.input.resume) is not None:
-                if isinstance(resume, dict) and all(
-                    is_xxh3_128_hexdigest(k) for k in resume
-                ):
-                    self.config[CONF][CONFIG_KEY_RESUME_MAP] = self.input.resume
-            if self.input.resume is not None and not self.checkpointer:
+            if resume_is_map := (
+                (resume := self.input.resume) is not None
+                and isinstance(resume, dict)
+                and all(is_xxh3_128_hexdigest(k) for k in resume)
+            ):
+                self.config[CONF][CONFIG_KEY_RESUME_MAP] = self.input.resume
+            if resume is not None and not self.checkpointer:
                 raise RuntimeError(
                     "Cannot use Command(resume=...) without checkpointer"
                 )
             writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
             # group writes by task ID
-            for tid, c, v in map_command(self.input):
-                writes[tid].append((c, v))
+            for tid, c, v in map_command(cmd=self.input):
+                if not (c == RESUME and resume_is_map):
+                    writes[tid].append((c, v))
             if not writes:
                 raise EmptyInputError("Received empty Command input")
             # save writes
