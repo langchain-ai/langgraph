@@ -2,6 +2,7 @@ import binascii
 import itertools
 import sys
 import threading
+import warnings
 from collections import defaultdict, deque
 from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
@@ -902,23 +903,22 @@ def _scratchpad(
             # distinguish from missing when used over http
             null_resume_write = None
 
+        # find task-specific resume value
+        for w in pending_writes:
+            if w[0] == task_id and w[1] == RESUME:
+                task_resume_write = w[2]
+                if not isinstance(task_resume_write, list):
+                    task_resume_write = [task_resume_write]
+                break
+        else:
+            task_resume_write = []
+        del w
+
         # find namespace and task-specific resume value
         if resume_map and namespace_hash in resume_map:
-            task_resume_write = resume_map[namespace_hash]
-            if not isinstance(task_resume_write, list):
-                task_resume_write = [task_resume_write]
-        else:
-            # find task-specific resume value
-            for w in pending_writes:
-                if w[0] == task_id and w[1] == RESUME:
-                    task_resume_write = w[2]
-                    if not isinstance(task_resume_write, list):
-                        task_resume_write = [task_resume_write]
-                    break
-            else:
-                task_resume_write = []
-            # clear var
-            del w
+            mapped_resume_write = resume_map[namespace_hash]
+            task_resume_write.append(mapped_resume_write)
+
     else:
         null_resume_write = None
         task_resume_write = []
