@@ -2,7 +2,6 @@ import binascii
 import itertools
 import sys
 import threading
-import warnings
 from collections import defaultdict, deque
 from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
