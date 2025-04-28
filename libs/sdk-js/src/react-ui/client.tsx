@@ -215,10 +215,6 @@ export function experimental_loadShare(name: string, module: unknown) {
 
 export function bootstrapUiContext() {
   if (typeof window === "undefined") {
-    console.warn(
-      "Attempting to bootstrap UI context outside of browser environment. " +
-        "Avoid importing from `@langchain/langgraph-sdk/react-ui` in server context.",
-    );
     return;
   }
 
