@@ -1078,7 +1078,9 @@ async def test_return_direct(version: str) -> None:
         ),
     ]
     model = FakeToolCallingModel(tool_calls=[second_tool_call, []])
-    agent = create_react_agent(model, [tool_return_direct, tool_normal])
+    agent = create_react_agent(
+        model, [tool_return_direct, tool_normal], version=version
+    )
     result = agent.invoke(
         {"messages": [HumanMessage(content="Test normal", id="hum1")]}
     )
@@ -1107,7 +1109,9 @@ async def test_return_direct(version: str) -> None:
         ),
     ]
     model = FakeToolCallingModel(tool_calls=[both_tool_calls, []])
-    agent = create_react_agent(model, [tool_return_direct, tool_normal])
+    agent = create_react_agent(
+        model, [tool_return_direct, tool_normal], version=version
+    )
     result = agent.invoke({"messages": [HumanMessage(content="Test both", id="hum2")]})
     assert result["messages"] == [
         HumanMessage(content="Test both", id="hum2"),
