@@ -35,7 +35,8 @@ from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, Pregel
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import PregelTask, Send, StateSnapshot, StreamWriter
-from tests.any_str import AnyDict, AnyStr
+from tests.any_int import AnyInt
+from tests.any_str import AnyDict, AnyStr, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
     REGULAR_CHECKPOINTERS_ASYNC,
@@ -2269,13 +2270,15 @@ async def test_prebuilt_tool_chat() -> None:
         ]
     }
 
-    assert [
+    events = [
         c
         async for c in app.astream(
             {"messages": [HumanMessage(content="what is weather in sf")]},
             stream_mode="messages",
         )
-    ] == [
+    ]
+
+    assert events[:3] == [
         (
             _AnyIdAIMessageChunk(
                 content="",
@@ -2301,7 +2304,7 @@ async def test_prebuilt_tool_chat() -> None:
                 "langgraph_step": 1,
                 "langgraph_node": "agent",
                 "langgraph_triggers": ("branch:to:agent",),
-                "langgraph_path": ("__pregel_pull", "agent"),
+                "langgraph_path": (PULL, "agent"),
                 "langgraph_checkpoint_ns": AnyStr("agent:"),
                 "checkpoint_ns": AnyStr("agent:"),
                 "ls_provider": "fakechatmodel",
@@ -2317,8 +2320,8 @@ async def test_prebuilt_tool_chat() -> None:
             {
                 "langgraph_step": 2,
                 "langgraph_node": "tools",
-                "langgraph_triggers": ("branch:to:tools",),
-                "langgraph_path": ("__pregel_pull", "tools"),
+                "langgraph_triggers": (PUSH,),
+                "langgraph_path": (PUSH, AnyInt(), False),
                 "langgraph_checkpoint_ns": AnyStr("tools:"),
             },
         ),
@@ -2360,13 +2363,16 @@ async def test_prebuilt_tool_chat() -> None:
                 "langgraph_step": 3,
                 "langgraph_node": "agent",
                 "langgraph_triggers": ("branch:to:agent",),
-                "langgraph_path": ("__pregel_pull", "agent"),
+                "langgraph_path": (PULL, "agent"),
                 "langgraph_checkpoint_ns": AnyStr("agent:"),
                 "checkpoint_ns": AnyStr("agent:"),
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
             },
         ),
+    ]
+
+    assert events[3:5] == UnsortedSequence(
         (
             _AnyIdToolMessage(
                 content="result for another",
@@ -2376,8 +2382,8 @@ async def test_prebuilt_tool_chat() -> None:
             {
                 "langgraph_step": 4,
                 "langgraph_node": "tools",
-                "langgraph_triggers": ("branch:to:tools",),
-                "langgraph_path": ("__pregel_pull", "tools"),
+                "langgraph_triggers": (PUSH,),
+                "langgraph_path": (PUSH, AnyInt(), False),
                 "langgraph_checkpoint_ns": AnyStr("tools:"),
             },
         ),
@@ -2390,11 +2396,13 @@ async def test_prebuilt_tool_chat() -> None:
             {
                 "langgraph_step": 4,
                 "langgraph_node": "tools",
-                "langgraph_triggers": ("branch:to:tools",),
-                "langgraph_path": ("__pregel_pull", "tools"),
+                "langgraph_triggers": (PUSH,),
+                "langgraph_path": (PUSH, AnyInt(), False),
                 "langgraph_checkpoint_ns": AnyStr("tools:"),
             },
         ),
+    )
+    assert events[5:] == [
         (
             _AnyIdAIMessageChunk(
                 content="answer",
@@ -2403,7 +2411,7 @@ async def test_prebuilt_tool_chat() -> None:
                 "langgraph_step": 5,
                 "langgraph_node": "agent",
                 "langgraph_triggers": ("branch:to:agent",),
-                "langgraph_path": ("__pregel_pull", "agent"),
+                "langgraph_path": (PULL, "agent"),
                 "langgraph_checkpoint_ns": AnyStr("agent:"),
                 "checkpoint_ns": AnyStr("agent:"),
                 "ls_provider": "fakechatmodel",
@@ -2412,12 +2420,13 @@ async def test_prebuilt_tool_chat() -> None:
         ),
     ]
 
-    assert [
+    stream_updates_events = [
         c
         async for c in app.astream(
             {"messages": [HumanMessage(content="what is weather in sf")]}
         )
-    ] == [
+    ]
+    assert stream_updates_events[:3] == [
         {
             "agent": {
                 "messages": [
@@ -2466,6 +2475,8 @@ async def test_prebuilt_tool_chat() -> None:
                 ]
             }
         },
+    ]
+    assert stream_updates_events[3:5] == UnsortedSequence(
         {
             "tools": {
                 "messages": [
@@ -2474,6 +2485,12 @@ async def test_prebuilt_tool_chat() -> None:
                         name="search_api",
                         tool_call_id="tool_call234",
                     ),
+                ]
+            }
+        },
+        {
+            "tools": {
+                "messages": [
                     _AnyIdToolMessage(
                         content="result for a third one",
                         name="search_api",
@@ -2482,7 +2499,9 @@ async def test_prebuilt_tool_chat() -> None:
                 ]
             }
         },
-        {"agent": {"messages": [_AnyIdAIMessage(content="answer")]}},
+    )
+    assert stream_updates_events[5:] == [
+        {"agent": {"messages": [_AnyIdAIMessage(content="answer")]}}
     ]
 
 
