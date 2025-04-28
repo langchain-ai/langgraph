@@ -665,7 +665,7 @@ class PregelLoop(LoopProtocol):
             for tid, c, v in map_command(cmd=self.input):
                 if not (c == RESUME and resume_is_map):
                     writes[tid].append((c, v))
-            if not writes:
+            if not writes and not resume_is_map:
                 raise EmptyInputError("Received empty Command input")
             # save writes
             for tid, ws in writes.items():
