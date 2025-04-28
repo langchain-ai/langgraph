@@ -3,6 +3,7 @@
 ::: langgraph_swarm.swarm
     options:
       members:
+        - SwarmState
         - create_swarm
         - add_active_agent_router
 

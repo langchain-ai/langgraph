@@ -22,6 +22,12 @@ MANUAL_API_REFERENCES_LANGGRAPH = [
         "create_react_agent",
         "prebuilt",
     ),
+    (
+        [],
+        "langgraph.prebuilt.chat_agent_executor",
+        "AgentState",
+        "prebuilt",
+    ),
     (["langgraph.prebuilt"], "langgraph.prebuilt.tool_node", "ToolNode", "prebuilt"),
     (
         ["langgraph.prebuilt"],
@@ -67,7 +73,13 @@ MANUAL_API_REFERENCES_LANGGRAPH = [
     (["langgraph_supervisor"], "langgraph_supervisor.supervisor", "create_supervisor", "supervisor"),
     (["langgraph_supervisor"], "langgraph_supervisor.handoff", "create_handoff_tool", "supervisor"),
     (["langgraph_swarm"], "langgraph_swarm.swarm", "create_swarm", "swarm"),
+    (["langgraph_swarm"], "langgraph_swarm.swarm", "add_active_agent_router", "swarm"),
+    (["langgraph_swarm"], "langgraph_swarm.swarm", "SwarmState", "swarm"),
     (["langgraph_swarm"], "langgraph_swarm.handoff", "create_handoff_tool", "swarm"),
+    ([], "langchain_mcp_adapters.client", "MultiServerMCPClient", "mcp"),
+    ([], "langchain_mcp_adapters.tools", "load_mcp_tools", "mcp"),
+    ([], "langchain_mcp_adapters.prompts", "load_mcp_prompt", "mcp"),
+    ([], "langchain_mcp_adapters.resources", "load_mcp_resources", "mcp"),
 ]
 
 WELL_KNOWN_LANGGRAPH_OBJECTS = {
@@ -149,7 +161,9 @@ def get_imports(code: str, path: str) -> List[ImportInformation]:
     for found_import in found_imports:
         module = found_import["source"]
 
-        if module.startswith("langchain"):
+        if module.startswith("langchain_mcp_adapters"):
+            package_ecosystem = "langgraph"
+        elif module.startswith("langchain"):
             # Handles things like `langchain` or `langchain_anthropic`
             package_ecosystem = "langchain"
         elif module.startswith("langgraph"):

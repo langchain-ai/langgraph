@@ -22,6 +22,7 @@ langgraph-checkpoint-postgres = { path = "../libs/checkpoint-postgres", develop 
 langgraph-sdk = {path = "../libs/sdk-py", develop = true}
 langgraph-supervisor = "^0.0.17"
 langgraph-swarm = "^0.0.10"
+langchain-mcp-adapters = "^0.0.9"
 langchain-ollama = "^0.2.3"
 mkdocs = "*"
 mkdocs-autorefs = "*"

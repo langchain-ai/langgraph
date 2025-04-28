@@ -385,13 +385,10 @@ nav:
       - agents/prebuilt.md
   - API reference:
     - reference/index.md
-    - Library:
+    - LangGraph:
       - Graphs: reference/graphs.md
       - Checkpointing: reference/checkpoints.md
       - Storage: reference/store.md
-      - Agents: reference/agents.md
-      - Supervisor: reference/supervisor.md
-      - Swarm: reference/swarm.md
       - Channels: reference/channels.md
       - Errors: reference/errors.md
       - Types: reference/types.md
@@ -399,6 +396,11 @@ nav:
       - Pregel: reference/pregel.md
       - Config: reference/config.md
       - Functional API: reference/func.md
+    - Agents:
+      - Agents: reference/agents.md
+      - Supervisor: reference/supervisor.md
+      - Swarm: reference/swarm.md
+      - MCP Adapters: reference/mcp.md
     - LangGraph Platform:
       - Server API: "cloud/reference/api/api_ref.md"
       - CLI: "cloud/reference/cli.md"
