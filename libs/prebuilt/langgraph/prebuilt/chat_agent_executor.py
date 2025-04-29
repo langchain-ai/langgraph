@@ -282,6 +282,8 @@ def create_react_agent(
 ) -> CompiledGraph:
     """Creates an agent graph that calls tools in a loop until a stopping condition is met.
 
+    For more details on using `create_react_agent`, visit [Agents](https://langchain-ai.github.io/langgraph/agents/overview/) documentation.
+
     Args:
         model: The `LangChain` chat model that supports tool calling.
         tools: A list of tools or a ToolNode instance.
