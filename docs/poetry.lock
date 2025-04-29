@@ -3744,7 +3744,7 @@ langgraph-prebuilt = ">=0.1.7,<0.2.0"
 type = "git"
 url = "https://github.com/langchain-ai/langgraph-supervisor-py"
 reference = "HEAD"
-resolved_reference = "18c8e7b7ca67828de6b71a83d7393ecb3c0372b0"
+resolved_reference = "5cbfa9748ec809c0ee92c6a821fb18851b9ddfde"
 
 [[package]]
 name = "langgraph-swarm"
@@ -3764,7 +3764,7 @@ langgraph = ">=0.3.5,<0.4.0"
 type = "git"
 url = "https://github.com/langchain-ai/langgraph-swarm-py"
 reference = "HEAD"
-resolved_reference = "aa56a3935b41adc265239c014b1d341f9bbee4ba"
+resolved_reference = "472a871aed829dc7fd655819cd5fbc8b0291f507"
 
 [[package]]
 name = "langmem"

@@ -13,6 +13,8 @@ C = TypeVar("C")
 
 
 class BaseChannel(Generic[Value, Update, C], ABC):
+    """Base class for all channels."""
+
     __slots__ = ("key", "typ")
 
     def __init__(self, typ: Any, key: str = "") -> None:

@@ -1,3 +1,5 @@
+"""Utilities for batching operations in a background task."""
+
 import asyncio
 import functools
 import weakref
