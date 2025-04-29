@@ -222,7 +222,7 @@
   '''
   graph TD;
   	__start__ --> agent;
-    agent -. &nbsp;exit&nbsp; .-> __end__;
+  	agent -. &nbsp;exit&nbsp; .-> __end__;
   	agent -. &nbsp;continue&nbsp; .-> tools;
   	tools --> agent;
   
