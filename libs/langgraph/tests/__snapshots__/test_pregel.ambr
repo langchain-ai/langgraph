@@ -156,7 +156,8 @@
       },
       {
         "source": "left",
-        "target": "__end__"
+        "target": "__end__",
+        "conditional": true
       },
       {
         "source": "right",
@@ -736,8 +737,10 @@
   	Call_Tool -.-> Researcher;
   	Chart_Generator -. &nbsp;call_tool&nbsp; .-> Call_Tool;
   	Chart_Generator -. &nbsp;continue&nbsp; .-> Researcher;
+    Chart_Generator -. &nbsp;end&nbsp; .-> __end__;
   	Researcher -. &nbsp;call_tool&nbsp; .-> Call_Tool;
   	Researcher -. &nbsp;continue&nbsp; .-> Chart_Generator;
+    Researcher -. &nbsp;end&nbsp; .-> __end__;
   	__start__ --> Researcher;
   	Researcher -. &nbsp;redo&nbsp; .-> Researcher;
   

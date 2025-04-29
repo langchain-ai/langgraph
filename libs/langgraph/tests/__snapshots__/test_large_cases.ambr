@@ -200,6 +200,12 @@
       },
       {
         "source": "agent",
+        "target": "__end__",
+        "data": "exit",
+        "conditional": true
+      },
+      {
+        "source": "agent",
         "target": "tools",
         "data": "continue",
         "conditional": true
@@ -207,11 +213,6 @@
       {
         "source": "tools",
         "target": "agent"
-      },
-      {
-        "source": "agent",
-        "target": "__end__",
-        "conditional": true
       }
     ]
   }
