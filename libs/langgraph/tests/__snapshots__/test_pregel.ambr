@@ -156,7 +156,8 @@
       },
       {
         "source": "left",
-        "target": "__end__"
+        "target": "__end__",
+        "conditional": true
       },
       {
         "source": "right",
@@ -171,7 +172,7 @@
   graph TD;
   	__start__ -. &nbsp;go-left&nbsp; .-> left;
   	__start__ -. &nbsp;go-right&nbsp; .-> right;
-  	left --> __end__;
+  	left -.-> __end__;
   	right --> __end__;
   
   '''
@@ -736,8 +737,10 @@
   	Call_Tool -.-> Researcher;
   	Chart_Generator -. &nbsp;call_tool&nbsp; .-> Call_Tool;
   	Chart_Generator -. &nbsp;continue&nbsp; .-> Researcher;
+  	Chart_Generator -. &nbsp;end&nbsp; .-> __end__;
   	Researcher -. &nbsp;call_tool&nbsp; .-> Call_Tool;
   	Researcher -. &nbsp;continue&nbsp; .-> Chart_Generator;
+  	Researcher -. &nbsp;end&nbsp; .-> __end__;
   	__start__ --> Researcher;
   	Researcher -. &nbsp;redo&nbsp; .-> Researcher;
   
@@ -777,26 +780,26 @@
   	gp_one(gp_one)
   	__end__([<p>__end__</p>]):::last
   	__start__ --> gp_one;
+  	gp_one -. &nbsp;1&nbsp; .-> __end__;
   	gp_one -. &nbsp;0&nbsp; .-> gp_two___start__;
   	gp_two___end__ --> gp_one;
-  	gp_one -.-> __end__;
   	subgraph gp_two
   	gp_two___start__(<p>__start__</p>)
   	gp_two_p_one(p_one)
   	gp_two___end__(<p>__end__</p>)
   	gp_two___start__ --> gp_two_p_one;
+  	gp_two_p_one -. &nbsp;1&nbsp; .-> gp_two___end__;
   	gp_two_p_one -. &nbsp;0&nbsp; .-> gp_two_p_two___start__;
   	gp_two_p_two___end__ --> gp_two_p_one;
-  	gp_two_p_one -.-> gp_two___end__;
   	subgraph p_two
   	gp_two_p_two___start__(<p>__start__</p>)
   	gp_two_p_two_c_one(c_one)
   	gp_two_p_two_c_two(c_two)
   	gp_two_p_two___end__(<p>__end__</p>)
   	gp_two_p_two___start__ --> gp_two_p_two_c_one;
+  	gp_two_p_two_c_one -. &nbsp;1&nbsp; .-> gp_two_p_two___end__;
   	gp_two_p_two_c_one -. &nbsp;0&nbsp; .-> gp_two_p_two_c_two;
   	gp_two_p_two_c_two --> gp_two_p_two_c_one;
-  	gp_two_p_two_c_one -.-> gp_two_p_two___end__;
   	end
   	end
   	classDef default fill:#f2f0ff,line-height:1.2
@@ -817,18 +820,18 @@
   	p_one(p_one)
   	__end__([<p>__end__</p>]):::last
   	__start__ --> p_one;
+  	p_one -. &nbsp;1&nbsp; .-> __end__;
   	p_one -. &nbsp;0&nbsp; .-> p_two___start__;
   	p_two___end__ --> p_one;
-  	p_one -.-> __end__;
   	subgraph p_two
   	p_two___start__(<p>__start__</p>)
   	p_two_c_one(c_one)
   	p_two_c_two(c_two)
   	p_two___end__(<p>__end__</p>)
   	p_two___start__ --> p_two_c_one;
+  	p_two_c_one -. &nbsp;1&nbsp; .-> p_two___end__;
   	p_two_c_one -. &nbsp;0&nbsp; .-> p_two_c_two;
   	p_two_c_two --> p_two_c_one;
-  	p_two_c_one -.-> p_two___end__;
   	end
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
@@ -846,16 +849,16 @@
       dict({
         'conditional': True,
         'source': 'answer_question',
+        'target': '__end__',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'answer_question',
         'target': 'ask_question',
       }),
       dict({
         'source': 'ask_question',
         'target': 'answer_question',
-      }),
-      dict({
-        'conditional': True,
-        'source': 'answer_question',
-        'target': '__end__',
       }),
     ]),
     'nodes': list([
@@ -1011,16 +1014,16 @@
       dict({
         'conditional': True,
         'source': 'conduct_interview:answer_question',
+        'target': 'conduct_interview:__end__',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'conduct_interview:answer_question',
         'target': 'conduct_interview:ask_question',
       }),
       dict({
         'source': 'conduct_interview:ask_question',
         'target': 'conduct_interview:answer_question',
-      }),
-      dict({
-        'conditional': True,
-        'source': 'conduct_interview:answer_question',
-        'target': 'conduct_interview:__end__',
       }),
     ]),
     'nodes': list([
