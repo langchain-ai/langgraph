@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # Streaming
 
 Building a responsive app for end-users? Real-time updates are key to keeping users engaged as your app progresses.

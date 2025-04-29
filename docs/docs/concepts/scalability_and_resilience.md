@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # LangGraph Platform: Scalability & Resilience
 
 LangGraph Platform is designed to scale horizontally with your workload. Each instance of the service is stateless, and keeps no resources in memory. The service is designed to gracefully handle new instances being added or removed, including hard shutdown cases.

@@ -1,6 +1,8 @@
 ---
 title: Concepts
 description: Conceptual Guide for LangGraph
+search:
+  boost: 0.5
 ---
 
 # Conceptual Guide

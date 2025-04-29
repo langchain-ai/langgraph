@@ -1,6 +1,8 @@
 ---
 title: How-to Guides
 description: How to accomplish common tasks in LangGraph
+search:
+  boost: 0.5
 ---
 
 # How-to Guides

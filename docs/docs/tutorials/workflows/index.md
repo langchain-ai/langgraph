@@ -1,3 +1,7 @@
+---
+search:
+    boost: 2 
+---
 # Workflows and Agents
 
 This guide reviews common patterns for agentic systems. In describing these systems, it can be useful to make a distinction between "workflows" and "agents". One way to think about this difference is nicely explained in [Anthropic's](https://python.langchain.com/docs/integrations/providers/anthropic/) `Building Effective Agents` blog post:

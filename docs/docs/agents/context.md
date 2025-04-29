@@ -1,3 +1,12 @@
+---
+search:
+  boost: 2
+tags:
+  - agent
+hide:
+  - tags
+---
+
 # Context
 
 Agents often require more than a list of messages to function effectively. They need **context**.

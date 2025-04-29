@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # FAQ
 
 Common questions and their answers!
