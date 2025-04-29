@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # Authentication & Access Control
 
 LangGraph Platform provides a flexible authentication and authorization system that can integrate with most authentication schemes.

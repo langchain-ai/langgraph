@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # Agent architectures
 
 Many LLM applications implement a particular control flow of steps before and / or after LLM calls. As an example, [RAG](https://github.com/langchain-ai/rag-from-scratch) performs retrieval of documents relevant to a user question, and passes those documents to an LLM in order to ground the model's response in the provided document context. 

@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # Bring Your Own Cloud (BYOC)
 
 !!! note Prerequisites

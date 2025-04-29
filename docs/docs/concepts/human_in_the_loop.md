@@ -1,3 +1,13 @@
+---
+search:
+  boost: 2
+tags:
+  - human-in-the-loop
+  - hil
+hide:
+  - tags
+---
+
 # Human-in-the-loop
 
 !!! tip "This guide uses the new `interrupt` function."

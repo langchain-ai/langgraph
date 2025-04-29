@@ -1,3 +1,14 @@
+---
+search:
+  boost: 2
+tags:
+  - anthropic
+  - openai
+  - agent
+hide:
+  - tags
+---
+
 # Models
 
 This page describes how to configure the chat model used by an agent.

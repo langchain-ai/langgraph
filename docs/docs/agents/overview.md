@@ -1,5 +1,11 @@
 ---
 title: Overview
+search:
+  boost: 2
+tags:
+  - agent
+hide:
+  - tags
 ---
 
 # Agent development with LangGraph

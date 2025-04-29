@@ -3474,6 +3474,26 @@ openai = ">=1.10.0,<2.0.0"
 requests = ">=2,<3"
 
 [[package]]
+name = "langchain-mcp-adapters"
+version = "0.0.9"
+description = "Make Anthropic Model Context Protocol (MCP) tools compatible with LangChain and LangGraph agents."
+optional = false
+python-versions = ">=3.10"
+groups = ["docs"]
+files = []
+develop = false
+
+[package.dependencies]
+langchain-core = ">=0.3.36,<0.4"
+mcp = ">=1.4.1,<1.7"
+
+[package.source]
+type = "git"
+url = "https://github.com/langchain-ai/langchain-mcp-adapters"
+reference = "HEAD"
+resolved_reference = "85eb1dcb4c5c86008feca287d9195e67861ad2d7"
+
+[[package]]
 name = "langchain-mistralai"
 version = "0.2.10"
 description = "An integration package connecting Mistral and LangChain"
@@ -3704,6 +3724,47 @@ orjson = ">=3.10.1"
 [package.source]
 type = "directory"
 url = "../libs/sdk-py"
+
+[[package]]
+name = "langgraph-supervisor"
+version = "0.0.18"
+description = "An implementation of a supervisor multi-agent architecture using LangGraph"
+optional = false
+python-versions = ">=3.10"
+groups = ["docs"]
+files = []
+develop = false
+
+[package.dependencies]
+langchain-core = ">=0.3.40,<0.4.0"
+langgraph = ">=0.3.5,<0.4.0"
+langgraph-prebuilt = ">=0.1.7,<0.2.0"
+
+[package.source]
+type = "git"
+url = "https://github.com/langchain-ai/langgraph-supervisor-py"
+reference = "HEAD"
+resolved_reference = "18c8e7b7ca67828de6b71a83d7393ecb3c0372b0"
+
+[[package]]
+name = "langgraph-swarm"
+version = "0.0.10"
+description = "An implementation of a multi-agent swarm using LangGraph"
+optional = false
+python-versions = ">=3.10"
+groups = ["docs"]
+files = []
+develop = false
+
+[package.dependencies]
+langchain-core = ">=0.3.40,<0.4.0"
+langgraph = ">=0.3.5,<0.4.0"
+
+[package.source]
+type = "git"
+url = "https://github.com/langchain-ai/langgraph-swarm-py"
+reference = "HEAD"
+resolved_reference = "aa56a3935b41adc265239c014b1d341f9bbee4ba"
 
 [[package]]
 name = "langmem"
@@ -4013,6 +4074,33 @@ files = [
 
 [package.dependencies]
 traitlets = "*"
+
+[[package]]
+name = "mcp"
+version = "1.6.0"
+description = "Model Context Protocol SDK"
+optional = false
+python-versions = ">=3.10"
+groups = ["docs"]
+files = [
+    {file = "mcp-1.6.0-py3-none-any.whl", hash = "sha256:7bd24c6ea042dbec44c754f100984d186620d8b841ec30f1b19eda9b93a634d0"},
+    {file = "mcp-1.6.0.tar.gz", hash = "sha256:d9324876de2c5637369f43161cd71eebfd803df5a95e46225cab8d280e366723"},
+]
+
+[package.dependencies]
+anyio = ">=4.5"
+httpx = ">=0.27"
+httpx-sse = ">=0.4"
+pydantic = ">=2.7.2,<3.0.0"
+pydantic-settings = ">=2.5.2"
+sse-starlette = ">=1.6.1"
+starlette = ">=0.27"
+uvicorn = ">=0.23.1"
+
+[package.extras]
+cli = ["python-dotenv (>=1.0.0)", "typer (>=0.12.4)"]
+rich = ["rich (>=13.9.4)"]
+ws = ["websockets (>=15.0.1)"]
 
 [[package]]
 name = "mdurl"
@@ -6103,7 +6191,6 @@ optional = false
 python-versions = ">=3.8"
 groups = ["test"]
 files = [
-    {file = "pyasn1-0.6.1-py3-none-any.whl", hash = "sha256:0d632f46f2ba09143da3a8afe9e33fb6f92fa2320ab7e886e2d0f7672af84629"},
     {file = "pyasn1-0.6.1.tar.gz", hash = "sha256:6f580d2bdd84365380830acf45550f2511469f673cb4a5ae3857a3170128b034"},
 ]
 
@@ -7590,6 +7677,26 @@ pymysql = ["pymysql"]
 sqlcipher = ["sqlcipher3_binary"]
 
 [[package]]
+name = "sse-starlette"
+version = "2.3.3"
+description = "SSE plugin for Starlette"
+optional = false
+python-versions = ">=3.9"
+groups = ["docs"]
+files = [
+    {file = "sse_starlette-2.3.3-py3-none-any.whl", hash = "sha256:8b0a0ced04a329ff7341b01007580dd8cf71331cc21c0ccea677d500618da1e0"},
+    {file = "sse_starlette-2.3.3.tar.gz", hash = "sha256:fdd47c254aad42907cfd5c5b83e2282be15be6c51197bf1a9b70b8e990522072"},
+]
+
+[package.dependencies]
+anyio = ">=4.7.0"
+starlette = ">=0.41.3"
+
+[package.extras]
+examples = ["fastapi"]
+uvicorn = ["uvicorn (>=0.34.0)"]
+
+[[package]]
 name = "stack-data"
 version = "0.6.3"
 description = "Extract data from python stack frames and tracebacks for informative displays"
@@ -7615,7 +7722,7 @@ version = "0.46.2"
 description = "The little ASGI library that shines."
 optional = false
 python-versions = ">=3.9"
-groups = ["test"]
+groups = ["docs", "test"]
 files = [
     {file = "starlette-0.46.2-py3-none-any.whl", hash = "sha256:595633ce89f8ffa71a015caed34a5b2dc1c0cdb3f0f1fbd1e69339cf2abeec35"},
     {file = "starlette-0.46.2.tar.gz", hash = "sha256:7f7361f34eed179294600af672f565727419830b54b7b084efe44bb82d2fccd5"},
@@ -8191,7 +8298,7 @@ version = "0.34.2"
 description = "The lightning-fast ASGI server."
 optional = false
 python-versions = ">=3.9"
-groups = ["test"]
+groups = ["docs", "test"]
 files = [
     {file = "uvicorn-0.34.2-py3-none-any.whl", hash = "sha256:deb49af569084536d269fe0a6d67e3754f104cf03aba7c11c40f01aadf33c403"},
     {file = "uvicorn-0.34.2.tar.gz", hash = "sha256:0e929828f6186353a80b58ea719861d2629d766293b6d19baf086ba31d4f3328"},
@@ -9068,4 +9175,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "4ea147f5c9060b856ea0a450ea78bb6666778d222dac2c3a3cf781b61f140bb6"
+content-hash = "aed7bb5f851ee6aaf2ec175ca5eddb94d21e62c8142035f7552bc92e85db8293"

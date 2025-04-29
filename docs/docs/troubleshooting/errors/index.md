@@ -1,3 +1,7 @@
+---
+search:
+  boost: 0.5
+---
 # Error reference
 
 This page contains guides around resolving common errors you may find while building with LangGraph.

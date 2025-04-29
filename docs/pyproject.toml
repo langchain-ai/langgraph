@@ -20,6 +20,10 @@ langgraph-checkpoint = { path = "../libs/checkpoint/", develop = true }
 langgraph-checkpoint-sqlite = { path = "../libs/checkpoint-sqlite", develop = true }
 langgraph-checkpoint-postgres = { path = "../libs/checkpoint-postgres", develop = true }
 langgraph-sdk = {path = "../libs/sdk-py", develop = true}
+# TODO: switch these to published versions
+langgraph-supervisor = { git = "https://github.com/langchain-ai/langgraph-supervisor-py" }
+langgraph-swarm = { git = "https://github.com/langchain-ai/langgraph-swarm-py" }
+langchain-mcp-adapters = { git = "https://github.com/langchain-ai/langchain-mcp-adapters" }
 langchain-ollama = "^0.2.3"
 mkdocs = "*"
 mkdocs-autorefs = "*"
