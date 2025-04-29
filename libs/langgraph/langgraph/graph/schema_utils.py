@@ -1,6 +1,7 @@
 import functools
 import logging
 import weakref
+from dataclasses import is_dataclass
 from inspect import isclass
 from typing import (
     Annotated,
@@ -13,7 +14,8 @@ from typing import (
     get_type_hints,
 )
 
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel, ConfigDict, TypeAdapter
+from typing_extensions import is_typeddict
 
 __all__ = ["SchemaCoercionMapper"]
 
@@ -246,7 +248,12 @@ _IDENTITY_TYPES: tuple[type[Any], ...] = (
 
 @functools.lru_cache(maxsize=2048)
 def _adapter_for(tp: Any) -> Callable[[Any], Any]:  # noqa: D401
-    return TypeAdapter(tp, config={"arbitrary_types_allowed": True}).validate_python
+    config = (
+        None
+        if (issubclass(tp, BaseModel) or is_typeddict(tp) or is_dataclass(tp))
+        else ConfigDict(arbitrary_types_allowed=True)
+    )
+    return TypeAdapter(tp, config=config).validate_python
 
 
 def _get_adapter(tp: Any) -> Callable[[Any], Any]:
