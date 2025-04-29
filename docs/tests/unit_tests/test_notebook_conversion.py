@@ -1,8 +1,8 @@
-import pytest
-
-import tempfile
-import nbformat
 import os
+import tempfile
+
+import nbformat
+import pytest
 
 from _scripts.notebook_convert import (
     _convert_links_in_markdown,
