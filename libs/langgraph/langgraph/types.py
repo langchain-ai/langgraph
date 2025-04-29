@@ -157,7 +157,7 @@ class StateUpdate(NamedTuple):
 
 
 class PregelTask(NamedTuple):
-    """An executed, interrupted or errored Pregel task."""
+    """A Pregel task."""
 
     id: str
     name: str
@@ -176,8 +176,6 @@ else:
 
 @dataclasses.dataclass(**_T_DC_KWARGS)
 class PregelExecutableTask:
-    """Pregel task to be executed."""
-
     name: str
     input: Any
     proc: Runnable
