@@ -76,6 +76,15 @@ class Graph:
         *,
         metadata: Optional[dict[str, Any]] = None,
     ) -> Self:
+        """Add a new node to the graph.
+
+        Args:
+            node (Union[str, RunnableLike]): The function or runnable this node will run.
+                If a string is provided, it will be used as the node name, and action will be used as the function or runnable.
+            action (Optional[RunnableLike]): The action associated with the node. (default: None)
+                Will be used as the node function or runnable if `node` is a string (node name).
+            metadata (Optional[dict[str, Any]]): The metadata associated with the node. (default: None)
+        """
         if isinstance(node, str):
             for character in (NS_SEP, NS_END):
                 if character in node:
@@ -110,6 +119,12 @@ class Graph:
         return self
 
     def add_edge(self, start_key: str, end_key: str) -> Self:
+        """Add a directed edge from the start node to the end node.
+
+        Args:
+            start_key (str): The key of the start node of the edge.
+            end_key (str): The key of the end node of the edge.
+        """
         if self.compiled:
             logger.warning(
                 "Adding an edge to a graph that has already been compiled. This will "
@@ -302,6 +317,25 @@ class Graph:
         debug: bool = False,
         name: Optional[str] = None,
     ) -> "CompiledGraph":
+        """Compiles the graph into a `CompiledGraph` object.
+
+        The compiled graph implements the `Runnable` interface and can be invoked,
+        streamed, batched, and run asynchronously.
+
+        Args:
+            checkpointer (Optional[Union[Checkpointer, Literal[False]]]): A checkpoint saver object or flag.
+                If provided, this Checkpointer serves as a fully versioned "short-term memory" for the graph,
+                allowing it to be paused, resumed, and replayed from any point.
+                If None, it may inherit the parent graph's checkpointer when used as a subgraph.
+                If False, it will not use or inherit any checkpointer.
+            interrupt_before (Optional[Sequence[str]]): An optional list of node names to interrupt before.
+            interrupt_after (Optional[Sequence[str]]): An optional list of node names to interrupt after.
+            debug (bool): A flag indicating whether to enable debug mode.
+            name (Optional[str]): The name to use for the compiled graph.
+
+        Returns:
+            CompiledGraph: The compiled graph.
+        """
         # assign default values
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []

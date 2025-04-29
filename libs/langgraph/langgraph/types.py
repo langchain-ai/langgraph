@@ -133,7 +133,8 @@ class CachePolicy(NamedTuple):
 
 @dataclasses.dataclass(**_DC_KWARGS)
 class Interrupt:
-    """
+    """Information about an interrupt that occurred in a node.
+
     !!! version-added "Added in version 0.2.24."
     """
 
@@ -156,6 +157,8 @@ class StateUpdate(NamedTuple):
 
 
 class PregelTask(NamedTuple):
+    """An executed, interrupted or errored Pregel task."""
+
     id: str
     name: str
     path: tuple[Union[str, int, tuple], ...]
@@ -173,6 +176,8 @@ else:
 
 @dataclasses.dataclass(**_T_DC_KWARGS)
 class PregelExecutableTask:
+    """Pregel task to be executed."""
+
     name: str
     input: Any
     proc: Runnable

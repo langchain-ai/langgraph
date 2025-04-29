@@ -1,6 +1,6 @@
 # Graph Definitions
 
-::: langgraph.graph.graph.Graph
+::: langgraph.graph.state.StateGraph
     options:
       show_if_no_docstring: true
       show_root_heading: true
@@ -9,9 +9,10 @@
         - add_node
         - add_edge
         - add_conditional_edges
+        - add_sequence
         - compile
 
-::: langgraph.graph.graph.CompiledGraph
+::: langgraph.graph.state.CompiledStateGraph
     options:
       show_if_no_docstring: true
       show_root_heading: true
@@ -35,7 +36,7 @@
         - aget_subgraphs
         - with_config
 
-::: langgraph.graph.state.StateGraph
+::: langgraph.graph.graph.Graph
     options:
       show_if_no_docstring: true
       show_root_heading: true
@@ -44,10 +45,9 @@
         - add_node
         - add_edge
         - add_conditional_edges
-        - add_sequence
         - compile
 
-::: langgraph.graph.state.CompiledStateGraph
+::: langgraph.graph.graph.CompiledGraph
     options:
       show_if_no_docstring: true
       show_root_heading: true
