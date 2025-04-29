@@ -265,11 +265,11 @@ Streaming the results of your LLM application is vital for ensuring a good user 
 
 ### Frontend and Generative UI
 
-With LangGraph Platform you can integrate LangGraph agents into your React applications and colocate UI components with your agent code. 
+With LangGraph Platform you can integrate LangGraph agents into your React applications and colocate UI components with your agent code.
 
 - [How to integrate LangGraph into your React application](../cloud/how-tos/use_stream_react.md)
 - [How to implement Generative User Interfaces with LangGraph](../cloud/how-tos/generative_ui_react.md)
-- [How to use LangGraph with CopilotKit in React](../cloud/how-tos/use_copilotkit_react.md)
+- [How to integrate LangGraph with CopilotKit for deeper frontend integration](../cloud/how-tos/use_copilotkit_react.md)
 - [How to Build Interruptible Agent with LangGraph and Copilotkit](../cloud/how-tos/use_langgraph_interrupt.md)
 
 ### Human-in-the-loop {#human-in-the-loop-1}

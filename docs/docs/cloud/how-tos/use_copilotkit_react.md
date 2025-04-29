@@ -1,4 +1,4 @@
-# How to use LangGraph with CopilotKit in React
+# How to integrate LangGraph with CopilotKit for deeper frontend integration
 
 !!! info "Prerequisites"
 
@@ -15,7 +15,38 @@ npm install @copilotkit/react-core @copilotkit/react-ui @copilotkit/runtime
 
 ## Basic Setup
 
-Integrating LangGraph with CopilotKit involves two main steps: setting up the backend runtime and configuring your frontend components.
+Integrating LangGraph with CopilotKit involves configuring your frontend components and optionally setting up a backend runtime. The fastest way to get started is to use [Copilotkit Cloud](https://cloud.copilotkit.ai/), which provides a stateless interaction layer that enables seamless communication between LangGraph and your frontend.
+
+### Frontend
+
+```tsx
+import { CopilotKit } from "@copilotkit/react-core";
+import { CopilotTextarea } from "@copilotkit/react-ui";
+
+function MyApp({ Component, pageProps }) {
+  return (
+    <CopilotKit publicApiKey="ck_xxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+      {children}
+    </CopilotKit>
+  );
+}
+
+import { CopilotChat } from "@copilotkit/react-ui";
+
+export function AIAssistantChatContainer() {
+  return (
+    <CopilotChat
+      instructions={
+        "You are assisting the user as best as you can. Answer in the best way possible given the data you have."
+      }
+      labels={{
+        title: "Your Assistant",
+        initial: "Hi! 👋 How can I assist you today?",
+      }}
+    />
+  );
+}
+```
 
 ### Copilot Runtime
 
@@ -61,43 +92,20 @@ server.listen(4000, () => {
 });
 ```
 
-### Frontend
-
-```tsx
-// layout.tsx
-import { CopilotKit } from "@copilotkit/react-core";
-import { CopilotTextarea } from "@copilotkit/react-ui";
-
-function MyApp({ Component, pageProps }) {
-  return <CopilotKit runtimeUrl="/api/copilotkit">{children}</CopilotKit>;
-}
-
-import { CopilotChat } from "@copilotkit/react-ui";
-
-export function YourComponent() {
-  return (
-    <CopilotChat
-      instructions={
-        "You are assisting the user as best as you can. Answer in the best way possible given the data you have."
-      }
-      labels={{
-        title: "Your Assistant",
-        initial: "Hi! 👋 How can I assist you today?",
-      }}
-    />
-  );
-}
-```
-
 ## Core Concepts
 
 ### Shared State
 
-The `useCoAgent` hook enables shared state management between your React application and LangGraph agent, allowing bidirectional synchronization. You can:
+The `useCoAgent` hook is CopilotKit's most powerful feature - it enables bidirectional state synchronization between your React application and LangGraph agents. This is what gives your AI application its dynamic, interactive capabilities.
 
-- Read the agent's current state in your UI components
-- Update the agent's state from your UI
-- Trigger agent reruns with updated state
+In LangGraph, [state is a crucial concept](https://langchain-ai.github.io/langgraph/concepts/low_level/?h=state#state) - it represents the current snapshot of your application and evolves as nodes in the graph execute. CopilotKit's integration allows you to:
+
+- **Directly access LangGraph state** in your React components
+- **Update the agent's state** from your UI components
+- **Trigger agent reruns** with updated state
+- **Automatically sync UI** when agent state changes
+
+This creates a seamless bridge between your frontend UI and backend LangGraph agent logic - one of the most challenging aspects of building AI applications that CopilotKit solves elegantly.
 
 #### Defining Agent State
 
@@ -215,17 +223,7 @@ By default, state updates only occur during node transitions. For continuous sta
 
 ### Frontend Actions
 
-Frontend actions enable your LangGraph agent to interact with and update your application's UI. They serve as bridges connecting your agent's logic to the interactive elements of your frontend.
-
-With frontend actions, your agent can:
-
-- Update UI elements dynamically
-- Trigger frontend animations or transitions
-- Show alerts or notifications
-- Modify application state
-- Handle user interactions programmatically
-
-#### Creating a Frontend Action
+Frontend actions allow your LangGraph agent to interact with your application's UI components. With this feature, agents can trigger UI updates, display notifications, or manipulate application state directly.
 
 ```tsx
 import { useCopilotAction } from "@copilotkit/react-core";
@@ -252,66 +250,36 @@ export function Page() {
 }
 ```
 
-This hook creates an action that the agent can trigger to interact with your UI.
+To connect these actions to your LangGraph agent:
 
-#### When should I use this?
+1. Install the SDK:
 
-Frontend actions are essential when you want to create truly interactive AI applications where your agent needs to:
+   ```bash
+   npm install @copilotkit/sdk-js
+   ```
 
-- Dynamically update UI elements
-- Trigger frontend animations or transitions
-- Show alerts or notifications
-- Modify application state
-- Handle user interactions programmatically
+2. Inherit from CopilotKitState in your agent's state:
 
-#### Implementation
+   ```ts
+   import { Annotation } from "@langchain/langgraph";
+   import { CopilotKitStateAnnotation } from "@copilotkit/sdk-js/langgraph";
 
-First, you'll need to create a frontend action using the useCopilotAction hook. Here's a simple one to get you started that says hello to the user.
+   export const YourAgentStateAnnotation = Annotation.Root({
+     yourAdditionalProperty: Annotation<string>,
+     ...CopilotKitStateAnnotation.spec,
+   });
+   ```
 
-##### Install the CopilotKit SDK
+3. Use the actions in your agent node:
+   ```ts
+   async function agentNode(state: YourAgentState, config: RunnableConfig) {
+     const actions = state.copilotkit?.actions;
+     const model = ChatOpenAI({ model: "gpt-4o" }).bindTools(actions);
+     // ... use the model with actions
+   }
+   ```
 
-Any LangGraph agent can be used with CopilotKit. However, creating deep agentic experiences with CopilotKit requires our LangGraph SDK.
-
-```
-npm install @copilotkit/sdk-js
-```
-
-##### Inheriting from CopilotKitState
-
-To access the frontend actions provided by CopilotKit, you can inherit from CopilotKitState in your agent's state definition:
-
-```ts
-import { Annotation } from "@langchain/langgraph";
-import { CopilotKitStateAnnotation } from "@copilotkit/sdk-js/langgraph";
-
-export const YourAgentStateAnnotation = Annotation.Root({
-  yourAdditionalProperty: Annotation<string>,
-  ...CopilotKitStateAnnotation.spec,
-});
-export type YourAgentState = typeof YourAgentStateAnnotation.State;
-```
-
-##### Accessing Frontend Actions
-
-Once your agent's state includes the copilotkit property, you can access the frontend actions and utilize them within your agent's logic.
-
-Here's how you can call a frontend action from your agent:
-
-```ts
-async function agentNode(
-  state: YourAgentState,
-  config: RunnableConfig
-): Promise<YourAgentState> {
-  // Access the actions from the copilotkit property
-
-  const actions = state.copilotkit?.actions;
-  const model = ChatOpenAI({ model: "gpt-4o" }).bindTools(actions);
-
-  // ...
-}
-```
-
-CopilotKit automatically provides these actions as LangChain-compatible tools, letting your agent easily call them as needed.
+CopilotKit automatically provides these actions as LangChain-compatible tools, making them seamlessly available to your agent.
 
 ## Further Reading
 
