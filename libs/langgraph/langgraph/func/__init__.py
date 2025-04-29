@@ -31,7 +31,7 @@ from langgraph.pregel.call import (
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.types import _DC_KWARGS, RetryPolicy, StreamMode
+from langgraph.types import _DC_KWARGS, CachePolicy, RetryPolicy, StreamMode
 
 
 @overload
@@ -39,6 +39,7 @@ def task(
     *,
     name: Optional[str] = None,
     retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
+    cache: Optional[CachePolicy[P]] = None,
 ) -> Callable[
     [Union[Callable[P, Awaitable[T]], Callable[P, T]]],
     Callable[P, SyncAsyncFuture[T]],
@@ -56,6 +57,7 @@ def task(
     *,
     name: Optional[str] = None,
     retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
+    cache: Optional[CachePolicy[P]] = None,
 ) -> Union[
     Callable[
         [Union[Callable[P, Awaitable[T]], Callable[P, T]]],
@@ -141,7 +143,7 @@ def task(
                 # handle regular functions / partials / callable classes, etc.
                 func.__name__ = name
 
-        call_func = functools.partial(call, func, retry=retry_policies)
+        call_func = functools.partial(call, func, retry=retry_policies, cache=cache)
         object.__setattr__(call_func, "_is_pregel_task", True)
         return functools.update_wrapper(call_func, func)
 

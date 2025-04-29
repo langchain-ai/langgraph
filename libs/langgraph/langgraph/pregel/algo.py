@@ -60,6 +60,7 @@ from langgraph.constants import (
     RESUME,
     RETURN,
     TAG_HIDDEN,
+    TASK_CACHE_NAMESPACE,
     TASKS,
     Send,
 )
@@ -72,6 +73,7 @@ from langgraph.pregel.read import INPUT_CACHE_KEY_TYPE, PregelNode
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
+    CachePolicy,
     PregelExecutableTask,
     PregelScratchpad,
     PregelTask,
@@ -111,24 +113,27 @@ class PregelTaskWrites(NamedTuple):
 
 
 class Call:
-    __slots__ = ("func", "input", "retry", "callbacks")
+    __slots__ = ("func", "input", "retry", "cache", "callbacks")
 
     func: Callable
-    input: Any
+    input: tuple[tuple[Any, ...], dict[str, Any]]
     retry: Optional[Sequence[RetryPolicy]]
+    cache: Optional[CachePolicy]
     callbacks: Callbacks
 
     def __init__(
         self,
         func: Callable,
-        input: Any,
+        input: tuple[tuple[Any, ...], dict[str, Any]],
         *,
         retry: Optional[Sequence[RetryPolicy]],
+        cache: Optional[CachePolicy],
         callbacks: Callbacks,
     ) -> None:
         self.func = func
         self.input = input
         self.retry = retry
+        self.cache = cache
         self.callbacks = callbacks
 
 
@@ -556,15 +561,23 @@ def prepare_single_task(
         # create task id
         triggers: Sequence[str] = PUSH_TRIGGER
         checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
-        task_id = task_id_func(
-            checkpoint_id_bytes,
-            checkpoint_ns,
-            str(step),
-            name,
-            PUSH,
-            task_path_str(task_path[1]),
-            str(task_path[2]),
-        )
+        if call.cache:
+            task_id = task_id_func(
+                TASK_CACHE_NAMESPACE,
+                name,
+                call.cache.key(*call.input[0], **call.input[1]),
+                # TODO add truncated iso timestamp here for ttl
+            )
+        else:
+            task_id = task_id_func(
+                checkpoint_id_bytes,
+                checkpoint_ns,
+                str(step),
+                name,
+                PUSH,
+                task_path_str(task_path[1]),
+                str(task_path[2]),
+            )
         task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
         # we append True to the task path to indicate that a call is being
         # made, so we should not return interrupts from this task (responsibility lies with the parent)
@@ -625,7 +638,7 @@ def prepare_single_task(
                 ),
                 triggers,
                 call.retry,
-                None,
+                call.cache,
                 task_id,
                 task_path,
             )
@@ -649,19 +662,31 @@ def prepare_single_task(
                     f"Ignoring unknown node name {packet.node} in pending sends"
                 )
                 return
+            # find process
+            proc = processes[packet.node]
+            proc_node = proc.node
+            if proc_node is None:
+                return
             # create task id
             triggers = PUSH_TRIGGER
             checkpoint_ns = (
                 f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
             )
-            task_id = task_id_func(
-                checkpoint_id_bytes,
-                checkpoint_ns,
-                str(step),
-                packet.node,
-                PUSH,
-                str(idx),
-            )
+            if proc.cache_policy:
+                task_id = task_id_func(
+                    TASK_CACHE_NAMESPACE,
+                    packet.node,
+                    proc.cache_policy.key(packet.arg),
+                )
+            else:
+                task_id = task_id_func(
+                    checkpoint_id_bytes,
+                    checkpoint_ns,
+                    str(step),
+                    packet.node,
+                    PUSH,
+                    str(idx),
+                )
         else:
             logger.warning(f"Ignoring invalid PUSH task path {task_path}")
             return
@@ -679,73 +704,64 @@ def prepare_single_task(
         if task_id_checksum is not None:
             assert task_id == task_id_checksum, f"{task_id} != {task_id_checksum}"
         if for_execution:
-            proc = processes[packet.node]
-            if node := proc.node:
-                if proc.metadata:
-                    metadata.update(proc.metadata)
-                writes = deque()
-                return PregelExecutableTask(
-                    packet.node,
-                    packet.arg,
-                    node,
-                    writes,
-                    patch_config(
-                        merge_configs(
-                            config, {"metadata": metadata, "tags": proc.tags}
-                        ),
-                        run_name=packet.node,
-                        callbacks=(
-                            manager.get_child(f"graph:step:{step}") if manager else None
-                        ),
-                        configurable={
-                            CONFIG_KEY_TASK_ID: task_id,
-                            # deque.extend is thread-safe
-                            CONFIG_KEY_SEND: partial(
-                                local_write,
-                                writes.extend,
-                                processes.keys(),
-                            ),
-                            CONFIG_KEY_READ: partial(
-                                local_read,
-                                channels,
-                                managed,
-                                PregelTaskWrites(
-                                    task_path, packet.node, writes, triggers
-                                ),
-                            ),
-                            CONFIG_KEY_STORE: (
-                                store or configurable.get(CONFIG_KEY_STORE)
-                            ),
-                            CONFIG_KEY_CHECKPOINTER: (
-                                checkpointer
-                                or configurable.get(CONFIG_KEY_CHECKPOINTER)
-                            ),
-                            CONFIG_KEY_CHECKPOINT_MAP: {
-                                **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
-                                parent_ns: checkpoint["id"],
-                            },
-                            CONFIG_KEY_CHECKPOINT_ID: None,
-                            CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
-                            CONFIG_KEY_SCRATCHPAD: _scratchpad(
-                                config[CONF].get(CONFIG_KEY_SCRATCHPAD),
-                                pending_writes,
-                                task_id,
-                                xxh3_128_hexdigest(task_checkpoint_ns.encode()),
-                                config[CONF].get(CONFIG_KEY_RESUME_MAP),
-                            ),
-                            CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
-                                PREVIOUS, None
-                            ),
-                        },
+            if proc.metadata:
+                metadata.update(proc.metadata)
+            writes = deque()
+            return PregelExecutableTask(
+                packet.node,
+                packet.arg,
+                proc_node,
+                writes,
+                patch_config(
+                    merge_configs(config, {"metadata": metadata, "tags": proc.tags}),
+                    run_name=packet.node,
+                    callbacks=(
+                        manager.get_child(f"graph:step:{step}") if manager else None
                     ),
-                    triggers,
-                    proc.retry_policy,
-                    None,
-                    task_id,
-                    task_path,
-                    writers=proc.flat_writers,
-                    subgraphs=proc.subgraphs,
-                )
+                    configurable={
+                        CONFIG_KEY_TASK_ID: task_id,
+                        # deque.extend is thread-safe
+                        CONFIG_KEY_SEND: partial(
+                            local_write,
+                            writes.extend,
+                            processes.keys(),
+                        ),
+                        CONFIG_KEY_READ: partial(
+                            local_read,
+                            channels,
+                            managed,
+                            PregelTaskWrites(task_path, packet.node, writes, triggers),
+                        ),
+                        CONFIG_KEY_STORE: (store or configurable.get(CONFIG_KEY_STORE)),
+                        CONFIG_KEY_CHECKPOINTER: (
+                            checkpointer or configurable.get(CONFIG_KEY_CHECKPOINTER)
+                        ),
+                        CONFIG_KEY_CHECKPOINT_MAP: {
+                            **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
+                            parent_ns: checkpoint["id"],
+                        },
+                        CONFIG_KEY_CHECKPOINT_ID: None,
+                        CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
+                        CONFIG_KEY_SCRATCHPAD: _scratchpad(
+                            config[CONF].get(CONFIG_KEY_SCRATCHPAD),
+                            pending_writes,
+                            task_id,
+                            xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+                            config[CONF].get(CONFIG_KEY_RESUME_MAP),
+                        ),
+                        CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
+                            PREVIOUS, None
+                        ),
+                    },
+                ),
+                triggers,
+                proc.retry_policy,
+                proc.cache_policy,
+                task_id,
+                task_path,
+                writers=proc.flat_writers,
+                subgraphs=proc.subgraphs,
+            )
         else:
             return PregelTask(task_id, packet.node, task_path)
     elif task_path[0] == PULL:
@@ -784,6 +800,7 @@ def prepare_single_task(
 
             # create task id
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
+            # TODO implement cache
             task_id = task_id_func(
                 checkpoint_id_bytes,
                 checkpoint_ns,
@@ -1000,7 +1017,8 @@ def _proc_input(
                     val = channels[chan].get()
                     break
             else:
-                val[k] = managed[k]()
+                val = managed[chan]()
+                break
         else:
             return MISSING
     else:
@@ -1019,18 +1037,20 @@ def _proc_input(
     return val
 
 
-def _uuid5_str(namespace: bytes, *parts: str) -> str:
+def _uuid5_str(namespace: bytes, *parts: str | bytes) -> str:
     """Generate a UUID from the SHA-1 hash of a namespace and str parts."""
 
     sha = sha1(namespace, usedforsecurity=False)
-    sha.update(b"".join(p.encode() for p in parts))
+    sha.update(b"".join(p.encode() if isinstance(p, str) else p for p in parts))
     hex = sha.hexdigest()
     return f"{hex[:8]}-{hex[8:12]}-{hex[12:16]}-{hex[16:20]}-{hex[20:32]}"
 
 
-def _xxhash_str(namespace: bytes, *parts: str) -> str:
+def _xxhash_str(namespace: bytes, *parts: str | bytes) -> str:
     """Generate a UUID from the XXH3 hash of a namespace and str parts."""
-    hex = xxh3_128_hexdigest(namespace + b"".join(p.encode() for p in parts))
+    hex = xxh3_128_hexdigest(
+        namespace + b"".join(p.encode() if isinstance(p, str) else p for p in parts)
+    )
     return f"{hex[:8]}-{hex[8:12]}-{hex[12:16]}-{hex[16:20]}-{hex[20:32]}"
 
 

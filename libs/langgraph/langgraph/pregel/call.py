@@ -13,7 +13,7 @@ from typing_extensions import ParamSpec
 
 from langgraph.constants import CONF, CONFIG_KEY_CALL, RETURN
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
-from langgraph.types import RetryPolicy
+from langgraph.types import CachePolicy, RetryPolicy
 from langgraph.utils.config import get_config
 from langgraph.utils.runnable import (
     RunnableCallable,
@@ -28,6 +28,7 @@ from langgraph.utils.runnable import (
 
 
 def _getattribute(obj: Any, name: str) -> Any:
+    parent = None
     for subpath in name.split("."):
         if subpath == "<locals>":
             raise AttributeError(f"Can't get local attribute {name!r} on {obj!r}")
@@ -135,7 +136,7 @@ def _explode_args_trace_inputs(
     return arguments
 
 
-def get_runnable_for_entrypoint(func: Callable[..., Any]) -> RunnableSeq:
+def get_runnable_for_entrypoint(func: Callable[..., Any]) -> Runnable:
     key = (func, False)
     if key in CACHE:
         return CACHE[key]
@@ -160,7 +161,7 @@ def get_runnable_for_entrypoint(func: Callable[..., Any]) -> RunnableSeq:
         return CACHE.setdefault(key, run)
 
 
-def get_runnable_for_task(func: Callable[..., Any]) -> RunnableSeq:
+def get_runnable_for_task(func: Callable[..., Any]) -> Runnable:
     key = (func, True)
     if key in CACHE:
         return CACHE[key]
@@ -222,9 +223,12 @@ def call(
     func: Callable[P, T],
     *args: Any,
     retry: Optional[Sequence[RetryPolicy]] = None,
+    cache: Optional[CachePolicy] = None,
     **kwargs: Any,
 ) -> SyncAsyncFuture[T]:
     config = get_config()
     impl = config[CONF][CONFIG_KEY_CALL]
-    fut = impl(func, (args, kwargs), retry=retry, callbacks=config["callbacks"])
+    fut = impl(
+        func, (args, kwargs), retry=retry, cache=cache, callbacks=config["callbacks"]
+    )
     return fut

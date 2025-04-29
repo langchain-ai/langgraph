@@ -434,7 +434,10 @@ class PregelLoop(LoopProtocol):
             # save the new task
             self.tasks[pushed.id] = pushed
             # match any pending writes to the new task
-            if self.skip_done_tasks:
+            if call.cache:
+                pass
+                # how to call async method here...
+            elif self.skip_done_tasks:
                 self._match_writes({pushed.id: pushed})
             # return the new task, to be started if not run before
             return pushed

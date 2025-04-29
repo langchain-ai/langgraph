@@ -11,6 +11,7 @@ from typing import (
     Literal,
     NamedTuple,
     Optional,
+    ParamSpec,
     TypeVar,
     Union,
     cast,
@@ -22,6 +23,7 @@ from typing_extensions import Self
 from xxhash import xxh3_128_hexdigest
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
+from langgraph.utils.cache import default_cache_key
 from langgraph.utils.fields import get_update_as_tuples
 
 if TYPE_CHECKING:
@@ -30,7 +32,7 @@ if TYPE_CHECKING:
 
 
 try:
-    from langchain_core.messages.tool import ToolOutputMixin
+    from langchain_core.messages.tool import ToolOutputMixin  # type: ignore
 except ImportError:
 
     class ToolOutputMixin:  # type: ignore[no-redef]
@@ -122,13 +124,16 @@ class RetryPolicy(NamedTuple):
     """List of exception classes that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
 
 
-class CachePolicy(NamedTuple):
+P = ParamSpec("P")
+
+
+class CachePolicy(NamedTuple, Generic[P]):
     """Configuration for caching nodes.
 
     !!! version-added "Added in version 0.2.24."
     """
 
-    pass
+    key: Callable[P, str | bytes] = default_cache_key
 
 
 @dataclasses.dataclass(**_DC_KWARGS)
