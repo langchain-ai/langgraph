@@ -10,7 +10,7 @@ CopilotKit provides React components to quickly integrate customizable AI copilo
 
 ```bash
 # Frontend packages
-npm install @copilotkit/react-core @copilotkit/react-ui @copilotkit/runtime
+npm install @copilotkit/react-core @copilotkit/react-ui
 ```
 
 ## Basic Setup
@@ -50,6 +50,14 @@ export function AIAssistantChatContainer() {
 
 ### Copilot Runtime
 
+If you're not using Copilotkit Cloud, you'll need to set up a runtime server to connect your frontend with LangGraph. First, install the runtime package:
+
+```bash
+npm install @copilotkit/runtime
+```
+
+Then create a server file with the following code:
+
 ```ts
 import { createServer } from "node:http";
 import {
@@ -58,8 +66,6 @@ import {
   copilotRuntimeNodeHttpEndpoint,
   langGraphPlatformEndpoint,
 } from "@copilotkit/runtime";
-
-const serviceAdapter = new ExperimentalEmptyAdapter();
 
 const server = createServer((req, res) => {
   const runtime = new CopilotRuntime({
@@ -79,9 +85,9 @@ const server = createServer((req, res) => {
   });
 
   const handler = copilotRuntimeNodeHttpEndpoint({
-    endpoint: "/copilotkit",
+    ...
+    endpoint: "/api/copilotkit",
     runtime,
-    serviceAdapter,
   });
 
   return handler(req, res);
@@ -91,6 +97,16 @@ server.listen(4000, () => {
   console.log("Listening at http://localhost:4000/copilotkit");
 });
 ```
+
+Start this server alongside your frontend application, and ensure your frontend's `CopilotKit` component points to this endpoint:
+
+```tsx
+<CopilotKit runtimeUrl="http://localhost:4000/api/copilotkit">
+  {children}
+</CopilotKit>
+```
+
+For more detailed information on self-hosting the Copilot Runtime, see the [CopilotKit Self-Hosting Guide](https://docs.copilotkit.ai/guides/self-hosting).
 
 ## Core Concepts
 
@@ -249,37 +265,6 @@ export function Page() {
   // Rest of component
 }
 ```
-
-To connect these actions to your LangGraph agent:
-
-1. Install the SDK:
-
-   ```bash
-   npm install @copilotkit/sdk-js
-   ```
-
-2. Inherit from CopilotKitState in your agent's state:
-
-   ```ts
-   import { Annotation } from "@langchain/langgraph";
-   import { CopilotKitStateAnnotation } from "@copilotkit/sdk-js/langgraph";
-
-   export const YourAgentStateAnnotation = Annotation.Root({
-     yourAdditionalProperty: Annotation<string>,
-     ...CopilotKitStateAnnotation.spec,
-   });
-   ```
-
-3. Use the actions in your agent node:
-   ```ts
-   async function agentNode(state: YourAgentState, config: RunnableConfig) {
-     const actions = state.copilotkit?.actions;
-     const model = ChatOpenAI({ model: "gpt-4o" }).bindTools(actions);
-     // ... use the model with actions
-   }
-   ```
-
-CopilotKit automatically provides these actions as LangChain-compatible tools, making them seamlessly available to your agent.
 
 ## Further Reading
 

@@ -9,14 +9,54 @@
 ## Installation
 
 ```bash
-npm install @copilotkit/react-core @copilotkit/react-ui @copilotkit/runtime
+# Frontend packages
+npm install @copilotkit/react-core @copilotkit/react-ui
 ```
 
 ## Basic Setup
 
-Integrating LangGraph with CopilotKit involves two main steps: setting up the backend runtime and configuring your frontend components.
+Integrating LangGraph with CopilotKit involves configuring your frontend components and optionally setting up a backend runtime. The fastest way to get started is to use [Copilotkit Cloud](https://cloud.copilotkit.ai/), which provides a stateless interaction layer that enables seamless communication between LangGraph and your frontend.
+
+### Frontend
+
+```tsx
+import { CopilotKit } from "@copilotkit/react-core";
+import { CopilotTextarea } from "@copilotkit/react-ui";
+
+function MyApp({ Component, pageProps }) {
+  return (
+    <CopilotKit publicApiKey="ck_xxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+      {children}
+    </CopilotKit>
+  );
+}
+
+import { CopilotChat } from "@copilotkit/react-ui";
+
+export function AIAssistantChatContainer() {
+  return (
+    <CopilotChat
+      instructions={
+        "You are assisting the user as best as you can. Answer in the best way possible given the data you have."
+      }
+      labels={{
+        title: "Your Assistant",
+        initial: "Hi! 👋 How can I assist you today?",
+      }}
+    />
+  );
+}
+```
 
 ### Copilot Runtime
+
+If you're not using Copilotkit Cloud, you'll need to set up a runtime server to connect your frontend with LangGraph. First, install the runtime package:
+
+```bash
+npm install @copilotkit/runtime
+```
+
+Then create a server file with the following code:
 
 ```ts
 import { createServer } from "node:http";
@@ -26,8 +66,6 @@ import {
   copilotRuntimeNodeHttpEndpoint,
   langGraphPlatformEndpoint,
 } from "@copilotkit/runtime";
-
-const serviceAdapter = new ExperimentalEmptyAdapter();
 
 const server = createServer((req, res) => {
   const runtime = new CopilotRuntime({
@@ -47,61 +85,42 @@ const server = createServer((req, res) => {
   });
 
   const handler = copilotRuntimeNodeHttpEndpoint({
-    endpoint: "/copilotkit",
+    endpoint: "/api/copilotkit",
     runtime,
-    serviceAdapter,
   });
 
   return handler(req, res);
 });
 
 server.listen(4000, () => {
-  console.log("Listening at http://localhost:4000/copilotkit");
+  console.log("Listening at http://localhost:4000/api/copilotkit");
 });
 ```
 
-### Frontend
+Start this server alongside your frontend application, and ensure your frontend's `CopilotKit` component points to this endpoint:
 
 ```tsx
-// layout.tsx
-import { CopilotKit } from "@copilotkit/react-core";
-import { CopilotTextarea } from "@copilotkit/react-ui";
-
-function MyApp({ Component, pageProps }) {
-  return <CopilotKit runtimeUrl="/api/copilotkit">{children}</CopilotKit>;
-}
-
-import { CopilotChat } from "@copilotkit/react-ui";
-
-export function YourComponent() {
-  return (
-    <CopilotChat
-      instructions={
-        "You are assisting the user as best as you can. Answer in the best way possible given the data you have."
-      }
-      labels={{
-        title: "Your Assistant",
-        initial: "Hi! 👋 How can I assist you today?",
-      }}
-    />
-  );
-}
+<CopilotKit runtimeUrl="http://localhost:4000/api/copilotkit">
+  {children}
+</CopilotKit>
 ```
+
+For more detailed information on self-hosting the Copilot Runtime, see the [CopilotKit Self-Hosting Guide](https://docs.copilotkit.ai/guides/self-hosting).
 
 ## Core Concepts
 
 ### Interrupts
 
-Interrupts allow you to pause agent execution to get user input. With CopilotKit, you can:
+Interrupts in LangGraph allow you to pause agent execution to get user input. Combined with CopilotKit, you can create truly interactive human-in-the-loop experiences by:
 
-- Create interactive flows that require user decisions
-- Present custom UI elements during interrupts
-- Make your agent aware of interrupt interactions
-- Handle multiple types of interrupts
+- Creating decision points that require user approval or input
+- Presenting custom UI elements during interrupt moments
+- Making your agent aware of interrupt interactions
+- Supporting different types of interrupts with customized handling
 
 #### Basic Interrupt Usage
 
-To use interrupts in your agent:
+To use interrupts in your LangGraph agent:
 
 ```ts
 import { interrupt } from "@langchain/langgraph";
@@ -149,7 +168,7 @@ function YourComponent() {
 
 #### Making Agents Aware of Interrupts
 
-By default, agents don't see interrupt interactions in their context. To include them:
+By default, agents don't see interrupt interactions in their context. To include them in the message history:
 
 ```ts
 import { copilotKitInterrupt } from "@copilotkit/sdk-js/langgraph";
@@ -168,7 +187,7 @@ async function chat_node(state: AgentState, config: RunnableConfig) {
 
 #### Conditional Interrupts
 
-Handle multiple interrupt types with the `enabled` property:
+To handle multiple interrupt types with different UI components:
 
 ```ts
 // In your agent
@@ -200,27 +219,9 @@ useLangGraphInterrupt({
 });
 ```
 
-#### Advanced Preprocessing
-
-Use the `handler` property to preprocess interrupts before rendering UI:
-
-```tsx
-useLangGraphInterrupt({
-  handler: async ({ event, resolve }) => {
-    // Process interrupt data
-    if (canAutoResolve(event.value)) {
-      resolve(computedResponse);
-      return;
-    }
-    return processedData;
-  },
-  render: ({ result, event, resolve }) => (
-    <CustomComponent data={result} onSubmit={(value) => resolve(value)} />
-  ),
-});
-```
-
 ## Further Reading
 
 - [CopilotKit Documentation](https://docs.copilotkit.ai)
-- [Interrupt](https://docs.copilotkit.ai/coagents/human-in-the-loop/interrupt-flow)
+- [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
+- [Human-in-the-Loop with Interrupts](https://docs.copilotkit.ai/coagents/human-in-the-loop/interrupt-flow)
+- [LangGraph Human-in-the-Loop Guide](../../concepts/human_in_the_loop.md)
