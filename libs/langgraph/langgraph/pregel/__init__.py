@@ -230,15 +230,15 @@ class Pregel(PregelProtocol):
 
     ## Actors
 
-    An **actor** is a [PregelNode][langgraph.pregel.read.PregelNode].
+    An **actor** is a `PregelNode`.
     It subscribes to channels, reads data from them, and writes data to them.
     It can be thought of as an **actor** in the Pregel algorithm.
-    [PregelNodes][langgraph.pregel.read.PregelNode] implement LangChain's
+    `PregelNodes` implement LangChain's
     Runnable interface.
 
     ## Channels
 
-    Channels are used to communicate between actors (PregelNodes).
+    Channels are used to communicate between actors (`PregelNodes`).
     Each channel has a value type, an update type, and an update function – which
     takes a sequence of updates and
     modifies the stored value. Channels can be used to send data from one chain to
