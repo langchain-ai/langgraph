@@ -1,12 +1,3 @@
----
-search:
-  boost: 2
-tags:
-  - agent
-hide:
-  - tags
----
-
 # Tools
 
 [Tools](https://python.langchain.com/docs/concepts/tools/) are a way to encapsulate a function and its input schema in a way that can be passed to a chat model that supports tool calling. This allows the model to request the execution of this function with specific inputs.
@@ -270,6 +261,115 @@ By default, the agent will catch all exceptions raised during tool calls and wil
     1. This provides a custom message to send to the LLM in case of an exception. See all available strategies in the [API reference][langgraph.prebuilt.tool_node.ToolNode].
 
 See [API reference][langgraph.prebuilt.tool_node.ToolNode] for more information on different tool error handling options.
+
+## Working with memory
+
+### Short-term memory
+
+Tools can [read](./context.md#tools) from and [modify](./memory.md#update-short-term-memory-from-tools) the agent's state (short-term memory) during execution.
+
+=== "Read"
+
+    ```python
+    from langchain_core.runnables import RunnableConfig
+
+    def get_user_info(
+        # highlight-next-line
+        config: RunnableConfig,
+    ) -> str:
+        """Look up user info."""
+        # highlight-next-line
+        user_id = config["configurable"].get("user_id")
+        return "User is John Smith" if user_id == "user_123" else "Unknown user"
+    ```
+
+=== "Write"
+
+    ```python
+    from typing import Annotated
+    from langchain_core.tools import InjectedToolCallId
+    from langchain_core.messages import ToolMessage
+    from langchain_core.runnables import RunnableConfig
+    from langgraph.prebuilt import InjectedState
+    from langgraph.prebuilt.chat_agent_executor import AgentState
+    from langgraph.types import Command
+
+    class CustomState(AgentState):
+        # highlight-next-line
+        user_name: str
+
+    def update_user_info(
+        # highlight-next-line
+        tool_call_id: Annotated[str, InjectedToolCallId],
+        # highlight-next-line
+        config: RunnableConfig
+    ) -> Command:
+        """Look up user info."""
+        # highlight-next-line
+        user_id = config["configurable"].get("user_id")
+        name = "John Smith" if user_id == "user_123" else "Unknown user"
+        # highlight-next-line
+        return Command(update={
+            # highlight-next-line
+            "user_name": name,
+            # update the message history
+            # highlight-next-line
+            "messages": [
+                ToolMessage(
+                    "Successfully looked up user information",
+                    # highlight-next-line
+                    tool_call_id=tool_call_id
+                )
+            ]
+        })
+    ```
+
+See this [guide](./memory.md#long-term-memory) to learn how to update state from tools.
+
+### Long-term memory
+
+You can read from and write to [long-term memory](./memory.md#long-term-memory) using [`get_store`][langgraph.config.get_store] function inside the tools:
+
+=== "Read"
+
+    ```python
+    from langchain_core.runnables import RunnableConfig
+    from langgraph.config import get_store
+
+    def get_user_info(config: RunnableConfig) -> str:
+        """Look up user info."""
+        # Same as that provided to `create_react_agent`
+        # highlight-next-line
+        store = get_store()
+        user_id = config["configurable"].get("user_id")
+        # highlight-next-line
+        user_info = store.get(("users",), user_id)
+        return str(user_info.value) if user_info else "Unknown user"
+    ```
+
+=== "Write"
+
+    ```python
+    from typing_extensions import TypedDict
+
+    from langchain_core.runnables import RunnableConfig
+    from langgraph.config import get_store
+
+    class UserInfo(TypedDict):
+        name: str
+
+    def save_user_info(user_info: UserInfo, config: RunnableConfig) -> str:
+        """Save user info."""
+        # Same as that provided to `create_react_agent`
+        # highlight-next-line
+        store = get_store()
+        user_id = config["configurable"].get("user_id")
+        # highlight-next-line
+        store.put(("users",), user_id, user_info)
+        return "Successfully saved user info."
+    ```
+
+See this [guide](./memory.md#long-term-memory) to learn more about managing long-term memory from tools.
 
 ## Prebuilt tools
 

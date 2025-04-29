@@ -149,6 +149,71 @@ agent = create_react_agent(
 
 To learn more about using `pre_model_hook` for managing message history, see this [how-to guide](../how-tos/create-react-agent-manage-message-history.ipynb)
 
+## Update short-term memory from tools
+
+To modify the agent's state during execution, you can use tools. This is useful for persisting intermediate results or making information accessible to subsequent tools or prompts.
+
+```python
+from typing import Annotated
+from langchain_core.tools import InjectedToolCallId
+from langchain_core.runnables import RunnableConfig
+from langchain_core.messages import ToolMessage
+from langgraph.prebuilt import InjectedState, create_react_agent
+from langgraph.prebuilt.chat_agent_executor import AgentState
+from langgraph.types import Command
+
+class CustomState(AgentState):
+    # highlight-next-line
+    user_name: str
+
+def update_user_info(
+    # highlight-next-line
+    tool_call_id: Annotated[str, InjectedToolCallId],
+    # highlight-next-line
+    config: RunnableConfig
+) -> Command:
+    """Look up and update user info."""
+    # highlight-next-line
+    user_id = config["configurable"].get("user_id")
+    name = "John Smith" if user_id == "user_123" else "Unknown user"
+    return Command(update={
+        # highlight-next-line
+        "user_name": name,
+        # update the message history
+        # highlight-next-line
+        "messages": [
+            ToolMessage(
+                "Successfully looked up user information",
+                # highlight-next-line
+                tool_call_id=tool_call_id
+            )
+        ]
+    })
+
+def greet(
+    # highlight-next-line
+    state: Annotated[CustomState, InjectedState]
+) -> str:
+    """Use this to greet the user once you found their info."""
+    user_name = state["user_name"]
+    return f"Hello {user_name}!"
+
+agent = create_react_agent(
+    model="anthropic:claude-3-7-sonnet-latest",
+    tools=[get_user_info, greet],
+    # highlight-next-line
+    state_schema=CustomState
+)
+
+agent.invoke(
+    {"messages": [{"role": "user", "content": "greet the user"}]},
+    # highlight-next-line
+    config={"configurable": {"user_id": "user_123"}}
+)
+```
+
+For more details, see [how to update state from tools](../how-tos/update-state-from-tools.ipynb).
+
 ## Long-term memory
 
 Use long-term memory to store user-specific or application-specific data across conversations. This is useful for applications like chatbots, where you want to remember user preferences or other information.
@@ -161,6 +226,7 @@ To use long-term memory, you need to:
 ### Reading
 
 ```python title="A tool the agent can use to look up user information"
+from langchain_core.runnables import RunnableConfig
 from langgraph.config import get_store
 from langgraph.prebuilt import create_react_agent
 from langgraph.store.memory import InMemoryStore
@@ -183,7 +249,7 @@ def get_user_info(config: RunnableConfig) -> str:
     # Same as that provided to `create_react_agent`
     # highlight-next-line
     store = get_store() # (6)!
-    user_id = config.get("configurable", {}).get("user_id")
+    user_id = config["configurable"].get("user_id")
     # highlight-next-line
     user_info = store.get(("users",), user_id) # (7)!
     return str(user_info.value) if user_info else "Unknown user"
@@ -231,7 +297,7 @@ def save_user_info(user_info: UserInfo, config: RunnableConfig) -> str: # (3)!
     # Same as that provided to `create_react_agent`
     # highlight-next-line
     store = get_store() # (4)!
-    user_id = config.get("configurable", {}).get("user_id")
+    user_id = config["configurable"].get("user_id")
     # highlight-next-line
     store.put(("users",), user_id, user_info) # (5)!
     return "Successfully saved user info."
