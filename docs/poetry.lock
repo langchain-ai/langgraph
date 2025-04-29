@@ -3480,14 +3480,18 @@ description = "Make Anthropic Model Context Protocol (MCP) tools compatible with
 optional = false
 python-versions = ">=3.10"
 groups = ["docs"]
-files = [
-    {file = "langchain_mcp_adapters-0.0.9-py3-none-any.whl", hash = "sha256:7c3dedd7830de826f418706c8a2fe388afcf8daf2037a1b39d1e065a5eacb082"},
-    {file = "langchain_mcp_adapters-0.0.9.tar.gz", hash = "sha256:9ecd10fc420d98b3c14115bbca3174575e0a4ea29bd125ef39d11191a72ff1a1"},
-]
+files = []
+develop = false
 
 [package.dependencies]
 langchain-core = ">=0.3.36,<0.4"
 mcp = ">=1.4.1,<1.7"
+
+[package.source]
+type = "git"
+url = "https://github.com/langchain-ai/langchain-mcp-adapters"
+reference = "HEAD"
+resolved_reference = "540ddee8df4395145376227fd3149c44f2a6add5"
 
 [[package]]
 name = "langchain-mistralai"
@@ -3728,15 +3732,19 @@ description = "An implementation of a supervisor multi-agent architecture using 
 optional = false
 python-versions = ">=3.10"
 groups = ["docs"]
-files = [
-    {file = "langgraph_supervisor-0.0.17-py3-none-any.whl", hash = "sha256:213c10994addcdce7127ce78b7bb621313237aec6eded55c59072c8a41fc236d"},
-    {file = "langgraph_supervisor-0.0.17.tar.gz", hash = "sha256:949de73176246911ed6ed8e0bef9140552eb1718738443ee80f8a038913a2c94"},
-]
+files = []
+develop = false
 
 [package.dependencies]
 langchain-core = ">=0.3.40,<0.4.0"
 langgraph = ">=0.3.5,<0.4.0"
 langgraph-prebuilt = ">=0.1.7,<0.2.0"
+
+[package.source]
+type = "git"
+url = "https://github.com/langchain-ai/langgraph-supervisor-py"
+reference = "HEAD"
+resolved_reference = "8cccfc8cbb329e93dadd3e84debdfa05c5342eb7"
 
 [[package]]
 name = "langgraph-swarm"
@@ -3745,14 +3753,18 @@ description = "An implementation of a multi-agent swarm using LangGraph"
 optional = false
 python-versions = ">=3.10"
 groups = ["docs"]
-files = [
-    {file = "langgraph_swarm-0.0.10-py3-none-any.whl", hash = "sha256:b8d075983d776602ec847aa9008a319a433f5f7a3c669d64dadf506dd85eeb9f"},
-    {file = "langgraph_swarm-0.0.10.tar.gz", hash = "sha256:3e3e2b73f437392ea5217f0f619f2fb2ef708b0368cc447d0a130558c7c09ec3"},
-]
+files = []
+develop = false
 
 [package.dependencies]
 langchain-core = ">=0.3.40,<0.4.0"
 langgraph = ">=0.3.5,<0.4.0"
+
+[package.source]
+type = "git"
+url = "https://github.com/langchain-ai/langgraph-swarm-py"
+reference = "HEAD"
+resolved_reference = "db05e028c08a1a630ddf1caeaeec7a1c21ab7583"
 
 [[package]]
 name = "langmem"
@@ -9163,4 +9175,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "95414debe1cd80365c6b8ffde45510bd31ab3b9220c242039dd47486496fd652"
+content-hash = "aed7bb5f851ee6aaf2ec175ca5eddb94d21e62c8142035f7552bc92e85db8293"
