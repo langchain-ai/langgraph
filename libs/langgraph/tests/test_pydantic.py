@@ -57,7 +57,7 @@ def test_is_supported_by_pydantic() -> None:
     assert is_supported_by_pydantic(PydanticModel) is True
 
 
-def test_nested_pydantic_models(version: str) -> None:
+def test_nested_pydantic_models() -> None:
     """Test that nested Pydantic models are properly constructed from leaf nodes up."""
 
     class NestedModel(BaseModel):
@@ -94,10 +94,7 @@ def test_nested_pydantic_models(version: str) -> None:
         name: str
         friends: list[str] = Field(default_factory=list)  # IDs of friends
 
-    if version == "v2":
-        conlist_type = conlist(item_type=int, min_length=2, max_length=5)
-    else:
-        conlist_type = conlist(item_type=int, min_items=2, max_items=5)
+    conlist_type = conlist(item_type=int, min_length=2, max_length=5)
 
     class State(BaseModel):
         # Basic nested model tests
