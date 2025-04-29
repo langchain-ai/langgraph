@@ -5,7 +5,9 @@ export interface UIMessage {
   name: string;
   props: Record<string, unknown>;
   metadata: {
-    run_id: string;
+    run_id?: string;
+    name?: string;
+    tags?: string[];
     message_id?: string;
     [key: string]: unknown;
   };
