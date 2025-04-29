@@ -3491,7 +3491,7 @@ mcp = ">=1.4.1,<1.7"
 type = "git"
 url = "https://github.com/langchain-ai/langchain-mcp-adapters"
 reference = "HEAD"
-resolved_reference = "540ddee8df4395145376227fd3149c44f2a6add5"
+resolved_reference = "85eb1dcb4c5c86008feca287d9195e67861ad2d7"
 
 [[package]]
 name = "langchain-mistralai"
