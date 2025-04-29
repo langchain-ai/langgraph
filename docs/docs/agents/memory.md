@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # Memory
 
 LangGraph supports two types of memory essential for building conversational agents:

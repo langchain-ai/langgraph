@@ -1,5 +1,7 @@
 ---
 title: Overview
+search:
+  boost: 2
 ---
 
 # Agent development with LangGraph

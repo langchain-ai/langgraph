@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # Deployment
 
 To deploy your LangGraph agent, create and configure a LangGraph app. This setup supports both local development and production deployments.

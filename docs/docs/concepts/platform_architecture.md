@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # LangGraph Platform Architecture
 
 ![](img/langgraph_platform_deployment_architecture.png)

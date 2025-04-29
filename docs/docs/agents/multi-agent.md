@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # Multi-agent
 
 A single agent might struggle if it needs to specialize in multiple domains or manage many tools. To tackle this, you can break your agent into smaller, independent agents and composing them into a [multi-agent system](../concepts/multi_agent.md).
