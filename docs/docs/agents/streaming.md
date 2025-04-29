@@ -1,3 +1,12 @@
+---
+search:
+  boost: 2
+tags:
+  - agent
+hide:
+  - tags
+---
+
 # Streaming
 
 Streaming is key to building responsive applications. There are a few types of data you’ll want to stream:

@@ -1,3 +1,12 @@
+---
+search:
+  boost: 2
+tags:
+  - agent
+hide:
+  - tags
+---
+
 # Agents
 
 ## What is an agent?

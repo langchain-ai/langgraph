@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # Standalone Container
 
 To deploy a [LangGraph Server](../concepts/langgraph_server.md), follow the how-to guide for [how to deploy a Standalone Container](../cloud/deployment/standalone_container.md).

@@ -1,3 +1,12 @@
+---
+search:
+  boost: 2
+tags:
+  - agent
+hide:
+  - tags
+---
+
 # Evals
 
 To evaluate your agent's performance you can use `LangSmith` [evaluations](https://docs.smith.langchain.com/evaluation). You would need to first define an evaluator function to judge the results from an agent, such as final outputs or trajectory. Depending on your evaluation technique, this may or may not involve a reference output:

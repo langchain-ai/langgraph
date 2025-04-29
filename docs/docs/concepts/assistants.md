@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # Assistants
 
 !!! info "Prerequisites"

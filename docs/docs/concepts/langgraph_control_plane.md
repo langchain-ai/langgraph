@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # LangGraph Control Plane
 
 The term "control plane" is used broadly to refer to the Control Plane UI where users create and update [LangGraph Servers](./langgraph_server.md) (deployments) and the Control Plane APIs that support the UI experience.

@@ -1,8 +1,9 @@
-# Prebuilt
+# Agents
 
 ::: langgraph.prebuilt.chat_agent_executor
     options:
       members:
+        - AgentState
         - create_react_agent
 
 ::: langgraph.prebuilt.tool_node

@@ -32,7 +32,8 @@ REDIRECT_MAP = {
     "cloud/concepts/cloud.md": "concepts/langgraph_cloud.md",
     "cloud/faq/studio.md": "concepts/langgraph_studio.md#studio-faqs",
     # misc
-    "prebuilt.md": "agents/prebuilt.md"
+    "prebuilt.md": "agents/prebuilt.md",
+    "reference/prebuilt.md": "reference/agents.md"
 }
 
 

@@ -1,3 +1,12 @@
+---
+search:
+  boost: 2
+tags:
+  - agent
+hide:
+  - tags
+---
+
 # Tools
 
 [Tools](https://python.langchain.com/docs/concepts/tools/) are a way to encapsulate a function and its input schema in a way that can be passed to a chat model that supports tool calling. This allows the model to request the execution of this function with specific inputs.

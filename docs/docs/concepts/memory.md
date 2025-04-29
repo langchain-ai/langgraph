@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # Memory
 
 ## What is Memory?
