@@ -4,18 +4,21 @@
 ```output
 {{ line.rstrip() | strip_ansi }}
 ```
+{ mkdocs-exclude-search }
 {%- endblock traceback_line -%}
 
 {%- block stream -%}
 ```output
-{{ output.text.rstrip() }}
+{{ output.text.rstrip() | strip_ansi }}
 ```
+{ mkdocs-exclude-search }
 {%- endblock stream -%}
 
 {%- block data_text scoped -%}
 ```output
-{{ output.data['text/plain'].rstrip() }}
+{{ output.data['text/plain'].rstrip() | strip_ansi }}
 ```
+{ mkdocs-exclude-search }
 {%- endblock data_text -%}
 
 {%- block data_html scoped -%}
