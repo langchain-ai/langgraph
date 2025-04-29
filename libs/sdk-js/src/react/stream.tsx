@@ -415,9 +415,14 @@ export interface UseStreamOptions<
   assistantId: string;
 
   /**
+   * Client used to send requests.
+   */
+  client?: Client;
+
+  /**
    * The URL of the API to use.
    */
-  apiUrl: ClientConfig["apiUrl"];
+  apiUrl?: ClientConfig["apiUrl"];
 
   /**
    * The API key to use.
@@ -629,6 +634,7 @@ export function useStream<
 
   const client = useMemo(
     () =>
+      options.client ??
       new Client({
         apiUrl: options.apiUrl,
         apiKey: options.apiKey,
@@ -636,6 +642,7 @@ export function useStream<
         defaultHeaders: options.defaultHeaders,
       }),
     [
+      options.client,
       options.apiKey,
       options.apiUrl,
       options.callerOptions,
