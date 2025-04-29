@@ -248,11 +248,14 @@ _IDENTITY_TYPES: tuple[type[Any], ...] = (
 
 @functools.lru_cache(maxsize=2048)
 def _adapter_for(tp: Any) -> Callable[[Any], Any]:  # noqa: D401
-    config = (
-        None
-        if (issubclass(tp, BaseModel) or is_typeddict(tp) or is_dataclass(tp))
-        else ConfigDict(arbitrary_types_allowed=True)
-    )
+    try:
+        config = (
+            None
+            if (issubclass(tp, BaseModel) or is_dataclass(tp) or is_typeddict(tp))
+            else ConfigDict(arbitrary_types_allowed=True)
+        )
+    except TypeError:
+        config = None
     return TypeAdapter(tp, config=config).validate_python
 
 
