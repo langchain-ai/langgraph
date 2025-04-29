@@ -849,16 +849,16 @@
       dict({
         'conditional': True,
         'source': 'answer_question',
+        'target': '__end__',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'answer_question',
         'target': 'ask_question',
       }),
       dict({
         'source': 'ask_question',
         'target': 'answer_question',
-      }),
-      dict({
-        'conditional': True,
-        'source': 'answer_question',
-        'target': '__end__',
       }),
     ]),
     'nodes': list([
@@ -1014,16 +1014,16 @@
       dict({
         'conditional': True,
         'source': 'conduct_interview:answer_question',
+        'target': 'conduct_interview:__end__',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'conduct_interview:answer_question',
         'target': 'conduct_interview:ask_question',
       }),
       dict({
         'source': 'conduct_interview:ask_question',
         'target': 'conduct_interview:answer_question',
-      }),
-      dict({
-        'conditional': True,
-        'source': 'conduct_interview:answer_question',
-        'target': 'conduct_interview:__end__',
       }),
     ]),
     'nodes': list([
