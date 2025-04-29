@@ -38,13 +38,6 @@ export const typedUi = <Decl extends Record<string, ElementType>>(
   const runId = (config.metadata?.run_id as string | undefined) ?? config.runId;
   if (!runId) throw new Error("run_id is required");
 
-  const metadata = {
-    ...config.metadata,
-    tags: config.tags,
-    name: config.runName,
-    run_id: runId,
-  };
-
   const handlePush = <K extends keyof PropMap & string>(
     message: {
       id?: string;
@@ -60,7 +53,9 @@ export const typedUi = <Decl extends Record<string, ElementType>>(
       name: message?.name,
       props: message?.props,
       metadata: {
-        ...metadata,
+        run_id: runId,
+        tags: config.tags,
+        name: config.runName,
         ...message?.metadata,
         ...(options?.message ? { message_id: options.message.id } : null),
       },
