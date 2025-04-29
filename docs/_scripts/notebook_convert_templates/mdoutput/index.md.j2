@@ -1,6 +1,6 @@
 {% extends 'markdown/index.md.j2' %}
 
-{% block input %}{# cell.metadata.langauge is an addition of our docs pipeline. #}
+{% block input %}{# cell.metadata.language is an addition of our docs pipeline. #}
 ```{%- if 'language' in cell.metadata -%}
 {{ cell.metadata.language }}
 {%- elif 'magics_language' in cell.metadata -%}
