@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # Double Texting
 
 !!! info "Prerequisites"

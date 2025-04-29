@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # Time Travel ⏱️
 
 !!! note "Prerequisites"

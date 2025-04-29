@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # Why LangGraph?
 
 ## LLM applications
