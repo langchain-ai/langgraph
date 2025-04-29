@@ -482,6 +482,18 @@ export interface UseStreamOptions<
   onMetadataEvent?: (data: MetadataStreamEvent["data"]) => void;
 
   /**
+   * Callback that is called when a LangChain event is received.
+   * @see https://langchain-ai.github.io/langgraph/cloud/how-tos/stream_events/#stream-graph-in-events-mode for more details.
+   */
+  onLangChainEvent?: (data: EventsStreamEvent["data"]) => void;
+
+  /**
+   * Callback that is called when a debug event is received.
+   * @internal This API is experimental and subject to change.
+   */
+  onDebugEvent?: (data: DebugStreamEvent["data"]) => void;
+
+  /**
    * The ID of the thread to fetch history and current values from.
    */
   threadId?: string | null;
@@ -679,13 +691,22 @@ export function useStream<
 
   const hasUpdateListener = options.onUpdateEvent != null;
   const hasCustomListener = options.onCustomEvent != null;
+  const hasLangChainListener = options.onLangChainEvent != null;
+  const hasDebugListener = options.onDebugEvent != null;
 
   const callbackStreamMode = useMemo(() => {
-    const modes: Exclude<StreamMode, "debug" | "messages">[] = [];
+    const modes: Exclude<StreamMode, "messages">[] = [];
     if (hasUpdateListener) modes.push("updates");
     if (hasCustomListener) modes.push("custom");
+    if (hasLangChainListener) modes.push("events");
+    if (hasDebugListener) modes.push("debug");
     return modes;
-  }, [hasUpdateListener, hasCustomListener]);
+  }, [
+    hasUpdateListener,
+    hasCustomListener,
+    hasLangChainListener,
+    hasDebugListener,
+  ]);
 
   const clearCallbackRef = useRef<() => void>(null!);
   clearCallbackRef.current = () => {
@@ -870,6 +891,8 @@ export function useStream<
               }),
           });
         if (event === "metadata") options.onMetadataEvent?.(data);
+        if (event === "events") options.onLangChainEvent?.(data);
+        if (event === "debug") options.onDebugEvent?.(data);
 
         if (event === "values") setStreamValues(data);
         if (event === "messages") {
