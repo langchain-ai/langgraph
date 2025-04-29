@@ -280,7 +280,9 @@ def create_react_agent(
     version: Literal["v1", "v2"] = "v1",
     name: Optional[str] = None,
 ) -> CompiledGraph:
-    """Creates a graph that works with a chat model that utilizes tool calling.
+    """Creates an agent graph that calls tools in a loop until a stopping condition is met.
+
+    For more details on using `create_react_agent`, visit [Agents](https://langchain-ai.github.io/langgraph/agents/overview/) documentation.
 
     Args:
         model: The `LangChain` chat model that supports tool calling.
@@ -374,27 +376,7 @@ def create_react_agent(
     Returns:
         A compiled LangChain runnable that can be used for chat interactions.
 
-    The resulting graph looks like this:
-
-    ``` mermaid
-    stateDiagram-v2
-        [*] --> Start
-        Start --> Agent
-        Agent --> Tools : continue
-        Tools --> Agent
-        Agent --> End : end
-        End --> [*]
-
-        classDef startClass fill:#ffdfba;
-        classDef endClass fill:#baffc9;
-        classDef otherClass fill:#fad7de;
-
-        class Start startClass
-        class End endClass
-        class Agent,Tools otherClass
-    ```
-
-    The "agent" node calls the language model with the messages list (after applying the messages modifier).
+    The "agent" node calls the language model with the messages list (after applying the prompt).
     If the resulting AIMessage contains `tool_calls`, the graph will then call the ["tools"][langgraph.prebuilt.tool_node.ToolNode].
     The "tools" node executes the tools (1 tool per `tool_call`) and adds the responses to the messages list
     as `ToolMessage` objects. The agent node then calls the language model again.
@@ -404,10 +386,10 @@ def create_react_agent(
     ``` mermaid
         sequenceDiagram
             participant U as User
-            participant A as Agent (LLM)
+            participant A as LLM
             participant T as Tools
             U->>A: Initial input
-            Note over A: Messages modifier + LLM
+            Note over A: Prompt + LLM
             loop while tool_calls present
                 A->>T: Execute tools
                 T-->>A: ToolMessage for each tool_calls
@@ -415,234 +397,24 @@ def create_react_agent(
             A->>U: Return final state
     ```
 
-    Examples:
-        Use with a simple tool:
+    Example:
 
-        ```pycon
-        >>> from langchain_openai import ChatOpenAI
-        >>> from langgraph.prebuilt import create_react_agent
+    ```python
+    from langgraph.prebuilt import create_react_agent
 
+    def check_weather(location: str) -> str:
+        '''Return the weather forecast for the specified location.'''
+        return f"It's always sunny in {location}"
 
-        ... def check_weather(location: str) -> str:
-        ...     '''Return the weather forecast for the specified location.'''
-        ...     return f"It's always sunny in {location}"
-        >>>
-        >>> tools = [check_weather]
-        >>> model = ChatOpenAI(model="gpt-4o")
-        >>> graph = create_react_agent(model, tools=tools)
-        >>> inputs = {"messages": [("user", "what is the weather in sf")]}
-        >>> for s in graph.stream(inputs, stream_mode="values"):
-        ...     message = s["messages"][-1]
-        ...     if isinstance(message, tuple):
-        ...         print(message)
-        ...     else:
-        ...         message.pretty_print()
-        ('user', 'what is the weather in sf')
-        ================================== Ai Message ==================================
-        Tool Calls:
-        check_weather (call_LUzFvKJRuaWQPeXvBOzwhQOu)
-        Call ID: call_LUzFvKJRuaWQPeXvBOzwhQOu
-        Args:
-            location: San Francisco
-        ================================= Tool Message =================================
-        Name: check_weather
-        It's always sunny in San Francisco
-        ================================== Ai Message ==================================
-        The weather in San Francisco is sunny.
-        ```
-        Add a system prompt for the LLM:
-
-        ```pycon
-        >>> system_prompt = "You are a helpful bot named Fred."
-        >>> graph = create_react_agent(model, tools, prompt=system_prompt)
-        >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
-        >>> for s in graph.stream(inputs, stream_mode="values"):
-        ...     message = s["messages"][-1]
-        ...     if isinstance(message, tuple):
-        ...         print(message)
-        ...     else:
-        ...         message.pretty_print()
-        ('user', "What's your name? And what's the weather in SF?")
-        ================================== Ai Message ==================================
-        Hi, my name is Fred. Let me check the weather in San Francisco for you.
-        Tool Calls:
-        check_weather (call_lqhj4O0hXYkW9eknB4S41EXk)
-        Call ID: call_lqhj4O0hXYkW9eknB4S41EXk
-        Args:
-            location: San Francisco
-        ================================= Tool Message =================================
-        Name: check_weather
-        It's always sunny in San Francisco
-        ================================== Ai Message ==================================
-        The weather in San Francisco is currently sunny. If you need any more details or have other questions, feel free to ask!
-        ```
-
-        Add a more complex prompt for the LLM:
-
-        ```pycon
-        >>> from langchain_core.prompts import ChatPromptTemplate
-        >>> prompt = ChatPromptTemplate.from_messages([
-        ...     ("system", "You are a helpful bot named Fred."),
-        ...     ("placeholder", "{messages}"),
-        ...     ("user", "Remember, always be polite!"),
-        ... ])
-        >>>
-        >>> graph = create_react_agent(model, tools, prompt=prompt)
-        >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
-        >>> for s in graph.stream(inputs, stream_mode="values"):
-        ...     message = s["messages"][-1]
-        ...     if isinstance(message, tuple):
-        ...         print(message)
-        ...     else:
-        ...         message.pretty_print()
-        ```
-
-        Add complex prompt with custom graph state:
-
-        ```pycon
-        >>> from typing_extensions import TypedDict
-        >>>
-        >>> from langgraph.managed import IsLastStep
-        >>> prompt = ChatPromptTemplate.from_messages(
-        ...     [
-        ...         ("system", "Today is {today}"),
-        ...         ("placeholder", "{messages}"),
-        ...     ]
-        ... )
-        >>>
-        >>> class CustomState(TypedDict):
-        ...     today: str
-        ...     messages: Annotated[list[BaseMessage], add_messages]
-        ...     is_last_step: IsLastStep
-        >>>
-        >>> graph = create_react_agent(model, tools, state_schema=CustomState, prompt=prompt)
-        >>> inputs = {"messages": [("user", "What's today's date? And what's the weather in SF?")], "today": "July 16, 2004"}
-        >>> for s in graph.stream(inputs, stream_mode="values"):
-        ...     message = s["messages"][-1]
-        ...     if isinstance(message, tuple):
-        ...         print(message)
-        ...     else:
-        ...         message.pretty_print()
-        ```
-
-        Add thread-level "chat memory" to the graph:
-
-        ```pycon
-        >>> from langgraph.checkpoint.memory import MemorySaver
-        >>> graph = create_react_agent(model, tools, checkpointer=MemorySaver())
-        >>> config = {"configurable": {"thread_id": "thread-1"}}
-        >>> def print_stream(graph, inputs, config):
-        ...     for s in graph.stream(inputs, config, stream_mode="values"):
-        ...         message = s["messages"][-1]
-        ...         if isinstance(message, tuple):
-        ...             print(message)
-        ...         else:
-        ...             message.pretty_print()
-        >>> inputs = {"messages": [("user", "What's the weather in SF?")]}
-        >>> print_stream(graph, inputs, config)
-        >>> inputs2 = {"messages": [("user", "Cool, so then should i go biking today?")]}
-        >>> print_stream(graph, inputs2, config)
-        ('user', "What's the weather in SF?")
-        ================================== Ai Message ==================================
-        Tool Calls:
-        check_weather (call_ChndaktJxpr6EMPEB5JfOFYc)
-        Call ID: call_ChndaktJxpr6EMPEB5JfOFYc
-        Args:
-            location: San Francisco
-        ================================= Tool Message =================================
-        Name: check_weather
-        It's always sunny in San Francisco
-        ================================== Ai Message ==================================
-        The weather in San Francisco is sunny. Enjoy your day!
-        ================================ Human Message =================================
-        Cool, so then should i go biking today?
-        ================================== Ai Message ==================================
-        Since the weather in San Francisco is sunny, it sounds like a great day for biking! Enjoy your ride!
-        ```
-
-        Add an interrupt to let the user confirm before taking an action:
-
-        ```pycon
-        >>> graph = create_react_agent(
-        ...     model, tools, interrupt_before=["tools"], checkpointer=MemorySaver()
-        >>> )
-        >>> config = {"configurable": {"thread_id": "thread-1"}}
-
-        >>> inputs = {"messages": [("user", "What's the weather in SF?")]}
-        >>> print_stream(graph, inputs, config)
-        >>> snapshot = graph.get_state(config)
-        >>> print("Next step: ", snapshot.next)
-        >>> print_stream(graph, None, config)
-        ```
-
-        Add cross-thread memory to the graph:
-
-        ```pycon
-        >>> from langgraph.prebuilt import InjectedStore
-        >>> from langgraph.store.base import BaseStore
-
-        >>> def save_memory(memory: str, *, config: RunnableConfig, store: Annotated[BaseStore, InjectedStore()]) -> str:
-        ...     '''Save the given memory for the current user.'''
-        ...     # This is a **tool** the model can use to save memories to storage
-        ...     user_id = config.get("configurable", {}).get("user_id")
-        ...     namespace = ("memories", user_id)
-        ...     store.put(namespace, f"memory_{len(store.search(namespace))}", {"data": memory})
-        ...     return f"Saved memory: {memory}"
-
-        >>> def prepare_model_inputs(state: AgentState, config: RunnableConfig, store: BaseStore):
-        ...     # Retrieve user memories and add them to the system message
-        ...     # This function is called **every time** the model is prompted. It converts the state to a prompt
-        ...     user_id = config.get("configurable", {}).get("user_id")
-        ...     namespace = ("memories", user_id)
-        ...     memories = [m.value["data"] for m in store.search(namespace)]
-        ...     system_msg = f"User memories: {', '.join(memories)}"
-        ...     return [{"role": "system", "content": system_msg)] + state["messages"]
-
-        >>> from langgraph.checkpoint.memory import MemorySaver
-        >>> from langgraph.store.memory import InMemoryStore
-        >>> store = InMemoryStore()
-        >>> graph = create_react_agent(model, [save_memory], prompt=prepare_model_inputs, store=store, checkpointer=MemorySaver())
-        >>> config = {"configurable": {"thread_id": "thread-1", "user_id": "1"}}
-
-        >>> inputs = {"messages": [("user", "Hey I'm Will, how's it going?")]}
-        >>> print_stream(graph, inputs, config)
-        ('user', "Hey I'm Will, how's it going?")
-        ================================== Ai Message ==================================
-        Hello Will! It's nice to meet you. I'm doing well, thank you for asking. How are you doing today?
-
-        >>> inputs2 = {"messages": [("user", "I like to bike")]}
-        >>> print_stream(graph, inputs2, config)
-        ================================ Human Message =================================
-        I like to bike
-        ================================== Ai Message ==================================
-        That's great to hear, Will! Biking is an excellent hobby and form of exercise. It's a fun way to stay active and explore your surroundings. Do you have any favorite biking routes or trails you enjoy? Or perhaps you're into a specific type of biking, like mountain biking or road cycling?
-
-        >>> config = {"configurable": {"thread_id": "thread-2", "user_id": "1"}}
-        >>> inputs3 = {"messages": [("user", "Hi there! Remember me?")]}
-        >>> print_stream(graph, inputs3, config)
-        ================================ Human Message =================================
-        Hi there! Remember me?
-        ================================== Ai Message ==================================
-        User memories:
-        Hello! Of course, I remember you, Will! You mentioned earlier that you like to bike. It's great to hear from you again. How have you been? Have you been on any interesting bike rides lately?
-        ```
-
-        Add a timeout for a given step:
-
-        ```pycon
-        >>> import time
-        ... def check_weather(location: str) -> str:
-        ...     '''Return the weather forecast for the specified location.'''
-        ...     time.sleep(2)
-        ...     return f"It's always sunny in {location}"
-        >>>
-        >>> tools = [check_weather]
-        >>> graph = create_react_agent(model, tools)
-        >>> graph.step_timeout = 1 # Seconds
-        >>> for s in graph.stream({"messages": [("user", "what is the weather in sf")]}):
-        ...     print(s)
-        TimeoutError: Timed out at step 2
-        ```
+    graph = create_react_agent(
+        "anthropic:claude-3-7-sonnet-latest",
+        tools=[check_weather],
+        prompt="You are a helpful assistant",
+    )
+    inputs = {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
+    for chunk in graph.stream(inputs, stream_mode="updates"):
+        print(chunk)
+    ```
     """
     if version not in ("v1", "v2"):
         raise ValueError(
