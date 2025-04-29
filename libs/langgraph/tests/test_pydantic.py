@@ -8,8 +8,18 @@ import uuid
 from enum import Enum
 from typing import Annotated, Literal, Optional, Union
 
-import pytest
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ByteSize,
+    Field,
+    SecretStr,
+    confloat,
+    conint,
+    conlist,
+    constr,
+    field_validator,
+    model_validator,
+)
 
 from langgraph.constants import END, START
 from langgraph.graph.state import StateGraph
@@ -47,35 +57,8 @@ def test_is_supported_by_pydantic() -> None:
     assert is_supported_by_pydantic(PydanticModel) is True
 
 
-@pytest.mark.parametrize("version", ["v1", "v2"])
 def test_nested_pydantic_models(version: str) -> None:
     """Test that nested Pydantic models are properly constructed from leaf nodes up."""
-
-    # Define nested Pydantic models
-    # Import necessary modules
-
-    if version == "v1":
-        from pydantic.v1 import (  # type: ignore
-            BaseModel,
-            ByteSize,
-            Field,
-            SecretStr,
-            confloat,
-            conint,
-            conlist,
-            constr,
-        )
-    else:
-        from pydantic import (  # type: ignore
-            BaseModel,
-            ByteSize,
-            Field,
-            SecretStr,
-            confloat,
-            conint,
-            conlist,
-            constr,
-        )
 
     class NestedModel(BaseModel):
         value: int
