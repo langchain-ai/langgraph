@@ -3,7 +3,6 @@ from collections.abc import Generator, Sequence
 from typing import Annotated, Any, Optional, Union, get_type_hints
 
 from pydantic import BaseModel
-from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import NotRequired, ReadOnly, Required, get_origin
 
 # NOTE: this is redefined here separately from langgraph.constants
@@ -158,12 +157,7 @@ def get_enhanced_type_hints(
 
 def get_update_as_tuples(input: Any, keys: Sequence[str]) -> list[tuple[str, Any]]:
     """Get Pydantic state update as a list of (key, value) tuples."""
-    # Pydantic v1
-    if isinstance(input, BaseModelV1):
-        keep: Optional[set[str]] = input.__fields_set__
-        defaults = {k: v.default for k, v in input.__fields__.items()}
-    # Pydantic v2
-    elif isinstance(input, BaseModel):
+    if isinstance(input, BaseModel):
         keep = input.model_fields_set
         defaults = {k: v.default for k, v in input.model_fields.items()}
     else:

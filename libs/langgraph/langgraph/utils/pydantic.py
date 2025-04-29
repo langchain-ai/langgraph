@@ -1,11 +1,10 @@
 import sys
 import typing
 from dataclasses import is_dataclass
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 import typing_extensions
 from pydantic import BaseModel
-from pydantic.v1 import BaseModel as BaseModelV1
 
 
 def create_model(
@@ -13,7 +12,7 @@ def create_model(
     *,
     field_definitions: Optional[dict[str, Any]] = None,
     root: Optional[Any] = None,
-) -> Union[BaseModel, BaseModelV1]:
+) -> type[BaseModel]:
     """Create a pydantic model with the given field definitions.
 
     Args:
@@ -21,24 +20,14 @@ def create_model(
         field_definitions: The field definitions for the model.
         root: Type for a root model (RootModel)
     """
-    try:
-        # for langchain-core >= 0.3.0
-        from langchain_core.utils.pydantic import create_model_v2
+    # for langchain-core >= 0.3.0
+    from langchain_core.utils.pydantic import create_model_v2
 
-        return create_model_v2(
-            model_name,
-            field_definitions=field_definitions,
-            root=root,
-        )
-    except ImportError:
-        # for langchain-core < 0.3.0
-        from langchain_core.runnables.utils import create_model
-
-        v1_kwargs = {}
-        if root is not None:
-            v1_kwargs["__root__"] = root
-
-        return create_model(model_name, **v1_kwargs, **(field_definitions or {}))
+    return create_model_v2(
+        model_name,
+        field_definitions=field_definitions,
+        root=root,
+    )
 
 
 def is_supported_by_pydantic(type_: Any) -> bool:
@@ -51,8 +40,6 @@ def is_supported_by_pydantic(type_: Any) -> bool:
     if is_dataclass(type_):
         return True
 
-    # Pydantic does not support mixing .v1 and root namespaces, so
-    # we only check for BaseModel (not pydantic.v1.BaseModel).
     if isinstance(type_, type) and issubclass(type_, BaseModel):
         return True
 

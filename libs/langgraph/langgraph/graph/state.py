@@ -23,7 +23,6 @@ from typing import (
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel
-from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import Self
 
 from langgraph._api.deprecation import LangGraphDeprecationWarning
@@ -642,7 +641,7 @@ class StateGraph(Graph):
                 self.input
                 if len(self.channels) > 1
                 and isclass(self.input)
-                and issubclass(self.input, (BaseModel, BaseModelV1))
+                and issubclass(self.input, BaseModel)
                 else None
             ),
             nodes={},
@@ -1026,7 +1025,7 @@ def _pick_mapper(
     if isclass(schema):
         if issubclass(schema, dict):
             return None
-        if issubclass(schema, (BaseModel, BaseModelV1)):
+        if issubclass(schema, BaseModel):
             return SchemaCoercionMapper(schema, type_hints=type_hints)
     return partial(_coerce_state, schema)
 
@@ -1204,7 +1203,7 @@ def _get_schema(
     channels: dict,
     name: str,
 ) -> type[BaseModel]:
-    if isclass(typ) and issubclass(typ, (BaseModel, BaseModelV1)):
+    if isclass(typ) and issubclass(typ, BaseModel):
         return typ
     else:
         keys = list(schemas[typ].keys())

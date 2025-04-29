@@ -33,6 +33,7 @@ from langchain_core.runnables import (
 )
 from langchain_core.runnables.graph import Edge
 from langsmith import traceable
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 from typing_extensions import TypedDict
@@ -2602,8 +2603,6 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
     request: pytest.FixtureRequest,
     checkpointer_name: str,
 ) -> None:
-    from pydantic.v1 import BaseModel, ValidationError
-
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
     setup = mocker.Mock()
     teardown = mocker.Mock()
@@ -2642,8 +2641,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
         yo: int
 
     class State(BaseModel):
-        class Config:
-            arbitrary_types_allowed = True
+        model_config = ConfigDict(arbitrary_types_allowed=True)
 
         query: str
         inner: Annotated[InnerObject, lambda x, y: y]
@@ -2777,11 +2775,6 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
     request: pytest.FixtureRequest,
     checkpointer_name: str,
 ) -> None:
-    from pydantic import BaseModel, ConfigDict, Field, ValidationError
-    from pydantic.v1 import BaseModel as BaseModelV1
-
-    IS_V1 = BaseModel is BaseModelV1
-
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
     setup = mocker.Mock()
     teardown = mocker.Mock()
@@ -2819,28 +2812,14 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
     class InnerObject(BaseModel):
         yo: int
 
-    if IS_V1:
+    class State(BaseModel):
+        model_config = ConfigDict(arbitrary_types_allowed=True)
 
-        class State(BaseModel):
-            class Config:
-                arbitrary_types_allowed = True
-
-            query: str
-            inner: Annotated[InnerObject, lambda x, y: y]
-            answer: Optional[str] = None
-            docs: Annotated[list[str], sorted_add]
-            client: Annotated[httpx.Client, Context(make_httpx_client)]
-
-    else:
-
-        class State(BaseModel):
-            model_config = ConfigDict(arbitrary_types_allowed=True)
-
-            query: str
-            inner: Annotated[InnerObject, lambda x, y: y]
-            answer: Optional[str] = None
-            docs: Annotated[list[str], sorted_add]
-            client: Annotated[httpx.Client, Context(make_httpx_client)]
+        query: str
+        inner: Annotated[InnerObject, lambda x, y: y]
+        answer: Optional[str] = None
+        docs: Annotated[list[str], sorted_add]
+        client: Annotated[httpx.Client, Context(make_httpx_client)]
 
     class StateUpdate(BaseModel):
         query: Optional[str] = None
@@ -2966,8 +2945,6 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_inp
     request: pytest.FixtureRequest,
     checkpointer_name: str,
 ) -> None:
-    from pydantic import BaseModel
-
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     def sorted_add(
@@ -4415,7 +4392,6 @@ def test_remove_message_from_node():
 
 def test_xray_lance(snapshot: SnapshotAssertion):
     from langchain_core.messages import AnyMessage, HumanMessage
-    from pydantic import BaseModel, Field
 
     class Analyst(BaseModel):
         affiliation: str = Field(
@@ -5533,8 +5509,6 @@ def test_dict_mixed_return() -> None:
 
 
 def test_command_pydantic_dataclass() -> None:
-    from pydantic import BaseModel
-
     class PydanticState(BaseModel):
         foo: str
 
@@ -6351,9 +6325,7 @@ def test_double_interrupt_subgraph(
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_multi_resume(
-    request: pytest.FixtureRequest, checkpointer_name: str
-) -> None:
+def test_multi_resume(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     class ChildState(TypedDict):
@@ -6362,11 +6334,11 @@ def test_multi_resume(
         human_inputs: list[str]
 
     def get_human_input(state: ChildState):
-        human_input = interrupt(state['prompt'])
+        human_input = interrupt(state["prompt"])
 
         return {
-            'human_input': human_input,
-            'human_inputs': [human_input],
+            "human_input": human_input,
+            "human_inputs": [human_input],
         }
 
     child_graph = (
@@ -6385,13 +6357,13 @@ def test_multi_resume(
         return [
             Send(
                 "child_graph",
-                {'prompt': prompt},
+                {"prompt": prompt},
             )
-            for prompt in state['prompts']
+            for prompt in state["prompts"]
         ]
 
     def cleanup(state: ParentState):
-        assert len(state['human_inputs']) == len(state["prompts"])
+        assert len(state["human_inputs"]) == len(state["prompts"])
 
     parent_graph = (
         StateGraph(ParentState)
@@ -6404,21 +6376,19 @@ def test_multi_resume(
     )
 
     thread_config: RunnableConfig = {
-        'configurable': {
-            'thread_id': uuid.uuid4(),
+        "configurable": {
+            "thread_id": uuid.uuid4(),
         },
     }
 
-    prompts = ['a', 'b', 'c', 'd', 'e']
+    prompts = ["a", "b", "c", "d", "e"]
 
     events = parent_graph.invoke(
-        {'prompts': prompts},
-        thread_config,
-        stream_mode='values'
+        {"prompts": prompts}, thread_config, stream_mode="values"
     )
 
-    assert len(events['__interrupt__']) == len(prompts)
-    interrupt_values = {i.value for i in events['__interrupt__']}
+    assert len(events["__interrupt__"]) == len(prompts)
+    interrupt_values = {i.value for i in events["__interrupt__"]}
     assert interrupt_values == set(prompts)
 
     resume_map: dict[str, str] = {
@@ -6428,11 +6398,8 @@ def test_multi_resume(
 
     result = parent_graph.invoke(Command(resume=resume_map), thread_config)
     assert result == {
-        'prompts': prompts,
-        'human_inputs': [
-            f"human input for prompt {prompt}"
-            for prompt in prompts
-        ],
+        "prompts": prompts,
+        "human_inputs": [f"human input for prompt {prompt}" for prompt in prompts],
     }
 
 
@@ -7169,8 +7136,6 @@ def test_node_destinations() -> None:
 
 
 def test_pydantic_none_state_update() -> None:
-    from pydantic import BaseModel
-
     class State(BaseModel):
         foo: Optional[str]
 
@@ -7182,8 +7147,6 @@ def test_pydantic_none_state_update() -> None:
 
 
 def test_pydantic_state_update_command() -> None:
-    from pydantic import BaseModel
-
     class State(BaseModel):
         foo: Optional[str]
 
@@ -7215,8 +7178,6 @@ def test_pydantic_state_update_command() -> None:
 
 
 def test_pydantic_state_mutation() -> None:
-    from pydantic import BaseModel, Field
-
     class Inner(BaseModel):
         a: int = 0
 
@@ -7249,8 +7210,6 @@ def test_pydantic_state_mutation() -> None:
 
 
 def test_pydantic_state_mutation_command() -> None:
-    from pydantic import BaseModel, Field
-
     class Inner(BaseModel):
         a: int = 0
 
@@ -7529,8 +7488,6 @@ def test_interrupt_subgraph_reenter_checkpointer_true(
 
 
 def test_empty_invoke() -> None:
-    from pydantic import BaseModel
-
     def reducer_merge_dicts(
         dict1: dict[Any, Any], dict2: dict[Any, Any]
     ) -> dict[Any, Any]:
@@ -7582,8 +7539,6 @@ def test_empty_invoke() -> None:
 def test_parallel_interrupts(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
-    from pydantic import BaseModel, Field
-
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     # --- CHILD GRAPH ---
@@ -7759,8 +7714,6 @@ def test_parallel_interrupts(
 def test_parallel_interrupts_double(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
-    from pydantic import BaseModel, Field
-
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     # --- CHILD GRAPH ---
@@ -8214,8 +8167,6 @@ def test_batch_update_as_input(
 
 
 def test_migration_graph(snapshot: SnapshotAssertion) -> None:
-    from pydantic import BaseModel
-
     class DummyState(BaseModel):
         pass_count: int = 0
 

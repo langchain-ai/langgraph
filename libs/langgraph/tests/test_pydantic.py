@@ -9,6 +9,7 @@ from enum import Enum
 from typing import Annotated, Literal, Optional, Union
 
 import pytest
+from pydantic import BaseModel, field_validator, model_validator
 
 from langgraph.constants import END, START
 from langgraph.graph.state import StateGraph
@@ -45,15 +46,6 @@ def test_is_supported_by_pydantic() -> None:
 
     assert is_supported_by_pydantic(PydanticModel) is True
 
-    if hasattr(pydantic, "v1"):
-
-        class PydanticModelV1(pydantic.v1.BaseModel):
-            x: int
-
-        assert is_supported_by_pydantic(PydanticModelV1) is False
-
-    assert is_supported_by_pydantic(int) is False
-
 
 @pytest.mark.parametrize("version", ["v1", "v2"])
 def test_nested_pydantic_models(version: str) -> None:
@@ -84,10 +76,6 @@ def test_nested_pydantic_models(version: str) -> None:
             conlist,
             constr,
         )
-        from pydantic.v1 import BaseModel as BaseModelV1
-
-        if BaseModel is BaseModelV1:
-            pytest.skip("Cannot test pydantic v2 using installed version < 2")
 
     class NestedModel(BaseModel):
         value: int
@@ -314,8 +302,6 @@ def test_nested_pydantic_models(version: str) -> None:
 
 
 def test_pydantic_state_field_validator():
-    from pydantic import BaseModel, field_validator, model_validator
-
     class State(BaseModel):
         name: str
         text: str = ""
@@ -337,35 +323,6 @@ def test_pydantic_state_field_validator():
 
     def process_node(state: State):
         assert State.model_validate(input_state) == state
-        return {"text": "Hello, " + state.name + "!"}
-
-    builder = StateGraph(state_schema=State)
-    builder.add_node("process", process_node)
-    builder.add_edge(START, "process")
-    builder.add_edge("process", END)
-    g = builder.compile()
-    res = g.invoke(input_state)
-    assert res["text"] == "Hello, Validated John!"
-
-
-def test_pydantic_v1_state_root_validator():
-    from pydantic.v1 import BaseModel, root_validator
-
-    class State(BaseModel):
-        name: str
-        text: str = ""
-        only_root: int = 13
-
-        @root_validator(pre=True)
-        @classmethod
-        def validate(cls, values: dict):
-            values["name"] = "Validated " + values["name"]
-            return values | {"only_root": 396}
-
-    input_state = {"name": "John"}
-
-    def process_node(state: State):
-        assert State(**input_state) == state
         return {"text": "Hello, " + state.name + "!"}
 
     builder = StateGraph(state_schema=State)
