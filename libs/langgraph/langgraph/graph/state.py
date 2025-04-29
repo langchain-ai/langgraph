@@ -1069,9 +1069,14 @@ def _control_static(
     ends: Union[tuple[str, ...], dict[str, str]],
 ) -> Sequence[tuple[str, Any, Optional[str]]]:
     if isinstance(ends, dict):
-        return [(CHANNEL_BRANCH_TO.format(k), None, label) for k, label in ends.items()]
+        return [
+            (k if k == END else CHANNEL_BRANCH_TO.format(k), None, label)
+            for k, label in ends.items()
+        ]
     else:
-        return [(CHANNEL_BRANCH_TO.format(e), None, None) for e in ends]
+        return [
+            (e if e == END else CHANNEL_BRANCH_TO.format(e), None, None) for e in ends
+        ]
 
 
 def _get_root(input: Any) -> Optional[Sequence[tuple[str, Any]]]:

@@ -287,6 +287,12 @@
       },
       {
         "source": "agent",
+        "target": "__end__",
+        "data": "end",
+        "conditional": true
+      },
+      {
+        "source": "agent",
         "target": "tools",
         "data": "continue",
         "conditional": true
@@ -294,11 +300,6 @@
       {
         "source": "tools",
         "target": "agent"
-      },
-      {
-        "source": "agent",
-        "target": "__end__",
-        "conditional": true
       }
     ]
   }
@@ -308,9 +309,9 @@
   '''
   graph TD;
   	__start__ --> agent;
+  	agent -. &nbsp;end&nbsp; .-> __end__;
   	agent -. &nbsp;continue&nbsp; .-> tools;
   	tools --> agent;
-  	agent -.-> __end__;
   
   '''
 # ---
@@ -374,17 +375,17 @@
       },
       {
         "source": "agent",
+        "target": "__end__",
+        "conditional": true
+      },
+      {
+        "source": "agent",
         "target": "tools",
         "conditional": true
       },
       {
         "source": "tools",
         "target": "agent"
-      },
-      {
-        "source": "agent",
-        "target": "__end__",
-        "conditional": true
       }
     ]
   }
@@ -394,9 +395,9 @@
   '''
   graph TD;
   	__start__ --> agent;
+  	agent -.-> __end__;
   	agent -.-> tools;
   	tools --> agent;
-  	agent -.-> __end__;
   
   '''
 # ---
