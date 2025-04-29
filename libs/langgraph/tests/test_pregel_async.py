@@ -8703,3 +8703,88 @@ async def test_batch_update_as_input(checkpointer_name: str) -> None:
         ]
 
         assert new_history == history
+
+
+async def test_draw_invalid():
+    from langchain_core.messages import BaseMessage
+
+    class AgentState(TypedDict):
+        messages: Annotated[list[BaseMessage], add_messages]
+
+    workflow = StateGraph(AgentState)
+
+    async def call_model(state: AgentState) -> AgentState:
+        return state
+
+    async def call_tool(state: AgentState) -> AgentState:
+        return state
+
+    async def do_nothing(state: AgentState) -> AgentState:
+        return state
+
+    def should_continue(state):
+        messages = state["messages"]
+        last_message = messages[-1]
+        if last_message.content.startswith("end"):
+            return END
+        else:
+            return [Send("tool", last_message), Send("nothing", last_message)]
+
+    workflow.add_node("agent", call_model)
+    workflow.add_node("tool", call_tool)
+    workflow.add_node("nothing", do_nothing)
+    workflow.set_entry_point("agent")
+    workflow.add_conditional_edges(
+        "agent",
+        should_continue,
+        path_map=["tool", "nothing", END],
+    )
+    workflow.add_edge("tool", "agent")
+
+    graph = workflow.compile()
+
+    assert graph.get_graph().to_json() == {
+        "nodes": [
+            {
+                "id": "__start__",
+                "type": "runnable",
+                "data": {
+                    "id": ["langchain", "schema", "runnable", "RunnablePassthrough"],
+                    "name": "__start__",
+                },
+            },
+            {
+                "id": "agent",
+                "type": "runnable",
+                "data": {
+                    "id": ["langgraph", "utils", "runnable", "RunnableCallable"],
+                    "name": "agent",
+                },
+            },
+            {
+                "id": "tool",
+                "type": "runnable",
+                "data": {
+                    "id": ["langgraph", "utils", "runnable", "RunnableCallable"],
+                    "name": "tool",
+                },
+            },
+            {
+                "id": "nothing",
+                "type": "runnable",
+                "data": {
+                    "id": ["langgraph", "utils", "runnable", "RunnableCallable"],
+                    "name": "nothing",
+                },
+            },
+            {"id": "__end__"},
+        ],
+        "edges": [
+            {"source": "__start__", "target": "agent"},
+            {"source": "agent", "target": "nothing", "conditional": True},
+            {"source": "agent", "target": "tool", "conditional": True},
+            {"source": "tool", "target": "agent"},
+            {"source": "agent", "target": "__end__", "conditional": True},
+            {"source": "nothing", "target": "__end__"},
+        ],
+    }
