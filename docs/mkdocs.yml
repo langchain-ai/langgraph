@@ -396,7 +396,7 @@ nav:
       - Pregel: reference/pregel.md
       - Config: reference/config.md
       - Functional API: reference/func.md
-    - Agents:
+    - Prebuilt:
       - Agents: reference/agents.md
       - Supervisor: reference/supervisor.md
       - Swarm: reference/swarm.md
