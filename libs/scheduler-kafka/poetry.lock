@@ -624,7 +624,7 @@ typing-extensions = ">=4.7"
 
 [[package]]
 name = "langgraph"
-version = "0.3.34"
+version = "0.4.0"
 description = "Building stateful, multi-actor applications with LLMs"
 optional = false
 python-versions = ">=3.9"
@@ -645,7 +645,7 @@ url = "../langgraph"
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.0.24"
+version = "2.0.25"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 optional = false
 python-versions = ">=3.9"
@@ -1689,4 +1689,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9"
-content-hash = "4c707b13fa125f9023492c1a9f298fc64a92d79554c447146d600a3cfd4be976"
+content-hash = "4ed29bfd01db66f6675a1b5f89a21a51547e45681287afd0460af4dbf56230bf"

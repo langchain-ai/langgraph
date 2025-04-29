@@ -6350,6 +6350,92 @@ def test_double_interrupt_subgraph(
     ]
 
 
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_multi_resume(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class ChildState(TypedDict):
+        prompt: str
+        human_input: str
+        human_inputs: list[str]
+
+    def get_human_input(state: ChildState):
+        human_input = interrupt(state['prompt'])
+
+        return {
+            'human_input': human_input,
+            'human_inputs': [human_input],
+        }
+
+    child_graph = (
+        StateGraph(ChildState)
+        .add_node("get_human_input", get_human_input)
+        .add_edge(START, "get_human_input")
+        .add_edge("get_human_input", END)
+        .compile(checkpointer=checkpointer)
+    )
+
+    class ParentState(TypedDict):
+        prompts: list[str]
+        human_inputs: Annotated[list[str], operator.add]
+
+    def assign_workers(state: ParentState) -> list[Send]:
+        return [
+            Send(
+                "child_graph",
+                {'prompt': prompt},
+            )
+            for prompt in state['prompts']
+        ]
+
+    def cleanup(state: ParentState):
+        assert len(state['human_inputs']) == len(state["prompts"])
+
+    parent_graph = (
+        StateGraph(ParentState)
+        .add_node("child_graph", child_graph)
+        .add_node("cleanup", cleanup)
+        .add_conditional_edges(START, assign_workers, ["child_graph"])
+        .add_edge("child_graph", "cleanup")
+        .add_edge("cleanup", END)
+        .compile(checkpointer=checkpointer)
+    )
+
+    thread_config: RunnableConfig = {
+        'configurable': {
+            'thread_id': uuid.uuid4(),
+        },
+    }
+
+    prompts = ['a', 'b', 'c', 'd', 'e']
+
+    events = parent_graph.invoke(
+        {'prompts': prompts},
+        thread_config,
+        stream_mode='values'
+    )
+
+    assert len(events['__interrupt__']) == len(prompts)
+    interrupt_values = {i.value for i in events['__interrupt__']}
+    assert interrupt_values == set(prompts)
+
+    resume_map: dict[str, str] = {
+        i.interrupt_id: f"human input for prompt {i.value}"
+        for i in parent_graph.get_state(thread_config).interrupts
+    }
+
+    result = parent_graph.invoke(Command(resume=resume_map), thread_config)
+    assert result == {
+        'prompts': prompts,
+        'human_inputs': [
+            f"human input for prompt {prompt}"
+            for prompt in prompts
+        ],
+    }
+
+
 def test_sync_streaming_with_functional_api() -> None:
     """Test streaming with functional API.
 

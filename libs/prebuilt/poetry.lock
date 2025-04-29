@@ -446,7 +446,7 @@ typing-extensions = ">=4.7"
 
 [[package]]
 name = "langgraph"
-version = "0.3.34"
+version = "0.4.0"
 description = "Building stateful, multi-actor applications with LLMs"
 optional = false
 python-versions = ">=3.9"
@@ -467,7 +467,7 @@ url = "../langgraph"
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.0.24"
+version = "2.0.25"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 optional = false
 python-versions = ">=3.9"
