@@ -154,8 +154,8 @@ class StateGraph(Graph):
         graph.set_finish_point("A")
         compiled = graph.compile()
 
-        # [ConfigurableFieldSpec(id='r', annotation=<class 'float'>, name=None, description=None, default=None, is_shared=False, dependencies=None)]
         print(compiled.config_specs)
+        # [ConfigurableFieldSpec(id='r', annotation=<class 'float'>, name=None, description=None, default=None, is_shared=False, dependencies=None)]
 
         step1 = compiled.invoke({"x": 0.5}, {"configurable": {"r": 3.0}})
         # {'x': [0.5, 0.75]}
