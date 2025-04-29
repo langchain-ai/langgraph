@@ -847,7 +847,9 @@ class CompiledStateGraph(CompiledGraph):
         ) -> Sequence[Union[ChannelWriteEntry, Send]]:
             writes = [
                 (
-                    ChannelWriteEntry(CHANNEL_BRANCH_TO.format(p), None)
+                    ChannelWriteEntry(
+                        p if p == END else CHANNEL_BRANCH_TO.format(p), None
+                    )
                     if not isinstance(p, Send)
                     else p
                 )

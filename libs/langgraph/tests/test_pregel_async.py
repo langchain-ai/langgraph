@@ -8781,10 +8781,10 @@ async def test_draw_invalid():
         ],
         "edges": [
             {"source": "__start__", "target": "agent"},
+            {"source": "agent", "target": "__end__", "conditional": True},
             {"source": "agent", "target": "nothing", "conditional": True},
             {"source": "agent", "target": "tool", "conditional": True},
             {"source": "tool", "target": "agent"},
-            {"source": "agent", "target": "__end__", "conditional": True},
             {"source": "nothing", "target": "__end__"},
         ],
     }
