@@ -72,6 +72,7 @@ MANUAL_API_REFERENCES_LANGGRAPH = [
     # other prebuilts
     (["langgraph_supervisor"], "langgraph_supervisor.supervisor", "create_supervisor", "supervisor"),
     (["langgraph_supervisor"], "langgraph_supervisor.handoff", "create_handoff_tool", "supervisor"),
+    ([], "langgraph_supervisor.handoff", "create_forward_message_tool", "supervisor"),
     (["langgraph_swarm"], "langgraph_swarm.swarm", "create_swarm", "swarm"),
     (["langgraph_swarm"], "langgraph_swarm.swarm", "add_active_agent_router", "swarm"),
     (["langgraph_swarm"], "langgraph_swarm.swarm", "SwarmState", "swarm"),

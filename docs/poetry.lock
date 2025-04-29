@@ -3727,7 +3727,7 @@ url = "../libs/sdk-py"
 
 [[package]]
 name = "langgraph-supervisor"
-version = "0.0.17"
+version = "0.0.18"
 description = "An implementation of a supervisor multi-agent architecture using LangGraph"
 optional = false
 python-versions = ">=3.10"
@@ -3744,7 +3744,7 @@ langgraph-prebuilt = ">=0.1.7,<0.2.0"
 type = "git"
 url = "https://github.com/langchain-ai/langgraph-supervisor-py"
 reference = "HEAD"
-resolved_reference = "8cccfc8cbb329e93dadd3e84debdfa05c5342eb7"
+resolved_reference = "18c8e7b7ca67828de6b71a83d7393ecb3c0372b0"
 
 [[package]]
 name = "langgraph-swarm"
@@ -3764,7 +3764,7 @@ langgraph = ">=0.3.5,<0.4.0"
 type = "git"
 url = "https://github.com/langchain-ai/langgraph-swarm-py"
 reference = "HEAD"
-resolved_reference = "db05e028c08a1a630ddf1caeaeec7a1c21ab7583"
+resolved_reference = "aa56a3935b41adc265239c014b1d341f9bbee4ba"
 
 [[package]]
 name = "langmem"
