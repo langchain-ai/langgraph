@@ -13,7 +13,7 @@ from typing import (
     get_type_hints,
 )
 
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 
 __all__ = ["SchemaCoercionMapper"]
 
@@ -243,67 +243,10 @@ _IDENTITY_TYPES: tuple[type[Any], ...] = (
     type(None),
 )
 
-try:
-    # Pydantic v2.
-    from pydantic import TypeAdapter
 
-    try:
-        import pydantic.v1.types as v1_types_
-        from pydantic.v1 import parse_obj_as
-
-        v1_types = tuple(
-            v for k, v in vars(v1_types_).items() if k in v1_types_.__all__
-        )
-    except ImportError:
-        v1_types = ()
-
-        def parse_obj_as(tp: Any, v: Any) -> Any:  # type: ignore
-            return v
-
-    try:
-        from pydantic.v1 import parse_obj_as
-        from pydantic.v1.main import create_model
-    except ImportError:
-        create_model = None  # type: ignore
-
-    def _get_v1_parser(tp: Any) -> Any:
-        if create_model is not None:
-            try:
-                parser = create_model(
-                    f"ParsingModel[{tp}]",
-                    __root__=(tp, ...),
-                )
-                return lambda v: parser(__root__=v).__root__  # type: ignore
-            except RuntimeError:
-                return lambda v: v
-        return lambda v: parse_obj_as(tp, v)
-
-    @functools.lru_cache(maxsize=2048)
-    def _adapter_for(tp: Any) -> Callable[[Any], Any]:  # noqa: D401
-        if tp in v1_types:
-            return _get_v1_parser(tp)
-        try:
-            return TypeAdapter(
-                tp, config={"arbitrary_types_allowed": True}
-            ).validate_python
-        except TypeError:
-            # Delayed classes like ConstrainedList
-            return _get_v1_parser(tp)
-
-except ImportError:
-    # Pydantic V1
-    from pydantic.v1.main import create_model
-
-    @functools.lru_cache(maxsize=2048)
-    def _adapter_for(tp: Any) -> Callable[[Any], Any]:  # noqa: D401
-        try:
-            parser = create_model(
-                f"ParsingModel[{tp}]",
-                __root__=(tp, ...),
-            )
-            return lambda v: parser(__root__=v).__root__  # type: ignore
-        except RuntimeError:
-            return lambda v: v
+@functools.lru_cache(maxsize=2048)
+def _adapter_for(tp: Any) -> Callable[[Any], Any]:  # noqa: D401
+    return TypeAdapter(tp, config={"arbitrary_types_allowed": True}).validate_python
 
 
 def _get_adapter(tp: Any) -> Callable[[Any], Any]:

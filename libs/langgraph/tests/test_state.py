@@ -7,7 +7,7 @@ from typing import Annotated as Annotated2
 
 import pytest
 from langchain_core.runnables import RunnableConfig, RunnableLambda
-from pydantic.v1 import BaseModel
+from pydantic import BaseModel
 from typing_extensions import NotRequired, Required, TypedDict
 
 from langgraph.graph.state import StateGraph, _get_node_name, _warn_invalid_state_schema
