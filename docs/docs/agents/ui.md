@@ -1,6 +1,10 @@
 ---
 search:
   boost: 2
+tags:
+  - agent
+hide:
+  - tags
 ---
 
 # UI

@@ -3,17 +3,11 @@ search:
   boost: 2
 tags:
   - anthropic
-  - groq
-  - huggingface
   - openai
-  - fireworks
-  - llama
-  - llama2
-  - ollama
+  - agent
 hide:
   - tags
 ---
-<!-- material/tags { scope: true } -->
 
 # Models
 
