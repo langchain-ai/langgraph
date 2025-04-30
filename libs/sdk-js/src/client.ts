@@ -1,6 +1,7 @@
 import {
   Assistant,
   AssistantGraph,
+  AssistantSortBy,
   AssistantVersion,
   CancelAction,
   Checkpoint,
@@ -16,8 +17,10 @@ import {
   Run,
   RunStatus,
   SearchItemsResponse,
+  SortOrder,
   Subgraphs,
   Thread,
+  ThreadSortBy,
   ThreadState,
   ThreadStatus,
 } from "./schema.js";
@@ -423,6 +426,8 @@ export class AssistantsClient extends BaseClient {
     metadata?: Metadata;
     limit?: number;
     offset?: number;
+    sortBy?: AssistantSortBy;
+    sortOrder?: SortOrder;
   }): Promise<Assistant[]> {
     return this.fetch<Assistant[]>("/assistants/search", {
       method: "POST",
@@ -431,6 +436,8 @@ export class AssistantsClient extends BaseClient {
         metadata: query?.metadata ?? undefined,
         limit: query?.limit ?? 10,
         offset: query?.offset ?? 0,
+        sort_by: query?.sortBy ?? undefined,
+        sort_order: query?.sortOrder ?? undefined,
       },
     });
   }
@@ -621,12 +628,12 @@ export class ThreadsClient<
     /**
      * Sort by.
      */
-    sortBy?: "thread_id" | "status" | "created_at" | "updated_at";
+    sortBy?: ThreadSortBy;
     /**
      * Sort order.
      * Must be one of 'asc' or 'desc'.
      */
-    sortOrder?: "asc" | "desc";
+    sortOrder?: SortOrder;
   }): Promise<Thread<ValuesType>[]> {
     return this.fetch<Thread<ValuesType>[]>("/threads/search", {
       method: "POST",

@@ -301,3 +301,14 @@ export interface CronCreateForThreadResponse
   extends Omit<CronCreateResponse, "thread_id"> {
   thread_id: string;
 }
+
+export type AssistantSortBy =
+  | "assistant_id"
+  | "graph_id"
+  | "name"
+  | "created_at"
+  | "updated_at";
+
+export type ThreadSortBy = "thread_id" | "status" | "created_at" | "updated_at";
+
+export type SortOrder = "asc" | "desc";
