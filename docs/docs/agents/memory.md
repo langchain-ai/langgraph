@@ -409,6 +409,10 @@ store.get(("users",), "user_123").value
 5. The `put` method is used to store data in the store. The first argument is the namespace, and the second argument is the key. This will store the user information in the store.
 6. The `user_id` is passed in the config. This is used to identify the user whose information is being updated.
 
+### Semantic search
+
+LangGraph also allows you to do [search](https://langchain-ai.github.io/langgraph/how-tos/memory/semantic-search/#using-in-create-react-agent) for items in long-term memory by semantic similarity.
+
 ### Prebuilt memory tools
 
 **LangMem** is a LangChain-maintained library that offers tools for managing long-term memories in your agent. See the [LangMem documentation](https://langchain-ai.github.io/langmem/) for usage examples.
