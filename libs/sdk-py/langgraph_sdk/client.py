@@ -33,6 +33,7 @@ import langgraph_sdk
 from langgraph_sdk.schema import (
     All,
     Assistant,
+    AssistantSortBy,
     AssistantVersion,
     CancelAction,
     Checkpoint,
@@ -52,10 +53,12 @@ from langgraph_sdk.schema import (
     RunCreate,
     RunStatus,
     SearchItemsResponse,
+    SortOrder,
     StreamMode,
     StreamPart,
     Subgraphs,
     Thread,
+    ThreadSortBy,
     ThreadState,
     ThreadStatus,
     ThreadUpdateStateResponse,
@@ -767,10 +770,8 @@ class AssistantsClient:
         graph_id: Optional[str] = None,
         limit: int = 10,
         offset: int = 0,
-        sort_by: Optional[
-            Literal["assistant_id", "graph_id", "name", "created_at", "updated_at"]
-        ] = None,
-        sort_order: Optional[Literal["asc", "desc"]] = None,
+        sort_by: Optional[AssistantSortBy] = None,
+        sort_order: Optional[SortOrder] = None,
         headers: Optional[dict[str, str]] = None,
     ) -> list[Assistant]:
         """Search for assistants.
@@ -1053,10 +1054,8 @@ class ThreadsClient:
         status: Optional[ThreadStatus] = None,
         limit: int = 10,
         offset: int = 0,
-        sort_by: Optional[
-            Literal["thread_id", "status", "created_at", "updated_at"]
-        ] = None,
-        sort_order: Optional[Literal["asc", "desc"]] = None,
+        sort_by: Optional[ThreadSortBy] = None,
+        sort_order: Optional[SortOrder] = None,
         headers: Optional[dict[str, str]] = None,
     ) -> list[Thread]:
         """Search for threads.
