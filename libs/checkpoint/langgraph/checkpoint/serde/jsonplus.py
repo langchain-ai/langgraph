@@ -34,6 +34,8 @@ EMPTY_BYTES = b""
 
 
 class JsonPlusSerializer(SerializerProtocol):
+    """Serializer that uses ormsgpack, with a fallback to extended JSON serializer."""
+
     def __init__(
         self, *, __unpack_ext_hook__: Optional[Callable[[int, bytes], Any]] = None
     ) -> None:

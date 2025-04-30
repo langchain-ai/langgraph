@@ -100,10 +100,9 @@ def push_ui_message(
         "name": name,
         "props": props,
         "metadata": {
-            **(config.get("metadata") or {}),
+            "run_id": config.get("run_id", None),
             "tags": config.get("tags", None),
             "name": config.get("run_name", None),
-            "run_id": config.get("run_id", None),
             **(metadata or {}),
             **({"message_id": message_id} if message_id else {}),
         },

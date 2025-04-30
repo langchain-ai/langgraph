@@ -27,6 +27,8 @@ Conn = _ainternal.Conn  # For backward compatibility
 
 
 class AsyncPostgresSaver(BasePostgresSaver):
+    """Asynchronous checkpointer that stores checkpoints in a Postgres database."""
+
     lock: asyncio.Lock
 
     def __init__(

@@ -26,6 +26,7 @@ import pytest
 from langchain_core.language_models import GenericFakeChatModel
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePassthrough
 from langchain_core.utils.aiter import aclosing
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 from typing_extensions import TypedDict
@@ -4663,15 +4664,8 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
         ]
 
 
-@pytest.mark.parametrize("version", ["v1", "v2"])
-async def test_nested_pydantic_models(version: str) -> None:
+async def test_nested_pydantic_models() -> None:
     """Test that nested Pydantic models are properly constructed from leaf nodes up."""
-
-    # Define nested Pydantic models
-    if version == "v1":
-        from pydantic.v1 import BaseModel, Field
-    else:
-        from pydantic import BaseModel, Field
 
     class NestedModel(BaseModel):
         value: int
@@ -4799,8 +4793,6 @@ async def test_nested_pydantic_models(version: str) -> None:
 async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
     snapshot: SnapshotAssertion, mocker: MockerFixture, checkpointer_name: str
 ) -> None:
-    from pydantic.v1 import BaseModel, ValidationError
-
     setup = mocker.Mock()
     teardown = mocker.Mock()
 
@@ -4835,8 +4827,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
         return sorted(operator.add(x, y))
 
     class State(BaseModel):
-        class Config:
-            arbitrary_types_allowed = True
+        model_config = ConfigDict(arbitrary_types_allowed=True)
 
         query: str
         answer: Optional[str] = None
@@ -4992,8 +4983,6 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
 async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
     snapshot: SnapshotAssertion, checkpointer_name: str
 ) -> None:
-    from pydantic import BaseModel, ValidationError
-
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
     ) -> list[str]:

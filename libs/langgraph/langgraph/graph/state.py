@@ -23,7 +23,6 @@ from typing import (
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel
-from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import Self
 
 from langgraph._api.deprecation import LangGraphDeprecationWarning
@@ -123,42 +122,44 @@ class StateGraph(Graph):
         config_schema (Optional[Type[Any]]): The schema class that defines the configuration.
             Use this to expose configurable parameters in your API.
 
-    Examples:
-        >>> from langchain_core.runnables import RunnableConfig
-        >>> from typing_extensions import Annotated, TypedDict
-        >>> from langgraph.checkpoint.memory import MemorySaver
-        >>> from langgraph.graph import StateGraph
-        >>>
-        >>> def reducer(a: list, b: int | None) -> list:
-        ...     if b is not None:
-        ...         return a + [b]
-        ...     return a
-        >>>
-        >>> class State(TypedDict):
-        ...     x: Annotated[list, reducer]
-        >>>
-        >>> class ConfigSchema(TypedDict):
-        ...     r: float
-        >>>
-        >>> graph = StateGraph(State, config_schema=ConfigSchema)
-        >>>
-        >>> def node(state: State, config: RunnableConfig) -> dict:
-        ...     r = config["configurable"].get("r", 1.0)
-        ...     x = state["x"][-1]
-        ...     next_value = x * r * (1 - x)
-        ...     return {"x": next_value}
-        >>>
-        >>> graph.add_node("A", node)
-        >>> graph.set_entry_point("A")
-        >>> graph.set_finish_point("A")
-        >>> compiled = graph.compile()
-        >>>
-        >>> print(compiled.config_specs)
-        [ConfigurableFieldSpec(id='r', annotation=<class 'float'>, name=None, description=None, default=None, is_shared=False, dependencies=None)]
-        >>>
-        >>> step1 = compiled.invoke({"x": 0.5}, {"configurable": {"r": 3.0}})
-        >>> print(step1)
-        {'x': [0.5, 0.75]}"""
+    Example:
+        ```python
+        from langchain_core.runnables import RunnableConfig
+        from typing_extensions import Annotated, TypedDict
+        from langgraph.checkpoint.memory import MemorySaver
+        from langgraph.graph import StateGraph
+
+        def reducer(a: list, b: int | None) -> list:
+            if b is not None:
+                return a + [b]
+            return a
+
+        class State(TypedDict):
+            x: Annotated[list, reducer]
+
+        class ConfigSchema(TypedDict):
+            r: float
+
+        graph = StateGraph(State, config_schema=ConfigSchema)
+
+        def node(state: State, config: RunnableConfig) -> dict:
+            r = config["configurable"].get("r", 1.0)
+            x = state["x"][-1]
+            next_value = x * r * (1 - x)
+            return {"x": next_value}
+
+        graph.add_node("A", node)
+        graph.set_entry_point("A")
+        graph.set_finish_point("A")
+        compiled = graph.compile()
+
+        print(compiled.config_specs)
+        # [ConfigurableFieldSpec(id='r', annotation=<class 'float'>, name=None, description=None, default=None, is_shared=False, dependencies=None)]
+
+        step1 = compiled.invoke({"x": 0.5}, {"configurable": {"r": 3.0}})
+        # {'x': [0.5, 0.75]}
+        ```
+    """
 
     nodes: dict[str, StateNodeSpec]  # type: ignore[assignment]
     channels: dict[str, BaseChannel]
@@ -251,17 +252,8 @@ class StateGraph(Graph):
         retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
         destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
     ) -> Self:
-        """Adds a new node to the state graph.
+        """Add a new node to the state graph.
         Will take the name of the function/runnable as the node name.
-
-        Args:
-            node (RunnableLike): The function or runnable this node will run.
-
-        Raises:
-            ValueError: If the key is already being used as a state key.
-
-        Returns:
-            Self: The instance of the state graph, allowing for method chaining.
         """
         ...
 
@@ -276,18 +268,7 @@ class StateGraph(Graph):
         retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
         destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
     ) -> Self:
-        """Adds a new node to the state graph.
-
-        Args:
-            node (str): The key of the node.
-            action (RunnableLike): The action associated with the node.
-
-        Raises:
-            ValueError: If the key is already being used as a state key.
-
-        Returns:
-            Self: The instance of the state graph, allowing for method chaining.
-        """
+        """Add a new node to the state graph."""
         ...
 
     def add_node(
@@ -300,13 +281,13 @@ class StateGraph(Graph):
         retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
         destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
     ) -> Self:
-        """Adds a new node to the state graph.
-
-        Will take the name of the function/runnable as the node name.
+        """Add a new node to the state graph.
 
         Args:
             node (Union[str, RunnableLike]): The function or runnable this node will run.
+                If a string is provided, it will be used as the node name, and action will be used as the function or runnable.
             action (Optional[RunnableLike]): The action associated with the node. (default: None)
+                Will be used as the node function or runnable if `node` is a string (node name).
             metadata (Optional[dict[str, Any]]): The metadata associated with the node. (default: None)
             input (Optional[Type[Any]]): The input schema for the node. (default: the graph's input schema)
             retry (Optional[Union[RetryPolicy, Sequence[RetryPolicy]]]): The policy for retrying the node. (default: None)
@@ -319,29 +300,29 @@ class StateGraph(Graph):
         Raises:
             ValueError: If the key is already being used as a state key.
 
-        Examples:
-            ```pycon
-            >>> from langgraph.graph import START, StateGraph
-            ...
-            >>> def my_node(state, config):
-            ...    return {"x": state["x"] + 1}
-            ...
-            >>> builder = StateGraph(dict)
-            >>> builder.add_node(my_node)  # node name will be 'my_node'
-            >>> builder.add_edge(START, "my_node")
-            >>> graph = builder.compile()
-            >>> graph.invoke({"x": 1})
-            {'x': 2}
-            ```
-            Customize the name:
+        Example:
+            ```python
+            from langgraph.graph import START, StateGraph
 
-            ```pycon
-            >>> builder = StateGraph(dict)
-            >>> builder.add_node("my_fair_node", my_node)
-            >>> builder.add_edge(START, "my_fair_node")
-            >>> graph = builder.compile()
-            >>> graph.invoke({"x": 1})
-            {'x': 2}
+            def my_node(state, config):
+                return {"x": state["x"] + 1}
+
+            builder = StateGraph(dict)
+            builder.add_node(my_node)  # node name will be 'my_node'
+            builder.add_edge(START, "my_node")
+            graph = builder.compile()
+            graph.invoke({"x": 1})
+            # {'x': 2}
+            ```
+
+        Example: Customize the name:
+            ```python
+            builder = StateGraph(dict)
+            builder.add_node("my_fair_node", my_node)
+            builder.add_edge(START, "my_fair_node")
+            graph = builder.compile()
+            graph.invoke({"x": 1})
+            # {'x': 2}
             ```
 
         Returns:
@@ -444,7 +425,7 @@ class StateGraph(Graph):
         return self
 
     def add_edge(self, start_key: Union[str, list[str]], end_key: str) -> Self:
-        """Adds a directed edge from the start node (or list of start nodes) to the end node.
+        """Add a directed edge from the start node (or list of start nodes) to the end node.
 
         When a single start node is provided, the graph will wait for that node to complete
         before executing the end node. When multiple start nodes are provided,
@@ -584,7 +565,7 @@ class StateGraph(Graph):
         debug: bool = False,
         name: Optional[str] = None,
     ) -> "CompiledStateGraph":
-        """Compiles the state graph into a `CompiledGraph` object.
+        """Compiles the state graph into a `CompiledStateGraph` object.
 
         The compiled graph implements the `Runnable` interface and can be invoked,
         streamed, batched, and run asynchronously.
@@ -598,6 +579,7 @@ class StateGraph(Graph):
             interrupt_before (Optional[Sequence[str]]): An optional list of node names to interrupt before.
             interrupt_after (Optional[Sequence[str]]): An optional list of node names to interrupt after.
             debug (bool): A flag indicating whether to enable debug mode.
+            name (Optional[str]): The name to use for the compiled graph.
 
         Returns:
             CompiledStateGraph: The compiled state graph.
@@ -642,7 +624,7 @@ class StateGraph(Graph):
                 self.input
                 if len(self.channels) > 1
                 and isclass(self.input)
-                and issubclass(self.input, (BaseModel, BaseModelV1))
+                and issubclass(self.input, BaseModel)
                 else None
             ),
             nodes={},
@@ -1028,7 +1010,7 @@ def _pick_mapper(
     if isclass(schema):
         if issubclass(schema, dict):
             return None
-        if issubclass(schema, (BaseModel, BaseModelV1)):
+        if issubclass(schema, BaseModel):
             return SchemaCoercionMapper(schema, type_hints=type_hints)
     return partial(_coerce_state, schema)
 
@@ -1211,7 +1193,7 @@ def _get_schema(
     channels: dict,
     name: str,
 ) -> type[BaseModel]:
-    if isclass(typ) and issubclass(typ, (BaseModel, BaseModelV1)):
+    if isclass(typ) and issubclass(typ, BaseModel):
         return typ
     else:
         keys = list(schemas[typ].keys())

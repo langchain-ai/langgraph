@@ -27,6 +27,8 @@ Conn = _internal.Conn  # For backward compatibility
 
 
 class PostgresSaver(BasePostgresSaver):
+    """Checkpointer that stores checkpoints in a Postgres database."""
+
     lock: threading.Lock
 
     def __init__(

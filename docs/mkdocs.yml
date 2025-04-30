@@ -390,13 +390,13 @@ nav:
       - Graphs: reference/graphs.md
       - Checkpointing: reference/checkpoints.md
       - Storage: reference/store.md
-      - Channels: reference/channels.md
-      - Errors: reference/errors.md
       - Types: reference/types.md
-      - Constants: reference/constants.md
-      - Pregel: reference/pregel.md
       - Config: reference/config.md
       - Functional API: reference/func.md
+      - Errors: reference/errors.md
+      - Constants: reference/constants.md
+      - Pregel: reference/pregel.md
+      - Channels: reference/channels.md
     - Prebuilt:
       - Agents: reference/agents.md
       - Supervisor: reference/supervisor.md
