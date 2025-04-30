@@ -70,6 +70,10 @@ agent = create_react_agent(
 )
 ```
 
+!!! note "Illustrative example" 
+
+    The example above uses `ChatAnthropic`, which is already supported by `init_chat_model`. This pattern is shown to illustrate how to manually instantiate a model not available through init_chat_model.
+
 ## Adding model fallbacks
 
 In case of errors from LLM providers, you can add a fallback to a different model or a different LLM provider using `model.with_fallbacks([...])`:
@@ -102,10 +106,6 @@ In case of errors from LLM providers, you can add a fallback to a different mode
         ])
     )
     ```
-
-!!! note "Illustrative example" 
-
-    The example above uses `ChatAnthropic`, which is already supported by `init_chat_model`. This pattern is shown to illustrate how to manually instantiate a model not available through init_chat_model.
 
 ## Additional resources
 
