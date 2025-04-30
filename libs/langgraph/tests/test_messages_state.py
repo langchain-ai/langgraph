@@ -12,13 +12,11 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from pydantic import BaseModel
-from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import TypedDict
 
 from langgraph.graph import add_messages
 from langgraph.graph.message import REMOVE_ALL_MESSAGES, MessagesState
 from langgraph.graph.state import END, START, StateGraph
-from tests.conftest import IS_LANGCHAIN_CORE_030_OR_GREATER
 from tests.messages import _AnyIdHumanMessage
 
 _, CORE_MINOR, CORE_PATCH = (int(v) for v in langchain_core.__version__.split("."))
@@ -175,19 +173,11 @@ def test_delete_all():
     assert result == expected_result
 
 
-MESSAGES_STATE_SCHEMAS = [MessagesState]
-if IS_LANGCHAIN_CORE_030_OR_GREATER:
+class MessagesStatePydantic(BaseModel):
+    messages: Annotated[list[AnyMessage], add_messages]
 
-    class MessagesStatePydantic(BaseModel):
-        messages: Annotated[list[AnyMessage], add_messages]
 
-    MESSAGES_STATE_SCHEMAS.append(MessagesStatePydantic)
-else:
-
-    class MessagesStatePydanticV1(BaseModelV1):
-        messages: Annotated[list[AnyMessage], add_messages]
-
-    MESSAGES_STATE_SCHEMAS.append(MessagesStatePydanticV1)
+MESSAGES_STATE_SCHEMAS = [MessagesState, MessagesStatePydantic]
 
 
 @pytest.mark.parametrize("state_schema", MESSAGES_STATE_SCHEMAS)

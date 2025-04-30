@@ -14,6 +14,7 @@ langgraph-checkpoint = "^2.0.10"
 langgraph-sdk = { version = ">=0.1.42", python = "<4.0" }
 langgraph-prebuilt = { version = ">=0.1.8", python = "<4.0" }
 xxhash = "^3.5.0"
+pydantic = { version = ">=2.7.4"}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.2"

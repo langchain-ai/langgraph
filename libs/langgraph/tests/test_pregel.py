@@ -33,6 +33,7 @@ from langchain_core.runnables import (
 )
 from langchain_core.runnables.graph import Edge
 from langsmith import traceable
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 from typing_extensions import TypedDict
@@ -2596,14 +2597,12 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
+def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
     snapshot: SnapshotAssertion,
     mocker: MockerFixture,
     request: pytest.FixtureRequest,
     checkpointer_name: str,
 ) -> None:
-    from pydantic.v1 import BaseModel, ValidationError
-
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
     setup = mocker.Mock()
     teardown = mocker.Mock()
@@ -2642,205 +2641,13 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
         yo: int
 
     class State(BaseModel):
-        class Config:
-            arbitrary_types_allowed = True
+        model_config = ConfigDict(arbitrary_types_allowed=True)
 
         query: str
         inner: Annotated[InnerObject, lambda x, y: y]
         answer: Optional[str] = None
         docs: Annotated[list[str], sorted_add]
         client: Annotated[httpx.Client, Context(make_httpx_client)]
-
-    class Input(BaseModel):
-        query: str
-        inner: InnerObject
-
-    class Output(BaseModel):
-        answer: str
-        docs: list[str]
-
-    class StateUpdate(BaseModel):
-        query: Optional[str] = None
-        answer: Optional[str] = None
-        docs: Optional[list[str]] = None
-
-    class UpdateDocs34(BaseModel):
-        docs: list[str] = ["doc3", "doc4"]
-
-    def rewrite_query(data: State) -> State:
-        assert isinstance(data.inner, InnerObject)
-        return {"query": f"query: {data.query}"}
-
-    def analyzer_one(data: State) -> State:
-        assert isinstance(data.inner, InnerObject)
-        return StateUpdate(query=f"analyzed: {data.query}")
-
-    def retriever_one(data: State) -> State:
-        return {"docs": ["doc1", "doc2"]}
-
-    def retriever_two(data: State) -> State:
-        time.sleep(0.1)
-        return UpdateDocs34()
-
-    def qa(data: State) -> State:
-        return {"answer": ",".join(data.docs)}
-
-    def decider(data: State) -> str:
-        assert isinstance(data, State)
-        return "retriever_two"
-
-    workflow = StateGraph(State, input=Input, output=Output)
-
-    workflow.add_node("rewrite_query", rewrite_query)
-    workflow.add_node("analyzer_one", analyzer_one)
-    workflow.add_node("retriever_one", retriever_one)
-    workflow.add_node("retriever_two", retriever_two)
-    workflow.add_node("qa", qa)
-
-    workflow.set_entry_point("rewrite_query")
-    workflow.add_edge("rewrite_query", "analyzer_one")
-    workflow.add_edge("analyzer_one", "retriever_one")
-    workflow.add_conditional_edges(
-        "rewrite_query", decider, {"retriever_two": "retriever_two"}
-    )
-    workflow.add_edge(["retriever_one", "retriever_two"], "qa")
-    workflow.set_finish_point("qa")
-
-    app = workflow.compile()
-
-    if checkpointer_name == "memory":
-        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
-        assert app.get_input_jsonschema() == snapshot
-        assert app.get_output_jsonschema() == snapshot
-
-    with pytest.raises(ValidationError), assert_ctx_once():
-        app.invoke({"query": {}})
-
-    with assert_ctx_once():
-        assert app.invoke({"query": "what is weather in sf", "inner": {"yo": 1}}) == {
-            "docs": ["doc1", "doc2", "doc3", "doc4"],
-            "answer": "doc1,doc2,doc3,doc4",
-        }
-
-    with assert_ctx_once():
-        assert [
-            *app.stream({"query": "what is weather in sf", "inner": {"yo": 1}})
-        ] == [
-            {"rewrite_query": {"query": "query: what is weather in sf"}},
-            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-            {"retriever_two": {"docs": ["doc3", "doc4"]}},
-            {"retriever_one": {"docs": ["doc1", "doc2"]}},
-            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-        ]
-
-    app_w_interrupt = workflow.compile(
-        checkpointer=checkpointer,
-        interrupt_after=["retriever_one"],
-    )
-    config = {"configurable": {"thread_id": "1"}}
-
-    with assert_ctx_once():
-        assert [
-            c
-            for c in app_w_interrupt.stream(
-                {"query": "what is weather in sf", "inner": {"yo": 1}}, config
-            )
-        ] == [
-            {"rewrite_query": {"query": "query: what is weather in sf"}},
-            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-            {"retriever_two": {"docs": ["doc3", "doc4"]}},
-            {"retriever_one": {"docs": ["doc1", "doc2"]}},
-            {"__interrupt__": ()},
-        ]
-
-    with assert_ctx_once():
-        assert [c for c in app_w_interrupt.stream(None, config)] == [
-            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-        ]
-
-    with assert_ctx_once():
-        assert app_w_interrupt.update_state(
-            config, {"docs": ["doc5"]}, as_node="rewrite_query"
-        ) == {
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
-            }
-        }
-
-
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
-    snapshot: SnapshotAssertion,
-    mocker: MockerFixture,
-    request: pytest.FixtureRequest,
-    checkpointer_name: str,
-) -> None:
-    from pydantic import BaseModel, ConfigDict, Field, ValidationError
-    from pydantic.v1 import BaseModel as BaseModelV1
-
-    IS_V1 = BaseModel is BaseModelV1
-
-    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
-    setup = mocker.Mock()
-    teardown = mocker.Mock()
-
-    @contextmanager
-    def assert_ctx_once() -> Iterator[None]:
-        assert setup.call_count == 0
-        assert teardown.call_count == 0
-        try:
-            yield
-        finally:
-            assert setup.call_count == 1
-            assert teardown.call_count == 1
-            setup.reset_mock()
-            teardown.reset_mock()
-
-    @contextmanager
-    def make_httpx_client() -> Iterator[httpx.Client]:
-        setup()
-        with httpx.Client() as client:
-            try:
-                yield client
-            finally:
-                teardown()
-
-    def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
-    ) -> list[str]:
-        if isinstance(y[0], tuple):
-            for rem, _ in y:
-                x.remove(rem)
-            y = [t[1] for t in y]
-        return sorted(operator.add(x, y))
-
-    class InnerObject(BaseModel):
-        yo: int
-
-    if IS_V1:
-
-        class State(BaseModel):
-            class Config:
-                arbitrary_types_allowed = True
-
-            query: str
-            inner: Annotated[InnerObject, lambda x, y: y]
-            answer: Optional[str] = None
-            docs: Annotated[list[str], sorted_add]
-            client: Annotated[httpx.Client, Context(make_httpx_client)]
-
-    else:
-
-        class State(BaseModel):
-            model_config = ConfigDict(arbitrary_types_allowed=True)
-
-            query: str
-            inner: Annotated[InnerObject, lambda x, y: y]
-            answer: Optional[str] = None
-            docs: Annotated[list[str], sorted_add]
-            client: Annotated[httpx.Client, Context(make_httpx_client)]
 
     class StateUpdate(BaseModel):
         query: Optional[str] = None
@@ -2966,8 +2773,6 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_inp
     request: pytest.FixtureRequest,
     checkpointer_name: str,
 ) -> None:
-    from pydantic import BaseModel
-
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     def sorted_add(
@@ -4415,7 +4220,6 @@ def test_remove_message_from_node():
 
 def test_xray_lance(snapshot: SnapshotAssertion):
     from langchain_core.messages import AnyMessage, HumanMessage
-    from pydantic import BaseModel, Field
 
     class Analyst(BaseModel):
         affiliation: str = Field(
@@ -5533,8 +5337,6 @@ def test_dict_mixed_return() -> None:
 
 
 def test_command_pydantic_dataclass() -> None:
-    from pydantic import BaseModel
-
     class PydanticState(BaseModel):
         foo: str
 
@@ -6351,9 +6153,7 @@ def test_double_interrupt_subgraph(
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_multi_resume(
-    request: pytest.FixtureRequest, checkpointer_name: str
-) -> None:
+def test_multi_resume(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     class ChildState(TypedDict):
@@ -6362,11 +6162,11 @@ def test_multi_resume(
         human_inputs: list[str]
 
     def get_human_input(state: ChildState):
-        human_input = interrupt(state['prompt'])
+        human_input = interrupt(state["prompt"])
 
         return {
-            'human_input': human_input,
-            'human_inputs': [human_input],
+            "human_input": human_input,
+            "human_inputs": [human_input],
         }
 
     child_graph = (
@@ -6385,13 +6185,13 @@ def test_multi_resume(
         return [
             Send(
                 "child_graph",
-                {'prompt': prompt},
+                {"prompt": prompt},
             )
-            for prompt in state['prompts']
+            for prompt in state["prompts"]
         ]
 
     def cleanup(state: ParentState):
-        assert len(state['human_inputs']) == len(state["prompts"])
+        assert len(state["human_inputs"]) == len(state["prompts"])
 
     parent_graph = (
         StateGraph(ParentState)
@@ -6404,21 +6204,19 @@ def test_multi_resume(
     )
 
     thread_config: RunnableConfig = {
-        'configurable': {
-            'thread_id': uuid.uuid4(),
+        "configurable": {
+            "thread_id": uuid.uuid4(),
         },
     }
 
-    prompts = ['a', 'b', 'c', 'd', 'e']
+    prompts = ["a", "b", "c", "d", "e"]
 
     events = parent_graph.invoke(
-        {'prompts': prompts},
-        thread_config,
-        stream_mode='values'
+        {"prompts": prompts}, thread_config, stream_mode="values"
     )
 
-    assert len(events['__interrupt__']) == len(prompts)
-    interrupt_values = {i.value for i in events['__interrupt__']}
+    assert len(events["__interrupt__"]) == len(prompts)
+    interrupt_values = {i.value for i in events["__interrupt__"]}
     assert interrupt_values == set(prompts)
 
     resume_map: dict[str, str] = {
@@ -6428,11 +6226,8 @@ def test_multi_resume(
 
     result = parent_graph.invoke(Command(resume=resume_map), thread_config)
     assert result == {
-        'prompts': prompts,
-        'human_inputs': [
-            f"human input for prompt {prompt}"
-            for prompt in prompts
-        ],
+        "prompts": prompts,
+        "human_inputs": [f"human input for prompt {prompt}" for prompt in prompts],
     }
 
 
@@ -7169,8 +6964,6 @@ def test_node_destinations() -> None:
 
 
 def test_pydantic_none_state_update() -> None:
-    from pydantic import BaseModel
-
     class State(BaseModel):
         foo: Optional[str]
 
@@ -7182,8 +6975,6 @@ def test_pydantic_none_state_update() -> None:
 
 
 def test_pydantic_state_update_command() -> None:
-    from pydantic import BaseModel
-
     class State(BaseModel):
         foo: Optional[str]
 
@@ -7215,8 +7006,6 @@ def test_pydantic_state_update_command() -> None:
 
 
 def test_pydantic_state_mutation() -> None:
-    from pydantic import BaseModel, Field
-
     class Inner(BaseModel):
         a: int = 0
 
@@ -7249,8 +7038,6 @@ def test_pydantic_state_mutation() -> None:
 
 
 def test_pydantic_state_mutation_command() -> None:
-    from pydantic import BaseModel, Field
-
     class Inner(BaseModel):
         a: int = 0
 
@@ -7529,8 +7316,6 @@ def test_interrupt_subgraph_reenter_checkpointer_true(
 
 
 def test_empty_invoke() -> None:
-    from pydantic import BaseModel
-
     def reducer_merge_dicts(
         dict1: dict[Any, Any], dict2: dict[Any, Any]
     ) -> dict[Any, Any]:
@@ -7582,8 +7367,6 @@ def test_empty_invoke() -> None:
 def test_parallel_interrupts(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
-    from pydantic import BaseModel, Field
-
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     # --- CHILD GRAPH ---
@@ -7759,8 +7542,6 @@ def test_parallel_interrupts(
 def test_parallel_interrupts_double(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
-    from pydantic import BaseModel, Field
-
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     # --- CHILD GRAPH ---
@@ -8214,8 +7995,6 @@ def test_batch_update_as_input(
 
 
 def test_migration_graph(snapshot: SnapshotAssertion) -> None:
-    from pydantic import BaseModel
-
     class DummyState(BaseModel):
         pass_count: int = 0
 
