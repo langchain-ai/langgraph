@@ -31,6 +31,13 @@ REDIRECT_MAP = {
     "cloud/concepts/api.md": "concepts/langgraph_server.md",
     "cloud/concepts/cloud.md": "concepts/langgraph_cloud.md",
     "cloud/faq/studio.md": "concepts/langgraph_studio.md#studio-faqs",
+    # prebuit redirects
+    "how-tos/create-react-agent.ipynb": "agents/agents.md#basic-configuration",
+    "how-tos/create-react-agent-memory.ipynb": "agents/memory.md",
+    "how-tos/create-react-agent-system-prompt.ipynb": "agents/context.md#prompts",
+    "how-tos/create-react-agent-hitl.ipynb": "agents/human-in-the-loop.md",
+    "how-tos/create-react-agent-structured-output.ipynb": "agents/agents.md#structured-output",
+    "how-tos/create-react-agent-manage-message-history.ipynb": "agents/memory.md",
     # misc
     "prebuilt.md": "agents/prebuilt.md",
     "reference/prebuilt.md": "reference/agents.md"
