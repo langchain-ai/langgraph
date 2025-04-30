@@ -1,9 +1,12 @@
-export interface UIMessage {
+export interface UIMessage<
+  TName extends string = string,
+  TProps extends Record<string, unknown> = Record<string, unknown>,
+> {
   type: "ui";
 
   id: string;
-  name: string;
-  props: Record<string, unknown>;
+  name: TName;
+  props: TProps;
   metadata: {
     merge?: boolean;
     run_id?: string;

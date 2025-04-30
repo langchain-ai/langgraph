@@ -46,7 +46,7 @@ export const typedUi = <Decl extends Record<string, ElementType>>(
       metadata?: Record<string, unknown>;
     },
     options?: { message?: MessageLike; merge?: boolean },
-  ): UIMessage;
+  ): UIMessage<K, PropMap[K]>;
 
   function handlePush<K extends keyof PropMap & string>(
     message: {
@@ -56,7 +56,7 @@ export const typedUi = <Decl extends Record<string, ElementType>>(
       metadata?: Record<string, unknown>;
     },
     options: { message?: MessageLike; merge: true },
-  ): UIMessage;
+  ): UIMessage<K, Partial<PropMap[K]>>;
 
   function handlePush<K extends keyof PropMap & string>(
     message: {
@@ -66,8 +66,8 @@ export const typedUi = <Decl extends Record<string, ElementType>>(
       metadata?: Record<string, unknown>;
     },
     options?: { message?: MessageLike; merge?: boolean },
-  ): UIMessage {
-    const evt: UIMessage = {
+  ): UIMessage<K, PropMap[K] | Partial<PropMap[K]>> {
+    const evt: UIMessage<K, PropMap[K] | Partial<PropMap[K]>> = {
       type: "ui" as const,
       id: message?.id ?? uuidv4(),
       name: message?.name,
