@@ -74,6 +74,34 @@ agent = create_react_agent(
 
     The example above uses `ChatAnthropic`, which is already supported by `init_chat_model`. This pattern is shown to illustrate how to manually instantiate a model not available through init_chat_model.
 
+## Disable streaming
+
+If you want to disable streaming of the individual LLM tokens, you can do set `disable_streaming=True` when initializing the model:
+
+=== "`init_chat_model`"
+
+    ```python
+    from langchain.chat_models import init_chat_model
+
+    model = init_chat_model(
+        "anthropic:claude-3-7-sonnet-latest",
+        # highlight-next-line
+        disable_streaming=True
+    )
+    ```
+
+=== "`ChatModel`"
+
+    ```python
+    from langchain_anthropic import ChatAnthropic
+
+    model = ChatAnthropic(
+        model="claude-3-7-sonnet-latest",
+        # highlight-next-line
+        disable_streaming=True
+    )
+    ```
+
 ## Additional resources
 
 - [Model integration directory](https://python.langchain.com/docs/integrations/chat/)
