@@ -423,6 +423,8 @@ export class AssistantsClient extends BaseClient {
     metadata?: Metadata;
     limit?: number;
     offset?: number;
+    sortBy?: "assistant_id" | "graph_id" | "name" | "created_at" | "updated_at";
+    sortOrder?: "asc" | "desc";
   }): Promise<Assistant[]> {
     return this.fetch<Assistant[]>("/assistants/search", {
       method: "POST",
@@ -431,6 +433,8 @@ export class AssistantsClient extends BaseClient {
         metadata: query?.metadata ?? undefined,
         limit: query?.limit ?? 10,
         offset: query?.offset ?? 0,
+        sort_by: query?.sortBy ?? undefined,
+        sort_order: query?.sortOrder ?? undefined,
       },
     });
   }
