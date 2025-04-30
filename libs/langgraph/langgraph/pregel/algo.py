@@ -60,7 +60,6 @@ from langgraph.constants import (
     RESUME,
     RETURN,
     TAG_HIDDEN,
-    TASK_CACHE_NAMESPACE,
     TASKS,
     Send,
 )
@@ -73,6 +72,7 @@ from langgraph.pregel.read import INPUT_CACHE_KEY_TYPE, PregelNode
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
+    CacheKey,
     CachePolicy,
     PregelExecutableTask,
     PregelScratchpad,
@@ -561,23 +561,15 @@ def prepare_single_task(
         # create task id
         triggers: Sequence[str] = PUSH_TRIGGER
         checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
-        if call.cache:
-            task_id = task_id_func(
-                TASK_CACHE_NAMESPACE,
-                name,
-                call.cache.key(*call.input[0], **call.input[1]),
-                # TODO add truncated iso timestamp here for ttl
-            )
-        else:
-            task_id = task_id_func(
-                checkpoint_id_bytes,
-                checkpoint_ns,
-                str(step),
-                name,
-                PUSH,
-                task_path_str(task_path[1]),
-                str(task_path[2]),
-            )
+        task_id = task_id_func(
+            checkpoint_id_bytes,
+            checkpoint_ns,
+            str(step),
+            name,
+            PUSH,
+            task_path_str(task_path[1]),
+            str(task_path[2]),
+        )
         task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
         # we append True to the task path to indicate that a call is being
         # made, so we should not return interrupts from this task (responsibility lies with the parent)
@@ -638,7 +630,12 @@ def prepare_single_task(
                 ),
                 triggers,
                 call.retry,
-                call.cache,
+                CacheKey(
+                    xxh3_128_hexdigest(call.cache.key(*call.input[0], **call.input[1])),
+                    call.cache.ttl,
+                )
+                if call.cache
+                else None,
                 task_id,
                 task_path,
             )
@@ -672,21 +669,14 @@ def prepare_single_task(
             checkpoint_ns = (
                 f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
             )
-            if proc.cache_policy:
-                task_id = task_id_func(
-                    TASK_CACHE_NAMESPACE,
-                    packet.node,
-                    proc.cache_policy.key(packet.arg),
-                )
-            else:
-                task_id = task_id_func(
-                    checkpoint_id_bytes,
-                    checkpoint_ns,
-                    str(step),
-                    packet.node,
-                    PUSH,
-                    str(idx),
-                )
+            task_id = task_id_func(
+                checkpoint_id_bytes,
+                checkpoint_ns,
+                str(step),
+                packet.node,
+                PUSH,
+                str(idx),
+            )
         else:
             logger.warning(f"Ignoring invalid PUSH task path {task_path}")
             return
@@ -756,7 +746,12 @@ def prepare_single_task(
                 ),
                 triggers,
                 proc.retry_policy,
-                proc.cache_policy,
+                CacheKey(
+                    xxh3_128_hexdigest(proc.cache_policy.key(packet.arg)),
+                    proc.cache_policy.ttl,
+                )
+                if proc.cache_policy
+                else None,
                 task_id,
                 task_path,
                 writers=proc.flat_writers,
@@ -800,7 +795,6 @@ def prepare_single_task(
 
             # create task id
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
-            # TODO implement cache
             task_id = task_id_func(
                 checkpoint_id_bytes,
                 checkpoint_ns,
@@ -885,7 +879,12 @@ def prepare_single_task(
                         ),
                         triggers,
                         proc.retry_policy,
-                        None,
+                        CacheKey(
+                            xxh3_128_hexdigest(proc.cache_policy.key(val)),
+                            proc.cache_policy.ttl,
+                        )
+                        if proc.cache_policy
+                        else None,
                         task_id,
                         task_path[:3],
                         writers=proc.flat_writers,

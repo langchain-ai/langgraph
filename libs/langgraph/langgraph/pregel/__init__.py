@@ -36,6 +36,7 @@ from langchain_core.runnables.utils import (
 from pydantic import BaseModel
 from typing_extensions import Self
 
+from langgraph.cache.base import BaseCache
 from langgraph.channels.base import (
     BaseChannel,
 )
@@ -47,6 +48,7 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.constants import (
     CONF,
+    CONFIG_KEY_CACHE,
     CONFIG_KEY_CHECKPOINT_DURING,
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_NS,
@@ -495,6 +497,9 @@ class Pregel(PregelProtocol):
     store: BaseStore | None = None
     """Memory store to use for SharedValues. Defaults to None."""
 
+    cache: BaseCache | None = None
+    """Cache to use for storing node results. Defaults to None."""
+
     retry_policy: Sequence[RetryPolicy] | None = None
     """Retry policies to use when running tasks. Set to None to disable."""
 
@@ -525,6 +530,7 @@ class Pregel(PregelProtocol):
         debug: bool | None = None,
         checkpointer: BaseCheckpointSaver | None = None,
         store: BaseStore | None = None,
+        cache: BaseCache | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         config_type: type[Any] | None = None,
         input_model: type[BaseModel] | None = None,
@@ -545,6 +551,7 @@ class Pregel(PregelProtocol):
         self.debug = debug if debug is not None else get_debug()
         self.checkpointer = checkpointer
         self.store = store
+        self.cache = cache
         if isinstance(retry_policy, RetryPolicy):
             self.retry_policy: Sequence[RetryPolicy] = (retry_policy,)
         else:
@@ -2193,6 +2200,7 @@ class Pregel(PregelProtocol):
         All | Sequence[str],
         BaseCheckpointSaver | None,
         BaseStore | None,
+        BaseCache | None,
     ]:
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
@@ -2225,6 +2233,10 @@ class Pregel(PregelProtocol):
             store: BaseStore | None = config[CONF][CONFIG_KEY_STORE]
         else:
             store = self.store
+        if CONFIG_KEY_CACHE in config.get(CONF, {}):
+            cache: BaseCache | None = config[CONF][CONFIG_KEY_CACHE]
+        else:
+            cache = self.cache
         return (
             debug,
             set(stream_mode),
@@ -2233,6 +2245,7 @@ class Pregel(PregelProtocol):
             interrupt_after,
             checkpointer,
             store,
+            cache,
         )
 
     def stream(
@@ -2405,6 +2418,7 @@ class Pregel(PregelProtocol):
                 interrupt_after_,
                 checkpointer,
                 store,
+                cache,
             ) = self._defaults(
                 config,
                 stream_mode=stream_mode,
@@ -2436,6 +2450,7 @@ class Pregel(PregelProtocol):
                 stream=StreamProtocol(stream.put, stream_modes),
                 config=config,
                 store=store,
+                cache=cache,
                 checkpointer=checkpointer,
                 nodes=self.nodes,
                 specs=self.channels,
@@ -2494,11 +2509,13 @@ class Pregel(PregelProtocol):
                 # channels are guaranteed to be immutable for the duration of the step,
                 # with channel updates applied only at the transition between steps.
                 while loop.tick(input_keys=self.input_channels):
+                    loop.match_cached_writes()
                     for _ in runner.tick(
                         loop.tasks.values(),
                         timeout=self.step_timeout,
                         retry_policy=self.retry_policy,
                         get_waiter=get_waiter,
+                        match_cached_writes=loop.match_cached_writes,
                     ):
                         # emit output
                         yield from output()
@@ -2710,6 +2727,7 @@ class Pregel(PregelProtocol):
                 interrupt_after_,
                 checkpointer,
                 store,
+                cache,
             ) = self._defaults(
                 config,
                 stream_mode=stream_mode,
@@ -2743,6 +2761,7 @@ class Pregel(PregelProtocol):
                 stream=StreamProtocol(stream.put_nowait, stream_modes),
                 config=config,
                 store=store,
+                cache=cache,
                 checkpointer=checkpointer,
                 nodes=self.nodes,
                 specs=self.channels,
@@ -2792,11 +2811,13 @@ class Pregel(PregelProtocol):
                 # channels are guaranteed to be immutable for the duration of the step,
                 # with channel updates applied only at the transition between steps
                 while loop.tick(input_keys=self.input_channels):
+                    await loop.amatch_cached_writes()
                     async for _ in runner.atick(
                         loop.tasks.values(),
                         timeout=self.step_timeout,
                         retry_policy=self.retry_policy,
                         get_waiter=get_waiter,
+                        # TODO pass match_cached_writes
                     ):
                         # emit output
                         for o in output():

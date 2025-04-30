@@ -318,11 +318,13 @@ class entrypoint:
         self,
         checkpointer: Optional[BaseCheckpointSaver] = None,
         store: Optional[BaseStore] = None,
+        cache: Optional[CachePolicy] = None,
         config_schema: Optional[type[Any]] = None,
     ) -> None:
         """Initialize the entrypoint decorator."""
         self.checkpointer = checkpointer
         self.store = store
+        self.cache = cache
         self.config_schema = config_schema
 
     @dataclass(**_DC_KWARGS)
@@ -452,5 +454,6 @@ class entrypoint:
             stream_eager=True,
             checkpointer=self.checkpointer,
             store=self.store,
+            cache=self.cache,
             config_type=self.config_schema,
         )

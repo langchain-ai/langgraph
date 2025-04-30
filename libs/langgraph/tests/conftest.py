@@ -1,5 +1,7 @@
+import os
 import sys
-from collections.abc import AsyncIterator
+import tempfile
+from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from typing import Optional
 from uuid import UUID, uuid4
@@ -11,6 +13,8 @@ from psycopg import AsyncConnection, Connection
 from psycopg_pool import AsyncConnectionPool, ConnectionPool
 from pytest_mock import MockerFixture
 
+from langgraph.cache.base import BaseCache
+from langgraph.cache.file import FileCache
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.postgres import PostgresSaver, ShallowPostgresSaver
 from langgraph.checkpoint.postgres.aio import (
@@ -359,6 +363,20 @@ async def _store_postgres_aio_pool():
             DEFAULT_POSTGRES_URI, autocommit=True
         ) as conn:
             await conn.execute(f"DROP DATABASE {database}")
+
+
+@pytest.fixture(scope="function")
+def file_cache() -> Iterator[BaseCache]:
+    _, path = tempfile.mkstemp()
+    os.remove(path)
+    try:
+        yield FileCache(path=path)
+    finally:
+        # Cleanup the file
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 @pytest.fixture(scope="function")

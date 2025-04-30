@@ -134,6 +134,11 @@ class CachePolicy(NamedTuple, Generic[P]):
     """
 
     key: Callable[P, str | bytes] = default_cache_key
+    """Function to generate a cache key from the node's input.
+    Defaults to hashing the input with pickle."""
+
+    ttl: Optional[int] = None
+    """Time to live for the cache entry in seconds. If None, the entry never expires."""
 
 
 @dataclasses.dataclass(**_DC_KWARGS)
@@ -179,6 +184,15 @@ else:
     _T_DC_KWARGS = {"frozen": True}
 
 
+class CacheKey(NamedTuple):
+    """Cache key for a task."""
+
+    key: str
+    """Key for the cache entry."""
+    ttl: Optional[int]
+    """Time to live for the cache entry in seconds."""
+
+
 @dataclasses.dataclass(**_T_DC_KWARGS)
 class PregelExecutableTask:
     name: str
@@ -188,7 +202,7 @@ class PregelExecutableTask:
     config: RunnableConfig
     triggers: Sequence[str]
     retry_policy: Optional[Sequence[RetryPolicy]]
-    cache_policy: Optional[CachePolicy]
+    cache_key: Optional[CacheKey]
     id: str
     path: tuple[Union[str, int, tuple], ...]
     scheduled: bool = False

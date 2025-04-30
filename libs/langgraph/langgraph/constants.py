@@ -61,6 +61,8 @@ CONFIG_KEY_STREAM_WRITER = sys.intern("__pregel_stream_writer")
 # holds a `StreamWriter` for stream_mode=custom
 CONFIG_KEY_STORE = sys.intern("__pregel_store")
 # holds a `BaseStore` made available to managed values
+CONFIG_KEY_CACHE = sys.intern("__pregel_cache")
+# holds a `BaseCache` made available to subgraphs
 CONFIG_KEY_RESUMING = sys.intern("__pregel_resuming")
 # holds a boolean indicating if subgraphs should resume from a previous checkpoint
 CONFIG_KEY_TASK_ID = sys.intern("__pregel_task_id")
@@ -106,7 +108,6 @@ NULL_TASK_ID = sys.intern("00000000-0000-0000-0000-000000000000")
 # the task_id to use for writes that are not associated with a task
 CONFIG_KEY_RESUME_MAP = sys.intern("__pregel_resume_map")
 # holds a mapping of task ns -> resume value for resuming tasks
-TASK_CACHE_NAMESPACE = b"__pregel_task_cache"
 
 RESERVED = {
     TAG_HIDDEN,

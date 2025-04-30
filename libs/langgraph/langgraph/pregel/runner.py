@@ -33,7 +33,12 @@ from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.pregel.algo import Call
 from langgraph.pregel.executor import Submit
 from langgraph.pregel.retry import arun_with_retry, run_with_retry
-from langgraph.types import PregelExecutableTask, PregelScratchpad, RetryPolicy
+from langgraph.types import (
+    CachePolicy,
+    PregelExecutableTask,
+    PregelScratchpad,
+    RetryPolicy,
+)
 from langgraph.utils.future import chain_future
 
 F = TypeVar("F", concurrent.futures.Future, asyncio.Future)
@@ -137,6 +142,7 @@ class PregelRunner:
         timeout: Optional[float] = None,
         retry_policy: Optional[Sequence[RetryPolicy]] = None,
         get_waiter: Optional[Callable[[], concurrent.futures.Future[None]]] = None,
+        match_cached_writes: Optional[Callable[[], None]] = None,
     ) -> Iterator[None]:
         tasks = tuple(tasks)
         futures = FuturesDict(
@@ -160,6 +166,7 @@ class PregelRunner:
                             retry=retry_policy,
                             futures=weakref.ref(futures),
                             schedule_task=self.schedule_task,
+                            match_cached_writes=match_cached_writes,
                             submit=self.submit,
                             reraise=reraise,
                         ),
@@ -203,6 +210,7 @@ class PregelRunner:
                             retry=retry_policy,
                             futures=weakref.ref(futures),
                             schedule_task=self.schedule_task,
+                            match_cached_writes=match_cached_writes,
                             submit=self.submit,
                             reraise=reraise,
                         ),
@@ -515,6 +523,7 @@ def _call(
     input: Any,
     *,
     retry: Optional[Sequence[RetryPolicy]] = None,
+    cache: Optional[CachePolicy] = None,
     callbacks: Callbacks = None,
     futures: weakref.ref[FuturesDict],
     schedule_task: weakref.ref[
@@ -522,6 +531,7 @@ def _call(
             [PregelExecutableTask, int, Optional[Call]], Optional[PregelExecutableTask]
         ]
     ],
+    match_cached_writes: Optional[Callable[[], None]],
     submit: weakref.ref[Submit],
     reraise: bool,
 ) -> concurrent.futures.Future[Any]:
@@ -535,8 +545,10 @@ def _call(
     if next_task := schedule_task()(  # type: ignore[misc]
         task(),  # type: ignore[arg-type]
         scratchpad.call_counter(),
-        Call(func, input, retry=retry, callbacks=callbacks),
+        Call(func, input, retry=retry, cache=cache, callbacks=callbacks),
     ):
+        if match_cached_writes:
+            match_cached_writes()
         if fut := next(
             (
                 f
@@ -596,6 +608,7 @@ def _acall(
     input: Any,
     *,
     retry: Optional[Sequence[RetryPolicy]] = None,
+    cache: Optional[CachePolicy] = None,
     callbacks: Callbacks = None,
     # injected dependencies
     futures: weakref.ref[FuturesDict],
@@ -616,7 +629,7 @@ def _acall(
     if next_task := schedule_task()(  # type: ignore[misc]
         task(),  # type: ignore[arg-type]
         scratchpad.call_counter(),
-        Call(func, input, retry=retry, callbacks=callbacks),
+        Call(func, input, retry=retry, cache=cache, callbacks=callbacks),
     ):
         if fut := next(
             (

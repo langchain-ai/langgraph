@@ -254,23 +254,6 @@ class BaseCheckpointSaver(Generic[V]):
         """
         raise NotImplementedError
 
-    def get_writes(
-        self,
-        task_ids: Sequence[str],
-    ) -> dict[str, list[tuple[str, Any]]]:
-        """Fetch writes associated with the given task IDs.
-
-        Args:
-            task_ids (Sequence[str]): List of task IDs to fetch writes for.
-
-        Returns:
-            dict[str, list[tuple[str, Any]]]: Mapping from task ID to list of writes.
-
-        Raises:
-            NotImplementedError: Implement this method in your custom checkpoint saver.
-        """
-        raise NotImplementedError
-
     def list(
         self,
         config: Optional[RunnableConfig],
@@ -369,23 +352,6 @@ class BaseCheckpointSaver(Generic[V]):
 
         Returns:
             Optional[CheckpointTuple]: The requested checkpoint tuple, or None if not found.
-
-        Raises:
-            NotImplementedError: Implement this method in your custom checkpoint saver.
-        """
-        raise NotImplementedError
-
-    async def aget_writes(
-        self,
-        task_ids: Sequence[str],
-    ) -> dict[str, list[tuple[str, Any]]]:
-        """Asynchronously fetch writes associated with the given task IDs.
-
-        Args:
-            task_ids (Sequence[str]): List of task IDs to fetch writes for.
-
-        Returns:
-            dict[str, list[tuple[str, Any]]]: Mapping from task ID to list of writes.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.

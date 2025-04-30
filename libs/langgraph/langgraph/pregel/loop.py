@@ -27,6 +27,7 @@ from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 from typing_extensions import ParamSpec, Self
 
+from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import (
     EXCLUDED_METADATA_KEYS,
@@ -147,6 +148,7 @@ def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
 class PregelLoop(LoopProtocol):
     input: Optional[Any]
     input_model: Optional[type[BaseModel]]
+    cache: Optional[BaseCache[Sequence[tuple[str, Any]]]]
     checkpointer: Optional[BaseCheckpointSaver]
     nodes: Mapping[str, PregelNode]
     specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]]
@@ -206,6 +208,7 @@ class PregelLoop(LoopProtocol):
         stream: Optional[StreamProtocol],
         config: RunnableConfig,
         store: Optional[BaseStore],
+        cache: Optional[BaseCache],
         checkpointer: Optional[BaseCheckpointSaver],
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
@@ -230,6 +233,7 @@ class PregelLoop(LoopProtocol):
         self.input = input
         self.input_model = input_model
         self.checkpointer = checkpointer
+        self.cache = cache
         self.nodes = nodes
         self.specs = specs
         self.output_keys = output_keys
@@ -434,10 +438,7 @@ class PregelLoop(LoopProtocol):
             # save the new task
             self.tasks[pushed.id] = pushed
             # match any pending writes to the new task
-            if call.cache:
-                pass
-                # how to call async method here...
-            elif self.skip_done_tasks:
+            if self.skip_done_tasks:
                 self._match_writes({pushed.id: pushed})
             # return the new task, to be started if not run before
             return pushed
@@ -615,6 +616,12 @@ class PregelLoop(LoopProtocol):
                 self._output_writes(task.id, task.writes, cached=True)
 
         return True
+
+    def match_cached_writes(self) -> None:
+        raise NotImplementedError
+
+    async def amatch_cached_writes(self) -> None:
+        raise NotImplementedError
 
     # private
 
@@ -970,6 +977,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         stream: Optional[StreamProtocol],
         config: RunnableConfig,
         store: Optional[BaseStore],
+        cache: Optional[BaseCache],
         checkpointer: Optional[BaseCheckpointSaver],
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
@@ -990,6 +998,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             stream=stream,
             config=config,
             checkpointer=checkpointer,
+            cache=cache,
             store=store,
             nodes=nodes,
             specs=specs,
@@ -1039,6 +1048,30 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             return
 
         return self.submit(cast(WritableManagedValue, managed_value).update, values)
+
+    def match_cached_writes(self) -> None:
+        if self.cache is None:
+            return
+        if cached := {
+            t.cache_key.key: t
+            for t in self.tasks.values()
+            if t.cache_key and not t.writes
+        }:
+            for key, values in self.cache.get(cached.keys()).items():
+                cached[key].writes.extend(values)
+
+    def put_writes(self, task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
+        """Put writes for a task, to be read by the next tick."""
+        super().put_writes(task_id, writes)
+        if not writes or self.cache is None or not hasattr(self, "tasks"):
+            return
+        task = self.tasks.get(task_id)
+        if task is None or task.cache_key is None:
+            return
+        self.submit(
+            self.cache.set,
+            {task.cache_key.key: (task.writes, task.cache_key.ttl)},
+        )
 
     # context manager
 
@@ -1120,6 +1153,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         stream: Optional[StreamProtocol],
         config: RunnableConfig,
         store: Optional[BaseStore],
+        cache: Optional[BaseCache],
         checkpointer: Optional[BaseCheckpointSaver],
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
@@ -1140,6 +1174,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             stream=stream,
             config=config,
             checkpointer=checkpointer,
+            cache=cache,
             store=store,
             nodes=nodes,
             specs=specs,
@@ -1189,6 +1224,33 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             return
 
         return self.submit(cast(WritableManagedValue, managed_value).aupdate, values)
+
+    async def amatch_cached_writes(self) -> None:
+        if self.cache is None:
+            return
+        if cached := {
+            t.cache_key.key: t
+            for t in self.tasks.values()
+            if t.cache_key and not t.writes
+        }:
+            for key, values in (await self.cache.aget(cached.keys())).items():
+                cached[key].writes.extend(values)
+
+    def put_writes(self, task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
+        """Put writes for a task, to be read by the next tick."""
+        super().put_writes(task_id, writes)
+        if not writes or self.cache is None or not hasattr(self, "tasks"):
+            return
+        task = self.tasks.get(task_id)
+        if task is None or task.cache_key is None:
+            return
+        if writes[0][0] in (INTERRUPT, ERROR):
+            # only cache successful tasks
+            return
+        self.submit(
+            self.cache.aset,
+            {task.cache_key.key: (task.writes, task.cache_key.ttl)},
+        )
 
     # context manager
 
