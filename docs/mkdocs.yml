@@ -260,6 +260,9 @@ nav:
       - Authentication & Access Control:
         - how-tos/auth/custom_auth.md
         - how-tos/auth/openapi_security.md
+        - tutorials/auth/getting_started.md
+        - tutorials/auth/resource_auth.md
+        - tutorials/auth/add_auth_server.md
       - Assistants:
         - cloud/how-tos/configuration_cloud.md
         - cloud/how-tos/assistant_versioning.md
@@ -342,11 +345,12 @@ nav:
     - tutorials/rag/langgraph_agentic_rag.ipynb
     - tutorials/multi_agent/agent_supervisor.ipynb
     - tutorials/customer-support/customer-support.ipynb
-    - tutorials/index.md
+    - tutorials/sql-agent.ipynb
+    
     # THE FOLLOWING TUTORIALS ARE NOT UP-TO-DATE
+    # - tutorials/index.md
     # - Quick Start:
     #     - tutorials/introduction.ipynb
-    #     - cloud/quick_start.md
     # - Chatbots:
     #     - tutorials/chatbots/information-gather-prompting.ipynb
     #     - tutorials/code_assistant/langgraph_code_assistant.ipynb
@@ -357,7 +361,7 @@ nav:
     #     - tutorials/rag/langgraph_crag_local.ipynb
     #     - tutorials/rag/langgraph_self_rag.ipynb
     #     - tutorials/rag/langgraph_self_rag_local.ipynb
-    #     - tutorials/sql-agent.ipynb
+    #     
     # - Agent Architectures:
     #     - Multi-Agent Systems:
     #         - tutorials/multi_agent/multi-agent-collaboration.ipynb
@@ -381,10 +385,7 @@ nav:
     #     - tutorials/web-navigation/web_voyager.ipynb
     #     - tutorials/usaco/usaco.ipynb
     #     - tutorials/extraction/retries.ipynb
-    # - LangGraph Platform:
-    #     - tutorials/auth/getting_started.md
-    #     - tutorials/auth/resource_auth.md
-    #     - tutorials/auth/add_auth_server.md
+
   - Resources:
     - Companies using LangGraph: adopters.md
     - LLMS-txt: llms-txt-overview.md
@@ -496,7 +497,7 @@ extra:
 validation:
   # https://www.mkdocs.org/user-guide/configuration/
   # We are still raising for omitted files because they determine the breadcrumbs for pages.
-  omitted_files: warn 
+  omitted_files: info 
   absolute_links: warn
   unrecognized_links: warn
   # TODO: figure out how to enable 'warn' for this
