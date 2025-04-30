@@ -271,6 +271,13 @@ By default, the agent will catch all exceptions raised during tool calls and wil
 
 See [API reference][langgraph.prebuilt.tool_node.ToolNode] for more information on different tool error handling options.
 
+## Working with memory
+
+LangGraph allows access to short-term and long-term memory from tools. See [Memory](./memory.md) guide for more information on:
+
+* how to [read](./memory.md#read-short-term) from and [write](./memory.md#write-short-term) to **short-term** memory
+* how to [read](./memory.md#read-long-term) from and [write](./memory.md#write-long-term) to **long-term** memory
+
 ## Prebuilt tools
 
 LangChain supports a wide range of prebuilt tool integrations for interacting with APIs, databases, file systems, web data, and more. These tools extend the functionality of agents and enable rapid development.

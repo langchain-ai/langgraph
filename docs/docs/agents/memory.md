@@ -149,6 +149,104 @@ agent = create_react_agent(
 
 To learn more about using `pre_model_hook` for managing message history, see this [how-to guide](../how-tos/create-react-agent-manage-message-history.ipynb)
 
+### Read in tools { #read-short-term }
+
+LangGraph allows agent to access its short-term memory (state) inside the tools.
+
+```python
+from typing import Annotated
+from langgraph.prebuilt import InjectedState, create_react_agent
+
+class CustomState(AgentState):
+    # highlight-next-line
+    user_id: str
+
+def get_user_info(
+    # highlight-next-line
+    state: Annotated[CustomState, InjectedState]
+) -> str:
+    """Look up user info."""
+    # highlight-next-line
+    user_id = state["user_id"]
+    return "User is John Smith" if user_id == "user_123" else "Unknown user"
+
+agent = create_react_agent(
+    model="anthropic:claude-3-7-sonnet-latest",
+    tools=[get_user_info],
+    # highlight-next-line
+    state_schema=CustomState,
+)
+
+agent.invoke({
+    "messages": "look up user information",
+    # highlight-next-line
+    "user_id": "user_123"
+})
+```
+
+See the [Context](./context.md#__tabbed_2_2) guide for more information.
+
+### Write from tools { #write-short-term }
+
+To modify the agent's short-term memory (state) during execution, you can return state updates directly from the tools. This is useful for persisting intermediate results or making information accessible to subsequent tools or prompts.
+
+```python
+from typing import Annotated
+from langchain_core.tools import InjectedToolCallId
+from langchain_core.runnables import RunnableConfig
+from langchain_core.messages import ToolMessage
+from langgraph.prebuilt import InjectedState, create_react_agent
+from langgraph.prebuilt.chat_agent_executor import AgentState
+from langgraph.types import Command
+
+class CustomState(AgentState):
+    # highlight-next-line
+    user_name: str
+
+def update_user_info(
+    tool_call_id: Annotated[str, InjectedToolCallId],
+    config: RunnableConfig
+) -> Command:
+    """Look up and update user info."""
+    user_id = config["configurable"].get("user_id")
+    name = "John Smith" if user_id == "user_123" else "Unknown user"
+    # highlight-next-line
+    return Command(update={
+        # highlight-next-line
+        "user_name": name,
+        # update the message history
+        "messages": [
+            ToolMessage(
+                "Successfully looked up user information",
+                tool_call_id=tool_call_id
+            )
+        ]
+    })
+
+def greet(
+    # highlight-next-line
+    state: Annotated[CustomState, InjectedState]
+) -> str:
+    """Use this to greet the user once you found their info."""
+    user_name = state["user_name"]
+    return f"Hello {user_name}!"
+
+agent = create_react_agent(
+    model="anthropic:claude-3-7-sonnet-latest",
+    tools=[get_user_info, greet],
+    # highlight-next-line
+    state_schema=CustomState
+)
+
+agent.invoke(
+    {"messages": [{"role": "user", "content": "greet the user"}]},
+    # highlight-next-line
+    config={"configurable": {"user_id": "user_123"}}
+)
+```
+
+For more details, see [how to update state from tools](../how-tos/update-state-from-tools.ipynb).
+
 ## Long-term memory
 
 Use long-term memory to store user-specific or application-specific data across conversations. This is useful for applications like chatbots, where you want to remember user preferences or other information.
@@ -158,9 +256,10 @@ To use long-term memory, you need to:
 1. [Configure a store](../how-tos/cross-thread-persistence.ipynb) to persist data across invocations.
 2. Use the [`get_store`][langgraph.config.get_store] function to access the store from within tools or prompts.
 
-### Reading
+### Read { #read-long-term }
 
 ```python title="A tool the agent can use to look up user information"
+from langchain_core.runnables import RunnableConfig
 from langgraph.config import get_store
 from langgraph.prebuilt import create_react_agent
 from langgraph.store.memory import InMemoryStore
@@ -183,7 +282,7 @@ def get_user_info(config: RunnableConfig) -> str:
     # Same as that provided to `create_react_agent`
     # highlight-next-line
     store = get_store() # (6)!
-    user_id = config.get("configurable", {}).get("user_id")
+    user_id = config["configurable"].get("user_id")
     # highlight-next-line
     user_info = store.get(("users",), user_id) # (7)!
     return str(user_info.value) if user_info else "Unknown user"
@@ -212,7 +311,7 @@ agent.invoke(
 7. The `get` method is used to retrieve data from the store. The first argument is the namespace, and the second argument is the key. This will return a `StoreValue` object, which contains the value and metadata about the value.
 8. The `store` is passed to the agent. This enables the agent to access the store when running tools. You can also use the `get_store` function to access the store from anywhere in your code.
 
-### Writing
+### Write { #write-long-term }
 
 ```python title="Example of a tool that updates user information"
 from typing_extensions import TypedDict
@@ -231,7 +330,7 @@ def save_user_info(user_info: UserInfo, config: RunnableConfig) -> str: # (3)!
     # Same as that provided to `create_react_agent`
     # highlight-next-line
     store = get_store() # (4)!
-    user_id = config.get("configurable", {}).get("user_id")
+    user_id = config["configurable"].get("user_id")
     # highlight-next-line
     store.put(("users",), user_id, user_info) # (5)!
     return "Successfully saved user info."
@@ -260,6 +359,10 @@ store.get(("users",), "user_123").value
 4. The `get_store` function is used to access the store. You can call it from anywhere in your code, including tools and prompts. This function returns the store that was passed to the agent when it was created.
 5. The `put` method is used to store data in the store. The first argument is the namespace, and the second argument is the key. This will store the user information in the store.
 6. The `user_id` is passed in the config. This is used to identify the user whose information is being updated.
+
+### Semantic search
+
+LangGraph also allows you to do [search](https://langchain-ai.github.io/langgraph/how-tos/memory/semantic-search/#using-in-create-react-agent) for items in long-term memory by semantic similarity.
 
 ### Prebuilt memory tools
 
