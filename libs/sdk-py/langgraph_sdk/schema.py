@@ -95,7 +95,9 @@ Action to take when cancelling the run.
 - "rollback": Cancel the run. Then delete the run and associated checkpoints.
 """
 
-AssistantSortBy = Literal["assistant_id", "graph_id", "name", "created_at", "updated_at"]
+AssistantSortBy = Literal[
+    "assistant_id", "graph_id", "name", "created_at", "updated_at"
+]
 """
 The field to sort by.
 """
@@ -109,6 +111,8 @@ SortOrder = Literal["asc", "desc"]
 """
 The order to sort by.
 """
+
+
 class Config(TypedDict, total=False):
     """Configuration options for a call."""
 
