@@ -411,7 +411,7 @@ store.get(("users",), "user_123").value
 
 ### Semantic search
 
-LangGraph also allows you to do [search](https://langchain-ai.github.io/langgraph/how-tos/memory/semantic-search/#using-in-create-react-agent) for items in long-term memory by semantic similarity.
+LangGraph also allows you to [search](https://langchain-ai.github.io/langgraph/how-tos/memory/semantic-search/#using-in-create-react-agent) for items in long-term memory by semantic similarity.
 
 ### Prebuilt memory tools
 

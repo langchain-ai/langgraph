@@ -151,13 +151,13 @@ See the below guide for how to integrate with other frameworks using the [Functi
 
 - [How to integrate LangGraph (functional API) with AutoGen, CrewAI, and other frameworks](autogen-integration-functional.ipynb)
 
-### Prebuilt ReAct Agent
+### Prebuilt Agent
 
-The LangGraph [prebuilt ReAct agent][langgraph.prebuilt.chat_agent_executor.create_react_agent] is pre-built implementation of a [tool calling agent](../concepts/agentic_concepts.md#tool-calling-agent). 
+LangGraph comes with a [prebuilt][langgraph.prebuilt.chat_agent_executor.create_react_agent] implementation of a [tool calling agent](../concepts/agentic_concepts.md#tool-calling-agent). See [Agents](../agents/overview.md) guides for more information.
 
-One of the big benefits of LangGraph is that you can easily create your own agent architectures. So while it's fine to start here to build an agent quickly, we would strongly recommend learning how to build your own agent so that you can take full advantage of LangGraph.
+!!! tip
 
-See [Agents](../agents/overview.md) guides for more information about how use the prebuilt agent.
+    One of the big benefits of LangGraph is that you can easily create your own agent architectures. So while it's fine to start here to build an agent quickly, we would strongly recommend learning how to build your own agent so that you can take full advantage of LangGraph.
 
 Interested in further customizing the ReAct agent? This guide provides an
 overview of its underlying implementation to help you customize for your own needs:
