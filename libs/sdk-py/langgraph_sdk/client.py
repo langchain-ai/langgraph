@@ -1381,6 +1381,7 @@ class RunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
+        checkpoint_during: Optional[bool] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         feedback_keys: Optional[Sequence[str]] = None,
@@ -1404,6 +1405,7 @@ class RunsClient:
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint_during: Optional[bool] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         feedback_keys: Optional[Sequence[str]] = None,
@@ -1428,6 +1430,7 @@ class RunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
+        checkpoint_during: Optional[bool] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         feedback_keys: Optional[Sequence[str]] = None,
@@ -1453,6 +1456,7 @@ class RunsClient:
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             checkpoint: The checkpoint to resume from.
+            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             feedback_keys: Feedback keys to assign to run.
@@ -1512,6 +1516,7 @@ class RunsClient:
             "webhook": webhook,
             "checkpoint": checkpoint,
             "checkpoint_id": checkpoint_id,
+            "checkpoint_during": checkpoint_during,
             "multitask_strategy": multitask_strategy,
             "if_not_exists": if_not_exists,
             "on_disconnect": on_disconnect,
@@ -1541,6 +1546,7 @@ class RunsClient:
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
+        checkpoint_during: Optional[bool] = None,
         config: Optional[Config] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
@@ -1565,6 +1571,7 @@ class RunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
+        checkpoint_during: Optional[bool] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
@@ -1587,6 +1594,7 @@ class RunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
+        checkpoint_during: Optional[bool] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
@@ -1610,6 +1618,7 @@ class RunsClient:
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             checkpoint: The checkpoint to resume from.
+            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
@@ -1705,6 +1714,7 @@ class RunsClient:
             "webhook": webhook,
             "checkpoint": checkpoint,
             "checkpoint_id": checkpoint_id,
+            "checkpoint_during": checkpoint_during,
             "multitask_strategy": multitask_strategy,
             "if_not_exists": if_not_exists,
             "on_completion": on_completion,
@@ -1737,6 +1747,7 @@ class RunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
+        checkpoint_during: Optional[bool] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
@@ -1758,6 +1769,7 @@ class RunsClient:
         command: Optional[Command] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint_during: Optional[bool] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
@@ -1780,6 +1792,7 @@ class RunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
+        checkpoint_during: Optional[bool] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
@@ -1803,6 +1816,7 @@ class RunsClient:
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             checkpoint: The checkpoint to resume from.
+            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
@@ -1879,6 +1893,7 @@ class RunsClient:
             "checkpoint": checkpoint,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "checkpoint_during": checkpoint_during,
             "if_not_exists": if_not_exists,
             "on_disconnect": on_disconnect,
             "on_completion": on_completion,
@@ -2129,6 +2144,7 @@ class CronClient:
         input: Optional[dict] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint_during: Optional[bool] = None,
         interrupt_before: Optional[Union[All, list[str]]] = None,
         interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
@@ -2145,6 +2161,7 @@ class CronClient:
             input: The input to the graph.
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
+            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
 
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
@@ -2179,6 +2196,7 @@ class CronClient:
             "config": config,
             "metadata": metadata,
             "assistant_id": assistant_id,
+            "checkpoint_during": checkpoint_during,
             "interrupt_before": interrupt_before,
             "interrupt_after": interrupt_after,
             "webhook": webhook,
@@ -2198,6 +2216,7 @@ class CronClient:
         input: Optional[dict] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint_during: Optional[bool] = None,
         interrupt_before: Optional[Union[All, list[str]]] = None,
         interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
@@ -2213,6 +2232,7 @@ class CronClient:
             input: The input to the graph.
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
+            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
@@ -2244,6 +2264,7 @@ class CronClient:
             "config": config,
             "metadata": metadata,
             "assistant_id": assistant_id,
+            "checkpoint_during": checkpoint_during,
             "interrupt_before": interrupt_before,
             "interrupt_after": interrupt_after,
             "webhook": webhook,
@@ -3817,6 +3838,7 @@ class SyncRunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
+        checkpoint_during: Optional[bool] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         feedback_keys: Optional[Sequence[str]] = None,
@@ -3840,6 +3862,7 @@ class SyncRunsClient:
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint_during: Optional[bool] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         feedback_keys: Optional[Sequence[str]] = None,
@@ -3864,6 +3887,7 @@ class SyncRunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
+        checkpoint_during: Optional[bool] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         feedback_keys: Optional[Sequence[str]] = None,
@@ -3889,6 +3913,7 @@ class SyncRunsClient:
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             checkpoint: The checkpoint to resume from.
+            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             feedback_keys: Feedback keys to assign to run.
@@ -3949,6 +3974,7 @@ class SyncRunsClient:
             "webhook": webhook,
             "checkpoint": checkpoint,
             "checkpoint_id": checkpoint_id,
+            "checkpoint_during": checkpoint_during,
             "multitask_strategy": multitask_strategy,
             "if_not_exists": if_not_exists,
             "on_disconnect": on_disconnect,
@@ -3979,6 +4005,7 @@ class SyncRunsClient:
         stream_subgraphs: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint_during: Optional[bool] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
@@ -4002,6 +4029,7 @@ class SyncRunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
+        checkpoint_during: Optional[bool] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
@@ -4024,6 +4052,7 @@ class SyncRunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
+        checkpoint_during: Optional[bool] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
@@ -4047,6 +4076,7 @@ class SyncRunsClient:
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             checkpoint: The checkpoint to resume from.
+            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
@@ -4142,6 +4172,7 @@ class SyncRunsClient:
             "webhook": webhook,
             "checkpoint": checkpoint,
             "checkpoint_id": checkpoint_id,
+            "checkpoint_during": checkpoint_during,
             "multitask_strategy": multitask_strategy,
             "if_not_exists": if_not_exists,
             "on_completion": on_completion,
@@ -4178,6 +4209,7 @@ class SyncRunsClient:
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
+        checkpoint_during: Optional[bool] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
@@ -4198,6 +4230,7 @@ class SyncRunsClient:
         command: Optional[Command] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint_during: Optional[bool] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         webhook: Optional[str] = None,
@@ -4217,6 +4250,7 @@ class SyncRunsClient:
         command: Optional[Command] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint_during: Optional[bool] = None,
         checkpoint: Optional[Checkpoint] = None,
         checkpoint_id: Optional[str] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
@@ -4241,6 +4275,7 @@ class SyncRunsClient:
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             checkpoint: The checkpoint to resume from.
+            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
@@ -4319,6 +4354,7 @@ class SyncRunsClient:
             "multitask_strategy": multitask_strategy,
             "if_not_exists": if_not_exists,
             "on_disconnect": on_disconnect,
+            "checkpoint_during": checkpoint_during,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
         }
@@ -4550,6 +4586,7 @@ class SyncCronClient:
         schedule: str,
         input: Optional[dict] = None,
         metadata: Optional[dict] = None,
+        checkpoint_during: Optional[bool] = None,
         config: Optional[Config] = None,
         interrupt_before: Optional[Union[All, list[str]]] = None,
         interrupt_after: Optional[Union[All, list[str]]] = None,
@@ -4567,10 +4604,9 @@ class SyncCronClient:
             input: The input to the graph.
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
+            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
-
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
-
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
@@ -4603,10 +4639,10 @@ class SyncCronClient:
             "assistant_id": assistant_id,
             "interrupt_before": interrupt_before,
             "interrupt_after": interrupt_after,
+            "checkpoint_during": checkpoint_during,
             "webhook": webhook,
+            "multitask_strategy": multitask_strategy,
         }
-        if multitask_strategy:
-            payload["multitask_strategy"] = multitask_strategy
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.post(
             f"/threads/{thread_id}/runs/crons", json=payload, headers=headers
@@ -4620,6 +4656,7 @@ class SyncCronClient:
         input: Optional[dict] = None,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
+        checkpoint_during: Optional[bool] = None,
         interrupt_before: Optional[Union[All, list[str]]] = None,
         interrupt_after: Optional[Union[All, list[str]]] = None,
         webhook: Optional[str] = None,
@@ -4635,6 +4672,7 @@ class SyncCronClient:
             input: The input to the graph.
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
+            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
@@ -4653,6 +4691,7 @@ class SyncCronClient:
                 input={"messages": [{"role": "user", "content": "hello!"}]},
                 metadata={"name":"my_run"},
                 config={"configurable": {"model_name": "openai"}},
+                checkpoint_during=True,
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 webhook="https://my.fake.webhook.com",
@@ -4669,9 +4708,9 @@ class SyncCronClient:
             "interrupt_before": interrupt_before,
             "interrupt_after": interrupt_after,
             "webhook": webhook,
+            "checkpoint_during": checkpoint_during,
+            "multitask_strategy": multitask_strategy,
         }
-        if multitask_strategy:
-            payload["multitask_strategy"] = multitask_strategy
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.post("/runs/crons", json=payload, headers=headers)
 
