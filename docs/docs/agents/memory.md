@@ -151,7 +151,40 @@ To learn more about using `pre_model_hook` for managing message history, see thi
 
 ### Read in tools { #read-short-term }
 
-LangGraph allows agent to access its short-term memory (state) inside the tools. See the [Context](./context.md#__tabbed_2_2) guide for more information.
+LangGraph allows agent to access its short-term memory (state) inside the tools.
+
+```python
+from typing import Annotated
+from langgraph.prebuilt import InjectedState, create_react_agent
+
+class CustomState(AgentState):
+    # highlight-next-line
+    user_id: str
+
+def get_user_info(
+    # highlight-next-line
+    state: Annotated[CustomState, InjectedState]
+) -> str:
+    """Look up user info."""
+    # highlight-next-line
+    user_id = state["user_id"]
+    return "User is John Smith" if user_id == "user_123" else "Unknown user"
+
+agent = create_react_agent(
+    model="anthropic:claude-3-7-sonnet-latest",
+    tools=[get_user_info],
+    # highlight-next-line
+    state_schema=CustomState,
+)
+
+agent.invoke({
+    "messages": "look up user information",
+    # highlight-next-line
+    "user_id": "user_123"
+})
+```
+
+See the [Context](./context.md#__tabbed_2_2) guide for more information.
 
 ### Write from tools { #write-short-term }
 
