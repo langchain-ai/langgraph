@@ -97,7 +97,7 @@ When the agent is invoked the second time with the same `thread_id`, the origina
 Long conversations can exceed the LLM's context window. Common solutions are:
 
 * [Summarization](#summarize-message-history): Maintain a running summary of the conversation
-* **trimming**: remove first or last N messages in the history
+* [Trimming](#trim-message-history): Remove first or last N messages in the history
 
 This allows the agent to keep track of the conversation without exceeding the LLM's context window.
 
