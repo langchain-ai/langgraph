@@ -218,6 +218,7 @@ export class CronsClient extends BaseClient {
       webhook: payload?.webhook,
       multitask_strategy: payload?.multitaskStrategy,
       if_not_exists: payload?.ifNotExists,
+      checkpoint_during: payload?.checkpointDuring,
     };
     return this.fetch<CronCreateForThreadResponse>(
       `/threads/${threadId}/runs/crons`,
@@ -249,6 +250,7 @@ export class CronsClient extends BaseClient {
       webhook: payload?.webhook,
       multitask_strategy: payload?.multitaskStrategy,
       if_not_exists: payload?.ifNotExists,
+      checkpoint_during: payload?.checkpointDuring,
     };
     return this.fetch<CronCreateResponse>(`/runs/crons`, {
       method: "POST",
@@ -849,6 +851,7 @@ export class RunsClient<
       on_disconnect: payload?.onDisconnect,
       after_seconds: payload?.afterSeconds,
       if_not_exists: payload?.ifNotExists,
+      checkpoint_during: payload?.checkpointDuring,
     };
 
     const endpoint =
@@ -900,6 +903,7 @@ export class RunsClient<
       multitask_strategy: payload?.multitaskStrategy,
       after_seconds: payload?.afterSeconds,
       if_not_exists: payload?.ifNotExists,
+      checkpoint_during: payload?.checkpointDuring,
     };
     return this.fetch<Run>(`/threads/${threadId}/runs`, {
       method: "POST",
@@ -972,6 +976,7 @@ export class RunsClient<
       on_disconnect: payload?.onDisconnect,
       after_seconds: payload?.afterSeconds,
       if_not_exists: payload?.ifNotExists,
+      checkpoint_during: payload?.checkpointDuring,
     };
     const endpoint =
       threadId == null ? `/runs/wait` : `/threads/${threadId}/runs/wait`;
