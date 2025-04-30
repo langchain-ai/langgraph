@@ -14,8 +14,10 @@ EMPTY_SEQ: tuple[str, ...] = tuple()
 MISSING = object()
 
 # --- Public constants ---
-TAG_NOSTREAM = sys.intern("langsmith:nostream")
+TAG_NOSTREAM = sys.intern("nostream")
 """Tag to disable streaming for a chat model."""
+TAG_NOSTREAM_ALT = sys.intern("langsmith:nostream")
+"""Tag to disable streaming for a chat model. (Deprecated in favour of "nostream")"""
 TAG_HIDDEN = sys.intern("langsmith:hidden")
 """Tag to hide a node/edge from certain tracing/streaming environments."""
 START = sys.intern("__start__")
