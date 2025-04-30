@@ -6351,9 +6351,7 @@ def test_double_interrupt_subgraph(
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_multi_resume(
-    request: pytest.FixtureRequest, checkpointer_name: str
-) -> None:
+def test_multi_resume(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     class ChildState(TypedDict):
@@ -6362,11 +6360,11 @@ def test_multi_resume(
         human_inputs: list[str]
 
     def get_human_input(state: ChildState):
-        human_input = interrupt(state['prompt'])
+        human_input = interrupt(state["prompt"])
 
         return {
-            'human_input': human_input,
-            'human_inputs': [human_input],
+            "human_input": human_input,
+            "human_inputs": [human_input],
         }
 
     child_graph = (
@@ -6385,13 +6383,13 @@ def test_multi_resume(
         return [
             Send(
                 "child_graph",
-                {'prompt': prompt},
+                {"prompt": prompt},
             )
-            for prompt in state['prompts']
+            for prompt in state["prompts"]
         ]
 
     def cleanup(state: ParentState):
-        assert len(state['human_inputs']) == len(state["prompts"])
+        assert len(state["human_inputs"]) == len(state["prompts"])
 
     parent_graph = (
         StateGraph(ParentState)
@@ -6404,21 +6402,19 @@ def test_multi_resume(
     )
 
     thread_config: RunnableConfig = {
-        'configurable': {
-            'thread_id': uuid.uuid4(),
+        "configurable": {
+            "thread_id": uuid.uuid4(),
         },
     }
 
-    prompts = ['a', 'b', 'c', 'd', 'e']
+    prompts = ["a", "b", "c", "d", "e"]
 
     events = parent_graph.invoke(
-        {'prompts': prompts},
-        thread_config,
-        stream_mode='values'
+        {"prompts": prompts}, thread_config, stream_mode="values"
     )
 
-    assert len(events['__interrupt__']) == len(prompts)
-    interrupt_values = {i.value for i in events['__interrupt__']}
+    assert len(events["__interrupt__"]) == len(prompts)
+    interrupt_values = {i.value for i in events["__interrupt__"]}
     assert interrupt_values == set(prompts)
 
     resume_map: dict[str, str] = {
@@ -6428,11 +6424,8 @@ def test_multi_resume(
 
     result = parent_graph.invoke(Command(resume=resume_map), thread_config)
     assert result == {
-        'prompts': prompts,
-        'human_inputs': [
-            f"human input for prompt {prompt}"
-            for prompt in prompts
-        ],
+        "prompts": prompts,
+        "human_inputs": [f"human input for prompt {prompt}" for prompt in prompts],
     }
 
 

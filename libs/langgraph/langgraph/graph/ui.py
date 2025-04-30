@@ -1,4 +1,4 @@
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Optional, Union, cast
 from uuid import uuid4
 
 from langchain_core.messages import AnyMessage
@@ -194,7 +194,7 @@ def ui_message_reducer(
             else:
                 ids_to_remove.discard(msg_id)
 
-                if msg.get("metadata", {}).get("merge", False):
+                if cast(UIMessage, msg).get("metadata", {}).get("merge", False):
                     prev_msg = merged[existing_idx]
                     msg = msg.copy()
                     msg["props"] = {**prev_msg["props"], **msg["props"]}
