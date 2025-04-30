@@ -104,6 +104,41 @@ To disable streaming of the individual LLM tokens, set `disable_streaming=True` 
 
 Refer to the [API reference](https://python.langchain.com/api_reference/core/language_models/langchain_core.language_models.chat_models.BaseChatModel.html#langchain_core.language_models.chat_models.BaseChatModel.disable_streaming) for more information on `disable_streaming`
 
+## Adding model fallbacks
+
+You can add a fallback to a different model or a different LLM provider using `model.with_fallbacks([...])`:
+
+=== "`init_chat_model`"
+
+    ```python
+    from langchain.chat_models import init_chat_model
+
+    model_with_fallbacks = (
+        init_chat_model("anthropic:claude-3-5-haiku-latest")
+        # highlight-next-line
+        .with_fallbacks([
+            init_chat_model("openai:gpt-4.1-mini"),
+        ])
+    )
+    ```
+
+=== "`ChatModel`"
+
+    ```python
+    from langchain_anthropic import ChatAnthropic
+    from langchain_openai import ChatOpenAI
+
+    model_with_fallbacks = (
+        ChatAnthropic(model="claude-3-5-haiku-latest")
+        # highlight-next-line
+        .with_fallbacks([
+            ChatOpenAI(model="gpt-4.1-mini"),
+        ])
+    )
+    ```
+
+See this [guide](https://python.langchain.com/docs/how_to/fallbacks/#fallback-to-better-model) for more information on model fallbacks.
+
 ## Additional resources
 
 - [Model integration directory](https://python.langchain.com/docs/integrations/chat/)
