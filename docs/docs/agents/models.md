@@ -76,7 +76,7 @@ agent = create_react_agent(
 
 ## Adding model fallbacks
 
-In case of errors from LLM providers, you can add a fallback to a different model or a different LLM provider using `model.with_fallbacks([...])`:
+You can add a fallback to a different model or a different LLM provider using `model.with_fallbacks([...])`:
 
 === "`init_chat_model`"
 
@@ -106,6 +106,8 @@ In case of errors from LLM providers, you can add a fallback to a different mode
         ])
     )
     ```
+
+See this [guide](https://python.langchain.com/docs/how_to/fallbacks/#fallback-to-better-model) for more information on model fallbacks.
 
 ## Additional resources
 
