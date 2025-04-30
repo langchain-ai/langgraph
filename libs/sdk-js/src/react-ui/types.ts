@@ -5,6 +5,7 @@ export interface UIMessage {
   name: string;
   props: Record<string, unknown>;
   metadata: {
+    merge?: boolean;
     run_id?: string;
     name?: string;
     tags?: string[];
@@ -16,6 +17,20 @@ export interface UIMessage {
 export interface RemoveUIMessage {
   type: "remove-ui";
   id: string;
+}
+
+export function isUIMessage(message: unknown): message is UIMessage {
+  if (typeof message !== "object" || message == null) return false;
+  if (!("type" in message)) return false;
+  return message.type === "ui";
+}
+
+export function isRemoveUIMessage(
+  message: unknown,
+): message is RemoveUIMessage {
+  if (typeof message !== "object" || message == null) return false;
+  if (!("type" in message)) return false;
+  return message.type === "remove-ui";
 }
 
 export function uiMessageReducer(
@@ -33,7 +48,9 @@ export function uiMessageReducer(
 
     const index = state.findIndex((ui) => ui.id === event.id);
     if (index !== -1) {
-      newState[index] = event;
+      newState[index] = event.metadata.merge
+        ? { ...event, props: { ...state[index].props, ...event.props } }
+        : event;
     } else {
       newState.push(event);
     }
