@@ -74,6 +74,41 @@ agent = create_react_agent(
 
     The example above uses `ChatAnthropic`, which is already supported by `init_chat_model`. This pattern is shown to illustrate how to manually instantiate a model not available through init_chat_model.
 
+## Adding model fallbacks
+
+You can add a fallback to a different model or a different LLM provider using `model.with_fallbacks([...])`:
+
+=== "`init_chat_model`"
+
+    ```python
+    from langchain.chat_models import init_chat_model
+
+    model_with_fallbacks = (
+        init_chat_model("anthropic:claude-3-5-haiku-latest")
+        # highlight-next-line
+        .with_fallbacks([
+            init_chat_model("openai:gpt-4.1-mini"),
+        ])
+    )
+    ```
+
+=== "`ChatModel`"
+
+    ```python
+    from langchain_anthropic import ChatAnthropic
+    from langchain_openai import ChatOpenAI
+
+    model_with_fallbacks = (
+        ChatAnthropic(model="claude-3-5-haiku-latest")
+        # highlight-next-line
+        .with_fallbacks([
+            ChatOpenAI(model="gpt-4.1-mini"),
+        ])
+    )
+    ```
+
+See this [guide](https://python.langchain.com/docs/how_to/fallbacks/#fallback-to-better-model) for more information on model fallbacks.
+
 ## Additional resources
 
 - [Model integration directory](https://python.langchain.com/docs/integrations/chat/)
