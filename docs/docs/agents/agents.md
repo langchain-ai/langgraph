@@ -112,7 +112,7 @@ from langgraph.prebuilt import create_react_agent
 
 # highlight-next-line
 def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:  # (1)!
-    user_name = config.get("configurable", {}).get("user_name")
+    user_name = config["configurable"].get("user_name")
     system_msg = f"You are a helpful assistant. Address the user as {user_name}."
     return [{"role": "system", "content": system_msg}] + state["messages"]
 
