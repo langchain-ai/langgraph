@@ -767,7 +767,9 @@ class AssistantsClient:
         graph_id: Optional[str] = None,
         limit: int = 10,
         offset: int = 0,
-        sort_by: Optional[Literal["assistant_id", "graph_id", "name", "created_at", "updated_at"]] = None,
+        sort_by: Optional[
+            Literal["assistant_id", "graph_id", "name", "created_at", "updated_at"]
+        ] = None,
         sort_order: Optional[Literal["asc", "desc"]] = None,
         headers: Optional[dict[str, str]] = None,
     ) -> list[Assistant]:
