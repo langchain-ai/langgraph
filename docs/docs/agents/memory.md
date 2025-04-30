@@ -171,24 +171,20 @@ class CustomState(AgentState):
     user_name: str
 
 def update_user_info(
-    # highlight-next-line
     tool_call_id: Annotated[str, InjectedToolCallId],
-    # highlight-next-line
     config: RunnableConfig
 ) -> Command:
     """Look up and update user info."""
-    # highlight-next-line
     user_id = config["configurable"].get("user_id")
     name = "John Smith" if user_id == "user_123" else "Unknown user"
+    # highlight-next-line
     return Command(update={
         # highlight-next-line
         "user_name": name,
         # update the message history
-        # highlight-next-line
         "messages": [
             ToolMessage(
                 "Successfully looked up user information",
-                # highlight-next-line
                 tool_call_id=tool_call_id
             )
         ]
