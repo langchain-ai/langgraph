@@ -149,9 +149,13 @@ agent = create_react_agent(
 
 To learn more about using `pre_model_hook` for managing message history, see this [how-to guide](../how-tos/create-react-agent-manage-message-history.ipynb)
 
-## Update short-term memory from tools
+### Read in tools { #read-short-term }
 
-To modify the agent's state during execution, you can use tools. This is useful for persisting intermediate results or making information accessible to subsequent tools or prompts.
+LangGraph allows agent to access its short-term memory (state) inside the tools. See the [Context](./context.md#__tabbed_2_2) guide for more information.
+
+### Write from tools { #write-short-term }
+
+To modify the agent's short-term memory (state) during execution, you can return state updates directly from the tools. This is useful for persisting intermediate results or making information accessible to subsequent tools or prompts.
 
 ```python
 from typing import Annotated
@@ -223,7 +227,7 @@ To use long-term memory, you need to:
 1. [Configure a store](../how-tos/cross-thread-persistence.ipynb) to persist data across invocations.
 2. Use the [`get_store`][langgraph.config.get_store] function to access the store from within tools or prompts.
 
-### Reading
+### Read { #read-long-term }
 
 ```python title="A tool the agent can use to look up user information"
 from langchain_core.runnables import RunnableConfig
@@ -278,7 +282,7 @@ agent.invoke(
 7. The `get` method is used to retrieve data from the store. The first argument is the namespace, and the second argument is the key. This will return a `StoreValue` object, which contains the value and metadata about the value.
 8. The `store` is passed to the agent. This enables the agent to access the store when running tools. You can also use the `get_store` function to access the store from anywhere in your code.
 
-### Writing
+### Write { #write-long-term }
 
 ```python title="Example of a tool that updates user information"
 from typing_extensions import TypedDict
