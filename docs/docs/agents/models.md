@@ -76,7 +76,7 @@ agent = create_react_agent(
 
 ## Disable streaming
 
-If you want to disable streaming of the individual LLM tokens, you can do set `disable_streaming=True` when initializing the model:
+To disable streaming of the individual LLM tokens, set `disable_streaming=True` when initializing the model:
 
 === "`init_chat_model`"
 
