@@ -95,123 +95,123 @@ nav:
     - Home: index.md
     - Get started:
       # - TO DO: Quickstart with Prebuilt Agents
-      - 'LangGraph basics': 'tutorials/introduction.ipynb'
-      - 'Key features': 'concepts/high_level.md'
-      - 'Glossary': 'concepts/low_level.md'
+      - LangGraph basics: tutorials/introduction.ipynb
+      - Key features: concepts/high_level.md
+      - Glossary: concepts/low_level.md
       - Deployment:
-        - 'tutorials/deployment.md'
-        - 'Local Deploy': 'tutorials/langgraph-platform/local-server.md'
-        - 'Template Applications': 'concepts/template_applications.md'  # TODO: make tutorial
-        - 'Cloud Deploy': 'cloud/quick_start.md'
-    - Prebuilt agents:
-      - agents/overview.md
-      - agents/agents.md
-      - agents/run_agents.md
-      - agents/streaming.md
-      - agents/models.md
-      - agents/tools.md
-      - agents/mcp.md
-      - agents/context.md
-      - agents/memory.md
-      - agents/human-in-the-loop.md
-      - agents/multi-agent.md
-      - agents/evals.md
-      - agents/deployment.md
-      - agents/ui.md
+        - tutorials/deployment.md
+        - Local deploy: tutorials/langgraph-platform/local-server.md
+        - Template applications: concepts/template_applications.md  # TODO: make tutorial
+        - Cloud deploy: cloud/quick_start.md
     - LangGraph:
-      - how-tos/index.md
-      - concepts/agentic_concepts.md
-      - concepts/multi_agent.md
-      - concepts/breakpoints.md
-      - concepts/human_in_the_loop.md
-      - concepts/v0-human-in-the-loop.md
-      - concepts/time-travel.md
-      - concepts/persistence.md
-      - concepts/memory.md
-      - concepts/streaming.md
+      # - how-tos/index.md
       - concepts/functional_api.md
-      - concepts/durable_execution.md
-      - concepts/pregel.md
-      - Graph API Basics:
-          - how-tos/state-reducers.ipynb
-          - how-tos/sequence.ipynb
-          - how-tos/branching.ipynb
-          - how-tos/recursion-limit.ipynb
-          - how-tos/visualization.ipynb
+      - concepts/agentic_concepts.md
+      - concepts/pregel.md # Not sure where this should go
+      - Prebuilt agents: # NOTE: Moved to under LangGraph to create a hierarchy based by product
+        - agents/overview.md
+        - agents/agents.md
+        - agents/run_agents.md
+        - agents/streaming.md
+        - agents/models.md
+        - agents/tools.md
+        - agents/mcp.md
+        - agents/context.md
+        - agents/memory.md
+        - agents/human-in-the-loop.md
+        - agents/multi-agent.md
+        - agents/evals.md
+        - agents/deployment.md
+        - agents/ui.md
+        - Notebooks: # OPEN QUESTIONS: do we want to keep this? should it be in this section?
+            - how-tos/create-react-agent.ipynb
+            - how-tos/create-react-agent-memory.ipynb
+            - how-tos/create-react-agent-system-prompt.ipynb
+            - how-tos/create-react-agent-hitl.ipynb
+            - how-tos/create-react-agent-structured-output.ipynb
+            - how-tos/create-react-agent-manage-message-history.ipynb
+            - how-tos/react-agent-from-scratch.ipynb
+            - how-tos/react-agent-from-scratch-functional.ipynb
+      - Graph API basics:
+        - how-tos/state-reducers.ipynb
+        - how-tos/sequence.ipynb
+        - how-tos/branching.ipynb
+        - how-tos/recursion-limit.ipynb
+        - how-tos/visualization.ipynb
       - Controllability:
-          - how-tos/map-reduce.ipynb
-          - how-tos/command.ipynb
-          - how-tos/configuration.ipynb
-          - how-tos/node-retries.ipynb
-          - how-tos/return-when-recursion-limit-hits.ipynb
+        - how-tos/map-reduce.ipynb
+        - how-tos/command.ipynb
+        - how-tos/configuration.ipynb
+        - how-tos/node-retries.ipynb
+        - how-tos/return-when-recursion-limit-hits.ipynb
+      - concepts/breakpoints.md
       - Persistence:
-          - how-tos/persistence.ipynb
-          - how-tos/subgraph-persistence.ipynb
-          - how-tos/cross-thread-persistence.ipynb
-          - how-tos/persistence_postgres.ipynb
-          - how-tos/persistence_mongodb.ipynb
-          - how-tos/persistence_redis.ipynb
-          - how-tos/persistence-functional.ipynb
-          - how-tos/cross-thread-persistence-functional.ipynb
+        - concepts/persistence.md
+        - concepts/durable_execution.md
+        - how-tos/persistence.ipynb
+        - how-tos/subgraph-persistence.ipynb
+        - how-tos/cross-thread-persistence.ipynb
+        - how-tos/persistence_postgres.ipynb
+        - how-tos/persistence_mongodb.ipynb
+        - how-tos/persistence_redis.ipynb
+        - how-tos/persistence-functional.ipynb
+        - how-tos/cross-thread-persistence-functional.ipynb
+      - Time travel: concepts/time-travel.md
       - Memory:
-          - how-tos/memory/manage-conversation-history.ipynb
-          - how-tos/memory/delete-messages.ipynb
-          - how-tos/memory/add-summary-conversation-history.ipynb
-          - how-tos/memory/semantic-search.ipynb
+        - concepts/memory.md
+        - how-tos/memory/manage-conversation-history.ipynb
+        - how-tos/memory/delete-messages.ipynb
+        - how-tos/memory/add-summary-conversation-history.ipynb
+        - how-tos/memory/semantic-search.ipynb
       - Human-in-the-loop:
-          - how-tos/human_in_the_loop/breakpoints.ipynb
-          - how-tos/human_in_the_loop/dynamic_breakpoints.ipynb
-          - how-tos/human_in_the_loop/edit-graph-state.ipynb
-          - how-tos/human_in_the_loop/wait-user-input.ipynb
-          - how-tos/human_in_the_loop/time-travel.ipynb
-          - how-tos/human_in_the_loop/review-tool-calls.ipynb
-          - how-tos/wait-user-input-functional.ipynb
-          - how-tos/review-tool-calls-functional.ipynb
+        - concepts/human_in_the_loop.md
+        # DEPRECATE - concepts/v0-human-in-the-loop.md
+        - how-tos/human_in_the_loop/breakpoints.ipynb
+        - how-tos/human_in_the_loop/dynamic_breakpoints.ipynb
+        - how-tos/human_in_the_loop/edit-graph-state.ipynb
+        - how-tos/human_in_the_loop/wait-user-input.ipynb
+        - how-tos/human_in_the_loop/time-travel.ipynb
+        - how-tos/human_in_the_loop/review-tool-calls.ipynb
+        - how-tos/wait-user-input-functional.ipynb
+        - how-tos/review-tool-calls-functional.ipynb
       - Streaming:
-          - how-tos/streaming.ipynb
-          - how-tos/streaming-tokens.ipynb
-          - how-tos/streaming-specific-nodes.ipynb
-          - how-tos/streaming-events-from-within-tools.ipynb
-          - how-tos/streaming-subgraphs.ipynb
-          - how-tos/disable-streaming.ipynb
+        - concepts/streaming.md
+        - how-tos/streaming.ipynb
+        - how-tos/streaming-tokens.ipynb
+        - how-tos/streaming-specific-nodes.ipynb
+        - how-tos/streaming-events-from-within-tools.ipynb
+        - how-tos/streaming-subgraphs.ipynb
+        - how-tos/disable-streaming.ipynb
       - Tool calling:
-          - how-tos/tool-calling.ipynb
-          - how-tos/tool-calling-errors.ipynb
-          - how-tos/pass-run-time-values-to-tools.ipynb
-          - how-tos/update-state-from-tools.ipynb
-          - how-tos/pass-config-to-tools.ipynb
-          - how-tos/many-tools.ipynb
+        - how-tos/tool-calling.ipynb
+        - how-tos/tool-calling-errors.ipynb
+        - how-tos/pass-run-time-values-to-tools.ipynb
+        - how-tos/update-state-from-tools.ipynb
+        - how-tos/pass-config-to-tools.ipynb
+        - how-tos/many-tools.ipynb
       - Subgraphs:
-          - how-tos/subgraph.ipynb
-          - how-tos/subgraphs-manage-state.ipynb
-          - how-tos/subgraph-transform-state.ipynb
+        - how-tos/subgraph.ipynb
+        - how-tos/subgraphs-manage-state.ipynb
+        - how-tos/subgraph-transform-state.ipynb
       - Multi-agent:
-          - how-tos/agent-handoffs.ipynb
-          - how-tos/multi-agent-network.ipynb
-          - how-tos/multi-agent-multi-turn-convo.ipynb
-          - how-tos/multi-agent-network-functional.ipynb
-          - how-tos/multi-agent-multi-turn-convo-functional.ipynb
+        - concepts/multi_agent.md
+        - how-tos/agent-handoffs.ipynb
+        - how-tos/multi-agent-network.ipynb
+        - how-tos/multi-agent-multi-turn-convo.ipynb
+        - how-tos/multi-agent-network-functional.ipynb
+        - how-tos/multi-agent-multi-turn-convo-functional.ipynb
       - State Management:
-          - how-tos/state-model.ipynb
-          - how-tos/input_output_schema.ipynb
-          - how-tos/pass_private_state.ipynb
+        - how-tos/state-model.ipynb
+        - how-tos/input_output_schema.ipynb
+        - how-tos/pass_private_state.ipynb
       - Other:
-          - how-tos/async.ipynb
-          - how-tos/react-agent-structured-output.ipynb
-          - how-tos/run-id-langsmith.ipynb
-          - how-tos/autogen-integration.ipynb
-          - how-tos/autogen-integration-functional.ipynb
-      - Prebuilt ReAct Agent:
-          - how-tos/create-react-agent.ipynb
-          - how-tos/create-react-agent-memory.ipynb
-          - how-tos/create-react-agent-system-prompt.ipynb
-          - how-tos/create-react-agent-hitl.ipynb
-          - how-tos/create-react-agent-structured-output.ipynb
-          - how-tos/create-react-agent-manage-message-history.ipynb
-          - how-tos/react-agent-from-scratch.ipynb
-          - how-tos/react-agent-from-scratch-functional.ipynb
+        - how-tos/async.ipynb
+        - how-tos/react-agent-structured-output.ipynb
+        - how-tos/run-id-langsmith.ipynb
+        - how-tos/autogen-integration.ipynb
+        - how-tos/autogen-integration-functional.ipynb
     - LangGraph Platform:
-      - High Level:
+      - High level:
           - concepts/langgraph_platform.md
           - concepts/platform_architecture.md
           - concepts/scalability_and_resilience.md
@@ -227,18 +227,18 @@ nav:
         - concepts/langgraph_cli.md
         - concepts/sdk.md
         - how-tos/use-remote-graph.md
-      - LangGraph Server:
+      - LangGraph server:
         - concepts/application_structure.md
         - concepts/assistants.md
         - concepts/double_texting.md
         - concepts/auth.md
-      - Deployment Options:
+      - Deployment options:
         - concepts/langgraph_cloud.md
         - concepts/langgraph_self_hosted_data_plane.md
         - concepts/langgraph_self_hosted_control_plane.md
         - concepts/langgraph_standalone_container.md
         - concepts/self_hosted.md
-      - Application Structure:
+      - Application structure:
         - cloud/deployment/setup.md
         - cloud/deployment/setup_pyproject.md
         - cloud/deployment/setup_javascript.md
@@ -255,9 +255,9 @@ nav:
         - how-tos/deploy-self-hosted.md
         - how-tos/use-remote-graph.md
         - how-tos/ttl/configure_ttl.md
-      - Data Management:
+      - Data management:
         - how-tos/ttl/configure_ttl.md
-      - Authentication & Access Control:
+      - Authentication & access control:
         - how-tos/auth/custom_auth.md
         - how-tos/auth/openapi_security.md
         - tutorials/auth/getting_started.md
@@ -333,19 +333,19 @@ nav:
       - Swarm: reference/swarm.md
       - MCP Adapters: reference/mcp.md
     - LangGraph Platform:
-      - Server API: "cloud/reference/api/api_ref.md"
-      - CLI: "cloud/reference/cli.md"
-      - SDK (Python): "cloud/reference/sdk/python_sdk_ref.md"
-      - SDK (JS/TS): "cloud/reference/sdk/js_ts_sdk_ref.md"
+      - Server API: cloud/reference/api/api_ref.md
+      - CLI: cloud/reference/cli.md
+      - SDK (Python): cloud/reference/sdk/python_sdk_ref.md
+      - SDK (JS/TS): cloud/reference/sdk/js_ts_sdk_ref.md
       - RemoteGraph: reference/remote_graph.md
-      - Environment variables: "cloud/reference/env_var.md"
+      - Environment variables: cloud/reference/env_var.md
   - Examples:
     - tutorials/langgraph-platform/local-server.md
     - tutorials/workflows/index.md
     - tutorials/rag/langgraph_agentic_rag.ipynb
     - tutorials/multi_agent/agent_supervisor.ipynb
     - tutorials/customer-support/customer-support.ipynb
-    - tutorials/sql-agent.ipynb
+    - SQL agent: tutorials/sql-agent.ipynb
     
     # THE FOLLOWING TUTORIALS ARE NOT UP-TO-DATE
     # - tutorials/index.md
@@ -387,21 +387,22 @@ nav:
     #     - tutorials/extraction/retries.ipynb
 
   - Resources:
-    - Companies using LangGraph: adopters.md
-    - LLMS-txt: llms-txt-overview.md
-    - FAQ: concepts/faq.md
-    - Troubleshooting:
-        - Troubleshooting: troubleshooting/errors/index.md
-        - troubleshooting/errors/index.md
-        - troubleshooting/errors/GRAPH_RECURSION_LIMIT.md
-        - troubleshooting/errors/INVALID_CONCURRENT_GRAPH_UPDATE.md
-        - troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE.md
-        - troubleshooting/errors/MULTIPLE_SUBGRAPHS.md
-        - troubleshooting/errors/INVALID_CHAT_HISTORY.md
-        - troubleshooting/errors/INVALID_LICENSE.md
-        - troubleshooting/studio.md
-    - LangGraph Academy Course: https://academy.langchain.com/courses/intro-to-langgraph
+    - concepts/faq.md
     - agents/prebuilt.md # NOTE: prebuilt.md is auto-generated by `make build-prebuilt`
+    - Troubleshooting:
+        - Errors:
+          - troubleshooting/errors/index.md
+          - troubleshooting/errors/GRAPH_RECURSION_LIMIT.md
+          - troubleshooting/errors/INVALID_CONCURRENT_GRAPH_UPDATE.md
+          - troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE.md
+          - troubleshooting/errors/MULTIPLE_SUBGRAPHS.md
+          - troubleshooting/errors/INVALID_CHAT_HISTORY.md
+          - troubleshooting/errors/INVALID_LICENSE.md
+        - LangGraph Studio: troubleshooting/studio.md
+    - Learn:
+      - LLMS-txt: llms-txt-overview.md
+      - LangGraph Academy course: https://academy.langchain.com/courses/intro-to-langgraph
+      - Case studies: adopters.md
 
 markdown_extensions:
   - abbr
