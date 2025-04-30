@@ -162,7 +162,7 @@ Common use cases:
     })
     ```
 
-## Tools
+## Accessing Context in Tools
 
 Tools can access context through special parameter **annotations**.
 
@@ -230,3 +230,7 @@ Tools can access context through special parameter **annotations**.
         "user_id": "user_123"
     })
     ```
+
+### Update Context from Tools
+
+Tools can update agent's context (state and long-term memory) during execution. This is useful for persisting intermediate results or making information accessible to subsequent tools or prompts. See [Memory](./memory.md#read-short-term) guide for more information.
