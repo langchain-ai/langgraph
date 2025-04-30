@@ -214,6 +214,8 @@ You can specify multiple streaming modes by passing stream mode as a list: `stre
 
 ## Disable streaming
 
+In some applications you might need to disable streaming of individual tokens for a given model. This is useful in [multi-agent](./multi-agent.md) systems to control which agents stream their output.
+
 See the [Models](./models.md#disable-streaming) guide to learn how to disable streaming.
 
 ## Additional resources

@@ -102,6 +102,8 @@ To disable streaming of the individual LLM tokens, set `disable_streaming=True` 
     )
     ```
 
+Refer to the [API reference](https://python.langchain.com/api_reference/core/language_models/langchain_core.language_models.chat_models.BaseChatModel.html#langchain_core.language_models.chat_models.BaseChatModel.disable_streaming) for more information on `disable_streaming`
+
 ## Additional resources
 
 - [Model integration directory](https://python.langchain.com/docs/integrations/chat/)
