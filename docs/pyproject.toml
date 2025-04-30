@@ -1,10 +1,11 @@
 [tool.poetry]
-name = "langgraph-monorepo"
+name = "langgraph-docs"
 version = "0.0.1"
-description = "LangGraph monorepo"
+description = "LangGraph docs"
 authors = []
 license = "MIT"
 readme = "README.md"
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.10"
