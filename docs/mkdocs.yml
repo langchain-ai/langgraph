@@ -96,7 +96,6 @@ nav:
     - Get started:
       # - TO DO: Quickstart with Prebuilt Agents
       - LangGraph basics: tutorials/introduction.ipynb
-      - Key features: concepts/high_level.md
       - Key features: concepts/low_level.md
       - Deployment:
         - tutorials/deployment.md

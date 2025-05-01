@@ -28,8 +28,8 @@ pip install -U langgraph
 
 There are several main ways to get started with LangGraph:
 
+- [Use LangGraph](https://langchain-ai.github.io/langgraph/tutorials/introduction/): Customize your architectures, use long-term memory, and implement human-in-the-loop to reliably handle complex tasks.
 - [Use prebuilt components](https://langchain-ai.github.io/langgraph/agents/overview/): Construct agentic systems quickly and reliably—without the need to implement orchestration, memory, or human feedback handling from scratch.
-- [Use LangGraph](https://langchain-ai.github.io/langgraph/tutorials/introduction/): Customize your  architectures, use long-term memory, and implement human-in-the-loop to reliably handle complex tasks.
 - [Use LangGraph Platform](https://langchain-ai.github.io/langgraph/concepts/langgraph_platform/): Test, debug, and deploy production applications.
 
 ## Why LangGraph?
@@ -65,16 +65,6 @@ While LangGraph can be used standalone, it also integrates seamlessly with any L
 
 - [LangSmith](http://www.langchain.com/langsmith) — Helpful for agent evals and observability. Debug poor-performing LLM app runs, evaluate agent trajectories, gain visibility in production, and improve performance over time.
 - [LangGraph Platform](https://langchain-ai.github.io/langgraph/concepts/#langgraph-platform) — Deploy and scale agents effortlessly with a purpose-built deployment platform for long running, stateful workflows. Discover, reuse, configure, and share agents across teams — and iterate quickly with visual prototyping in [LangGraph Studio](https://langchain-ai.github.io/langgraph/concepts/langgraph_studio/).
-
-## Pairing with LangGraph Platform
-
-While LangGraph is our open-source agent orchestration framework, enterprises that need scalable agent deployment can benefit from [LangGraph Platform](https://langchain-ai.github.io/langgraph/concepts/langgraph_platform/).
-
-LangGraph Platform can help engineering teams:
-
-- **Accelerate agent development**: Quickly create agent UXs with configurable templates and [LangGraph Studio](https://langchain-ai.github.io/langgraph/concepts/langgraph_studio/) for visualizing and debugging agent interactions.
-- **Deploy seamlessly**: We handle the complexity of deploying your agent. LangGraph Platform includes robust APIs for memory, threads, and cron jobs plus auto-scaling task queues & servers.
-- **Centralize agent management & reusability**: Discover, reuse, and manage agents across the organization. Business users can also modify agents without coding.
 
 ## Additional resources
 

@@ -5,11 +5,17 @@ search:
 
 # LangGraph Platform
 
-Watch this 4-minute overview of LangGraph Platform to see how it helps you build, deploy, and evaluate agentic applications.
+While [LangGraph](/docs/docs/index.md) is our open-source agent orchestration framework, enterprises that need scalable agent deployment can benefit from [LangGraph Platform](https://langchain-ai.github.io/langgraph/concepts/langgraph_platform/).
+
+LangGraph Platform can help engineering teams:
+
+- **Accelerate agent development**: Quickly create agent UXs with configurable templates and [LangGraph Studio](https://langchain-ai.github.io/langgraph/concepts/langgraph_studio/) for visualizing and debugging agent interactions.
+- **Deploy seamlessly**: We handle the complexity of deploying your agent. LangGraph Platform includes robust APIs for memory, threads, and cron jobs plus auto-scaling task queues & servers.
+- **Centralize agent management & reusability**: Discover, reuse, and manage agents across the organization. Business users can also modify agents without coding.
 
 <iframe width="560" height="315" src="https://www.youtube.com/embed/pfAQxBS5z88?si=XGS6Chydn6lhSO1S" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 
-## Overview
+## Key features
 
 LangGraph Platform is a commercial solution for deploying agentic applications to production, built on the open-source [LangGraph framework](./high_level.md).
 
@@ -27,9 +33,9 @@ The LangGraph Platform consists of several components that work together to supp
 
 The LangGraph Platform offers a few different deployment options described in the [deployment options guide](./deployment_options.md).
 
-## Why Use LangGraph Platform?
+## Why use LangGraph Platform?
 
-**LangGraph Platform** handles common issues that arise when deploying LLM applications to production, allowing you to focus on agent logic instead of managing server infrastructure.
+LangGraph Platform handles common issues that arise when deploying LLM applications to production, allowing you to focus on agent logic instead of managing server infrastructure.
 
 - **[Streaming Support](streaming.md)**: As agents grow more sophisticated, they often benefit from streaming both token outputs and intermediate states back to the user. Without this, users are left waiting for potentially long operations with no feedback. LangGraph Server provides [multiple streaming modes](streaming.md) optimized for various application needs.
 
