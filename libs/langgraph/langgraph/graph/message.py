@@ -71,94 +71,99 @@ def add_messages(
             format, meaning contents can be string, 'text' blocks, or 'image_url' blocks
             and tool responses are returned as their own ToolMessages.
 
-            **REQUIREMENT**: Must have ``langchain-core>=0.3.11`` installed to use this
-            feature.
+            !!! important "Requirement"
+
+                Must have ``langchain-core>=0.3.11`` installed to use this feature.
 
     Returns:
         A new list of messages with the messages from `right` merged into `left`.
         If a message in `right` has the same ID as a message in `left`, the
         message from `right` will replace the message from `left`.
 
-    Examples:
-        ```pycon
-        >>> from langchain_core.messages import AIMessage, HumanMessage
-        >>> msgs1 = [HumanMessage(content="Hello", id="1")]
-        >>> msgs2 = [AIMessage(content="Hi there!", id="2")]
-        >>> add_messages(msgs1, msgs2)
-        [HumanMessage(content='Hello', id='1'), AIMessage(content='Hi there!', id='2')]
-
-        >>> msgs1 = [HumanMessage(content="Hello", id="1")]
-        >>> msgs2 = [HumanMessage(content="Hello again", id="1")]
-        >>> add_messages(msgs1, msgs2)
-        [HumanMessage(content='Hello again', id='1')]
-
-        >>> from typing import Annotated
-        >>> from typing_extensions import TypedDict
-        >>> from langgraph.graph import StateGraph
-        >>>
-        >>> class State(TypedDict):
-        ...     messages: Annotated[list, add_messages]
-        ...
-        >>> builder = StateGraph(State)
-        >>> builder.add_node("chatbot", lambda state: {"messages": [("assistant", "Hello")]})
-        >>> builder.set_entry_point("chatbot")
-        >>> builder.set_finish_point("chatbot")
-        >>> graph = builder.compile()
-        >>> graph.invoke({})
-        {'messages': [AIMessage(content='Hello', id=...)]}
-
-        >>> from typing import Annotated
-        >>> from typing_extensions import TypedDict
-        >>> from langgraph.graph import StateGraph, add_messages
-        >>>
-        >>> class State(TypedDict):
-        ...     messages: Annotated[list, add_messages(format='langchain-openai')]
-        ...
-        >>> def chatbot_node(state: State) -> list:
-        ...     return {"messages": [
-        ...         {
-        ...             "role": "user",
-        ...             "content": [
-        ...                 {
-        ...                     "type": "text",
-        ...                     "text": "Here's an image:",
-        ...                     "cache_control": {"type": "ephemeral"},
-        ...                 },
-        ...                 {
-        ...                     "type": "image",
-        ...                     "source": {
-        ...                         "type": "base64",
-        ...                         "media_type": "image/jpeg",
-        ...                         "data": "1234",
-        ...                     },
-        ...                 },
-        ...             ]
-        ...         },
-        ...     ]}
-        >>> builder = StateGraph(State)
-        >>> builder.add_node("chatbot", chatbot_node)
-        >>> builder.set_entry_point("chatbot")
-        >>> builder.set_finish_point("chatbot")
-        >>> graph = builder.compile()
-        >>> graph.invoke({"messages": []})
-        {
-            'messages': [
-                HumanMessage(
-                    content=[
-                        {"type": "text", "text": "Here's an image:"},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": "data:image/jpeg;base64,1234"},
-                        },
-                    ],
-                ),
-            ]
-        }
+    Example:
+        ```python title="Basic usage"
+        from langchain_core.messages import AIMessage, HumanMessage
+        msgs1 = [HumanMessage(content="Hello", id="1")]
+        msgs2 = [AIMessage(content="Hi there!", id="2")]
+        add_messages(msgs1, msgs2)
+        # [HumanMessage(content='Hello', id='1'), AIMessage(content='Hi there!', id='2')]
         ```
 
-    ..versionchanged:: 0.2.61
+        ```python title="Overwrite existing message"
+        msgs1 = [HumanMessage(content="Hello", id="1")]
+        msgs2 = [HumanMessage(content="Hello again", id="1")]
+        add_messages(msgs1, msgs2)
+        # [HumanMessage(content='Hello again', id='1')]
+        ```
 
-        Support for 'format="langchain-openai"' flag added.
+        ```python title="Use in a StateGraph"
+        from typing import Annotated
+        from typing_extensions import TypedDict
+        from langgraph.graph import StateGraph
+
+        class State(TypedDict):
+            messages: Annotated[list, add_messages]
+
+        builder = StateGraph(State)
+        builder.add_node("chatbot", lambda state: {"messages": [("assistant", "Hello")]})
+        builder.set_entry_point("chatbot")
+        builder.set_finish_point("chatbot")
+        graph = builder.compile()
+        graph.invoke({})
+        # {'messages': [AIMessage(content='Hello', id=...)]}
+        ```
+
+        ```python title="Use OpenAI message format"
+        from typing import Annotated
+        from typing_extensions import TypedDict
+        from langgraph.graph import StateGraph, add_messages
+
+        class State(TypedDict):
+            messages: Annotated[list, add_messages(format='langchain-openai')]
+
+        def chatbot_node(state: State) -> list:
+            return {"messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Here's an image:",
+                            "cache_control": {"type": "ephemeral"},
+                        },
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/jpeg",
+                                "data": "1234",
+                            },
+                        },
+                    ]
+                },
+            ]}
+
+        builder = StateGraph(State)
+        builder.add_node("chatbot", chatbot_node)
+        builder.set_entry_point("chatbot")
+        builder.set_finish_point("chatbot")
+        graph = builder.compile()
+        graph.invoke({"messages": []})
+        # {
+        #     'messages': [
+        #         HumanMessage(
+        #             content=[
+        #                 {"type": "text", "text": "Here's an image:"},
+        #                 {
+        #                     "type": "image_url",
+        #                     "image_url": {"url": "data:image/jpeg;base64,1234"},
+        #                 },
+        #             ],
+        #         ),
+        #     ]
+        # }
+        ```
+
     """
     remove_all_idx = None
     # coerce to list
