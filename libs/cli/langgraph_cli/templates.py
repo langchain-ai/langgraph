@@ -101,8 +101,8 @@ def _download_repo_with_requests(repo_url: str, path: str) -> None:
     """Download a ZIP archive from the given URL and extracts it to the specified path.
 
     Args:
-        repo_url (str): The URL of the repository to download.
-        path (str): The path where the repository should be extracted.
+        repo_url: The URL of the repository to download.
+        path: The path where the repository should be extracted.
     """
     click.secho("📥 Attempting to download repository as a ZIP archive...", fg="yellow")
     click.secho(f"URL: {repo_url}", fg="yellow")
@@ -136,7 +136,7 @@ def _get_template_url(template_name: str) -> Optional[str]:
     Retrieves the template URL based on the provided template name.
 
     Args:
-        template_name (str): The name of the template.
+        template_name: The name of the template.
 
     Returns:
         Optional[str]: The URL of the template if found, else None.
@@ -166,8 +166,8 @@ def create_new(path: Optional[str], template: Optional[str]) -> None:
     """Create a new LangGraph project at the specified PATH using the chosen TEMPLATE.
 
     Args:
-        path (Optional[str]): The path where the new project will be created.
-        template (Optional[str]): The name of the template to use.
+        path: The path where the new project will be created.
+        template: The name of the template to use.
     """
     # Prompt for path if not provided
     if not path:

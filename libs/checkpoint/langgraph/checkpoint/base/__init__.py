@@ -232,7 +232,7 @@ class BaseCheckpointSaver(Generic[V]):
         """Fetch a checkpoint using the given configuration.
 
         Args:
-            config (RunnableConfig): Configuration specifying which checkpoint to retrieve.
+            config: Configuration specifying which checkpoint to retrieve.
 
         Returns:
             Optional[Checkpoint]: The requested checkpoint, or None if not found.
@@ -244,7 +244,7 @@ class BaseCheckpointSaver(Generic[V]):
         """Fetch a checkpoint tuple using the given configuration.
 
         Args:
-            config (RunnableConfig): Configuration specifying which checkpoint to retrieve.
+            config: Configuration specifying which checkpoint to retrieve.
 
         Returns:
             Optional[CheckpointTuple]: The requested checkpoint tuple, or None if not found.
@@ -265,10 +265,10 @@ class BaseCheckpointSaver(Generic[V]):
         """List checkpoints that match the given criteria.
 
         Args:
-            config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.
-            filter (Optional[Dict[str, Any]]): Additional filtering criteria.
-            before (Optional[RunnableConfig]): List checkpoints created before this configuration.
-            limit (Optional[int]): Maximum number of checkpoints to return.
+            config: Base configuration for filtering checkpoints.
+            filter: Additional filtering criteria.
+            before: List checkpoints created before this configuration.
+            limit: Maximum number of checkpoints to return.
 
         Returns:
             Iterator[CheckpointTuple]: Iterator of matching checkpoint tuples.
@@ -288,10 +288,10 @@ class BaseCheckpointSaver(Generic[V]):
         """Store a checkpoint with its configuration and metadata.
 
         Args:
-            config (RunnableConfig): Configuration for the checkpoint.
-            checkpoint (Checkpoint): The checkpoint to store.
-            metadata (CheckpointMetadata): Additional metadata for the checkpoint.
-            new_versions (ChannelVersions): New channel versions as of this write.
+            config: Configuration for the checkpoint.
+            checkpoint: The checkpoint to store.
+            metadata: Additional metadata for the checkpoint.
+            new_versions: New channel versions as of this write.
 
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.
@@ -311,10 +311,10 @@ class BaseCheckpointSaver(Generic[V]):
         """Store intermediate writes linked to a checkpoint.
 
         Args:
-            config (RunnableConfig): Configuration of the related checkpoint.
-            writes (List[Tuple[str, Any]]): List of writes to store.
-            task_id (str): Identifier for the task creating the writes.
-            task_path (str): Path of the task creating the writes.
+            config: Configuration of the related checkpoint.
+            writes: List of writes to store.
+            task_id: Identifier for the task creating the writes.
+            task_path: Path of the task creating the writes.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
@@ -328,7 +328,7 @@ class BaseCheckpointSaver(Generic[V]):
         """Delete all checkpoints and writes associated with a specific thread ID.
 
         Args:
-            thread_id (str): The thread ID whose checkpoints should be deleted.
+            thread_id: The thread ID whose checkpoints should be deleted.
         """
         raise NotImplementedError
 
@@ -336,7 +336,7 @@ class BaseCheckpointSaver(Generic[V]):
         """Asynchronously fetch a checkpoint using the given configuration.
 
         Args:
-            config (RunnableConfig): Configuration specifying which checkpoint to retrieve.
+            config: Configuration specifying which checkpoint to retrieve.
 
         Returns:
             Optional[Checkpoint]: The requested checkpoint, or None if not found.
@@ -348,7 +348,7 @@ class BaseCheckpointSaver(Generic[V]):
         """Asynchronously fetch a checkpoint tuple using the given configuration.
 
         Args:
-            config (RunnableConfig): Configuration specifying which checkpoint to retrieve.
+            config: Configuration specifying which checkpoint to retrieve.
 
         Returns:
             Optional[CheckpointTuple]: The requested checkpoint tuple, or None if not found.
@@ -369,10 +369,10 @@ class BaseCheckpointSaver(Generic[V]):
         """Asynchronously list checkpoints that match the given criteria.
 
         Args:
-            config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.
-            filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata.
-            before (Optional[RunnableConfig]): List checkpoints created before this configuration.
-            limit (Optional[int]): Maximum number of checkpoints to return.
+            config: Base configuration for filtering checkpoints.
+            filter: Additional filtering criteria for metadata.
+            before: List checkpoints created before this configuration.
+            limit: Maximum number of checkpoints to return.
 
         Returns:
             AsyncIterator[CheckpointTuple]: Async iterator of matching checkpoint tuples.
@@ -393,10 +393,10 @@ class BaseCheckpointSaver(Generic[V]):
         """Asynchronously store a checkpoint with its configuration and metadata.
 
         Args:
-            config (RunnableConfig): Configuration for the checkpoint.
-            checkpoint (Checkpoint): The checkpoint to store.
-            metadata (CheckpointMetadata): Additional metadata for the checkpoint.
-            new_versions (ChannelVersions): New channel versions as of this write.
+            config: Configuration for the checkpoint.
+            checkpoint: The checkpoint to store.
+            metadata: Additional metadata for the checkpoint.
+            new_versions: New channel versions as of this write.
 
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.
@@ -416,10 +416,10 @@ class BaseCheckpointSaver(Generic[V]):
         """Asynchronously store intermediate writes linked to a checkpoint.
 
         Args:
-            config (RunnableConfig): Configuration of the related checkpoint.
-            writes (List[Tuple[str, Any]]): List of writes to store.
-            task_id (str): Identifier for the task creating the writes.
-            task_path (str): Path of the task creating the writes.
+            config: Configuration of the related checkpoint.
+            writes: List of writes to store.
+            task_id: Identifier for the task creating the writes.
+            task_path: Path of the task creating the writes.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
@@ -433,7 +433,7 @@ class BaseCheckpointSaver(Generic[V]):
         """Delete all checkpoints and writes associated with a specific thread ID.
 
         Args:
-            thread_id (str): The thread ID whose checkpoints should be deleted.
+            thread_id: The thread ID whose checkpoints should be deleted.
         """
         raise NotImplementedError
 
@@ -444,8 +444,8 @@ class BaseCheckpointSaver(Generic[V]):
         as long as they are monotonically increasing.
 
         Args:
-            current (Optional[V]): The current version identifier (int, float, or str).
-            channel (BaseChannel): The channel being versioned.
+            current: The current version identifier (int, float, or str).
+            channel: The channel being versioned.
 
         Returns:
             V: The next version identifier, which must be increasing.
