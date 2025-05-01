@@ -104,7 +104,7 @@ nav:
         - Cloud deploy: cloud/quick_start.md
     - LangGraph:
       - concepts/agentic_concepts.md
-      - Prebuilt agents: # NOTE: Moved to under LangGraph to create a hierarchy based by product
+      - Prebuilt agents:
         - agents/overview.md
         - agents/agents.md
         - agents/run_agents.md
@@ -119,8 +119,6 @@ nav:
         - agents/evals.md
         - agents/deployment.md
         - agents/ui.md
-        # - how-tos/react-agent-from-scratch.ipynb
-        # - how-tos/react-agent-from-scratch-functional.ipynb
       - Graph API basics:
         - how-tos/state-reducers.ipynb
         - how-tos/sequence.ipynb
