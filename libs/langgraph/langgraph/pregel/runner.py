@@ -198,26 +198,25 @@ class PregelRunner:
             futures[get_waiter()] = None
         # schedule tasks
         for t in tasks:
-            if not t.writes:
-                fut = self.submit()(  # type: ignore[misc]
-                    run_with_retry,
-                    t,
-                    retry_policy,
-                    configurable={
-                        CONFIG_KEY_CALL: partial(
-                            _call,
-                            weakref.ref(t),
-                            retry=retry_policy,
-                            futures=weakref.ref(futures),
-                            schedule_task=self.schedule_task,
-                            match_cached_writes=match_cached_writes,
-                            submit=self.submit,
-                            reraise=reraise,
-                        ),
-                    },
-                    __reraise_on_exit__=reraise,
-                )
-                futures[fut] = t
+            fut = self.submit()(  # type: ignore[misc]
+                run_with_retry,
+                t,
+                retry_policy,
+                configurable={
+                    CONFIG_KEY_CALL: partial(
+                        _call,
+                        weakref.ref(t),
+                        retry=retry_policy,
+                        futures=weakref.ref(futures),
+                        schedule_task=self.schedule_task,
+                        match_cached_writes=match_cached_writes,
+                        submit=self.submit,
+                        reraise=reraise,
+                    ),
+                },
+                __reraise_on_exit__=reraise,
+            )
+            futures[fut] = t
         # execute tasks, and wait for one to fail or all to finish.
         # each task is independent from all other concurrent tasks
         # yield updates/debug output as each task finishes
@@ -332,33 +331,32 @@ class PregelRunner:
             futures[get_waiter()] = None
         # schedule tasks
         for t in tasks:
-            if not t.writes:
-                fut = cast(
-                    asyncio.Future,
-                    self.submit()(  # type: ignore[misc]
-                        arun_with_retry,
-                        t,
-                        retry_policy,
-                        stream=self.use_astream,
-                        configurable={
-                            CONFIG_KEY_CALL: partial(
-                                _acall,
-                                weakref.ref(t),
-                                retry=retry_policy,
-                                stream=self.use_astream,
-                                futures=weakref.ref(futures),
-                                schedule_task=self.schedule_task,
-                                submit=self.submit,
-                                reraise=reraise,
-                                loop=loop,
-                            ),
-                        },
-                        __name__=t.name,
-                        __cancel_on_exit__=True,
-                        __reraise_on_exit__=reraise,
-                    ),
-                )
-                futures[fut] = t
+            fut = cast(
+                asyncio.Future,
+                self.submit()(  # type: ignore[misc]
+                    arun_with_retry,
+                    t,
+                    retry_policy,
+                    stream=self.use_astream,
+                    configurable={
+                        CONFIG_KEY_CALL: partial(
+                            _acall,
+                            weakref.ref(t),
+                            retry=retry_policy,
+                            stream=self.use_astream,
+                            futures=weakref.ref(futures),
+                            schedule_task=self.schedule_task,
+                            submit=self.submit,
+                            reraise=reraise,
+                            loop=loop,
+                        ),
+                    },
+                    __name__=t.name,
+                    __cancel_on_exit__=True,
+                    __reraise_on_exit__=reraise,
+                ),
+            )
+            futures[fut] = t
         # execute tasks, and wait for one to fail or all to finish.
         # each task is independent from all other concurrent tasks
         # yield updates/debug output as each task finishes

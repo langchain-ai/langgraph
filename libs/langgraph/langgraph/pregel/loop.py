@@ -349,7 +349,7 @@ class PregelLoop(LoopProtocol):
                 )
         # output writes
         if hasattr(self, "tasks"):
-            self._output_writes(task_id, writes)
+            self.output_writes(task_id, writes)
 
     def _put_pending_writes(self) -> None:
         if self.checkpointer_put_writes is None:
@@ -612,14 +612,14 @@ class PregelLoop(LoopProtocol):
         # print output for any tasks we applied previous writes to
         for task in self.tasks.values():
             if task.writes:
-                self._output_writes(task.id, task.writes, cached=True)
+                self.output_writes(task.id, task.writes, cached=True)
 
         return True
 
-    def match_cached_writes(self) -> None:
+    def match_cached_writes(self) -> list[PregelExecutableTask]:
         raise NotImplementedError
 
-    async def amatch_cached_writes(self) -> None:
+    async def amatch_cached_writes(self) -> list[PregelExecutableTask]:
         raise NotImplementedError
 
     # private
@@ -921,7 +921,7 @@ class PregelLoop(LoopProtocol):
         for v in values(*args, **kwargs):
             self.stream((self.checkpoint_ns, mode, v))
 
-    def _output_writes(
+    def output_writes(
         self, task_id: str, writes: WritesT, *, cached: bool = False
     ) -> None:
         if task := self.tasks.get(task_id):
@@ -1048,16 +1048,20 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
 
         return self.submit(cast(WritableManagedValue, managed_value).update, values)
 
-    def match_cached_writes(self) -> None:
+    def match_cached_writes(self) -> list[PregelExecutableTask]:
         if self.cache is None:
             return
+        matched: list[PregelExecutableTask] = []
         if cached := {
             t.cache_key.key: t
             for t in self.tasks.values()
             if t.cache_key and not t.cache_key.refresh and not t.writes
         }:
             for key, values in self.cache.get(tuple(cached)).items():
-                cached[key].writes.extend(values)
+                task = cached[key]
+                task.writes.extend(values)
+                matched.append(task)
+        return matched
 
     def put_writes(self, task_id: str, writes: WritesT) -> None:
         """Put writes for a task, to be read by the next tick."""
@@ -1227,13 +1231,17 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
     async def amatch_cached_writes(self) -> None:
         if self.cache is None:
             return
+        matched: list[PregelExecutableTask] = []
         if cached := {
             t.cache_key.key: t
             for t in self.tasks.values()
             if t.cache_key and not t.cache_key.refresh and not t.writes
         }:
             for key, values in (await self.cache.aget(tuple(cached))).items():
-                cached[key].writes.extend(values)
+                task = cached[key]
+                task.writes.extend(values)
+                matched.append(task)
+        return matched
 
     def put_writes(self, task_id: str, writes: WritesT) -> None:
         """Put writes for a task, to be read by the next tick."""
