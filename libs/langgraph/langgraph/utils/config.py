@@ -199,7 +199,7 @@ def get_callback_manager_for_config(
     """Get a callback manager for a config.
 
     Args:
-        config (RunnableConfig): The config.
+        config: The config.
 
     Returns:
         CallbackManager: The callback manager.
@@ -237,7 +237,7 @@ def get_async_callback_manager_for_config(
     """Get an async callback manager for a config.
 
     Args:
-        config (RunnableConfig): The config.
+        config: The config.
 
     Returns:
         AsyncCallbackManager: The async callback manager.
