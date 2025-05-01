@@ -362,6 +362,11 @@ class Config(TypedDict, total=False):
     """Optional. Internal use only.
     """
 
+    base_image: Optional[str]
+    """Optional. Base image to use for the LangGraph API server.
+    
+    Defaults to langchain/langgraph-api or langchain/langgraphjs-api."""
+
     pip_config_file: Optional[str]
     """Optional. Path to a pip config file (e.g., "/etc/pip.conf" or "pip.ini") for controlling
     package installation (custom indices, credentials, etc.).
@@ -517,6 +522,7 @@ def validate_config(config: Config) -> Config:
         "python_version": python_version,
         "pip_config_file": config.get("pip_config_file"),
         "_INTERNAL_docker_tag": config.get("_INTERNAL_docker_tag"),
+        "base_image": config.get("base_image"),
         "dependencies": config.get("dependencies", []),
         "dockerfile_lines": config.get("dockerfile_lines", []),
         "graphs": config.get("graphs", {}),
@@ -1199,9 +1205,12 @@ ADD {relpath} /deps/{name}
                 "# -- End of JS dependencies install --",
             ]
         )
-
+    if "/langgraph-server" in base_image:
+        image_str = f"{base_image}-py{docker_tag}"
+    else:
+        image_str = f"{base_image}:{docker_tag}"
     docker_file_contents = [
-        f"FROM {base_image}:{docker_tag}",
+        f"FROM {image_str}",
         "",
         os.linesep.join(config["dockerfile_lines"]),
         "",
@@ -1285,6 +1294,8 @@ def node_config_to_docker(
 
 
 def default_base_image(config: Config) -> str:
+    if config.get("base_image"):
+        return config["base_image"]
     if config.get("node_version") and not config.get("python_version"):
         return "langchain/langgraphjs-api"
     return "langchain/langgraph-api"
@@ -1297,6 +1308,9 @@ def docker_tag(
     base_image = base_image or default_base_image(config)
     if config.get("_INTERNAL_docker_tag"):
         return f"{base_image}:{config['_INTERNAL_docker_tag']}"
+
+    if "/langgraph-server" in base_image:
+        return f"{base_image}-py{config['python_version']}"
 
     if config.get("node_version") and not config.get("python_version"):
         return f"{base_image}:{config['node_version']}"

@@ -30,6 +30,7 @@ def test_validate_config():
     actual_config = validate_config(expected_config)
     expected_config = {
         "_INTERNAL_docker_tag": None,
+        "base_image": None,
         "python_version": "3.11",
         "node_version": None,
         "pip_config_file": None,
@@ -49,6 +50,7 @@ def test_validate_config():
     env = ".env"
     expected_config = {
         "_INTERNAL_docker_tag": None,
+        "base_image": None,
         "python_version": "3.12",
         "node_version": None,
         "pip_config_file": "pipconfig.txt",

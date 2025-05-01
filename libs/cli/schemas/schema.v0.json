@@ -51,6 +51,17 @@
               ],
               "description": "Optional. Custom authentication config, including the path to your Python auth logic and\nthe OpenAPI security definitions it uses.\n"
             },
+            "base_image": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Base image to use for the LangGraph API server.\n\nDefaults to langchain/langgraph-api or langchain/langgraphjs-api.\n"
+            },
             "checkpointer": {
               "anyOf": [
                 {
@@ -177,6 +188,17 @@
                 }
               ],
               "description": "Optional. Custom authentication config, including the path to your Python auth logic and\nthe OpenAPI security definitions it uses.\n"
+            },
+            "base_image": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Base image to use for the LangGraph API server.\n\nDefaults to langchain/langgraph-api or langchain/langgraphjs-api.\n"
             },
             "checkpointer": {
               "anyOf": [
