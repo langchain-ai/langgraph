@@ -101,13 +101,16 @@ nav:
         - Local deploy: tutorials/langgraph-platform/local-server.md
         - Cloud deploy: cloud/quick_start.md
     - LangGraph:
+      # agentic concepts may need a bit of love if we're putting it
+      # at the top of the LangGraph section
       - concepts/agentic_concepts.md
-      - API concepts:
-        - Graph API: concepts/low_level.md
-        - Functional API: concepts/functional_api.md
+      # low level concepts is an odd mix of a Graph API basics overview (conceptual)
+      # and a general glossary of terms related to the Graph API
+      # but it also has some terms from the functional API.
+      # Unclear on where to put it in its current form.
+      - concepts/low_level.md
       - Graph API basics:
         - how-tos/state-reducers.ipynb
-        - how-tos/sequence.ipynb
         - how-tos/branching.ipynb
         - how-tos/recursion-limit.ipynb
         - how-tos/visualization.ipynb
@@ -120,18 +123,10 @@ nav:
         - how-tos/persistence_postgres.ipynb
         - how-tos/persistence_mongodb.ipynb
         - how-tos/persistence_redis.ipynb
-        - how-tos/persistence-functional.ipynb
-        - how-tos/cross-thread-persistence-functional.ipynb
       - Human-in-the-loop:
         - concepts/human_in_the_loop.md
-        - how-tos/human_in_the_loop/breakpoints.ipynb
-        - how-tos/human_in_the_loop/dynamic_breakpoints.ipynb
-        - how-tos/human_in_the_loop/edit-graph-state.ipynb
         - how-tos/human_in_the_loop/wait-user-input.ipynb
-        - how-tos/human_in_the_loop/time-travel.ipynb
         - how-tos/human_in_the_loop/review-tool-calls.ipynb
-        - how-tos/wait-user-input-functional.ipynb
-        - how-tos/review-tool-calls-functional.ipynb
       - Streaming:
         - concepts/streaming.md
         - how-tos/streaming.ipynb
@@ -146,8 +141,14 @@ nav:
         - how-tos/configuration.ipynb
         - how-tos/node-retries.ipynb
         - how-tos/return-when-recursion-limit-hits.ipynb
-      - concepts/breakpoints.md
-      - Time travel: concepts/time-travel.md
+      - Breakpoints:
+        - concepts/breakpoints.md
+        - how-tos/human_in_the_loop/breakpoints.ipynb
+        - how-tos/human_in_the_loop/dynamic_breakpoints.ipynb
+      - Time travel:
+        - concepts/time-travel.md
+        - how-tos/human_in_the_loop/time-travel.ipynb
+        - how-tos/human_in_the_loop/edit-graph-state.ipynb
       - Memory:
         - concepts/memory.md
         - how-tos/memory/manage-conversation-history.ipynb
@@ -170,19 +171,30 @@ nav:
         - how-tos/agent-handoffs.ipynb
         - how-tos/multi-agent-network.ipynb
         - how-tos/multi-agent-multi-turn-convo.ipynb
-        - how-tos/multi-agent-network-functional.ipynb
-        - how-tos/multi-agent-multi-turn-convo-functional.ipynb
       - State Management:
         - how-tos/state-model.ipynb
         - how-tos/input_output_schema.ipynb
         - how-tos/pass_private_state.ipynb
+      - Functional API:
+        - concepts/functional_api.md
+        - how-tos/wait-user-input-functional.ipynb
+        - how-tos/review-tool-calls-functional.ipynb
+        - how-tos/persistence-functional.ipynb
+        - how-tos/cross-thread-persistence-functional.ipynb
+        - how-tos/multi-agent-network-functional.ipynb
+        - how-tos/multi-agent-multi-turn-convo-functional.ipynb
+        - how-tos/autogen-integration-functional.ipynb
       - Other:
+        # Pregel is the underlying low level API that backs
+        # both the Graph API and the Functional API.
+        # It allows using the functional API from within the Graph API
+        # and vice versa.
         - concepts/pregel.md
+        # We want to push async higher (need to check the content inside it)
+        # and convert it into a concept rather than a how-to page.
         - how-tos/async.ipynb
-        - how-tos/react-agent-structured-output.ipynb
         - how-tos/run-id-langsmith.ipynb
         - how-tos/autogen-integration.ipynb
-        - how-tos/autogen-integration-functional.ipynb
     - Prebuilt agents:
         - agents/overview.md
         - agents/agents.md
