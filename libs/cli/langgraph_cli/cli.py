@@ -589,6 +589,12 @@ def dockerfile(save_path: str, config: pathlib.Path, add_docker_compose: bool) -
     "or networks blocking localhost connections.",
     default=False,
 )
+@click.option(
+    "--server-log-level",
+    type=str,
+    default="WARNING",
+    help="Set the log level for the API server.",
+)
 @cli.command(
     "dev",
     help="🏃‍♀️‍➡️ Run LangGraph API server in development mode with hot reloading and debugging support",
@@ -606,6 +612,7 @@ def dev(
     studio_url: Optional[str],
     allow_blocking: bool,
     tunnel: bool,
+    server_log_level: str,
 ):
     """CLI entrypoint for running the LangGraph API server."""
     try:
@@ -674,6 +681,7 @@ def dev(
         studio_url=studio_url,
         allow_blocking=allow_blocking,
         tunnel=tunnel,
+        server_level=server_log_level,
     )
 
 
