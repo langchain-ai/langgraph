@@ -91,8 +91,8 @@ plugins:
                 - "!^_"
 
 nav:
+  - Home: index.md
   - Guides:
-    - Home: index.md
     - Get started:
       # - TO DO: Quickstart with Prebuilt Agents
       - LangGraph basics: tutorials/introduction.ipynb
