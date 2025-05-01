@@ -251,7 +251,7 @@ def call(
         func,
         (args, kwargs),
         retry=retry,
-        cache=cache_policy,
+        cache_policy=cache_policy,
         callbacks=config["callbacks"],
     )
     return fut

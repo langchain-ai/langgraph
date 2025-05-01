@@ -145,7 +145,7 @@ def task(
                 func.__name__ = name
 
         call_func = functools.partial(
-            call, func, retry=retry_policies, cache=cache_policy
+            call, func, retry=retry_policies, cache_policy=cache_policy
         )
         object.__setattr__(call_func, "_is_pregel_task", True)
         return functools.update_wrapper(call_func, func)
