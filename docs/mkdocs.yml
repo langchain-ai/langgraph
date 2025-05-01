@@ -97,17 +97,13 @@ nav:
       # - TO DO: Quickstart with Prebuilt Agents
       - LangGraph basics: tutorials/introduction.ipynb
       - Key features: concepts/high_level.md
-      - Glossary: concepts/low_level.md
+      - Key features: concepts/low_level.md
       - Deployment:
         - tutorials/deployment.md
         - Local deploy: tutorials/langgraph-platform/local-server.md
-        - Template applications: concepts/template_applications.md  # TODO: make tutorial
         - Cloud deploy: cloud/quick_start.md
     - LangGraph:
-      # - how-tos/index.md
-      - concepts/functional_api.md
       - concepts/agentic_concepts.md
-      - concepts/pregel.md # Not sure where this should go
       - Prebuilt agents: # NOTE: Moved to under LangGraph to create a hierarchy based by product
         - agents/overview.md
         - agents/agents.md
@@ -123,28 +119,15 @@ nav:
         - agents/evals.md
         - agents/deployment.md
         - agents/ui.md
-        - Notebooks: # OPEN QUESTIONS: do we want to keep this? should it be in this section?
-            - how-tos/create-react-agent.ipynb
-            - how-tos/create-react-agent-memory.ipynb
-            - how-tos/create-react-agent-system-prompt.ipynb
-            - how-tos/create-react-agent-hitl.ipynb
-            - how-tos/create-react-agent-structured-output.ipynb
-            - how-tos/create-react-agent-manage-message-history.ipynb
-            - how-tos/react-agent-from-scratch.ipynb
-            - how-tos/react-agent-from-scratch-functional.ipynb
+        # - how-tos/react-agent-from-scratch.ipynb
+        # - how-tos/react-agent-from-scratch-functional.ipynb
       - Graph API basics:
         - how-tos/state-reducers.ipynb
         - how-tos/sequence.ipynb
         - how-tos/branching.ipynb
         - how-tos/recursion-limit.ipynb
         - how-tos/visualization.ipynb
-      - Controllability:
-        - how-tos/map-reduce.ipynb
-        - how-tos/command.ipynb
-        - how-tos/configuration.ipynb
-        - how-tos/node-retries.ipynb
-        - how-tos/return-when-recursion-limit-hits.ipynb
-      - concepts/breakpoints.md
+      - concepts/functional_api.md
       - Persistence:
         - concepts/persistence.md
         - concepts/durable_execution.md
@@ -156,16 +139,8 @@ nav:
         - how-tos/persistence_redis.ipynb
         - how-tos/persistence-functional.ipynb
         - how-tos/cross-thread-persistence-functional.ipynb
-      - Time travel: concepts/time-travel.md
-      - Memory:
-        - concepts/memory.md
-        - how-tos/memory/manage-conversation-history.ipynb
-        - how-tos/memory/delete-messages.ipynb
-        - how-tos/memory/add-summary-conversation-history.ipynb
-        - how-tos/memory/semantic-search.ipynb
       - Human-in-the-loop:
         - concepts/human_in_the_loop.md
-        # DEPRECATE - concepts/v0-human-in-the-loop.md
         - how-tos/human_in_the_loop/breakpoints.ipynb
         - how-tos/human_in_the_loop/dynamic_breakpoints.ipynb
         - how-tos/human_in_the_loop/edit-graph-state.ipynb
@@ -182,6 +157,20 @@ nav:
         - how-tos/streaming-events-from-within-tools.ipynb
         - how-tos/streaming-subgraphs.ipynb
         - how-tos/disable-streaming.ipynb
+      - Controllability:
+        - how-tos/map-reduce.ipynb
+        - how-tos/command.ipynb
+        - how-tos/configuration.ipynb
+        - how-tos/node-retries.ipynb
+        - how-tos/return-when-recursion-limit-hits.ipynb
+      - concepts/breakpoints.md
+      - Time travel: concepts/time-travel.md
+      - Memory:
+        - concepts/memory.md
+        - how-tos/memory/manage-conversation-history.ipynb
+        - how-tos/memory/delete-messages.ipynb
+        - how-tos/memory/add-summary-conversation-history.ipynb
+        - how-tos/memory/semantic-search.ipynb
       - Tool calling:
         - how-tos/tool-calling.ipynb
         - how-tos/tool-calling-errors.ipynb
@@ -205,20 +194,20 @@ nav:
         - how-tos/input_output_schema.ipynb
         - how-tos/pass_private_state.ipynb
       - Other:
+        - concepts/pregel.md
         - how-tos/async.ipynb
         - how-tos/react-agent-structured-output.ipynb
         - how-tos/run-id-langsmith.ipynb
         - how-tos/autogen-integration.ipynb
         - how-tos/autogen-integration-functional.ipynb
     - LangGraph Platform:
-      - High level:
-          - concepts/langgraph_platform.md
-          - concepts/platform_architecture.md
-          - concepts/scalability_and_resilience.md
-          - concepts/deployment_options.md
-          - concepts/bring_your_own_cloud.md
-          - concepts/plans.md
-          - concepts/template_applications.md
+      - Overview: concepts/langgraph_platform.md
+      - concepts/platform_architecture.md
+      - concepts/scalability_and_resilience.md
+      - concepts/deployment_options.md
+      - concepts/bring_your_own_cloud.md
+      - concepts/plans.md
+      - concepts/template_applications.md
       - Components:
         - concepts/langgraph_control_plane.md
         - concepts/langgraph_data_plane.md
@@ -312,8 +301,7 @@ nav:
         - cloud/how-tos/iterate_graph_studio.md
         - cloud/how-tos/clone_traces_studio.md
         - how-tos/local-studio.md
-      # - concepts/index.md REMOVE?
-        
+  
   - Reference:
     - reference/index.md
     - LangGraph:
@@ -339,6 +327,7 @@ nav:
       - SDK (JS/TS): cloud/reference/sdk/js_ts_sdk_ref.md
       - RemoteGraph: reference/remote_graph.md
       - Environment variables: cloud/reference/env_var.md
+  
   - Examples:
     - tutorials/langgraph-platform/local-server.md
     - tutorials/workflows/index.md
@@ -346,49 +335,12 @@ nav:
     - tutorials/multi_agent/agent_supervisor.ipynb
     - tutorials/customer-support/customer-support.ipynb
     - SQL agent: tutorials/sql-agent.ipynb
-    
-    # THE FOLLOWING TUTORIALS ARE NOT UP-TO-DATE
-    # - tutorials/index.md
-    # - Quick Start:
-    #     - tutorials/introduction.ipynb
-    # - Chatbots:
-    #     - tutorials/chatbots/information-gather-prompting.ipynb
-    #     - tutorials/code_assistant/langgraph_code_assistant.ipynb
-    # - RAG:
-    #     - tutorials/rag/langgraph_adaptive_rag.ipynb
-    #     - tutorials/rag/langgraph_adaptive_rag_local.ipynb
-    #     - tutorials/rag/langgraph_crag.ipynb
-    #     - tutorials/rag/langgraph_crag_local.ipynb
-    #     - tutorials/rag/langgraph_self_rag.ipynb
-    #     - tutorials/rag/langgraph_self_rag_local.ipynb
-    #     
-    # - Agent Architectures:
-    #     - Multi-Agent Systems:
-    #         - tutorials/multi_agent/multi-agent-collaboration.ipynb
-    #         - tutorials/multi_agent/hierarchical_agent_teams.ipynb
-    #     - Planning Agents:
-    #         - tutorials/plan-and-execute/plan-and-execute.ipynb
-    #         - tutorials/rewoo/rewoo.ipynb
-    #         - tutorials/llm-compiler/LLMCompiler.ipynb
-    #     - Reflection & Critique:
-    #         - tutorials/reflection/reflection.ipynb
-    #         - tutorials/reflexion/reflexion.ipynb
-    #         - tutorials/tot/tot.ipynb
-    #         - tutorials/lats/lats.ipynb
-    #         - tutorials/self-discover/self-discover.ipynb
-    # - Evaluation & Analysis:
-    #     - tutorials/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb
-    #     - tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb
-    # - Experimental:
-    #     - tutorials/storm/storm.ipynb
-    #     - tutorials/tnt-llm/tnt-llm.ipynb
-    #     - tutorials/web-navigation/web_voyager.ipynb
-    #     - tutorials/usaco/usaco.ipynb
-    #     - tutorials/extraction/retries.ipynb
-
+  
   - Resources:
+    - LLMS-txt: llms-txt-overview.md
     - concepts/faq.md
     - agents/prebuilt.md # NOTE: prebuilt.md is auto-generated by `make build-prebuilt`
+    - Template applications: concepts/template_applications.md  # TODO: make tutorial
     - Troubleshooting:
         - Errors:
           - troubleshooting/errors/index.md
@@ -400,7 +352,6 @@ nav:
           - troubleshooting/errors/INVALID_LICENSE.md
         - LangGraph Studio: troubleshooting/studio.md
     - Learn:
-      - LLMS-txt: llms-txt-overview.md
       - LangGraph Academy course: https://academy.langchain.com/courses/intro-to-langgraph
       - Case studies: adopters.md
 

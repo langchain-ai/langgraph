@@ -3,7 +3,7 @@ search:
   boost: 2
 ---
 
-# LangGraph Glossary
+# Key features
 
 ## Graphs
 
