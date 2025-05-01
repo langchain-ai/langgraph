@@ -1,16 +1,16 @@
 ---
 tags:
-    - mcp
-    - platform
+  - mcp
+  - platform
 hide:
-    - toc
+  - tags
 ---
 
 # Model context protocol (MCP)
 
 The **Model Context Protocol (MCP)** is an open standard that defines how applications supply context to large language models (LLMs).
 
-The [LangGraph server](./langgraph_server.md) implements MCP using the [Streamable HTTP transport](https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/transports/#streamable-http). This allows LangGraph **agents** to be exposed as **MCP tools**, making them usable with any MCP-compliant client supporting Streamable HTTP.
+[LangGraph Server](./langgraph_server.md) implements MCP using the [Streamable HTTP transport](https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/transports/#streamable-http). This allows LangGraph **agents** to be exposed as **MCP tools**, making them usable with any MCP-compliant client supporting Streamable HTTP.
 
 The MCP endpoint is available at:
 
@@ -18,7 +18,7 @@ The MCP endpoint is available at:
 /mcp
 ```
 
-on the LangGraph server.
+on [LangGraph Server](./langgraph_server.md).
 
 ## Requirements
 
@@ -33,59 +33,37 @@ Install them with:
 pip install "langgraph-api>=0.2.3" "langgraph-sdk>=0.1.61"
 ```
 
-## Usage overview
+## Exposing an agent as MCP tool
 
-To enable MCP:
 
-- Upgrade to a recent LangGraph server version.
-- MCP tools (agents) will be automatically exposed.
-- Connect with any MCP-compliant client that supports Streamable HTTP.
+When deployed, your agent will appear as a tool in the MCP endpoint
+with this configuration:
 
-### JavaScript client example
+- **Tool name**: The agent's name.
+- **Tool description**: The agent's description.
+- **Tool input schema**: The agent's input schema.
 
-You can use the official JavaScript client:
+### Setting name and description 
 
-```bash
-npm install @modelcontextprotocol/sdk
-```
+You can set the name and description of your agent in `langgraph.json`:
 
-> **Note**
-> Replace `serverUrl` with your LangGraph server URL and configure authentication headers as needed.
-
-```js
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-
-// Connects to the LangGraph MCP endpoint
-async function connectClient(url) {
-    const baseUrl = new URL(url);
-    const client = new Client({
-        name: 'streamable-http-client',
-        version: '1.0.0'
-    });
-
-    const transport = new StreamableHTTPClientTransport(baseUrl);
-    await client.connect(transport);
-
-    console.log("Connected using Streamable HTTP transport");
-    console.log(JSON.stringify(await client.listTools(), null, 2));
-    return client;
+```json
+{
+    "graphs": {
+        "my_agent": {
+            "path": "./my_agent/agent.py:graph",
+            "description": "A description of what the agent does"
+        }
+    },
+    "env": ".env"
 }
-
-const serverUrl = "http://localhost:2024/mcp";
-
-connectClient(serverUrl)
-    .then(() => {
-        console.log("Client connected successfully");
-    })
-    .catch(error => {
-        console.error("Failed to connect client:", error);
-    });
 ```
 
-## Design your agent
+After deployment, you can update the name and description using the LangGraph SDK.
 
-To expose your agent effectively as an MCP tool, design its input and output schemas to be **clear and simple** for LLMs to process.
+### Schema
+
+Define clear, minimal input and output schemas to avoid exposing unnecessary internal complexity to the LLM.
 
 The default [MessagesState](./low_level.md#messagesstate) uses `AnyMessage`, which supports many message types but is too general for direct LLM exposure.
 
@@ -127,19 +105,72 @@ print(graph.invoke({"question": "hi"}))
 
 For more details, see the [low-level concepts guide](https://langchain-ai.github.io/langgraph/concepts/low_level/#state).
 
-!!! important "Keep schemas clean"
 
-    Define clear, minimal input and output schemas to avoid exposing unnecessary internal complexity to the LLM.
+## Usage overview
 
-## MCP Sessions 
+To enable MCP:
 
-The current implementation of MCP in LangGraph does not support sessions. This means that each request to the `/mcp` endpoint is stateless and does not maintain any session information between requests.
+- Upgrade to a recent LangGraph server version.
+- MCP tools (agents) will be automatically exposed.
+- Connect with any MCP-compliant client that supports Streamable HTTP.
+
+
+### Client
+
+Use an MCP-compliant client to connect to the LangGraph server. The following examples show how to connect using different programming languages.
+
+=== "JavaScript/TypeScript"
+
+    ```bash
+    npm install @modelcontextprotocol/sdk
+    ```
+
+    > **Note**
+    > Replace `serverUrl` with your LangGraph server URL and configure authentication headers as needed.
+
+    ```js
+    import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+    import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+
+    // Connects to the LangGraph MCP endpoint
+    async function connectClient(url) {
+        const baseUrl = new URL(url);
+        const client = new Client({
+            name: 'streamable-http-client',
+            version: '1.0.0'
+        });
+
+        const transport = new StreamableHTTPClientTransport(baseUrl);
+        await client.connect(transport);
+
+        console.log("Connected using Streamable HTTP transport");
+        console.log(JSON.stringify(await client.listTools(), null, 2));
+        return client;
+    }
+
+    const serverUrl = "http://localhost:2024/mcp";
+
+    connectClient(serverUrl)
+        .then(() => {
+            console.log("Client connected successfully");
+        })
+        .catch(error => {
+            console.error("Failed to connect client:", error);
+        });
+    ```
+
+=== "Python"
+
+    No official MCP client is available for Python yet.
+
+
+## Session behavior  
+
+The current LangGraph MCP implementation does not support sessions. Each `/mcp` request is stateless and independent.
 
 ## Authentication
 
-The `/mcp` endpoint uses the same authentication as the rest of the LangGraph API.
-
-Refer to the [authentication guide](./auth.md) for setup details.
+The `/mcp` endpoint uses the same authentication as the rest of the LangGraph API. Refer to the [authentication guide](./auth.md) for setup details.
 
 ## Disabling MCP
 
