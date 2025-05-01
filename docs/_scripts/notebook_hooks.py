@@ -26,8 +26,8 @@ REDIRECT_MAP = {
     "how-tos/streaming-from-final-node.ipynb": "how-tos/streaming-specific-nodes.ipynb",
     "how-tos/streaming-events-from-within-tools-without-langchain.ipynb": "how-tos/streaming-events-from-within-tools.ipynb#example-without-langchain",
     # cloud redirects
-    "cloud/index.md": "concepts/index.md#langgraph-platform",
-    "cloud/how-tos/index.md": "how-tos/index.md#langgraph-platform",
+    "cloud/index.md": "index.md",
+    "cloud/how-tos/index.md": "concepts/langgraph_platform",
     "cloud/concepts/api.md": "concepts/langgraph_server.md",
     "cloud/concepts/cloud.md": "concepts/langgraph_cloud.md",
     "cloud/faq/studio.md": "concepts/langgraph_studio.md#studio-faqs",
@@ -42,7 +42,8 @@ REDIRECT_MAP = {
     "reference/prebuilt.md": "reference/agents.md",
     "concepts/high_level.md": "index.md",
     "concepts/index.md": "index.md",
-    "concepts/v0-human-in-the-loop.md": "concepts/human-in-the-loop.md"
+    "concepts/v0-human-in-the-loop.md": "concepts/human-in-the-loop.md",
+    "how-tos/index.md": "index.md"
 }
 
 

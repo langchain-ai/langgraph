@@ -241,8 +241,8 @@ Now that you have a LangGraph app running locally, take your journey further by 
 
 Expand your knowledge with these resources:
 
-- **[LangGraph Platform Concepts](../../concepts/index.md#langgraph-platform)**: Understand the foundational concepts of the LangGraph Platform.  
-- **[LangGraph Platform How-to Guides](../../how-tos/index.md#langgraph-platform)**: Discover step-by-step guides to build and deploy applications.
+- **[LangGraph Platform Concepts](../../concepts/langgraph_platform)**: Understand the foundational concepts of the LangGraph Platform.  
+- **[LangGraph Platform How-to Guides](../../index)**: Discover step-by-step guides to build and deploy applications.
 
 ### 🛠️ Developer References
 
