@@ -1,3 +1,7 @@
+---
+search:
+    boost: 2 
+---
 # Workflows and Agents
 
 This guide reviews common patterns for agentic systems. In describing these systems, it can be useful to make a distinction between "workflows" and "agents". One way to think about this difference is nicely explained in [Anthropic's](https://python.langchain.com/docs/integrations/providers/anthropic/) `Building Effective Agents` blog post:
@@ -222,7 +226,7 @@ As noted in the Anthropic blog on `Building Effective Agents`:
 
 
     @entrypoint()
-    def parallel_workflow(topic: str):
+    def prompt_chaining_workflow(topic: str):
         original_joke = generate_joke(topic).result()
         if check_punchline(original_joke) == "Pass":
             return original_joke
@@ -231,7 +235,7 @@ As noted in the Anthropic blog on `Building Effective Agents`:
         return polish_joke(improved_joke).result()
 
     # Invoke
-    for step in parallel_workflow.stream("cats", stream_mode="updates"):
+    for step in prompt_chaining_workflow.stream("cats", stream_mode="updates"):
         print(step)
         print("\n")
     ```

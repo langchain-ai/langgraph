@@ -38,29 +38,45 @@ export const typedUi = <Decl extends Record<string, ElementType>>(
   const runId = (config.metadata?.run_id as string | undefined) ?? config.runId;
   if (!runId) throw new Error("run_id is required");
 
-  const metadata = {
-    ...config.metadata,
-    tags: config.tags,
-    name: config.runName,
-    run_id: runId,
-  };
-
-  const handlePush = <K extends keyof PropMap & string>(
+  function handlePush<K extends keyof PropMap & string>(
     message: {
       id?: string;
       name: K;
       props: PropMap[K];
       metadata?: Record<string, unknown>;
     },
-    options?: { message?: MessageLike },
-  ): UIMessage => {
-    const evt: UIMessage = {
+    options?: { message?: MessageLike; merge?: boolean },
+  ): UIMessage<K, PropMap[K]>;
+
+  function handlePush<K extends keyof PropMap & string>(
+    message: {
+      id?: string;
+      name: K;
+      props: Partial<PropMap[K]>;
+      metadata?: Record<string, unknown>;
+    },
+    options: { message?: MessageLike; merge: true },
+  ): UIMessage<K, Partial<PropMap[K]>>;
+
+  function handlePush<K extends keyof PropMap & string>(
+    message: {
+      id?: string;
+      name: K;
+      props: PropMap[K] | Partial<PropMap[K]>;
+      metadata?: Record<string, unknown>;
+    },
+    options?: { message?: MessageLike; merge?: boolean },
+  ): UIMessage<K, PropMap[K] | Partial<PropMap[K]>> {
+    const evt: UIMessage<K, PropMap[K] | Partial<PropMap[K]>> = {
       type: "ui" as const,
       id: message?.id ?? uuidv4(),
       name: message?.name,
       props: message?.props,
       metadata: {
-        ...metadata,
+        merge: options?.merge || undefined,
+        run_id: runId,
+        tags: config.tags,
+        name: config.runName,
         ...message?.metadata,
         ...(options?.message ? { message_id: options.message.id } : null),
       },
@@ -69,7 +85,7 @@ export const typedUi = <Decl extends Record<string, ElementType>>(
     config.writer?.(evt);
     config.configurable?.__pregel_send?.([[stateKey, evt]]);
     return evt;
-  };
+  }
 
   const handleDelete = (id: string): RemoveUIMessage => {
     const evt: RemoveUIMessage = { type: "remove-ui", id };

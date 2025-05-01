@@ -40,6 +40,9 @@ agent.invoke(
 )
 ```
 
+> [!TIP]
+> Check out [this guide](https://langchain-ai.github.io/langgraph/tutorials/workflows/) that walks through implementing common patterns (workflows and agents) in LangGraph. 
+
 ## Why use LangGraph?
 
 LangGraph is built for developers who want to build powerful, adaptable AI agents. Developers choose LangGraph for:

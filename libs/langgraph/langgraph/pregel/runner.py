@@ -3,18 +3,13 @@ import concurrent.futures
 import threading
 import time
 import weakref
+from collections.abc import AsyncIterator, Awaitable, Iterable, Iterator, Sequence
 from functools import partial
 from typing import (
     Any,
-    AsyncIterator,
-    Awaitable,
     Callable,
     Generic,
-    Iterable,
-    Iterator,
     Optional,
-    Sequence,
-    Type,
     TypeVar,
     Union,
     cast,
@@ -72,7 +67,7 @@ class FuturesDict(Generic[F, E], dict[F, Optional[PregelExecutableTask]]):
         callback: weakref.ref[
             Callable[[PregelExecutableTask, Optional[BaseException]], None]
         ],
-        future_type: Type[F],
+        future_type: type[F],
         # used for generic typing, newer py supports FutureDict[...](...)
     ) -> None:
         super().__init__()
@@ -140,7 +135,7 @@ class PregelRunner:
         *,
         reraise: bool = True,
         timeout: Optional[float] = None,
-        retry_policy: Optional[RetryPolicy] = None,
+        retry_policy: Optional[Sequence[RetryPolicy]] = None,
         get_waiter: Optional[Callable[[], concurrent.futures.Future[None]]] = None,
     ) -> Iterator[None]:
         tasks = tuple(tasks)
@@ -269,7 +264,7 @@ class PregelRunner:
         *,
         reraise: bool = True,
         timeout: Optional[float] = None,
-        retry_policy: Optional[RetryPolicy] = None,
+        retry_policy: Optional[Sequence[RetryPolicy]] = None,
         get_waiter: Optional[Callable[[], asyncio.Future[None]]] = None,
     ) -> AsyncIterator[None]:
         loop = asyncio.get_event_loop()
@@ -475,7 +470,7 @@ def _exception(
 def _panic_or_proceed(
     futs: Union[set[concurrent.futures.Future], set[asyncio.Future]],
     *,
-    timeout_exc_cls: Type[Exception] = TimeoutError,
+    timeout_exc_cls: type[Exception] = TimeoutError,
     panic: bool = True,
 ) -> None:
     """Cancel remaining tasks if any failed, re-raise exception if panic is True."""
@@ -519,7 +514,7 @@ def _call(
     func: Callable[[Any], Union[Awaitable[Any], Any]],
     input: Any,
     *,
-    retry: Optional[RetryPolicy] = None,
+    retry: Optional[Sequence[RetryPolicy]] = None,
     callbacks: Callbacks = None,
     futures: weakref.ref[FuturesDict],
     schedule_task: weakref.ref[
@@ -600,7 +595,7 @@ def _acall(
     func: Callable[[Any], Union[Awaitable[Any], Any]],
     input: Any,
     *,
-    retry: Optional[RetryPolicy] = None,
+    retry: Optional[Sequence[RetryPolicy]] = None,
     callbacks: Callbacks = None,
     # injected dependencies
     futures: weakref.ref[FuturesDict],

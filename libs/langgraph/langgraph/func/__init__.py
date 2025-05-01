@@ -2,10 +2,10 @@ import asyncio
 import concurrent.futures
 import functools
 import inspect
+from collections.abc import Awaitable, Sequence
 from dataclasses import dataclass
 from typing import (
     Any,
-    Awaitable,
     Callable,
     Generic,
     Optional,
@@ -19,7 +19,7 @@ from typing import (
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.constants import END, PREVIOUS, START, TAG_HIDDEN
+from langgraph.constants import END, PREVIOUS, START
 from langgraph.pregel import Pregel
 from langgraph.pregel.call import (
     P,
@@ -38,7 +38,7 @@ from langgraph.types import _DC_KWARGS, RetryPolicy, StreamMode
 def task(
     *,
     name: Optional[str] = None,
-    retry: Optional[RetryPolicy] = None,
+    retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
 ) -> Callable[
     [Union[Callable[P, Awaitable[T]], Callable[P, T]]],
     Callable[P, SyncAsyncFuture[T]],
@@ -55,7 +55,7 @@ def task(
     __func_or_none__: Optional[Union[Callable[P, Awaitable[T]], Callable[P, T]]] = None,
     *,
     name: Optional[str] = None,
-    retry: Optional[RetryPolicy] = None,
+    retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
 ) -> Union[
     Callable[
         [Union[Callable[P, Awaitable[T]], Callable[P, T]]],
@@ -119,6 +119,10 @@ def task(
         await add_one.ainvoke([1, 2, 3])  # Returns [2, 3, 4]
         ```
     """
+    if isinstance(retry, RetryPolicy):
+        retry_policies: Optional[Sequence[RetryPolicy]] = (retry,)
+    else:
+        retry_policies = retry
 
     def decorator(
         func: Union[Callable[P, Awaitable[T]], Callable[P, T]],
@@ -137,7 +141,7 @@ def task(
                 # handle regular functions / partials / callable classes, etc.
                 func.__name__ = name
 
-        call_func = functools.partial(call, func, retry=retry)
+        call_func = functools.partial(call, func, retry=retry_policies)
         object.__setattr__(call_func, "_is_pregel_task", True)
         return functools.update_wrapper(call_func, func)
 
@@ -221,7 +225,7 @@ class entrypoint:
             as its result is cached by the checkpointer.
 
             Args:
-                topic (str): The subject of the essay.
+                topic: The subject of the essay.
 
             Returns:
                 dict: A dictionary containing the generated essay and the human review.
@@ -429,8 +433,7 @@ class entrypoint:
                             [
                                 ChannelWriteEntry(END, mapper=_pluck_return_value),
                                 ChannelWriteEntry(PREVIOUS, mapper=_pluck_save_value),
-                            ],
-                            tags=[TAG_HIDDEN],
+                            ]
                         )
                     ],
                 )

@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # Multi-agent Systems
 
 An [agent](./agentic_concepts.md#agent-architectures) is _a system that uses an LLM to decide the control flow of an application_. As you develop these systems, they might grow more complex over time, making them harder to manage and scale. For example, you might run into the following problems:

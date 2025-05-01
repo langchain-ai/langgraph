@@ -1,18 +1,16 @@
 import dataclasses
 import sys
 from collections import deque
+from collections.abc import Hashable, Sequence
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
     ClassVar,
     Generic,
-    Hashable,
     Literal,
     NamedTuple,
     Optional,
-    Sequence,
-    Type,
     TypeVar,
     Union,
     cast,
@@ -21,8 +19,10 @@ from typing import (
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from typing_extensions import Self
+from xxhash import xxh3_128_hexdigest
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
+from langgraph.utils.fields import get_update_as_tuples
 
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
@@ -49,7 +49,7 @@ Checkpointer = Union[None, bool, BaseCheckpointSaver]
 StreamMode = Literal["values", "updates", "debug", "messages", "custom"]
 """How the stream method should emit outputs.
 
-- `"values"`: Emit all values in the state after each step.
+- `"values"`: Emit all values in the state after each step, including interrupts.
     When used with functional API, values are emitted once at the end of the workflow.
 - `"updates"`: Emit only the node or task names and updates returned by the nodes or tasks after each step.
     If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
@@ -75,6 +75,10 @@ def default_retry_on(exc: Exception) -> bool:
 
     if isinstance(exc, ConnectionError):
         return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return 500 <= exc.response.status_code < 600
+    if isinstance(exc, requests.HTTPError):
+        return 500 <= exc.response.status_code < 600 if exc.response else True
     if isinstance(
         exc,
         (
@@ -93,10 +97,6 @@ def default_retry_on(exc: Exception) -> bool:
         ),
     ):
         return False
-    if isinstance(exc, httpx.HTTPStatusError):
-        return 500 <= exc.response.status_code < 600
-    if isinstance(exc, requests.HTTPError):
-        return 500 <= exc.response.status_code < 600 if exc.response else True
     return True
 
 
@@ -117,7 +117,7 @@ class RetryPolicy(NamedTuple):
     jitter: bool = True
     """Whether to add random jitter to the interval between retries."""
     retry_on: Union[
-        Type[Exception], Sequence[Type[Exception]], Callable[[Exception], bool]
+        type[Exception], Sequence[type[Exception]], Callable[[Exception], bool]
     ] = default_retry_on
     """List of exception classes that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
 
@@ -133,7 +133,8 @@ class CachePolicy(NamedTuple):
 
 @dataclasses.dataclass(**_DC_KWARGS)
 class Interrupt:
-    """
+    """Information about an interrupt that occurred in a node.
+
     !!! version-added "Added in version 0.2.24."
     """
 
@@ -142,6 +143,13 @@ class Interrupt:
     ns: Optional[Sequence[str]] = None
     when: Literal["during"] = dataclasses.field(default="during", repr=False)
 
+    @property
+    def interrupt_id(self) -> str:
+        """Generate a unique ID for the interrupt based on its namespace."""
+        if self.ns is None:
+            return "placeholder-id"
+        return xxh3_128_hexdigest("|".join(self.ns).encode())
+
 
 class StateUpdate(NamedTuple):
     values: Optional[dict[str, Any]]
@@ -149,6 +157,8 @@ class StateUpdate(NamedTuple):
 
 
 class PregelTask(NamedTuple):
+    """A Pregel task."""
+
     id: str
     name: str
     path: tuple[Union[str, int, tuple], ...]
@@ -172,7 +182,7 @@ class PregelExecutableTask:
     writes: deque[tuple[str, Any]]
     config: RunnableConfig
     triggers: Sequence[str]
-    retry_policy: Optional[RetryPolicy]
+    retry_policy: Optional[Sequence[RetryPolicy]]
     cache_policy: Optional[CachePolicy]
     id: str
     path: tuple[Union[str, int, tuple], ...]
@@ -185,19 +195,21 @@ class StateSnapshot(NamedTuple):
     """Snapshot of the state of the graph at the beginning of a step."""
 
     values: Union[dict[str, Any], Any]
-    """Current values of channels"""
+    """Current values of channels."""
     next: tuple[str, ...]
     """The name of the node to execute in each task for this step."""
     config: RunnableConfig
-    """Config used to fetch this snapshot"""
+    """Config used to fetch this snapshot."""
     metadata: Optional[CheckpointMetadata]
-    """Metadata associated with this snapshot"""
+    """Metadata associated with this snapshot."""
     created_at: Optional[str]
-    """Timestamp of snapshot creation"""
+    """Timestamp of snapshot creation."""
     parent_config: Optional[RunnableConfig]
-    """Config used to fetch the parent snapshot, if any"""
+    """Config used to fetch the parent snapshot, if any."""
     tasks: tuple[PregelTask, ...]
     """Tasks to execute in this step. If already attempted, may contain an error."""
+    interrupts: tuple[Interrupt, ...]
+    """Interrupts that occurred in this step that are pending resolution."""
 
 
 class Send:
@@ -251,8 +263,8 @@ class Send:
         Initialize a new instance of the Send class.
 
         Args:
-            node (str): The name of the target node to send the message to.
-            arg (Any): The state or message to send to the target node.
+            node: The name of the target node to send the message to.
+            arg: The state or message to send to the target node.
         """
         self.node = node
         self.arg = arg
@@ -287,6 +299,10 @@ class Command(Generic[N], ToolOutputMixin):
             - Command.PARENT: closest parent graph
         update: update to apply to the graph's state.
         resume: value to resume execution with. To be used together with [`interrupt()`][langgraph.types.interrupt].
+            Can be one of the following:
+
+            - mapping of interrupt ids to resume values
+            - a single value with which to resume the next interrupt
         goto: can be one of the following:
 
             - name of the node to navigate to next (any node that belongs to the specified `graph`)
@@ -297,7 +313,7 @@ class Command(Generic[N], ToolOutputMixin):
 
     graph: Optional[str] = None
     update: Optional[Any] = None
-    resume: Optional[Union[Any, dict[str, Any]]] = None
+    resume: Optional[Union[dict[str, Any], Any]] = None
     goto: Union[Send, Sequence[Union[Send, str]], str] = ()
 
     def __repr__(self) -> str:
@@ -318,7 +334,7 @@ class Command(Generic[N], ToolOutputMixin):
         ):
             return self.update
         elif hints := get_type_hints(type(self.update)):
-            return [(k, getattr(self.update, k)) for k in hints]
+            return get_update_as_tuples(self.update, tuple(hints.keys()))
         elif self.update is not None:
             return [("__root__", self.update)]
         else:

@@ -95,6 +95,23 @@ Action to take when cancelling the run.
 - "rollback": Cancel the run. Then delete the run and associated checkpoints.
 """
 
+AssistantSortBy = Literal[
+    "assistant_id", "graph_id", "name", "created_at", "updated_at"
+]
+"""
+The field to sort by.
+"""
+
+ThreadSortBy = Literal["thread_id", "status", "created_at", "updated_at"]
+"""
+The field to sort by.
+"""
+
+SortOrder = Literal["asc", "desc"]
+"""
+The order to sort by.
+"""
+
 
 class Config(TypedDict, total=False):
     """Configuration options for a call."""
@@ -125,7 +142,7 @@ class Checkpoint(TypedDict):
     thread_id: str
     """Unique identifier for the thread associated with this checkpoint."""
     checkpoint_ns: str
-    """Namespace for the checkpoint, used for organization and retrieval."""
+    """Namespace for the checkpoint; used internally to manage subgraph state."""
     checkpoint_id: Optional[str]
     """Optional unique identifier for the checkpoint itself."""
     checkpoint_map: Optional[dict[str, Any]]

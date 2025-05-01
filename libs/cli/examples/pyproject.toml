@@ -8,7 +8,7 @@ packages = []
 package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.9.0,<4.0"
+python = ">=3.9"
 langgraph-cli = {path = "../../cli", develop = true}
 langgraph-sdk = {path = "../../sdk-py", develop = true}
 

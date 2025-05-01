@@ -1,6 +1,8 @@
 ---
 title: Reference
 description: API reference for LangGraph
+search:
+  boost: 0.5
 ---
 
 <style>

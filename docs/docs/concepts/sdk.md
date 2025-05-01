@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # LangGraph SDK
 
 !!! info "Prerequisites"

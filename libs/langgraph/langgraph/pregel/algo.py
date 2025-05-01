@@ -3,19 +3,17 @@ import itertools
 import sys
 import threading
 from collections import defaultdict, deque
+from collections.abc import Iterable, Mapping, Sequence
+from copy import copy
 from functools import partial
 from hashlib import sha1
 from typing import (
     Any,
     Callable,
-    Iterable,
-    Iterator,
     Literal,
-    Mapping,
     NamedTuple,
     Optional,
     Protocol,
-    Sequence,
     Union,
     cast,
     overload,
@@ -42,6 +40,7 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_PREVIOUS,
     CONFIG_KEY_READ,
+    CONFIG_KEY_RESUME_MAP,
     CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STORE,
@@ -49,6 +48,7 @@ from langgraph.constants import (
     EMPTY_SEQ,
     ERROR,
     INTERRUPT,
+    MISSING,
     NO_WRITES,
     NS_END,
     NS_SEP,
@@ -63,12 +63,12 @@ from langgraph.constants import (
     TASKS,
     Send,
 )
-from langgraph.errors import EmptyChannelError, InvalidUpdateError
+from langgraph.errors import InvalidUpdateError
 from langgraph.managed.base import ManagedValueMapping
 from langgraph.pregel.call import get_runnable_for_task
-from langgraph.pregel.io import read_channel, read_channels
+from langgraph.pregel.io import read_channels
 from langgraph.pregel.log import logger
-from langgraph.pregel.read import PregelNode
+from langgraph.pregel.read import INPUT_CACHE_KEY_TYPE, PregelNode
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
@@ -115,7 +115,7 @@ class Call:
 
     func: Callable
     input: Any
-    retry: Optional[RetryPolicy]
+    retry: Optional[Sequence[RetryPolicy]]
     callbacks: Callbacks
 
     def __init__(
@@ -123,7 +123,7 @@ class Call:
         func: Callable,
         input: Any,
         *,
-        retry: Optional[RetryPolicy],
+        retry: Optional[Sequence[RetryPolicy]],
         callbacks: Callbacks,
     ) -> None:
         self.func = func
@@ -423,6 +423,7 @@ def prepare_next_tasks(
         are the tasks themselves. This is the union of all PUSH tasks (Sends)
         and PULL tasks (nodes triggered by edges).
     """
+    input_cache: dict[INPUT_CACHE_KEY_TYPE, Any] = {}
     checkpoint_id_bytes = binascii.unhexlify(checkpoint["id"].replace("-", ""))
     null_version = checkpoint_null_version(checkpoint)
     tasks: list[Union[PregelTask, PregelExecutableTask]] = []
@@ -444,6 +445,7 @@ def prepare_next_tasks(
             store=store,
             checkpointer=checkpointer,
             manager=manager,
+            input_cache=input_cache,
         ):
             tasks.append(task)
 
@@ -486,6 +488,7 @@ def prepare_next_tasks(
             store=store,
             checkpointer=checkpointer,
             manager=manager,
+            input_cache=input_cache,
         ):
             tasks.append(task)
     return {t.id: t for t in tasks}
@@ -511,6 +514,7 @@ def prepare_single_task(
     store: Optional[BaseStore] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
+    input_cache: Optional[dict[INPUT_CACHE_KEY_TYPE, Any]] = None,
 ) -> Union[None, PregelTask, PregelExecutableTask]:
     """Prepares a single task for the next Pregel step, given a task path, which
     uniquely identifies a PUSH or PULL task within the graph."""
@@ -539,11 +543,14 @@ def prepare_single_task(
             str(task_path[2]),
         )
         task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
+        # we append True to the task path to indicate that a call is being
+        # made, so we should not return interrupts from this task (responsibility lies with the parent)
+        task_path = (*task_path[:3], True)
         metadata = {
             "langgraph_step": step,
             "langgraph_node": name,
             "langgraph_triggers": triggers,
-            "langgraph_path": task_path[:3],
+            "langgraph_path": task_path,
             "langgraph_checkpoint_ns": task_checkpoint_ns,
         }
         if task_id_checksum is not None:
@@ -572,7 +579,7 @@ def prepare_single_task(
                             local_read,
                             channels,
                             managed,
-                            PregelTaskWrites(task_path[:3], name, writes, triggers),
+                            PregelTaskWrites(task_path, name, writes, triggers),
                         ),
                         CONFIG_KEY_STORE: (store or configurable.get(CONFIG_KEY_STORE)),
                         CONFIG_KEY_CHECKPOINTER: (
@@ -588,6 +595,8 @@ def prepare_single_task(
                             config[CONF].get(CONFIG_KEY_SCRATCHPAD),
                             pending_writes,
                             task_id,
+                            xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+                            config[CONF].get(CONFIG_KEY_RESUME_MAP),
                         ),
                     },
                 ),
@@ -595,10 +604,10 @@ def prepare_single_task(
                 call.retry,
                 None,
                 task_id,
-                task_path[:3],
+                task_path,
             )
         else:
-            return PregelTask(task_id, name, task_path[:3])
+            return PregelTask(task_id, name, task_path)
     elif task_path[0] == PUSH:
         if len(task_path) == 2:
             # SEND tasks, executed in superstep n+1
@@ -634,11 +643,14 @@ def prepare_single_task(
             logger.warning(f"Ignoring invalid PUSH task path {task_path}")
             return
         task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
+        # we append False to the task path to indicate that a call is not being made
+        # so we should return interrupts from this task
+        task_path = (*task_path[:3], False)
         metadata = {
             "langgraph_step": step,
             "langgraph_node": packet.node,
             "langgraph_triggers": triggers,
-            "langgraph_path": task_path[:3],
+            "langgraph_path": task_path,
             "langgraph_checkpoint_ns": task_checkpoint_ns,
         }
         if task_id_checksum is not None:
@@ -675,7 +687,7 @@ def prepare_single_task(
                                 channels,
                                 managed,
                                 PregelTaskWrites(
-                                    task_path[:3], packet.node, writes, triggers
+                                    task_path, packet.node, writes, triggers
                                 ),
                             ),
                             CONFIG_KEY_STORE: (
@@ -695,6 +707,8 @@ def prepare_single_task(
                                 config[CONF].get(CONFIG_KEY_SCRATCHPAD),
                                 pending_writes,
                                 task_id,
+                                xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+                                config[CONF].get(CONFIG_KEY_RESUME_MAP),
                             ),
                             CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
                                 PREVIOUS, None
@@ -705,12 +719,12 @@ def prepare_single_task(
                     proc.retry_policy,
                     None,
                     task_id,
-                    task_path[:3],
+                    task_path,
                     writers=proc.flat_writers,
                     subgraphs=proc.subgraphs,
                 )
         else:
-            return PregelTask(task_id, packet.node, task_path[:3])
+            return PregelTask(task_id, packet.node, task_path)
     elif task_path[0] == PULL:
         # (PULL, node name)
         name = cast(str, task_path[1])
@@ -729,11 +743,15 @@ def prepare_single_task(
         ):
             triggers = tuple(sorted(proc.triggers))
             try:
-                val = next(
-                    _proc_input(proc, managed, channels, for_execution=for_execution)
+                val = _proc_input(
+                    proc,
+                    managed,
+                    channels,
+                    for_execution=for_execution,
+                    input_cache=input_cache,
                 )
-            except StopIteration:
-                return
+                if val is MISSING:
+                    return
             except Exception as exc:
                 if SUPPORTS_EXC_NOTES:
                     exc.add_note(
@@ -817,6 +835,8 @@ def prepare_single_task(
                                     config[CONF].get(CONFIG_KEY_SCRATCHPAD),
                                     pending_writes,
                                     task_id,
+                                    xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+                                    config[CONF].get(CONFIG_KEY_RESUME_MAP),
                                 ),
                                 CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
                                     PREVIOUS, None
@@ -868,6 +888,8 @@ def _scratchpad(
     parent_scratchpad: Optional[PregelScratchpad],
     pending_writes: list[PendingWrite],
     task_id: str,
+    namespace_hash: str,
+    resume_map: Optional[dict[str, Any]],
 ) -> PregelScratchpad:
     if len(pending_writes) > 0:
         # find global resume value
@@ -879,6 +901,7 @@ def _scratchpad(
             # None cannot be used as a resume value, because it would be difficult to
             # distinguish from missing when used over http
             null_resume_write = None
+
         # find task-specific resume value
         for w in pending_writes:
             if w[0] == task_id and w[1] == RESUME:
@@ -888,8 +911,13 @@ def _scratchpad(
                 break
         else:
             task_resume_write = []
-        # clear var
         del w
+
+        # find namespace and task-specific resume value
+        if resume_map and namespace_hash in resume_map:
+            mapped_resume_write = resume_map[namespace_hash]
+            task_resume_write.append(mapped_resume_write)
+
     else:
         null_resume_write = None
         task_resume_write = []
@@ -926,34 +954,32 @@ def _proc_input(
     channels: Mapping[str, BaseChannel],
     *,
     for_execution: bool,
-) -> Iterator[Any]:
+    input_cache: Optional[dict[INPUT_CACHE_KEY_TYPE, Any]],
+) -> Any:
     """Prepare input for a PULL task, based on the process's channels and triggers."""
+    # if in cache return shallow copy
+    if input_cache is not None and proc.input_cache_key in input_cache:
+        return copy(input_cache[proc.input_cache_key])
     # If all trigger channels subscribed by this process are not empty
     # then invoke the process with the values of all non-empty channels
     if isinstance(proc.channels, dict):
-        try:
-            val: dict[str, Any] = {}
-            for k, chan in proc.channels.items():
-                if chan in proc.triggers:
-                    val[k] = read_channel(channels, chan, catch=False)
-                elif chan in channels:
-                    try:
-                        val[k] = read_channel(channels, chan, catch=False)
-                    except EmptyChannelError:
-                        continue
-                else:
-                    val[k] = managed[k]()
-        except EmptyChannelError:
-            return
+        val: dict[str, Any] = {}
+        for k, chan in proc.channels.items():
+            if chan in channels:
+                if channels[chan].is_available():
+                    val[k] = channels[chan].get()
+            else:
+                val[k] = managed[k]()
     elif isinstance(proc.channels, list):
         for chan in proc.channels:
-            try:
-                val = read_channel(channels, chan, catch=False)
-                break
-            except EmptyChannelError:
-                pass
+            if chan in channels:
+                if channels[chan].is_available():
+                    val = channels[chan].get()
+                    break
+            else:
+                val[k] = managed[k]()
         else:
-            return
+            return MISSING
     else:
         raise RuntimeError(
             "Invalid channels type, expected list or dict, got {proc.channels}"
@@ -963,7 +989,11 @@ def _proc_input(
     if for_execution and proc.mapper is not None:
         val = proc.mapper(val)
 
-    yield val
+    # Cache the input value
+    if input_cache is not None:
+        input_cache[proc.input_cache_key] = val
+
+    return val
 
 
 def _uuid5_str(namespace: bytes, *parts: str) -> str:

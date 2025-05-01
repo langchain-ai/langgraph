@@ -9,6 +9,7 @@ from bench.fanout_to_subgraph import fanout_to_subgraph, fanout_to_subgraph_sync
 from bench.pydantic_state import pydantic_state
 from bench.react_agent import react_agent
 from bench.sequential import create_sequential
+from bench.wide_dict import wide_dict
 from bench.wide_state import wide_state
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph
@@ -25,6 +26,7 @@ async def arun(graph: Pregel, input: dict):
                     "configurable": {"thread_id": str(uuid4())},
                     "recursion_limit": 1000000000,
                 },
+                checkpoint_during=False,
             )
         ]
     )
@@ -41,6 +43,7 @@ async def arun_first_event_latency(graph: Pregel, input: dict) -> None:
             "configurable": {"thread_id": str(uuid4())},
             "recursion_limit": 1000000000,
         },
+        checkpoint_during=False,
     )
 
     try:
@@ -60,6 +63,7 @@ def run(graph: Pregel, input: dict):
                     "configurable": {"thread_id": str(uuid4())},
                     "recursion_limit": 1000000000,
                 },
+                checkpoint_during=False,
             )
         ]
     )
@@ -76,6 +80,7 @@ def run_first_event_latency(graph: Pregel, input: dict) -> None:
             "configurable": {"thread_id": str(uuid4())},
             "recursion_limit": 1000000000,
         },
+        checkpoint_during=False,
     )
 
     try:
@@ -239,6 +244,102 @@ benchmarks = (
         "wide_state_9x1200_checkpoint",
         wide_state(1200).compile(checkpointer=MemorySaver()),
         wide_state(1200).compile(checkpointer=MemorySaver()),
+        {
+            "messages": [
+                {
+                    str(i) * 10: {
+                        str(j) * 10: ["hi?" * 10, True, 1, 6327816386138, None] * 5
+                        for j in range(3)
+                    }
+                    for i in range(3)
+                }
+            ]
+        },
+    ),
+    (
+        "wide_dict_25x300",
+        wide_dict(300).compile(checkpointer=None),
+        wide_dict(300).compile(checkpointer=None),
+        {
+            "messages": [
+                {
+                    str(i) * 10: {
+                        str(j) * 10: ["hi?" * 10, True, 1, 6327816386138, None] * 5
+                        for j in range(5)
+                    }
+                    for i in range(5)
+                }
+            ]
+        },
+    ),
+    (
+        "wide_dict_25x300_checkpoint",
+        wide_dict(300).compile(checkpointer=MemorySaver()),
+        wide_dict(300).compile(checkpointer=MemorySaver()),
+        {
+            "messages": [
+                {
+                    str(i) * 10: {
+                        str(j) * 10: ["hi?" * 10, True, 1, 6327816386138, None] * 5
+                        for j in range(5)
+                    }
+                    for i in range(5)
+                }
+            ]
+        },
+    ),
+    (
+        "wide_dict_15x600",
+        wide_dict(600).compile(checkpointer=None),
+        wide_dict(600).compile(checkpointer=None),
+        {
+            "messages": [
+                {
+                    str(i) * 10: {
+                        str(j) * 10: ["hi?" * 10, True, 1, 6327816386138, None] * 5
+                        for j in range(5)
+                    }
+                    for i in range(3)
+                }
+            ]
+        },
+    ),
+    (
+        "wide_dict_15x600_checkpoint",
+        wide_dict(600).compile(checkpointer=MemorySaver()),
+        wide_dict(600).compile(checkpointer=MemorySaver()),
+        {
+            "messages": [
+                {
+                    str(i) * 10: {
+                        str(j) * 10: ["hi?" * 10, True, 1, 6327816386138, None] * 5
+                        for j in range(5)
+                    }
+                    for i in range(3)
+                }
+            ]
+        },
+    ),
+    (
+        "wide_dict_9x1200",
+        wide_dict(1200).compile(checkpointer=None),
+        wide_dict(1200).compile(checkpointer=None),
+        {
+            "messages": [
+                {
+                    str(i) * 10: {
+                        str(j) * 10: ["hi?" * 10, True, 1, 6327816386138, None] * 5
+                        for j in range(3)
+                    }
+                    for i in range(3)
+                }
+            ]
+        },
+    ),
+    (
+        "wide_dict_9x1200_checkpoint",
+        wide_dict(1200).compile(checkpointer=MemorySaver()),
+        wide_dict(1200).compile(checkpointer=MemorySaver()),
         {
             "messages": [
                 {

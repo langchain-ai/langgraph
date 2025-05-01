@@ -1,8 +1,17 @@
+---
+search:
+  boost: 2
+---
+
 # Persistence
 
 LangGraph has a built-in persistence layer, implemented through checkpointers. When you compile graph with a checkpointer, the checkpointer saves a `checkpoint` of the graph state at every super-step. Those checkpoints are saved to a `thread`, which can be accessed after graph execution. Because `threads` allow access to graph's state after execution, several powerful capabilities including human-in-the-loop, memory, time travel, and fault-tolerance are all possible. See [this how-to guide](../how-tos/persistence.ipynb) for an end-to-end example on how to add and use checkpointers with your graph. Below, we'll discuss each of these concepts in more detail. 
 
 ![Checkpoints](img/persistence/checkpoints.jpg)
+
+!!! info "LangGraph API handles checkpointing automatically"
+
+    When using the LangGraph API, you don't need to implement or configure checkpointers manually. The API handles all persistence infrastructure for you behind the scenes.
 
 ## Threads
 
@@ -26,7 +35,7 @@ Let's see what checkpoints are saved when a simple graph is invoked as follows:
 
 ```python
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from typing import Annotated
 from typing_extensions import TypedDict
 from operator import add
@@ -49,7 +58,7 @@ workflow.add_edge(START, "node_a")
 workflow.add_edge("node_a", "node_b")
 workflow.add_edge("node_b", END)
 
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 graph = workflow.compile(checkpointer=checkpointer)
 
 config = {"configurable": {"thread_id": "1"}}
@@ -223,6 +232,10 @@ But, what if we want to retain some information *across threads*? Consider the c
 
 With checkpointers alone, we cannot share information across threads. This motivates the need for the [`Store`](../reference/store.md#langgraph.store.base.BaseStore) interface. As an illustration, we can define an `InMemoryStore` to store information about a user across threads. We simply compile our graph with a checkpointer, as before, and with our new `in_memory_store` variable.
 
+!!!  info "LangGraph API handles stores automatically"
+
+    When using the LangGraph API, you don't need to implement or configure stores manually. The API handles all storage infrastructure for you behind the scenes.
+
 ### Basic Usage
 
 First, let's showcase this in isolation without using LangGraph.
@@ -324,10 +337,10 @@ store.put(
 With this all in place, we use the `in_memory_store` in LangGraph. The `in_memory_store` works hand-in-hand with the checkpointer: the checkpointer saves state to threads, as discussed above, and the `in_memory_store` allows us to store arbitrary information for access *across* threads. We compile the graph with both the checkpointer and the `in_memory_store` as follows. 
 
 ```python
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 # We need this because we want to enable threads (conversations)
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 
 # ... Define the graph ...
 
@@ -440,6 +453,7 @@ Under the hood, checkpointing is powered by checkpointer objects that conform to
 * `langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database ([SqliteSaver][langgraph.checkpoint.sqlite.SqliteSaver] / [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver]). Ideal for experimentation and local workflows. Needs to be installed separately.
 * `langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database ([PostgresSaver][langgraph.checkpoint.postgres.PostgresSaver] / [AsyncPostgresSaver][langgraph.checkpoint.postgres.aio.AsyncPostgresSaver]), used in LangGraph Cloud. Ideal for using in production. Needs to be installed separately.
 
+
 ### Checkpointer interface
 
 Each checkpointer conforms to [BaseCheckpointSaver][langgraph.checkpoint.base.BaseCheckpointSaver] interface and implements the following methods:
@@ -452,7 +466,7 @@ Each checkpointer conforms to [BaseCheckpointSaver][langgraph.checkpoint.base.Ba
 If the checkpointer is used with asynchronous graph execution (i.e. executing the graph via `.ainvoke`, `.astream`, `.abatch`), asynchronous versions of the above methods will be used (`.aput`, `.aput_writes`, `.aget_tuple`, `.alist`).
 
 !!! note Note
-    For running your graph asynchronously, you can use `MemorySaver`, or async versions of Sqlite/Postgres checkpointers -- `AsyncSqliteSaver` / `AsyncPostgresSaver` checkpointers.
+    For running your graph asynchronously, you can use `InMemorySaver`, or async versions of Sqlite/Postgres checkpointers -- `AsyncSqliteSaver` / `AsyncPostgresSaver` checkpointers.
 
 ### Serializer
 

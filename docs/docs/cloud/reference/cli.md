@@ -10,9 +10,6 @@ The LangGraph command line interface includes commands to build and run a LangGr
     === "Python"
         ```bash
         pip install langgraph-cli
-
-        # Install via Homebrew
-        brew install langgraph-cli
         ```
 
     === "JS"
@@ -52,7 +49,7 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
     | <span style="white-space: nowrap;">`pip_config_file`</span>  | Path to `pip` config file.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
     | <span style="white-space: nowrap;">`dockerfile_lines`</span> | Array of additional lines to add to Dockerfile following the import from parent image.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
     | <span style="white-space: nowrap;">`checkpointer`</span>   | Configuration for the checkpointer. Contains a `ttl` field which is an object with the following keys: <ul><li>`strategy`: How to handle expired checkpoints (e.g., `"delete"`).</li><li>`sweep_interval_minutes`: How often to check for expired checkpoints (integer).</li><li>`default_ttl`: Default time-to-live for checkpoints in **minutes** (integer). Defines how long checkpoints are kept before the specified strategy is applied.</li></ul> |
-    | <span style="white-space: nowrap;">`http`</span>            | HTTP server configuration with the following fields: <ul><li>`app`: Path to custom Starlette/FastAPI app (e.g., `"./src/agent/webapp.py:app"`). See [custom routes guide](../../how-tos/http/custom_routes.md).</li><li>`disable_assistants`: Disable `/assistants` routes</li><li>`disable_threads`: Disable `/threads` routes</li><li>`disable_runs`: Disable `/runs` routes</li><li>`disable_store`: Disable `/store` routes</li><li>`disable_meta`: Disable `/ok`, `/info`, `/metrics`, and `/docs` routes</li><li>`cors`: CORS configuration with fields for `allow_origins`, `allow_methods`, `allow_headers`, etc.</li></ul> |
+    | <span style="white-space: nowrap;">`http`</span>            | HTTP server configuration with the following fields: <ul><li>`app`: Path to custom Starlette/FastAPI app (e.g., `"./src/agent/webapp.py:app"`). See [custom routes guide](../../how-tos/http/custom_routes.md).</li><li>`disable_assistants`: Disable `/assistants` routes</li><li>`disable_threads`: Disable `/threads` routes</li><li>`disable_runs`: Disable `/runs` routes</li><li>`disable_store`: Disable `/store` routes</li><li>`disable_meta`: Disable `/ok`, `/info`, `/metrics`, and `/docs` routes</li><li>`cors`: CORS configuration with fields for `allow_origins`, `allow_methods`, `allow_headers`, etc.</li><li>`configurable_headers`: Define which request headers to exclude or include as a run's configurable values.</li></ul> |
 
 === "JS"
 
@@ -298,6 +295,11 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
     | `--no-reload`                 |                  | Disable auto-reload                                                                 |
     | `--n-jobs-per-worker INTEGER` |                  | Number of jobs per worker. Default is 10                                            |
     | `--debug-port INTEGER`        |                  | Port for debugger to listen on                                                      |
+    | `--wait-for-client`           | `False`          | Wait for a debugger client to connect to the debug port before starting the server   |
+    | `--no-browser`                |                  | Skip automatically opening the browser when the server starts                       |
+    | `--studio-url TEXT`           |                  | URL of the LangGraph Studio instance to connect to. Defaults to https://smith.langchain.com |
+    | `--allow-blocking`            | `False`          | Do not raise errors for synchronous I/O blocking operations in your code (added in `0.2.6`)           |
+    | `--tunnel`                    | `False`          | Expose the local server via a public tunnel (Cloudflare) for remote frontend access. This avoids issues with browsers like Safari or networks blocking localhost connections        |
     | `--help`                      |                  | Display command documentation                                                       |
 
 
@@ -321,6 +323,11 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
     | `--no-reload`                 |                  | Disable auto-reload                                                                 |
     | `--n-jobs-per-worker INTEGER` |                  | Number of jobs per worker. Default is 10                                            |
     | `--debug-port INTEGER`        |                  | Port for debugger to listen on                                                      |
+    | `--wait-for-client`           | `False`          | Wait for a debugger client to connect to the debug port before starting the server   |
+    | `--no-browser`                |                  | Skip automatically opening the browser when the server starts                       |
+    | `--studio-url TEXT`           |                  | URL of the LangGraph Studio instance to connect to. Defaults to https://smith.langchain.com |
+    | `--allow-blocking`            | `False`          | Do not raise errors for synchronous I/O blocking operations in your code            |
+    | `--tunnel`                    | `False`          | Expose the local server via a public tunnel (Cloudflare) for remote frontend access. This avoids issues with browsers or networks blocking localhost connections        |
     | `--help`                      |                  | Display command documentation                                                       |
 
 ### `build`

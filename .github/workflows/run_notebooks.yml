@@ -9,7 +9,7 @@ on:
         type: string
         description: "JSON string of changed files"
   schedule:
-    - cron: '0 13 * * *'
+    - cron: "0 13 * * *"
 
 defaults:
   run:
@@ -30,12 +30,12 @@ jobs:
         uses: "./.github/actions/poetry_setup"
         with:
           python-version: 3.11
-          poetry-version: 1.7.1
+          poetry-version: 2.1.2
           cache-key: test-langgraph-notebooks
 
       - name: Install dependencies
         run: |
-          poetry install --with test
+          poetry install --with test --no-root
           poetry run pip install jupyter
 
       - name: Start services

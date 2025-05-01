@@ -22,6 +22,12 @@ MANUAL_API_REFERENCES_LANGGRAPH = [
         "create_react_agent",
         "prebuilt",
     ),
+    (
+        [],
+        "langgraph.prebuilt.chat_agent_executor",
+        "AgentState",
+        "prebuilt",
+    ),
     (["langgraph.prebuilt"], "langgraph.prebuilt.tool_node", "ToolNode", "prebuilt"),
     (
         ["langgraph.prebuilt"],
@@ -45,6 +51,8 @@ MANUAL_API_REFERENCES_LANGGRAPH = [
     (["langgraph.constants"], "langgraph.types", "Interrupt", "types"),
     (["langgraph.constants"], "langgraph.types", "interrupt", "types"),
     (["langgraph.constants"], "langgraph.types", "Command", "types"),
+    (["langgraph.config"], "langgraph.config", "get_stream_writer", "config"),
+    (["langgraph.config"], "langgraph.config", "get_store", "config"),
     (["langgraph.func"], "langgraph.func", "entrypoint", "func"),
     (["langgraph.func"], "langgraph.func", "task", "func"),
     (["langgraph.types"], "langgraph.types", "RetryPolicy", "types"),
@@ -56,10 +64,23 @@ MANUAL_API_REFERENCES_LANGGRAPH = [
     ([], "langgraph.checkpoint.base", "SerializerProtocol", "checkpoints"),
     ([], "langgraph.checkpoint.serde.jsonplus", "JsonPlusSerializer", "checkpoints"),
     ([], "langgraph.checkpoint.memory", "MemorySaver", "checkpoints"),
+    ([], "langgraph.checkpoint.memory", "InMemorySaver", "checkpoints"),
     ([], "langgraph.checkpoint.sqlite.aio", "AsyncSqliteSaver", "checkpoints"),
     ([], "langgraph.checkpoint.sqlite", "SqliteSaver", "checkpoints"),
     ([], "langgraph.checkpoint.postgres.aio", "AsyncPostgresSaver", "checkpoints"),
     ([], "langgraph.checkpoint.postgres", "PostgresSaver", "checkpoints"),
+    # other prebuilts
+    (["langgraph_supervisor"], "langgraph_supervisor.supervisor", "create_supervisor", "supervisor"),
+    (["langgraph_supervisor"], "langgraph_supervisor.handoff", "create_handoff_tool", "supervisor"),
+    ([], "langgraph_supervisor.handoff", "create_forward_message_tool", "supervisor"),
+    (["langgraph_swarm"], "langgraph_swarm.swarm", "create_swarm", "swarm"),
+    (["langgraph_swarm"], "langgraph_swarm.swarm", "add_active_agent_router", "swarm"),
+    (["langgraph_swarm"], "langgraph_swarm.swarm", "SwarmState", "swarm"),
+    (["langgraph_swarm"], "langgraph_swarm.handoff", "create_handoff_tool", "swarm"),
+    ([], "langchain_mcp_adapters.client", "MultiServerMCPClient", "mcp"),
+    ([], "langchain_mcp_adapters.tools", "load_mcp_tools", "mcp"),
+    ([], "langchain_mcp_adapters.prompts", "load_mcp_prompt", "mcp"),
+    ([], "langchain_mcp_adapters.resources", "load_mcp_resources", "mcp"),
 ]
 
 WELL_KNOWN_LANGGRAPH_OBJECTS = {
@@ -141,7 +162,9 @@ def get_imports(code: str, path: str) -> List[ImportInformation]:
     for found_import in found_imports:
         module = found_import["source"]
 
-        if module.startswith("langchain"):
+        if module.startswith("langchain_mcp_adapters"):
+            package_ecosystem = "langgraph"
+        elif module.startswith("langchain"):
             # Handles things like `langchain` or `langchain_anthropic`
             package_ecosystem = "langchain"
         elif module.startswith("langgraph"):
@@ -214,7 +237,7 @@ def update_markdown_with_imports(markdown: str, path: str) -> str:
         path: The path of the file where the markdown content originated.
 
     Returns:
-        Updated markdown with API reference links appended to Python code blocks.
+        Updated markdown with API reference links prepended to Python code blocks.
 
     Example:
         Given a markdown with a Python code block:
@@ -237,7 +260,7 @@ def update_markdown_with_imports(markdown: str, path: str) -> str:
             match (re.Match): The regex match object containing the code block.
 
         Returns:
-            str: The modified code block with API reference links appended if applicable.
+            str: The modified code block with API reference links prepended if applicable.
         """
         indent = match.group("indent")
         code_block = match.group("code")
@@ -253,8 +276,8 @@ def update_markdown_with_imports(markdown: str, path: str) -> str:
         api_links = " | ".join(
             f'<a href="{imp["docs"]}">{imp["imported"]}</a>' for imp in imports
         )
-        # Return the code block with appended API reference links
-        return f"{original_code_block}\n\n{indent}API Reference: {api_links}"
+        # Return the code block with prepended API reference links
+        return f"{indent}API Reference: {api_links}\n\n{original_code_block}"
 
     # Apply the replace_code_block function to all matches in the markdown
     updated_markdown = code_block_pattern.sub(replace_code_block, markdown)

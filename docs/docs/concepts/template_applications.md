@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # Template Applications
 
 Templates are open source reference applications designed to help you get started quickly when building with LangGraph. They provide working examples of common agentic workflows that can be customized to your needs.

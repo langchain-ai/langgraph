@@ -22,7 +22,7 @@ To support this, LangGraph Studio, in combination with LangSmith, allows you to 
 
 First navigate to the LangSmith trace. Here you should see a button to "Run in Studio".
 
-![Run in Studio](../img/run_in_studio.png){width=1200}
+![Run in Studio](img/run_in_studio.png){width=1200}
 
 This will prompt you to enter the url that your locally running agent is accessible at. Once provided, select "Clone thread locally". If you have multiple graphs in your agent, you will also be prompted to select a graph to clone this thread under.
 

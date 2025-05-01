@@ -1,12 +1,16 @@
-# How to Add Breakpoints
+# How to add static breakpoints
 
-When creating LangGraph agents, it is often nice to add a human-in-the-loop component.
-This can be helpful when giving them access to tools.
-Often in these situations you may want to manually approve an action before taking.
+!!! tip "Prerequisites"
 
-This can be in several ways, but the primary supported way is to add an "interrupt" before a node is executed.
-This interrupts execution at that node.
-You can then resume from that spot to continue.  
+    This guide assumes familiarity with the following concepts:
+
+    * [Breakpoints](../../concepts/breakpoints.md)
+    * [LangGraph Glossary](../../concepts/low_level.md)
+    
+
+Human-in-the-loop (HIL) interactions are crucial for [agentic systems](../../concepts/agentic_concepts.md#human-in-the-loop). [Breakpoints](../../concepts/low_level.md#breakpoints) are a common HIL interaction pattern, allowing the graph to stop at specific steps and seek human approval before proceeding (e.g., for sensitive actions).
+
+Breakpoints are built on top of LangGraph [checkpoints](../../concepts/low_level.md#persistence), which save the graph's state after each node execution. Checkpoints are saved in [threads](../../concepts/low_level.md#threads) that preserve graph state and can be accessed after a graph has finished execution. This allows for graph execution to pause at specific points, await human approval, and then resume execution from the last checkpoint.
 
 ## Setup
 

@@ -1,5 +1,7 @@
 ---
 title: Tutorials
+search:
+  boost: 0.5
 ---
 
 # Tutorials

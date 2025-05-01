@@ -19,7 +19,7 @@ export type StreamEvent =
 
 export interface Send {
   node: string;
-  input: Record<string, unknown> | null;
+  input: unknown | null;
 }
 
 export interface Command {
@@ -66,6 +66,11 @@ interface RunsInvokePayload {
    * Checkpoint for when creating a new run.
    */
   checkpoint?: Omit<Checkpoint, "thread_id">;
+
+  /**
+   * Whether to checkpoint during the run (or only at the end/interruption).
+   */
+  checkpointDuring?: boolean;
 
   /**
    * Interrupt execution before entering these nodes.
