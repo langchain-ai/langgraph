@@ -91,10 +91,10 @@ plugins:
                 - "!^_"
 
 nav:
-  - Home: index.md
   - Guides:
+    - Home: index.md
     - Get started:
-      # - TO DO: Quickstart with Prebuilt Agents
+      - Quickstart: agents/agents.md
       - LangGraph basics: tutorials/introduction.ipynb
       - Deployment:
         - tutorials/deployment.md
@@ -104,20 +104,20 @@ nav:
       # agentic concepts may need a bit of love if we're putting it
       # at the top of the LangGraph section
       - concepts/agentic_concepts.md
-      # low level concepts is an odd mix of a Graph API basics overview (conceptual)
-      # and a general glossary of terms related to the Graph API
-      # but it also has some terms from the functional API.
-      # Unclear on where to put it in its current form.
-      - concepts/low_level.md
-      - Graph API basics:
+      - Graph API:
+        - Overview: concepts/low_level.md
+          # low level concepts is an odd mix of a Graph API basics overview (conceptual)
+          # and a general glossary of terms related to the Graph API
+          # but it also has some terms from the functional API.
+          # Unclear on where to put it in its current form.
         - how-tos/state-reducers.ipynb
         - how-tos/sequence.ipynb
         - how-tos/branching.ipynb
         - how-tos/recursion-limit.ipynb
         - how-tos/visualization.ipynb
       - Persistence:
-        - concepts/persistence.md
-        - concepts/durable_execution.md
+        - Overview: concepts/persistence.md
+        - concepts/durable_execution.md # TO DO: Combine with Persistence concept doc?
         - how-tos/persistence.ipynb
         - how-tos/subgraph-persistence.ipynb
         - how-tos/cross-thread-persistence.ipynb
@@ -125,11 +125,11 @@ nav:
         - how-tos/persistence_mongodb.ipynb
         - how-tos/persistence_redis.ipynb
       - Human-in-the-loop:
-        - concepts/human_in_the_loop.md
+        - Overview: concepts/human_in_the_loop.md
         - how-tos/human_in_the_loop/wait-user-input.ipynb
         - how-tos/human_in_the_loop/review-tool-calls.ipynb
       - Streaming:
-        - concepts/streaming.md
+        - Overview: concepts/streaming.md
         - how-tos/streaming.ipynb
         - how-tos/streaming-tokens.ipynb
         - how-tos/streaming-specific-nodes.ipynb
@@ -143,15 +143,15 @@ nav:
         - how-tos/node-retries.ipynb
         - how-tos/return-when-recursion-limit-hits.ipynb
       - Breakpoints:
-        - concepts/breakpoints.md
+        - Overview: concepts/breakpoints.md
         - how-tos/human_in_the_loop/breakpoints.ipynb
         - how-tos/human_in_the_loop/dynamic_breakpoints.ipynb
       - Time travel:
-        - concepts/time-travel.md
+        - Overview: concepts/time-travel.md
         - how-tos/human_in_the_loop/time-travel.ipynb
         - how-tos/human_in_the_loop/edit-graph-state.ipynb
       - Memory:
-        - concepts/memory.md
+        - Overview: concepts/memory.md
         - how-tos/memory/manage-conversation-history.ipynb
         - how-tos/memory/delete-messages.ipynb
         - how-tos/memory/add-summary-conversation-history.ipynb
@@ -168,7 +168,7 @@ nav:
         - how-tos/subgraphs-manage-state.ipynb
         - how-tos/subgraph-transform-state.ipynb
       - Multi-agent:
-        - concepts/multi_agent.md
+        - Overview: concepts/multi_agent.md
         - how-tos/agent-handoffs.ipynb
         - how-tos/multi-agent-network.ipynb
         - how-tos/multi-agent-multi-turn-convo.ipynb
@@ -177,7 +177,7 @@ nav:
         - how-tos/input_output_schema.ipynb
         - how-tos/pass_private_state.ipynb
       - Functional API:
-        - concepts/functional_api.md
+        - Overview: concepts/functional_api.md
         - how-tos/wait-user-input-functional.ipynb
         - how-tos/review-tool-calls-functional.ipynb
         - how-tos/persistence-functional.ipynb
@@ -197,8 +197,7 @@ nav:
         - how-tos/run-id-langsmith.ipynb
         - how-tos/autogen-integration.ipynb
     - Prebuilt agents:
-        - agents/overview.md
-        - agents/agents.md
+        - Overview: agents/overview.md
         - agents/run_agents.md
         - agents/streaming.md
         - agents/models.md
