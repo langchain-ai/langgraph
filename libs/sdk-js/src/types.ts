@@ -68,6 +68,11 @@ interface RunsInvokePayload {
   checkpoint?: Omit<Checkpoint, "thread_id">;
 
   /**
+   * Whether to checkpoint during the run (or only at the end/interruption).
+   */
+  checkpointDuring?: boolean;
+
+  /**
    * Interrupt execution before entering these nodes.
    */
   interruptBefore?: "*" | string[];

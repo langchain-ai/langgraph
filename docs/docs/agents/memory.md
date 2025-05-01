@@ -92,15 +92,26 @@ When the agent is invoked the second time with the same `thread_id`, the origina
 
     If you're using [LangGraph Platform](./deployment.md), during deployment your checkpointer will be automatically configured to use a production-ready database.
 
-### Message history summarization 
+### Manage message history
+
+Long conversations can exceed the LLM's context window. Common solutions are:
+
+* [Summarization](#summarize-message-history): Maintain a running summary of the conversation
+* [Trimming](#trim-message-history): Remove first or last N messages in the history
+
+This allows the agent to keep track of the conversation without exceeding the LLM's context window.
+
+To manage message history, specify `pre_model_hook` — a function ([node](../concepts/low_level.md#nodes)) that will always run before calling the language model.
+
+#### Summarize message history
 
 <figure markdown="1">
 ![image](./assets/summary.png){: style="max-height:400px"}
-<figcaption>Message history can grow quickly and exceed the LLM's context window. A common solution is to maintain a running summary of the conversation. This allows the agent to keep track of the conversation without exceeding the LLM's context window.
+<figcaption>Long conversations can exceed the LLM's context window. A common solution is to maintain a running summary of the conversation. This allows the agent to keep track of the conversation without exceeding the LLM's context window.
 </figcaption>
 </figure>
 
-Long conversations can exceed the LLM's context window. To handle this, you can summarize older messages by specifying a [`pre_model_hook`][langgraph.prebuilt.chat_agent_executor.create_react_agent], such as the prebuilt [`SummarizationNode`](https://langchain-ai.github.io/langmem/reference/short_term/#langmem.short_term.SummarizationNode):
+To summarize message history, you can use [`pre_model_hook`][langgraph.prebuilt.chat_agent_executor.create_react_agent] with a prebuilt [`SummarizationNode`](https://langchain-ai.github.io/langmem/reference/short_term/#langmem.short_term.SummarizationNode):
 
 ```python
 from langchain_anthropic import ChatAnthropic
@@ -146,6 +157,44 @@ agent = create_react_agent(
 3. The `checkpointer` is passed to the agent. This enables the agent to persist its state across invocations.
 4. The `pre_model_hook` is set to the `SummarizationNode`. This node will summarize the message history before sending it to the LLM. The summarization node will automatically handle the summarization process and update the agent's state with the new summary. You can replace this with a custom implementation if you prefer. Please see the [create_react_agent][langgraph.prebuilt.chat_agent_executor.create_react_agent] API reference for more details.
 5. The `state_schema` is set to the `State` class, which is the custom state that contains an extra `context` key.
+
+#### Trim message history
+
+To trim message history, you can use [`pre_model_hook`][langgraph.prebuilt.chat_agent_executor.create_react_agent] with [`trim_messages`](https://python.langchain.com/api_reference/core/messages/langchain_core.messages.utils.trim_messages.html) function:
+
+```python
+# highlight-next-line
+from langchain_core.messages.utils import (
+    # highlight-next-line
+    trim_messages,
+    # highlight-next-line
+    count_tokens_approximately
+# highlight-next-line
+)
+from langgraph.prebuilt import create_react_agent
+
+# This function will be called every time before the node that calls LLM
+def pre_model_hook(state):
+    trimmed_messages = trim_messages(
+        state["messages"],
+        strategy="last",
+        token_counter=count_tokens_approximately,
+        max_tokens=384,
+        start_on="human",
+        end_on=("human", "tool"),
+    )
+    # highlight-next-line
+    return {"llm_input_messages": trimmed_messages}
+
+checkpointer = InMemorySaver()
+agent = create_react_agent(
+    model,
+    tools,
+    # highlight-next-line
+    pre_model_hook=pre_model_hook,
+    checkpointer=checkpointer,
+)
+```
 
 To learn more about using `pre_model_hook` for managing message history, see this [how-to guide](../how-tos/create-react-agent-manage-message-history.ipynb)
 
@@ -359,6 +408,10 @@ store.get(("users",), "user_123").value
 4. The `get_store` function is used to access the store. You can call it from anywhere in your code, including tools and prompts. This function returns the store that was passed to the agent when it was created.
 5. The `put` method is used to store data in the store. The first argument is the namespace, and the second argument is the key. This will store the user information in the store.
 6. The `user_id` is passed in the config. This is used to identify the user whose information is being updated.
+
+### Semantic search
+
+LangGraph also allows you to [search](https://langchain-ai.github.io/langgraph/how-tos/memory/semantic-search/#using-in-create-react-agent) for items in long-term memory by semantic similarity.
 
 ### Prebuilt memory tools
 
