@@ -13,8 +13,7 @@ class HTTPException(Exception):
         status_code: HTTP status code for the error. Defaults to 401 "Unauthorized".
         detail: Detailed error message. If None, uses a default
             message based on the status code.
-        headers: Additional HTTP headers to
-            include in the error response.
+        headers: Additional HTTP headers to include in the error response.
 
     Example:
         Default:
