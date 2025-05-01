@@ -78,7 +78,7 @@ plugins:
             inherited_members: true
             selection:
               docstring_style: google
-            docstring_section_style: list
+            docstring_section_style: table
             show_root_toc_entry: false
             show_signature: true
             show_signature_annotations: true

@@ -1,6 +1,7 @@
 import {
   Assistant,
   AssistantGraph,
+  AssistantSortBy,
   AssistantVersion,
   CancelAction,
   Checkpoint,
@@ -16,8 +17,10 @@ import {
   Run,
   RunStatus,
   SearchItemsResponse,
+  SortOrder,
   Subgraphs,
   Thread,
+  ThreadSortBy,
   ThreadState,
   ThreadStatus,
 } from "./schema.js";
@@ -215,6 +218,7 @@ export class CronsClient extends BaseClient {
       webhook: payload?.webhook,
       multitask_strategy: payload?.multitaskStrategy,
       if_not_exists: payload?.ifNotExists,
+      checkpoint_during: payload?.checkpointDuring,
     };
     return this.fetch<CronCreateForThreadResponse>(
       `/threads/${threadId}/runs/crons`,
@@ -246,6 +250,7 @@ export class CronsClient extends BaseClient {
       webhook: payload?.webhook,
       multitask_strategy: payload?.multitaskStrategy,
       if_not_exists: payload?.ifNotExists,
+      checkpoint_during: payload?.checkpointDuring,
     };
     return this.fetch<CronCreateResponse>(`/runs/crons`, {
       method: "POST",
@@ -423,6 +428,8 @@ export class AssistantsClient extends BaseClient {
     metadata?: Metadata;
     limit?: number;
     offset?: number;
+    sortBy?: AssistantSortBy;
+    sortOrder?: SortOrder;
   }): Promise<Assistant[]> {
     return this.fetch<Assistant[]>("/assistants/search", {
       method: "POST",
@@ -431,6 +438,8 @@ export class AssistantsClient extends BaseClient {
         metadata: query?.metadata ?? undefined,
         limit: query?.limit ?? 10,
         offset: query?.offset ?? 0,
+        sort_by: query?.sortBy ?? undefined,
+        sort_order: query?.sortOrder ?? undefined,
       },
     });
   }
@@ -621,12 +630,12 @@ export class ThreadsClient<
     /**
      * Sort by.
      */
-    sortBy?: "thread_id" | "status" | "created_at" | "updated_at";
+    sortBy?: ThreadSortBy;
     /**
      * Sort order.
      * Must be one of 'asc' or 'desc'.
      */
-    sortOrder?: "asc" | "desc";
+    sortOrder?: SortOrder;
   }): Promise<Thread<ValuesType>[]> {
     return this.fetch<Thread<ValuesType>[]>("/threads/search", {
       method: "POST",
@@ -842,6 +851,7 @@ export class RunsClient<
       on_disconnect: payload?.onDisconnect,
       after_seconds: payload?.afterSeconds,
       if_not_exists: payload?.ifNotExists,
+      checkpoint_during: payload?.checkpointDuring,
     };
 
     const endpoint =
@@ -893,6 +903,7 @@ export class RunsClient<
       multitask_strategy: payload?.multitaskStrategy,
       after_seconds: payload?.afterSeconds,
       if_not_exists: payload?.ifNotExists,
+      checkpoint_during: payload?.checkpointDuring,
     };
     return this.fetch<Run>(`/threads/${threadId}/runs`, {
       method: "POST",
@@ -965,6 +976,7 @@ export class RunsClient<
       on_disconnect: payload?.onDisconnect,
       after_seconds: payload?.afterSeconds,
       if_not_exists: payload?.ifNotExists,
+      checkpoint_during: payload?.checkpointDuring,
     };
     const endpoint =
       threadId == null ? `/runs/wait` : `/threads/${threadId}/runs/wait`;

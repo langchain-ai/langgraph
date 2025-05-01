@@ -1,5 +1,6 @@
 import json
 import pathlib
+import re
 import shutil
 import tempfile
 import textwrap
@@ -345,6 +346,35 @@ def test_dockerfile_command_new_style_config() -> None:
 
         # Check if Dockerfile was created
         assert save_path.exists()
+
+
+def test_dockerfile_command_with_base_image() -> None:
+    """Test the 'dockerfile' command with a base image."""
+    runner = CliRunner()
+    config_content = {
+        "python_version": "3.11",
+        "graphs": {"agent": "agent.py:graph"},
+        "dependencies": ["."],
+        "base_image": "langchain/langgraph-server:0.2",
+    }
+    with temporary_config_folder(config_content) as temp_dir:
+        save_path = temp_dir / "Dockerfile"
+        agent_path = temp_dir / "agent.py"
+        agent_path.parent.mkdir(parents=True, exist_ok=True)
+        agent_path.touch()
+
+        result = runner.invoke(
+            cli,
+            ["dockerfile", str(save_path), "--config", str(temp_dir / "config.json")],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "✅ Created: Dockerfile" in result.output
+
+        assert save_path.exists()
+        with open(save_path) as f:
+            dockerfile = f.read()
+            assert re.match("FROM langchain/langgraph-server:0.2-py3.*", dockerfile)
 
 
 def test_dockerfile_command_with_docker_compose() -> None:

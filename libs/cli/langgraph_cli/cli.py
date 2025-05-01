@@ -438,8 +438,17 @@ tests
     ),
     is_flag=True,
 )
+@click.option(
+    "--base-image",
+    help="Base image to use for the LangGraph API server. Defaults to langchain/langgraph-api or langchain/langgraphjs-api",
+)
 @log_command
-def dockerfile(save_path: str, config: pathlib.Path, add_docker_compose: bool) -> None:
+def dockerfile(
+    save_path: str,
+    config: pathlib.Path,
+    add_docker_compose: bool,
+    base_image: Optional[str] = None,
+) -> None:
     save_path = pathlib.Path(save_path).absolute()
     secho(f"🔍 Validating configuration at path: {config}", fg="yellow")
     config_json = langgraph_cli.config.validate_config_file(config)
@@ -449,7 +458,7 @@ def dockerfile(save_path: str, config: pathlib.Path, add_docker_compose: bool) -
     dockerfile, additional_contexts = langgraph_cli.config.config_to_docker(
         config,
         config_json,
-        None,
+        base_image=base_image,
     )
     with open(str(save_path), "w", encoding="utf-8") as f:
         f.write(dockerfile)
@@ -589,6 +598,12 @@ def dockerfile(save_path: str, config: pathlib.Path, add_docker_compose: bool) -
     "or networks blocking localhost connections.",
     default=False,
 )
+@click.option(
+    "--server-log-level",
+    type=str,
+    default="WARNING",
+    help="Set the log level for the API server.",
+)
 @cli.command(
     "dev",
     help="🏃‍♀️‍➡️ Run LangGraph API server in development mode with hot reloading and debugging support",
@@ -606,6 +621,7 @@ def dev(
     studio_url: Optional[str],
     allow_blocking: bool,
     tunnel: bool,
+    server_log_level: str,
 ):
     """CLI entrypoint for running the LangGraph API server."""
     try:
@@ -674,6 +690,7 @@ def dev(
         studio_url=studio_url,
         allow_blocking=allow_blocking,
         tunnel=tunnel,
+        server_level=server_log_level,
     )
 
 
@@ -701,7 +718,10 @@ def prepare_args_and_stdin(
     debugger_port: Optional[int] = None,
     debugger_base_url: Optional[str] = None,
     postgres_uri: Optional[str] = None,
+    # Like "my-tag" (if you already built it locally)
     image: Optional[str] = None,
+    # Like "langchain/langgraphjs-api" or "langchain/langgraph-api
+    base_image: Optional[str] = None,
 ) -> Tuple[List[str], str]:
     assert config_path.exists(), f"Config file not found: {config_path}"
     # prepare args

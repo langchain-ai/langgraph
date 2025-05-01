@@ -83,7 +83,7 @@ agent.invoke({
 
 For context that spans *across* conversations or sessions, LangGraph allows access to **long-term memory** via a `store`. This can be used to read or update persistent facts (e.g., user profiles, preferences, prior interactions). For more, see the [Memory guide](./memory.md).
 
-## Customizing Prompts with Context
+## Customizing Prompts with Context { #prompts }
 
 Prompts define how the agent behaves. To incorporate runtime context, you can dynamically generate prompts based on the agent's state or config.
 
@@ -162,7 +162,7 @@ Common use cases:
     })
     ```
 
-## Accessing Context in Tools
+## Accessing Context in Tools { #tools }
 
 Tools can access context through special parameter **annotations**.
 
