@@ -3,7 +3,7 @@ search:
   boost: 2
 ---
 
-# Key features
+# Graph API concepts
 
 ## Graphs
 

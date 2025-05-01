@@ -3,7 +3,7 @@ search:
   boost: 2
 ---
 
-# Functional API
+# Functional API concepts
 
 ## Overview
 

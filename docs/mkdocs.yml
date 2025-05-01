@@ -96,13 +96,15 @@ nav:
     - Get started:
       # - TO DO: Quickstart with Prebuilt Agents
       - LangGraph basics: tutorials/introduction.ipynb
-      - Key features: concepts/low_level.md
       - Deployment:
         - tutorials/deployment.md
         - Local deploy: tutorials/langgraph-platform/local-server.md
         - Cloud deploy: cloud/quick_start.md
     - LangGraph:
       - concepts/agentic_concepts.md
+      - API concepts:
+        - Graph API: concepts/low_level.md
+        - Functional API: concepts/functional_api.md
       - Prebuilt agents:
         - agents/overview.md
         - agents/agents.md
@@ -124,7 +126,6 @@ nav:
         - how-tos/branching.ipynb
         - how-tos/recursion-limit.ipynb
         - how-tos/visualization.ipynb
-      - concepts/functional_api.md
       - Persistence:
         - concepts/persistence.md
         - concepts/durable_execution.md
