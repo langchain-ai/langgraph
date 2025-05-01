@@ -111,6 +111,7 @@ nav:
       - concepts/low_level.md
       - Graph API basics:
         - how-tos/state-reducers.ipynb
+        - how-tos/sequence.ipynb
         - how-tos/branching.ipynb
         - how-tos/recursion-limit.ipynb
         - how-tos/visualization.ipynb
