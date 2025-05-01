@@ -17,7 +17,7 @@ In this tutorial, we will extend our chatbot to give each user their own private
 
 ## Understanding Resource Authorization
 
-In the last tutorial, we controlled who could access our bot. But right now, any authenticated user can see everyone else's conversations! Let's fix that by adding [resource authorization](../../concepts/auth.md#resource-authorization).
+In the last tutorial, we controlled who could access our bot. But right now, any authenticated user can see everyone else's conversations! Let's fix that by adding [resource authorization](../auth/resource_auth.md).
 
 First, make sure you have completed the [Basic Authentication](getting_started.md) tutorial and that your secure bot can be run without errors:
 

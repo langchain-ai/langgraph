@@ -6,11 +6,11 @@
     2. [Resource Authorization](resource_auth.md) - Let users have private conversations
     3. Production Auth (you are here) - Add real user accounts and validate using OAuth2
 
-In the [Making Conversations Private](resource_auth.md) tutorial, we added [resource authorization](../../concepts/auth.md#resource-authorization) to give users private conversations. However, we were still using hard-coded tokens for authentication, which is not secure. Now we'll replace those tokens with real user accounts using [OAuth2](../../concepts/auth.md#oauth2-authentication).
+In the [Making Conversations Private](resource_auth.md) tutorial, we added [resource authorization](../../tutorials/auth/resource_auth.md) to give users private conversations. However, we were still using hard-coded tokens for authentication, which is not secure. Now we'll replace those tokens with real user accounts using [OAuth2](../auth/getting_started.md).
 
-We'll keep the same [`Auth`](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth) object and [resource-level access control](../../concepts/auth.md#resource-level-access-control), but upgrade our authentication to use Supabase as our identity provider. While we use Supabase in this tutorial, the concepts apply to any OAuth2 provider. You'll learn how to:
+We'll keep the same [`Auth`](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth) object and [resource-level access control](../../concepts/auth.md#single-owner-resources), but upgrade our authentication to use Supabase as our identity provider. While we use Supabase in this tutorial, the concepts apply to any OAuth2 provider. You'll learn how to:
 
-1. Replace test tokens with real [JWT tokens](../../concepts/auth.md#jwt-tokens)
+1. Replace test tokens with real JWT tokens
 2. Integrate with OAuth2 providers for secure user authentication
 3. Handle user sessions and metadata while maintaining our existing authorization logic
 
