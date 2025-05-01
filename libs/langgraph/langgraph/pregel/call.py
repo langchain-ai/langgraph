@@ -74,6 +74,25 @@ def _whichmodule(obj: Any, name: str) -> Optional[str]:
     return None
 
 
+def identifier(obj: Any, name: Optional[str] = None) -> Optional[str]:
+    if name is None:
+        name = getattr(obj, "__qualname__", None)
+    if name is None:  # pragma: no cover
+        # This used to be needed for Python 2.7 support but is probably not
+        # needed anymore. However we keep the __name__ introspection in case
+        # users of cloudpickle rely on this old behavior for unknown reasons.
+        name = getattr(obj, "__name__", None)
+    if name is None:
+        return None
+
+    module_name = getattr(obj, "__module__", None)
+    if module_name is None:
+        # In this case, obj.__module__ is None. obj is thus treated as dynamic.
+        return None
+
+    return f"{module_name}.{name}"
+
+
 def _lookup_module_and_qualname(
     obj: Any, name: Optional[str] = None
 ) -> Optional[tuple[types.ModuleType, str]]:

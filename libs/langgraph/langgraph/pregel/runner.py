@@ -586,6 +586,7 @@ def _call(
                         retry=retry,
                         callbacks=callbacks,
                         schedule_task=schedule_task,
+                        match_cached_writes=match_cached_writes,
                         submit=submit,
                         reraise=reraise,
                     ),

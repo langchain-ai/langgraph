@@ -65,7 +65,7 @@ from langgraph.constants import (
 )
 from langgraph.errors import InvalidUpdateError
 from langgraph.managed.base import ManagedValueMapping
-from langgraph.pregel.call import get_runnable_for_task
+from langgraph.pregel.call import get_runnable_for_task, identifier
 from langgraph.pregel.io import read_channels
 from langgraph.pregel.log import logger
 from langgraph.pregel.read import INPUT_CACHE_KEY_TYPE, PregelNode
@@ -79,7 +79,7 @@ from langgraph.types import (
     PregelTask,
     RetryPolicy,
 )
-from langgraph.utils.config import merge_configs, patch_config
+from langgraph.utils.config import merge_configs, patch_config, recast_checkpoint_ns
 
 GetNextVersion = Callable[[Optional[V], BaseChannel], V]
 SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
@@ -631,7 +631,18 @@ def prepare_single_task(
                 triggers,
                 call.retry,
                 CacheKey(
-                    xxh3_128_hexdigest(call.cache.key(*call.input[0], **call.input[1])),
+                    xxh3_128_hexdigest(
+                        b"".join(
+                            (
+                                b"__pregel_cache",
+                                recast_checkpoint_ns(parent_ns).encode()
+                                if parent_ns
+                                else b"",
+                                (identifier(call.func) or "__dynamic__").encode(),
+                                call.cache.key(*call.input[0], **call.input[1]),
+                            )
+                        )
+                    ),
                     call.cache.ttl,
                 )
                 if call.cache
@@ -747,7 +758,18 @@ def prepare_single_task(
                 triggers,
                 proc.retry_policy,
                 CacheKey(
-                    xxh3_128_hexdigest(proc.cache_policy.key(packet.arg)),
+                    xxh3_128_hexdigest(
+                        b"".join(
+                            (
+                                b"__pregel_cache",
+                                recast_checkpoint_ns(parent_ns).encode()
+                                if parent_ns
+                                else b"",
+                                packet.node.encode(),
+                                proc.cache_policy.key(packet.arg),
+                            )
+                        )
+                    ),
                     proc.cache_policy.ttl,
                 )
                 if proc.cache_policy
@@ -880,7 +902,18 @@ def prepare_single_task(
                         triggers,
                         proc.retry_policy,
                         CacheKey(
-                            xxh3_128_hexdigest(proc.cache_policy.key(val)),
+                            xxh3_128_hexdigest(
+                                b"".join(
+                                    (
+                                        b"__pregel_cache",
+                                        recast_checkpoint_ns(parent_ns).encode()
+                                        if parent_ns
+                                        else b"",
+                                        name.encode(),
+                                        proc.cache_policy.key(val),
+                                    )
+                                )
+                            ),
                             proc.cache_policy.ttl,
                         )
                         if proc.cache_policy
