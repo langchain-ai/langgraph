@@ -16,6 +16,7 @@ from typing import (
     overload,
 )
 
+from langgraph.cache.base import BaseCache
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -318,7 +319,7 @@ class entrypoint:
         self,
         checkpointer: Optional[BaseCheckpointSaver] = None,
         store: Optional[BaseStore] = None,
-        cache: Optional[CachePolicy] = None,
+        cache: Optional[BaseCache] = None,
         config_schema: Optional[type[Any]] = None,
     ) -> None:
         """Initialize the entrypoint decorator."""
