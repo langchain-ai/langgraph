@@ -37,8 +37,7 @@ class FileCache(BaseCache):
     def delete(self, keys: list[str]) -> None:
         """Delete the cached values for the given keys."""
         for key in keys:
-            if key in self._db:
-                del self._db[key]
+            self._db.pop(key, None)
 
     async def aget(self, keys: list[str]) -> dict[str, bytes]:
         """Asynchronously get the cached values for the given keys."""
