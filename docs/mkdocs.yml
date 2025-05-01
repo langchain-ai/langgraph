@@ -105,21 +105,6 @@ nav:
       - API concepts:
         - Graph API: concepts/low_level.md
         - Functional API: concepts/functional_api.md
-      - Prebuilt agents:
-        - agents/overview.md
-        - agents/agents.md
-        - agents/run_agents.md
-        - agents/streaming.md
-        - agents/models.md
-        - agents/tools.md
-        - agents/mcp.md
-        - agents/context.md
-        - agents/memory.md
-        - agents/human-in-the-loop.md
-        - agents/multi-agent.md
-        - agents/evals.md
-        - agents/deployment.md
-        - agents/ui.md
       - Graph API basics:
         - how-tos/state-reducers.ipynb
         - how-tos/sequence.ipynb
@@ -198,6 +183,21 @@ nav:
         - how-tos/run-id-langsmith.ipynb
         - how-tos/autogen-integration.ipynb
         - how-tos/autogen-integration-functional.ipynb
+    - Prebuilt agents:
+        - agents/overview.md
+        - agents/agents.md
+        - agents/run_agents.md
+        - agents/streaming.md
+        - agents/models.md
+        - agents/tools.md
+        - agents/mcp.md
+        - agents/context.md
+        - agents/memory.md
+        - agents/human-in-the-loop.md
+        - agents/multi-agent.md
+        - agents/evals.md
+        - agents/deployment.md
+        - agents/ui.md
     - LangGraph Platform:
       - Overview: concepts/langgraph_platform.md
       - concepts/platform_architecture.md

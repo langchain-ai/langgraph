@@ -40,7 +40,9 @@ REDIRECT_MAP = {
     # misc
     "prebuilt.md": "agents/prebuilt.md",
     "reference/prebuilt.md": "reference/agents.md",
-    "concepts/high_level.md": "index.md"
+    "concepts/high_level.md": "index.md",
+    "concepts/index.md": "index.md",
+    "concepts/v0-human-in-the-loop.md": "concepts/human-in-the-loop.md"
 }
 
 

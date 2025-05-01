@@ -5,7 +5,7 @@ search:
 
 # LangGraph Platform
 
-While [LangGraph](/docs/docs/index.md) is our open-source agent orchestration framework, enterprises that need scalable agent deployment can benefit from [LangGraph Platform](https://langchain-ai.github.io/langgraph/concepts/langgraph_platform/).
+While [LangGraph](https://langchain-ai.github.io/langgraph/) is our open-source agent orchestration framework, enterprises that need scalable agent deployment can benefit from [LangGraph Platform](https://langchain-ai.github.io/langgraph/concepts/langgraph_platform/).
 
 LangGraph Platform can help engineering teams:
 
@@ -17,7 +17,7 @@ LangGraph Platform can help engineering teams:
 
 ## Key features
 
-LangGraph Platform is a commercial solution for deploying agentic applications to production, built on the open-source [LangGraph framework](./high_level.md).
+LangGraph Platform is a commercial solution for deploying agentic applications to production, built on the open-source [LangGraph framework](https://langchain-ai.github.io/langgraph/).
 
 The LangGraph Platform consists of several components that work together to support the development, deployment, debugging, and monitoring of LangGraph applications:
 
