@@ -11,7 +11,7 @@ T = TypeVar("T")
 class BaseCache(ABC, Generic[T]):
     """Base class for a cache."""
 
-    serde: SerializerProtocol = JsonPlusSerializer()
+    serde: SerializerProtocol = JsonPlusSerializer(pickle_fallback=True)
 
     def __init__(self, *, serde: SerializerProtocol | None = None) -> None:
         """Initialize the cache with a serializer."""
