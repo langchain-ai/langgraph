@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 
 try:
-    from langchain_core.messages.tool import ToolOutputMixin  # type: ignore
+    from langchain_core.messages.tool import ToolOutputMixin
 except ImportError:
 
     class ToolOutputMixin:  # type: ignore[no-redef]

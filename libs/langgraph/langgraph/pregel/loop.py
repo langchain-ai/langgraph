@@ -134,6 +134,7 @@ INPUT_DONE = object()
 INPUT_RESUMING = object()
 INPUT_SHOULD_VALIDATE = object()
 SPECIAL_CHANNELS = (ERROR, INTERRUPT, SCHEDULED)
+WritesT = Sequence[tuple[str, Any]]
 
 
 def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
@@ -148,7 +149,7 @@ def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
 class PregelLoop(LoopProtocol):
     input: Optional[Any]
     input_model: Optional[type[BaseModel]]
-    cache: Optional[BaseCache[Sequence[tuple[str, Any]]]]
+    cache: Optional[BaseCache[WritesT]]
     checkpointer: Optional[BaseCheckpointSaver]
     nodes: Mapping[str, PregelNode]
     specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]]
@@ -163,16 +164,14 @@ class PregelLoop(LoopProtocol):
     debug: bool
 
     checkpointer_get_next_version: GetNextVersion
-    checkpointer_put_writes: Optional[
-        Callable[[RunnableConfig, Sequence[tuple[str, Any]], str], Any]
-    ]
+    checkpointer_put_writes: Optional[Callable[[RunnableConfig, WritesT, str], Any]]
     checkpointer_put_writes_accepts_task_path: bool
     _checkpointer_put_after_previous: Optional[
         Callable[
             [
                 Optional[concurrent.futures.Future],
                 RunnableConfig,
-                Sequence[tuple[str, Any]],
+                Checkpoint,
                 str,
                 ChannelVersions,
             ],
@@ -303,7 +302,7 @@ class PregelLoop(LoopProtocol):
         )
         self.prev_checkpoint_config = None
 
-    def put_writes(self, task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
+    def put_writes(self, task_id: str, writes: WritesT) -> None:
         """Put writes for a task, to be read by the next tick."""
         if not writes:
             return
@@ -923,7 +922,7 @@ class PregelLoop(LoopProtocol):
             self.stream((self.checkpoint_ns, mode, v))
 
     def _output_writes(
-        self, task_id: str, writes: Sequence[tuple[str, Any]], *, cached: bool = False
+        self, task_id: str, writes: WritesT, *, cached: bool = False
     ) -> None:
         if task := self.tasks.get(task_id):
             if task.config is not None and TAG_HIDDEN in task.config.get(
@@ -1057,10 +1056,10 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             for t in self.tasks.values()
             if t.cache_key and not t.cache_key.refresh and not t.writes
         }:
-            for key, values in self.cache.get(cached.keys()).items():
+            for key, values in self.cache.get(tuple(cached)).items():
                 cached[key].writes.extend(values)
 
-    def put_writes(self, task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
+    def put_writes(self, task_id: str, writes: WritesT) -> None:
         """Put writes for a task, to be read by the next tick."""
         super().put_writes(task_id, writes)
         if not writes or self.cache is None or not hasattr(self, "tasks"):
@@ -1233,10 +1232,10 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             for t in self.tasks.values()
             if t.cache_key and not t.cache_key.refresh and not t.writes
         }:
-            for key, values in (await self.cache.aget(cached.keys())).items():
+            for key, values in (await self.cache.aget(tuple(cached))).items():
                 cached[key].writes.extend(values)
 
-    def put_writes(self, task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
+    def put_writes(self, task_id: str, writes: WritesT) -> None:
         """Put writes for a task, to be read by the next tick."""
         super().put_writes(task_id, writes)
         if not writes or self.cache is None or not hasattr(self, "tasks"):

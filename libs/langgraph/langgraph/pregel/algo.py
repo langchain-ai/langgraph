@@ -585,6 +585,28 @@ def prepare_single_task(
             assert task_id == task_id_checksum, f"{task_id} != {task_id_checksum}"
         if for_execution:
             writes: deque[tuple[str, Any]] = deque()
+            if call.cache_policy:
+                args_key = call.cache_policy.key(*call.input[0], **call.input[1])
+                cache_key: Optional[CacheKey] = CacheKey(
+                    xxh3_128_hexdigest(
+                        b"".join(
+                            (
+                                b"__pregel_cache",
+                                recast_checkpoint_ns(parent_ns).encode()
+                                if parent_ns
+                                else b"",
+                                (identifier(call.func) or "__dynamic__").encode(),
+                                args_key.encode()
+                                if isinstance(args_key, str)
+                                else args_key,
+                            )
+                        )
+                    ),
+                    call.cache_policy.ttl,
+                    call.cache_policy.refresh,
+                )
+            else:
+                cache_key = None
             return PregelExecutableTask(
                 name,
                 call.input,
@@ -630,24 +652,7 @@ def prepare_single_task(
                 ),
                 triggers,
                 call.retry,
-                CacheKey(
-                    xxh3_128_hexdigest(
-                        b"".join(
-                            (
-                                b"__pregel_cache",
-                                recast_checkpoint_ns(parent_ns).encode()
-                                if parent_ns
-                                else b"",
-                                (identifier(call.func) or "__dynamic__").encode(),
-                                call.cache_policy.key(*call.input[0], **call.input[1]),
-                            )
-                        )
-                    ),
-                    call.cache_policy.ttl,
-                    call.cache_policy.refresh,
-                )
-                if call.cache_policy
-                else None,
+                cache_key,
                 task_id,
                 task_path,
             )
@@ -709,6 +714,28 @@ def prepare_single_task(
             if proc.metadata:
                 metadata.update(proc.metadata)
             writes = deque()
+            if proc.cache_policy:
+                args_key = proc.cache_policy.key(packet.arg)
+                cache_key = CacheKey(
+                    xxh3_128_hexdigest(
+                        b"".join(
+                            (
+                                b"__pregel_cache",
+                                recast_checkpoint_ns(parent_ns).encode()
+                                if parent_ns
+                                else b"",
+                                packet.node.encode(),
+                                args_key.encode()
+                                if isinstance(args_key, str)
+                                else args_key,
+                            )
+                        )
+                    ),
+                    proc.cache_policy.ttl,
+                    proc.cache_policy.refresh,
+                )
+            else:
+                cache_key = None
             return PregelExecutableTask(
                 packet.node,
                 packet.arg,
@@ -758,24 +785,7 @@ def prepare_single_task(
                 ),
                 triggers,
                 proc.retry_policy,
-                CacheKey(
-                    xxh3_128_hexdigest(
-                        b"".join(
-                            (
-                                b"__pregel_cache",
-                                recast_checkpoint_ns(parent_ns).encode()
-                                if parent_ns
-                                else b"",
-                                packet.node.encode(),
-                                proc.cache_policy.key(packet.arg),
-                            )
-                        )
-                    ),
-                    proc.cache_policy.ttl,
-                    proc.cache_policy.refresh,
-                )
-                if proc.cache_policy
-                else None,
+                cache_key,
                 task_id,
                 task_path,
                 writers=proc.flat_writers,
@@ -842,6 +852,28 @@ def prepare_single_task(
                     if proc.metadata:
                         metadata.update(proc.metadata)
                     writes = deque()
+                    if proc.cache_policy:
+                        args_key = proc.cache_policy.key(val)
+                        cache_key = CacheKey(
+                            xxh3_128_hexdigest(
+                                b"".join(
+                                    (
+                                        b"__pregel_cache",
+                                        recast_checkpoint_ns(parent_ns).encode()
+                                        if parent_ns
+                                        else b"",
+                                        name.encode(),
+                                        args_key.encode()
+                                        if isinstance(args_key, str)
+                                        else args_key,
+                                    )
+                                )
+                            ),
+                            proc.cache_policy.ttl,
+                            proc.cache_policy.refresh,
+                        )
+                    else:
+                        cache_key = None
                     return PregelExecutableTask(
                         name,
                         val,
@@ -903,24 +935,7 @@ def prepare_single_task(
                         ),
                         triggers,
                         proc.retry_policy,
-                        CacheKey(
-                            xxh3_128_hexdigest(
-                                b"".join(
-                                    (
-                                        b"__pregel_cache",
-                                        recast_checkpoint_ns(parent_ns).encode()
-                                        if parent_ns
-                                        else b"",
-                                        name.encode(),
-                                        proc.cache_policy.key(val),
-                                    )
-                                )
-                            ),
-                            proc.cache_policy.ttl,
-                            proc.cache_policy.refresh,
-                        )
-                        if proc.cache_policy
-                        else None,
+                        cache_key,
                         task_id,
                         task_path[:3],
                         writers=proc.flat_writers,

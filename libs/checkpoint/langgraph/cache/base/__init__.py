@@ -5,10 +5,10 @@ from typing import Generic, Sequence, TypeVar
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
-T = TypeVar("T")
+ValueT = TypeVar("ValueT")
 
 
-class BaseCache(ABC, Generic[T]):
+class BaseCache(ABC, Generic[ValueT]):
     """Base class for a cache."""
 
     serde: SerializerProtocol = JsonPlusSerializer(pickle_fallback=True)
@@ -18,19 +18,19 @@ class BaseCache(ABC, Generic[T]):
         self.serde = serde or self.serde
 
     @abstractmethod
-    def get(self, keys: Sequence[str]) -> dict[str, T]:
+    def get(self, keys: Sequence[str]) -> dict[str, ValueT]:
         """Get the cached values for the given keys."""
 
     @abstractmethod
-    async def aget(self, keys: Sequence[str]) -> dict[str, T]:
+    async def aget(self, keys: Sequence[str]) -> dict[str, ValueT]:
         """Asynchronously get the cached values for the given keys."""
 
     @abstractmethod
-    def set(self, mapping: Mapping[str, tuple[T, int | None]]) -> None:
+    def set(self, mapping: Mapping[str, tuple[ValueT, int | None]]) -> None:
         """Set the cached values for the given keys and TTLs."""
 
     @abstractmethod
-    async def aset(self, mapping: Mapping[str, tuple[T, int | None]]) -> None:
+    async def aset(self, mapping: Mapping[str, tuple[ValueT, int | None]]) -> None:
         """Asynchronously set the cached values for the given keys and TTLs."""
 
     @abstractmethod
