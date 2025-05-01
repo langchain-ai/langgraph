@@ -6607,7 +6607,7 @@ def test_multiple_interrupts_functional_cache(
 
     counter = 0
 
-    @task(cache=CachePolicy())
+    @task(cache_policy=CachePolicy())
     def double(x: int) -> int:
         """Increment the counter."""
         nonlocal counter

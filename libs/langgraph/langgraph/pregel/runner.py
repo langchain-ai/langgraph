@@ -523,7 +523,7 @@ def _call(
     input: Any,
     *,
     retry: Optional[Sequence[RetryPolicy]] = None,
-    cache: Optional[CachePolicy] = None,
+    cache_policy: Optional[CachePolicy] = None,
     callbacks: Callbacks = None,
     futures: weakref.ref[FuturesDict],
     schedule_task: weakref.ref[
@@ -545,7 +545,7 @@ def _call(
     if next_task := schedule_task()(  # type: ignore[misc]
         task(),  # type: ignore[arg-type]
         scratchpad.call_counter(),
-        Call(func, input, retry=retry, cache=cache, callbacks=callbacks),
+        Call(func, input, retry=retry, cache_policy=cache_policy, callbacks=callbacks),
     ):
         if match_cached_writes:
             match_cached_writes()
@@ -630,7 +630,7 @@ def _acall(
     if next_task := schedule_task()(  # type: ignore[misc]
         task(),  # type: ignore[arg-type]
         scratchpad.call_counter(),
-        Call(func, input, retry=retry, cache=cache, callbacks=callbacks),
+        Call(func, input, retry=retry, cache_policy=cache, callbacks=callbacks),
     ):
         if fut := next(
             (

@@ -242,12 +242,16 @@ def call(
     func: Callable[P, T],
     *args: Any,
     retry: Optional[Sequence[RetryPolicy]] = None,
-    cache: Optional[CachePolicy] = None,
+    cache_policy: Optional[CachePolicy] = None,
     **kwargs: Any,
 ) -> SyncAsyncFuture[T]:
     config = get_config()
     impl = config[CONF][CONFIG_KEY_CALL]
     fut = impl(
-        func, (args, kwargs), retry=retry, cache=cache, callbacks=config["callbacks"]
+        func,
+        (args, kwargs),
+        retry=retry,
+        cache=cache_policy,
+        callbacks=config["callbacks"],
     )
     return fut
