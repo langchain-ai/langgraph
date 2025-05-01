@@ -256,6 +256,6 @@ export LANGSMITH_API_KEY=...
 Congratulations! If you've worked your way through this tutorial you are well on your way to becoming a LangGraph Cloud expert. Here are some other resources to check out to help you out on the path to expertise:
 
 - **[LangGraph Tutorial](../tutorials/introduction.ipynb)**: Get started with LangGraph framework.
-- **[LangGraph Platform Concepts](../concepts/langgraph_platform)**: Understand the foundational concepts of the LangGraph Platform.
+- **[LangGraph Platform Concepts](../concepts/langgraph_platform.md)**: Understand the foundational concepts of the LangGraph Platform.
 
 
