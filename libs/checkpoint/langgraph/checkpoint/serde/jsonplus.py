@@ -235,7 +235,7 @@ class JsonPlusSerializer(SerializerProtocol):
             return ormsgpack.unpackb(
                 data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
-        elif type_ == "pickle":
+        elif self.pickle_fallback and type_ == "pickle":
             return pickle.loads(data_)
         else:
             raise NotImplementedError(f"Unknown serialization type: {type_}")
