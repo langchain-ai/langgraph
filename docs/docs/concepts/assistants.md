@@ -33,10 +33,3 @@ Once you've created an assistant, you can save and version it to track changes t
 For example, let's imagine you have a general writing agent. You have created a general graph architecture that works well for writing. However, there are different types of writing, e.g. blogs vs tweets. In order to get the best performance on each use case, you need to make some minor changes to the models and prompts used. In this setup, you could create an assistant for each use case - one for blog writing and one for tweeting. These would share the same graph structure, but they may use different models and different prompts. Read [this how-to](../cloud/how-tos/assistant_versioning.md) to learn how you can use assistant versioning through both the [Studio](../concepts/langgraph_studio.md) and the SDK.
 
 ![assistant versions](img/assistants.png)
-
-
-## Resources
-
-For more information on assistants, see the following resources:
-
-- [Assistants how-to guides](../how-tos/index.md#assistants)
