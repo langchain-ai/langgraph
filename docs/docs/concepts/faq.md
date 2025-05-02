@@ -47,10 +47,13 @@ LangGraph is a stateful, orchestration framework that brings added control to ag
 
 We currently have the following deployment options for LangGraph applications:
 
-- [‍Self-Hosted Lite](./deployment_options.md#self-hosted-lite): A free (up to 1M nodes executed), limited version of LangGraph Platform that you can run locally or in a self-hosted manner. This version requires a LangSmith API key and logs all usage to LangSmith. Fewer features are available than in paid plans.
-- [Cloud SaaS](./deployment_options.md#cloud-saas): Fully managed and hosted as part of LangSmith, with automatic updates and zero maintenance.
-- [‍Bring Your Own Cloud (BYOC)](./deployment_options.md#bring-your-own-cloud): Deploy LangGraph Platform within your VPC, provisioned and run as a service. Keep data in your environment while outsourcing the management of the service.
-- [Self-Hosted Enterprise](./deployment_options.md#self-hosted-enterprise): Deploy LangGraph entirely on your own infrastructure.
+- **Cloud SaaS<sup>(Beta)**: A fully managed model for deployment where we manage the [control plane](./langgraph_control_plane.md) and [data plane](./langgraph_data_plane.md) in our cloud. This option provides a simple way to deploy and manage your LangGraph Servers. Available for **Plus** and **Enterprise** plans.
+
+- **Self-Hosted Data Plane<sup>(Beta)</sup>**: A "hybrid" model for deployemnt where we manage the [control plane](./langgraph_control_plane.md) in our cloud and you manage the [data plane](./langgraph_data_plane.md) in your cloud. This option provides a way to securely manage your data plane infrastructure, while offloading control plane management to us. Available for the **Enterprise** plan.
+
+- **Self-Hosted Control Plane<sup>(Beta)</sup>**: A fully self-hosted model for deployment where you manage the [control plane](./langgraph_control_plane.md) and [data plane](./langgraph_data_plane.md) in your cloud. This option give you full control and responsibility of the control plane and data plane infrastructure. Available for the **Enterprise** plan.
+
+- **Standalone Container**: The least restrictive model for deployment. Deploy standalone instances of a LangGraph Server in your cloud. Available for all plans.
 
 ## Is LangGraph Platform open source?
 

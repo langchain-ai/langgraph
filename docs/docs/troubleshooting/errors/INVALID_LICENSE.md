@@ -21,9 +21,9 @@ See the [local server](../../tutorials/langgraph-platform/local-server.md) docs 
 
 If you would like a fast managed environment, consider the [Cloud SaaS](../../concepts/langgraph_cloud.md) deployment option. This requires no additional license key.
 
-#### For Self-Hosted Lite (Limited Features)
+#### For Standalone container (Limited Features)
 
-If your deployment is unlikely to see more than 1 million node executions per year and don't need Crons and other enterprise features, consider the [Self-Hosted Lite](../../concepts/deployment_options.md#self-hosted-lite) deployment option.
+If your deployment is unlikely to see more than 1 million node executions per year and don't need Crons and other enterprise features, consider the [Self-Hosted Lite](../../concepts/deployment_options.md) deployment option.
 
 You can deploy with Self-Hosted Lite by setting a valid `LANGSMITH_API_KEY` in your environment (e.g., in the `.env` file referenced by `langgraph.json`) and building a Docker image. The API key must be associated with an account on a **Plus** plan or greater.
 

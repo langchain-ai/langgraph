@@ -52,13 +52,6 @@ By default, starting the local server with `langgraph dev` will run the server a
 https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
 ```
 
-## Related
-
-For more information please see the following:
-
-- [LangGraph Studio how-to guides](../how-tos/index.md#langgraph-studio)
-- [LangGraph CLI Documentation](../cloud/reference/cli.md)
-
 ## LangGraph Studio FAQs
 
 ### Why is my project failing to start?

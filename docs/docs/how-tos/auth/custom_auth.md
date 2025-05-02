@@ -5,7 +5,7 @@
     This guide assumes familiarity with the following concepts:
 
       *  [**Authentication & Access Control**](../../concepts/auth.md)
-      *  [**LangGraph Platform**](../../concepts/index.md#langgraph-platform)
+      *  [**LangGraph Platform**](../../concepts/langgraph_platform.md)
     
     For a more guided walkthrough, see [**setting up custom authentication**](../../tutorials/auth/getting_started.md) tutorial.
 

@@ -727,5 +727,4 @@ To avoid issues, refrain from dynamically changing the node's structure between 
 ## Additional Resources 📚
 
 - [**Conceptual Guide: Persistence**](persistence.md#replay): Read the persistence guide for more context on replaying.
-- [**How to Guides: Human-in-the-loop**](../how-tos/index.md#human-in-the-loop): Learn how to implement human-in-the-loop workflows in LangGraph.
 - [**How to implement multi-turn conversations**](../how-tos/multi-agent-multi-turn-convo.ipynb): Learn how to implement multi-turn conversations in LangGraph.
