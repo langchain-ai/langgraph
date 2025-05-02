@@ -1,3 +1,5 @@
+import type { MessageTupleMetadata } from "./types.stream.js";
+
 type ImageDetail = "auto" | "low" | "high";
 type MessageContentImageUrl = {
   type: "image_url";
@@ -17,6 +19,7 @@ export type HumanMessage = {
   type: "human";
   id?: string | undefined;
   content: MessageContent;
+  metadata?: MessageTupleMetadata;
 };
 
 export type AIMessage = {
@@ -59,6 +62,7 @@ export type AIMessage = {
     | undefined;
   additional_kwargs?: MessageAdditionalKwargs | undefined;
   response_metadata?: Record<string, unknown> | undefined;
+  metadata?: MessageTupleMetadata;
 };
 
 export type ToolMessage = {
@@ -70,24 +74,28 @@ export type ToolMessage = {
   tool_call_id: string;
   additional_kwargs?: MessageAdditionalKwargs | undefined;
   response_metadata?: Record<string, unknown> | undefined;
+  metadata?: MessageTupleMetadata;
 };
 
 export type SystemMessage = {
   type: "system";
   id?: string | undefined;
   content: MessageContent;
+  metadata?: MessageTupleMetadata;
 };
 
 export type FunctionMessage = {
   type: "function";
   id?: string | undefined;
   content: MessageContent;
+  metadata?: MessageTupleMetadata;
 };
 
 export type RemoveMessage = {
   type: "remove";
   id: string;
   content: MessageContent;
+  metadata?: MessageTupleMetadata;
 };
 
 export type Message =

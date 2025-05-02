@@ -19,7 +19,7 @@ export type StreamMode =
   | "custom"
   | "messages-tuple";
 
-type MessageTupleMetadata = {
+export type MessageTupleMetadata = {
   tags: string[];
   [key: string]: unknown;
 };

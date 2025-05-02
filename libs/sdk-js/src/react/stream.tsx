@@ -896,9 +896,9 @@ export function useStream<
 
         if (event === "values") setStreamValues(data);
         if (event === "messages") {
-          const [serialized] = data;
+          const [serialized, metadata] = data;
 
-          const messageId = messageManagerRef.current.add(serialized);
+          const messageId = messageManagerRef.current.add({ ...serialized, metadata });
           if (!messageId) {
             console.warn(
               "Failed to add message to manager, no message ID found",
