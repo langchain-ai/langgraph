@@ -459,7 +459,8 @@ def create_react_agent(
     tool_calling_enabled = len(tool_classes) > 0
 
     if _should_bind_tools(model, tool_classes) and tool_calling_enabled:
-        model = cast(BaseChatModel, model).bind_tools(tool_classes)
+        underlying_model = _get_model(model)
+    	model = underlying_model.bind_tools(tool_classes)
 
     model_runnable = _get_prompt_runnable(prompt) | model
 
