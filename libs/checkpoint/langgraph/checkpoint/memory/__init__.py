@@ -41,7 +41,7 @@ class InMemorySaver(
         If you are using the LangGraph Platform, no checkpointer needs to be specified. The correct managed checkpointer will be used automatically.
 
     Args:
-        serde (Optional[SerializerProtocol]): The serializer to use for serializing and deserializing checkpoints. Defaults to None.
+        serde: The serializer to use for serializing and deserializing checkpoints. Defaults to None.
 
     Examples:
 
@@ -138,7 +138,7 @@ class InMemorySaver(
         for the given thread ID is retrieved.
 
         Args:
-            config (RunnableConfig): The config to use for retrieving the checkpoint.
+            config: The config to use for retrieving the checkpoint.
 
         Returns:
             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
@@ -255,10 +255,10 @@ class InMemorySaver(
         on the provided criteria.
 
         Args:
-            config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.
-            filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata.
-            before (Optional[RunnableConfig]): List checkpoints created before this configuration.
-            limit (Optional[int]): Maximum number of checkpoints to return.
+            config: Base configuration for filtering checkpoints.
+            filter: Additional filtering criteria for metadata.
+            before: List checkpoints created before this configuration.
+            limit: Maximum number of checkpoints to return.
 
         Yields:
             Iterator[CheckpointTuple]: An iterator of matching checkpoint tuples.
@@ -380,10 +380,10 @@ class InMemorySaver(
         with the provided config.
 
         Args:
-            config (RunnableConfig): The config to associate with the checkpoint.
-            checkpoint (Checkpoint): The checkpoint to save.
-            metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
-            new_versions (dict): New versions as of this write
+            config: The config to associate with the checkpoint.
+            checkpoint: The checkpoint to save.
+            metadata: Additional metadata to save with the checkpoint.
+            new_versions: New versions as of this write
 
         Returns:
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
@@ -427,10 +427,10 @@ class InMemorySaver(
         with the provided config.
 
         Args:
-            config (RunnableConfig): The config to associate with the writes.
-            writes (list[tuple[str, Any]]): The writes to save.
-            task_id (str): Identifier for the task creating the writes.
-            task_path (str): Path of the task creating the writes.
+            config: The config to associate with the writes.
+            writes: The writes to save.
+            task_id: Identifier for the task creating the writes.
+            task_path: Path of the task creating the writes.
 
         Returns:
             RunnableConfig: The updated config containing the saved writes' timestamp.
@@ -456,7 +456,7 @@ class InMemorySaver(
         """Delete all checkpoints and writes associated with a thread ID.
 
         Args:
-            thread_id (str): The thread ID to delete.
+            thread_id: The thread ID to delete.
 
         Returns:
             None
@@ -477,7 +477,7 @@ class InMemorySaver(
         method in a separate thread using asyncio.
 
         Args:
-            config (RunnableConfig): The config to use for retrieving the checkpoint.
+            config: The config to use for retrieving the checkpoint.
 
         Returns:
             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
@@ -498,7 +498,7 @@ class InMemorySaver(
         method in a separate thread using asyncio.
 
         Args:
-            config (RunnableConfig): The config to use for listing the checkpoints.
+            config: The config to use for listing the checkpoints.
 
         Yields:
             AsyncIterator[CheckpointTuple]: An asynchronous iterator of checkpoint tuples.
@@ -516,10 +516,10 @@ class InMemorySaver(
         """Asynchronous version of put.
 
         Args:
-            config (RunnableConfig): The config to associate with the checkpoint.
-            checkpoint (Checkpoint): The checkpoint to save.
-            metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
-            new_versions (dict): New versions as of this write
+            config: The config to associate with the checkpoint.
+            checkpoint: The checkpoint to save.
+            metadata: Additional metadata to save with the checkpoint.
+            new_versions: New versions as of this write
 
         Returns:
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
@@ -539,10 +539,10 @@ class InMemorySaver(
         method in a separate thread using asyncio.
 
         Args:
-            config (RunnableConfig): The config to associate with the writes.
-            writes (List[Tuple[str, Any]]): The writes to save, each as a (channel, value) pair.
-            task_id (str): Identifier for the task creating the writes.
-            task_path (str): Path of the task creating the writes.
+            config: The config to associate with the writes.
+            writes: The writes to save, each as a (channel, value) pair.
+            task_id: Identifier for the task creating the writes.
+            task_path: Path of the task creating the writes.
 
         Returns:
             None
@@ -553,7 +553,7 @@ class InMemorySaver(
         """Delete all checkpoints and writes associated with a thread ID.
 
         Args:
-            thread_id (str): The thread ID to delete.
+            thread_id: The thread ID to delete.
 
         Returns:
             None

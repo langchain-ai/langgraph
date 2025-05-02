@@ -34,7 +34,7 @@ def recast_checkpoint_ns(ns: str) -> str:
     """Remove task IDs from checkpoint namespace.
 
     Args:
-        ns (str): The checkpoint namespace with task IDs.
+        ns: The checkpoint namespace with task IDs.
 
     Returns:
         str: The checkpoint namespace without task IDs.
@@ -79,7 +79,7 @@ def merge_configs(*configs: Optional[RunnableConfig]) -> RunnableConfig:
     """Merge multiple configs into one.
 
     Args:
-        *configs (Optional[RunnableConfig]): The configs to merge.
+        *configs: The configs to merge.
 
     Returns:
         RunnableConfig: The merged config.
@@ -159,15 +159,15 @@ def patch_config(
     """Patch a config with new values.
 
     Args:
-        config (Optional[RunnableConfig]): The config to patch.
-        callbacks (Optional[BaseCallbackManager], optional): The callbacks to set.
+        config: The config to patch.
+        callbacks: The callbacks to set.
           Defaults to None.
-        recursion_limit (Optional[int], optional): The recursion limit to set.
+        recursion_limit: The recursion limit to set.
           Defaults to None.
-        max_concurrency (Optional[int], optional): The max concurrency to set.
+        max_concurrency: The max concurrency to set.
           Defaults to None.
-        run_name (Optional[str], optional): The run name to set. Defaults to None.
-        configurable (Optional[Dict[str, Any]], optional): The configurable to set.
+        run_name: The run name to set. Defaults to None.
+        configurable: The configurable to set.
           Defaults to None.
 
     Returns:
@@ -199,7 +199,7 @@ def get_callback_manager_for_config(
     """Get a callback manager for a config.
 
     Args:
-        config (RunnableConfig): The config.
+        config: The config.
 
     Returns:
         CallbackManager: The callback manager.
@@ -237,7 +237,7 @@ def get_async_callback_manager_for_config(
     """Get an async callback manager for a config.
 
     Args:
-        config (RunnableConfig): The config.
+        config: The config.
 
     Returns:
         AsyncCallbackManager: The async callback manager.

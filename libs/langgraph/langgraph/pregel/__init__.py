@@ -805,8 +805,8 @@ class Pregel(PregelProtocol):
         """Get the subgraphs of the graph.
 
         Args:
-            namespace (Optional[str]): The namespace to filter the subgraphs by.
-            recurse (bool): Whether to recurse into the subgraphs.
+            namespace: The namespace to filter the subgraphs by.
+            recurse: Whether to recurse into the subgraphs.
                 If False, only the immediate subgraphs will be returned.
 
         Returns:
@@ -844,8 +844,8 @@ class Pregel(PregelProtocol):
         """Get the subgraphs of the graph.
 
         Args:
-            namespace (Optional[str]): The namespace to filter the subgraphs by.
-            recurse (bool): Whether to recurse into the subgraphs.
+            namespace: The namespace to filter the subgraphs by.
+            recurse: Whether to recurse into the subgraphs.
                 If False, only the immediate subgraphs will be returned.
 
         Returns:

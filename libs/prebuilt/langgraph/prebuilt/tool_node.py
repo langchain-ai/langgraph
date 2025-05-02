@@ -543,10 +543,10 @@ class ToolNode(RunnableCallable):
         tool calls for tool invocation.
 
         Args:
-            tool_call (ToolCall): The tool call to inject state and store into.
-            input (Union[list[AnyMessage], dict[str, Any], BaseModel]): The input state
+            tool_call: The tool call to inject state and store into.
+            input: The input state
                 to inject.
-            store (Optional[BaseStore]): The store to inject.
+            store: The store to inject.
 
         Returns:
             ToolCall: The tool call with injected state and store.
@@ -625,7 +625,7 @@ def tools_condition(
     has tool calls. Otherwise, route to the end.
 
     Args:
-        state (Union[list[AnyMessage], dict[str, Any], BaseModel]): The state to check for
+        state: The state to check for
             tool calls. Must have a list of messages (MessageGraph) or have the
             "messages" key (StateGraph).
 

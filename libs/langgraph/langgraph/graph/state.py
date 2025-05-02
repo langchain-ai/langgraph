@@ -118,8 +118,8 @@ class StateGraph(Graph):
     The signature of a reducer function is (Value, Value) -> Value.
 
     Args:
-        state_schema (Type[Any]): The schema class that defines the state.
-        config_schema (Optional[Type[Any]]): The schema class that defines the configuration.
+        state_schema: The schema class that defines the state.
+        config_schema: The schema class that defines the configuration.
             Use this to expose configurable parameters in your API.
 
     Example:
@@ -284,15 +284,15 @@ class StateGraph(Graph):
         """Add a new node to the state graph.
 
         Args:
-            node (Union[str, RunnableLike]): The function or runnable this node will run.
+            node: The function or runnable this node will run.
                 If a string is provided, it will be used as the node name, and action will be used as the function or runnable.
-            action (Optional[RunnableLike]): The action associated with the node. (default: None)
+            action: The action associated with the node. (default: None)
                 Will be used as the node function or runnable if `node` is a string (node name).
-            metadata (Optional[dict[str, Any]]): The metadata associated with the node. (default: None)
-            input (Optional[Type[Any]]): The input schema for the node. (default: the graph's input schema)
-            retry (Optional[Union[RetryPolicy, Sequence[RetryPolicy]]]): The policy for retrying the node. (default: None)
+            metadata: The metadata associated with the node. (default: None)
+            input: The input schema for the node. (default: the graph's input schema)
+            retry: The policy for retrying the node. (default: None)
                 If a sequence is provided, the first matching policy will be applied.
-            destinations (Optional[Union[dict[str, str], tuple[str, ...]]]): Destinations that indicate where a node can route to.
+            destinations: Destinations that indicate where a node can route to.
                 This is useful for edgeless graphs with nodes that return `Command` objects.
                 If a dict is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
                 If a tuple is provided, the values will be used as the target node names.
@@ -432,8 +432,8 @@ class StateGraph(Graph):
         the graph will wait for ALL of the start nodes to complete before executing the end node.
 
         Args:
-            start_key (Union[str, list[str]]): The key(s) of the start node(s) of the edge.
-            end_key (str): The key of the end node of the edge.
+            start_key: The key(s) of the start node(s) of the edge.
+            end_key: The key of the end node of the edge.
 
         Raises:
             ValueError: If the start key is 'END' or if the start key or end key is not present in the graph.
@@ -476,14 +476,14 @@ class StateGraph(Graph):
         """Add a conditional edge from the starting node to any number of destination nodes.
 
         Args:
-            source (str): The starting node. This conditional edge will run when
+            source: The starting node. This conditional edge will run when
                 exiting this node.
-            path (Union[Callable, Runnable]): The callable that determines the next
+            path: The callable that determines the next
                 node or nodes. If not specifying `path_map` it should return one or
                 more nodes. If it returns END, the graph will stop execution.
-            path_map (Optional[dict[Hashable, str]]): Optional mapping of paths to node
+            path_map: Optional mapping of paths to node
                 names. If omitted the paths returned by `path` should be node names.
-            then (Optional[str]): The name of a node to execute after the nodes
+            then: The name of a node to execute after the nodes
                 selected by `path`.
 
         Returns:
@@ -571,15 +571,15 @@ class StateGraph(Graph):
         streamed, batched, and run asynchronously.
 
         Args:
-            checkpointer (Optional[Union[Checkpointer, Literal[False]]]): A checkpoint saver object or flag.
+            checkpointer: A checkpoint saver object or flag.
                 If provided, this Checkpointer serves as a fully versioned "short-term memory" for the graph,
                 allowing it to be paused, resumed, and replayed from any point.
                 If None, it may inherit the parent graph's checkpointer when used as a subgraph.
                 If False, it will not use or inherit any checkpointer.
-            interrupt_before (Optional[Sequence[str]]): An optional list of node names to interrupt before.
-            interrupt_after (Optional[Sequence[str]]): An optional list of node names to interrupt after.
-            debug (bool): A flag indicating whether to enable debug mode.
-            name (Optional[str]): The name to use for the compiled graph.
+            interrupt_before: An optional list of node names to interrupt before.
+            interrupt_after: An optional list of node names to interrupt after.
+            debug: A flag indicating whether to enable debug mode.
+            name: The name to use for the compiled graph.
 
         Returns:
             CompiledStateGraph: The compiled state graph.

@@ -22,7 +22,7 @@ The LLM operates in a loop. In each iteration, it selects a tool to invoke, prov
 
 ## Basic configuration
 
-Use [`create_react_agent`](https://python.langchain.com/docs/api_reference/langgraph.prebuilt.chat_agent_executor/#create-react-agent) to instantiate an agent:
+Use [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent] to instantiate an agent:
 
 ```python
 from langgraph.prebuilt import create_react_agent

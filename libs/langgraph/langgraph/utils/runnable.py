@@ -67,7 +67,7 @@ def _set_config_context(
     """Set the child Runnable config + tracing context.
 
     Args:
-        config (RunnableConfig): The config to set.
+        config: The config to set.
     """
     config_token = var_child_runnable_config.set(config)
     if run is not None:
@@ -83,7 +83,7 @@ def _unset_config_context(
     """Set the child Runnable config + tracing context.
 
     Args:
-        config (RunnableConfig): The config to set.
+        config: The config to set.
     """
     var_child_runnable_config.reset(token)
     if run is not None:
@@ -108,7 +108,7 @@ def set_config_context(
     """Set the child Runnable config + tracing context.
 
     Args:
-        config (RunnableConfig): The config to set.
+        config: The config to set.
     """
     ctx = copy_context()
     config_token = ctx.run(_set_config_context, config, run)
