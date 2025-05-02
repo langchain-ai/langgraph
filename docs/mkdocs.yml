@@ -289,6 +289,7 @@ nav:
             - concepts/assistants.md
             - concepts/double_texting.md
             - concepts/auth.md
+            - concepts/server-mcp.md
           - Deployment Options:
             - concepts/langgraph_cloud.md
             - concepts/langgraph_self_hosted_data_plane.md
