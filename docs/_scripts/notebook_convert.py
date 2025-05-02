@@ -220,6 +220,24 @@ def _convert_links_in_markdown(markdown: str) -> str:
     )
 
 
+class HideCellTagPreprocessor(Preprocessor):
+    """
+    Removes cells that have '# hide-cell' at the beginning of the cell content.
+    This allows authors to include cells in the notebook that should not
+    appear in the generated markdown output.
+    """
+
+    def preprocess(self, nb, resources):
+        # Filter out cells with the '# hide-cell' comment at the beginning
+        nb.cells = [
+            cell
+            for cell in nb.cells
+            if not (cell.source.strip().startswith("# hide-cell"))
+        ]
+
+        return nb, resources
+
+
 class EscapePreprocessor(Preprocessor):
     def __init__(self, markdown_exec_migration: bool = False, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -341,6 +359,7 @@ class ExtractAttachmentsPreprocessor(Preprocessor):
 
 exporter = MarkdownExporter(
     preprocessors=[
+        HideCellTagPreprocessor,
         EscapePreprocessor,
         ExtractAttachmentsPreprocessor,
     ],
