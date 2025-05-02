@@ -7,6 +7,8 @@ hide:
   - tags
 ---
 
+# Agent quickstart
+
 This guide shows you how to set up and use LangGraph's **prebuilt**, **reusable** components, which are designed to help you construct agentic systems quickly and reliably.
 
 ## 1. Create an agent
