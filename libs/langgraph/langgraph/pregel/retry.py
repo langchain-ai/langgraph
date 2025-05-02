@@ -61,7 +61,7 @@ def run_with_retry(
         except Exception as exc:
             if SUPPORTS_EXC_NOTES:
                 exc.add_note(f"During task with name '{task.name}' and id '{task.id}'")
-            if retry_policy is None:
+            if not retry_policy:
                 raise
 
             # Check which retry policy applies to this exception
@@ -149,7 +149,7 @@ async def arun_with_retry(
         except Exception as exc:
             if SUPPORTS_EXC_NOTES:
                 exc.add_note(f"During task with name '{task.name}' and id '{task.id}'")
-            if retry_policies is None:
+            if not retry_policies:
                 raise
 
             # Check which retry policy applies to this exception

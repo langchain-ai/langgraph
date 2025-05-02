@@ -323,11 +323,15 @@ class entrypoint:
         store: Optional[BaseStore] = None,
         cache: Optional[BaseCache] = None,
         config_schema: Optional[type[Any]] = None,
+        cache_policy: Optional[CachePolicy] = None,
+        retry: Union[RetryPolicy, Sequence[RetryPolicy]] = (),
     ) -> None:
         """Initialize the entrypoint decorator."""
         self.checkpointer = checkpointer
         self.store = store
         self.cache = cache
+        self.cache_policy = cache_policy
+        self.retry = retry
         self.config_schema = config_schema
 
     @dataclass(**_DC_KWARGS)
@@ -458,5 +462,7 @@ class entrypoint:
             checkpointer=self.checkpointer,
             store=self.store,
             cache=self.cache,
+            cache_policy=self.cache_policy,
+            retry_policy=self.retry,
             config_type=self.config_schema,
         )

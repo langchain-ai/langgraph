@@ -104,6 +104,7 @@ from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
+    CachePolicy,
     Checkpointer,
     Interrupt,
     LoopProtocol,
@@ -500,8 +501,12 @@ class Pregel(PregelProtocol):
     cache: BaseCache | None = None
     """Cache to use for storing node results. Defaults to None."""
 
-    retry_policy: Sequence[RetryPolicy] | None = None
-    """Retry policies to use when running tasks. Set to None to disable."""
+    retry_policy: Sequence[RetryPolicy] = ()
+    """Retry policies to use when running tasks. Empty set disables retries."""
+
+    cache_policy: CachePolicy | None = None
+    """Cache policy to use for all nodes. Can be overridden by individual nodes.
+    Defaults to None."""
 
     config_type: type[Any] | None = None
 
@@ -531,7 +536,8 @@ class Pregel(PregelProtocol):
         checkpointer: BaseCheckpointSaver | None = None,
         store: BaseStore | None = None,
         cache: BaseCache | None = None,
-        retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+        retry_policy: RetryPolicy | Sequence[RetryPolicy] = (),
+        cache_policy: CachePolicy | None = None,
         config_type: type[Any] | None = None,
         input_model: type[BaseModel] | None = None,
         config: RunnableConfig | None = None,
@@ -552,10 +558,10 @@ class Pregel(PregelProtocol):
         self.checkpointer = checkpointer
         self.store = store
         self.cache = cache
-        if isinstance(retry_policy, RetryPolicy):
-            self.retry_policy: Sequence[RetryPolicy] = (retry_policy,)
-        else:
-            self.retry_policy = retry_policy
+        self.retry_policy = (
+            (retry_policy,) if isinstance(retry_policy, RetryPolicy) else retry_policy
+        )
+        self.cache_policy = cache_policy
         self.config_type = config_type
         self.input_model = input_model
         self.config = config
@@ -2465,6 +2471,8 @@ class Pregel(PregelProtocol):
                 else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, True),
                 trigger_to_nodes=self.trigger_to_nodes,
                 migrate_checkpoint=self._migrate_checkpoint,
+                retry_policy=self.retry_policy,
+                cache_policy=self.cache_policy,
             ) as loop:
                 # create runner
                 runner = PregelRunner(
@@ -2514,7 +2522,6 @@ class Pregel(PregelProtocol):
                     for _ in runner.tick(
                         [t for t in loop.tasks.values() if not t.writes],
                         timeout=self.step_timeout,
-                        retry_policy=self.retry_policy,
                         get_waiter=get_waiter,
                         match_cached_writes=loop.match_cached_writes,
                     ):
@@ -2777,6 +2784,8 @@ class Pregel(PregelProtocol):
                 else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, True),
                 trigger_to_nodes=self.trigger_to_nodes,
                 migrate_checkpoint=self._migrate_checkpoint,
+                retry_policy=self.retry_policy,
+                cache_policy=self.cache_policy,
             ) as loop:
                 # create runner
                 runner = PregelRunner(
@@ -2817,7 +2826,6 @@ class Pregel(PregelProtocol):
                     async for _ in runner.atick(
                         [t for t in loop.tasks.values() if not t.writes],
                         timeout=self.step_timeout,
-                        retry_policy=self.retry_policy,
                         get_waiter=get_waiter,
                         # TODO pass match_cached_writes
                     ):

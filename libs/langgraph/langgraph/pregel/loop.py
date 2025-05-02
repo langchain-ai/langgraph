@@ -118,10 +118,12 @@ from langgraph.pregel.utils import get_new_channel_versions, is_xxh3_128_hexdige
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
+    CachePolicy,
     Command,
     LoopProtocol,
     PregelExecutableTask,
     PregelScratchpad,
+    RetryPolicy,
     StreamChunk,
     StreamProtocol,
 )
@@ -162,6 +164,8 @@ class PregelLoop(LoopProtocol):
     interrupt_before: Union[All, Sequence[str]]
     checkpoint_during: bool
     debug: bool
+    retry_policy: Sequence[RetryPolicy]
+    cache_policy: Optional[CachePolicy]
 
     checkpointer_get_next_version: GetNextVersion
     checkpointer_put_writes: Optional[Callable[[RunnableConfig, WritesT, str], Any]]
@@ -220,6 +224,8 @@ class PregelLoop(LoopProtocol):
         input_model: Optional[type[BaseModel]] = None,
         debug: bool = False,
         migrate_checkpoint: Optional[Callable[[Checkpoint], None]] = None,
+        retry_policy: Sequence[RetryPolicy] = (),
+        cache_policy: Optional[CachePolicy] = None,
         checkpoint_during: bool = True,
     ) -> None:
         super().__init__(
@@ -247,6 +253,8 @@ class PregelLoop(LoopProtocol):
         )
         self._migrate_checkpoint = migrate_checkpoint
         self.trigger_to_nodes = trigger_to_nodes
+        self.retry_policy = retry_policy
+        self.cache_policy = cache_policy
         self.checkpoint_during = checkpoint_during
         self.debug = debug
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
@@ -421,6 +429,8 @@ class PregelLoop(LoopProtocol):
                 store=self.store,
                 checkpointer=self.checkpointer,
                 manager=self.manager,
+                retry_policy=self.retry_policy,
+                cache_policy=self.cache_policy,
             ),
         ):
             # don't start if we should interrupt *before* the new task
@@ -550,6 +560,8 @@ class PregelLoop(LoopProtocol):
             checkpointer=self.checkpointer,
             trigger_to_nodes=self.trigger_to_nodes,
             updated_channels=updated_channels,
+            retry_policy=self.retry_policy,
+            cache_policy=self.cache_policy,
         )
         self.to_interrupt = []
 
@@ -989,6 +1001,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         input_model: Optional[type[BaseModel]] = None,
         debug: bool = False,
         migrate_checkpoint: Optional[Callable[[Checkpoint], None]] = None,
+        retry_policy: Sequence[RetryPolicy] = (),
+        cache_policy: Optional[CachePolicy] = None,
         checkpoint_during: bool = True,
     ) -> None:
         super().__init__(
@@ -1009,6 +1023,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             debug=debug,
             migrate_checkpoint=migrate_checkpoint,
             trigger_to_nodes=trigger_to_nodes,
+            retry_policy=retry_policy,
+            cache_policy=cache_policy,
             checkpoint_during=checkpoint_during,
         )
         self.stack = ExitStack()
@@ -1169,6 +1185,8 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         input_model: Optional[type[BaseModel]] = None,
         debug: bool = False,
         migrate_checkpoint: Optional[Callable[[Checkpoint], None]] = None,
+        retry_policy: Sequence[RetryPolicy] = (),
+        cache_policy: Optional[CachePolicy] = None,
         checkpoint_during: bool = True,
     ) -> None:
         super().__init__(
@@ -1189,6 +1207,8 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             debug=debug,
             migrate_checkpoint=migrate_checkpoint,
             trigger_to_nodes=trigger_to_nodes,
+            retry_policy=retry_policy,
+            cache_policy=cache_policy,
             checkpoint_during=checkpoint_during,
         )
         self.stack = AsyncExitStack()
