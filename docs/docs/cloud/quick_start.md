@@ -256,8 +256,7 @@ export LANGSMITH_API_KEY=...
 Congratulations! If you've worked your way through this tutorial you are well on your way to becoming a LangGraph Cloud expert. Here are some other resources to check out to help you out on the path to expertise:
 
 - **[LangGraph Tutorial](../tutorials/introduction.ipynb)**: Get started with LangGraph framework.
-- **[LangGraph Platform Concepts](../concepts/index.md#langgraph-platform)**: Understand the foundational concepts of the LangGraph Platform.
-- **[LangGraph Platform How-to Guides](../how-tos/index.md#langgraph-platform)**: Discover step-by-step guides to build and deploy applications.
+- **[LangGraph Platform docs](../concepts/langgraph_platform.md)**: Content containing foundational concepts and how-to guides for LangGraph Platform.
 - **[Launch Local LangGraph Server](../tutorials/langgraph-platform/local-server.md)**: This quick start guide shows how to start a LangGraph Server locally for the **ReAct Agent** template. The steps are similar for other templates.
 
 
