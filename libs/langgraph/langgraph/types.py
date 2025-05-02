@@ -263,8 +263,8 @@ class Send:
         Initialize a new instance of the Send class.
 
         Args:
-            node (str): The name of the target node to send the message to.
-            arg (Any): The state or message to send to the target node.
+            node: The name of the target node to send the message to.
+            arg: The state or message to send to the target node.
         """
         self.node = node
         self.arg = arg

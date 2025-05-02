@@ -187,12 +187,12 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         """Create a new AsyncPostgresStore instance from a connection string.
 
         Args:
-            conn_string (str): The Postgres connection info string.
-            pipeline (bool): Whether to use AsyncPipeline (only for single connections)
-            pool_config (Optional[PoolConfig]): Configuration for the connection pool.
+            conn_string: The Postgres connection info string.
+            pipeline: Whether to use AsyncPipeline (only for single connections)
+            pool_config: Configuration for the connection pool.
                 If provided, will create a connection pool and use it instead of a single connection.
                 This overrides the `pipeline` argument.
-            index (Optional[PostgresIndexConfig]): The embedding config.
+            index: The embedding config.
 
         Returns:
             AsyncPostgresStore: A new AsyncPostgresStore instance.
