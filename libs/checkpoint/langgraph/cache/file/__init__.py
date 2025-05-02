@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import dbm
 
 import ormsgpack
@@ -22,11 +23,16 @@ class FileCache(BaseCache):
 
     def get(self, keys: list[str]) -> dict[str, bytes]:
         """Get the cached values for the given keys."""
-        return {
-            key: self.serde.loads_typed(ormsgpack.unpackb(self._db[key]))
-            for key in keys
-            if key in self._db
-        }
+        now = datetime.datetime.now(datetime.timezone.utc).timestamp()
+        values: dict[str, bytes] = {}
+        for key in keys:
+            if val := self._db.get(key):
+                expiry, *data = ormsgpack.unpackb(val)
+                if expiry is not None and now > expiry:
+                    self._db.pop(key, None)
+                    continue
+                values[key] = self.serde.loads_typed(data)
+        return values
 
     async def aget(self, keys: list[str]) -> dict[str, bytes]:
         """Asynchronously get the cached values for the given keys."""
@@ -34,9 +40,14 @@ class FileCache(BaseCache):
 
     def set(self, mapping: dict[str, tuple[bytes, int | None]]) -> None:
         """Set the cached values for the given keys and TTLs."""
-        for key, (value, _) in mapping.items():
-            # File-based caches do not support TTLs, so we ignore them.
-            self._db[key] = ormsgpack.packb(self.serde.dumps_typed(value))
+        now = datetime.datetime.now(datetime.timezone.utc)
+        for key, (value, ttl) in mapping.items():
+            if ttl is not None:
+                delta = datetime.timedelta(seconds=ttl)
+                expiry: float | None = (now + delta).timestamp()
+            else:
+                expiry = None
+            self._db[key] = ormsgpack.packb((expiry, *self.serde.dumps_typed(value)))
 
     async def aset(self, mapping: dict[str, tuple[bytes, int | None]]) -> None:
         """Asynchronously set the cached values for the given keys and TTLs."""
