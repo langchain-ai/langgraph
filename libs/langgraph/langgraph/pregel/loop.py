@@ -616,10 +616,10 @@ class PregelLoop(LoopProtocol):
 
         return True
 
-    def match_cached_writes(self) -> list[PregelExecutableTask]:
+    def match_cached_writes(self) -> Sequence[PregelExecutableTask]:
         raise NotImplementedError
 
-    async def amatch_cached_writes(self) -> list[PregelExecutableTask]:
+    async def amatch_cached_writes(self) -> Sequence[PregelExecutableTask]:
         raise NotImplementedError
 
     # private
@@ -1048,9 +1048,9 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
 
         return self.submit(cast(WritableManagedValue, managed_value).update, values)
 
-    def match_cached_writes(self) -> list[PregelExecutableTask]:
+    def match_cached_writes(self) -> Sequence[PregelExecutableTask]:
         if self.cache is None:
-            return
+            return ()
         matched: list[PregelExecutableTask] = []
         if cached := {
             t.cache_key.key: t
@@ -1228,9 +1228,9 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
 
         return self.submit(cast(WritableManagedValue, managed_value).aupdate, values)
 
-    async def amatch_cached_writes(self) -> None:
+    async def amatch_cached_writes(self) -> Sequence[PregelExecutableTask]:
         if self.cache is None:
-            return
+            return []
         matched: list[PregelExecutableTask] = []
         if cached := {
             t.cache_key.key: t
