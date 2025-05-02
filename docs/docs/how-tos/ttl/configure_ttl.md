@@ -10,7 +10,7 @@
 
 The LangGraph Platform persists both [checkpoints](../../concepts/persistence.md#checkpoints) (thread state) and [cross-thread memories](../../concepts/persistence.md#memory-store) (store items). Configure Time-to-Live (TTL) policies in `langgraph.json` to automatically manage the lifecycle of this data, preventing indefinite accumulation.
 
-## Configuring Checkpoint TTLß
+## Configuring Checkpoint TTL
 
 Checkpoints capture the state of conversation threads. Setting a TTL ensures old checkpoints and threads are automatically deleted.
 
