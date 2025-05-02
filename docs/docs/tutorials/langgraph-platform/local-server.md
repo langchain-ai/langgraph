@@ -239,10 +239,7 @@ Now that you have a LangGraph app running locally, take your journey further by 
 
 ### 📚 Learn More about LangGraph Platform
 
-Expand your knowledge with these resources:
-
-- **[LangGraph Platform Concepts](../../concepts/langgraph_platform.md)**: Understand the foundational concepts of the LangGraph Platform.  
-- **[LangGraph Platform How-to Guides](../../index.md)**: Discover step-by-step guides to build and deploy applications.
+Check out the [LangGraph Platform docs](../../concepts/langgraph_platform.md) for content about foundational concepts and how-to guides.
 
 ### 🛠️ Developer References
 
