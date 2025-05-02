@@ -70,60 +70,60 @@ Prompts instruct the LLM how to behave. Add one of the following types of prompt
 
 === "Static prompt"
 
-Define a fixed prompt string or list of messages:
+    Define a fixed prompt string or list of messages:
 
-```python
-from langgraph.prebuilt import create_react_agent
+    ```python
+    from langgraph.prebuilt import create_react_agent
 
-agent = create_react_agent(
-    model="anthropic:claude-3-7-sonnet-latest",
-    tools=[get_weather],
-    # A static prompt that never changes
-    # highlight-next-line
-    prompt="Never answer questions about the weather."
-)
+    agent = create_react_agent(
+        model="anthropic:claude-3-7-sonnet-latest",
+        tools=[get_weather],
+        # A static prompt that never changes
+        # highlight-next-line
+        prompt="Never answer questions about the weather."
+    )
 
-agent.invoke(
-    {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
-)
-```
+    agent.invoke(
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
+    )
+    ```
 
 === "Dynamic prompt"
 
-Define a function that returns a message list based on the agent's state and configuration:
+    Define a function that returns a message list based on the agent's state and configuration:
 
-```python
-from langchain_core.messages import AnyMessage
-from langchain_core.runnables import RunnableConfig
-from langgraph.prebuilt.chat_agent_executor import AgentState
-from langgraph.prebuilt import create_react_agent
+    ```python
+    from langchain_core.messages import AnyMessage
+    from langchain_core.runnables import RunnableConfig
+    from langgraph.prebuilt.chat_agent_executor import AgentState
+    from langgraph.prebuilt import create_react_agent
 
-# highlight-next-line
-def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:  # (1)!
-    user_name = config["configurable"].get("user_name")
-    system_msg = f"You are a helpful assistant. Address the user as {user_name}."
-    return [{"role": "system", "content": system_msg}] + state["messages"]
-
-agent = create_react_agent(
-    model="anthropic:claude-3-7-sonnet-latest",
-    tools=[get_weather],
     # highlight-next-line
-    prompt=prompt
-)
+    def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:  # (1)!
+        user_name = config["configurable"].get("user_name")
+        system_msg = f"You are a helpful assistant. Address the user as {user_name}."
+        return [{"role": "system", "content": system_msg}] + state["messages"]
 
-agent.invoke(
-    {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
-    # highlight-next-line
-    config={"configurable": {"user_name": "John Smith"}}
-)
-```
+    agent = create_react_agent(
+        model="anthropic:claude-3-7-sonnet-latest",
+        tools=[get_weather],
+        # highlight-next-line
+        prompt=prompt
+    )
 
-1. Dynamic prompts allow including non-message [context](./context.md) when constructing an input to the LLM, such as:
+    agent.invoke(
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
+        # highlight-next-line
+        config={"configurable": {"user_name": "John Smith"}}
+    )
+    ```
 
-    - Information passed at runtime, like a `user_id` or API credentials (using `config`).
-    - Internal agent state updated during a multi-step reasoning process (using `state`).
+    1. Dynamic prompts allow including non-message [context](./context.md) when constructing an input to the LLM, such as:
 
-    Dynamic prompts can be defined as functions that take `state` and `config` and return a list of messages to send to the LLM.
+        - Information passed at runtime, like a `user_id` or API credentials (using `config`).
+        - Internal agent state updated during a multi-step reasoning process (using `state`).
+
+        Dynamic prompts can be defined as functions that take `state` and `config` and return a list of messages to send to the LLM.
 
 For more information, see [Context](./context.md).
 
