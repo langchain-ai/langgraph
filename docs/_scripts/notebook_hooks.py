@@ -30,6 +30,9 @@ REDIRECT_MAP = {
     "how-tos/branching.ipynb": "how-tos/graph-api#create-branches-for-parallel-node-execution",
     "how-tos/recursion-limit.ipynb": "how-tos/graph-api#create-and-control-loops",
     "how-tos/visualization.ipynb": "how-tos/graph-api#visualize-your-graph",
+    "how-tos/input_output_schema.ipynb": "how-tos/graph-api#define-input-and-output-schemas",
+    "how-tos/pass_private_state.ipynb": "how-tos/graph-api#pass-private-state-between-nodes",
+    "how-tos/state-model.ipynb": "how-tos/graph-api#use-pydantic-models-for-graph-state",
     # cloud redirects
     "cloud/index.md": "concepts/index.md#langgraph-platform",
     "cloud/how-tos/index.md": "how-tos/index.md#langgraph-platform",
