@@ -61,14 +61,14 @@ agent = create_react_agent(
 
 For more information on how to configure LLMs, see [Models](./models.md).
 
-## 3. Add custom prompts
+## 3. Add a custom prompt
 
-Prompts instruct the LLM how to behave. There are two types of prompts:
+Prompts instruct the LLM how to behave. Add one of the following types of prompts:
 
 * **Static**: A string is interpreted as a **system message**.
 * **Dynamic**: A list of messages generated at **runtime**, based on input or configuration.
 
-### Static prompts
+=== "Static prompt"
 
 Define a fixed prompt string or list of messages:
 
@@ -88,7 +88,7 @@ agent.invoke(
 )
 ```
 
-### Dynamic prompts
+=== "Dynamic prompt"
 
 Define a function that returns a message list based on the agent's state and configuration:
 
