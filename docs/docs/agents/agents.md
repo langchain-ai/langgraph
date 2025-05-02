@@ -7,22 +7,11 @@ hide:
   - tags
 ---
 
-# Agents
+This guide shows you have to set up and use LangGraph's **prebuilt**, **reusable** components, which are designed to help you construct agentic systems quickly and reliably.
 
-## What is an agent?
+## 1. Create an agent
 
-An *agent* consists of three components: a **large language model (LLM)**, a set of **tools** it can use, and a **prompt** that provides instructions.
-
-The LLM operates in a loop. In each iteration, it selects a tool to invoke, provides input, receives the result (an observation), and uses that observation to inform the next action. The loop continues until a stopping condition is met — typically when the agent has gathered enough information to respond to the user.
-
-<figure markdown="1">
-![image](./assets/agent.png){: style="max-height:400px"}
-<figcaption>Agent loop: the LLM selects tools and uses their outputs to fulfill a user request.</figcaption>
-</figure>
-
-## Basic configuration
-
-Use [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent] to instantiate an agent:
+Use [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent]:
 
 ```python
 from langgraph.prebuilt import create_react_agent
@@ -48,7 +37,7 @@ agent.invoke(
 3. Provide a list of tools for the model to use.
 4. Provide a system prompt (instructions) to the language model used by the agent.
 
-## LLM configuration
+## 2. Configure an LLM
 
 Use [init_chat_model](https://python.langchain.com/api_reference/langchain/chat_models/langchain.chat_models.base.init_chat_model.html) to configure an LLM with specific parameters,
 such as temperature:
@@ -71,18 +60,18 @@ agent = create_react_agent(
 )
 ```
 
-See the [models](./models.md) page for more information on how to configure LLMs.
+For more information on how to configure LLMs, see [Models](./models.md).
 
-## Custom Prompts
+## 3. Add custom prompts
 
-Prompts instruct the LLM how to behave. They can be:
+Prompts instruct the LLM how to behave. There are two types of prompts:
 
-* **Static**: A string is interpreted as a **system message**
-* **Dynamic**: a list of messages generated at **runtime** based on input or configuration
+* **Static**: A string is interpreted as a **system message**.
+* **Dynamic**: A list of messages generated at **runtime**, based on input or configuration.
 
 ### Static prompts
 
-Define a fixed prompt string or list of messages.
+Define a fixed prompt string or list of messages:
 
 ```python
 from langgraph.prebuilt import create_react_agent
@@ -137,11 +126,11 @@ agent.invoke(
 
     Dynamic prompts can be defined as functions that take `state` and `config` and return a list of messages to send to the LLM.
 
-See the [context](./context.md) page for more information.
+For more information, see [Context](./context.md).
 
-## Memory
+## 4. Add memory
 
-To allow multi-turn conversations with an agent, you need to enable [persistence](../concepts/persistence.md) by providing a `checkpointer` when creating an agent. At runtime you need to provide a config containing `thread_id` — a unique identifier for the conversation (session):
+To allow multi-turn conversations with an agent, you need to enable [persistence](../concepts/persistence.md) by providing a `checkpointer` when creating an agent. At runtime, you need to provide a config containing `thread_id` — a unique identifier for the conversation (session):
 
 ```python
 from langgraph.prebuilt import create_react_agent
@@ -179,10 +168,9 @@ When you enable the checkpointer, it stores agent state at every step in the pro
 
 Note that in the above example, when the agent is invoked the second time with the same `thread_id`, the original message history from the first conversation is automatically included, together with the new user input.
 
-Please see the [memory guide](./memory.md) for more details on how to work with memory.
+For more information, see [Memory](./memory.md).
 
-
-## Structured output
+## 5. Configure structured output
 
 To produce structured responses conforming to a schema, use the `response_format` parameter. The schema can be defined with a `Pydantic` model or `TypedDict`. The result will be accessible via the `structured_response` field.
 
@@ -215,4 +203,9 @@ response["structured_response"]
 !!! Note "LLM post-processing"
 
     Structured output requires an additional call to the LLM to format the response according to the schema.
+
+## Next steps
+
+- [Deploy your agent locally](../tutorials/langgraph-platform/local-server.md)
+- [Learn more about prebuilt agents](../agents/overview.md)
 
