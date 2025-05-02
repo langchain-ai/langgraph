@@ -7,6 +7,7 @@ from typing import (
     Union,
     cast,
 )
+from uuid import UUID, uuid5
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.graph import (
@@ -630,6 +631,10 @@ class RemoteGraph(PregelProtocol):
         """
         sync_client = self._validate_sync_client()
         merged_config = merge_configs(self.config, config)
+        thread_id = merged_config["configurable"].get("thread_id")
+        checkpoint_ns = merged_config["configurable"].get("checkpoint_ns")
+        if checkpoint_ns:
+            thread_id = str(uuid5(UUID(thread_id), checkpoint_ns))
         sanitized_config = self._sanitize_config(merged_config)
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
@@ -641,7 +646,7 @@ class RemoteGraph(PregelProtocol):
             command = None
 
         for chunk in sync_client.runs.stream(
-            thread_id=sanitized_config["configurable"].get("thread_id"),
+            thread_id=thread_id,
             assistant_id=self.name,
             input=input,
             command=command,
@@ -725,6 +730,10 @@ class RemoteGraph(PregelProtocol):
         """
         client = self._validate_client()
         merged_config = merge_configs(self.config, config)
+        thread_id = merged_config["configurable"].get("thread_id")
+        checkpoint_ns = merged_config["configurable"].get("checkpoint_ns")
+        if checkpoint_ns:
+            thread_id = str(uuid5(UUID(thread_id), checkpoint_ns))
         sanitized_config = self._sanitize_config(merged_config)
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
@@ -736,7 +745,7 @@ class RemoteGraph(PregelProtocol):
             command = None
 
         async for chunk in client.runs.stream(
-            thread_id=sanitized_config["configurable"].get("thread_id"),
+            thread_id=thread_id,
             assistant_id=self.name,
             input=input,
             command=command,
