@@ -25,6 +25,11 @@ REDIRECT_MAP = {
     "how-tos/streaming-tokens-without-langchain.ipynb": "how-tos/streaming-tokens.ipynb#example-without-langchain",
     "how-tos/streaming-from-final-node.ipynb": "how-tos/streaming-specific-nodes.ipynb",
     "how-tos/streaming-events-from-within-tools-without-langchain.ipynb": "how-tos/streaming-events-from-within-tools.ipynb#example-without-langchain",
+    "how-tos/state-reducers.ipynb": "how-tos/graph-api#define-and-update-state",
+    "how-tos/sequence.ipynb": "how-tos/graph-api#create-a-sequence-of-steps",
+    "how-tos/branching.ipynb": "how-tos/graph-api#create-branches-for-parallel-node-execution",
+    "how-tos/recursion-limit.ipynb": "how-tos/graph-api#create-and-control-loops",
+    "how-tos/visualization.ipynb": "how-tos/graph-api#visualize-your-graph",
     # cloud redirects
     "cloud/index.md": "concepts/index.md#langgraph-platform",
     "cloud/how-tos/index.md": "how-tos/index.md#langgraph-platform",

@@ -111,11 +111,6 @@ nav:
           # but it also has some terms from the functional API.
           # Unclear on where to put it in its current form.
         - Use the Graph API: how-tos/graph-api.ipynb
-        - how-tos/state-reducers.ipynb
-        - how-tos/sequence.ipynb
-        - how-tos/branching.ipynb
-        - how-tos/recursion-limit.ipynb
-        - how-tos/visualization.ipynb
       - Persistence:
         - Overview: concepts/persistence.md
         - concepts/durable_execution.md # TO DO: Combine with Persistence concept doc?
