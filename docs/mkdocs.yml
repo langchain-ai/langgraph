@@ -77,7 +77,7 @@ plugins:
             inherited_members: true
             selection:
               docstring_style: google
-            docstring_section_style: list
+            docstring_section_style: table
             show_root_toc_entry: false
             show_signature: true
             show_signature_annotations: true
@@ -337,7 +337,7 @@ nav:
       - SDK (JS/TS): cloud/reference/sdk/js_ts_sdk_ref.md
       - RemoteGraph: reference/remote_graph.md
       - Environment variables: cloud/reference/env_var.md
-  
+
   - Examples:
     - tutorials/langgraph-platform/local-server.md
     - tutorials/workflows/index.md
@@ -345,7 +345,7 @@ nav:
     - tutorials/multi_agent/agent_supervisor.ipynb
     - tutorials/customer-support/customer-support.ipynb
     - SQL agent: tutorials/sql-agent.ipynb
-  
+
   - Resources:
     - LLMS-txt: llms-txt-overview.md
     - concepts/faq.md

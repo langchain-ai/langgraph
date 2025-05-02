@@ -126,7 +126,7 @@ def add_human_in_the_loop(
     *,
     interrupt_config: HumanInterruptConfig = None,
 ) -> BaseTool:
-   """Wrap a tool to support human-in-the-loop review.""" 
+    """Wrap a tool to support human-in-the-loop review.""" 
     if not isinstance(tool, BaseTool):
         tool = create_tool(tool)
 
