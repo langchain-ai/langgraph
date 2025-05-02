@@ -7,11 +7,11 @@ hide:
   - tags
 ---
 
-This guide shows you have to set up and use LangGraph's **prebuilt**, **reusable** components, which are designed to help you construct agentic systems quickly and reliably.
+This guide shows you how to set up and use LangGraph's **prebuilt**, **reusable** components, which are designed to help you construct agentic systems quickly and reliably.
 
 ## 1. Create an agent
 
-Use [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent]:
+To create an agent, use [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent]:
 
 ```python
 from langgraph.prebuilt import create_react_agent
@@ -39,8 +39,7 @@ agent.invoke(
 
 ## 2. Configure an LLM
 
-Use [init_chat_model](https://python.langchain.com/api_reference/langchain/chat_models/langchain.chat_models.base.init_chat_model.html) to configure an LLM with specific parameters,
-such as temperature:
+To configure an LLM with specific parameters, such as temperature, use [init_chat_model](https://python.langchain.com/api_reference/langchain/chat_models/langchain.chat_models.base.init_chat_model.html):
 
 ```python
 from langchain.chat_models import init_chat_model
