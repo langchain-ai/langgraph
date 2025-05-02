@@ -152,10 +152,7 @@ nav:
         - how-tos/human_in_the_loop/edit-graph-state.ipynb
       - Memory:
         - Overview: concepts/memory.md
-        - how-tos/memory/manage-conversation-history.ipynb
-        - how-tos/memory/delete-messages.ipynb
-        - how-tos/memory/add-summary-conversation-history.ipynb
-        - how-tos/memory/semantic-search.ipynb
+        - Manage Conversation History: how-tos/memory.ipynb
       - Tool calling:
         - how-tos/tool-calling.ipynb
         - how-tos/tool-calling-errors.ipynb
