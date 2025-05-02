@@ -277,7 +277,7 @@ def update_markdown_with_imports(markdown: str, path: str) -> str:
             f'<a href="{imp["docs"]}">{imp["imported"]}</a>' for imp in imports
         )
         # Return the code block with prepended API reference links
-        return f"{indent}<sup><i>API: {api_links}</i></sup>\n\n{original_code_block}"
+        return f"{indent}<sup><i>API Reference: {api_links}</i></sup>\n\n{original_code_block}"
 
     # Apply the replace_code_block function to all matches in the markdown
     updated_markdown = code_block_pattern.sub(replace_code_block, markdown)
