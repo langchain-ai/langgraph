@@ -149,11 +149,11 @@ snapshot.next
         return human_response["data"]
     ```
 
-    Similar to Python's built-in `input()` function, calling `interrupt` inside the tool will pause execution. Progress is persisted based on the [checkpointer](../../concepts/.md#checkpointer-libraries); so if it is persisting with Postgres, it can resume at any time as long as the database is alive. In this example, it is persisting with the in-memory checkpointer and can resume any time if the Python kernel is running.
+    Similar to Python's built-in `input()` function, calling `interrupt` inside the tool will pause execution. Progress is persisted based on the [checkpointer](../../concepts/persistence.md#checkpointer-libraries); so if it is persisting with Postgres, it can resume at any time as long as the database is alive. In this example, it is persisting with the in-memory checkpointer and can resume any time if the Python kernel is running.
 
 ## 5. Resume execution
 
-To resume execution, pass a [`Command`](../../concepts/human_in_the_loop#the-command-primitive) object containing data expected by the tool. The format of this data can be customized based on needs. For this example, use a dict with a key `"data"`:
+To resume execution, pass a [`Command`](../../concepts/human_in_the_loop.md#the-command-primitive) object containing data expected by the tool. The format of this data can be customized based on needs. For this example, use a dict with a key `"data"`:
 
 ``` python
 human_response = (
