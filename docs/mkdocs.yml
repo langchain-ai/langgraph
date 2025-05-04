@@ -95,7 +95,14 @@ nav:
     - Home: index.md
     - Get started:
       - Quickstart: agents/agents.md
-      - LangGraph basics: tutorials/introduction.ipynb
+      - LangGraph basics:
+        -  how-tos/get-started/why-langgraph.md
+        -  Build a basic chatbot: how-tos/get-started/1-build-basic-chatbot.md
+        -  Add tools: how-tos/get-started/2-add-tools.md
+        -  Add memory: how-tos/get-started/3-add-memory.md
+        -  Add human oversight: how-tos/get-started/4-human-in-the-loop.md
+        -  Customize state: how-tos/get-started/5-customize-state.md
+        -  Time travel: how-tos/get-started/6-time-travel.md
       - Deployment:
         - tutorials/deployment.md
         - Local deploy: tutorials/langgraph-platform/local-server.md

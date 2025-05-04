@@ -43,7 +43,8 @@ REDIRECT_MAP = {
     "concepts/high_level.md": "index.md",
     "concepts/index.md": "index.md",
     "concepts/v0-human-in-the-loop.md": "concepts/human-in-the-loop.md",
-    "how-tos/index.md": "index.md"
+    "how-tos/index.md": "index.md",
+    "tutorials/introduction.md": "guides/get-started/why-langgraph.md"
 }
 
 
