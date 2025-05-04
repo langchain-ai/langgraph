@@ -30,7 +30,7 @@ Adding this information to the state makes it easily accessible by other graph n
 
 ## 2. Update the state inside the tool
 
-Now, populate the state keys inside of the `human_assistance` tool. This allows a human to review the information before it is stored in the state. Use [`Command`](../../concepts/low_level#using-inside-tools) to issue a state update from inside the tool.
+Now, populate the state keys inside of the `human_assistance` tool. This allows a human to review the information before it is stored in the state. Use [`Command`](../../concepts/low_level.md#using-inside-tools) to issue a state update from inside the tool.
 
 ``` python
 from langchain_core.messages import ToolMessage
