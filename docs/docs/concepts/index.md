@@ -75,6 +75,7 @@ The LangGraph Platform comprises several components that work together to suppor
 - [Cron Jobs](./langgraph_server.md#cron-jobs): Cron jobs are a way to schedule tasks to run at specific times in your LangGraph application.
 - [Double Texting](./double_texting.md): Double texting is a common issue in LLM applications where users may send multiple messages before the graph has finished running. This guide explains how to handle double texting with LangGraph Deploy.
 - [Authentication & Access Control](./auth.md): Learn about options for authentication and access control when deploying the LangGraph Platform.
+- [MCP Endpoint](./server-mcp.md): Expose your LangGraph agents as MCP tools using an MCP endpoint.
 
 ### Deployment Options
 

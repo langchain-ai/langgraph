@@ -175,11 +175,6 @@ nav:
               - how-tos/autogen-integration.ipynb
               - how-tos/autogen-integration-functional.ipynb
           - Prebuilt ReAct Agent:
-              - how-tos/create-react-agent.ipynb
-              - how-tos/create-react-agent-memory.ipynb
-              - how-tos/create-react-agent-system-prompt.ipynb
-              - how-tos/create-react-agent-hitl.ipynb
-              - how-tos/create-react-agent-structured-output.ipynb
               - how-tos/create-react-agent-manage-message-history.ipynb
               - how-tos/react-agent-from-scratch.ipynb
               - how-tos/react-agent-from-scratch-functional.ipynb
@@ -294,6 +289,7 @@ nav:
             - concepts/assistants.md
             - concepts/double_texting.md
             - concepts/auth.md
+            - concepts/server-mcp.md
           - Deployment Options:
             - concepts/langgraph_cloud.md
             - concepts/langgraph_self_hosted_data_plane.md
