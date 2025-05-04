@@ -29,6 +29,12 @@ REDIRECT_MAP = {
     "how-tos/memory/manage-conversation-history.ipynb": "how-tos/memory.ipynb",
     "how-tos/memory/delete-messages.ipynb": "how-tos/memory.ipynb#delete-messages",
     "how-tos/memory/add-summary-conversation-history.ipynb": "how-tos/memory.ipynb#summarize-messages",
+    # persistence how-tos
+    "how-tos/persistence_postgres.ipynb": "how-tos/persistence.ipynb#use-a-database",
+    "how-tos/persistence_mongodb.ipynb": "how-tos/persistence.ipynb#use-a-database",
+    "how-tos/persistence_redis.ipynb": "how-tos/persistence.ipynb#use-a-database",
+    "how-tos/subgraph-persistence.ipynb": "how-tos/persistence.ipynb#use-with-subgraphs",
+    "how-tos/cross-thread-persistence.ipynb": "how-tos/persistence.ipynb#add-long-term-memory",
     # cloud redirects
     "cloud/index.md": "index.md",
     "cloud/how-tos/index.md": "concepts/langgraph_platform",

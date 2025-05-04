@@ -232,7 +232,7 @@ But, what if we want to retain some information *across threads*? Consider the c
 
 With checkpointers alone, we cannot share information across threads. This motivates the need for the [`Store`](../reference/store.md#langgraph.store.base.BaseStore) interface. As an illustration, we can define an `InMemoryStore` to store information about a user across threads. We simply compile our graph with a checkpointer, as before, and with our new `in_memory_store` variable.
 
-!!!  info "LangGraph API handles stores automatically"
+!!! info "LangGraph API handles stores automatically"
 
     When using the LangGraph API, you don't need to implement or configure stores manually. The API handles all storage infrastructure for you behind the scenes.
 
