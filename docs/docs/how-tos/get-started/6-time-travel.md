@@ -275,6 +275,6 @@ The graph resumed execution from the `action` node. You can tell this is the cas
 
 Take your LangGraph journey further by exploring deployment and advanced features:
 
-- **[LangGraph Server quickstart](../langgraph-platform/local-server)**: Launch a LangGraph server locally and interact with it using the REST API and LangGraph Studio Web UI.
-- **[LangGraph Cloud quickstart](../../cloud/quick_start)**: Deploy your LangGraph app using LangGraph Cloud.
+- **[LangGraph Server quickstart](../../tutorials/langgraph-platform/local-server.md)**: Launch a LangGraph server locally and interact with it using the REST API and LangGraph Studio Web UI.
+- **[LangGraph Cloud quickstart](../../cloud/quick_start.md)**: Deploy your LangGraph app using LangGraph Cloud.
 - **[LangGraph Platform concepts](../../concepts/langgraph_platform.md)**: Understand the foundational concepts of the LangGraph Platform.

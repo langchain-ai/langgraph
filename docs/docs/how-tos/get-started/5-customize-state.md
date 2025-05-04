@@ -30,7 +30,7 @@ Adding this information to the state makes it easily accessible by other graph n
 
 ## 2. Update the state inside the tool
 
-Now, populate the state keys inside of the `human_assistance` tool. This allows a human to review the information before it is stored in the state. Use [`Command`](../../concepts/low_level/#using-inside-tools) to issue a state update from inside the tool.
+Now, populate the state keys inside of the `human_assistance` tool. This allows a human to review the information before it is stored in the state. Use [`Command`](../../concepts/low_level#using-inside-tools) to issue a state update from inside the tool.
 
 ``` python
 from langchain_core.messages import ToolMessage
@@ -215,7 +215,7 @@ snapshot = graph.get_state(config)
 {'name': 'LangGraph (library)', 'birthday': 'Jan 17, 2024'}
 ```
 
-Manual state updates will [generate a trace](https://smith.langchain.com/public/7ebb7827-378d-49fe-9f6c-5df0e90086c8/r) in LangSmith. If desired, they can also be used to [control human-in-the-loop workflows](../../how-tos/human_in_the_loop/edit-graph-state/). Use of the `interrupt` function is generally recommended instead, as it allows data to be transmitted in a human-in-the-loop interaction independently of state updates.
+Manual state updates will [generate a trace](https://smith.langchain.com/public/7ebb7827-378d-49fe-9f6c-5df0e90086c8/r) in LangSmith. If desired, they can also be used to [control human-in-the-loop workflows](../../how-tos/human_in_the_loop/edit-graph-state.md). Use of the `interrupt` function is generally recommended instead, as it allows data to be transmitted in a human-in-the-loop interaction independently of state updates.
 
 **Congratulations!** You've added custom keys to the state to facilitate a more complex workflow, and learned how to generate state updates from inside tools.
 

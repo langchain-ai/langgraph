@@ -2,7 +2,7 @@
 
 Agents can be unreliable and may need human input to successfully accomplish tasks. Similarly, for some actions, you may want to require human approval before running to ensure that everything is running as intended.
 
-LangGraph's [persistence](../../concepts/persistence) layer supports **human-in-the-loop** workflows, allowing execution to pause and resume based on user feedback. The primary interface to this functionality is the [`interrupt`](../../concepts/human_in_the_loop/#interrupt) function. Calling `interrupt` inside a node will pause execution. Execution can be resumed, together with new input from a human, by passing in a [Command](../../concepts/human_in_the_loop/#the-command-primitive). `interrupt` is ergonomically similar to Python's built-in `input()`, [with some caveats](../../concepts/human_in_the_loop/#interrupt).
+LangGraph's [persistence](../../concepts/persistence.md) layer supports **human-in-the-loop** workflows, allowing execution to pause and resume based on user feedback. The primary interface to this functionality is the [`interrupt`](../../concepts/human_in_the_loop#interrupt) function. Calling `interrupt` inside a node will pause execution. Execution can be resumed, together with new input from a human, by passing in a [Command](../../concepts/human_in_the_loop#the-command-primitive). `interrupt` is ergonomically similar to Python's built-in `input()`, [with some caveats](../../concepts/human_in_the_loop.md#interrupt).
 
 !!! note
 
@@ -66,7 +66,7 @@ graph_builder.add_edge(START, "chatbot")
 
 !!! tip
 
-    For more information and examples of human-in-the-loop workflows, see [Human-in-the-loop](../../concepts/human_in_the_loop.md). This includes how to [review and edit tool calls](../../how-tos/human_in_the_loop/review-tool-calls/) before they are executed.
+    For more information and examples of human-in-the-loop workflows, see [Human-in-the-loop](../../concepts/human_in_the_loop.md). This includes how to [review and edit tool calls](../../how-tos/human_in_the_loop/review-tool-calls.ipynb) before they are executed.
 
 ## 2. Compile the graph
 
@@ -149,11 +149,11 @@ snapshot.next
         return human_response["data"]
     ```
 
-    Similar to Python's built-in `input()` function, calling `interrupt` inside the tool will pause execution. Progress is persisted based on the [checkpointer](../../concepts/persistence/#checkpointer-libraries); so if it is persisting with Postgres, it can resume at any time as long as the database is alive. In this example, it is persisting with the in-memory checkpointer and can resume any time if the Python kernel is running.
+    Similar to Python's built-in `input()` function, calling `interrupt` inside the tool will pause execution. Progress is persisted based on the [checkpointer](../../concepts/persistence#checkpointer-libraries); so if it is persisting with Postgres, it can resume at any time as long as the database is alive. In this example, it is persisting with the in-memory checkpointer and can resume any time if the Python kernel is running.
 
 ## 5. Resume execution
 
-To resume execution, pass a [`Command`](../../concepts/human_in_the_loop/#the-command-primitive) object containing data expected by the tool. The format of this data can be customized based on needs. For this example, use a dict with a key `"data"`:
+To resume execution, pass a [`Command`](../../concepts/human_in_the_loop#the-command-primitive) object containing data expected by the tool. The format of this data can be customized based on needs. For this example, use a dict with a key `"data"`:
 
 ``` python
 human_response = (
@@ -206,10 +206,6 @@ Output is truncated. View as a scrollable element or open in a text editor. Adju
 The input has been received and processed as a tool message. Review this call's [LangSmith trace](https://smith.langchain.com/public/9f0f87e3-56a7-4dde-9c76-b71675624e91/r) to see the exact work that was done in the above call. Notice that the state is loaded in the first step so that our chatbot can continue where it left off.
 
 **Congratulations!** You've used an `interrupt` to add human-in-the-loop execution to your chatbot, allowing for human oversight and intervention when needed. This opens up the potential UIs you can create with your AI systems. Since you have already added a **checkpointer**, as long as the underlying persistence layer is running, the graph can be paused **indefinitely** and resumed at any time as if nothing had happened.
-
-!!! tip 
-
-    Human-in-the-loop workflows enable a variety of new workflows and user experiences. Check out [this section](../../how-tos/#human-in-the-loop) of the How-to Guides for more examples of Human-in-the-loop workflows, including how to [review and edit tool calls](../../how-tos/human_in_the_loop/review-tool-calls/) before they are executed.
 
 Check out the code snippet below to review the graph from this tutorial:
 
