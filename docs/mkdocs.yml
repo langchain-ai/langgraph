@@ -103,7 +103,9 @@ nav:
     - LangGraph:
       # agentic concepts may need a bit of love if we're putting it
       # at the top of the LangGraph section
-      - concepts/agentic_concepts.md
+      - "Agent architectures":
+        - Overview: concepts/agentic_concepts.md
+        - Workflows & agents: tutorials/workflows/index.md
       - Graph API:
         - Overview: concepts/low_level.md
           # low level concepts is an odd mix of a Graph API basics overview (conceptual)
@@ -340,7 +342,6 @@ nav:
 
   - Examples:
     - tutorials/langgraph-platform/local-server.md
-    - tutorials/workflows/index.md
     - tutorials/rag/langgraph_agentic_rag.ipynb
     - tutorials/multi_agent/agent_supervisor.ipynb
     - tutorials/customer-support/customer-support.ipynb
