@@ -92,7 +92,7 @@ def chatbot(state: State):
 graph_builder.add_node("chatbot", chatbot)
 ```
 
-## 3. Create a function to run the tools
+## 5. Create a function to run the tools
 
 Now, create a function to run the tools if they are called. Do this by adding the tools to a new node called`BasicToolNode` that checks the most recent message in the state and calls tools if the message contains `tool_calls`. It relies on the LLM's `tool_calling` support, which is available in Anthropic, OpenAI, Google Gemini, and a number of other LLM providers.
 
@@ -136,7 +136,7 @@ graph_builder.add_node("tools", tool_node)
 
     If you do not want to build this yourself in the future, you can use LangGraph's prebuilt [ToolNode](https://langchain-ai.github.io/langgraph/reference/prebuilt/#toolnode).
 
-## 4. Define the `conditional_edges`
+## 6. Define the `conditional_edges`
 
 With the tool node added, now you can define the `conditional_edges`. 
 
@@ -187,7 +187,7 @@ graph = graph_builder.compile()
 
     You can replace this with the prebuilt [tools_condition](https://langchain-ai.github.io/langgraph/reference/prebuilt/#tools_condition) to be more concise. 
 
-## 5. Visualize the graph (optional)
+## 7. Visualize the graph (optional)
 
 You can visualize the graph using the `get_graph` method and one of the "draw" methods, like `draw_ascii` or `draw_png`. The `draw` methods each require additional dependencies.
 
@@ -201,9 +201,9 @@ except Exception:
     pass
 ```
 
-![alt text](image-1.png)
+![chatbot-with-tools-diagram](chatbot-with-tools.png)
 
-## 6. Ask the bot questions
+## 8. Ask the bot questions
 
 Now you can ask the chatbot questions outside its training data:
 
@@ -258,7 +258,7 @@ Goodbye!
 Output is truncated. View as a scrollable element or open in a text editor. Adjust cell output settings...
 ```
 
-## 2. Use prebuilts
+## 9. Use prebuilts
 
 For ease of use, adjust your code to replace the following with LangGraph prebuilt components. These have built in functionality like parallel API execution.
 

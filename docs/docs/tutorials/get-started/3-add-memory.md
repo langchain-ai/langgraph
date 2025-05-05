@@ -40,8 +40,6 @@ except Exception:
     pass
 ```
 
-![alt text](image-2.png)
-
 ## 3. Interact with your chatbot
 
 Now you can interact with your bot!
@@ -80,7 +78,7 @@ Now you can interact with your bot!
 
         The config was provided as the **second positional argument** when calling our graph. It importantly is _not_ nested within the graph inputs (`{'messages': []}`).
 
-## 4. Ask a sequential question
+## 4. Ask a follow up question
 
 Ask a follow up question:
 
@@ -199,4 +197,4 @@ graph = graph_builder.compile(checkpointer=memory)
 
 ## Next steps
 
-In the next tutorial, you will [add human oversight to the chatbot](./4-human-in-the-loop.md) to handle situations where it may need guidance or verification before proceeding.
+In the next tutorial, you will [add human-in-the-loop controls to the chatbot](./4-human-in-the-loop.md) to handle situations where it may need guidance or verification before proceeding.
