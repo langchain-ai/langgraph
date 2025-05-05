@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import dbm
+from collections.abc import Mapping, Sequence
 
 import ormsgpack
 
@@ -21,7 +22,7 @@ class FileCache(BaseCache):
         super().__init__(serde=serde)
         self._db = dbm.open(path, "c")
 
-    def get(self, keys: list[str]) -> dict[str, bytes]:
+    def get(self, keys: Sequence[str]) -> dict[str, bytes]:
         """Get the cached values for the given keys."""
         now = datetime.datetime.now(datetime.timezone.utc).timestamp()
         values: dict[str, bytes] = {}
@@ -34,11 +35,11 @@ class FileCache(BaseCache):
                 values[key] = self.serde.loads_typed(data)
         return values
 
-    async def aget(self, keys: list[str]) -> dict[str, bytes]:
+    async def aget(self, keys: Sequence[str]) -> dict[str, bytes]:
         """Asynchronously get the cached values for the given keys."""
         return await asyncio.to_thread(self.get, keys)
 
-    def set(self, mapping: dict[str, tuple[bytes, int | None]]) -> None:
+    def set(self, mapping: Mapping[str, tuple[bytes, int | None]]) -> None:
         """Set the cached values for the given keys and TTLs."""
         now = datetime.datetime.now(datetime.timezone.utc)
         for key, (value, ttl) in mapping.items():
@@ -49,15 +50,15 @@ class FileCache(BaseCache):
                 expiry = None
             self._db[key] = ormsgpack.packb((expiry, *self.serde.dumps_typed(value)))
 
-    async def aset(self, mapping: dict[str, tuple[bytes, int | None]]) -> None:
+    async def aset(self, mapping: Mapping[str, tuple[bytes, int | None]]) -> None:
         """Asynchronously set the cached values for the given keys and TTLs."""
         await asyncio.to_thread(self.set, mapping)
 
-    def delete(self, keys: list[str]) -> None:
+    def delete(self, keys: Sequence[str]) -> None:
         """Delete the cached values for the given keys."""
         for key in keys:
             self._db.pop(key, None)
 
-    async def adelete(self, keys: list[str]) -> None:
+    async def adelete(self, keys: Sequence[str]) -> None:
         """Asynchronously delete the cached values for the given keys."""
         await asyncio.to_thread(self.delete, keys)
