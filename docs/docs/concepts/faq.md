@@ -45,15 +45,7 @@ LangGraph is a stateful, orchestration framework that brings added control to ag
 
 ## What are my deployment options for LangGraph Platform?
 
-We currently have the following deployment options for LangGraph applications:
-
-- **Cloud SaaS<sup>(Beta)**: A fully managed model for deployment where we manage the [control plane](./langgraph_control_plane.md) and [data plane](./langgraph_data_plane.md) in our cloud. This option provides a simple way to deploy and manage your LangGraph Servers. Available for **Plus** and **Enterprise** plans.
-
-- **Self-Hosted Data Plane<sup>(Beta)</sup>**: A "hybrid" model for deployemnt where we manage the [control plane](./langgraph_control_plane.md) in our cloud and you manage the [data plane](./langgraph_data_plane.md) in your cloud. This option provides a way to securely manage your data plane infrastructure, while offloading control plane management to us. Available for the **Enterprise** plan.
-
-- **Self-Hosted Control Plane<sup>(Beta)</sup>**: A fully self-hosted model for deployment where you manage the [control plane](./langgraph_control_plane.md) and [data plane](./langgraph_data_plane.md) in your cloud. This option give you full control and responsibility of the control plane and data plane infrastructure. Available for the **Enterprise** plan.
-
-- **Standalone Container**: The least restrictive model for deployment. Deploy standalone instances of a LangGraph Server in your cloud. Available for all plans.
+See the [deployment options guide](./deployment_options.md) for more details on each option.
 
 ## Is LangGraph Platform open source?
 

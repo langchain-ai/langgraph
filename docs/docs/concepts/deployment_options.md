@@ -15,7 +15,7 @@ search:
 
 There are 4 main options for deploying with the LangGraph Platform:
 
-1. **<a href="#cloud-saas">Cloud SaaS<sup>(Beta)</sup></a>**: Available for **Plus** and **Enterprise** plans.
+1. **<a href="#cloud-saas">Cloud SaaS</a>**: Available for **Plus** and **Enterprise** plans.
 
 1. **<a href="#self-hosted-data-plane">Self-Hosted Data Plane<sup>(Beta)</sup></a>**: Available for the **Enterprise** plan.
 
@@ -23,9 +23,18 @@ There are 4 main options for deploying with the LangGraph Platform:
 
 1. **[Standalone Container](#standalone-container)**: Available for all plans.
 
-Please see the [LangGraph Platform Plans](./plans.md) for more information on the different plans.
+A quick comparison...
 
-The guide below will explain the differences between the deployment options.
+|                      | **Cloud SaaS** | **Self-Hosted [Data Plane](../concepts/langgraph_data_plane.md)** | **Self-Hosted [Control Plane](../concepts/langgraph_control_plane.md)** | **Standalone Container** |
+|----------------------|----------------|----------------------------|-------------------------------|--------------------------|
+| **[Control Plane UI/API](../concepts/langgraph_control_plane.md)** | Yes | Yes | Yes | No |
+| **CI/CD** | Managed internally by platform | Managed externally by you | Managed externally by you | Managed externally by you |
+| **Data/Compute Residency** | LangChain’s cloud | Your cloud | Your cloud | Your cloud |
+| **Required Permissions** | None | See details [here](). | See details [here](). | None |
+| **LangSmith Compatibility** | Trace to LangSmith SaaS | Trace to LangSmith SaaS | Trace to Self-Hosted LangSmith | Optional tracing |
+| **[Pricing](https://www.langchain.com/pricing-langgraph-platform)** | Plus | Enterprise | Enterprise | Developer |
+
+Please see the [LangGraph Platform Plans](./plans.md) for more information on the different plans. The guide below will explain the differences between the deployment options.
 
 ## Cloud SaaS
 
