@@ -1,4 +1,4 @@
-# Add human-in-the-loop to the chatbot    
+# Add human-in-the-loop controls
 
 Agents can be unreliable and may need human input to successfully accomplish tasks. Similarly, for some actions, you may want to require human approval before running to ensure that everything is running as intended.
 
@@ -6,7 +6,7 @@ LangGraph's [persistence](../../concepts/persistence.md) layer supports **human-
 
 !!! note
 
-    This tutorial builds on [Add memory to the chatbot](./3-add-memory.md).
+    This tutorial builds on [Add memory](./3-add-memory.md).
 
 ## 1. Add the `human_assistance` tool
 

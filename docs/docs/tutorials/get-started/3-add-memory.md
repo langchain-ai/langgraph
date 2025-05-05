@@ -1,4 +1,4 @@
-# Add memory to the chatbot
+# Add memory
 
 The chatbot can now [use tools](./2-add-tools.md) to answer user questions, but it does not remember the context of previous interactions. This limits its ability to have coherent, multi-turn conversations.
 
@@ -8,7 +8,7 @@ We will see later that **checkpointing** is _much_ more powerful than simple cha
 
 !!! note
 
-    This tutorial builds on [Add tools to the chatbot](./2-add-tools.md).
+    This tutorial builds on [Add tools](./2-add-tools.md).
 
 ## 1. Create a `MemorySaver` checkpointer
 

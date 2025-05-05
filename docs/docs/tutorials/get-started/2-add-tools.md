@@ -1,4 +1,4 @@
-# Add tools to the chatbot
+# Add tools
 
 To handle queries you chatbot can't answer "from memory", integrate a web search tool. The chatbot can use this tool to find relevant information and provide better responses.
 

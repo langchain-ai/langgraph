@@ -4,7 +4,7 @@ In this tutorial, you will add additional fields to the state to define complex 
 
 !!! note
 
-    This tutorial builds on [Add human oversight to the chatbot](./4-human-in-the-loop.md).
+    This tutorial builds on [Add human-in-the-loop controls](./4-human-in-the-loop.md).
 
 ## 1. Add keys to the state
 

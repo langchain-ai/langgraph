@@ -11,9 +11,9 @@ LangGraph is built for developers who want to build powerful, adaptable AI agent
 To get acquainted with LangGraph's key concepts and features, complete the following LangGraph basics tutorials series:
 
 1. [Build a basic chatbot](./1-build-basic-chatbot.md)
-2. [Add tools to the chatbot](./2-add-tools.md)
-3. [Add memory to the chatbot](./3-add-memory.md)
-4. [Add human-in-the-loop to the chatbot](./4-human-in-the-loop.md)
+2. [Add tools](./2-add-tools.md)
+3. [Add memory](./3-add-memory.md)
+4. [Add human-in-the-loop controls](./4-human-in-the-loop.md)
 5. [Customize state](./5-customize-state.md)
 6. [Time travel](./6-time-travel.md)
 
