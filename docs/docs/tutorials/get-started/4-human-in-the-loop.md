@@ -1,4 +1,4 @@
-# Add human-in-the-loop controls to the chatbot    
+# Add human-in-the-loop to the chatbot    
 
 Agents can be unreliable and may need human input to successfully accomplish tasks. Similarly, for some actions, you may want to require human approval before running to ensure that everything is running as intended.
 

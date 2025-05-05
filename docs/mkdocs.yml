@@ -100,7 +100,7 @@ nav:
         -  Build a basic chatbot: tutorials/get-started/1-build-basic-chatbot.md
         -  Add tools: tutorials/get-started/2-add-tools.md
         -  Add memory: tutorials/get-started/3-add-memory.md
-        -  Add human oversight: tutorials/get-started/4-human-in-the-loop.md
+        -  Add human-in-the-loop: tutorials/get-started/4-human-in-the-loop.md
         -  Customize state: tutorials/get-started/5-customize-state.md
         -  Time travel: tutorials/get-started/6-time-travel.md
       - Deployment:

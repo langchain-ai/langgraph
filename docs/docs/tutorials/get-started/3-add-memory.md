@@ -197,4 +197,4 @@ graph = graph_builder.compile(checkpointer=memory)
 
 ## Next steps
 
-In the next tutorial, you will [add human-in-the-loop controls to the chatbot](./4-human-in-the-loop.md) to handle situations where it may need guidance or verification before proceeding.
+In the next tutorial, you will [add human-in-the-loop to the chatbot](./4-human-in-the-loop.md) to handle situations where it may need guidance or verification before proceeding.

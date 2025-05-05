@@ -13,7 +13,7 @@ To get acquainted with LangGraph's key concepts and features, complete the follo
 1. [Build a basic chatbot](./1-build-basic-chatbot.md)
 2. [Add tools to the chatbot](./2-add-tools.md)
 3. [Add memory to the chatbot](./3-add-memory.md)
-4. [Add human-in-the-loop controls to the chatbot](./4-human-in-the-loop.md)
+4. [Add human-in-the-loop to the chatbot](./4-human-in-the-loop.md)
 5. [Customize state](./5-customize-state.md)
 6. [Time travel](./6-time-travel.md)
 
