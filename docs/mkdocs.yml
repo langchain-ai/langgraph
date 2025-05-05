@@ -330,11 +330,10 @@ nav:
       - Environment variables: cloud/reference/env_var.md
 
   - Examples:
-    - tutorials/langgraph-platform/local-server.md
     - tutorials/workflows/index.md
-    - tutorials/rag/langgraph_agentic_rag.ipynb
-    - tutorials/multi_agent/agent_supervisor.ipynb
-    - tutorials/customer-support/customer-support.ipynb
+    - Agentic RAG: tutorials/rag/langgraph_agentic_rag.ipynb
+    - Agent Supervisor: tutorials/multi_agent/agent_supervisor.ipynb
+    - Customer Support: tutorials/customer-support/customer-support.ipynb
     - SQL agent: tutorials/sql-agent.ipynb
 
   - Resources:
