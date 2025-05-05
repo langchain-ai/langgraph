@@ -387,6 +387,8 @@ def prepare_next_tasks(
     manager: Literal[None] = None,
     trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
     updated_channels: Optional[set[str]] = None,
+    retry_policy: Sequence[RetryPolicy] = (),
+    cache_policy: Literal[None] = None,
 ) -> dict[str, PregelTask]: ...
 
 
@@ -406,6 +408,8 @@ def prepare_next_tasks(
     manager: Union[None, ParentRunManager, AsyncParentRunManager],
     trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
     updated_channels: Optional[set[str]] = None,
+    retry_policy: Sequence[RetryPolicy] = (),
+    cache_policy: Optional[CachePolicy] = None,
 ) -> dict[str, PregelExecutableTask]: ...
 
 
