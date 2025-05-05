@@ -35,7 +35,7 @@ LangGraph is a stateful, orchestration framework that brings added control to ag
 | Streaming           | Basic                                                     | Dedicated mode for token-by-token messages                                                             |
 | Checkpointer        | Community contributed                                     | Supported out-of-the-box                                                                               |
 | Persistence Layer   | Self-managed                                              | Managed Postgres with efficient storage                                                                |
-| Deployment          | Self-managed                                              | • Cloud SaaS <br> • Free self-hosted <br> • Enterprise (BYOC or paid self-hosted)                      |
+| Deployment          | Self-managed                                              | • Cloud SaaS <br> • Free self-hosted <br> • Enterprise (paid self-hosted)                      |
 | Scalability         | Self-managed                                              | Auto-scaling of task queues and servers                                                                |
 | Fault-tolerance     | Self-managed                                              | Automated retries                                                                                      |
 | Concurrency Control | Simple threading                                          | Supports double-texting                                                                                |
@@ -59,7 +59,7 @@ We currently have the following deployment options for LangGraph applications:
 
 No. LangGraph Platform is proprietary software.
 
-There is a free, self-hosted version of LangGraph Platform with access to basic features. The Cloud SaaS deployment option is free while in beta, but will eventually be a paid service. We will always give ample notice before charging for a service and reward our early adopters with preferential pricing. The Bring Your Own Cloud (BYOC) and Self-Hosted Enterprise options are also paid services. [Contact our sales team](https://www.langchain.com/contact-sales) to learn more.
+There is a free, self-hosted version of LangGraph Platform with access to basic features. The Cloud SaaS deployment option is free while in beta, but will eventually be a paid service. We will always give ample notice before charging for a service and reward our early adopters with preferential pricing. The Self-Hosted deployment options are paid services. [Contact our sales team](https://www.langchain.com/contact-sales) to learn more.
 
 For more information, see our [LangGraph Platform pricing page](https://www.langchain.com/pricing-langgraph-platform).
 
