@@ -130,12 +130,7 @@ nav:
         - how-tos/human_in_the_loop/review-tool-calls.ipynb
       - Streaming:
         - Overview: concepts/streaming.md
-        - how-tos/streaming.ipynb
-        - how-tos/streaming-tokens.ipynb
-        - how-tos/streaming-specific-nodes.ipynb
-        - how-tos/streaming-events-from-within-tools.ipynb
-        - how-tos/streaming-subgraphs.ipynb
-        - how-tos/disable-streaming.ipynb
+        - "Stream outputs": how-tos/streaming.md
       - Controllability:
         - how-tos/map-reduce.ipynb
         - how-tos/command.ipynb
