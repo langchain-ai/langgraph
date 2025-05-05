@@ -4,11 +4,11 @@
 
     Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM apps built with LangGraph — read more about how to get started [here](https://docs.smith.langchain.com).
 
-## Streaming API
+## Streaming entrypoints
 
-The entrypoint for streaming is the `stream` method (or the async `astream` method) on any LangGraph graph. This method returns an iterator that yields the streamed outputs from the graph.
+LangGraph graphs expose the `.stream()` (sync) and `.astream()` (async) methods to yield streamed outputs as iterators.
 
-You can stream outputs from the graph by using `graph.stream(..., stream_mode=<stream_mode>)` method, e.g.:
+Basic usage example:
 
 === "Sync"
 
@@ -26,7 +26,9 @@ You can stream outputs from the graph by using `graph.stream(..., stream_mode=<s
 
 ### Stream multiple modes
 
-You can also combine multiple streaming mode by providing a list to `stream_mode` parameter:
+You can pass a list as the `stream_mode` parameter to stream multiple modes at once. 
+
+The streamed outputs will be tuples of `(mode, chunk)` where `mode` is the name of the stream mode and `chunk` is the data streamed by that mode.
 
 === "Sync"
 
@@ -42,7 +44,7 @@ You can also combine multiple streaming mode by providing a list to `stream_mode
         print(chunk)
     ```
 
-### Available modes
+### Supported stream modes
 
 | Mode                                            | Description                                                                                                                                                                         |
 |-------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -52,9 +54,9 @@ You can also combine multiple streaming mode by providing a list to `stream_mode
 | [`messages`](../how-tos/streaming-tokens.ipynb) | Streams LLM tokens and metadata for the graph node where the LLM is invoked.                                                                                                        |
 | [`debug`](../how-tos/streaming.md#debug)        | Streams as much information as possible throughout the execution of the graph.                                                                                                      |
 
-## State 
+## Stream graph state
 
-You can use the stream modes `updates` and `values` to stream the state of the graph as it changes during execution.
+Use `updates` and `values` to stream the state of the graph as it executes.
 
 * `updates` streams the **updates** to the state after each step of the graph.
 * `values` streams the **full value** of the state after each step of the graph.
@@ -117,13 +119,14 @@ graph = (
 
 ## Subgraphs
 
-If you have created a graph with [subgraphs](../subgraph), you may wish to stream outputs from those subgraphs. To do so, you can specify `subgraphs=True` in parent graph's `.stream()` method:
+To include outputs from [subgraphs](../subgraph) in the streamed outputs, you can set `subgraphs=True` in the `.stream()` method of the parent graph. This will stream outputs from both the parent graph and any subgraphs.
 
 ```python
-for chunk in parent_graph.stream(
+for chunk in graph.stream(
     {"foo": "foo"},
     # highlight-next-line
-    subgraphs=True # (1)!
+    subgraphs=True, # (1)!
+    stream_mode="updates",
 ):
     print(chunk)
 ```
@@ -205,30 +208,14 @@ for chunk in graph.stream(
 
 ## LLM tokens {#messages}
 
-!!! info "Prerequisites"
+Use the `messages` streaming mode to stream Large Language Model (LLM) outputs **token by token** from any part of your graph, including nodes, tools, subgraphs, or tasks.
 
-    This guide assumes familiarity with the following:
-    
-    - [Chat Models](https://python.langchain.com/docs/concepts/chat_models/)
+The streamed output from [`messages` mode](#supported-stream-modes) is a tuple `(message_chunk, metadata)` where:
 
-Use the `messages` streaming mode to stream LLM messages **token-by-token** from **anywhere** in your graph. 
+- `message_chunk`: the token or message segment from the LLM.
+- `metadata`: a dictionary containing details about the graph node and LLM invocation.
 
-You can stream LLM tokens from:
-
-* nodes
-* tools
-* subgraphs
-* tasks
-
-
-The streamed outputs will be tuples of `(message chunk, metadata)`:
-
-* message chunk is the token streamed by the LLM
-* metadata is a dictionary with information about the graph node where the LLM was called as well as the LLM invocation metadata
-
-!!! tip "Using without LangChain"
-
-    If you need to stream LLM tokens **without using LangChain**, you can use [`stream_mode="custom"`](../streaming/#custom) to stream the outputs from LLM provider clients directly. See [stream arbitrary chat models](#stream-arbitrary-chat-models) for details.
+> If your LLM is not available as a LangChain integration, you can stream its outputs using `custom` mode instead. See [use with any LLM](#use-with-any-llm) for details.
 
 ```python
 from dataclasses import dataclass
@@ -280,76 +267,98 @@ for message_chunk, metadata in graph.stream( # (2)!
 You can associate `tags` with LLM invocations to filter the streamed tokens by LLM invocation.
 
 ```python
-from typing import TypedDict
+from langchain.chat_models import init_chat_model
 
-from langchain_openai import ChatOpenAI
+llm_1 = init_chat_model(model="openai:gpt-4o-mini", tags=['joke']) # (1)!
+llm_2 = init_chat_model(model="openai:gpt-4o-mini", tags=['poem']) # (2)!
 
-from langgraph.graph import START, StateGraph
+graph = ... # define a graph that uses these LLMs
 
-# Note: we're adding the tags here to be able to filter the model outputs down the line
-joke_model = ChatOpenAI(model="gpt-4o-mini", tags=["joke"])
-poem_model = ChatOpenAI(model="gpt-4o-mini", tags=["poem"])
-
-
-class State(TypedDict):
-      topic: str
-      joke: str
-      poem: str
-
-
-# highlight-next-line
-async def call_model(state, config):
-      topic = state["topic"]
-      print("Writing joke...")
-      # Note: Passing the config through explicitly is required for python < 3.11
-      # Since context var support wasn't added before then: https://docs.python.org/3/library/asyncio-task.html#creating-tasks
-      joke_response = await joke_model.ainvoke(
-            [{"role": "user", "content": f"Write a joke about {topic}"}],
-            # highlight-next-line
-            config,
-      )
-      print("\n\nWriting poem...")
-      poem_response = await poem_model.ainvoke(
-            [{"role": "user", "content": f"Write a short poem about {topic}"}],
-            # highlight-next-line
-            config,
-      )
-      return {"joke": joke_response.content, "poem": poem_response.content}
-
-
-graph = (
-      StateGraph(State)
-      .add_node(call_model)
-      .add_edge(START, "call_model")
-      .compile()
-)
-```
-
-You can see that we're streaming tokens from all of the LLM invocations. Let's now filter the streamed tokens to include only a specific LLM invocation. We can use the streamed metadata and filter events using the tags we've added to the LLMs previously:
-
-```python
-async for msg, metadata in graph.astream(
+async for msg, metadata in graph.astream(  # (3)!
     {"topic": "cats"},
     # highlight-next-line
     stream_mode="messages",
 ):
-    if msg.content:
+    if metadata["tags"] == ["joke"]: # (4)!
         print(msg.content, end="|", flush=True)
 ```
+
+1. llm_1 is tagged with "joke".
+2. llm_2 is tagged with "poem".
+3. The `stream_mode` is set to "messages" to stream LLM tokens. The `metadata` contains information about the LLM invocation, including the tags.
+4. Filter the streamed tokens by the `tags` field in the metadata to only include the tokens from the LLM invocation with the "joke" tag.
+
+
+??? example "Filtering by tags"
+
+      ```python
+      from typing import TypedDict
+
+      from langchain.chat_models import init_chat_model
+      from langgraph.graph import START, StateGraph
+
+      joke_model = init_chat_model(model="openai:gpt-4o-mini", tags=["joke"]) # (1)!
+      poem_model = init_chat_model(model="openai:gpt-4o-mini", tags=["poem"]) # (2)!
+
+
+      class State(TypedDict):
+            topic: str
+            joke: str
+            poem: str
+
+
+      async def call_model(state, config):
+            topic = state["topic"]
+            print("Writing joke...")
+            # Note: Passing the config through explicitly is required for python < 3.11
+            # Since context var support wasn't added before then: https://docs.python.org/3/library/asyncio-task.html#creating-tasks
+            joke_response = await joke_model.ainvoke(
+                  [{"role": "user", "content": f"Write a joke about {topic}"}],
+                  config, # (3)!
+            )
+            print("\n\nWriting poem...")
+            poem_response = await poem_model.ainvoke(
+                  [{"role": "user", "content": f"Write a short poem about {topic}"}],
+                  config, # (3)!
+            )
+            return {"joke": joke_response.content, "poem": poem_response.content}
+
+
+      graph = (
+            StateGraph(State)
+            .add_node(call_model)
+            .add_edge(START, "call_model")
+            .compile()
+      )
+
+      async for msg, metadata in graph.astream(
+            {"topic": "cats"},
+            # highlight-next-line
+            stream_mode="messages", # (4)!
+      ):
+          if metadata["tags"] == ["joke"]: # (4)!
+              print(msg.content, end="|", flush=True)
+      ```
+
+      1. The `joke_model` is tagged with "joke".
+      2. The `poem_model` is tagged with "poem".
+      3. The `config` is passed through explicitly to ensure the context vars are propagated correctly. This is required for Python < 3.11 when using async code. Please see the [async section](#async) for more details.
+      4. The `stream_mode` is set to "messages" to stream LLM tokens. The `metadata` contains information about the LLM invocation, including the tags.
+
 
 ### Filter by node
 
-A common use case when [streaming LLM tokens](../streaming-tokens) is to only stream them from specific nodes. To do so, you can use `stream_mode="messages"` and filter the outputs by the `langgraph_node` field in the streamed metadata:
+To stream tokens only from specific nodes, use `stream_mode="messages"` and filter the outputs by the `langgraph_node` field in the streamed metadata:
 
 ```python
-# highlight-next-line
 for msg, metadata in graph.stream( # (1)!
-    {"topic": "cats"},
+    inputs,
+    # highlight-next-line
     stream_mode="messages",
 ):
     # highlight-next-line
-    if msg.content and metadata["langgraph_node"] == "write_poem": # (2)!
-        print(msg.content, end="|", flush=True)
+    if msg.content and metadata["langgraph_node"] == "some_node_name": # (2)!
+        ...
 ```
 
 1. The "messages" stream mode returns a tuple of `(message_chunk, metadata)` where `message_chunk` is the token streamed by the LLM and `metadata` is a dictionary with information about the graph node where the LLM was called and other information.
@@ -462,9 +471,7 @@ def query_database(query: str) -> str:
     writer = get_stream_writer() # (1)!
     # highlight-next-line
     writer({"data": "Retrieved 0/100 records", "type": "progress"}) # (2)!
-    # Do some work like fetching data from a database
-    # ...
-    # ...
+    # perform query
     # highlight-next-line
     writer({"data": "Retrieved 100/100 records", "type": "progress"}) # (3)!
     return "some-answer" 
@@ -649,7 +656,7 @@ If you're using the `stream` API while also using a chat model that doesn't supp
 
 this could happen if you have an LLM application that leverages different chat models, some of which support streaming and others that do not. In such cases, you may want to disable streaming for specific chat models that do not support streaming.
 
-To disable streaming for specific chat models, you can set `disable_streaming=True` when initializing the model:
+To disable streaming for specific chat models, set `disable_streaming=True` when initializing the model:
 
 === "init_chat_model"
       
@@ -665,7 +672,7 @@ To disable streaming for specific chat models, you can set `disable_streaming=Tr
 
       1. Set `disable_streaming=True` to disable streaming for the chat model.
 
-=== "ChatModel interface"
+=== "chat model interface"
 
       ```python
       from langchain_openai import ChatOpenAI
