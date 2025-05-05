@@ -30,9 +30,9 @@ REDIRECT_MAP = {
     "how-tos/memory/delete-messages.ipynb": "how-tos/memory.ipynb#delete-messages",
     "how-tos/memory/add-summary-conversation-history.ipynb": "how-tos/memory.ipynb#summarize-messages",
     # persistence how-tos
-    "how-tos/persistence_postgres.ipynb": "how-tos/persistence.ipynb#use-a-database",
-    "how-tos/persistence_mongodb.ipynb": "how-tos/persistence.ipynb#use-a-database",
-    "how-tos/persistence_redis.ipynb": "how-tos/persistence.ipynb#use-a-database",
+    "how-tos/persistence_postgres.ipynb": "how-tos/persistence.ipynb#use-in-production",
+    "how-tos/persistence_mongodb.ipynb": "how-tos/persistence.ipynb#use-in-production",
+    "how-tos/persistence_redis.ipynb": "how-tos/persistence.ipynb#use-in-production",
     "how-tos/subgraph-persistence.ipynb": "how-tos/persistence.ipynb#use-with-subgraphs",
     "how-tos/cross-thread-persistence.ipynb": "how-tos/persistence.ipynb#add-long-term-memory",
     # cloud redirects
