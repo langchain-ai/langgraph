@@ -119,7 +119,7 @@ graph = (
 
 ## Subgraphs
 
-To include outputs from [subgraphs](../subgraph) in the streamed outputs, you can set `subgraphs=True` in the `.stream()` method of the parent graph. This will stream outputs from both the parent graph and any subgraphs.
+To include outputs from [subgraphs](../concepts/low_level.md#subgraphs) in the streamed outputs, you can set `subgraphs=True` in the `.stream()` method of the parent graph. This will stream outputs from both the parent graph and any subgraphs.
 
 ```python
 for chunk in graph.stream(
