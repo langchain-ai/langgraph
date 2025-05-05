@@ -32,14 +32,6 @@ There are several main ways to get started with LangGraph:
 - [Use prebuilt components](https://langchain-ai.github.io/langgraph/agents/overview/): Construct agentic systems quickly and reliably—without the need to implement orchestration, memory, or human feedback handling from scratch.
 - [Use LangGraph Platform](https://langchain-ai.github.io/langgraph/concepts/langgraph_platform/): Test, debug, and deploy production applications.
 
-## Why LangGraph?
-
-LangGraph is built for developers who want to build powerful, adaptable AI agents. Developers choose LangGraph for:
-
-- **Reliability and controllability.** Steer agent actions with moderation checks and human-in-the-loop approvals. LangGraph persists context for long-running workflows, keeping your agents on course.
-- **Low-level and extensible.** Build custom agents with fully descriptive, low-level primitives – free from rigid abstractions that limit customization. Design scalable multi-agent systems, with each agent serving a specific role tailored to your use case.
-- **First-class streaming support.** With token-by-token streaming and streaming of intermediate steps, LangGraph gives users clear visibility into agent reasoning and actions as they unfold in real time.
-
 ## What LangGraph provides
 
 LangGraph provides low-level supporting infrastructure that sits underneath *any* workflow or agent. It does not abstract prompts or architecture, and provides three central benefits:
