@@ -195,7 +195,7 @@ class Auth:
             - authorization (str | None): The Authorization header value (e.g., "Bearer <token>")
 
         Args:
-            fn (Callable): The authentication handler function to register.
+            fn: The authentication handler function to register.
                 Must return a representation of the user. This could be a:
                     - string (the user id)
                     - dict containing {"identity": str, "permissions": list[str]}

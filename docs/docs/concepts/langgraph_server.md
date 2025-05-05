@@ -131,5 +131,4 @@ See the corresponding [how-to guide](../cloud/how-tos/webhooks.md) for more deta
 ## Related
 
 * LangGraph [Application Structure](./application_structure.md) guide explains how to structure your LangGraph application for deployment.
-* [How-to guides for the LangGraph Platform](../how-tos/index.md).
 * The [LangGraph Cloud API Reference](../cloud/reference/api/api_ref.html) provides detailed information on the API endpoints and data models.

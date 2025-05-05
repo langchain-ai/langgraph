@@ -81,4 +81,3 @@ For more information, please see:
 
 * [LangGraph Platform plans](./plans.md)
 * [LangGraph Platform pricing](https://www.langchain.com/langgraph-platform-pricing)
-* [Deployment how-to guides](../how-tos/index.md#deployment)

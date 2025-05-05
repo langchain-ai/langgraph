@@ -77,7 +77,7 @@ plugins:
             inherited_members: true
             selection:
               docstring_style: google
-            docstring_section_style: list
+            docstring_section_style: table
             show_root_toc_entry: false
             show_signature: true
             show_signature_annotations: true
@@ -95,7 +95,14 @@ nav:
     - Home: index.md
     - Get started:
       - Quickstart: agents/agents.md
-      - LangGraph basics: tutorials/introduction.ipynb
+      - LangGraph basics:
+        -  concepts/why-langgraph.md
+        -  Build a basic chatbot: tutorials/get-started/1-build-basic-chatbot.md
+        -  tutorials/get-started/2-add-tools.md
+        -  tutorials/get-started/3-add-memory.md
+        -  Add human-in-the-loop: tutorials/get-started/4-human-in-the-loop.md
+        -  tutorials/get-started/5-customize-state.md
+        -  tutorials/get-started/6-time-travel.md
       - Deployment:
         - tutorials/deployment.md
         - Local deploy: tutorials/langgraph-platform/local-server.md
@@ -115,11 +122,9 @@ nav:
         - Overview: concepts/persistence.md
         - concepts/durable_execution.md # TO DO: Combine with Persistence concept doc?
         - how-tos/persistence.ipynb
-        - how-tos/subgraph-persistence.ipynb
-        - how-tos/cross-thread-persistence.ipynb
-        - how-tos/persistence_postgres.ipynb
-        - how-tos/persistence_mongodb.ipynb
-        - how-tos/persistence_redis.ipynb
+      - Memory:
+        - Overview: concepts/memory.md
+        - Manage memory: how-tos/memory.ipynb
       - Human-in-the-loop:
         - Overview: concepts/human_in_the_loop.md
         - how-tos/human_in_the_loop/wait-user-input.ipynb
@@ -146,12 +151,6 @@ nav:
         - Overview: concepts/time-travel.md
         - how-tos/human_in_the_loop/time-travel.ipynb
         - how-tos/human_in_the_loop/edit-graph-state.ipynb
-      - Memory:
-        - Overview: concepts/memory.md
-        - how-tos/memory/manage-conversation-history.ipynb
-        - how-tos/memory/delete-messages.ipynb
-        - how-tos/memory/add-summary-conversation-history.ipynb
-        - how-tos/memory/semantic-search.ipynb
       - Tool calling:
         - how-tos/tool-calling.ipynb
         - how-tos/tool-calling-errors.ipynb
@@ -329,7 +328,7 @@ nav:
       - SDK (JS/TS): cloud/reference/sdk/js_ts_sdk_ref.md
       - RemoteGraph: reference/remote_graph.md
       - Environment variables: cloud/reference/env_var.md
-  
+
   - Examples:
     - tutorials/langgraph-platform/local-server.md
     - tutorials/workflows/index.md
@@ -337,7 +336,7 @@ nav:
     - tutorials/multi_agent/agent_supervisor.ipynb
     - tutorials/customer-support/customer-support.ipynb
     - SQL agent: tutorials/sql-agent.ipynb
-  
+
   - Resources:
     - LLMS-txt: llms-txt-overview.md
     - concepts/faq.md

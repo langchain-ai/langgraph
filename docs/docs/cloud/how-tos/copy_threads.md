@@ -4,7 +4,9 @@ You may wish to copy (i.e. "fork") an existing thread in order to keep the exist
 
 ## Setup
 
-This code assumes you already have a thread to copy. You can read about what a thread is [here](../../concepts/langgraph_server.md#threads) and learn how to stream a run on a thread in [these how-to guides](../../how-tos/index.md#streaming_1).
+This code assumes you already have a thread to copy. 
+
+For more information, see these guides on [Threads](../../concepts/langgraph_server.md#threads) and [Streaming](../../concepts/streaming.md).
 
 ### SDK initialization
 

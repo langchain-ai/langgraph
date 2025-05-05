@@ -10,7 +10,7 @@ New to LangGraph or LLM app development? Read this material to get up and runnin
 
 ## Get Started 🚀 {#quick-start}
 
-- [LangGraph Quickstart](introduction.ipynb): Build a chatbot that can use tools and keep track of conversation history. Add human-in-the-loop capabilities and explore how time-travel works.
+- [LangGraph basics](get-started/1-build-basic-chatbot.md): Build a chatbot that can use tools and keep track of conversation history. Add human-in-the-loop capabilities and explore how time-travel works.
 - [Common Workflows](workflows/index.md): Overview of the most common workflows using LLMs implemented with LangGraph.
 - [LangGraph Server Quickstart](langgraph-platform/local-server.md): Launch a LangGraph server locally and interact with it using REST API and LangGraph Studio Web UI.
 - [LangGraph Template Quickstart](../concepts/template_applications.md): Start building with LangGraph Platform using a template application.
@@ -45,7 +45,6 @@ Explore practical implementations tailored for specific scenarios:
 
 - [Network](multi_agent/multi-agent-collaboration.ipynb): Enable two or more agents to collaborate on a task
 - [Supervisor](multi_agent/agent_supervisor.ipynb): Use an LLM to orchestrate and delegate to individual agents
-- [Hierarchical Teams](multi_agent/hierarchical_agent_teams.ipynb): Orchestrate nested teams of agents to solve problems
  
 #### Planning Agents
 

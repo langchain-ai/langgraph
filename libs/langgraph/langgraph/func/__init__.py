@@ -225,7 +225,7 @@ class entrypoint:
             as its result is cached by the checkpointer.
 
             Args:
-                topic (str): The subject of the essay.
+                topic: The subject of the essay.
 
             Returns:
                 dict: A dictionary containing the generated essay and the human review.
