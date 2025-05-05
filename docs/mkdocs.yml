@@ -205,7 +205,6 @@ nav:
       - Overview: concepts/langgraph_platform.md
       - concepts/platform_architecture.md
       - concepts/scalability_and_resilience.md
-      - concepts/deployment_options.md
       - concepts/bring_your_own_cloud.md
       - concepts/plans.md
       - concepts/template_applications.md
@@ -222,29 +221,32 @@ nav:
         - concepts/assistants.md
         - concepts/double_texting.md
         - concepts/auth.md
-      - Deployment options:
-        - concepts/langgraph_cloud.md
-        - concepts/langgraph_self_hosted_data_plane.md
-        - concepts/langgraph_self_hosted_control_plane.md
-        - concepts/langgraph_standalone_container.md
-        - concepts/self_hosted.md
       - Application structure:
         - cloud/deployment/setup.md
         - cloud/deployment/setup_pyproject.md
         - cloud/deployment/setup_javascript.md
         - cloud/deployment/semantic_search.md
         - cloud/deployment/custom_docker.md
-        - cloud/deployment/test_locally.md
+        - cloud/deployment/test_locally.md # REMOVE?
         - cloud/deployment/graph_rebuild.md
         - how-tos/autogen-langgraph-platform.ipynb
       - Deployment:
-        - cloud/deployment/cloud.md
-        - cloud/deployment/self_hosted_data_plane.md
-        - cloud/deployment/self_hosted_control_plane.md
-        - cloud/deployment/standalone_container.md
-        - how-tos/deploy-self-hosted.md
-        - how-tos/use-remote-graph.md
-        - how-tos/ttl/configure_ttl.md
+        - Overview: concepts/deployment_options.md
+        - LangGraph Cloud SaaS:
+          - Overview: concepts/langgraph_cloud.md
+          - cloud/deployment/cloud.md
+        - concepts/self_hosted.md # DEPRECATE?
+        - how-tos/deploy-self-hosted.md # DEPRECATE?
+        - Self-Hosted Data Plane:
+          - concepts/langgraph_self_hosted_data_plane.md
+          - cloud/deployment/self_hosted_data_plane.md
+        - Self-Hosted Control Plane:
+          - concepts/langgraph_self_hosted_control_plane.md
+          - cloud/deployment/self_hosted_control_plane.md
+        - Standalone Container:
+          - concepts/langgraph_standalone_container.md
+          - cloud/deployment/standalone_container.md
+        - how-tos/use-remote-graph.md # SHOULD THIS GO SOMEWHERE ELSE?
       - Data management:
         - how-tos/ttl/configure_ttl.md
       - Authentication & access control:
