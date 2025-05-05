@@ -207,7 +207,6 @@ nav:
         - concepts/platform_architecture.md
         - concepts/scalability_and_resilience.md
         - concepts/deployment_options.md
-        - concepts/bring_your_own_cloud.md
         - concepts/plans.md
       - Components:
           - concepts/langgraph_control_plane.md

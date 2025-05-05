@@ -13,7 +13,7 @@
 
     Custom auth is supported for all deployments in the **managed LangGraph Cloud**, as well as **Enterprise** self-hosted plans. It is not supported for **Lite** self-hosted plans.
 
-This guide shows how to add custom authentication to your LangGraph Platform application. This guide applies to both LangGraph Cloud, BYOC, and self-hosted deployments. It does not apply to isolated usage of the LangGraph open source library in your own custom server.
+This guide shows how to add custom authentication to your LangGraph Platform application. This guide applies to both LangGraph Cloud and self-hosted deployments. It does not apply to isolated usage of the LangGraph open source library in your own custom server.
 
 ## 1. Implement authentication
 
