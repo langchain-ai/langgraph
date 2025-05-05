@@ -87,7 +87,7 @@ def _get_api_key(api_key: Optional[str] = None) -> Optional[str]:
     return None  # type: ignore
 
 
-def get_headers(
+def _get_headers(
     api_key: Optional[str], custom_headers: Optional[dict[str, str]]
 ) -> dict[str, str]:
     """Combine api_key and custom user-provided headers."""
@@ -107,7 +107,7 @@ def get_headers(
     return headers
 
 
-def orjson_default(obj: Any) -> Any:
+def _orjson_default(obj: Any) -> Any:
     if hasattr(obj, "model_dump") and callable(obj.model_dump):
         return obj.model_dump()
     elif hasattr(obj, "dict") and callable(obj.dict):
@@ -173,7 +173,7 @@ def get_client(
         base_url=url,
         transport=transport,
         timeout=httpx.Timeout(connect=5, read=300, write=300, pool=5),
-        headers=get_headers(api_key, headers),
+        headers=_get_headers(api_key, headers),
     )
     return LangGraphClient(client)
 
@@ -229,7 +229,7 @@ class HttpClient:
             else:
                 logger.error(f"Error from langgraph-api: {body}", exc_info=e)
             raise e
-        return await adecode_json(r)
+        return await _adecode_json(r)
 
     async def post(
         self,
@@ -240,7 +240,7 @@ class HttpClient:
     ) -> Any:
         """Send a POST request."""
         if json is not None:
-            request_headers, content = await aencode_json(json)
+            request_headers, content = await _aencode_json(json)
         else:
             request_headers, content = {}, b""
         # Merge headers, with runtime headers taking precedence
@@ -256,13 +256,13 @@ class HttpClient:
             else:
                 logger.error(f"Error from langgraph-api: {body}", exc_info=e)
             raise e
-        return await adecode_json(r)
+        return await _adecode_json(r)
 
     async def put(
         self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None
     ) -> Any:
         """Send a PUT request."""
-        request_headers, content = await aencode_json(json)
+        request_headers, content = await _aencode_json(json)
         if headers:
             request_headers.update(headers)
         r = await self.client.put(path, headers=request_headers, content=content)
@@ -275,13 +275,13 @@ class HttpClient:
             else:
                 logger.error(f"Error from langgraph-api: {body}", exc_info=e)
             raise e
-        return await adecode_json(r)
+        return await _adecode_json(r)
 
     async def patch(
         self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None
     ) -> Any:
         """Send a PATCH request."""
-        request_headers, content = await aencode_json(json)
+        request_headers, content = await _aencode_json(json)
         if headers:
             request_headers.update(headers)
         r = await self.client.patch(path, headers=request_headers, content=content)
@@ -294,7 +294,7 @@ class HttpClient:
             else:
                 logger.error(f"Error from langgraph-api: {body}", exc_info=e)
             raise e
-        return await adecode_json(r)
+        return await _adecode_json(r)
 
     async def delete(
         self,
@@ -325,7 +325,7 @@ class HttpClient:
         headers: Optional[dict[str, str]] = None,
     ) -> AsyncIterator[StreamPart]:
         """Stream results using SSE."""
-        request_headers, content = await aencode_json(json)
+        request_headers, content = await _aencode_json(json)
         request_headers["Accept"] = "text/event-stream"
         request_headers["Cache-Control"] = "no-store"
         # Add runtime headers with precedence
@@ -360,14 +360,14 @@ class HttpClient:
                     yield sse
 
 
-async def aencode_json(json: Any) -> tuple[dict[str, str], bytes]:
+async def _aencode_json(json: Any) -> tuple[dict[str, str], bytes]:
     if json is None:
         return {}, None
     body = await asyncio.get_running_loop().run_in_executor(
         None,
         orjson.dumps,
         json,
-        orjson_default,
+        _orjson_default,
         orjson.OPT_SERIALIZE_NUMPY | orjson.OPT_NON_STR_KEYS,
     )
     content_length = str(len(body))
@@ -376,7 +376,7 @@ async def aencode_json(json: Any) -> tuple[dict[str, str], bytes]:
     return headers, body
 
 
-async def adecode_json(r: httpx.Response) -> Any:
+async def _adecode_json(r: httpx.Response) -> Any:
     body = await r.aread()
     return (
         await asyncio.get_running_loop().run_in_executor(None, orjson.loads, body)
@@ -2663,7 +2663,7 @@ def get_sync_client(
         base_url=url,
         transport=transport,
         timeout=httpx.Timeout(connect=5, read=300, write=300, pool=5),
-        headers=get_headers(api_key, headers),
+        headers=_get_headers(api_key, headers),
     )
     return SyncLangGraphClient(client)
 
@@ -2711,7 +2711,7 @@ class SyncHttpClient:
             else:
                 logger.error(f"Error from langgraph-api: {body}", exc_info=e)
             raise e
-        return decode_json(r)
+        return _decode_json(r)
 
     def post(
         self,
@@ -2722,7 +2722,7 @@ class SyncHttpClient:
     ) -> Any:
         """Send a POST request."""
         if json is not None:
-            request_headers, content = encode_json(json)
+            request_headers, content = _encode_json(json)
         else:
             request_headers, content = {}, b""
         if headers:
@@ -2737,13 +2737,13 @@ class SyncHttpClient:
             else:
                 logger.error(f"Error from langgraph-api: {body}", exc_info=e)
             raise e
-        return decode_json(r)
+        return _decode_json(r)
 
     def put(
         self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None
     ) -> Any:
         """Send a PUT request."""
-        request_headers, content = encode_json(json)
+        request_headers, content = _encode_json(json)
         if headers:
             request_headers.update(headers)
 
@@ -2757,13 +2757,13 @@ class SyncHttpClient:
             else:
                 logger.error(f"Error from langgraph-api: {body}", exc_info=e)
             raise e
-        return decode_json(r)
+        return _decode_json(r)
 
     def patch(
         self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None
     ) -> Any:
         """Send a PATCH request."""
-        request_headers, content = encode_json(json)
+        request_headers, content = _encode_json(json)
         if headers:
             request_headers.update(headers)
         r = self.client.patch(path, headers=request_headers, content=content)
@@ -2776,7 +2776,7 @@ class SyncHttpClient:
             else:
                 logger.error(f"Error from langgraph-api: {body}", exc_info=e)
             raise e
-        return decode_json(r)
+        return _decode_json(r)
 
     def delete(
         self,
@@ -2807,7 +2807,7 @@ class SyncHttpClient:
         headers: Optional[dict[str, str]] = None,
     ) -> Iterator[StreamPart]:
         """Stream the results of a request using SSE."""
-        request_headers, content = encode_json(json)
+        request_headers, content = _encode_json(json)
         request_headers["Accept"] = "text/event-stream"
         request_headers["Cache-Control"] = "no-store"
         if headers:
@@ -2840,10 +2840,10 @@ class SyncHttpClient:
                     yield sse
 
 
-def encode_json(json: Any) -> tuple[dict[str, str], bytes]:
+def _encode_json(json: Any) -> tuple[dict[str, str], bytes]:
     body = orjson.dumps(
         json,
-        orjson_default,
+        _orjson_default,
         orjson.OPT_SERIALIZE_NUMPY | orjson.OPT_NON_STR_KEYS,
     )
     content_length = str(len(body))
@@ -2852,7 +2852,7 @@ def encode_json(json: Any) -> tuple[dict[str, str], bytes]:
     return headers, body
 
 
-def decode_json(r: httpx.Response) -> Any:
+def _decode_json(r: httpx.Response) -> Any:
     body = r.read()
     return orjson.loads(body) if body else None
 
