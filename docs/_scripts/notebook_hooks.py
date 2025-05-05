@@ -38,6 +38,9 @@ REDIRECT_MAP = {
     "how-tos/memory/manage-conversation-history.ipynb": "how-tos/memory.ipynb",
     "how-tos/memory/delete-messages.ipynb": "how-tos/memory.ipynb#delete-messages",
     "how-tos/memory/add-summary-conversation-history.ipynb": "how-tos/memory.ipynb#summarize-messages",
+    # subgraph how-tos
+    "how-tos/subgraph-transform-state.ipynb": "how-tos/subgraph.ipynb#different-state-schemas",
+    "how-tos/subgraphs-manage-state.ipynb": "how-tos/subgraph.ipynb#add-persistence",
     # persistence how-tos
     "how-tos/persistence_postgres.ipynb": "how-tos/persistence.ipynb#use-in-production",
     "how-tos/persistence_mongodb.ipynb": "how-tos/persistence.ipynb#use-in-production",
