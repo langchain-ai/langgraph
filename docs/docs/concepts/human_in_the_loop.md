@@ -400,24 +400,14 @@ When using the `interrupt` function, the graph will pause at the interrupt and w
 
 Graph execution can be resumed using the [Command](../reference/types.md#langgraph.types.Command) primitive which can be passed through the `invoke`, `ainvoke`, `stream` or `astream` methods.
 
-The `Command` primitive provides several options to control and modify the graph's state during resumption:
+The `Command` primitive provides a way to **pass a value** (such as user's input) to the `interrupt` via `Command(resume=value)`. Execution resumes from the beginning of the node where the `interrupt` was used, however, this time the `interrupt(...)` call will return the value passed in the `Command(resume=value)` instead of pausing the graph.
 
-1. **Pass a value to the `interrupt`**: Provide data, such as a user's response, to the graph using `Command(resume=value)`. Execution resumes from the beginning of the node where the `interrupt` was used, however, this time the `interrupt(...)` call will return the value passed in the `Command(resume=value)` instead of pausing the graph.
+```python
+# Resume graph execution with the user's input.
+graph.invoke(Command(resume={"age": "25"}), thread_config)
+```
 
-       ```python
-       # Resume graph execution with the user's input.
-       graph.invoke(Command(resume={"age": "25"}), thread_config)
-       ```
-
-2. **Update the graph state**: Modify the graph state using `Command(update=update)`. Note that resumption starts from the beginning of the node where the `interrupt` was used. Execution resumes from the beginning of the node where the `interrupt` was used, but with the updated state.
-
-      ```python
-      # Update the graph state and resume.
-      # You must provide a `resume` value if using an `interrupt`.
-      graph.invoke(Command(update={"foo": "bar"}, resume="Let's go!!!"), thread_config)
-      ```
-
-By leveraging `Command`, you can resume graph execution, handle user inputs, and dynamically adjust the graph's state.
+By leveraging `Command`, you can resume graph execution and handle user inputs.
 
 ## How does resuming from an interrupt work?
 
