@@ -25,6 +25,25 @@ REDIRECT_MAP = {
     "how-tos/streaming-tokens-without-langchain.ipynb": "how-tos/streaming-tokens.ipynb#example-without-langchain",
     "how-tos/streaming-from-final-node.ipynb": "how-tos/streaming-specific-nodes.ipynb",
     "how-tos/streaming-events-from-within-tools-without-langchain.ipynb": "how-tos/streaming-events-from-within-tools.ipynb#example-without-langchain",
+    # graph-api
+    "how-tos/state-reducers.ipynb": "how-tos/graph-api#define-and-update-state",
+    "how-tos/sequence.ipynb": "how-tos/graph-api#create-a-sequence-of-steps",
+    "how-tos/branching.ipynb": "how-tos/graph-api#create-branches-for-parallel-node-execution",
+    "how-tos/recursion-limit.ipynb": "how-tos/graph-api#create-and-control-loops",
+    "how-tos/visualization.ipynb": "how-tos/graph-api#visualize-your-graph",
+    "how-tos/input_output_schema.ipynb": "how-tos/graph-api#define-input-and-output-schemas",
+    "how-tos/pass_private_state.ipynb": "how-tos/graph-api#pass-private-state-between-nodes",
+    "how-tos/state-model.ipynb": "how-tos/graph-api#use-pydantic-models-for-graph-state",
+    # memory how-tos
+    "how-tos/memory/manage-conversation-history.ipynb": "how-tos/memory.ipynb",
+    "how-tos/memory/delete-messages.ipynb": "how-tos/memory.ipynb#delete-messages",
+    "how-tos/memory/add-summary-conversation-history.ipynb": "how-tos/memory.ipynb#summarize-messages",
+    # persistence how-tos
+    "how-tos/persistence_postgres.ipynb": "how-tos/persistence.ipynb#use-in-production",
+    "how-tos/persistence_mongodb.ipynb": "how-tos/persistence.ipynb#use-in-production",
+    "how-tos/persistence_redis.ipynb": "how-tos/persistence.ipynb#use-in-production",
+    "how-tos/subgraph-persistence.ipynb": "how-tos/persistence.ipynb#use-with-subgraphs",
+    "how-tos/cross-thread-persistence.ipynb": "how-tos/persistence.ipynb#add-long-term-memory",
     # cloud redirects
     "cloud/index.md": "index.md",
     "cloud/how-tos/index.md": "concepts/langgraph_platform",
@@ -43,7 +62,8 @@ REDIRECT_MAP = {
     "concepts/high_level.md": "index.md",
     "concepts/index.md": "index.md",
     "concepts/v0-human-in-the-loop.md": "concepts/human-in-the-loop.md",
-    "how-tos/index.md": "index.md"
+    "how-tos/index.md": "index.md",
+    "tutorials/introduction.ipynb": "concepts/why-langgraph.md"
 }
 
 
