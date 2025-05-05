@@ -18,13 +18,18 @@ DISABLED = os.getenv("DISABLE_NOTEBOOK_CONVERT") in ("1", "true", "True")
 
 REDIRECT_MAP = {
     # lib redirects
-    "how-tos/stream-values.ipynb": "how-tos/streaming.ipynb#values",
-    "how-tos/stream-updates.ipynb": "how-tos/streaming.ipynb#updates",
-    "how-tos/streaming-content.ipynb": "how-tos/streaming.ipynb#custom",
-    "how-tos/stream-multiple.ipynb": "how-tos/streaming.ipynb#multiple",
-    "how-tos/streaming-tokens-without-langchain.ipynb": "how-tos/streaming-tokens.ipynb#example-without-langchain",
+    "how-tos/stream-values.ipynb": "how-tos/streaming.md#stream-graph-state",
+    "how-tos/stream-updates.ipynb": "how-tos/streaming.md#stream-graph-state",
+    "how-tos/streaming-content.ipynb": "how-tos/streaming.md",
+    "how-tos/stream-multiple.ipynb": "how-tos/streaming.md#stream-multiple-nodes",
+    "how-tos/streaming-tokens-without-langchain.ipynb": "how-tos/streaming.md#use-with-any-llm",
     "how-tos/streaming-from-final-node.ipynb": "how-tos/streaming-specific-nodes.ipynb",
-    "how-tos/streaming-events-from-within-tools-without-langchain.ipynb": "how-tos/streaming-events-from-within-tools.ipynb#example-without-langchain",
+    "how-tos/streaming-events-from-within-tools-without-langchain.ipynb": "how-tos/streaming.md#use-with-any-llm",
+    "how-tos/streaming-tokens.ipynb": "how-tos/streaming.md#streaming-tokens",
+    "how-tos/streaming-specific-nodes": "how-tos/streaming-specific-nodes.ipynb",
+    "how-tos/streaming-events-from-within-tools": "how-tos/streaming.md#stream-custom-data",
+    "how-tos/streaming-subgraphs.ipynb": "how-tos/streaming.md#subgraphs",
+    "how-tos/disable-streaming.ipynb": "how-tos/streaming.md#disable-streaming-for-specific-chat-models",
     # cloud redirects
     "cloud/index.md": "index.md",
     "cloud/how-tos/index.md": "concepts/langgraph_platform",
@@ -43,7 +48,7 @@ REDIRECT_MAP = {
     "concepts/high_level.md": "index.md",
     "concepts/index.md": "index.md",
     "concepts/v0-human-in-the-loop.md": "concepts/human-in-the-loop.md",
-    "how-tos/index.md": "index.md"
+    "how-tos/index.md": "index.md",
 }
 
 

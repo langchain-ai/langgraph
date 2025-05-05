@@ -4,7 +4,7 @@
 
     Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM apps built with LangGraph — read more about how to get started [here](https://docs.smith.langchain.com).
 
-## Streaming entrypoints
+## Streaming API
 
 LangGraph graphs expose the `.stream()` (sync) and `.astream()` (async) methods to yield streamed outputs as iterators.
 
@@ -48,7 +48,7 @@ The streamed outputs will be tuples of `(mode, chunk)` where `mode` is the name 
 
 | Mode                                            | Description                                                                                                                                                                         |
 |-------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [`values`](../how-tos/streaming.md#values)      | Streams the full value of the state after each step of the graph.                                                                                                                   |
+| [`values`](#stream-graph-state)                 | Streams the full value of the state after each step of the graph.                                                                                                                   |
 | [`updates`](../how-tos/streaming.md#updates)    | Streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g., multiple nodes are run), those updates are streamed separately. |
 | [`custom`](../how-tos/streaming.md#custom)      | Streams custom data from inside your graph nodes.                                                                                                                                   |
 | [`messages`](../how-tos/streaming-tokens.ipynb) | Streams LLM tokens and metadata for the graph node where the LLM is invoked.                                                                                                        |
@@ -216,6 +216,11 @@ The streamed output from [`messages` mode](#supported-stream-modes) is a tuple `
 - `metadata`: a dictionary containing details about the graph node and LLM invocation.
 
 > If your LLM is not available as a LangChain integration, you can stream its outputs using `custom` mode instead. See [use with any LLM](#use-with-any-llm) for details.
+ 
+!!! warning "Manual config required for async in Python < 3.11"
+
+    When using Python < 3.11 with async code, you must explicitly pass `RunnableConfig` to `ainvoke()` to enable proper streaming.  
+    See [Async with Python < 3.11](#async-with-python-3-11) for details or upgrade to Python 3.11+.
 
 ```python
 from dataclasses import dataclass
@@ -421,72 +426,80 @@ for msg, metadata in graph.stream( # (1)!
 
 ## Stream custom data
 
-Sometimes you need to send **custom, user-defined data** from inside a LangGraph node or tool during execution. This is useful when you want to surface intermediate results, log details, or push any non-standard outputs as part of the streaming flow.
+To send **custom user-defined data** from inside a LangGraph node or tool, follow these steps:
 
-To stream custom data, you need to:
+1. Use `get_stream_writer()` to access the stream writer and emit custom data.
+2. Set `stream_mode="custom"` when calling `.stream()` or `.astream()` to get the custom data in the stream. You can combine multiple modes (e.g., `["updates", "custom"]`), but at least one must be `"custom"`.
 
-1. **Write custom data using the stream writer** — use `get_stream_writer()` to access the writer.
-2. **Set `stream_mode="custom"` when calling `.stream()` or `.astream()`** — this ensures the graph routes your custom data to the stream. You can also combine multiple streaming modes (e.g., `["updates", "custom"]`), but at least one of them must be `"custom"` for your custom data to appear.
+!!! warning "No `get_stream_writer()` in async for Python < 3.11"
 
-Below are examples showing how to use this inside both **nodes** and **tools**.
-
-
-!!! warning "Async with Python < 3.11"
-
-      If you are using Python < 3.11 and are running LangGraph asynchronously,
-      `get_stream_writer()` won't work since it uses [contextvar](https://docs.python.org/3/library/contextvars.html) propagation (only available in [Python >= 3.11](https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task)).
-
-      Instead of using `get_stream_writer()`, you should include `writer` in the function signature of your node or tool, and pass it in when invoking the function.
-
-### From a node
-
-```python
-from langgraph.config import get_stream_writer
-
-# Example node function
-def node(state):
-    writer = get_stream_writer()
-    # Stream a custom key-value pair
-    writer({"custom_key": "Generating custom data inside node"})
-    ...
-    # do some processing
+    In async code running on Python < 3.11, `get_stream_writer()` will not work.  
+    Instead, add a `writer` parameter to your node or tool and pass it manually.  
+    See [Async with Python < 3.11](#async-with-python-3-11) for usage examples.
 
 
-# Define a graph that uses this node
+=== "node"
 
-# Usage
-for chunk in graph.stream(inputs, stream_mode="custom"):
-    print(chunk)
-```
+      ```python
+      from typing import TypedDict
+      from langgraph.config import get_stream_writer
+      from langgraph.graph import StateGraph, START
 
-### From a tool
+      class State(TypedDict):
+          query: str
+          answer: str
 
-```python
-from langchain_core.tools import tool
-from langgraph.config import get_stream_writer
+      def node(state: State):
+          writer = get_stream_writer()  # (1)!
+          writer({"custom_key": "Generating custom data inside node"}) # (2)!
+          return {"answer": "some data"}
 
-@tool
-def query_database(query: str) -> str:
-    """Query the database."""
-    writer = get_stream_writer() # (1)!
-    # highlight-next-line
-    writer({"data": "Retrieved 0/100 records", "type": "progress"}) # (2)!
-    # perform query
-    # highlight-next-line
-    writer({"data": "Retrieved 100/100 records", "type": "progress"}) # (3)!
-    return "some-answer" 
+      graph = (
+          StateGraph(State)
+          .add_node(node)
+          .add_edge(START, "node")
+          .compile()
+      )
+
+      inputs = {"query": "example"}
+
+      # Usage
+      for chunk in graph.stream(inputs, stream_mode="custom"):  # (3)!
+          print(chunk)
+      ```
+
+      1. Get the stream writer to send custom data.
+      2. Emit a custom key-value pair (e.g., progress update).
+      3. Set `stream_mode="custom"` to receive the custom data in the stream.
+
+=== "tool"
+
+      ```python
+      from langchain_core.tools import tool
+      from langgraph.config import get_stream_writer
+
+      @tool
+      def query_database(query: str) -> str:
+          """Query the database."""
+          writer = get_stream_writer() # (1)!
+          # highlight-next-line
+          writer({"data": "Retrieved 0/100 records", "type": "progress"}) # (2)!
+          # perform query
+          # highlight-next-line
+          writer({"data": "Retrieved 100/100 records", "type": "progress"}) # (3)!
+          return "some-answer" 
 
 
-graph = ... # define a graph that uses this tool
+      graph = ... # define a graph that uses this tool
 
-for chunk in graph.stream(inputs, stream_mode="custom"): # (4)!
-    print(chunk)
-```
+      for chunk in graph.stream(inputs, stream_mode="custom"): # (4)!
+          print(chunk)
+      ```
 
-1. Get the stream writer to send custom data.
-2. Stream a custom key-value pair with progress information.
-3. Stream another custom key-value pair with progress information.
-4. Set `stream_mode="custom"` to receive the custom data in the stream.
+      1. Access the stream writer to send custom data.
+      2. Emit a custom key-value pair (e.g., progress update).
+      3. Emit another custom key-value pair.
+      4. Set `stream_mode="custom"` to receive the custom data in the stream.
 
 ## Use with any LLM
 
@@ -652,11 +665,10 @@ for chunk in graph.stream(
 
 Some chat models, including the new O1 models from OpenAI (depending on when you're reading this), do not support streaming.
 
-If you're using the `stream` API while also using a chat model that doesn't support streaming, you may encounter issues. For example,
+If your application mixes models that support streaming with those that do not, you may need to explicitly disable streaming for 
+models that do not support it.
 
-this could happen if you have an LLM application that leverages different chat models, some of which support streaming and others that do not. In such cases, you may want to disable streaming for specific chat models that do not support streaming.
-
-To disable streaming for specific chat models, set `disable_streaming=True` when initializing the model:
+Set `disable_streaming=True` when initializing the model.
 
 === "init_chat_model"
       
@@ -683,70 +695,86 @@ To disable streaming for specific chat models, set `disable_streaming=True` when
       1. Set `disable_streaming=True` to disable streaming for the chat model.
 
 
+## Async with Python < 3.11
 
+In Python versions < 3.11, [asyncio tasks](https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task) do not support the `context` parameter.  
+This limits LangGraph ability to automatically propagate context, and affects LangGraph’s streaming mechanisms in two key ways:
 
-## Async
+1. You **must** explicitly pass [`RunnableConfig`](https://python.langchain.com/docs/concepts/runnables/#runnableconfig) into async LLM calls (e.g., `ainvoke()`), as callbacks are not automatically propagated.
+2. You **cannot** use `get_stream_writer()` in async nodes or tools — you must pass a `writer` argument directly.
 
-When using Python < 3.11 with async code, please ensure you manually pass the `RunnableConfig` through to the chat model when invoking it like so: `model.ainvoke(..., config)`.
-The stream method collects all events from your nested code using a streaming tracer passed as a callback. In 3.11 and above, this is automatically handled via [contextvars](https://docs.python.org/3/library/contextvars.html); prior to 3.11, [asyncio's tasks](https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task) lacked proper `contextvar` support, meaning that the callbacks will only propagate if you manually pass the config through. We do this in the `call_model` function below.
+??? example "async LLM call with manual config"
 
-!!! warning "Async in Python < 3.11"
+      ```python
+      from typing import TypedDict
+      from langgraph.graph import START, StateGraph
+      from langchain.chat_models import init_chat_model
 
-    When using Python < 3.11 with async code, please ensure you manually pass the `RunnableConfig` through to the chat model when invoking it like so: `model.ainvoke(..., config)`.
-    The stream method collects all events from your nested code using a streaming tracer passed as a callback. In 3.11 and above, this is automatically handled via [contextvars](https://docs.python.org/3/library/contextvars.html); prior to 3.11, [asyncio's tasks](https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task) lacked proper `contextvar` support, meaning that the callbacks will only propagate if you manually pass the config through. We do this in the `call_model` function below.
+      llm = init_chat_model(model="openai:gpt-4o-mini")
 
-!!! note Manual Callback Propagation
+      class State(TypedDict):
+          topic: str
+          joke: str
 
-    Note that in `call_model(state: State, config: RunnableConfig):` below, we a) accept the [`RunnableConfig`](https://python.langchain.com/api_reference/core/runnables/langchain_core.runnables.config.RunnableConfig.html#langchain_core.runnables.config.RunnableConfig) in the node function and b) pass it in as the second arg for `model.ainvoke(..., config)`. This is optional for python >= 3.11.
+      async def call_model(state, config): # (1)!
+          topic = state["topic"]
+          print("Generating joke...")
+          joke_response = await llm.ainvoke(
+              [{"role": "user", "content": f"Write a joke about {topic}"}],
+              # highlight-next-line
+              config, # (2)!
+          )
+          return {"joke": joke_response.content}
 
-```python
-from langchain_core.messages import AIMessageChunk
-from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import tool
-
-@tool
-async def get_items(
-    place: str, 
-    # Manually accept config (needed for Python <= 3.10) 
-    # highlight-next-line
-    config: RunnableConfig,
-) -> str:
-      """Use this tool to list items one might find in a place you're asked about."""
-      # Attention: when using async, you should be invoking the LLM using ainvoke!
-      # If you fail to do so, streaming will NOT work.
-      response = await llm.ainvoke(
-            [
-                  {
-                        "role": "user",
-                        "content": (
-                              f"Can you tell me what kind of items i might find in the following place: '{place}'. "
-                              "List at least 3 such items separating them by a comma. And include a brief description of each item."
-                        ),
-                  }
-            ],
-            # highlight-next-line
-            config,
+      graph = (
+          StateGraph(State)
+          .add_node(call_model)
+          .add_edge(START, "call_model")
+          .compile()
       )
-      return response.content
 
-tools = [get_items]
-# contains `agent` (tool-calling LLM) and `tools` (tool executor) nodes
-agent = create_react_agent(llm, tools=tools)
+      async for chunk, metadata in graph.astream(
+          {"topic": "ice cream"},
+          # highlight-next-line
+          stream_mode="messages", # (3)!
+      ):
+          if chunk.content:
+              print(chunk.content, end="|", flush=True)
+      ```
 
-inputs = {
-    "messages": [  
-        {"role": "user", "content": "what items are in the bedroom?"}
-    ]
-}
-async for msg, metadata in agent.astream(
-    inputs,
-    stream_mode="messages",
-):
-    if (
-        isinstance(msg, AIMessageChunk)
-        and msg.content
-        # Stream all messages from the tool node
-        and metadata["langgraph_node"] == "tools"
-    ):
-        print(msg.content, end="|", flush=True)
-```
+      1. Accept `config` as an argument in the async node function.
+      2. Pass `config` to `llm.ainvoke()` to ensure proper context propagation. 
+      3. Set `stream_mode="messages"` to stream LLM tokens.
+
+??? example "async custom streaming with stream writer"
+
+      ```python
+      from typing import TypedDict
+      from langgraph.types import StreamWriter
+
+      class State(TypedDict):
+            topic: str
+            joke: str
+
+      # highlight-next-line
+      async def generate_joke(state: State, writer: StreamWriter): # (1)!
+            writer({"custom_key": "Streaming custom data while generating a joke"})
+            return {"joke": f"This is a joke about {state['topic']}"}
+
+      graph = (
+            StateGraph(State)
+            .add_node(generate_joke)
+            .add_edge(START, "generate_joke")
+            .compile()
+      )
+
+      async for chunk in graph.astream(
+            {"topic": "ice cream"},
+            # highlight-next-line
+            stream_mode="custom", # (2)!
+      ):
+            print(chunk)
+      ```
+
+      1. Add `writer` as an argument in the function signature of the async node or tool. LangGraph will automatically pass the stream writer to the function.
+      2. Set `stream_mode="custom"` to receive the custom data in the stream.
