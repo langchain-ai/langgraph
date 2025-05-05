@@ -117,11 +117,7 @@ nav:
           # and a general glossary of terms related to the Graph API
           # but it also has some terms from the functional API.
           # Unclear on where to put it in its current form.
-        - how-tos/state-reducers.ipynb
-        - how-tos/sequence.ipynb
-        - how-tos/branching.ipynb
-        - how-tos/recursion-limit.ipynb
-        - how-tos/visualization.ipynb
+        - Use the Graph API: how-tos/graph-api.ipynb
       - Persistence:
         - Overview: concepts/persistence.md
         - concepts/durable_execution.md # TO DO: Combine with Persistence concept doc?
@@ -171,10 +167,6 @@ nav:
         - how-tos/agent-handoffs.ipynb
         - how-tos/multi-agent-network.ipynb
         - how-tos/multi-agent-multi-turn-convo.ipynb
-      - State Management:
-        - how-tos/state-model.ipynb
-        - how-tos/input_output_schema.ipynb
-        - how-tos/pass_private_state.ipynb
       - Functional API:
         - Overview: concepts/functional_api.md
         - how-tos/wait-user-input-functional.ipynb

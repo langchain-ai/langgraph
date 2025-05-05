@@ -17,7 +17,7 @@ At its core, LangGraph models agent workflows as graphs. You define the behavior
 
 By composing `Nodes` and `Edges`, you can create complex, looping workflows that evolve the `State` over time. The real power, though, comes from how LangGraph manages that `State`. To emphasize: `Nodes` and `Edges` are nothing more than Python functions - they can contain an LLM or just good ol' Python code.
 
-In short: _nodes do the work. edges tell what to do next_.
+In short: _nodes do the work, edges tell what to do next_.
 
 LangGraph's underlying graph algorithm uses [message passing](https://en.wikipedia.org/wiki/Message_passing) to define a general program. When a Node completes its operation, it sends messages along one or more edges to other node(s). These recipient nodes then execute their functions, pass the resulting messages to the next set of nodes, and the process continues. Inspired by Google's [Pregel](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/) system, the program proceeds in discrete "super-steps."
 
@@ -411,19 +411,6 @@ If you are using tools that update state via `Command`, we recommend using prebu
 
 `Command` is an important part of human-in-the-loop workflows: when using `interrupt()` to collect user input, `Command` is then used to supply the input and resume execution via `Command(resume="User input")`. Check out [this conceptual guide](./human_in_the_loop.md) for more information.
 
-## Persistence
-
-LangGraph provides built-in persistence for your agent's state using [checkpointers][langgraph.checkpoint.base.BaseCheckpointSaver]. Checkpointers save snapshots of the graph state at every superstep, allowing resumption at any time. This enables features like human-in-the-loop interactions, memory management, and fault-tolerance. You can even directly manipulate a graph's state after its execution using the
-appropriate `get` and `update` methods. For more details, see the [persistence conceptual guide](./persistence.md).
-
-## Threads
-
-Threads in LangGraph represent individual sessions or conversations between your graph and a user. When using checkpointing, turns in a single conversation (and even steps within a single graph execution) are organized by a unique thread ID.
-
-## Storage
-
-LangGraph provides built-in document storage through the [BaseStore][langgraph.store.base.BaseStore] interface. Unlike checkpointers, which save state by thread ID, stores use custom namespaces for organizing data. This enables cross-thread persistence, allowing agents to maintain long-term memories, learn from past interactions, and accumulate knowledge over time. Common use cases include storing user profiles, building knowledge bases, and managing global preferences across all threads.
-
 ## Graph Migrations
 
 LangGraph can easily handle migrations of graph definitions (nodes, edges, and state) even when using a checkpointer to track state.
@@ -476,139 +463,12 @@ graph.invoke(inputs, config={"recursion_limit": 5, "configurable":{"llm": "anthr
 
 Read [this how-to](https://langchain-ai.github.io/langgraph/how-tos/recursion-limit/) to learn more about how the recursion limit works.
 
-## `interrupt`
-
-Use the [interrupt](../reference/types.md/#langgraph.types.interrupt) function to **pause** the graph at specific points to collect user input. The `interrupt` function surfaces interrupt information to the client, allowing the developer to collect user input, validate the graph state, or make decisions before resuming execution.
-
-```python
-from langgraph.types import interrupt
-
-def human_approval_node(state: State):
-    ...
-    answer = interrupt(
-        # This value will be sent to the client.
-        # It can be any JSON serializable value.
-        {"question": "is it ok to continue?"},
-    )
-    ...
-```
-
-Resuming the graph is done by passing a [`Command`](#command) object to the graph with the `resume` key set to the value returned by the `interrupt` function.
-
-Read more about how the `interrupt` is used for **human-in-the-loop** workflows in the [Human-in-the-loop conceptual guide](./human_in_the_loop.md).
-
 ## Breakpoints
 
 Breakpoints pause graph execution at specific points and enable stepping through execution step by step. Breakpoints are powered by LangGraph's [**persistence layer**](./persistence.md), which saves the state after each graph step. Breakpoints can also be used to enable [**human-in-the-loop**](./human_in_the_loop.md) workflows, though we recommend using the [`interrupt` function](#interrupt) for this purpose.
 
 Read more about breakpoints in the [Breakpoints conceptual guide](./breakpoints.md).
 
-## Subgraphs
-
-A subgraph is a [graph](#graphs) that is used as a [node](#nodes) in another graph. This is nothing more than the age-old concept of encapsulation, applied to LangGraph. Some reasons for using subgraphs are:
-
-- building [multi-agent systems](./multi_agent.md)
-
-- when you want to reuse a set of nodes in multiple graphs, which maybe share some state, you can define them once in a subgraph and then use them in multiple parent graphs
-
-- when you want different teams to work on different parts of the graph independently, you can define each part as a subgraph, and as long as the subgraph interface (the input and output schemas) is respected, the parent graph can be built without knowing any details of the subgraph
-
-There are two ways to add subgraphs to a parent graph:
-
-- add a node with the compiled subgraph: this is useful when the parent graph and the subgraph share state keys and you don't need to transform state on the way in or out
-
-```python
-builder.add_node("subgraph", subgraph_builder.compile())
-```
-
-- add a node with a function that invokes the subgraph: this is useful when the parent graph and the subgraph have different state schemas and you need to transform state before or after calling the subgraph
-
-```python
-subgraph = subgraph_builder.compile()
-
-def call_subgraph(state: State):
-    return subgraph.invoke({"subgraph_key": state["parent_key"]})
-
-builder.add_node("subgraph", call_subgraph)
-```
-
-Let's take a look at examples for each.
-
-### As a compiled graph
-
-The simplest way to create subgraph nodes is by using a [compiled subgraph](#compiling-your-graph) directly. When doing so, it is **important** that the parent graph and the subgraph [state schemas](#state) share at least one key which they can use to communicate. If your graph and subgraph do not share any keys, you should write a function [invoking the subgraph](#as-a-function) instead.
-
-!!! Note
-    If you pass extra keys to the subgraph node (i.e., in addition to the shared keys), they will be ignored by the subgraph node. Similarly, if you return extra keys from the subgraph, they will be ignored by the parent graph.
-
-```python
-from langgraph.graph import StateGraph
-from typing import TypedDict
-
-class State(TypedDict):
-    foo: str
-
-class SubgraphState(TypedDict):
-    foo: str  # note that this key is shared with the parent graph state
-    bar: str
-
-# Define subgraph
-def subgraph_node(state: SubgraphState):
-    # note that this subgraph node can communicate with the parent graph via the shared "foo" key
-    return {"foo": state["foo"] + "bar"}
-
-subgraph_builder = StateGraph(SubgraphState)
-subgraph_builder.add_node(subgraph_node)
-...
-subgraph = subgraph_builder.compile()
-
-# Define parent graph
-builder = StateGraph(State)
-builder.add_node("subgraph", subgraph)
-...
-graph = builder.compile()
-```
-
-### As a function
-
-You might want to define a subgraph with a completely different schema. In this case, you can create a node function that invokes the subgraph. This function will need to [transform](../how-tos/subgraph-transform-state.ipynb) the input (parent) state to the subgraph state before invoking the subgraph, and transform the results back to the parent state before returning the state update from the node.
-
-```python
-class State(TypedDict):
-    foo: str
-
-class SubgraphState(TypedDict):
-    # note that none of these keys are shared with the parent graph state
-    bar: str
-    baz: str
-
-# Define subgraph
-def subgraph_node(state: SubgraphState):
-    return {"bar": state["bar"] + "baz"}
-
-subgraph_builder = StateGraph(SubgraphState)
-subgraph_builder.add_node(subgraph_node)
-...
-subgraph = subgraph_builder.compile()
-
-# Define parent graph
-def node(state: State):
-    # transform the state to the subgraph state
-    response = subgraph.invoke({"bar": state["foo"]})
-    # transform response back to the parent state
-    return {"foo": response["bar"]}
-
-builder = StateGraph(State)
-# note that we are using `node` function instead of a compiled subgraph
-builder.add_node(node)
-...
-graph = builder.compile()
-```
-
 ## Visualization
 
 It's often nice to be able to visualize graphs, especially as they get more complex. LangGraph comes with several built-in ways to visualize graphs. See [this how-to guide](../how-tos/visualization.ipynb) for more info.
-
-## Streaming
-
-LangGraph is built with first class support for streaming, including streaming updates from graph nodes during the execution, streaming tokens from LLM calls and more. See this [conceptual guide](./streaming.md) for more information.

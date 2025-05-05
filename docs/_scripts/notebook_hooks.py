@@ -25,6 +25,15 @@ REDIRECT_MAP = {
     "how-tos/streaming-tokens-without-langchain.ipynb": "how-tos/streaming-tokens.ipynb#example-without-langchain",
     "how-tos/streaming-from-final-node.ipynb": "how-tos/streaming-specific-nodes.ipynb",
     "how-tos/streaming-events-from-within-tools-without-langchain.ipynb": "how-tos/streaming-events-from-within-tools.ipynb#example-without-langchain",
+    # graph-api
+    "how-tos/state-reducers.ipynb": "how-tos/graph-api#define-and-update-state",
+    "how-tos/sequence.ipynb": "how-tos/graph-api#create-a-sequence-of-steps",
+    "how-tos/branching.ipynb": "how-tos/graph-api#create-branches-for-parallel-node-execution",
+    "how-tos/recursion-limit.ipynb": "how-tos/graph-api#create-and-control-loops",
+    "how-tos/visualization.ipynb": "how-tos/graph-api#visualize-your-graph",
+    "how-tos/input_output_schema.ipynb": "how-tos/graph-api#define-input-and-output-schemas",
+    "how-tos/pass_private_state.ipynb": "how-tos/graph-api#pass-private-state-between-nodes",
+    "how-tos/state-model.ipynb": "how-tos/graph-api#use-pydantic-models-for-graph-state",
     # memory how-tos
     "how-tos/memory/manage-conversation-history.ipynb": "how-tos/memory.ipynb",
     "how-tos/memory/delete-messages.ipynb": "how-tos/memory.ipynb#delete-messages",
