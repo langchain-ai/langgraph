@@ -206,7 +206,6 @@ nav:
       - General concepts:
         - concepts/platform_architecture.md
         - concepts/scalability_and_resilience.md
-        - concepts/deployment_options.md
         - concepts/plans.md
       - Components:
           - concepts/langgraph_control_plane.md
@@ -215,7 +214,6 @@ nav:
           - concepts/langgraph_studio.md
           - concepts/langgraph_cli.md
           - concepts/sdk.md
-      - how-tos/use-remote-graph.md
       - LangGraph Studio:
         - cloud/how-tos/test_deployment.md
         - cloud/how-tos/test_local_deployment.md
@@ -231,11 +229,19 @@ nav:
         - concepts/double_texting.md
         - concepts/auth.md
       - Deployment options:
-        - concepts/langgraph_cloud.md
-        - concepts/langgraph_self_hosted_data_plane.md
-        - concepts/langgraph_self_hosted_control_plane.md
-        - concepts/langgraph_standalone_container.md
-        - concepts/self_hosted.md
+        - Overview: concepts/deployment_options.md
+        - Cloud SaaS:
+          - Overview: concepts/langgraph_cloud.md
+          - How to deploy to Cloud SaaS: cloud/deployment/cloud.md
+        - Self-Hosted Data Plane:
+          - Overview: concepts/langgraph_self_hosted_data_plane.md
+          - How to deploy the Self-Hosted Data Plane: cloud/deployment/self_hosted_data_plane.md
+        - Self-Hosted Control Plane:
+          - Overview: concepts/langgraph_self_hosted_control_plane.md
+          - How to deploy the Self-Hosted Control Plane: cloud/deployment/self_hosted_control_plane.md
+        - Standalone Container:
+          - Overview: concepts/langgraph_standalone_container.md
+          - How to deploy a Standalone Container: cloud/deployment/standalone_container.md
       - Application structure:
         - cloud/deployment/setup.md
         - cloud/deployment/setup_pyproject.md
@@ -245,14 +251,6 @@ nav:
         - cloud/deployment/test_locally.md
         - cloud/deployment/graph_rebuild.md
         - how-tos/autogen-langgraph-platform.ipynb
-      - Deployment:
-        - cloud/deployment/cloud.md
-        - cloud/deployment/self_hosted_data_plane.md
-        - cloud/deployment/self_hosted_control_plane.md
-        - cloud/deployment/standalone_container.md
-        - how-tos/deploy-self-hosted.md
-        - how-tos/use-remote-graph.md
-        - how-tos/ttl/configure_ttl.md
       - Data management:
         - how-tos/ttl/configure_ttl.md
       - Authentication & access control:
@@ -297,6 +295,8 @@ nav:
         - cloud/how-tos/webhooks.md
       - Cron Jobs:
         - cloud/how-tos/cron_jobs.md
+      - Remote Graph:
+        - how-tos/use-remote-graph.md
       - Modifying the API:
         - how-tos/http/custom_lifespan.md
         - how-tos/http/custom_middleware.md
