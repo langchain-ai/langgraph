@@ -37,6 +37,7 @@ REDIRECT_MAP = {
     "how-tos/map-reduce.ipynb": "how-tos/graph-api/#map-reduce-and-the-send-api",
     "how-tos/command.ipynb": "how-tos/graph-api/#combine-control-flow-and-state-updates-with-command",
     "how-tos/configuration.ipynb": "how-tos/graph-api/#add-runtime-configuration",
+    "how-tos/node-retries.ipynb": "how-tos/graph-api/#add-retry-policies",
     # memory how-tos
     "how-tos/memory/manage-conversation-history.ipynb": "how-tos/memory.ipynb",
     "how-tos/memory/delete-messages.ipynb": "how-tos/memory.ipynb#delete-messages",

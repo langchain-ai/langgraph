@@ -138,7 +138,6 @@ nav:
         - how-tos/streaming-subgraphs.ipynb
         - how-tos/disable-streaming.ipynb
       - Controllability:
-        - how-tos/node-retries.ipynb
         - how-tos/return-when-recursion-limit-hits.ipynb
       - Breakpoints:
         - Overview: concepts/breakpoints.md
