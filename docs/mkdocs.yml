@@ -146,7 +146,6 @@ nav:
       - Breakpoints:
         - Overview: concepts/breakpoints.md
         - how-tos/human_in_the_loop/breakpoints.ipynb
-        - how-tos/human_in_the_loop/dynamic_breakpoints.ipynb
       - Time travel:
         - Overview: concepts/time-travel.md
         - how-tos/human_in_the_loop/time-travel.ipynb
