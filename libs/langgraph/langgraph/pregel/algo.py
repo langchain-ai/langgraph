@@ -599,7 +599,7 @@ def prepare_single_task(
             writes: deque[tuple[str, Any]] = deque()
             cache_policy = call.cache_policy or cache_policy
             if cache_policy:
-                args_key = cache_policy.key(*call.input[0], **call.input[1])
+                args_key = cache_policy.key_func(*call.input[0], **call.input[1])
                 cache_key: Optional[CacheKey] = CacheKey(
                     xxh3_128_hexdigest(
                         b"".join(
@@ -729,7 +729,7 @@ def prepare_single_task(
             writes = deque()
             cache_policy = proc.cache_policy or cache_policy
             if cache_policy:
-                args_key = cache_policy.key(packet.arg)
+                args_key = cache_policy.key_func(packet.arg)
                 cache_key = CacheKey(
                     xxh3_128_hexdigest(
                         b"".join(
@@ -868,7 +868,7 @@ def prepare_single_task(
                     writes = deque()
                     cache_policy = proc.cache_policy or cache_policy
                     if cache_policy:
-                        args_key = cache_policy.key(val)
+                        args_key = cache_policy.key_func(val)
                         cache_key = CacheKey(
                             xxh3_128_hexdigest(
                                 b"".join(

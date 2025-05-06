@@ -142,7 +142,9 @@ class PregelRunner:
         timeout: Optional[float] = None,
         retry_policy: Optional[Sequence[RetryPolicy]] = None,
         get_waiter: Optional[Callable[[], concurrent.futures.Future[None]]] = None,
-        match_cached_writes: Optional[Callable[[], None]] = None,
+        match_cached_writes: Optional[
+            Callable[[], Sequence[PregelExecutableTask]]
+        ] = None,
     ) -> Iterator[None]:
         tasks = tuple(tasks)
         futures = FuturesDict(
@@ -529,7 +531,7 @@ def _call(
             [PregelExecutableTask, int, Optional[Call]], Optional[PregelExecutableTask]
         ]
     ],
-    match_cached_writes: Optional[Callable[[], None]],
+    match_cached_writes: Optional[Callable[[], Sequence[PregelExecutableTask]]],
     submit: weakref.ref[Submit],
     reraise: bool,
 ) -> concurrent.futures.Future[Any]:

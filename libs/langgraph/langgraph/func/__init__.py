@@ -40,7 +40,7 @@ def task(
     *,
     name: Optional[str] = None,
     retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
-    cache_policy: Optional[CachePolicy[P]] = None,
+    cache_policy: Optional[CachePolicy[Callable[P, str | bytes]]] = None,
 ) -> Callable[
     [Union[Callable[P, Awaitable[T]], Callable[P, T]]],
     Callable[P, SyncAsyncFuture[T]],
@@ -58,7 +58,7 @@ def task(
     *,
     name: Optional[str] = None,
     retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
-    cache_policy: Optional[CachePolicy[P]] = None,
+    cache_policy: Optional[CachePolicy[Callable[P, str | bytes]]] = None,
 ) -> Union[
     Callable[
         [Union[Callable[P, Awaitable[T]], Callable[P, T]]],

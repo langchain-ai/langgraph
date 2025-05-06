@@ -11,7 +11,6 @@ from typing import (
     Literal,
     NamedTuple,
     Optional,
-    ParamSpec,
     TypeVar,
     Union,
     cast,
@@ -124,16 +123,16 @@ class RetryPolicy(NamedTuple):
     """List of exception classes that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
 
 
-P = ParamSpec("P")
+KeyFuncT = TypeVar("KeyFuncT", bound=Callable[..., str | bytes])
 
 
-class CachePolicy(NamedTuple, Generic[P]):
+class CachePolicy(NamedTuple, Generic[KeyFuncT]):
     """Configuration for caching nodes.
 
     !!! version-added "Added in version 0.2.24."
     """
 
-    key: Callable[P, str | bytes] = default_cache_key
+    key_func: KeyFuncT = default_cache_key  # type: ignore[assignment]
     """Function to generate a cache key from the node's input.
     Defaults to hashing the input with pickle."""
 

@@ -18,7 +18,7 @@ def _freeze(obj: Any) -> Hashable:
     return obj  # strings, ints, dataclasses with frozen=True, etc.
 
 
-def default_cache_key(*args: Any, **kwargs: Any) -> bytes:
+def default_cache_key(*args: Any, **kwargs: Any) -> str | bytes:
     """Default cache key function that uses the arguments and keyword arguments to generate a hashable key."""
     import pickle
 
