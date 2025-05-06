@@ -225,8 +225,7 @@ nav:
           - cloud/how-tos/stream_events.md
           - cloud/how-tos/stream_debug.md
           - cloud/how-tos/stream_multiple.md
-          - cloud/how-tos/use_stream_react.md
-          - cloud/how-tos/generative_ui_react.md
+          
         - Human-in-the-loop:
           - cloud/how-tos/human_in_the_loop_breakpoint.md
           - cloud/how-tos/human_in_the_loop_user_input.md
@@ -247,8 +246,7 @@ nav:
           - how-tos/http/custom_lifespan.md
           - how-tos/http/custom_middleware.md
           - how-tos/http/custom_routes.md
-      - LangGraph CLI:
-        - Overview: concepts/langgraph_cli.md
+      - LangGraph CLI: concepts/langgraph_cli.md
       - LangGraph Studio:
         - Overview: concepts/langgraph_studio.md
         - cloud/how-tos/test_deployment.md
@@ -259,12 +257,9 @@ nav:
         - cloud/how-tos/iterate_graph_studio.md
         - cloud/how-tos/clone_traces_studio.md
         - how-tos/local-studio.md
-      - LangGraph SDK:
-        - Overview: concepts/sdk.md
-      - LangGraph Data Plane:
-        - Overview: concepts/langgraph_data_plane.md
-      - LangGraph Control Plane:
-        - Overview: concepts/langgraph_control_plane.md
+      - LangGraph SDK: concepts/sdk.md
+      - LangGraph Data Plane: concepts/langgraph_data_plane.md
+      - LangGraph Control Plane: concepts/langgraph_control_plane.md
       - Application structure:
         - Overview: concepts/application_structure.md
         - cloud/deployment/setup.md
@@ -331,6 +326,9 @@ nav:
         - tutorials/auth/resource_auth.md
         - tutorials/auth/add_auth_server.md
       - Cloud deploy: cloud/quick_start.md
+      - Front-end and generative UI:
+        - Integrate LangGraph into a React app: cloud/how-tos/use_stream_react.md
+        - Implement generative UI with LangGraph: cloud/how-tos/generative_ui_react.md
 
   - Resources:
     - LLMS-txt: llms-txt-overview.md
