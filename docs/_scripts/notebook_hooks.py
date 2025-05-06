@@ -47,7 +47,7 @@ REDIRECT_MAP = {
     # tool calling how-tos
     "how-tos/tool-calling-errors.ipynb": "how-tos/tool-calling.ipynb#handle-errors",
     "how-tos/pass-config-to-tools.ipynb": "how-tos/tool-calling.ipynb#access-config",
-    "how-tos/pass-run-time-values-to-tools.ipynb": "how-tos/tool-calling.ipynb#access-state",
+    "how-tos/pass-run-time-values-to-tools.ipynb": "how-tos/tool-calling.ipynb#read-state",
     "how-tos/update-state-from-tools.ipynb": "how-tos/tool-calling.ipynb#update-state",
     # cloud redirects
     "cloud/index.md": "index.md",

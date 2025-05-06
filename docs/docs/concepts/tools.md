@@ -1,14 +1,21 @@
-# Tool calling
+# Tools
 
 Many AI applications interact directly with humans. In these cases, it is appropriate for models to respond in natural language.
 But what about cases where we want a model to also interact *directly* with systems, such as databases or an API?
-These systems often have a particular input schema; for example, APIs frequently have a required payload structure.
-This need motivates the concept of *tool calling*. You can use [tool calling](https://platform.openai.com/docs/guides/function-calling/example-use-cases) to request model responses that match a particular schema.
+These systems often have a particular input schema; for example, APIs frequently have a required payload structure. You can use [tool calling](https://platform.openai.com/docs/guides/function-calling/example-use-cases) to request model responses that match a particular schema.
+
+[Tools](https://python.langchain.com/docs/concepts/tools/) are a way to encapsulate a function and its input schema in a way that can be passed to a chat model that supports tool calling. This allows the model to request the execution of this function with specific inputs.
+
+**Tools** can be passed to [chat models](https://python.langchain.com/docs/concepts/chat_models) that support [tool calling](https://python.langchain.com/docs/concepts/tool_calling) allowing the model to request the execution of a specific function with specific inputs.
+
+You can [create custom tools](https://python.langchain.com/docs/how_to/custom_tools/) or use [prebuilt](#prebuilt-tools) tools.
+
+## Tool calling
 
 ![Diagram of a tool call by a model](./img/tool_call.png)
 
 A key principle of tool calling is that the model decides when to use a tool based on the input's relevance. The model doesn't always need to call a tool.
-For example, given an unrelated input, the model would not call the tool:
+For example, given an input that is *irrelevant to the tool*, the model would not call the tool:
 
 ```python
 result = llm_with_tools.invoke("Hello world!")
@@ -32,38 +39,24 @@ result.tool_calls
 
 For more details on usage, see the [how-to guide](../how-tos/tool-calling.ipynb).
 
-## Create tools
-
-[Tools](https://python.langchain.com/docs/concepts/tools/) are a way to encapsulate a function and its input schema in a way that can be passed to a chat model that supports tool calling. This allows the model to request the execution of this function with specific inputs.
-
-**Tools** can be passed to [chat models](https://python.langchain.com/docs/concepts/chat_models) that support [tool calling](https://python.langchain.com/docs/concepts/tool_calling) allowing the model to request the execution of a specific function with specific inputs.
-
-To create tools, you can use vanilla functions or the [@tool](https://python.langchain.com/api_reference/core/tools/langchain_core.tools.convert.tool.html) decorator.
-
-=== "Python functions"
-
-    This requires using LangGraph [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode]
-    
-    ```python
-    def multiply(a: int, b: int) -> int:
-        """Multiply two numbers."""
-        return a * b
-    ```
-
-=== "`@tool` decorator"
-    ```python
-    from langchain_core.tools import tool
-
-    @tool
-    def multiply(a: int, b: int) -> int:
-        """Multiply two numbers."""
-        return a * b
-    ```
-
-For more details on how to create tools, see the [how to create custom tools](https://python.langchain.com/docs/how_to/custom_tools/) guide.
-
 ## Execute tools
 
-LangGraph offers pre-built components — [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] and [`create-react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent] — that invoke the tools on behalf of the user.
+LangGraph offers pre-built components — [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] and [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent] — that invoke the tools on behalf of the user.
 
 See this [how-to guide](../how-tos/tool-calling.ipynb#use-prebuilt-toolnode) on tool calling.
+
+## Prebuilt tools
+
+LangChain supports a wide range of prebuilt tool integrations for interacting with APIs, databases, file systems, web data, and more. These tools extend the functionality of agents and enable rapid development.
+
+You can browse the full list of available integrations in the [LangChain integrations directory](https://python.langchain.com/docs/integrations/tools/).
+
+Some commonly used tool categories include:
+
+- **Search**: Bing, SerpAPI, Tavily
+- **Code interpreters**: Python REPL, Node.js REPL
+- **Databases**: SQL, MongoDB, Redis
+- **Web data**: Web scraping and browsing
+- **APIs**: OpenWeatherMap, NewsAPI, and others
+
+These integrations can be configured and added to your agents using the same `tools` parameter shown in the examples above.
