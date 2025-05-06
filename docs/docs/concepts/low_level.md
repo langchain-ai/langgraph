@@ -383,13 +383,13 @@ def my_node(state: State) -> Command[Literal["other_subgraph"]]:
 
 This is particularly useful when implementing [multi-agent handoffs](./multi_agent.md#handoffs).
 
-Check out [this guide](../../how-tos/graph-api/#navigate-to-a-node-in-a-parent-graph) for detail.
+Check out [this guide](../how-tos/graph-api.ipynb#navigate-to-a-node-in-a-parent-graph) for detail.
 
 ### Using inside tools
 
 A common use case is updating graph state from inside a tool. For example, in a customer support application you might want to look up customer information based on their account number or ID in the beginning of the conversation.
 
-Refer to [this guide](../../how-tos/graph-api/#using-inside-tools) for detail.
+Refer to [this guide](../how-tos/graph-api.ipynb#using-inside-tools) for detail.
 
 ### Human-in-the-loop
 
