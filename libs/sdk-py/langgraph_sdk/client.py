@@ -1,10 +1,11 @@
 """The LangGraph client implementations connect to the LangGraph API.
 
-This module provides both asynchronous (LangGraphClient) and synchronous (SyncLanggraphClient)
+This module provides both asynchronous ([get_client()](#get_client) or [LangGraphClient](#LangGraphClient))
+and synchronous ([get_sync_client()](#get_sync_client) or [SyncLanggraphClient](#SyncLanggraphClient))
 clients to interacting with the LangGraph API's core resources such as
 Assistants, Threads, Runs, and Cron jobs, as well as its persistent
 document Store.
-"""
+"""  # noqa: E501
 
 from __future__ import annotations
 
@@ -2690,6 +2691,15 @@ class SyncLangGraphClient:
 
 
 class SyncHttpClient:
+    """Handle synchronous requests to the LangGraph API.
+
+    Provides error messaging and content handling enhancements above the
+    underlying httpx client, mirroring the interface of [HttpClient](#HttpClient)
+    but for sync usage.
+
+    Attributes:
+        client (httpx.Client): Underlying HTTPX sync client.
+    """
     def __init__(self, client: httpx.Client) -> None:
         self.client = client
 
@@ -2862,10 +2872,12 @@ class SyncAssistantsClient:
 
     This class provides methods to interact with assistants, which are versioned configurations of your graph.
 
-    Example:
+    ???+ example "Examples"
 
-        client = get_client()
+        ```python
+        client = get_sync_client(url="http://localhost:2024")
         assistant = client.assistants.get("assistant_id_123")
+        ```
     """
 
     def __init__(self, http: SyncHttpClient) -> None:
@@ -2880,14 +2892,15 @@ class SyncAssistantsClient:
         """Get an assistant by ID.
 
         Args:
-            assistant_id: The ID of the assistant to get.
+            assistant_id: The ID of the assistant to get OR the name of the graph (to use the default assistant).
             headers: Optional custom headers to include with the request.
 
         Returns:
             Assistant: Assistant Object.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
             assistant = client.assistants.get(
                 assistant_id="my_assistant_id"
             )
@@ -2903,6 +2916,7 @@ class SyncAssistantsClient:
                 'config': {},
                 'metadata': {'created_by': 'system'}
             }
+            ```
 
         """  # noqa: E501
         return self.http.get(f"/assistants/{assistant_id}", headers=headers)
@@ -2924,8 +2938,10 @@ class SyncAssistantsClient:
         Returns:
             Graph: The graph information for the assistant in JSON format.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             graph_info = client.assistants.get_graph(
                 assistant_id="my_assistant_id"
             )
@@ -2946,7 +2962,7 @@ class SyncAssistantsClient:
                         {'source': 'agent','target': '__end__'}
                     ]
             }
-
+            ```
 
         """  # noqa: E501
         return self.http.get(
@@ -2968,13 +2984,16 @@ class SyncAssistantsClient:
         Returns:
             GraphSchema: The graph schema for the assistant.
 
-        Example Usage:
+        ???+ example "  Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             schema = client.assistants.get_schemas(
                 assistant_id="my_assistant_id"
             )
             print(schema)
-
+            ```
+            ```
             ----------------------------------------------------------------------------------------------------------------------------
 
             {
@@ -3060,6 +3079,7 @@ class SyncAssistantsClient:
                             }
                     }
             }
+            ```
 
         """  # noqa: E501
         return self.http.get(f"/assistants/{assistant_id}/schemas", headers=headers)
@@ -3126,8 +3146,10 @@ class SyncAssistantsClient:
         Returns:
             Assistant: The created assistant.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             assistant = client.assistants.create(
                 graph_id="agent",
                 config={"configurable": {"model_name": "openai"}},
@@ -3136,6 +3158,7 @@ class SyncAssistantsClient:
                 if_exists="do_nothing",
                 name="my_name"
             )
+            ```
         """  # noqa: E501
         payload: Dict[str, Any] = {
             "graph_id": graph_id,
@@ -3183,15 +3206,17 @@ class SyncAssistantsClient:
         Returns:
             Assistant: The updated assistant.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             assistant = client.assistants.update(
                 assistant_id='e280dad7-8618-443f-87f1-8e41841c180f',
                 graph_id="other-graph",
                 config={"configurable": {"model_name": "anthropic"}},
                 metadata={"number":2}
             )
-
+            ```
         """  # noqa: E501
         payload: Dict[str, Any] = {}
         if graph_id:
@@ -3225,11 +3250,14 @@ class SyncAssistantsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             client.assistants.delete(
                 assistant_id="my_assistant_id"
             )
+            ```
 
         """  # noqa: E501
         self.http.delete(f"/assistants/{assistant_id}", headers=headers)
@@ -3256,14 +3284,17 @@ class SyncAssistantsClient:
         Returns:
             list[Assistant]: A list of assistants.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             assistants = client.assistants.search(
                 metadata = {"name":"my_name"},
                 graph_id="my_graph_id",
                 limit=5,
                 offset=5
             )
+            ```
         """
         payload: Dict[str, Any] = {
             "limit": limit,
@@ -3300,11 +3331,14 @@ class SyncAssistantsClient:
         Returns:
             list[Assistant]: A list of assistants.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
-            assistant_versions = await client.assistants.get_versions(
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
+            assistant_versions = client.assistants.get_versions(
                 assistant_id="my_assistant_id"
             )
+            ```
 
         """  # noqa: E501
 
@@ -3335,12 +3369,15 @@ class SyncAssistantsClient:
         Returns:
             Assistant: Assistant Object.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
-            new_version_assistant = await client.assistants.set_latest(
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
+            new_version_assistant = client.assistants.set_latest(
                 assistant_id="my_assistant_id",
                 version=3
             )
+            ```
 
         """  # noqa: E501
 
@@ -3359,7 +3396,7 @@ class SyncThreadsClient:
 
     Example:
 
-        client = get_sync_client()
+        client = get_sync_client(url="http://localhost:2024")
         thread = client.threads.create(metadata={"user_id": "123"})
     """
 
@@ -3381,12 +3418,15 @@ class SyncThreadsClient:
         Returns:
             Thread: Thread object.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             thread = client.threads.get(
                 thread_id="my_thread_id"
             )
             print(thread)
+            ```
 
             -----------------------------------------------------
 
@@ -3427,12 +3467,16 @@ class SyncThreadsClient:
         Returns:
             Thread: The created thread.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             thread = client.threads.create(
                 metadata={"number":1},
                 thread_id="my-thread-id",
                 if_exists="raise"
+            )
+            ```
             )
         """  # noqa: E501
         payload: Dict[str, Any] = {}
@@ -3479,12 +3523,15 @@ class SyncThreadsClient:
         Returns:
             Thread: The created thread.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             thread = client.threads.update(
                 thread_id="my-thread-id",
                 metadata={"number":1},
             )
+            ```
         """  # noqa: E501
         return self.http.patch(
             f"/threads/{thread_id}", json={"metadata": metadata}, headers=headers
@@ -3505,11 +3552,13 @@ class SyncThreadsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
             client.threads.delete(
                 thread_id="my_thread_id"
             )
+            ```
 
         """  # noqa: E501
         self.http.delete(f"/threads/{thread_id}", headers=headers)
@@ -3538,15 +3587,17 @@ class SyncThreadsClient:
         Returns:
             list[Thread]: List of the threads matching the search parameters.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             threads = client.threads.search(
                 metadata={"number":1},
                 status="interrupted",
                 limit=15,
                 offset=5
             )
-
+            ```
         """  # noqa: E501
         payload: Dict[str, Any] = {
             "limit": limit,
@@ -3575,11 +3626,14 @@ class SyncThreadsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             client.threads.copy(
                 thread_id="my_thread_id"
             )
+            ```
 
         """  # noqa: E501
         return self.http.post(f"/threads/{thread_id}/copy", json=None, headers=headers)
@@ -3604,14 +3658,18 @@ class SyncThreadsClient:
         Returns:
             ThreadState: the thread of the state.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             thread_state = client.threads.get_state(
                 thread_id="my_thread_id",
                 checkpoint_id="my_checkpoint_id"
             )
             print(thread_state)
+            ```
 
+            ```shell
             ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
             {
@@ -3685,6 +3743,7 @@ class SyncThreadsClient:
                         'checkpoint_id': '1ef4a9b8-d80d-6fa7-8000-9300467fad0f'
                     }
             }
+            ```
 
         """  # noqa: E501
         if checkpoint:
