@@ -19,7 +19,7 @@ There are two versions of the LangGraph Server: `Lite` and `Enterprise`.
 
 The `Lite` version is a limited version of the LangGraph Server that you can run locally or in a self-hosted manner (up to 1 million nodes executed per year). `Lite` is only available for the [Standalone Container](../concepts/langgraph_standalone_container.md) deployment option.
 
-The `Enterprise` version is the full version of the LangGraph Server. To use the `Enterprise` version, you must acquire a license key that you will need to specify when running the Docker image. To acquire a license key, please email sales@langchain.dev. `Enterprise` is available for [Cloud SaaS](../concepts/langgraph_cloud.md), [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md), and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployment options.
+The `Enterprise` version is the full version of the LangGraph Server. To use the `Enterprise` version, you must acquire a license key that you will need to specify when running the Docker image. To acquire a license key, please email sales@langchain.dev. `Enterprise` is available for [Cloud SaaS](../concepts/langgraph_cloud.md), [Self-Hosted Data Plane](../concepts/self_hosted.md#self-hosted-data-plane-beta), and [Self-Hosted Control Plane](../concepts/self_hosted.md#self-hosted-control-plane-beta) deployment options.
 
 Feature Differences:
 

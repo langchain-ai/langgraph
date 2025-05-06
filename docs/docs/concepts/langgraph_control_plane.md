@@ -57,8 +57,8 @@ CPU and memory resources are per container.
 !!! info "For [Cloud SaaS](../concepts/langgraph_cloud.md)"
     For `Production` type deployments, resources can be manually increased on a case-by-case basis depending on use case and capacity constraints. Contact support@langchain.dev to request an increase in resources.
 
-!!! info "For [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md)"
-    Resources for [Self-Hosted Data Plane](../concepts/langgraph_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_control_plane.md) deployments can be fully customized.
+!!! info 
+    Resources for [Self-Hosted Data Plane](../concepts/self_hosted.md#self-hosted-data-plane-beta) and [Self-Hosted Control Plane](../concepts/self_hosted.md#self-hosted-control-plane-beta) deployments can be fully customized.
 
 ### Database Provisioning
 
@@ -70,8 +70,8 @@ There is no direct access to the database. All access to the database occurs thr
 
 The database is never deleted until the deployment itself is deleted. See [Automatic Deletion](#automatic-deletion) for additional details.
 
-!!! info "For [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md)"
-    A custom Postgres instance can be configured for [Self-Hosted Data Plane](../concepts/langgraph_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_control_plane.md) deployments.
+!!! info
+    A custom Postgres instance can be configured for [Self-Hosted Data Plane](../concepts/self_hosted.md#self-hosted-data-plane-beta) and [Self-Hosted Control Plane](../concepts/self_hosted.md#self-hosted-control-plane-beta) deployments.
 
 ### Asynchronous Deployment
 

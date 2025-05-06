@@ -34,7 +34,7 @@ A quick comparison:
 | **Data/compute residency** | LangChain’s cloud | Your cloud | Your cloud | Your cloud | |
 | **Required permissions** | None | See details [here](). | See details [here](). | None | |
 | **LangSmith compatibility** | Trace to LangSmith SaaS | Trace to LangSmith SaaS | Trace to Self-Hosted LangSmith | Optional tracing | |
-| **[Server version compatibility](../concepts/langgraph_server/#server-versions)** | Enterprise | Enterprise | Enterprise | Lite, Enterprise | |
+| **[Server version compatibility](../concepts/langgraph_server.md#server-versions)** | Enterprise | Enterprise | Enterprise | Lite, Enterprise | |
 | **[Pricing](https://www.langchain.com/pricing-langgraph-platform)** | Plus | Enterprise | Enterprise | Developer | Free with LangSmith |
 
 ## Cloud SaaS

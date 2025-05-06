@@ -1,6 +1,6 @@
 # How to Deploy Self-Hosted Data Plane (Beta)
 
-Before deploying, review the [conceptual guide for the Self-Hosted Data Plane](../../concepts/langgraph_self_hosted_data_plane.md) deployment option.
+Before deploying, review the [conceptual guide for the Self-Hosted Data Plane](../../concepts/self_hosted.md#self-hosted-data-plane-beta) deployment option.
 
 ## Prerequisites
 
