@@ -37,9 +37,19 @@ Create a new app from the `react-agent` template. This template is a simple agen
 
 In the root of your new LangGraph app, install the dependencies in `edit` mode so your local changes are used by the server:
 
-```shell
-pip install -e .
-```
+=== "Python Server"
+
+    ```shell
+    cd path/to/your/app
+    pip install -e .
+    ```
+
+=== "Node Server"
+
+    ```shell
+    cd path/to/your/app
+    yarn install
+    ```
 
 ## Create a `.env` file
 
@@ -62,9 +72,17 @@ OPENAI_API_KEY=sk-...
 
 ## 🚀 Launch LangGraph Server
 
-```shell
-langgraph dev
-```
+=== "Python Server"
+
+    ```shell
+    langgraph dev
+    ```
+
+=== "Node Server"
+
+    ```shell
+    npx @langchain/langgraph-cli dev
+    ```
 
 This will start up the LangGraph API server locally. If this runs successfully, you should see something like:
 
@@ -99,9 +117,13 @@ LangGraph Studio Web is a specialized UI that you can connect to LangGraph API s
     ```
 
 
-!!! warning "Safari Compatibility"
+!!! info "Safari Compatibility"
     
-    Currently, LangGraph Studio Web does not support Safari when running a server locally.
+    Use the `--tunnel` flag with your command to create a secure tunnel, as Safari has limitations when connecting to localhost servers:
+    
+    ```shell
+    langgraph dev --tunnel
+    ```
 
 ## Test the API
 
@@ -117,23 +139,26 @@ LangGraph Studio Web is a specialized UI that you can connect to LangGraph API s
 
     ```python
     from langgraph_sdk import get_client
+    import asyncio
 
     client = get_client(url="http://localhost:2024")
 
-    async for chunk in client.runs.stream(
-        None,  # Threadless run
-        "agent", # Name of assistant. Defined in langgraph.json.
-        input={
+    async def main():
+        async for chunk in client.runs.stream(
+            None,  # Threadless run
+            "agent", # Name of assistant. Defined in langgraph.json.
+            input={
             "messages": [{
                 "role": "human",
                 "content": "What is LangGraph?",
-            }],
-        },
-        stream_mode="updates",
-    ):
-        print(f"Receiving new event of type: {chunk.event}...")
-        print(chunk.data)
-        print("\n\n")
+                }],
+            },
+        ):
+            print(f"Receiving new event of type: {chunk.event}...")
+            print(chunk.data)
+            print("\n\n")
+
+    asyncio.run(main())
     ```
 
 === "Python SDK (Sync)"
@@ -160,7 +185,7 @@ LangGraph Studio Web is a specialized UI that you can connect to LangGraph API s
                 "content": "What is LangGraph?",
             }],
         },
-        stream_mode="updates",
+        stream_mode="messages-tuple",
     ):
         print(f"Receiving new event of type: {chunk.event}...")
         print(chunk.data)
@@ -192,7 +217,7 @@ LangGraph Studio Web is a specialized UI that you can connect to LangGraph API s
                     { "role": "user", "content": "What is LangGraph?"}
                 ]
             },
-            streamMode: "messages",
+            streamMode: "messages-tuple",
         }
     );
 
@@ -219,15 +244,9 @@ LangGraph Studio Web is a specialized UI that you can connect to LangGraph API s
                     }
                 ]
             },
-            \"stream_mode\": \"updates\"
+            \"stream_mode\": \"messages-tuple\"
         }" 
     ```
-
-!!! tip "Auth"
-
-    If you're connecting to a remote server, you will need to provide a LangSmith
-    API Key for authorization. Please see the API Reference for the clients
-    for more information.
 
 ## Next Steps
 
