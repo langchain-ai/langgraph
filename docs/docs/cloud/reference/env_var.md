@@ -91,6 +91,10 @@ Database Connectivity:
 
 - The custom Postgres instance must be accessible by the LangGraph Server. The user is responsible for ensuring connectivity.
 
+## `LANGGRAPH_POSTGRES_POOL_MAX_SIZE`
+
+Beginning with langgraph-api version `0.2.12`, the maximum size of the Postgres connection pool can be controlled using the `LANGGRAPH_POSTGRES_POOL_MAX_SIZE` environment variable. By setting this variable, you can determine the upper bound on the number of simultaneous connections the server will establish with the Postgres database. This is particularly useful for deployments where database resources are limited (or more available) or where you need to tune connection behavior for performance or scaling reasons. If not specified, the pool size defaults to 150 connections.
+
 ## `REDIS_URI_CUSTOM`
 
 !!! info "Only for Self-Hosted Data Plane and Self-Hosted Control Plane"
