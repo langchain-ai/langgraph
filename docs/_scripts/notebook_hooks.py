@@ -18,11 +18,11 @@ DISABLED = os.getenv("DISABLE_NOTEBOOK_CONVERT") in ("1", "true", "True")
 
 REDIRECT_MAP = {
     # lib redirects
-    "how-tos/stream-values.ipynb": "how-tos/streaming.ipynb#values",
-    "how-tos/stream-updates.ipynb": "how-tos/streaming.ipynb#updates",
-    "how-tos/streaming-content.ipynb": "how-tos/streaming.ipynb#custom",
-    "how-tos/stream-multiple.ipynb": "how-tos/streaming.ipynb#multiple",
-    "how-tos/streaming-tokens-without-langchain.ipynb": "how-tos/streaming-tokens.ipynb#example-without-langchain",
+    "how-tos/stream-values.ipynb": "how-tos/streaming.md#stream-graph-state",
+    "how-tos/stream-updates.ipynb": "how-tos/streaming.md#stream-graph-state",
+    "how-tos/streaming-content.ipynb": "how-tos/streaming.md",
+    "how-tos/stream-multiple.ipynb": "how-tos/streaming.md#stream-multiple-nodes",
+    "how-tos/streaming-tokens-without-langchain.ipynb": "how-tos/streaming.md#use-with-any-llm",
     "how-tos/streaming-from-final-node.ipynb": "how-tos/streaming-specific-nodes.ipynb",
     "how-tos/streaming-events-from-within-tools-without-langchain.ipynb": "how-tos/streaming-events-from-within-tools.ipynb#example-without-langchain",
     # graph-api
@@ -43,6 +43,9 @@ REDIRECT_MAP = {
     "how-tos/memory/manage-conversation-history.ipynb": "how-tos/memory.ipynb",
     "how-tos/memory/delete-messages.ipynb": "how-tos/memory.ipynb#delete-messages",
     "how-tos/memory/add-summary-conversation-history.ipynb": "how-tos/memory.ipynb#summarize-messages",
+    # subgraph how-tos
+    "how-tos/subgraph-transform-state.ipynb": "how-tos/subgraph.ipynb#different-state-schemas",
+    "how-tos/subgraphs-manage-state.ipynb": "how-tos/subgraph.ipynb#add-persistence",
     # persistence how-tos
     "how-tos/persistence_postgres.ipynb": "how-tos/persistence.ipynb#use-in-production",
     "how-tos/persistence_mongodb.ipynb": "how-tos/persistence.ipynb#use-in-production",
@@ -61,6 +64,8 @@ REDIRECT_MAP = {
     "how-tos/create-react-agent-system-prompt.ipynb": "agents/context.md#prompts",
     "how-tos/create-react-agent-hitl.ipynb": "agents/human-in-the-loop.md",
     "how-tos/create-react-agent-structured-output.ipynb": "agents/agents.md#structured-output",
+    # breakpoints
+    "how-tos/human_in_the_loop/dynamic_breakpoints.ipynb": "how-tos/human_in_the_loop/breakpoints.ipynb",
     # misc
     "prebuilt.md": "agents/prebuilt.md",
     "reference/prebuilt.md": "reference/agents.md",
@@ -68,7 +73,7 @@ REDIRECT_MAP = {
     "concepts/index.md": "index.md",
     "concepts/v0-human-in-the-loop.md": "concepts/human-in-the-loop.md",
     "how-tos/index.md": "index.md",
-    "tutorials/introduction.ipynb": "concepts/why-langgraph.md"
+    "tutorials/introduction.ipynb": "concepts/why-langgraph.md",
 }
 
 
