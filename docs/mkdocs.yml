@@ -201,19 +201,28 @@ nav:
         - agents/ui.md
     - LangGraph Platform:
       - Overview: concepts/langgraph_platform.md
-      - concepts/platform_architecture.md
-      - concepts/scalability_and_resilience.md
-      - concepts/bring_your_own_cloud.md
-      - concepts/plans.md
-      - concepts/template_applications.md
+      - General concepts:
+        - concepts/platform_architecture.md
+        - concepts/scalability_and_resilience.md
+        - concepts/deployment_options.md
+        - concepts/plans.md
       - Components:
-        - concepts/langgraph_control_plane.md
-        - concepts/langgraph_data_plane.md
-        - concepts/langgraph_server.md
-        - concepts/langgraph_studio.md
-        - concepts/langgraph_cli.md
-        - concepts/sdk.md
-        - how-tos/use-remote-graph.md
+          - concepts/langgraph_control_plane.md
+          - concepts/langgraph_data_plane.md
+          - concepts/langgraph_server.md
+          - concepts/langgraph_studio.md
+          - concepts/langgraph_cli.md
+          - concepts/sdk.md
+      - how-tos/use-remote-graph.md
+      - LangGraph Studio:
+        - cloud/how-tos/test_deployment.md
+        - cloud/how-tos/test_local_deployment.md
+        - cloud/how-tos/invoke_studio.md
+        - cloud/how-tos/threads_studio.md
+        - cloud/how-tos/datasets_studio.md
+        - cloud/how-tos/iterate_graph_studio.md
+        - cloud/how-tos/clone_traces_studio.md
+        - how-tos/local-studio.md
       - LangGraph server:
         - concepts/application_structure.md
         - concepts/assistants.md
@@ -290,15 +299,7 @@ nav:
         - how-tos/http/custom_lifespan.md
         - how-tos/http/custom_middleware.md
         - how-tos/http/custom_routes.md
-      - LangGraph Studio:
-        - cloud/how-tos/test_deployment.md
-        - cloud/how-tos/test_local_deployment.md
-        - cloud/how-tos/invoke_studio.md
-        - cloud/how-tos/threads_studio.md
-        - cloud/how-tos/datasets_studio.md
-        - cloud/how-tos/iterate_graph_studio.md
-        - cloud/how-tos/clone_traces_studio.md
-        - how-tos/local-studio.md
+      
   
   - Reference:
     - reference/index.md
@@ -330,9 +331,9 @@ nav:
     - tutorials/langgraph-platform/local-server.md
     - Cloud deploy: cloud/quick_start.md
     - tutorials/workflows/index.md
-    - tutorials/rag/langgraph_agentic_rag.ipynb
-    - tutorials/multi_agent/agent_supervisor.ipynb
-    - tutorials/customer-support/customer-support.ipynb
+    - Agentic RAG: tutorials/rag/langgraph_agentic_rag.ipynb
+    - Agent Supervisor: tutorials/multi_agent/agent_supervisor.ipynb
+    - Customer Support: tutorials/customer-support/customer-support.ipynb
     - SQL agent: tutorials/sql-agent.ipynb
 
   - Resources:
