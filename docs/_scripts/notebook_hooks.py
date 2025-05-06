@@ -36,6 +36,7 @@ REDIRECT_MAP = {
     "how-tos/state-model.ipynb": "how-tos/graph-api#use-pydantic-models-for-graph-state",
     "how-tos/map-reduce.ipynb": "how-tos/graph-api/#map-reduce-and-the-send-api",
     "how-tos/command.ipynb": "how-tos/graph-api/#combine-control-flow-and-state-updates-with-command",
+    "how-tos/configuration.ipynb": "how-tos/graph-api/#add-runtime-configuration",
     # memory how-tos
     "how-tos/memory/manage-conversation-history.ipynb": "how-tos/memory.ipynb",
     "how-tos/memory/delete-messages.ipynb": "how-tos/memory.ipynb#delete-messages",

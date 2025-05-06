@@ -426,7 +426,7 @@ config = {"configurable": {"llm": "anthropic"}}
 graph.invoke(inputs, config=config)
 ```
 
-You can then access and use this configuration inside a node:
+You can then access and use this configuration inside a node or conditional edge:
 
 ```python
 def node_a(state, config):
