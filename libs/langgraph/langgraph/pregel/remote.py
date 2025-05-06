@@ -124,11 +124,14 @@ class RemoteGraph(PregelProtocol):
             sync_client: A `SyncLangGraphClient` instance to use instead of creating a default client.
             config: An optional `RunnableConfig` instance with additional configuration.
             name: Human-readable name to attach to the RemoteGraph instance.
-                Will be accessible via `RemoteGraph.name`. This is useful for adding `RemoteGraph`
-                as a subgraph via `graph.add_node(remote_graph)`.
+                This is useful for adding `RemoteGraph` as a subgraph via `graph.add_node(remote_graph)`.
+                If not provided, defaults to the assistant ID.
         """
         self.assistant_id = assistant_id
-        self.name = name
+        if name is None:
+            self.name = assistant_id
+        else:
+            self.name = name
         self.config = config
 
         if client is None and url is not None:
