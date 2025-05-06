@@ -7537,6 +7537,7 @@ async def test_multiple_interrupts_functional(checkpointer_name: str) -> None:
         assert counter == 3
 
 
+@NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_multiple_interrupts_functional_cache(
     checkpointer_name: str, file_cache: BaseCache
