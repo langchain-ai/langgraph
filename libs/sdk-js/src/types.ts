@@ -141,6 +141,11 @@ interface RunsInvokePayload {
    * Useful when obtaining headers from the response.
    */
   onResponse?: (response: Response) => void;
+
+  /**
+   * Callback when a run is created.
+   */
+  onRunCreated?: (params: { run_id: string; thread_id?: string }) => void;
 }
 
 export interface RunsStreamPayload<

@@ -68,6 +68,24 @@ export function getApiKey(apiKey?: string): string | undefined {
   return undefined;
 }
 
+const REGEX_RUN_METADATA =
+  /(\/threads\/(?<thread_id>.+))?\/runs\/(?<run_id>.+)/;
+
+function getRunMetadataFromResponse(
+  response: Response,
+): { run_id: string; thread_id?: string } | undefined {
+  const contentLocation = response.headers.get("Content-Location");
+  if (!contentLocation) return undefined;
+
+  const match = REGEX_RUN_METADATA.exec(contentLocation);
+
+  if (!match?.groups?.run_id) return undefined;
+  return {
+    run_id: match.groups.run_id,
+    thread_id: match.groups.thread_id || undefined,
+  };
+}
+
 export interface ClientConfig {
   apiUrl?: string;
   apiKey?: string;
@@ -903,8 +921,9 @@ export class RunsClient<
       }),
     );
 
-    const contentLocation = response.headers.get("Content-Location");
-    if (contentLocation) payload?.onResponse?.(response);
+    payload?.onResponse?.(response);
+    const runMetadata = getRunMetadataFromResponse(response);
+    if (runMetadata) payload?.onRunCreated?.(runMetadata);
 
     const stream: ReadableStream<{ event: any; data: any }> = (
       response.body || new ReadableStream({ start: (ctrl) => ctrl.close() })
@@ -954,8 +973,9 @@ export class RunsClient<
       withResponse: true,
     });
 
-    const contentLocation = response.headers.get("Content-Location");
-    if (contentLocation) payload?.onResponse?.(response);
+    payload?.onResponse?.(response);
+    const runMetadata = getRunMetadataFromResponse(response);
+    if (runMetadata) payload?.onRunCreated?.(runMetadata);
 
     return run;
   }
@@ -1036,8 +1056,9 @@ export class RunsClient<
       withResponse: true,
     });
 
-    const contentLocation = response.headers.get("Content-Location");
-    if (contentLocation) payload?.onResponse?.(response);
+    payload?.onResponse?.(response);
+    const runMetadata = getRunMetadataFromResponse(response);
+    if (runMetadata) payload?.onRunCreated?.(runMetadata);
 
     const raiseError =
       payload?.raiseError !== undefined ? payload.raiseError : true;
