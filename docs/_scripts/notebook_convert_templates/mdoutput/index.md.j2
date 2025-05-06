@@ -38,9 +38,13 @@
 {%- endblock data_html -%}
 
 {%- block data_jpg scoped -%}
-![](data:image/jpg;base64,{{ output.data['image/jpeg'] }})
+<p>
+<img src="data:image/jpg;base64,{{ output.data['image/jpeg'] }}" />
+</p>
 {%- endblock data_jpg -%}
 
 {%- block data_png scoped -%}
-![](data:image/png;base64,{{ output.data['image/png'] }})
+<p>
+<img src="data:image/png;base64,{{ output.data['image/png'] }}" />
+</p>
 {%- endblock data_png -%}
