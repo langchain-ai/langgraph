@@ -66,8 +66,7 @@ REDIRECT_MAP = {
     "tutorials/introduction.ipynb": "concepts/why-langgraph.md",
     # deployment redirects
     "how-tos/deploy-self-hosted.md": "cloud/deployment/self_hosted_data_plane.md",
-    "concepts/langgraph_self_hosted_data_plane.md": "concepts/self_hosted.md#self-hosted-data-plane-beta",
-    "concepts/langgraph_self_hosted_control_plane.md": "concepts/self_hosted.md#self-hosted-control-plane-beta"
+    "concepts/self_hosted.md": "concepts/langgraph_self_hosted_data_plane.md"
 }
 
 

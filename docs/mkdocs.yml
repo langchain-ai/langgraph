@@ -242,9 +242,11 @@ nav:
         - Cloud SaaS:
           - Overview: concepts/langgraph_cloud.md
           - Deploy Cloud SaaS: cloud/deployment/cloud.md
-        - Self-Hosted:
+        - Self-Hosted Data Plane:
           - Overview: concepts/self_hosted.md
           - Deploy Self-Hosted Data Plane: cloud/deployment/self_hosted_data_plane.md
+        - Self-Hosted Control Plane:
+          - Overview: concepts/langgraph_self_hosted_control_plane.md
           - Deploy Self-Hosted Control Plane: cloud/deployment/self_hosted_control_plane.md
         - Standalone Container:
           - Overview: concepts/langgraph_standalone_container.md

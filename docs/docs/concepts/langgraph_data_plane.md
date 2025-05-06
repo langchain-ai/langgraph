@@ -69,7 +69,7 @@ All traffic from deployments created after January 6th 2025 will come through a 
 ### Custom Postgres
 
 !!! info 
-    Custom Postgres instances are only available for [Self-Hosted Data Plane](../concepts/self_hosted.md#self-hosted-data-plane-beta) and [Self-Hosted Control Plane](../concepts/self_hosted.md#self-hosted-control-plane-beta) deployments.
+    Custom Postgres instances are only available for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments.
 
 A custom Postgres instance can be used instead of the [one automatically created by the control plane](./langgraph_control_plane.md#database-provisioning). Specify the [`POSTGRES_URI_CUSTOM`](../cloud/reference/env_var.md#postgres_uri_custom) environment variable to use a custom Postgres instance.
 
@@ -78,7 +78,7 @@ Multiple deployments can share the same Postgres instance. For example, for `Dep
 ### Custom Redis
 
 !!! info
-    Custom Redis instances are only available for [Self-Hosted Data Plane](../concepts/self_hosted.md#self-hosted-control-plane-beta) and [Self-Hosted Control Plane](../concepts/self_hosted.md#self-hosted-control-plane-beta) deployments.
+    Custom Redis instances are only available for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_control_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments.
 
 A custom Redis instance can be used instead of the one automatically created by the control plane. Specify the [REDIS_URI_CUSTOM](../cloud/reference/env_var.md#redis_uri_custom) environment variable to use a custom Redis instance.
 

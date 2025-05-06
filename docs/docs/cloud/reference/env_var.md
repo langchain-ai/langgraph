@@ -47,7 +47,7 @@ Set this environment variable to have a deployment send traces to a self-hosted 
 ## `LANGSMITH_TRACING`
 
 !!! info "Only for Self-Hosted Data Plane, Self-Hosted Control Plane, and Standalone Container"
-    Disabling LangSmith tracing is only available for [Self-Hosted Data Plane](../../concepts/self_hosted.md#self-hosted-data-plane-beta), [Self-Hosted Control Plane](../../concepts/self_hosted.md#self-hosted-control-plane-beta), and [Standalone Container](../../concepts/langgraph_standalone_container.md) deployments.
+    Disabling LangSmith tracing is only available for [Self-Hosted Data Plane](../../concepts/langgraph_self_hosted_data_plane.md), [Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md), and [Standalone Container](../../concepts/langgraph_standalone_container.md) deployments.
 
 Set `LANGSMITH_TRACING` to `false` to disable tracing to LangSmith.
 
@@ -70,7 +70,7 @@ Number of jobs per worker for the LangGraph Server task queue. Defaults to `10`.
 ## `POSTGRES_URI_CUSTOM`
 
 !!! info "Only for Self-Hosted Data Plane and Self-Hosted Control Plane"
-    Custom Postgres instances are only available for [Self-Hosted Data Plane](../../concepts/self_hosted.md#self-hosted-data-plane-beta) and [Self-Hosted Control Plane](../../concepts/self_hosted.md#self-hosted-control-plane-beta) deployments.
+    Custom Postgres instances are only available for [Self-Hosted Data Plane](../../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md) deployments.
 
 Specify `POSTGRES_URI_CUSTOM` to use a custom Postgres instance. The value of `POSTGRES_URI_CUSTOM` must be a valid [Postgres connection URI](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNSTRING-URIS).
 
@@ -94,7 +94,7 @@ Database Connectivity:
 ## `REDIS_URI_CUSTOM`
 
 !!! info "Only for Self-Hosted Data Plane and Self-Hosted Control Plane"
-    Custom Redis instances are only available for [Self-Hosted Data Plane](../../concepts/self_hosted.md#self-hosted-data-plane-beta) and [Self-Hosted Control Plane](../../concepts/self_hosted.md#self-hosted-control-plane-beta) deployments.
+    Custom Redis instances are only available for [Self-Hosted Data Plane](../../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md) deployments.
 
 Specify `REDIS_URI_CUSTOM` to use a custom Redis instance. The value of `REDIS_URI_CUSTOM` must be a valid [Redis connection URI](https://redis-py.readthedocs.io/en/stable/connections.html#redis.Redis.from_url).
 
