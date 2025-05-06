@@ -201,78 +201,30 @@ nav:
         - agents/ui.md
     - LangGraph Platform:
       - Overview: concepts/langgraph_platform.md
-      - LangGraph Control Plane:
-        - Overview: concepts/langgraph_control_plane.md
-      - LangGraph Data Plane:
-        - Overview: concepts/langgraph_data_plane.md
-      - LangGraph Server:
-        - Overview: concepts/langgraph_server.md
-        - how-tos/use-remote-graph.md # SHOULD THIS GO SOMEWHERE ELSE?
-        - Data management:
-          - how-tos/ttl/configure_ttl.md
-        - Authentication & access control:
-          - Overview: concepts/auth.md
-          - how-tos/auth/custom_auth.md
-          - how-tos/auth/openapi_security.md
-        - MCP: # NEED TO ADD FROM MAIN
-        - Assistants:
-          - Overview: concepts/assistants.md
-          - cloud/how-tos/configuration_cloud.md
-          - cloud/how-tos/assistant_versioning.md
-        - Threads:
-          - cloud/how-tos/copy_threads.md
-          - cloud/how-tos/check_thread_status.md
-        - Runs:
-          - cloud/how-tos/background_run.md
-          - cloud/how-tos/same-thread.md
-          - cloud/how-tos/cron_jobs.md
-          - cloud/how-tos/stateless_runs.md
-          - cloud/how-tos/configurable_headers.md
-        - Streaming:
-          - cloud/how-tos/stream_values.md
-          - cloud/how-tos/stream_updates.md
-          - cloud/how-tos/stream_messages.md
-          - cloud/how-tos/stream_events.md
-          - cloud/how-tos/stream_debug.md
-          - cloud/how-tos/stream_multiple.md
-          - cloud/how-tos/use_stream_react.md
-          - cloud/how-tos/generative_ui_react.md
-        - Human-in-the-loop:
-          - cloud/how-tos/human_in_the_loop_breakpoint.md
-          - cloud/how-tos/human_in_the_loop_user_input.md
-          - cloud/how-tos/human_in_the_loop_edit_state.md
-          - cloud/how-tos/human_in_the_loop_time_travel.md
-          - cloud/how-tos/human_in_the_loop_review_tool_calls.md
-        - Double-texting:
-          - Overview: concepts/double_texting.md
-          - cloud/how-tos/interrupt_concurrent.md
-          - cloud/how-tos/rollback_concurrent.md
-          - cloud/how-tos/reject_concurrent.md
-          - cloud/how-tos/enqueue_concurrent.md
-        - Webhooks:
-          - cloud/how-tos/webhooks.md
-        - Cron Jobs:
-          - cloud/how-tos/cron_jobs.md
-        - Modifying the API:
-          - how-tos/http/custom_lifespan.md
-          - how-tos/http/custom_middleware.md
-          - how-tos/http/custom_routes.md
-      - LangGraph CLI:
-        - Overview: concepts/langgraph_cli.md
-      - LangGraph SDK:
-        - Overview: concepts/sdk.md
-      - LangGraph Studio:
-        - Overview: concepts/langgraph_studio.md
-        - cloud/how-tos/test_deployment.md
-        - cloud/how-tos/test_local_deployment.md
-        - cloud/how-tos/invoke_studio.md
-        - cloud/how-tos/threads_studio.md
-        - cloud/how-tos/datasets_studio.md
-        - cloud/how-tos/iterate_graph_studio.md
-        - cloud/how-tos/clone_traces_studio.md
-        - how-tos/local-studio.md
+      - concepts/platform_architecture.md
+      - Scalability & resilience: concepts/scalability_and_resilience.md # SHOULD THIS BE COMBINED WITH PLATFORM ARCHITECTURE ABOVE?
+      - Components: # IS THIS UNNECESSARY NESTING?
+          - concepts/langgraph_control_plane.md
+          - concepts/langgraph_data_plane.md
+          - LangGraph Server:
+            - Overview: concepts/langgraph_server.md
+            - concepts/application_structure.md
+            - concepts/assistants.md
+            - concepts/double_texting.md
+            - concepts/auth.md
+          - LangGraph Studio:
+            - Overview: concepts/langgraph_studio.md
+            - cloud/how-tos/test_deployment.md
+            - cloud/how-tos/test_local_deployment.md
+            - cloud/how-tos/invoke_studio.md
+            - cloud/how-tos/threads_studio.md
+            - cloud/how-tos/datasets_studio.md
+            - cloud/how-tos/iterate_graph_studio.md
+            - cloud/how-tos/clone_traces_studio.md
+            - how-tos/local-studio.md
+          - concepts/langgraph_cli.md
+          - concepts/sdk.md
       - Application structure:
-        - Overview: concepts/application_structure.md
         - cloud/deployment/setup.md
         - cloud/deployment/setup_pyproject.md
         - cloud/deployment/setup_javascript.md
@@ -281,10 +233,8 @@ nav:
         - cloud/deployment/test_locally.md # REMOVE?
         - cloud/deployment/graph_rebuild.md
         - how-tos/autogen-langgraph-platform.ipynb
-      - Deployment options:
+      - Deployment:
         - Overview: concepts/deployment_options.md
-        - concepts/platform_architecture.md
-        - Scalability & resilience: concepts/scalability_and_resilience.md
         - Cloud SaaS:
           - Overview: concepts/langgraph_cloud.md
           - Deploy Cloud SaaS: cloud/deployment/cloud.md
@@ -298,8 +248,53 @@ nav:
           - Overview: concepts/langgraph_standalone_container.md
           - Deploy Standalone Container: cloud/deployment/standalone_container.md
           # ADD SH LITE?
-        - Plans and pricing: concepts/plans.md # DELETE AND ROUTE TO MARKETING SITE?
-      
+        - how-tos/use-remote-graph.md # SHOULD THIS GO SOMEWHERE ELSE?
+        - concepts/plans.md # DELETE AND ROUTE TO MARKETING SITE?
+      - Data management:
+        - how-tos/ttl/configure_ttl.md
+      - Authentication & access control:
+        - how-tos/auth/custom_auth.md
+        - how-tos/auth/openapi_security.md
+      - Assistants:
+        - cloud/how-tos/configuration_cloud.md
+        - cloud/how-tos/assistant_versioning.md
+      - Threads:
+        - cloud/how-tos/copy_threads.md
+        - cloud/how-tos/check_thread_status.md
+      - Runs:
+        - cloud/how-tos/background_run.md
+        - cloud/how-tos/same-thread.md
+        - cloud/how-tos/cron_jobs.md
+        - cloud/how-tos/stateless_runs.md
+        - cloud/how-tos/configurable_headers.md
+      - Streaming:
+        - cloud/how-tos/stream_values.md
+        - cloud/how-tos/stream_updates.md
+        - cloud/how-tos/stream_messages.md
+        - cloud/how-tos/stream_events.md
+        - cloud/how-tos/stream_debug.md
+        - cloud/how-tos/stream_multiple.md
+        - cloud/how-tos/use_stream_react.md
+        - cloud/how-tos/generative_ui_react.md
+      - Human-in-the-loop:
+        - cloud/how-tos/human_in_the_loop_breakpoint.md
+        - cloud/how-tos/human_in_the_loop_user_input.md
+        - cloud/how-tos/human_in_the_loop_edit_state.md
+        - cloud/how-tos/human_in_the_loop_time_travel.md
+        - cloud/how-tos/human_in_the_loop_review_tool_calls.md
+      - Double-texting:
+        - cloud/how-tos/interrupt_concurrent.md
+        - cloud/how-tos/rollback_concurrent.md
+        - cloud/how-tos/reject_concurrent.md
+        - cloud/how-tos/enqueue_concurrent.md
+      - Webhooks:
+        - cloud/how-tos/webhooks.md
+      - Cron Jobs:
+        - cloud/how-tos/cron_jobs.md
+      - Modifying the API:
+        - how-tos/http/custom_lifespan.md
+        - how-tos/http/custom_middleware.md
+        - how-tos/http/custom_routes.md
       
   
   - Reference:
