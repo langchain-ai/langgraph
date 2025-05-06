@@ -1102,7 +1102,7 @@ def _proc_input(
     return val
 
 
-def _uuid5_str(namespace: bytes, *parts: str | bytes) -> str:
+def _uuid5_str(namespace: bytes, *parts: Union[str, bytes]) -> str:
     """Generate a UUID from the SHA-1 hash of a namespace and str parts."""
 
     sha = sha1(namespace, usedforsecurity=False)
@@ -1111,7 +1111,7 @@ def _uuid5_str(namespace: bytes, *parts: str | bytes) -> str:
     return f"{hex[:8]}-{hex[8:12]}-{hex[12:16]}-{hex[16:20]}-{hex[20:32]}"
 
 
-def _xxhash_str(namespace: bytes, *parts: str | bytes) -> str:
+def _xxhash_str(namespace: bytes, *parts: Union[str, bytes]) -> str:
     """Generate a UUID from the XXH3 hash of a namespace and str parts."""
     hex = xxh3_128_hexdigest(
         namespace + b"".join(p.encode() if isinstance(p, str) else p for p in parts)
