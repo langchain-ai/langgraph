@@ -1095,13 +1095,12 @@ export class RunsClient<
 
   /**
    * Stream output from a run in real-time, until the run is done.
-   * Output is not buffered, so any output produced before this call will
-   * not be received here.
    *
-   * @param threadId The ID of the thread.
+   * @param threadId The ID of the thread. Can be set to `null` | `undefined` for stateless runs.
    * @param runId The ID of the run.
    * @param options Additional options for controlling the stream behavior:
    *   - signal: An AbortSignal that can be used to cancel the stream request
+   *   - lastEventId: The ID of the last event received. Can be used to reconnect to a stream without losing events.
    *   - cancelOnDisconnect: When true, automatically cancels the run if the client disconnects from the stream
    *   - streamMode: Controls what types of events to receive from the stream (can be a single mode or array of modes)
    *        Must be a subset of the stream modes passed when creating the run. Background runs default to having the union of all
@@ -1109,16 +1108,17 @@ export class RunsClient<
    * @returns An async generator yielding stream parts.
    */
   async *joinStream(
-    threadId: string,
+    threadId: string | undefined | null,
     runId: string,
     options?:
       | {
           signal?: AbortSignal;
           cancelOnDisconnect?: boolean;
+          lastEventId?: string;
           streamMode?: StreamMode | StreamMode[];
         }
       | AbortSignal,
-  ): AsyncGenerator<{ event: StreamEvent; data: any }> {
+  ): AsyncGenerator<{ id?: string; event: StreamEvent; data: any }> {
     const opts =
       typeof options === "object" &&
       options != null &&
@@ -1127,15 +1127,23 @@ export class RunsClient<
         : options;
 
     const response = await this.asyncCaller.fetch(
-      ...this.prepareFetchOptions(`/threads/${threadId}/runs/${runId}/stream`, {
-        method: "GET",
-        timeoutMs: null,
-        signal: opts?.signal,
-        params: {
-          cancel_on_disconnect: opts?.cancelOnDisconnect ? "1" : "0",
-          stream_mode: opts?.streamMode,
+      ...this.prepareFetchOptions(
+        threadId != null
+          ? `/threads/${threadId}/runs/${runId}/stream`
+          : `/runs/${runId}/stream`,
+        {
+          method: "GET",
+          timeoutMs: null,
+          signal: opts?.signal,
+          headers: opts?.lastEventId
+            ? { "Last-Event-ID": opts.lastEventId }
+            : undefined,
+          params: {
+            cancel_on_disconnect: opts?.cancelOnDisconnect ? "1" : "0",
+            stream_mode: opts?.streamMode,
+          },
         },
-      }),
+      ),
     );
 
     const stream: ReadableStream<{ event: string; data: any }> = (
