@@ -3,7 +3,7 @@ search:
   boost: 2
 ---
 
-## Breakpoints
+# Breakpoints
 
 Breakpoints pause graph execution at defined points and let you step through each stage. They use LangGraph's [**persistence layer**](./persistence.md), which saves the graph state after each step.
 
