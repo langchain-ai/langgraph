@@ -117,9 +117,13 @@ LangGraph Studio Web is a specialized UI that you can connect to LangGraph API s
     ```
 
 
-!!! warning "Safari Compatibility"
+!!! info "Safari Compatibility"
     
-    Currently, LangGraph Studio Web does not support Safari when running a server locally.
+    Use the `--tunnel` flag with your command to create a secure tunnel, as Safari has limitations when connecting to localhost servers:
+    
+    ```shell
+    langgraph dev --tunnel
+    ```
 
 ## Test the API
 
@@ -181,7 +185,7 @@ LangGraph Studio Web is a specialized UI that you can connect to LangGraph API s
                 "content": "What is LangGraph?",
             }],
         },
-        stream_mode="updates",
+        stream_mode="messages-tuple",
     ):
         print(f"Receiving new event of type: {chunk.event}...")
         print(chunk.data)
@@ -213,7 +217,7 @@ LangGraph Studio Web is a specialized UI that you can connect to LangGraph API s
                     { "role": "user", "content": "What is LangGraph?"}
                 ]
             },
-            streamMode: "messages",
+            streamMode: "messages-tuple",
         }
     );
 
@@ -240,15 +244,9 @@ LangGraph Studio Web is a specialized UI that you can connect to LangGraph API s
                     }
                 ]
             },
-            \"stream_mode\": \"updates\"
+            \"stream_mode\": \"messages-tuple\"
         }" 
     ```
-
-!!! tip "Auth"
-
-    If you're connecting to a remote server, you will need to provide a LangSmith
-    API Key for authorization. Please see the API Reference for the clients
-    for more information.
 
 ## Next Steps
 
