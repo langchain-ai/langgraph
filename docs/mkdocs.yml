@@ -219,13 +219,13 @@ nav:
           - cloud/how-tos/stateless_runs.md
           - cloud/how-tos/configurable_headers.md
         - Streaming:
+          - Overview: cloud/concepts/streaming.md
           - cloud/how-tos/stream_values.md
           - cloud/how-tos/stream_updates.md
           - cloud/how-tos/stream_messages.md
           - cloud/how-tos/stream_events.md
           - cloud/how-tos/stream_debug.md
           - cloud/how-tos/stream_multiple.md
-          
         - Human-in-the-loop:
           - cloud/how-tos/human_in_the_loop_breakpoint.md
           - cloud/how-tos/human_in_the_loop_user_input.md
