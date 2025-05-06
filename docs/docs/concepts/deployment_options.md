@@ -5,17 +5,9 @@ search:
 
 # Deployment Options
 
-!!! info "Prerequisites"
-
-    - [LangGraph Platform](./langgraph_platform.md)
-    - [LangGraph Server](./langgraph_server.md)
-    - [LangGraph Platform Plans](./plans.md)
-
-## Overview
-
 There are 4 main options for deploying with the LangGraph Platform:
 
-1. [Cloud SaaS]("#cloud-saas")
+1. [Cloud SaaS](#cloud-saas)
 
 1. [Self-Hosted Data Plane<sup>(Beta)</sup>](#self-hosted-data-plane)
 
@@ -29,12 +21,12 @@ A quick comparison:
 
 |                      | **Cloud SaaS** | **Self-Hosted Data Plane** | **Self-Hosted Control Plane** | **Standalone Container** | **Self-Hosted Lite** |
 |----------------------|----------------|----------------------------|-------------------------------|--------------------------| ---------------------|
-| **[Control Plane UI/API](../concepts/langgraph_control_plane.md)** | Yes | Yes | Yes | No | |
-| **CI/CD** | Managed internally by platform | Managed externally by you | Managed externally by you | Managed externally by you | |
-| **Data/compute residency** | LangChain’s cloud | Your cloud | Your cloud | Your cloud | |
-| **Required permissions** | None | See details [here](). | See details [here](). | None | |
-| **LangSmith compatibility** | Trace to LangSmith SaaS | Trace to LangSmith SaaS | Trace to Self-Hosted LangSmith | Optional tracing | |
-| **[Server version compatibility](../concepts/langgraph_server.md#server-versions)** | Enterprise | Enterprise | Enterprise | Lite, Enterprise | |
+| **[Control Plane UI/API](../concepts/langgraph_control_plane.md)** | Yes | Yes | Yes | No | No |
+| **CI/CD** | Managed internally by platform | Managed externally by you | Managed externally by you | Managed externally by you | Managed externally by you |
+| **Data/compute residency** | LangChain’s cloud | Your cloud | Your cloud | Your cloud | Your cloud |
+| **Required permissions** | None | See details [here](). | See details [here](). | None | None |
+| **LangSmith compatibility** | Trace to LangSmith SaaS | Trace to LangSmith SaaS | Trace to Self-Hosted LangSmith | Optional tracing | Optional tracing |
+| **[Server version compatibility](../concepts/langgraph_server.md#server-versions)** | Enterprise | Enterprise | Enterprise | Lite, Enterprise | Lite |
 | **[Pricing](https://www.langchain.com/pricing-langgraph-platform)** | Plus | Enterprise | Enterprise | Developer | Free with LangSmith |
 
 ## Cloud SaaS
@@ -86,6 +78,8 @@ For more information, please see:
 * [How to deploy a Standalone Container](../cloud/deployment/standalone_container.md)
 
 ## Self-Hosted Lite
+
+TBD
 
 ## Related
 
