@@ -39,7 +39,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
 from langgraph.managed import IsLastStep, RemainingSteps
-from langgraph.prebuilt.interrupt import InterruptPolicy
+from langgraph.prebuilt.interrupt import HumanInterruptConfig
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer, Send
@@ -257,7 +257,7 @@ def create_react_agent(
     debug: bool = False,
     version: Literal["v1", "v2"] = "v2",
     name: Optional[str] = None,
-    interrupt_policy: Optional[InterruptPolicy] = None,
+    interrupt_policy: Optional[dict[str, HumanInterruptConfig]] = None,
 ) -> CompiledGraph:
     """Creates an agent graph that calls tools in a loop until a stopping condition is met.
 

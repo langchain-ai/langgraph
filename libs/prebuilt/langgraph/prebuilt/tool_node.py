@@ -40,7 +40,7 @@ from langgraph.prebuilt.interrupt import (
     HumanInterrupt,
     HumanInterruptConfig,
     HumanResponse,
-    InterruptPolicy,
+    _allowed_resume_types,
 )
 from langgraph.store.base import BaseStore
 from langgraph.types import Command, Send, interrupt
@@ -214,7 +214,7 @@ class ToolNode(RunnableCallable):
             bool, str, Callable[..., str], tuple[type[Exception], ...]
         ] = True,
         messages_key: str = "messages",
-        interrupt_policy: Optional[InterruptPolicy] = None,
+        interrupt_policy: Optional[dict[str, HumanInterruptConfig]] = None,
     ) -> None:
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self.tools_by_name: dict[str, BaseTool] = {}
@@ -330,6 +330,22 @@ class ToolNode(RunnableCallable):
         )
 
         response = interrupt([request])
+
+        # resume provided by agent inbox as a list
+        if isinstance(response, list):
+            response = response[0]
+
+        try:
+            response_type = response.get("type")
+        except AttributeError:
+            response_type = "invalid"
+
+        if response_type not in _allowed_resume_types(hitl_config):
+            raise ValueError(
+                f"Unexpected human response: {response}."
+                f"Expected one with `'type'` in {_allowed_resume_types(hitl_config)}."
+            )
+
         return response
 
     def _run_one(
@@ -344,58 +360,33 @@ class ToolNode(RunnableCallable):
         tool_name = call["name"]
         tool_input = {**call, **{"type": "tool_call"}}
 
-        if interrupt_policy := self.interrupt_policy:
-            interrupt_config = interrupt_policy.lookup(tool_name)
-            if any(interrupt_config.values()):
-                human_response = self._interrupt(
-                    tool_input, tool_name, interrupt_config
-                )
+        if (
+            (interrupt_policy := self.interrupt_policy) is not None
+            and (interrupt_config := interrupt_policy.get(tool_name)) is not None
+            and any(interrupt_config.values())
+        ):
+            human_response = self._interrupt(tool_input, tool_name, interrupt_config)
+            response_type = human_response.get("type")
 
-                if (
-                    interrupt_config["allow_accept"]
-                    and human_response["type"] == "accept"
-                ):
-                    # pass, this is good
-                    ...
-                elif (
-                    interrupt_config["allow_edit"] and human_response["type"] == "edit"
-                ):
-                    tool_input = human_response["args"]
-                elif (
-                    interrupt_config["allow_respond"]
-                    and human_response["type"] == "response"
-                ):
-                    return ToolMessage(
-                        content=human_response["args"],
-                        name=tool_name,
-                        tool_call_id=call["id"],
-                        status="error",
-                    )
-                elif (
-                    interrupt_config["allow_ignore"]
-                    and human_response["type"] == "ignore"
-                ):
-                    return ToolMessage(
-                        content=f"Tool call ignored: {tool_name}:{call['id']}",
-                        name=tool_name,
-                        tool_call_id=call["id"],
-                        status="error",
-                    )
-                else:
-                    allowed_types = [
-                        type_name
-                        for type_name, is_allowed in {
-                            "accept": interrupt_config["allow_accept"],
-                            "edit": interrupt_config["allow_edit"],
-                            "response": interrupt_config["allow_respond"],
-                            "ignore": interrupt_config["allow_ignore"],
-                        }.items()
-                        if is_allowed
-                    ]
-                    raise ValueError(
-                        f"Unexpected human response: {human_response}. "
-                        f"Expected one with `'type'` in {allowed_types}."
-                    )
+            if response_type == "accept":
+                # no-op, we just continue
+                ...
+            elif response_type == "edit":
+                tool_input = cast(ActionRequest, human_response)["args"]["args"]
+            elif response_type == "response":
+                return ToolMessage(
+                    content=cast(str, human_response["args"]),
+                    name=tool_name,
+                    tool_call_id=call["id"],
+                    status="error",
+                )
+            elif human_response["type"] == "ignore":
+                return ToolMessage(
+                    content=f"User ignored the tool call: {tool_name}:{call['id']}",
+                    name=tool_name,
+                    tool_call_id=call["id"],
+                    status="error",
+                )
         try:
             response = self.tools_by_name[tool_name].invoke(tool_input, config)
 
