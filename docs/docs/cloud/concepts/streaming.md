@@ -13,7 +13,7 @@ LangGraph Cloud supports five streaming modes:
 | **`updates`**        | Stream only the updates to the graph state after each node. [Guide](../how-tos/stream_updates.md)                                                              |
 | **`messages-tuple`** | Stream LLM tokens for any messages generated inside the graph (useful for chat apps). [Guide](../how-tos/stream_messages.md)                                   |
 | **`debug`**          | Stream debug information throughout graph execution. [Guide](../how-tos/stream_debug.md)                                                                       |
-| **`custom`**         | Stream custom data                                                                                                                                            |
+| **`custom`**         | Stream custom data                                                                                                                                             |
 | **`events`**         | Stream all events (including the state of the graph); mainly useful when migrating large LCEL apps. [Guide](../how-tos/stream_events.md)                       |
 
 ✅ You can also **combine multiple modes** at the same time.  See the [how-to guide](../how-tos/stream_multiple.md) for configuration details.
