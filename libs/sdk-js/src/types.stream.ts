@@ -24,15 +24,21 @@ type MessageTupleMetadata = {
   [key: string]: unknown;
 };
 
-type AsSubgraph<TEvent extends { event: string; data: unknown }> = {
-  event: TEvent["event"] | `${TEvent["event"]}|${string}`;
-  data: TEvent["data"];
-};
+type AsSubgraph<TEvent extends { id?: string; event: string; data: unknown }> =
+  {
+    id?: TEvent["id"];
+    event: TEvent["event"] | `${TEvent["event"]}|${string}`;
+    data: TEvent["data"];
+  };
 
 /**
  * Stream event with values after completion of each step.
  */
-export type ValuesStreamEvent<StateType> = { event: "values"; data: StateType };
+export type ValuesStreamEvent<StateType> = {
+  id?: string;
+  event: "values";
+  data: StateType;
+};
 
 /** @internal */
 export type SubgraphValuesStreamEvent<StateType> = AsSubgraph<
@@ -57,6 +63,7 @@ export type SubgraphMessagesTupleStreamEvent =
  * Metadata stream event with information about the run and thread
  */
 export type MetadataStreamEvent = {
+  id?: string;
   event: "metadata";
   data: { run_id: string; thread_id: string };
 };
@@ -65,6 +72,7 @@ export type MetadataStreamEvent = {
  * Stream event with error information.
  */
 export type ErrorStreamEvent = {
+  id?: string;
   event: "error";
   data: { error: string; message: string };
 };
@@ -78,6 +86,7 @@ export type SubgraphErrorStreamEvent = AsSubgraph<ErrorStreamEvent>;
  * produced the update as well as the update.
  */
 export type UpdatesStreamEvent<UpdateType> = {
+  id?: string;
   event: "updates";
   data: { [node: string]: UpdateType };
 };
@@ -96,14 +105,17 @@ export type CustomStreamEvent<T> = { event: "custom"; data: T };
 export type SubgraphCustomStreamEvent<T> = AsSubgraph<CustomStreamEvent<T>>;
 
 type MessagesMetadataStreamEvent = {
+  id?: string;
   event: "messages/metadata";
   data: { [messageId: string]: { metadata: unknown } };
 };
 type MessagesCompleteStreamEvent = {
+  id?: string;
   event: "messages/complete";
   data: Message[];
 };
 type MessagesPartialStreamEvent = {
+  id?: string;
   event: "messages/partial";
   data: Message[];
 };
@@ -126,7 +138,7 @@ export type SubgraphMessagesStreamEvent =
 /**
  * Stream event with detailed debug information.
  */
-export type DebugStreamEvent = { event: "debug"; data: unknown };
+export type DebugStreamEvent = { id?: string; event: "debug"; data: unknown };
 
 /** @internal */
 export type SubgraphDebugStreamEvent = AsSubgraph<DebugStreamEvent>;
@@ -135,6 +147,7 @@ export type SubgraphDebugStreamEvent = AsSubgraph<DebugStreamEvent>;
  * Stream event with events occurring during execution.
  */
 export type EventsStreamEvent = {
+  id?: string;
   event: "events";
   data: {
     event:
@@ -157,6 +170,7 @@ export type SubgraphEventsStreamEvent = AsSubgraph<EventsStreamEvent>;
  * the `RunsStreamPayload` to receive this event.
  */
 export type FeedbackStreamEvent = {
+  id?: string;
   event: "feedback";
   data: { [feedbackKey: string]: string };
 };
