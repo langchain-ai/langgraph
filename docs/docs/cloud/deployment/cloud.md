@@ -1,4 +1,4 @@
-# How to Deploy to Cloud SaaS (Beta)
+# How to Deploy to Cloud SaaS
 
 Before deploying, review the [conceptual guide for the Cloud SaaS](../../concepts/langgraph_cloud.md) deployment option.
 

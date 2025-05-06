@@ -194,10 +194,18 @@ nav:
         - agents/deployment.md
         - agents/ui.md
     - LangGraph Platform:
+      - Quickstart: cloud/quick_start.md
       - Overview: concepts/langgraph_platform.md
       - LangGraph Server:
         - Overview: concepts/langgraph_server.md
-        - how-tos/use-remote-graph.md # SHOULD THIS GO SOMEWHERE ELSE?
+        - Application structure:
+          - Overview: concepts/application_structure.md
+          - cloud/deployment/setup.md
+          - cloud/deployment/setup_pyproject.md
+          - cloud/deployment/setup_javascript.md
+          - cloud/deployment/semantic_search.md
+          - cloud/deployment/custom_docker.md
+          - how-tos/autogen-langgraph-platform.ipynb
         - Data management:
           - how-tos/ttl/configure_ttl.md
         - Authentication & access control:
@@ -258,17 +266,6 @@ nav:
         - cloud/how-tos/clone_traces_studio.md
         - how-tos/local-studio.md
       - LangGraph SDK: concepts/sdk.md
-      - LangGraph Data Plane: concepts/langgraph_data_plane.md
-      - LangGraph Control Plane: concepts/langgraph_control_plane.md
-      - Application structure:
-        - Overview: concepts/application_structure.md
-        - cloud/deployment/setup.md
-        - cloud/deployment/setup_pyproject.md
-        - cloud/deployment/setup_javascript.md
-        - cloud/deployment/semantic_search.md
-        - cloud/deployment/custom_docker.md
-        - cloud/deployment/graph_rebuild.md
-        - how-tos/autogen-langgraph-platform.ipynb
       - Deployment options:
         - Overview: concepts/deployment_options.md
         - concepts/platform_architecture.md
@@ -277,16 +274,18 @@ nav:
           - Overview: concepts/langgraph_cloud.md
           - Deploy Cloud SaaS: cloud/deployment/cloud.md
         - Self-Hosted Data Plane:
-          - Overview: concepts/self_hosted.md
+          - Overview: concepts/langgraph_self_hosted_data_plane.md
+          - LangGraph Data Plane: concepts/langgraph_data_plane.md
           - Deploy Self-Hosted Data Plane: cloud/deployment/self_hosted_data_plane.md
         - Self-Hosted Control Plane:
           - Overview: concepts/langgraph_self_hosted_control_plane.md
+          - LangGraph Control Plane: concepts/langgraph_control_plane.md
           - Deploy Self-Hosted Control Plane: cloud/deployment/self_hosted_control_plane.md
         - Standalone Container:
           - Overview: concepts/langgraph_standalone_container.md
           - Deploy Standalone Container: cloud/deployment/standalone_container.md
           # ADD SH LITE?
-        - Plans and pricing: concepts/plans.md # DELETE AND ROUTE TO MARKETING SITE?
+        - Plans and pricing: concepts/plans.md
       
   - Reference:
     - reference/index.md
@@ -325,7 +324,8 @@ nav:
         - tutorials/auth/getting_started.md
         - tutorials/auth/resource_auth.md
         - tutorials/auth/add_auth_server.md
-      - Cloud deploy: cloud/quick_start.md
+      - Rebuild graph at runtime: cloud/deployment/graph_rebuild.md
+      - how-tos/use-remote-graph.md
       - Front-end and generative UI:
         - Integrate LangGraph into a React app: cloud/how-tos/use_stream_react.md
         - Implement generative UI with LangGraph: cloud/how-tos/generative_ui_react.md
