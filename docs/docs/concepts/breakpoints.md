@@ -11,4 +11,4 @@ With breakpoints, you can inspect the graph's state and node inputs at any point
 
 <figure markdown="1">
 ![image](img/breakpoints.png){: style="max-height:400px"}
-<figcaption>An example graph consisting of 3 sequential step with a breakpoint before step_3. </figcaption> </figure>
+<figcaption>An example graph consisting of 3 sequential steps with a breakpoint before step_3. </figcaption> </figure>
