@@ -35,8 +35,15 @@ from pydantic import BaseModel
 from typing_extensions import Annotated, get_args, get_origin
 
 from langgraph.errors import GraphBubbleUp
+from langgraph.prebuilt.interrupt import (
+    ActionRequest,
+    HumanInterrupt,
+    HumanInterruptConfig,
+    HumanResponse,
+    InterruptPolicy,
+)
 from langgraph.store.base import BaseStore
-from langgraph.types import Command, Send
+from langgraph.types import Command, Send, interrupt
 from langgraph.utils.runnable import RunnableCallable
 
 INVALID_TOOL_NAME_ERROR_TEMPLATE = (
@@ -207,6 +214,7 @@ class ToolNode(RunnableCallable):
             bool, str, Callable[..., str], tuple[type[Exception], ...]
         ] = True,
         messages_key: str = "messages",
+        interrupt_policy: Optional[InterruptPolicy] = None,
     ) -> None:
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self.tools_by_name: dict[str, BaseTool] = {}
@@ -214,6 +222,7 @@ class ToolNode(RunnableCallable):
         self.tool_to_store_arg: dict[str, Optional[str]] = {}
         self.handle_tool_errors = handle_tool_errors
         self.messages_key = messages_key
+        self.interrupt_policy = interrupt_policy
         for tool_ in tools:
             if not isinstance(tool_, BaseTool):
                 tool_ = create_tool(tool_)
@@ -304,6 +313,25 @@ class ToolNode(RunnableCallable):
             combined_outputs.append(parent_command)
         return combined_outputs
 
+    def _interrupt(
+        self,
+        tool_input: dict[str, Any],
+        tool_name: str,
+        hitl_config: HumanInterruptConfig,
+    ) -> HumanResponse:
+        """Interrupt before a tool call and ask for human input."""
+        request = HumanInterrupt(
+            action_request=ActionRequest(
+                action=tool_name,
+                args=tool_input,
+            ),
+            config=hitl_config,
+            description=self.tools_by_name[tool_name].description,
+        )
+
+        response = interrupt([request])
+        return response
+
     def _run_one(
         self,
         call: ToolCall,
@@ -313,9 +341,63 @@ class ToolNode(RunnableCallable):
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
 
+        tool_name = call["name"]
+        tool_input = {**call, **{"type": "tool_call"}}
+
+        if interrupt_policy := self.interrupt_policy:
+            interrupt_config = interrupt_policy.lookup(tool_name)
+            if any(interrupt_config.values()):
+                human_response = self._interrupt(
+                    tool_input, tool_name, interrupt_config
+                )
+
+                if (
+                    interrupt_config["allow_accept"]
+                    and human_response["type"] == "accept"
+                ):
+                    # pass, this is good
+                    ...
+                elif (
+                    interrupt_config["allow_edit"] and human_response["type"] == "edit"
+                ):
+                    tool_input = human_response["args"]
+                elif (
+                    interrupt_config["allow_respond"]
+                    and human_response["type"] == "response"
+                ):
+                    return ToolMessage(
+                        content=human_response["args"],
+                        name=tool_name,
+                        tool_call_id=call["id"],
+                        status="error",
+                    )
+                elif (
+                    interrupt_config["allow_ignore"]
+                    and human_response["type"] == "ignore"
+                ):
+                    return ToolMessage(
+                        content=f"Tool call ignored: {tool_name}:{call['id']}",
+                        name=tool_name,
+                        tool_call_id=call["id"],
+                        status="error",
+                    )
+                else:
+                    allowed_types = [
+                        type_name
+                        for type_name, is_allowed in {
+                            "accept": interrupt_config["allow_accept"],
+                            "edit": interrupt_config["allow_edit"],
+                            "response": interrupt_config["allow_respond"],
+                            "ignore": interrupt_config["allow_ignore"],
+                        }.items()
+                        if is_allowed
+                    ]
+                    raise ValueError(
+                        f"Unexpected human response: {human_response}. "
+                        f"Expected one with `'type'` in {allowed_types}."
+                    )
         try:
-            input = {**call, **{"type": "tool_call"}}
-            response = self.tools_by_name[call["name"]].invoke(input, config)
+            response = self.tools_by_name[tool_name].invoke(tool_input, config)
 
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios:
@@ -342,7 +424,7 @@ class ToolNode(RunnableCallable):
                 content = _handle_tool_error(e, flag=self.handle_tool_errors)
             return ToolMessage(
                 content=content,
-                name=call["name"],
+                name=tool_name,
                 tool_call_id=call["id"],
                 status="error",
             )

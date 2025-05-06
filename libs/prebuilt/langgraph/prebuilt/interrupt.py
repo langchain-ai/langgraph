@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
 from typing import (
     Literal,
     Optional,
@@ -5,6 +8,8 @@ from typing import (
 )
 
 from typing_extensions import TypedDict
+
+from langgraph.types import All
 
 
 class HumanInterruptConfig(TypedDict):
@@ -92,3 +97,47 @@ class HumanResponse(TypedDict):
 
     type: Literal["accept", "ignore", "response", "edit"]
     args: Union[None, str, ActionRequest]
+
+
+def _interrupt_allowed(tool: str, policy: All | list[str]) -> bool:
+    """Check if a tool is allowed by a policy."""
+    return policy == "*" or tool in policy
+
+
+# TODO: implement caching for tool -> interrupt policy mapper
+@dataclass
+class InterruptPolicy:
+    """This class defines the policy for how users can interact with the graph when it is paused for human input,
+    depending on the tool being executed.
+
+    Each attribute can be set to a list of tool names or to the special value `"*"` (All).
+    """
+
+    can_approve: All | list[str] = field(default_factory=list)
+    """Tool names for which the human can accept/approve the current state."""
+
+    can_respond: All | list[str] = field(default_factory=list)
+    """Tool names for which the human can respond to the current state."""
+
+    can_edit: All | list[str] = field(default_factory=list)
+    """Tool names for which the human can edit the current state."""
+
+    can_ignore: All | list[str] = field(default_factory=list)
+    """Tool names for which the human can ignore/skip the current step."""
+
+    def lookup(self, tool: str) -> HumanInterruptConfig:
+        """Checks if the graph should interrupt for a specific tool based on the policy.
+
+        Args:
+            tool: The name of the tool being executed.
+
+        Returns:
+            A tuple containing a boolean indicating whether to interrupt and the corresponding configuration.
+        """
+
+        return HumanInterruptConfig(
+            allow_ignore=_interrupt_allowed(tool, self.can_ignore),
+            allow_respond=_interrupt_allowed(tool, self.can_respond),
+            allow_edit=_interrupt_allowed(tool, self.can_edit),
+            allow_accept=_interrupt_allowed(tool, self.can_approve),
+        )
