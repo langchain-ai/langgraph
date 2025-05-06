@@ -130,6 +130,7 @@ class BaseClient {
       json?: unknown;
       params?: Record<string, unknown>;
       timeoutMs?: number | null;
+      withResponse?: boolean;
     },
   ): [url: URL, init: RequestInit] {
     const mutatedOptions = {
@@ -144,6 +145,10 @@ class BaseClient {
         "Content-Type": "application/json",
       };
       delete mutatedOptions.json;
+    }
+
+    if (mutatedOptions.withResponse) {
+      delete mutatedOptions.withResponse;
     }
 
     let timeoutSignal: AbortSignal | null = null;
@@ -177,20 +182,52 @@ class BaseClient {
 
   protected async fetch<T>(
     path: string,
+    options: RequestInit & {
+      json?: unknown;
+      params?: Record<string, unknown>;
+      timeoutMs?: number | null;
+      signal?: AbortSignal;
+      withResponse: true;
+    },
+  ): Promise<[T, Response]>;
+
+  protected async fetch<T>(
+    path: string,
     options?: RequestInit & {
       json?: unknown;
       params?: Record<string, unknown>;
       timeoutMs?: number | null;
       signal?: AbortSignal;
+      withResponse?: false;
     },
-  ): Promise<T> {
+  ): Promise<T>;
+
+  protected async fetch<T>(
+    path: string,
+    options?: RequestInit & {
+      json?: unknown;
+      params?: Record<string, unknown>;
+      timeoutMs?: number | null;
+      signal?: AbortSignal;
+      withResponse?: boolean;
+    },
+  ): Promise<T | [T, Response]> {
     const response = await this.asyncCaller.fetch(
       ...this.prepareFetchOptions(path, options),
     );
-    if (response.status === 202 || response.status === 204) {
-      return undefined as T;
+
+    const body = (() => {
+      if (response.status === 202 || response.status === 204) {
+        return undefined as T;
+      }
+      return response.json() as Promise<T>;
+    })();
+
+    if (options?.withResponse) {
+      return [await body, response];
     }
-    return response.json() as T;
+
+    return body;
   }
 }
 
@@ -856,6 +893,7 @@ export class RunsClient<
 
     const endpoint =
       threadId == null ? `/runs/stream` : `/threads/${threadId}/runs/stream`;
+
     const response = await this.asyncCaller.fetch(
       ...this.prepareFetchOptions(endpoint, {
         method: "POST",
@@ -864,6 +902,9 @@ export class RunsClient<
         signal: payload?.signal,
       }),
     );
+
+    const contentLocation = response.headers.get("Content-Location");
+    if (contentLocation) payload?.onResponse?.(response);
 
     const stream: ReadableStream<{ event: any; data: any }> = (
       response.body || new ReadableStream({ start: (ctrl) => ctrl.close() })
@@ -905,11 +946,18 @@ export class RunsClient<
       if_not_exists: payload?.ifNotExists,
       checkpoint_during: payload?.checkpointDuring,
     };
-    return this.fetch<Run>(`/threads/${threadId}/runs`, {
+
+    const [run, response] = await this.fetch<Run>(`/threads/${threadId}/runs`, {
       method: "POST",
       json,
       signal: payload?.signal,
+      withResponse: true,
     });
+
+    const contentLocation = response.headers.get("Content-Location");
+    if (contentLocation) payload?.onResponse?.(response);
+
+    return run;
   }
 
   /**
@@ -980,27 +1028,30 @@ export class RunsClient<
     };
     const endpoint =
       threadId == null ? `/runs/wait` : `/threads/${threadId}/runs/wait`;
-    const response = await this.fetch<ThreadState["values"]>(endpoint, {
+    const [run, response] = await this.fetch<ThreadState["values"]>(endpoint, {
       method: "POST",
       json,
       timeoutMs: null,
       signal: payload?.signal,
+      withResponse: true,
     });
+
+    const contentLocation = response.headers.get("Content-Location");
+    if (contentLocation) payload?.onResponse?.(response);
+
     const raiseError =
       payload?.raiseError !== undefined ? payload.raiseError : true;
     if (
       raiseError &&
-      "__error__" in response &&
-      typeof response.__error__ === "object" &&
-      response.__error__ &&
-      "error" in response.__error__ &&
-      "message" in response.__error__
+      "__error__" in run &&
+      typeof run.__error__ === "object" &&
+      run.__error__ &&
+      "error" in run.__error__ &&
+      "message" in run.__error__
     ) {
-      throw new Error(
-        `${response.__error__?.error}: ${response.__error__?.message}`,
-      );
+      throw new Error(`${run.__error__?.error}: ${run.__error__?.message}`);
     }
-    return response;
+    return run;
   }
 
   /**
