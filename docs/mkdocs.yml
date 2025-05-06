@@ -213,7 +213,7 @@ nav:
           - Overview: concepts/auth.md
           - how-tos/auth/custom_auth.md
           - how-tos/auth/openapi_security.md
-        - MCP: # NEED TO ADD FROM MAIN
+        # NEED TO ADD MCP DOC FROM MAIN
         - Assistants:
           - Overview: concepts/assistants.md
           - cloud/how-tos/configuration_cloud.md
