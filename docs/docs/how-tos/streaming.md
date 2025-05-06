@@ -1,9 +1,5 @@
 # Stream outputs
 
-!!! tip "Set up [LangSmith](https://smith.langchain.com) for LangGraph Development"
-
-    Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM apps built with LangGraph — read more about how to get started [here](https://docs.smith.langchain.com).
-
 ## Streaming API
 
 LangGraph graphs expose the `.stream()` (sync) and `.astream()` (async) methods to yield streamed outputs as iterators.
@@ -189,8 +185,7 @@ for chunk in graph.stream(
       
       1. Set `subgraphs=True` to stream outputs from subgraphs.
 
-
-      Voila! The streamed outputs now contain updates from both the parent graph and the subgraph. **Note** that we are receiving not just the node updates, but we also the namespaces which tell us what graph (or subgraph) we are streaming from.
+      **Note** that we are receiving not just the node updates, but we also the namespaces which tell us what graph (or subgraph) we are streaming from.
 
 ## Debugging {#debug}
 
@@ -676,9 +671,9 @@ Set `disable_streaming=True` when initializing the model.
       from langchain.chat_models import init_chat_model
 
       model = init_chat_model(
-            "anthropic:claude-3-7-sonnet-latest",
-            # highlight-next-line
-            disable_streaming=True # (1)!
+          "anthropic:claude-3-7-sonnet-latest",
+          # highlight-next-line
+          disable_streaming=True # (1)!
       )
       ```
 
