@@ -9,7 +9,7 @@ To deploy a [LangGraph Server](../concepts/langgraph_server.md), follow the how-
 
 ## Overview
 
-LangGraph Platform's Self-Hosted Data Plane deployment option is a "hybrid" model for deployemnt where we manage the [control plane](./langgraph_control_plane.md) in our cloud and you manage the [data plane](./langgraph_data_plane.md) in your cloud.
+LangGraph Platform's Self-Hosted Data Plane deployment option is a "hybrid" model for deployment where we manage the [control plane](./langgraph_control_plane.md) in our cloud and you manage the [data plane](./langgraph_data_plane.md) in your cloud.
 
 |                   | [Control Plane](../concepts/langgraph_control_plane.md) | [Data Plane](../concepts/langgraph_data_plane.md) |
 |-------------------|-------------------|------------|
