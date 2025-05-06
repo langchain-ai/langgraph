@@ -413,7 +413,9 @@ class AssistantsClient:
         Returns:
             Assistant: Assistant Object.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             assistant = await client.assistants.get(
                 assistant_id="my_assistant_id"
@@ -453,12 +455,17 @@ class AssistantsClient:
         Returns:
             Graph: The graph information for the assistant in JSON format.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             graph_info = await client.assistants.get_graph(
                 assistant_id="my_assistant_id"
             )
             print(graph_info)
+            ```
+
+            ```shell
 
             --------------------------------------------------------------------------------------------------------------------------
 
@@ -475,6 +482,7 @@ class AssistantsClient:
                         {'source': 'agent','target': '__end__'}
                     ]
             }
+            ```
 
 
         """  # noqa: E501
@@ -494,12 +502,17 @@ class AssistantsClient:
         Returns:
             GraphSchema: The graph schema for the assistant.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             schema = await client.assistants.get_schemas(
                 assistant_id="my_assistant_id"
             )
             print(schema)
+            ```
+
+            ```shell
 
             ----------------------------------------------------------------------------------------------------------------------------
 
@@ -586,6 +599,7 @@ class AssistantsClient:
                             }
                     }
             }
+            ```
 
         """  # noqa: E501
         return await self.http.get(
@@ -656,7 +670,9 @@ class AssistantsClient:
         Returns:
             Assistant: The created assistant.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             assistant = await client.assistants.create(
                 graph_id="agent",
@@ -666,6 +682,7 @@ class AssistantsClient:
                 if_exists="do_nothing",
                 name="my_name"
             )
+            ```
         """  # noqa: E501
         payload: Dict[str, Any] = {
             "graph_id": graph_id,
@@ -713,7 +730,9 @@ class AssistantsClient:
         Returns:
             Assistant: The updated assistant.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             assistant = await client.assistants.update(
                 assistant_id='e280dad7-8618-443f-87f1-8e41841c180f',
@@ -721,6 +740,7 @@ class AssistantsClient:
                 config={"configurable": {"model_name": "anthropic"}},
                 metadata={"number":2}
             )
+            ```
 
         """  # noqa: E501
         payload: Dict[str, Any] = {}
@@ -755,7 +775,9 @@ class AssistantsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             await client.assistants.delete(
                 assistant_id="my_assistant_id"
@@ -790,7 +812,9 @@ class AssistantsClient:
         Returns:
             list[Assistant]: A list of assistants.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             assistants = await client.assistants.search(
                 metadata = {"name":"my_name"},
@@ -798,7 +822,8 @@ class AssistantsClient:
                 limit=5,
                 offset=5
             )
-        """
+            ```
+            """
         payload: Dict[str, Any] = {
             "limit": limit,
             "offset": offset,
@@ -838,7 +863,9 @@ class AssistantsClient:
         Returns:
             list[AssistantVersion]: A list of assistant versions.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             assistant_versions = await client.assistants.get_versions(
                 assistant_id="my_assistant_id"
@@ -873,12 +900,15 @@ class AssistantsClient:
         Returns:
             Assistant: Assistant Object.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             new_version_assistant = await client.assistants.set_latest(
                 assistant_id="my_assistant_id",
                 version=3
             )
+            ```
 
         """  # noqa: E501
 
@@ -917,7 +947,9 @@ class ThreadsClient:
         Returns:
             Thread: Thread object.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             thread = await client.threads.get(
                 thread_id="my_thread_id"
@@ -963,13 +995,16 @@ class ThreadsClient:
         Returns:
             Thread: The created thread.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             thread = await client.threads.create(
                 metadata={"number":1},
                 thread_id="my-thread-id",
                 if_exists="raise"
             )
+            ```
         """  # noqa: E501
         payload: Dict[str, Any] = {}
         if thread_id:
@@ -1015,7 +1050,9 @@ class ThreadsClient:
         Returns:
             Thread: The created thread.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             thread = await client.threads.update(
                 thread_id="my-thread-id",
@@ -1038,11 +1075,14 @@ class ThreadsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost2024)
             await client.threads.delete(
                 thread_id="my_thread_id"
             )
+            ```
 
         """  # noqa: E501
         await self.http.delete(f"/threads/{thread_id}", headers=headers)
@@ -1075,7 +1115,9 @@ class ThreadsClient:
         Returns:
             list[Thread]: List of the threads matching the search parameters.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             threads = await client.threads.search(
                 metadata={"number":1},
@@ -1117,8 +1159,10 @@ class ThreadsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost2024)
             await client.threads.copy(
                 thread_id="my_thread_id"
             )
@@ -1149,7 +1193,9 @@ class ThreadsClient:
         Returns:
             ThreadState: the thread of the state.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             thread_state = await client.threads.get_state(
                 thread_id="my_thread_id",
@@ -1274,7 +1320,9 @@ class ThreadsClient:
         Returns:
             ThreadUpdateStateResponse: Response after updating a thread's state.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             response = await client.threads.update_state(
                 thread_id="my_thread_id",
@@ -1331,7 +1379,9 @@ class ThreadsClient:
         Returns:
             list[ThreadState]: the state history of the thread.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             thread_state = await client.threads.get_history(
                 thread_id="my_thread_id",
@@ -1476,7 +1526,9 @@ class RunsClient:
         Returns:
             AsyncIterator[StreamPart]: Asynchronous iterator of stream results.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             async for chunk in client.runs.stream(
                 thread_id=None,
@@ -1636,7 +1688,9 @@ class RunsClient:
         Returns:
             Run: The created background run.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             background_run = await client.runs.create(
                 thread_id="my_thread_id",
@@ -1836,7 +1890,9 @@ class RunsClient:
         Returns:
             Union[list[dict], dict[str, Any]]: The output of the run.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             final_state_of_run = await client.runs.wait(
                 thread_id=None,
@@ -1940,7 +1996,9 @@ class RunsClient:
         Returns:
             List[Run]: The runs for the thread.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             await client.runs.list(
                 thread_id="thread_id",
@@ -1972,7 +2030,9 @@ class RunsClient:
         Returns:
             Run: Run object.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             run = await client.runs.get(
                 thread_id="thread_id_to_delete",
@@ -2007,7 +2067,9 @@ class RunsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             await client.runs.cancel(
                 thread_id="thread_id_to_cancel",
@@ -2036,7 +2098,9 @@ class RunsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             result =await client.runs.join(
                 thread_id="thread_id_to_join",
@@ -2073,7 +2137,9 @@ class RunsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             await client.runs.join_stream(
                 thread_id="thread_id_to_join",
@@ -2105,7 +2171,9 @@ class RunsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             await client.runs.delete(
                 thread_id="thread_id_to_delete",
@@ -2175,7 +2243,9 @@ class CronClient:
         Returns:
             Run: The cron run.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             cron_run = await client.crons.create_for_thread(
                 thread_id="my-thread-id",
@@ -2244,7 +2314,9 @@ class CronClient:
         Returns:
             Run: The cron run.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             cron_run = client.crons.create(
                 assistant_id="agent",
@@ -2289,7 +2361,9 @@ class CronClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             await client.crons.delete(
                 cron_id="cron_to_delete"
@@ -2319,7 +2393,9 @@ class CronClient:
         Returns:
             list[Cron]: The list of cron jobs returned by the search,
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             cron_jobs = await client.crons.search(
                 assistant_id="my_assistant_id",
@@ -2400,7 +2476,9 @@ class StoreClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             await client.store.put_item(
                 ["documents", "user123"],
@@ -2444,7 +2522,9 @@ class StoreClient:
             Item: The retrieved item.
             headers: Optional custom headers to include with the request.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             item = await client.store.get_item(
                 ["documents", "user123"],
@@ -2489,7 +2569,9 @@ class StoreClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             await client.store.delete_item(
                 ["documents", "user123"],
@@ -2527,7 +2609,9 @@ class StoreClient:
         Returns:
             List[Item]: A list of items matching the search criteria.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             items = await client.store.search_items(
                 ["documents"],
@@ -2592,7 +2676,9 @@ class StoreClient:
         Returns:
             List[List[str]]: A list of namespaces matching the criteria.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             namespaces = await client.store.list_namespaces(
                 prefix=["documents"],
@@ -2900,23 +2986,24 @@ class SyncAssistantsClient:
 
         ???+ example "Example Usage"
 
-            ```python
-            assistant = client.assistants.get(
-                assistant_id="my_assistant_id"
-            )
-            print(assistant)
+        ```python
+        assistant = client.assistants.get(
+            assistant_id="my_assistant_id"
+        )
+        print(assistant)
+        ```
+        ```shell
+        ----------------------------------------------------
 
-            ----------------------------------------------------
-
-            {
-                'assistant_id': 'my_assistant_id',
-                'graph_id': 'agent',
-                'created_at': '2024-06-25T17:10:33.109781+00:00',
-                'updated_at': '2024-06-25T17:10:33.109781+00:00',
-                'config': {},
-                'metadata': {'created_by': 'system'}
-            }
-            ```
+        {
+            'assistant_id': 'my_assistant_id',
+            'graph_id': 'agent',
+            'created_at': '2024-06-25T17:10:33.109781+00:00',
+            'updated_at': '2024-06-25T17:10:33.109781+00:00',
+            'config': {},
+            'metadata': {'created_by': 'system'}
+        }
+        ```
 
         """  # noqa: E501
         return self.http.get(f"/assistants/{assistant_id}", headers=headers)
@@ -3427,7 +3514,7 @@ class SyncThreadsClient:
             )
             print(thread)
             ```
-
+            ```shell
             -----------------------------------------------------
 
             {
@@ -3436,6 +3523,7 @@ class SyncThreadsClient:
                 'updated_at': '2024-07-18T18:35:15.540834+00:00',
                 'metadata': {'graph_id': 'agent'}
             }
+            ```
 
         """  # noqa: E501
 
@@ -3787,7 +3875,9 @@ class SyncThreadsClient:
         Returns:
             ThreadUpdateStateResponse: Response after updating a thread's state.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             response = await client.threads.update_state(
                 thread_id="my_thread_id",
@@ -3844,7 +3934,9 @@ class SyncThreadsClient:
         Returns:
             list[ThreadState]: the state history of the thread.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             thread_state = client.threads.get_history(
                 thread_id="my_thread_id",
@@ -3992,7 +4084,9 @@ class SyncRunsClient:
         Returns:
             Iterator[StreamPart]: Iterator of stream results.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             async for chunk in client.runs.stream(
                 thread_id=None,
@@ -4152,7 +4246,9 @@ class SyncRunsClient:
         Returns:
             Run: The created background run.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             background_run = client.runs.create(
                 thread_id="my_thread_id",
@@ -4353,7 +4449,9 @@ class SyncRunsClient:
         Returns:
             Union[list[dict], dict[str, Any]]: The output of the run.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             final_state_of_run = client.runs.wait(
                 thread_id=None,
@@ -4443,7 +4541,9 @@ class SyncRunsClient:
         Returns:
             List[Run]: The runs for the thread.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             client.runs.list(
                 thread_id="thread_id",
@@ -4473,7 +4573,9 @@ class SyncRunsClient:
         Returns:
             Run: Run object.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             run = client.runs.get(
                 thread_id="thread_id_to_delete",
@@ -4506,7 +4608,9 @@ class SyncRunsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             client.runs.cancel(
                 thread_id="thread_id_to_cancel",
@@ -4539,7 +4643,9 @@ class SyncRunsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             client.runs.join(
                 thread_id="thread_id_to_join",
@@ -4576,7 +4682,9 @@ class SyncRunsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             client.runs.join_stream(
                 thread_id="thread_id_to_join",
@@ -4612,7 +4720,9 @@ class SyncRunsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             client.runs.delete(
                 thread_id="thread_id_to_delete",
@@ -4674,7 +4784,9 @@ class SyncCronClient:
         Returns:
             Run: The cron run.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             cron_run = client.crons.create_for_thread(
                 thread_id="my-thread-id",
@@ -4742,7 +4854,9 @@ class SyncCronClient:
         Returns:
             Run: The cron run.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             cron_run = client.crons.create(
                 assistant_id="agent",
@@ -4788,7 +4902,9 @@ class SyncCronClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             client.crons.delete(
                 cron_id="cron_to_delete"
@@ -4818,7 +4934,9 @@ class SyncCronClient:
         Returns:
             list[Cron]: The list of cron jobs returned by the search,
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             cron_jobs = client.crons.search(
                 assistant_id="my_assistant_id",
@@ -4899,7 +5017,9 @@ class SyncStoreClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             client.store.put_item(
                 ["documents", "user123"],
@@ -4941,7 +5061,9 @@ class SyncStoreClient:
         Returns:
             Item: The retrieved item.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             item = client.store.get_item(
                 ["documents", "user123"],
@@ -4987,7 +5109,9 @@ class SyncStoreClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             client.store.delete_item(
                 ["documents", "user123"],
@@ -5023,7 +5147,9 @@ class SyncStoreClient:
         Returns:
             List[Item]: A list of items matching the search criteria.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             items = client.store.search_items(
                 ["documents"],
@@ -5085,7 +5211,9 @@ class SyncStoreClient:
         Returns:
             List[List[str]]: A list of namespaces matching the criteria.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             namespaces = client.store.list_namespaces(
                 prefix=["documents"],
