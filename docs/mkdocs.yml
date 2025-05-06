@@ -242,7 +242,6 @@ nav:
         - cloud/deployment/setup_javascript.md
         - cloud/deployment/semantic_search.md
         - cloud/deployment/custom_docker.md
-        - cloud/deployment/test_locally.md
         - cloud/deployment/graph_rebuild.md
         - how-tos/autogen-langgraph-platform.ipynb
       - Deployment:
