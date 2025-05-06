@@ -126,11 +126,9 @@ class RetryPolicy(NamedTuple):
 KeyFuncT = TypeVar("KeyFuncT", bound=Callable[..., str | bytes])
 
 
-class CachePolicy(NamedTuple, Generic[KeyFuncT]):
-    """Configuration for caching nodes.
-
-    !!! version-added "Added in version 0.2.24."
-    """
+@dataclasses.dataclass(**_DC_KWARGS)
+class CachePolicy(Generic[KeyFuncT]):
+    """Configuration for caching nodes."""
 
     key_func: KeyFuncT = default_cache_key  # type: ignore[assignment]
     """Function to generate a cache key from the node's input.
