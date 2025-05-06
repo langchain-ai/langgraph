@@ -44,6 +44,11 @@ REDIRECT_MAP = {
     "how-tos/persistence_redis.ipynb": "how-tos/persistence.ipynb#use-in-production",
     "how-tos/subgraph-persistence.ipynb": "how-tos/persistence.ipynb#use-with-subgraphs",
     "how-tos/cross-thread-persistence.ipynb": "how-tos/persistence.ipynb#add-long-term-memory",
+    # tool calling how-tos
+    "how-tos/tool-calling-errors.ipynb": "how-tos/tool-calling.ipynb#handle-errors",
+    "how-tos/pass-config-to-tools.ipynb": "how-tos/tool-calling.ipynb#access-config",
+    "how-tos/pass-run-time-values-to-tools.ipynb": "how-tos/tool-calling.ipynb#access-state",
+    "how-tos/update-state-from-tools.ipynb": "how-tos/tool-calling.ipynb#update-state",
     # cloud redirects
     "cloud/index.md": "index.md",
     "cloud/how-tos/index.md": "concepts/langgraph_platform",

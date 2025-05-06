@@ -147,12 +147,8 @@ nav:
         - how-tos/human_in_the_loop/time-travel.ipynb
         - how-tos/human_in_the_loop/edit-graph-state.ipynb
       - Tool calling:
+        - Overview: concepts/tools.md
         - how-tos/tool-calling.ipynb
-        - how-tos/tool-calling-errors.ipynb
-        - how-tos/pass-run-time-values-to-tools.ipynb
-        - how-tos/update-state-from-tools.ipynb
-        - how-tos/pass-config-to-tools.ipynb
-        - how-tos/many-tools.ipynb
       - Subgraphs:
         - how-tos/subgraph.ipynb
         - how-tos/subgraphs-manage-state.ipynb
