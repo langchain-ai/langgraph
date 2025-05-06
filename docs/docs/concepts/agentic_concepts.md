@@ -103,7 +103,7 @@ For practical implementation, see our [map-reduce tutorial](../how-tos/map-reduc
 
 ### Subgraphs
 
-[Subgraphs](./low_level.md#subgraphs) are essential for managing complex agent architectures, particularly in [multi-agent systems](./multi_agent.md). They allow:
+[Subgraphs](./subgraphs.md) are essential for managing complex agent architectures, particularly in [multi-agent systems](./multi_agent.md). They allow:
 
 - Isolated state management for individual agents
 - Hierarchical organization of agent teams
