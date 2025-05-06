@@ -137,8 +137,6 @@ nav:
         - how-tos/streaming-events-from-within-tools.ipynb
         - how-tos/streaming-subgraphs.ipynb
         - how-tos/disable-streaming.ipynb
-      - Controllability:
-        - how-tos/return-when-recursion-limit-hits.ipynb
       - Breakpoints:
         - Overview: concepts/breakpoints.md
         - how-tos/human_in_the_loop/breakpoints.ipynb
