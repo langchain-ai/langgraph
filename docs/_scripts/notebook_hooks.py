@@ -55,7 +55,6 @@ REDIRECT_MAP = {
     "concepts/v0-human-in-the-loop.md": "concepts/human-in-the-loop.md",
     "how-tos/index.md": "index.md",
     "tutorials/introduction.ipynb": "concepts/why-langgraph.md",
-    "tutorials/workflows/index.md": "tutorials/workflows/workflows.md",
 }
 
 

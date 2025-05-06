@@ -112,7 +112,7 @@ nav:
       # at the top of the LangGraph section
       - Agent architectures:
         - Overview: concepts/agentic_concepts.md
-        - Workflows & agents: tutorials/workflows/workflows.md
+        - Workflows & agents: tutorials/workflows.md
       - Graph API:
         - Overview: concepts/low_level.md
           # low level concepts is an odd mix of a Graph API basics overview (conceptual)
