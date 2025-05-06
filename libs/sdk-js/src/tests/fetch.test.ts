@@ -14,6 +14,7 @@ describe.each([[""], ["mocked"]])("Client uses %s fetch", (description) => {
     globalFetchMock = jest.fn(() =>
       Promise.resolve({
         ok: true,
+        headers: new Headers(),
         json: () =>
           Promise.resolve({
             batch_ingest_config: {
@@ -26,6 +27,7 @@ describe.each([[""], ["mocked"]])("Client uses %s fetch", (description) => {
     overriddenFetch = jest.fn(() =>
       Promise.resolve({
         ok: true,
+        headers: new Headers(),
         json: () =>
           Promise.resolve({
             batch_ingest_config: {
