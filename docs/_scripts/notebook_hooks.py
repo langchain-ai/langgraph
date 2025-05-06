@@ -59,6 +59,8 @@ REDIRECT_MAP = {
     "how-tos/create-react-agent-system-prompt.ipynb": "agents/context.md#prompts",
     "how-tos/create-react-agent-hitl.ipynb": "agents/human-in-the-loop.md",
     "how-tos/create-react-agent-structured-output.ipynb": "agents/agents.md#structured-output",
+    # Time-travel
+    "how-tos/human_in_the_loop/edit-graph-state.ipynb": "how-tos/human_in_the_loop/time-travel.ipynb",
     # breakpoints
     "how-tos/human_in_the_loop/dynamic_breakpoints.ipynb": "how-tos/human_in_the_loop/breakpoints.ipynb",
     # misc
