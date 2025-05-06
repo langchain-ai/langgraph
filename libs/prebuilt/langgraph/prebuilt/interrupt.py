@@ -95,17 +95,3 @@ class HumanResponse(TypedDict):
     type: Literal["accept", "ignore", "response", "edit"]
     args: Union[None, str, ActionRequest]
 
-
-def _allowed_resume_types(interrupt_config: HumanInterruptConfig) -> list[str]:
-    """Get the allowed resume types from the interrupt config."""
-    allowed_types = [
-        type_name
-        for type_name, is_allowed in {
-            "accept": interrupt_config["allow_accept"],
-            "edit": interrupt_config["allow_edit"],
-            "response": interrupt_config["allow_respond"],
-            "ignore": interrupt_config["allow_ignore"],
-        }.items()
-        if is_allowed
-    ]
-    return allowed_types
