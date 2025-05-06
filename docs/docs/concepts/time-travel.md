@@ -5,22 +5,58 @@ search:
 
 # Time Travel ⏱️
 
-!!! note "Prerequisites"
-
-    This guide assumes that you are familiar with LangGraph's checkpoints and states. If not, please review the [persistence](./persistence.md) concept first.
-
-
 When working with non-deterministic systems that make model-based decisions (e.g., agents powered by LLMs), it can be useful to examine their decision-making process in detail:
 
 1. 🤔 **Understand Reasoning**: Analyze the steps that led to a successful result.
 2. 🐞 **Debug Mistakes**: Identify where and why errors occurred.
 3. 🔍 **Explore Alternatives**: Test different paths to uncover better solutions.
 
-We call these debugging techniques **Time Travel**, composed of two key actions: [**Replaying**](#replaying) 🔁 and [**Forking**](#forking) 🔀 .
+
+LangGraph provides **time travel** functionality to support these use cases. Specifically, you can **resume execution from a prior checkpoint** — either replaying the same state or modifying it to explore alternatives. In all cases, resuming past execution produces a **new fork** in the history.
+
+## Using checkpoints to time travel
+
+To resume from a previous checkpoint:
+
+1. Retrieve the available checkpoints:
+   ```python
+   all_checkpoints = []
+   for state in graph.get_state_history(thread):
+       all_checkpoints.append(state)
+   ```
+2. Identify the desired checkpoint’s ID (e.g., `xyz`).
+3. Configure the graph to resume from that checkpoint:
+   ```python
+   config = {"configurable": {"thread_id": "1", "checkpoint_id": "xyz"}}
+   for event in graph.stream(None, config, stream_mode="values"):
+       print(event)
+   ```
+
+This replays all steps **before** the given checkpoint and re-executes the steps **after** it, creating a **new fork** even if the downstream steps were already executed previously.
+
+## Modifying state when resuming
+
+You can also modify the graph’s state before continuing from a checkpoint:
+
+```python
+config = {"configurable": {"thread_id": "1", "checkpoint_id": "xyz"}}
+graph.update_state(config, {"state": "updated state"})
+```
+
+This creates a **forked checkpoint** (e.g., `xyz-fork`), from which you can continue execution:
+
+```python
+config = {"configurable": {"thread_id": "1", "checkpoint_id": "xyz-fork"}}
+for event in graph.stream(None, config, stream_mode="values"):
+    print(event)
+```
+
+## Summary
+
+* Resuming from any prior checkpoint — whether replaying or modifying state — **always generates a new fork**.
+* This allows you to explore alternative decision paths, debug specific steps, and analyze agent behavior under different conditions without altering the original run.
 
 ## Replaying
-
-![](./img/human_in_the_loop/replay.png)
 
 Replaying allows us to revisit and reproduce an agent's past actions, up to and including a specific step (checkpoint).
 
@@ -44,8 +80,6 @@ The graph replays previously executed steps _before_ the provided `checkpoint_id
 
 ## Forking
 
-![](./img/human_in_the_loop/forking.png)
-
 Forking allows you to revisit an agent's past actions and explore alternative paths within the graph.
 
 To edit a specific checkpoint, such as `xyz`, provide its `checkpoint_id` when updating the graph's state:
@@ -63,7 +97,3 @@ for event in graph.stream(None, config, stream_mode="values"):
     print(event)
 ```
 
-## Additional Resources 📚
-
-- [**Conceptual Guide: Persistence**](https://langchain-ai.github.io/langgraph/concepts/persistence/#replay): Read the persistence guide for more context on replaying.
-- [**How to View and Update Past Graph State**](../how-tos/human_in_the_loop/time-travel.ipynb): Step-by-step instructions for working with graph state that demonstrate the **replay** and **fork** actions.
