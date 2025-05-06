@@ -146,7 +146,6 @@ nav:
       - Time travel:
         - Overview: concepts/time-travel.md
         - how-tos/human_in_the_loop/time-travel.ipynb
-        - how-tos/human_in_the_loop/edit-graph-state.ipynb
       - Tool calling:
         - how-tos/tool-calling.ipynb
         - how-tos/tool-calling-errors.ipynb
