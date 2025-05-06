@@ -15,17 +15,27 @@ search:
 
 There are 4 main options for deploying with the LangGraph Platform:
 
-1. **<a href="#cloud-saas">Cloud SaaS<sup>(Beta)</sup></a>**
+1. [Cloud SaaS]("#cloud-saas")
 
-1. **<a href="#self-hosted-data-plane">Self-Hosted Data Plane<sup>(Beta)</sup></a>**
+1. [Self-Hosted Data Plane<sup>(Beta)</sup>](#self-hosted-data-plane)
 
-1. **<a href="#self-hosted-control-plane">Self-Hosted Control Plane<sup>(Beta)</sup></a>**
+1. [Self-Hosted Control Plane<sup>(Beta)</sup>](#self-hosted-control-plane)
 
-1. **[Standalone Container](#standalone-container)**
+1. [Standalone Container](#standalone-container)
 
-Please see the [LangGraph Platform Plans](./plans.md) for more information on the different plans.
+1. [Self-Hosted Lite](#self-hosted-lite)
 
-The guide below will explain the differences between the deployment options.
+A quick comparison:
+
+|                      | **Cloud SaaS** | **Self-Hosted Data Plane** | **Self-Hosted Control Plane** | **Standalone Container** | **Self-Hosted Lite** |
+|----------------------|----------------|----------------------------|-------------------------------|--------------------------| ---------------------|
+| **[Control Plane UI/API](../concepts/langgraph_control_plane.md)** | Yes | Yes | Yes | No | |
+| **CI/CD** | Managed internally by platform | Managed externally by you | Managed externally by you | Managed externally by you | |
+| **Data/compute residency** | LangChain’s cloud | Your cloud | Your cloud | Your cloud | |
+| **Required permissions** | None | See details [here](). | See details [here](). | None | |
+| **LangSmith compatibility** | Trace to LangSmith SaaS | Trace to LangSmith SaaS | Trace to Self-Hosted LangSmith | Optional tracing | |
+| **[Server version compatibility](../concepts/langgraph_server/#server-versions)** | Enterprise | Enterprise | Enterprise | Lite, Enterprise | |
+| **[Pricing](https://www.langchain.com/pricing-langgraph-platform)** | Plus | Enterprise | Enterprise | Developer | Free with LangSmith |
 
 ## Cloud SaaS
 
@@ -74,6 +84,8 @@ For more information, please see:
 
 * [Sandalone Container Conceptual Guide](./langgraph_standalone_container.md)
 * [How to deploy a Standalone Container](../cloud/deployment/standalone_container.md)
+
+## Self-Hosted Lite
 
 ## Related
 
