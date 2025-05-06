@@ -234,14 +234,14 @@ nav:
         - Overview: concepts/deployment_options.md
         - Cloud SaaS:
           - Overview: concepts/langgraph_cloud.md
-          - Deploy to Cloud SaaS: cloud/deployment/cloud.md
+          - Deploy Cloud SaaS: cloud/deployment/cloud.md
         - Self-Hosted:
           - Overview: concepts/self_hosted.md
-          - Deploy to Self-Hosted Data Plane: cloud/deployment/self_hosted_data_plane.md
-          - Deploy to Self-Hosted Control Plane: cloud/deployment/self_hosted_control_plane.md
+          - Deploy Self-Hosted Data Plane: cloud/deployment/self_hosted_data_plane.md
+          - Deploy Self-Hosted Control Plane: cloud/deployment/self_hosted_control_plane.md
         - Standalone Container:
           - Overview: concepts/langgraph_standalone_container.md
-          - Deploy to Standalone Container: cloud/deployment/standalone_container.md
+          - Deploy Standalone Container: cloud/deployment/standalone_container.md
           # ADD SH LITE?
         - how-tos/use-remote-graph.md # SHOULD THIS GO SOMEWHERE ELSE?
       - Data management:
