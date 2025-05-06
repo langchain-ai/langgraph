@@ -3,9 +3,9 @@ import logging
 import random
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Awaitable, Sequence
 from dataclasses import replace
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from langgraph.constants import (
     CONF,
@@ -106,6 +106,9 @@ async def arun_with_retry(
     task: PregelExecutableTask,
     retry_policies: Optional[Sequence[RetryPolicy]],
     stream: bool = False,
+    match_cached_writes: Optional[
+        Callable[[], Awaitable[Sequence[PregelExecutableTask]]]
+    ] = None,
     configurable: Optional[dict[str, Any]] = None,
 ) -> None:
     """Run a task asynchronously with retries."""
@@ -114,6 +117,11 @@ async def arun_with_retry(
     config = task.config
     if configurable is not None:
         config = patch_configurable(config, configurable)
+    if match_cached_writes is not None and task.cache_key is not None:
+        for t in await match_cached_writes():
+            if t is task:
+                # if the task is already cached, return
+                return
     while True:
         try:
             # clear any writes from previous attempts

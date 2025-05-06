@@ -31,6 +31,7 @@ from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 from typing_extensions import TypedDict
 
+from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.context import Context
@@ -55,6 +56,7 @@ from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.runner import PregelRunner
 from langgraph.store.base import BaseStore
 from langgraph.types import (
+    CachePolicy,
     Command,
     Interrupt,
     PregelTask,
@@ -5395,7 +5397,10 @@ async def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
         ]
 
 
-async def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
+@pytest.mark.parametrize("with_cache", [True, False])
+async def test_in_one_fan_out_state_graph_waiting_edge_multiple(
+    with_cache: bool, file_cache: BaseCache
+) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
     ) -> list[str]:
@@ -5410,7 +5415,11 @@ async def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
         answer: str
         docs: Annotated[list[str], sorted_add]
 
+    rewrite_query_count = 0
+
     async def rewrite_query(data: State) -> State:
+        nonlocal rewrite_query_count
+        rewrite_query_count += 1
         return {"query": f"query: {data['query']}"}
 
     async def analyzer_one(data: State) -> State:
@@ -5437,7 +5446,11 @@ async def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
 
     workflow = StateGraph(State)
 
-    workflow.add_node("rewrite_query", rewrite_query)
+    workflow.add_node(
+        "rewrite_query",
+        rewrite_query,
+        cache_policy=CachePolicy() if with_cache else None,
+    )
     workflow.add_node("analyzer_one", analyzer_one)
     workflow.add_node("retriever_one", retriever_one)
     workflow.add_node("retriever_two", retriever_two)
@@ -5452,21 +5465,34 @@ async def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
     workflow.add_conditional_edges("decider", decider_cond)
     workflow.set_finish_point("qa")
 
-    app = workflow.compile()
+    app = workflow.compile(cache=file_cache)
 
     assert await app.ainvoke({"query": "what is weather in sf"}) == {
         "query": "analyzed: query: analyzed: query: what is weather in sf",
         "answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4",
         "docs": ["doc1", "doc1", "doc2", "doc2", "doc3", "doc3", "doc4", "doc4"],
     }
+    assert rewrite_query_count == 2
 
     assert [c async for c in app.astream({"query": "what is weather in sf"})] == [
-        {"rewrite_query": {"query": "query: what is weather in sf"}},
+        {
+            "rewrite_query": {"query": "query: what is weather in sf"},
+            "__metadata__": {"cached": True},
+        }
+        if with_cache
+        else {"rewrite_query": {"query": "query: what is weather in sf"}},
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"decider": None},
-        {"rewrite_query": {"query": "query: analyzed: query: what is weather in sf"}},
+        {
+            "rewrite_query": {"query": "query: analyzed: query: what is weather in sf"},
+            "__metadata__": {"cached": True},
+        }
+        if with_cache
+        else {
+            "rewrite_query": {"query": "query: analyzed: query: what is weather in sf"}
+        },
         {
             "analyzer_one": {
                 "query": "analyzed: query: analyzed: query: what is weather in sf"
@@ -5477,6 +5503,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
         {"decider": None},
         {"qa": {"answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4"}},
     ]
+    assert rewrite_query_count == 2 if with_cache else 4
 
 
 async def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> None:
@@ -7506,6 +7533,47 @@ async def test_multiple_interrupts_functional(checkpointer_name: str) -> None:
         # `double` value should be cached appropriately when used w/ `interrupt`
         assert result == {
             "values": [2, "a", 4, "b", 6, "c"],
+        }
+        assert counter == 3
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_multiple_interrupts_functional_cache(
+    checkpointer_name: str, file_cache: BaseCache
+):
+    """Test multiple interrupts with functional API."""
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        counter = 0
+
+        @task(cache_policy=CachePolicy())
+        def double(x: int) -> int:
+            """Increment the counter."""
+            nonlocal counter
+            counter += 1
+            return 2 * x
+
+        @entrypoint(checkpointer=checkpointer, cache=file_cache)
+        def graph(state: dict) -> dict:
+            """React tool."""
+
+            values = []
+
+            for idx in [1, 1, 2, 2, 3, 3]:
+                values.extend([double(idx).result(), interrupt({"a": "boo"})])
+
+            return {"values": values}
+
+        configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
+        await graph.ainvoke({}, configurable)
+        await graph.ainvoke(Command(resume="a"), configurable)
+        await graph.ainvoke(Command(resume="b"), configurable)
+        await graph.ainvoke(Command(resume="c"), configurable)
+        await graph.ainvoke(Command(resume="d"), configurable)
+        await graph.ainvoke(Command(resume="e"), configurable)
+        result = await graph.ainvoke(Command(resume="f"), configurable)
+        # `double` value should be cached appropriately when used w/ `interrupt`
+        assert result == {
+            "values": [2, "a", 2, "b", 4, "c", 4, "d", 6, "e", 6, "f"],
         }
         assert counter == 3
 

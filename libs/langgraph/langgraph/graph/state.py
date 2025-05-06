@@ -80,7 +80,7 @@ from langgraph.pregel.write import (
     ChannelWriteTupleEntry,
 )
 from langgraph.store.base import BaseStore
-from langgraph.types import All, Checkpointer, Command, RetryPolicy
+from langgraph.types import All, CachePolicy, Checkpointer, Command, RetryPolicy
 from langgraph.utils.fields import get_field_default, get_update_as_tuples
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.runnable import RunnableLike, coerce_to_runnable
@@ -114,6 +114,7 @@ class StateNodeSpec(NamedTuple):
     metadata: Optional[dict[str, Any]]
     input: type[Any]
     retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]]
+    cache_policy: Optional[CachePolicy]
     ends: Optional[Union[tuple[str, ...], dict[str, str]]] = EMPTY_SEQ
     defer: bool = False
 
@@ -260,6 +261,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[type[Any]] = None,
         retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
+        cache_policy: Optional[CachePolicy] = None,
         destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
     ) -> Self:
         """Add a new node to the state graph.
@@ -277,6 +279,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[type[Any]] = None,
         retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
+        cache_policy: Optional[CachePolicy] = None,
         destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
     ) -> Self:
         """Add a new node to the state graph."""
@@ -291,6 +294,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[type[Any]] = None,
         retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
+        cache_policy: Optional[CachePolicy] = None,
         destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
     ) -> Self:
         """Add a new node to the state graph.
@@ -304,6 +308,7 @@ class StateGraph(Graph):
             input: The input schema for the node. (default: the graph's input schema)
             retry: The policy for retrying the node. (default: None)
                 If a sequence is provided, the first matching policy will be applied.
+            cache_policy: The cache policy for the node. (default: None)
             destinations: Destinations that indicate where a node can route to.
                 This is useful for edgeless graphs with nodes that return `Command` objects.
                 If a dict is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
@@ -432,6 +437,7 @@ class StateGraph(Graph):
             metadata,
             input=input or self.schema,
             retry_policy=retry,
+            cache_policy=cache_policy,
             ends=ends,
             defer=defer,
         )
@@ -814,6 +820,7 @@ class CompiledStateGraph(CompiledGraph):
                 writers=[ChannelWrite(write_entries)],
                 metadata=node.metadata,
                 retry_policy=node.retry_policy,
+                cache_policy=node.cache_policy,
                 bound=node.runnable,
             )
         else:

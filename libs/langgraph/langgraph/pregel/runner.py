@@ -155,7 +155,9 @@ class PregelRunner:
         # give control back to the caller
         yield
         # fast path if single task with no timeout and no waiter
-        if len(tasks) == 1 and timeout is None and get_waiter is None:
+        if len(tasks) == 0:
+            return
+        elif len(tasks) == 1 and timeout is None and get_waiter is None:
             t = tasks[0]
             try:
                 run_with_retry(
@@ -275,6 +277,9 @@ class PregelRunner:
         timeout: Optional[float] = None,
         retry_policy: Optional[Sequence[RetryPolicy]] = None,
         get_waiter: Optional[Callable[[], asyncio.Future[None]]] = None,
+        match_cached_writes: Optional[
+            Callable[[], Awaitable[Sequence[PregelExecutableTask]]]
+        ] = None,
     ) -> AsyncIterator[None]:
         loop = asyncio.get_event_loop()
         tasks = tuple(tasks)
@@ -286,7 +291,9 @@ class PregelRunner:
         # give control back to the caller
         yield
         # fast path if single task with no waiter and no timeout
-        if len(tasks) == 1 and get_waiter is None and timeout is None:
+        if len(tasks) == 0:
+            return
+        elif len(tasks) == 1 and get_waiter is None and timeout is None:
             t = tasks[0]
             try:
                 await arun_with_retry(
@@ -301,6 +308,7 @@ class PregelRunner:
                             retry=retry_policy,
                             futures=weakref.ref(futures),
                             schedule_task=self.schedule_task,
+                            match_cached_writes=match_cached_writes,
                             submit=self.submit,
                             reraise=reraise,
                             loop=loop,
@@ -348,6 +356,7 @@ class PregelRunner:
                             stream=self.use_astream,
                             futures=weakref.ref(futures),
                             schedule_task=self.schedule_task,
+                            match_cached_writes=match_cached_writes,
                             submit=self.submit,
                             reraise=reraise,
                             loop=loop,
@@ -609,7 +618,7 @@ def _acall(
     input: Any,
     *,
     retry: Optional[Sequence[RetryPolicy]] = None,
-    cache: Optional[CachePolicy] = None,
+    cache_policy: Optional[CachePolicy] = None,
     callbacks: Callbacks = None,
     # injected dependencies
     futures: weakref.ref[FuturesDict],
@@ -618,6 +627,9 @@ def _acall(
             [PregelExecutableTask, int, Optional[Call]], Optional[PregelExecutableTask]
         ]
     ],
+    match_cached_writes: Optional[
+        Callable[[], Awaitable[Sequence[PregelExecutableTask]]]
+    ] = None,
     submit: weakref.ref[Submit],
     loop: asyncio.AbstractEventLoop,
     reraise: bool = False,
@@ -630,7 +642,7 @@ def _acall(
     if next_task := schedule_task()(  # type: ignore[misc]
         task(),  # type: ignore[arg-type]
         scratchpad.call_counter(),
-        Call(func, input, retry=retry, cache_policy=cache, callbacks=callbacks),
+        Call(func, input, retry=retry, cache_policy=cache_policy, callbacks=callbacks),
     ):
         if fut := next(
             (
@@ -666,6 +678,7 @@ def _acall(
                     next_task,
                     retry,
                     stream=stream,
+                    match_cached_writes=match_cached_writes,
                     configurable={
                         CONFIG_KEY_CALL: partial(
                             _acall,
@@ -673,6 +686,7 @@ def _acall(
                             stream=stream,
                             futures=futures,
                             schedule_task=schedule_task,
+                            match_cached_writes=match_cached_writes,
                             submit=submit,
                             loop=loop,
                             reraise=reraise,

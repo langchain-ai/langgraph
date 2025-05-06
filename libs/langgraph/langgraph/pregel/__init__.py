@@ -2827,7 +2827,7 @@ class Pregel(PregelProtocol):
                         [t for t in loop.tasks.values() if not t.writes],
                         timeout=self.step_timeout,
                         get_waiter=get_waiter,
-                        # TODO pass match_cached_writes
+                        match_cached_writes=loop.amatch_cached_writes,
                     ):
                         # emit output
                         for o in output():
