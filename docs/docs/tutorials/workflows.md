@@ -11,7 +11,7 @@ This guide reviews common patterns for agentic systems. In describing these syst
 
 Here is a simple way to visualize these differences:
 
-![Agent Workflow](../concepts/img/agent_workflow.png)
+![Agent Workflow](../../concepts/img/agent_workflow.png)
 
 When building agents and workflows, LangGraph offers a number of benefits including persistence, streaming, and support for debugging as well as deployment.
 
