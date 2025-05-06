@@ -200,10 +200,6 @@ nav:
         - agents/ui.md
     - LangGraph Platform:
       - Overview: concepts/langgraph_platform.md
-      - LangGraph Control Plane:
-        - Overview: concepts/langgraph_control_plane.md
-      - LangGraph Data Plane:
-        - Overview: concepts/langgraph_data_plane.md
       - LangGraph Server:
         - Overview: concepts/langgraph_server.md
         - how-tos/use-remote-graph.md # SHOULD THIS GO SOMEWHERE ELSE?
@@ -258,8 +254,6 @@ nav:
           - how-tos/http/custom_routes.md
       - LangGraph CLI:
         - Overview: concepts/langgraph_cli.md
-      - LangGraph SDK:
-        - Overview: concepts/sdk.md
       - LangGraph Studio:
         - Overview: concepts/langgraph_studio.md
         - cloud/how-tos/test_deployment.md
@@ -270,6 +264,12 @@ nav:
         - cloud/how-tos/iterate_graph_studio.md
         - cloud/how-tos/clone_traces_studio.md
         - how-tos/local-studio.md
+      - LangGraph SDK:
+        - Overview: concepts/sdk.md
+      - LangGraph Data Plane:
+        - Overview: concepts/langgraph_data_plane.md
+      - LangGraph Control Plane:
+        - Overview: concepts/langgraph_control_plane.md
       - Application structure:
         - Overview: concepts/application_structure.md
         - cloud/deployment/setup.md
