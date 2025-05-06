@@ -103,8 +103,7 @@ nav:
         -  Add human-in-the-loop: tutorials/get-started/4-human-in-the-loop.md
         -  tutorials/get-started/5-customize-state.md
         -  tutorials/get-started/6-time-travel.md
-      - Deployment: tutorials/deployment.md
-        
+      - Deployment: tutorials/deployment.md 
     - LangGraph:
       # agentic concepts may need a bit of love if we're putting it
       # at the top of the LangGraph section
@@ -296,12 +295,9 @@ nav:
           - Deploy Self-Hosted Control Plane: cloud/deployment/self_hosted_control_plane.md
         - Standalone Container:
           - Overview: concepts/langgraph_standalone_container.md
-          - Deploy Standalone Container: cloud/deployment/standalone_container.md
-          # ADD SH LITE?
+          - Deploy Standalone Container: cloud/deployment/standalone_container.md # ADD SH LITE?
         - Plans and pricing: concepts/plans.md # DELETE AND ROUTE TO MARKETING SITE?
       
-      
-  
   - Reference:
     - reference/index.md
     - LangGraph:
