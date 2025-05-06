@@ -107,7 +107,9 @@ nav:
     - LangGraph:
       # agentic concepts may need a bit of love if we're putting it
       # at the top of the LangGraph section
-      - concepts/agentic_concepts.md
+      - Agent architectures:
+        - Overview: concepts/agentic_concepts.md
+        - Workflows & agents: tutorials/workflows.md
       - Graph API:
         - Overview: concepts/low_level.md
           # low level concepts is an odd mix of a Graph API basics overview (conceptual)
@@ -128,12 +130,7 @@ nav:
         - how-tos/human_in_the_loop/review-tool-calls.ipynb
       - Streaming:
         - Overview: concepts/streaming.md
-        - how-tos/streaming.ipynb
-        - how-tos/streaming-tokens.ipynb
-        - how-tos/streaming-specific-nodes.ipynb
-        - how-tos/streaming-events-from-within-tools.ipynb
-        - how-tos/streaming-subgraphs.ipynb
-        - how-tos/disable-streaming.ipynb
+        - "Stream outputs": how-tos/streaming.md
       - Controllability:
         - how-tos/map-reduce.ipynb
         - how-tos/command.ipynb
@@ -143,7 +140,6 @@ nav:
       - Breakpoints:
         - Overview: concepts/breakpoints.md
         - how-tos/human_in_the_loop/breakpoints.ipynb
-        - how-tos/human_in_the_loop/dynamic_breakpoints.ipynb
       - Time travel:
         - Overview: concepts/time-travel.md
         - how-tos/human_in_the_loop/time-travel.ipynb
@@ -156,9 +152,8 @@ nav:
         - how-tos/pass-config-to-tools.ipynb
         - how-tos/many-tools.ipynb
       - Subgraphs:
+        - Overview: concepts/subgraphs.md
         - how-tos/subgraph.ipynb
-        - how-tos/subgraphs-manage-state.ipynb
-        - how-tos/subgraph-transform-state.ipynb
       - Multi-agent:
         - Overview: concepts/multi_agent.md
         - how-tos/agent-handoffs.ipynb
