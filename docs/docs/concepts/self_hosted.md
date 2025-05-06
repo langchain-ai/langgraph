@@ -10,41 +10,58 @@ search:
     - [LangGraph Platform](./langgraph_platform.md)
     - [Deployment Options](./deployment_options.md)
 
-## Versions
-
 There are two versions of the self-hosted deployment: [Self-Hosted Data Plane](./deployment_options.md#self-hosted-data-plane) and [Self-Hosted Control Plane](./deployment_options.md#self-hosted-control-plane).
-
-### Self-Hosted Data Plane
-
-The [Self-Hosted Data Plane](./langgraph_self_hosted_data_plane.md) deployment option is a "hybrid" model for deployment where we manage the [control plane](./langgraph_control_plane.md) in our cloud and you manage the [data plane](./langgraph_data_plane.md) in your cloud. This option provides a way to securely manage your data plane infrastructure, while offloading control plane management to us.
-
-When using the Self-Hosted Data Plane version, you authenticate with a [LangSmith](https://smith.langchain.com/) API key.
-
-### Self-Hosted Control Plane
-
-The [Self-Hosted Control Plane](./langgraph_self_hosted_control_plane.md) deployment option is a fully self-hosted model for deployment where you manage the [control plane](./langgraph_control_plane.md) and [data plane](./langgraph_data_plane.md) in your cloud. This option give you full control and responsibility of the control plane and data plane infrastructure.
 
 ## Requirements
 
 - You use `langgraph-cli` and/or [LangGraph Studio](./langgraph_studio.md) app to test graph locally.
 - You use `langgraph build` command to build image.
 
-## How it works
 
-- Deploy Redis and Postgres instances on your own infrastructure.
-- Build the docker image for [LangGraph Server](./langgraph_server.md) using the [LangGraph CLI](./langgraph_cli.md).
-- Deploy a web server that will run the docker image and pass in the necessary environment variables.
+## Self-Hosted Data Plane (Beta)
 
-!!! warning "Note"
+The [Self-Hosted Data Plane](./self_hosted.md.md) deployment option is a "hybrid" model for deployment where we manage the [control plane](./langgraph_control_plane.md) in our cloud and you manage the [data plane](./langgraph_data_plane.md) in your cloud. This option provides a way to securely manage your data plane infrastructure, while offloading control plane management to us. When using the Self-Hosted Data Plane version, you authenticate with a [LangSmith](https://smith.langchain.com/) API key.
 
-    The LangGraph Platform Deployments view is optionally available for Self-Hosted LangGraph deployments. With one click, self-hosted LangGraph deployments can be deployed in the same Kubernetes cluster where a self-hosted LangSmith instance is deployed.
+|                   | [Control Plane](../concepts/langgraph_control_plane.md) | [Data Plane](../concepts/langgraph_data_plane.md) |
+|-------------------|-------------------|------------|
+| **What is it?** | <ul><li>Control Plane UI for creating deployments and revisions</li><li>Control Plane APIs for creating deployments and revisions</li></ul> | <ul><li>Data plane "listener" for reconciling deployments with control plane state</li><li>LangGraph Servers</li><li>Postgres, Redis, etc</li></ul> |
+| **Where is it hosted?** | LangChain's cloud | Your cloud |
+| **Who provisions and manages it?** | LangChain | You |
 
-For step-by-step instructions, see [How to set up a self-hosted deployment of LangGraph](../how-tos/deploy-self-hosted.md).
+For information on how to deploy a [LangGraph Server](../concepts/langgraph_server.md) to Self-Hosted Data Plane, see [Deploy to Self-Hosted Data Plane](../cloud/deployment/self_hosted_data_plane.md)
 
-## Helm Chart
+### Architecture
 
-If you would like to deploy LangGraph Cloud on Kubernetes, you can use this [Helm chart](https://github.com/langchain-ai/helm/blob/main/charts/langgraph-cloud/README.md).
+![Self-Hosted Data Plane Architecture](./img/self_hosted_data_plane_architecture.png)
 
-## Related
+### Compute Platforms
 
-- [How to set up a self-hosted deployment of LangGraph](../how-tos/deploy-self-hosted.md).
+- **Kubernetes**: The Self-Hosted Data Plane deployment option supports deploying data plane infrastructure to any Kubernetes cluster.
+- **Amazon ECS**: Coming soon!
+
+!!! tip
+
+  If you would like to deploy to Kubernetes, you can use this [Helm chart](https://github.com/langchain-ai/helm/blob/main/charts/langgraph-cloud/README.md).
+
+## Self-Hosted Control Plane (Beta)
+
+The [Self-Hosted Control Plane](./langgraph_self_hosted_control_plane.md) deployment option is a fully self-hosted model for deployment where you manage the [control plane](./langgraph_control_plane.md) and [data plane](./langgraph_data_plane.md) in your cloud. This option give you full control and responsibility of the control plane and data plane infrastructure.
+
+|                   | [Control Plane](../concepts/langgraph_control_plane.md) | [Data Plane](../concepts/langgraph_data_plane.md) |
+|-------------------|-------------------|------------|
+| **What is it?** | <ul><li>Control Plane UI for creating deployments and revisions</li><li>Control Plane APIs for creating deployments and revisions</li></ul> | <ul><li>Data plane "listener" for reconciling deployments with control plane state</li><li>LangGraph Servers</li><li>Postgres, Redis, etc</li></ul> |
+| **Where is it hosted?** | Your cloud | Your cloud |
+| **Who provisions and manages it?** | You | You |
+
+### Architecture
+
+![Self-Hosted Control Plane Architecture](./img/self_hosted_control_plane_architecture.png)
+
+### Compute Platforms
+
+ - **Kubernetes**: The Self-Hosted Control Plane deployment option supports deploying control plane and data plane infrastructure to any Kubernetes cluster.
+
+!!! tip
+
+  If you would like to deploy to Kubernetes, you can use this [Helm chart](https://github.com/langchain-ai/helm/blob/main/charts/langgraph-cloud/README.md).
+

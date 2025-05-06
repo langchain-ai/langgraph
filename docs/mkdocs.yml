@@ -232,20 +232,17 @@ nav:
         - how-tos/autogen-langgraph-platform.ipynb
       - Deployment:
         - Overview: concepts/deployment_options.md
-        - LangGraph Cloud SaaS:
+        - Cloud SaaS:
           - Overview: concepts/langgraph_cloud.md
-          - cloud/deployment/cloud.md
-        - concepts/self_hosted.md # DEPRECATE?
-        - how-tos/deploy-self-hosted.md # DEPRECATE?
-        - Self-Hosted Data Plane:
-          - concepts/langgraph_self_hosted_data_plane.md
-          - cloud/deployment/self_hosted_data_plane.md
-        - Self-Hosted Control Plane:
-          - concepts/langgraph_self_hosted_control_plane.md
-          - cloud/deployment/self_hosted_control_plane.md
+          - Deploy to Cloud SaaS: cloud/deployment/cloud.md
+        - Self-Hosted:
+          - Overview: concepts/self_hosted.md
+          - Deploy to Self-Hosted Data Plane: cloud/deployment/self_hosted_data_plane.md
+          - Deploy to Self-Hosted Control Plane: cloud/deployment/self_hosted_control_plane.md
         - Standalone Container:
-          - concepts/langgraph_standalone_container.md
-          - cloud/deployment/standalone_container.md
+          - Overview: concepts/langgraph_standalone_container.md
+          - Deploy to Standalone Container: cloud/deployment/standalone_container.md
+          # ADD SH LITE?
         - how-tos/use-remote-graph.md # SHOULD THIS GO SOMEWHERE ELSE?
       - Data management:
         - how-tos/ttl/configure_ttl.md
