@@ -1,6 +1,8 @@
 # Subgraphs
 
-A subgraph is a [graph](./low_level.md#graphs) that is used as a [node](./low_level.md#nodes) in another graph — concept of encapsulation applied to LangGraph. Subgraphs allow you to build complex systems with multiple components that are themselves graphs.
+A subgraph is a [graph](./low_level.md#graphs) that is used as a [node](./low_level.md#nodes) in another graph — this is the concept of encapsulation applied to LangGraph. Subgraphs allow you to build complex systems with multiple components that are themselves graphs.
+
+![Subgraph](./img/subgraph.png)
 
 Some reasons for using subgraphs are:
 
@@ -10,7 +12,70 @@ Some reasons for using subgraphs are:
 
 The main question when adding subgraphs is how the parent graph and subgraph communicate, i.e. how they pass the [state](./low_level.md#state) between each other during the graph execution. There are two scenarios:
 
-* parent graph and subgraph **share schema keys**. In this case, you can [add a node with the compiled subgraph](../how-tos/subgraph.ipynb#shared-state-schemas)
-* parent graph and subgraph have **different schemas**. In this case, you have to [add a node function that invokes the subgraph](../how-tos/subgraph.ipynb#different-state-schemas): this is useful when the parent graph and the subgraph have different state schemas and you need to transform state before or after calling the subgraph
+* parent and subgraph have **shared state keys** in their state [schemas](./low_level.md#state). In this case, you can [include the subgraph as a node in the parent graph](../how-tos/subgraph.ipynb#shared-state-schemas)
 
-![Subgraph](./img/subgraph.png)
+    ```python
+    from langgraph.graph import StateGraph, MessagesState, START
+
+    # Subgraph
+
+    def call_model(state: MessagesState):
+        response = model.invoke(state["messages"])
+        return {"messages": response}
+
+    subgraph_builder = StateGraph(State)
+    subgraph_builder.add_node(call_model)
+    ...
+    # highlight-next-line
+    subgraph = subgraph_builder.compile()
+
+    # Parent graph
+
+    builder = StateGraph(State)
+    # highlight-next-line
+    builder.add_node("subgraph_node", subgraph)
+    builder.add_edge(START, "subgraph_node")
+    graph = builder.compile()
+    ...
+    graph.invoke({"messages": [{"role": "user", "content": "hi!"}]})
+    ```
+
+* parent graph and subgraph have **different schemas** (no shared state keys in their state [schemas](../../concepts/low_level#state)). In this case, you have to [call the subgraph from inside a node in the parent graph](../how-tos/subgraph.ipynb#different-state-schemas): this is useful when the parent graph and the subgraph have different state schemas and you need to transform state before or after calling the subgraph
+
+    ```python
+    from typing_extensions import TypedDict, Annotated
+    from langchain_core.messages import AnyMessage
+    from langgraph.graph import StateGraph, MessagesState, START
+    from langgraph.graph.message import add_messages
+
+    class SubgraphMessagesState(TypedDict):
+        # highlight-next-line
+        subgraph_messages: Annotated[list[AnyMessage], add_messages]
+
+    # Subgraph
+
+    # highlight-next-line
+    def call_model(state: SubgraphMessagesState):
+        response = model.invoke(state["subgraph_messages"])
+        return {"subgraph_messages": response}
+
+    subgraph_builder = StateGraph(State)
+    subgraph_builder.add_node(call_model)
+    ...
+    # highlight-next-line
+    subgraph = subgraph_builder.compile()
+
+    # Parent graph
+
+    def call_subgraph(state: MessagesState):
+        response = subgraph.invoke({"subgraph_messages": state["messages"]})
+        return {"messages": response["subgraph_messages"]}
+
+    builder = StateGraph(State)
+    # highlight-next-line
+    builder.add_node("subgraph_node", call_subgraph)
+    builder.add_edge(START, "subgraph_node")
+    graph = builder.compile()
+    ...
+    graph.invoke({"messages": [{"role": "user", "content": "hi!"}]})
+    ```
