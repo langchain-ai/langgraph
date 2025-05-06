@@ -201,33 +201,29 @@ nav:
         - agents/ui.md
     - LangGraph Platform:
       - Overview: concepts/langgraph_platform.md
-      - General concepts:
-        - concepts/platform_architecture.md
-        - concepts/scalability_and_resilience.md
-        - concepts/deployment_options.md
-        - concepts/plans.md
-      - Components:
+      - concepts/platform_architecture.md
+      - Scalability & resilience: concepts/scalability_and_resilience.md # SHOULD THIS BE COMBINED WITH PLATFORM ARCHITECTURE ABOVE?
+      - Components: # IS THIS UNNECESSARY NESTING?
           - concepts/langgraph_control_plane.md
           - concepts/langgraph_data_plane.md
-          - concepts/langgraph_server.md
-          - concepts/langgraph_studio.md
+          - LangGraph Server:
+            - Overview: concepts/langgraph_server.md
+            - concepts/application_structure.md
+            - concepts/assistants.md
+            - concepts/double_texting.md
+            - concepts/auth.md
+          - LangGraph Studio:
+            - Overview: concepts/langgraph_studio.md
+            - cloud/how-tos/test_deployment.md
+            - cloud/how-tos/test_local_deployment.md
+            - cloud/how-tos/invoke_studio.md
+            - cloud/how-tos/threads_studio.md
+            - cloud/how-tos/datasets_studio.md
+            - cloud/how-tos/iterate_graph_studio.md
+            - cloud/how-tos/clone_traces_studio.md
+            - how-tos/local-studio.md
           - concepts/langgraph_cli.md
           - concepts/sdk.md
-      - how-tos/use-remote-graph.md
-      - LangGraph Studio:
-        - cloud/how-tos/test_deployment.md
-        - cloud/how-tos/test_local_deployment.md
-        - cloud/how-tos/invoke_studio.md
-        - cloud/how-tos/threads_studio.md
-        - cloud/how-tos/datasets_studio.md
-        - cloud/how-tos/iterate_graph_studio.md
-        - cloud/how-tos/clone_traces_studio.md
-        - how-tos/local-studio.md
-      - LangGraph server:
-        - concepts/application_structure.md
-        - concepts/assistants.md
-        - concepts/double_texting.md
-        - concepts/auth.md
       - Application structure:
         - cloud/deployment/setup.md
         - cloud/deployment/setup_pyproject.md
@@ -253,14 +249,12 @@ nav:
           - Deploy Standalone Container: cloud/deployment/standalone_container.md
           # ADD SH LITE?
         - how-tos/use-remote-graph.md # SHOULD THIS GO SOMEWHERE ELSE?
+        - concepts/plans.md # DELETE AND ROUTE TO MARKETING SITE?
       - Data management:
         - how-tos/ttl/configure_ttl.md
       - Authentication & access control:
         - how-tos/auth/custom_auth.md
         - how-tos/auth/openapi_security.md
-        - tutorials/auth/getting_started.md
-        - tutorials/auth/resource_auth.md
-        - tutorials/auth/add_auth_server.md
       - Assistants:
         - cloud/how-tos/configuration_cloud.md
         - cloud/how-tos/assistant_versioning.md
@@ -330,13 +324,17 @@ nav:
       - Environment variables: cloud/reference/env_var.md
 
   - Examples:
-    - tutorials/langgraph-platform/local-server.md
-    - Cloud deploy: cloud/quick_start.md
-    - tutorials/workflows/index.md
+    - Launch local server: tutorials/langgraph-platform/local-server.md
     - Agentic RAG: tutorials/rag/langgraph_agentic_rag.ipynb
     - Agent Supervisor: tutorials/multi_agent/agent_supervisor.ipynb
     - Customer Support: tutorials/customer-support/customer-support.ipynb
     - SQL agent: tutorials/sql-agent.ipynb
+    - LangGraph Platform:
+      - Authentication:
+        - tutorials/auth/getting_started.md
+        - tutorials/auth/resource_auth.md
+        - tutorials/auth/add_auth_server.md
+      - Cloud deploy: cloud/quick_start.md
 
   - Resources:
     - LLMS-txt: llms-txt-overview.md
