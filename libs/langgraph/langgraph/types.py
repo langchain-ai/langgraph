@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import dataclasses
 import sys
 from collections import deque
@@ -10,9 +12,7 @@ from typing import (
     Generic,
     Literal,
     NamedTuple,
-    Optional,
     TypeVar,
-    Union,
     cast,
     get_type_hints,
 )
@@ -41,7 +41,7 @@ except ImportError:
 All = Literal["*"]
 """Special value to indicate that graph should interrupt on all nodes."""
 
-Checkpointer = Union[None, bool, BaseCheckpointSaver]
+Checkpointer = None | bool | BaseCheckpointSaver
 """Type of the checkpointer to use for a subgraph.
 - True enables persistent checkpointing for this subgraph.
 - False disables checkpointing, even if the parent graph has a checkpointer.
@@ -117,9 +117,9 @@ class RetryPolicy(NamedTuple):
     """Maximum number of attempts to make before giving up, including the first."""
     jitter: bool = True
     """Whether to add random jitter to the interval between retries."""
-    retry_on: Union[
-        type[Exception], Sequence[type[Exception]], Callable[[Exception], bool]
-    ] = default_retry_on
+    retry_on: (
+        type[Exception] | Sequence[type[Exception]] | Callable[[Exception], bool]
+    ) = default_retry_on
     """List of exception classes that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
 
 
@@ -134,7 +134,7 @@ class CachePolicy(Generic[KeyFuncT]):
     """Function to generate a cache key from the node's input.
     Defaults to hashing the input with pickle."""
 
-    ttl: Optional[int] = None
+    ttl: int | None = None
     """Time to live for the cache entry in seconds. If None, the entry never expires."""
 
     refresh: bool = False
@@ -150,7 +150,7 @@ class Interrupt:
 
     value: Any
     resumable: bool = False
-    ns: Optional[Sequence[str]] = None
+    ns: Sequence[str] | None = None
     when: Literal["during"] = dataclasses.field(default="during", repr=False)
 
     @property
@@ -162,8 +162,8 @@ class Interrupt:
 
 
 class StateUpdate(NamedTuple):
-    values: Optional[dict[str, Any]]
-    as_node: Optional[str] = None
+    values: dict[str, Any] | None
+    as_node: str | None = None
 
 
 class PregelTask(NamedTuple):
@@ -171,11 +171,11 @@ class PregelTask(NamedTuple):
 
     id: str
     name: str
-    path: tuple[Union[str, int, tuple], ...]
-    error: Optional[Exception] = None
+    path: tuple[str | int | tuple, ...]
+    error: Exception | None = None
     interrupts: tuple[Interrupt, ...] = ()
-    state: Union[None, RunnableConfig, "StateSnapshot"] = None
-    result: Optional[Any] = None
+    state: RunnableConfig | StateSnapshot | None = None
+    result: Any | None = None
 
 
 if sys.version_info > (3, 11):
@@ -189,7 +189,7 @@ class CacheKey(NamedTuple):
 
     key: str
     """Key for the cache entry."""
-    ttl: Optional[int]
+    ttl: int | None
     """Time to live for the cache entry in seconds."""
     refresh: bool
     """Whether to force a refresh of the cache entry when it is accessed."""
@@ -204,28 +204,28 @@ class PregelExecutableTask:
     config: RunnableConfig
     triggers: Sequence[str]
     retry_policy: Sequence[RetryPolicy]
-    cache_key: Optional[CacheKey]
+    cache_key: CacheKey | None
     id: str
-    path: tuple[Union[str, int, tuple], ...]
+    path: tuple[str | int | tuple, ...]
     scheduled: bool = False
     writers: Sequence[Runnable] = ()
-    subgraphs: Sequence["PregelProtocol"] = ()
+    subgraphs: Sequence[PregelProtocol] = ()
 
 
 class StateSnapshot(NamedTuple):
     """Snapshot of the state of the graph at the beginning of a step."""
 
-    values: Union[dict[str, Any], Any]
+    values: dict[str, Any] | Any
     """Current values of channels."""
     next: tuple[str, ...]
     """The name of the node to execute in each task for this step."""
     config: RunnableConfig
     """Config used to fetch this snapshot."""
-    metadata: Optional[CheckpointMetadata]
+    metadata: CheckpointMetadata | None
     """Metadata associated with this snapshot."""
-    created_at: Optional[str]
+    created_at: str | None
     """Timestamp of snapshot creation."""
-    parent_config: Optional[RunnableConfig]
+    parent_config: RunnableConfig | None
     """Config used to fetch the parent snapshot, if any."""
     tasks: tuple[PregelTask, ...]
     """Tasks to execute in this step. If already attempted, may contain an error."""
@@ -332,10 +332,10 @@ class Command(Generic[N], ToolOutputMixin):
             - sequence of `Send` objects
     """
 
-    graph: Optional[str] = None
-    update: Optional[Any] = None
-    resume: Optional[Union[Any, dict[str, Any]]] = None
-    goto: Union[Send, Sequence[Union[Send, N]], N] = ()
+    graph: str | None = None
+    update: Any | None = None
+    resume: dict[str, Any] | Any | None = None
+    goto: Send | N | Sequence[Send | N] = ()
 
     def __repr__(self) -> str:
         # get all non-None values
@@ -385,8 +385,8 @@ class StreamProtocol:
 
 class LoopProtocol:
     config: RunnableConfig
-    store: Optional["BaseStore"]
-    stream: Optional[StreamProtocol]
+    store: BaseStore | None
+    stream: StreamProtocol | None
     step: int
     stop: int
 
@@ -396,8 +396,8 @@ class LoopProtocol:
         step: int,
         stop: int,
         config: RunnableConfig,
-        store: Optional["BaseStore"] = None,
-        stream: Optional[StreamProtocol] = None,
+        store: BaseStore | None = None,
+        stream: StreamProtocol | None = None,
     ) -> None:
         self.stream = stream
         self.config = config
