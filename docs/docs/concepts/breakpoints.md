@@ -5,7 +5,13 @@ search:
 
 # Breakpoints
 
-Breakpoints pause graph execution at specific points and enable stepping through execution step by step. Breakpoints are powered by LangGraph's [**persistence layer**](./persistence.md), which saves the state after each graph step. Breakpoints can also be used to enable [**human-in-the-loop**](./human_in_the_loop.md) workflows, though we recommend using the [`interrupt` function](./human_in_the_loop.md#interrupt) for this purpose.
+Breakpoints pause graph execution at specific points and enable stepping through execution step by step. Breakpoints are powered by LangGraph's [**persistence layer**](./persistence.md), which saves the state after each graph step.
+
+Breakpoints can be used to inspect the state of the graph at any point in time, allowing you to view the state of the graph and the inputs to each node. This is useful for debugging and understanding how the graph is executing.
+
+With breakpoints graph execution can be paused **indefinitely** until the user decides to resume execution as the state of the graph is persisted into the checkpointer.
+
+Breakpoints can also be used to enable [**human-in-the-loop**](./human_in_the_loop.md) workflows, though we recommend using the [`interrupt` function](./human_in_the_loop.md#interrupt) for this purpose.
 
 ## Requirements
 
@@ -22,66 +28,150 @@ There are two places where you can set breakpoints:
 
 1. **Before** or **after** a node executes by setting breakpoints at **compile time** or **run time**. We call these [**static breakpoints**](#static-breakpoints).
 2. **Inside** a node using the [`NodeInterrupt` exception](#nodeinterrupt-exception).
- 
-### Static breakpoints
-
-Static breakpoints are triggered either **before** or **after** a node executes. You can set static breakpoints by specifying `interrupt_before` and `interrupt_after` at **"compile" time** or **run time**.
 
 === "Compile time"
 
     ```python
     graph = graph_builder.compile(
-        interrupt_before=["node_a"], 
-        interrupt_after=["node_b", "node_c"],
-        checkpointer=..., # Specify a checkpointer
+        # highlight-next-line
+        interrupt_before=["node_a"], # (1)!
+        # highlight-next-line
+        interrupt_after=["node_b", "node_c"], # (2)!
+        checkpointer=checkpointer, # (3)!
     )
 
-    thread_config = {
+    config = {
         "configurable": {
             "thread_id": "some_thread"
         }
     }
 
     # Run the graph until the breakpoint
-    graph.invoke(inputs, config=thread_config)
-
-    # Optionally update the graph state based on user input
-    graph.update_state(update, config=thread_config)
+    graph.invoke(inputs, config=thread_config) # (4)!
 
     # Resume the graph
-    graph.invoke(None, config=thread_config)
+    graph.invoke(None, config=thread_config) # (5)!
     ```
+
+    1. `interrupt_before` specifies the nodes where execution should pause before the node is executed.
+    2. `interrupt_after` specifies the nodes where execution should pause after the node is executed.
+    3. A checkpointer is required to enable breakpoints.
+    4. The graph is run until the first breakpoint is hit.
+    5. The graph is resumed by passing in `None` for the input. This will run the graph until the next breakpoint is hit.
 
 === "Run time"
 
     ```python
-    graph.invoke(
+    # highlight-next-line
+    graph.invoke( # (1)!
         inputs, 
-        config={"configurable": {"thread_id": "some_thread"}}, 
-        interrupt_before=["node_a"], 
-        interrupt_after=["node_b", "node_c"]
+        # highlight-next-line
+        interrupt_before=["node_a"], # (2)!
+        # highlight-next-line
+        interrupt_after=["node_b", "node_c"] # (3)!
+        config={
+            "configurable": {"thread_id": "some_thread"}
+        }, 
     )
 
-    thread_config = {
+    config = {
         "configurable": {
             "thread_id": "some_thread"
         }
     }
 
     # Run the graph until the breakpoint
-    graph.invoke(inputs, config=thread_config)
-
-    # Optionally update the graph state based on user input
-    graph.update_state(update, config=thread_config)
+    graph.invoke(inputs, config=config) # (4)!
 
     # Resume the graph
-    graph.invoke(None, config=thread_config)
+    graph.invoke(None, config=config) # (5)!
     ```
+
+    1. `graph.invoke` is called with the `interrupt_before` and `interrupt_after` parameters. This is a run-time configuration and can be changed for every invocation.
+    2. `interrupt_before` specifies the nodes where execution should pause before the node is executed.
+    3. `interrupt_after` specifies the nodes where execution should pause after the node is executed.
+    4. The graph is run until the first breakpoint is hit.
+    5. The graph is resumed by passing in `None` for the input. This will run the graph until the next breakpoint is hit.
 
     !!! note
 
         You cannot set static breakpoints at runtime for **sub-graphs**.
         If you have a sub-graph, you must set the breakpoints at compilation time.
+
+
+
+
+### Static breakpoints
+
+Static breakpoints are triggered either **before** or **after** a node executes. You can set static breakpoints by specifying `interrupt_before` and `interrupt_after` at **"compile" time** or **run time**.
+
+```python
+from IPython.display import Image, display
+from typing_extensions import TypedDict
+
+from langgraph.checkpoint.memory import InMemorySaver 
+from langgraph.graph import StateGraph, START, END
+
+
+class State(TypedDict):
+    input: str
+
+
+def step_1(state):
+    print("---Step 1---")
+    pass
+
+
+def step_2(state):
+    print("---Step 2---")
+    pass
+
+
+def step_3(state):
+    print("---Step 3---")
+    pass
+
+
+builder = StateGraph(State)
+builder.add_node("step_1", step_1)
+builder.add_node("step_2", step_2)
+builder.add_node("step_3", step_3)
+builder.add_edge(START, "step_1")
+builder.add_edge("step_1", "step_2")
+builder.add_edge("step_2", "step_3")
+builder.add_edge("step_3", END)
+
+# Set up a checkpointer 
+checkpointer = InMemorySaver() # (1)!
+
+graph = builder.compile(
+    checkpointer=checkpointer, # (2)!
+    interrupt_before=["step_3"] # (3)!
+)
+
+# View
+display(Image(graph.get_graph().draw_mermaid_png()))
+```
+
+```python
+# Input
+initial_input = {"input": "hello world"}
+
+# Thread
+thread = {"configurable": {"thread_id": "1"}}
+
+# Run the graph until the first interruption
+for event in graph.stream(initial_input, thread, stream_mode="values"):
+    print(event)
+    
+# This will run until the breakpoint
+# You can get the state of the graph at this point
+print(graph.get_state(config))
+
+# You can continue the graph execution by passing in `None` for the input
+for event in graph.stream(None, thread, stream_mode="values"):
+    print(event)
+```
 
 Static breakpoints can be especially useful for debugging if you want to step through the graph execution one
 node at a time or if you want to pause the graph execution at specific nodes.
