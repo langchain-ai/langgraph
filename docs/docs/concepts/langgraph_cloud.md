@@ -3,7 +3,7 @@ search:
   boost: 2
 ---
 
-# Cloud SaaS (Beta)
+# Cloud SaaS
 
 To deploy a [LangGraph Server](../concepts/langgraph_server.md), follow the how-to guide for [how to deploy to Cloud SaaS](../cloud/deployment/cloud.md).
 
