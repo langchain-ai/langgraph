@@ -282,7 +282,7 @@ def greet(
 
 agent = create_react_agent(
     model="anthropic:claude-3-7-sonnet-latest",
-    tools=[get_user_info, greet],
+    tools=[update_user_info, greet],
     # highlight-next-line
     state_schema=CustomState
 )
