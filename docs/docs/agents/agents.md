@@ -16,7 +16,7 @@ This guide shows you how to set up and use LangGraph's **prebuilt**, **reusable*
 If you haven't already, install LangGraph:
 
 ```
-pip install -U langgraph
+pip install -U langgraph "langchain[anthropic]"
 ```
 
 ## 2. Create an agent
