@@ -28,12 +28,17 @@ REDIRECT_MAP = {
     # graph-api
     "how-tos/state-reducers.ipynb": "how-tos/graph-api#define-and-update-state",
     "how-tos/sequence.ipynb": "how-tos/graph-api#create-a-sequence-of-steps",
-    "how-tos/branching.ipynb": "how-tos/graph-api#create-branches-for-parallel-node-execution",
+    "how-tos/branching.ipynb": "how-tos/graph-api#create-branches",
     "how-tos/recursion-limit.ipynb": "how-tos/graph-api#create-and-control-loops",
     "how-tos/visualization.ipynb": "how-tos/graph-api#visualize-your-graph",
     "how-tos/input_output_schema.ipynb": "how-tos/graph-api#define-input-and-output-schemas",
     "how-tos/pass_private_state.ipynb": "how-tos/graph-api#pass-private-state-between-nodes",
     "how-tos/state-model.ipynb": "how-tos/graph-api#use-pydantic-models-for-graph-state",
+    "how-tos/map-reduce.ipynb": "how-tos/graph-api/#map-reduce-and-the-send-api",
+    "how-tos/command.ipynb": "how-tos/graph-api/#combine-control-flow-and-state-updates-with-command",
+    "how-tos/configuration.ipynb": "how-tos/graph-api/#add-runtime-configuration",
+    "how-tos/node-retries.ipynb": "how-tos/graph-api/#add-retry-policies",
+    "how-tos/return-when-recursion-limit-hits.ipynb": "how-tos/graph-api/#impose-a-recursion-limit",
     # memory how-tos
     "how-tos/memory/manage-conversation-history.ipynb": "how-tos/memory.ipynb",
     "how-tos/memory/delete-messages.ipynb": "how-tos/memory.ipynb#delete-messages",
