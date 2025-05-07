@@ -1,7 +1,7 @@
 """The LangGraph client implementations connect to the LangGraph API.
 
-This module provides both asynchronous ([get_client()](#get_client) or [LangGraphClient](#LangGraphClient))
-and synchronous ([get_sync_client()](#get_sync_client) or [SyncLanggraphClient](#SyncLanggraphClient))
+This module provides both asynchronous ([get_client(url="http://localhost:2024"))](#get_client) or [LangGraphClient](#LangGraphClient))
+and synchronous ([get_sync_client(url="http://localhost:2024"))](#get_sync_client) or [SyncLanggraphClient](#SyncLanggraphClient))
 clients to interacting with the LangGraph API's core resources such as
 Assistants, Threads, Runs, and Cron jobs, as well as its persistent
 document Store.
@@ -392,10 +392,12 @@ class AssistantsClient:
     This class provides methods to interact with assistants,
     which are versioned configurations of your graph.
 
-    Example:
+    ???+ example "Example"
 
-        client = get_client()
+        ```python
+        client = get_client(url="http://localhost:2024")
         assistant = await client.assistants.get("assistant_id_123")
+        ```
     """
 
     def __init__(self, http: HttpClient) -> None:
@@ -928,7 +930,7 @@ class ThreadsClient:
 
     Example:
 
-        client = get_client()
+        client = get_client(url="http://localhost:2024"))
         new_thread = await client.threads.create(metadata={"user_id": "123"})
     """
 
@@ -1409,10 +1411,12 @@ class RunsClient:
     A run is a single assistant invocation with optional input, config, and metadata.
     This client manages runs, which can be stateful (on threads) or stateless.
 
-    Example:
+    ???+ example "Example"
 
-        client = get_client()
+        ```python
+        client = get_client(url="http://localhost:2024")
         run = await client.runs.create(assistant_id="asst_123", thread_id="thread_456", input={"query": "Hello"})
+        ```
     """
 
     def __init__(self, http: HttpClient) -> None:
@@ -2192,7 +2196,7 @@ class CronClient:
 
     Example:
 
-        client = get_client()
+        client = get_client(url="http://localhost:2024"))
         cron_job = await client.crons.create_for_thread(
             thread_id="thread_123",
             assistant_id="asst_456",
@@ -2444,10 +2448,12 @@ class StoreClient:
     The Store provides a key-value storage system for persisting data across graph executions,
     allowing for stateful operations and data sharing across threads.
 
-    Example:
+    ???+ example "Example"
 
-        client = get_client()
+        ```python
+        client = get_client(url="http://localhost:2024")
         await client.store.put_item(["users", "user123"], "mem-123451342", {"name": "Alice", "score": 100})
+        ```
     """
 
     def __init__(self, http: HttpClient) -> None:
@@ -2761,10 +2767,12 @@ class SyncLangGraphClient:
     This class provides synchronous access to LangGraph API endpoints for managing
     assistants, threads, runs, cron jobs, and data storage.
 
-    Example:
+    ???+ example "Example"
 
-        client = get_sync_client()
+        ```python
+        client = get_sync_client(url="http://localhost:2024")
         assistant = client.assistants.get("asst_123")
+        ```
     """
 
     def __init__(self, client: httpx.Client) -> None:
@@ -2959,6 +2967,8 @@ class SyncAssistantsClient:
     This class provides methods to interact with assistants, which are versioned configurations of your graph.
 
     ???+ example "Examples"
+
+        ???+ example "Example"
 
         ```python
         client = get_sync_client(url="http://localhost:2024")
@@ -3481,10 +3491,12 @@ class SyncThreadsClient:
     This class provides methods to create, retrieve, and manage threads,
     which represent conversations or stateful interactions.
 
-    Example:
+    ???+ example "Example"
 
+        ```python
         client = get_sync_client(url="http://localhost:2024")
         thread = client.threads.create(metadata={"user_id": "123"})
+        ```
     """
 
     def __init__(self, http: SyncHttpClient) -> None:
@@ -3966,10 +3978,12 @@ class SyncRunsClient:
     This class provides methods to create, retrieve, and manage runs, which represent
     individual executions of graphs.
 
-    Example:
+    ???+ example "Example"
 
-        client = get_sync_client()
+        ```python
+        client = get_sync_client(url="http://localhost:2024")
         run = client.runs.create(thread_id="thread_123", assistant_id="asst_456")
+        ```
     """
 
     def __init__(self, http: SyncHttpClient) -> None:
@@ -4465,6 +4479,9 @@ class SyncRunsClient:
                 multitask_strategy="interrupt"
             )
             print(final_state_of_run)
+            ```
+
+            ```json
 
             -------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -4544,7 +4561,7 @@ class SyncRunsClient:
         ???+ example "Example Usage"
 
             ```python
-
+            client = get_sync_client(url="http://localhost:2024")
             client.runs.list(
                 thread_id="thread_id",
                 limit=5,
@@ -4738,10 +4755,12 @@ class SyncCronClient:
 
     This class provides methods to create and manage scheduled tasks (cron jobs) for automated graph executions.
 
-    Example:
+    ???+ example "Example"
 
-        client = get_sync_client()
+        ```python
+        client = get_sync_client(url="http://localhost:2024")
         cron_job = client.crons.create_for_thread(thread_id="thread_123", assistant_id="asst_456", schedule="0 * * * *")
+        ```
     """
 
     def __init__(self, http_client: SyncHttpClient) -> None:
@@ -4987,7 +5006,7 @@ class SyncStoreClient:
 
     Example:
 
-        client = get_sync_client()
+        client = get_sync_client(url="http://localhost:2024"))
         client.store.put_item(["users", "profiles"], "user123", {"name": "Alice", "age": 30})
     """
 
