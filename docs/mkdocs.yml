@@ -126,17 +126,12 @@ nav:
         - Manage memory: how-tos/memory.ipynb
       - Human-in-the-loop:
         - Overview: concepts/human_in_the_loop.md
-        - how-tos/human_in_the_loop/wait-user-input.ipynb
-        - how-tos/human_in_the_loop/review-tool-calls.ipynb
+        - how-tos/human_in_the_loop/use-interrupt.md
+        - how-tos/human_in_the_loop/breakpoints.ipynb
+        - how-tos/human_in_the_loop/time-travel.ipynb
       - Streaming:
         - Overview: concepts/streaming.md
         - "Stream outputs": how-tos/streaming.md
-      - Breakpoints:
-        - Overview: concepts/breakpoints.md
-        - how-tos/human_in_the_loop/breakpoints.ipynb
-      - Time travel:
-        - Overview: concepts/time-travel.md
-        - how-tos/human_in_the_loop/time-travel.ipynb
       - Tools:
         - Overview: concepts/tools.md
         - how-tos/tool-calling.ipynb
