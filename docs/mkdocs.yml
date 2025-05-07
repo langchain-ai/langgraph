@@ -447,3 +447,4 @@ copyright: >
 extra_css:
   - stylesheets/version_admonitions.css
   - stylesheets/logos.css
+  - stylesheets/sticky_navigation.css
