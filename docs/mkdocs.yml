@@ -152,6 +152,7 @@ nav:
         - how-tos/subgraph.ipynb
       - Multi-agent:
         - Overview: concepts/multi_agent.md
+        - how-tos/multi_agent.ipynb
         - how-tos/agent-handoffs.ipynb
         - how-tos/multi-agent-network.ipynb
         - how-tos/multi-agent-multi-turn-convo.ipynb
