@@ -126,8 +126,7 @@ nav:
         - Manage memory: how-tos/memory.ipynb
       - Human-in-the-loop:
         - Overview: concepts/human_in_the_loop.md
-        - how-tos/human_in_the_loop/wait-user-input.ipynb
-        - how-tos/human_in_the_loop/review-tool-calls.ipynb
+        - how-tos/human_in_the_loop/add-human-in-the-loop.md
       - Streaming:
         - Overview: concepts/streaming.md
         - "Stream outputs": how-tos/streaming.md
