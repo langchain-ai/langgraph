@@ -32,21 +32,6 @@ In other words, the data plane "listener" reads the latest state of the control 
 
 This section describes various features of the data plane.
 
-### Lite vs Enterprise
-
-There are two versions of the LangGraph Server: `Lite` and `Enterprise`.
-
-The `Lite` version is a limited version of the LangGraph Server that you can run locally or in a self-hosted manner (up to 1 million nodes executed per year). `Lite` is only available for the [Standalone Container](../concepts/langgraph_standalone_container.md) deployment option.
-
-The `Enterprise` version is the full version of the LangGraph Server. To use the `Enterprise` version, you must acquire a license key that you will need to specify when running the Docker image. To acquire a license key, please email sales@langchain.dev. `Enterprise` is available for [Cloud SaaS](../concepts/langgraph_cloud.md), [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md), and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployment options.
-
-Feature Differences:
-
-|       | Lite       | Enterprise |
-|-------|------------|------------|
-| [Cron Jobs](../concepts/langgraph_server.md#cron-jobs) |❌|✅|
-| [Custom Authentication](../concepts/auth.md) |❌|✅|
-
 ### Autoscaling
 
 [`Production` type](../concepts/langgraph_control_plane.md#deployment-types) deployments automatically scale up to 10 containers. Scaling is based on 3 metrics:
@@ -83,7 +68,7 @@ All traffic from deployments created after January 6th 2025 will come through a 
 
 ### Custom Postgres
 
-!!! info "Only for Self-Hosted Data Plane and Self-Hosted Control Plane"
+!!! info 
     Custom Postgres instances are only available for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments.
 
 A custom Postgres instance can be used instead of the [one automatically created by the control plane](./langgraph_control_plane.md#database-provisioning). Specify the [`POSTGRES_URI_CUSTOM`](../cloud/reference/env_var.md#postgres_uri_custom) environment variable to use a custom Postgres instance.
@@ -92,8 +77,8 @@ Multiple deployments can share the same Postgres instance. For example, for `Dep
 
 ### Custom Redis
 
-!!! info "Only for Self-Hosted Data Plane and Self-Hosted Control Plane"
-    Custom Redis instances are only available for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments.
+!!! info
+    Custom Redis instances are only available for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_control_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments.
 
 A custom Redis instance can be used instead of the one automatically created by the control plane. Specify the [REDIS_URI_CUSTOM](../cloud/reference/env_var.md#redis_uri_custom) environment variable to use a custom Redis instance.
 

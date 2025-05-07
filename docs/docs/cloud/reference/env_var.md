@@ -38,11 +38,11 @@ For deployments to LangGraph Cloud, this environment variable is set automatical
 
 ## `LANGSMITH_RUNS_ENDPOINTS`
 
-For [Bring Your Own Cloud (BYOC)](../../concepts/bring_your_own_cloud.md) deployments with [self-hosted LangSmith](https://docs.smith.langchain.com/self_hosting) only.
+For deployments with [self-hosted LangSmith](https://docs.smith.langchain.com/self_hosting) only.
 
-Set this environment variable to have a BYOC deployment send traces to a self-hosted LangSmith instance. The value of `LANGSMITH_RUNS_ENDPOINTS` is a JSON string: `{"<SELF_HOSTED_LANGSMITH_HOSTNAME>":"<LANGSMITH_API_KEY>"}`.
+Set this environment variable to have a deployment send traces to a self-hosted LangSmith instance. The value of `LANGSMITH_RUNS_ENDPOINTS` is a JSON string: `{"<SELF_HOSTED_LANGSMITH_HOSTNAME>":"<LANGSMITH_API_KEY>"}`.
 
-`SELF_HOSTED_LANGSMITH_HOSTNAME` is the hostname of the self-hosted LangSmith instance. It must be accessible to the BYOC deployment. `LANGSMITH_API_KEY` is a LangSmith API generated from the self-hosted LangSmith instance.
+`SELF_HOSTED_LANGSMITH_HOSTNAME` is the hostname of the self-hosted LangSmith instance. It must be accessible to the deployment. `LANGSMITH_API_KEY` is a LangSmith API generated from the self-hosted LangSmith instance.
 
 ## `LANGSMITH_TRACING`
 

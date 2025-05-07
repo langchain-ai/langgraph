@@ -13,6 +13,21 @@ search:
 
 LangGraph Server offers an API for creating and managing agent-based applications. It is built on the concept of [assistants](assistants.md), which are agents configured for specific tasks, and includes built-in [persistence](persistence.md#memory-store) and a **task queue**. This versatile API supports a wide range of agentic application use cases, from background processing to real-time interactions.
 
+## Server versions
+
+There are two versions of the LangGraph Server: `Lite` and `Enterprise`.
+
+The `Lite` version is a limited version of the LangGraph Server that you can run locally or in a self-hosted manner (up to 1 million nodes executed per year). `Lite` is only available for the [Standalone Container](../concepts/langgraph_standalone_container.md) deployment option.
+
+The `Enterprise` version is the full version of the LangGraph Server. To use the `Enterprise` version, you must acquire a license key that you will need to specify when running the Docker image. To acquire a license key, please email sales@langchain.dev. `Enterprise` is available for [Cloud SaaS](../concepts/langgraph_cloud.md), [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md), and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployment options.
+
+Feature Differences:
+
+|       | Lite       | Enterprise |
+|-------|------------|------------|
+| [Cron Jobs](../concepts/langgraph_server.md#cron-jobs) |❌|✅|
+| [Custom Authentication](../concepts/auth.md) |❌|✅|
+
 ## Key Features
 
 The LangGraph Platform incorporates best practices for agent deployment, so you can focus on building your agent logic.

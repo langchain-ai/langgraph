@@ -79,7 +79,7 @@ The LangGraph Platform comprises several components that work together to suppor
 
 ### Deployment Options
 
-- <a href="./langgraph_cloud/">Cloud SaaS<sup>(Beta)</sup></a>: Connect to your GitHub repositories and deploy LangGraph Servers to LangChain's cloud. We manage everything.
+- <a href="./langgraph_cloud/">Cloud SaaS</a>: Connect to your GitHub repositories and deploy LangGraph Servers to LangChain's cloud. We manage everything.
 - <a href="./langgraph_self_hosted_data_plane/">Self-Hosted Data Plane<sup>(Beta)</sup></a>: Create deployments from the [Control Plane UI](../concepts/langgraph_control_plane.md#control-plane-ui) and deploy LangGraph Servers to your cloud. We manage the [control plane](../concepts/langgraph_control_plane.md), you manage the deployments.
 - <a href="./langgraph_self_hosted_control_plane/">Self-Hosted Control Plane<sup>(Beta)</sup></a>: Create deployments from a self-hosted [Control Plane UI](../concepts/langgraph_control_plane.md#control-plane-ui) and deploy LangGraph Servers to your cloud. You manage everything.
 - [Standalone Container](../concepts/langgraph_standalone_container.md): Deploy LangGraph Server Docker images however you like.

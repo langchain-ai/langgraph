@@ -1,15 +1,15 @@
----
-search:
-  boost: 2
----
+# Self-Hosted Control Plane
 
-# Self-Hosted Control Plane (Beta)
+There are two versions of the self-hosted deployment: [Self-Hosted Data Plane](./deployment_options.md#self-hosted-data-plane) and [Self-Hosted Control Plane](./deployment_options.md#self-hosted-control-plane).
 
-To deploy a [LangGraph Server](../concepts/langgraph_server.md), follow the how-to guide for [how to deploy the Self-Hosted Control Plane](../cloud/deployment/self_hosted_control_plane.md).
+## Requirements
 
-## Overview
+- You use `langgraph-cli` and/or [LangGraph Studio](./langgraph_studio.md) app to test graph locally.
+- You use `langgraph build` command to build image.
 
-The Self-Hosted Control Plane deployment option is a fully self-hosted model for deployment where you manage the [control plane](./langgraph_control_plane.md) and [data plane](./langgraph_data_plane.md) in your cloud (this option implies that the data plane is self-hosted).
+## Self-Hosted Control Plane (Beta)
+
+The [Self-Hosted Control Plane](./langgraph_self_hosted_control_plane.md) deployment option is a fully self-hosted model for deployment where you manage the [control plane](./langgraph_control_plane.md) and [data plane](./langgraph_data_plane.md) in your cloud. This option give you full control and responsibility of the control plane and data plane infrastructure.
 
 |                   | [Control Plane](../concepts/langgraph_control_plane.md) | [Data Plane](../concepts/langgraph_data_plane.md) |
 |-------------------|-------------------|------------|
@@ -17,12 +17,14 @@ The Self-Hosted Control Plane deployment option is a fully self-hosted model for
 | **Where is it hosted?** | Your cloud | Your cloud |
 | **Who provisions and manages it?** | You | You |
 
-## Architecture
+### Architecture
 
 ![Self-Hosted Control Plane Architecture](./img/self_hosted_control_plane_architecture.png)
 
-## Compute Platforms
+### Compute Platforms
 
-### Kubernetes
+ - **Kubernetes**: The Self-Hosted Control Plane deployment option supports deploying control plane and data plane infrastructure to any Kubernetes cluster.
 
-The Self-Hosted Control Plane deployment option supports deploying control plane and data plane infrastructure to any Kubernetes cluster.
+!!! tip
+
+  If you would like to deploy to Kubernetes, you can use this [Helm chart](https://github.com/langchain-ai/helm/blob/main/charts/langgraph-cloud/README.md).

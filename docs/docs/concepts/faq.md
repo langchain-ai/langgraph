@@ -35,7 +35,7 @@ LangGraph is a stateful, orchestration framework that brings added control to ag
 | Streaming           | Basic                                                     | Dedicated mode for token-by-token messages                                                             |
 | Checkpointer        | Community contributed                                     | Supported out-of-the-box                                                                               |
 | Persistence Layer   | Self-managed                                              | Managed Postgres with efficient storage                                                                |
-| Deployment          | Self-managed                                              | • Cloud SaaS <br> • Free self-hosted <br> • Enterprise (BYOC or paid self-hosted)                      |
+| Deployment          | Self-managed                                              | • Cloud SaaS <br> • Free self-hosted <br> • Enterprise (paid self-hosted)                      |
 | Scalability         | Self-managed                                              | Auto-scaling of task queues and servers                                                                |
 | Fault-tolerance     | Self-managed                                              | Automated retries                                                                                      |
 | Concurrency Control | Simple threading                                          | Supports double-texting                                                                                |
@@ -43,23 +43,11 @@ LangGraph is a stateful, orchestration framework that brings added control to ag
 | Monitoring          | None                                                      | Integrated with LangSmith for observability                                                            |
 | IDE integration     | LangGraph Studio                                          | LangGraph Studio                                                                                       |
 
-## What are my deployment options for LangGraph Platform?
-
-We currently have the following deployment options for LangGraph applications:
-
-- **Cloud SaaS<sup>(Beta)**: A fully managed model for deployment where we manage the [control plane](./langgraph_control_plane.md) and [data plane](./langgraph_data_plane.md) in our cloud. This option provides a simple way to deploy and manage your LangGraph Servers. Available for **Plus** and **Enterprise** plans.
-
-- **Self-Hosted Data Plane<sup>(Beta)</sup>**: A "hybrid" model for deployemnt where we manage the [control plane](./langgraph_control_plane.md) in our cloud and you manage the [data plane](./langgraph_data_plane.md) in your cloud. This option provides a way to securely manage your data plane infrastructure, while offloading control plane management to us. Available for the **Enterprise** plan.
-
-- **Self-Hosted Control Plane<sup>(Beta)</sup>**: A fully self-hosted model for deployment where you manage the [control plane](./langgraph_control_plane.md) and [data plane](./langgraph_data_plane.md) in your cloud. This option give you full control and responsibility of the control plane and data plane infrastructure. Available for the **Enterprise** plan.
-
-- **Standalone Container**: The least restrictive model for deployment. Deploy standalone instances of a LangGraph Server in your cloud. Available for all plans.
-
 ## Is LangGraph Platform open source?
 
 No. LangGraph Platform is proprietary software.
 
-There is a free, self-hosted version of LangGraph Platform with access to basic features. The Cloud SaaS deployment option is free while in beta, but will eventually be a paid service. We will always give ample notice before charging for a service and reward our early adopters with preferential pricing. The Bring Your Own Cloud (BYOC) and Self-Hosted Enterprise options are also paid services. [Contact our sales team](https://www.langchain.com/contact-sales) to learn more.
+There is a free, self-hosted version of LangGraph Platform with access to basic features. The Cloud SaaS deployment option is free while in beta, but will eventually be a paid service. We will always give ample notice before charging for a service and reward our early adopters with preferential pricing. The Self-Hosted deployment options are paid services. [Contact our sales team](https://www.langchain.com/contact-sales) to learn more.
 
 For more information, see our [LangGraph Platform pricing page](https://www.langchain.com/pricing-langgraph-platform).
 
