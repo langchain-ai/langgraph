@@ -9,6 +9,10 @@ search:
 
 <div align="center"><iframe width="560" height="315" src="https://www.youtube.com/embed/pfAQxBS5z88?si=XGS6Chydn6lhSO1S" title="What is LangGraph Platform?" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>
 
+!!! tip "Get started with LangGraph Platform"
+
+    Check out the [LangGraph Platform quickstart](../cloud/quick_start.md) for instructions on how to set up and use LangGraph Platform to do a cloud deployment.
+
 ## Components
 
 The LangGraph Platform consists of components that work together to support the development, deployment, debugging, and monitoring of LangGraph applications:
