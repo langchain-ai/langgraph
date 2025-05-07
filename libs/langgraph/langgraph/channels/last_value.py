@@ -126,7 +126,7 @@ class LastValueAfterFinish(
 
         return False
 
-    def finish(self) -> None:
+    def finish(self) -> bool:
         if not self.finished and self.value is not MISSING:
             self.finished = True
             return True

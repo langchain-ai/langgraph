@@ -157,7 +157,7 @@ class NamedBarrierValueAfterFinish(
             return True
         return False
 
-    def finish(self) -> None:
+    def finish(self) -> bool:
         if not self.finished and self.seen == self.names:
             self.finished = True
             return True

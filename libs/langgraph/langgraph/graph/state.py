@@ -28,7 +28,11 @@ from typing_extensions import Self
 from langgraph._api.deprecation import LangGraphDeprecationWarning
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
-from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitForNames
+from langgraph.channels.dynamic_barrier_value import (
+    DynamicBarrierValue,
+    DynamicBarrierValueAfterFinish,
+    WaitForNames,
+)
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue, LastValueAfterFinish
 from langgraph.channels.named_barrier_value import (
@@ -904,7 +908,10 @@ class CompiledStateGraph(CompiledGraph):
                 else [node for node in self.builder.nodes if node != branch.then]
             )
             channel_name = f"branch:{start}:{name}::then"
-            self.channels[channel_name] = DynamicBarrierValue(str)
+            if self.builder.nodes[branch.then].barrier:
+                self.channels[channel_name] = DynamicBarrierValueAfterFinish(str)
+            else:
+                self.channels[channel_name] = DynamicBarrierValue(str)
             self.nodes[branch.then].triggers.append(channel_name)
             for end in ends:
                 if end != END:
