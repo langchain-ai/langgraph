@@ -144,17 +144,17 @@ To use `interrupt` in your graph, you need to:
 3. **Run the graph** with a [**thread ID**](./persistence.md#threads) until the `interrupt` is hit.
 4. **Resume execution** using `invoke`/`ainvoke`/`stream`/`astream` (see [**The `Command` primitive**](#the-command-primitive)).
 
-## Design Patterns
+## Design patterns
 
 There are typically three different **actions** that you can do with a human-in-the-loop workflow:
 
 1. **Approve or Reject**: Pause the graph before a critical step, such as an API call, to review and approve the action. If the action is rejected, you can prevent the graph from executing the step, and potentially take an alternative action. This pattern often involve **routing** the graph based on the human's input.
 2. **Edit Graph State**: Pause the graph to review and edit the graph state. This is useful for correcting mistakes or updating the state with additional information. This pattern often involves **updating** the state with the human's input.
-3. **Get Input**: Explicitly request human input at a particular step in the graph. This is useful for collecting additional information or context to inform the agent's decision-making process or for supporting **multi-turn conversations**.
+3. **Get Input**: Explicitly request human input at a particular step in the graph. This is useful for collecting additional information or context to inform the agent's decision-making process.
 
 Below we show different design patterns that can be implemented using these **actions**.
 
-### Approve or Reject
+### Approve or reject
 
 <figure markdown="1">
 ![image](../../concepts/img/human_in_the_loop/approve-or-reject.png){: style="max-height:400px"}
@@ -164,7 +164,6 @@ Below we show different design patterns that can be implemented using these **ac
 Pause the graph before a critical step, such as an API call, to review and approve the action. If the action is rejected, you can prevent the graph from executing the step, and potentially take an alternative action.
 
 ```python
-
 from typing import Literal
 from langgraph.types import interrupt, Command
 
@@ -194,9 +193,79 @@ thread_config = {"configurable": {"thread_id": "some_id"}}
 graph.invoke(Command(resume=True), config=thread_config)
 ```
 
+??? example "Extended example: approve or reject with interrupt"
+
+    ```python
+    from typing import Literal, TypedDict
+    import uuid
+
+    from langgraph.constants import START, END
+    from langgraph.graph import StateGraph
+    from langgraph.types import interrupt, Command
+    from langgraph.checkpoint.memory import MemorySaver
+
+    # Define the shared graph state
+    class State(TypedDict):
+        llm_output: str
+        decision: str
+
+    # Simulate an LLM output node
+    def generate_llm_output(state: State) -> State:
+        return {"llm_output": "This is the generated output."}
+
+    # Human approval node
+    def human_approval(state: State) -> Command[Literal["approved_path", "rejected_path"]]:
+        decision = interrupt({
+            "question": "Do you approve the following output?",
+            "llm_output": state["llm_output"]
+        })
+
+        if decision == "approve":
+            return Command(goto="approved_path", update={"decision": "approved"})
+        else:
+            return Command(goto="rejected_path", update={"decision": "rejected"})
+
+    # Next steps after approval
+    def approved_node(state: State) -> State:
+        print("✅ Approved path taken.")
+        return state
+
+    # Alternative path after rejection
+    def rejected_node(state: State) -> State:
+        print("❌ Rejected path taken.")
+        return state
+
+    # Build the graph
+    builder = StateGraph(State)
+    builder.add_node("generate_llm_output", generate_llm_output)
+    builder.add_node("human_approval", human_approval)
+    builder.add_node("approved_path", approved_node)
+    builder.add_node("rejected_path", rejected_node)
+
+    builder.set_entry_point("generate_llm_output")
+    builder.add_edge("generate_llm_output", "human_approval")
+    builder.add_edge("approved_path", END)
+    builder.add_edge("rejected_path", END)
+
+    checkpointer = MemorySaver()
+    graph = builder.compile(checkpointer=checkpointer)
+
+    # Run until interrupt
+    config = {"configurable": {"thread_id": uuid.uuid4()}}
+    result = graph.invoke({}, config=config)
+    print(result["__interrupt__"])
+    # Output:
+    # Interrupt(value={'question': 'Do you approve the following output?', 'llm_output': 'This is the generated output.'}, ...)
+
+    # Simulate resuming with human input
+    # To test rejection, replace resume="approve" with resume="reject"
+    final_result = graph.invoke(Command(resume="approve"), config=config)
+    print(final_result)
+    ```
+
 See [how to review tool calls](./review-tool-calls.ipynb) for a more detailed example.
 
-### Review & Edit State
+### Review & edit state
 
 <figure markdown="1">
 ![image](../../concepts/img/human_in_the_loop/edit-graph-state-simple.png){: style="max-height:400px"}
@@ -239,9 +308,83 @@ graph.invoke(
 )
 ```
 
-See [How to wait for user input using interrupt](./wait-user-input.ipynb) for a more detailed example.
+??? example "Extended example: edit state with interrupt"
 
-### Review Tool Calls
+    ```python
+    from typing import TypedDict
+    import uuid
+
+    from langgraph.constants import START, END
+    from langgraph.graph import StateGraph
+    from langgraph.types import interrupt, Command
+    from langgraph.checkpoint.memory import MemorySaver
+
+    # Define the graph state
+    class State(TypedDict):
+        summary: str
+
+    # Simulate an LLM summary generation
+    def generate_summary(state: State) -> State:
+        return {
+            "summary": "The cat sat on the mat and looked at the stars."
+        }
+
+    # Human editing node
+    def human_review_edit(state: State) -> State:
+        result = interrupt({
+            "task": "Please review and edit the generated summary if necessary.",
+            "generated_summary": state["summary"]
+        })
+        return {
+            "summary": result["edited_summary"]
+        }
+
+    # Simulate downstream use of the edited summary
+    def downstream_use(state: State) -> State:
+        print(f"✅ Using edited summary: {state['summary']}")
+        return state
+
+    # Build the graph
+    builder = StateGraph(State)
+    builder.add_node("generate_summary", generate_summary)
+    builder.add_node("human_review_edit", human_review_edit)
+    builder.add_node("downstream_use", downstream_use)
+
+    builder.set_entry_point("generate_summary")
+    builder.add_edge("generate_summary", "human_review_edit")
+    builder.add_edge("human_review_edit", "downstream_use")
+    builder.add_edge("downstream_use", END)
+
+    # Set up in-memory checkpointing for interrupt support
+    checkpointer = MemorySaver()
+    graph = builder.compile(checkpointer=checkpointer)
+
+    # Invoke the graph until it hits the interrupt
+    config = {"configurable": {"thread_id": uuid.uuid4()}}
+    result = graph.invoke({}, config=config)
+
+    # Output interrupt payload
+    print(result["__interrupt__"])
+    # Example output:
+    # Interrupt(
+    #   value={
+    #     'task': 'Please review and edit the generated summary if necessary.',
+    #     'generated_summary': 'The cat sat on the mat and looked at the stars.'
+    #   },
+    #   resumable=True,
+    #   ...
+    # )
+
+    # Resume the graph with human-edited input
+    edited_summary = "The cat lay on the rug, gazing peacefully at the night sky."
+    resumed_result = graph.invoke(
+        Command(resume={"edited_summary": edited_summary}),
+        config=config
+    )
+    print(resumed_result)
+    ```
+
+### Review tool calls
 
 <figure markdown="1">
 ![image](../../concepts/img/human_in_the_loop/tool-call-review.png){: style="max-height:400px"}
@@ -313,19 +456,89 @@ def human_node(state: State):
     }
 ```
 
+??? example "Extended example: validating user input"
+
+    ```python
+    from typing import TypedDict
+    import uuid
+
+    from langgraph.constants import START, END
+    from langgraph.graph import StateGraph
+    from langgraph.types import interrupt, Command
+    from langgraph.checkpoint.memory import MemorySaver
+
+    # Define graph state
+    class State(TypedDict):
+        age: int
+
+    # Node that asks for human input and validates it
+    def get_valid_age(state: State) -> State:
+        prompt = "Please enter your age (must be a non-negative integer)."
+
+        while True:
+            user_input = interrupt(prompt)
+
+            # Validate the input
+            try:
+                age = int(user_input)
+                if age < 0:
+                    raise ValueError("Age must be non-negative.")
+                break  # Valid input received
+            except (ValueError, TypeError):
+                prompt = f"'{user_input}' is not valid. Please enter a non-negative integer for age."
+
+        return {"age": age}
+
+    # Node that uses the valid input
+    def report_age(state: State) -> State:
+        print(f"✅ Human is {state['age']} years old.")
+        return state
+
+    # Build the graph
+    builder = StateGraph(State)
+    builder.add_node("get_valid_age", get_valid_age)
+    builder.add_node("report_age", report_age)
+
+    builder.set_entry_point("get_valid_age")
+    builder.add_edge("get_valid_age", "report_age")
+    builder.add_edge("report_age", END)
+
+    # Create the graph with a memory checkpointer
+    checkpointer = MemorySaver()
+    graph = builder.compile(checkpointer=checkpointer)
+
+    # Run the graph until the first interrupt
+    config = {"configurable": {"thread_id": uuid.uuid4()}}
+    result = graph.invoke({}, config=config)
+    print(result["__interrupt__"])  # First prompt: "Please enter your age..."
+
+    # Simulate an invalid input (e.g., string instead of integer)
+    result = graph.invoke(Command(resume="not a number"), config=config)
+    print(result["__interrupt__"])  # Follow-up prompt with validation message
+
+    # Simulate a second invalid input (e.g., negative number)
+    result = graph.invoke(Command(resume="-10"), config=config)
+    print(result["__interrupt__"])  # Another retry
+
+    # Provide valid input
+    final_result = graph.invoke(Command(resume="25"), config=config)
+    print(final_result)  # Should include the valid age
+    ```
+
+
 ## Resume using the `Command` primitive
 
-When using the `interrupt` function, the graph will pause at the interrupt and wait for user input.
+When the `interrupt` function is used within a graph, execution pauses at that point and awaits user input.
 
-Graph execution can be resumed using the [Command](../reference/types.md#langgraph.types.Command) primitive which can be passed through the `invoke`, `ainvoke`, `stream` or `astream` methods.
+To resume execution, use the [`Command`](../reference/types.md#langgraph.types.Command) primitive, which can be supplied via the `invoke`, `ainvoke`, `stream`, or `astream` methods.
 
-**Pass a value to the `interrupt`**: Provide data, such as a user's response, to the graph using `Command(resume=value)`. Execution resumes from the beginning of the node where the `interrupt` was used, however, this time the `interrupt(...)` call will return the value passed in the `Command(resume=value)` instead of pausing the graph.
+**Providing a response to the `interrupt`:**
+To continue execution, pass the user's input using `Command(resume=value)`. The graph resumes execution from the beginning of the node where `interrupt(...)` was initially called. This time, the `interrupt` function will return the value provided in `Command(resume=value)` rather than pausing again.
 
- ```python
- # Resume graph execution with the user's input.
- graph.invoke(Command(resume={"age": "25"}), thread_config)
- ```
-
+```python
+# Resume graph execution by providing the user's input.
+graph.invoke(Command(resume={"age": "25"}), thread_config)
+```
 
 ## How does resuming from an interrupt work?
 
@@ -374,7 +587,7 @@ resume_map = {
 parent_graph.invoke(Command(resume=resume_map), config=thread_config)
 ```
 
-## Common Pitfalls
+## Common pitfalls
 
 ### Side-effects
 
