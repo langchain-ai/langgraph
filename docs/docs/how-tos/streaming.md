@@ -2,7 +2,7 @@
 
 ## Streaming API
 
-LangGraph graphs expose the `.stream()` (sync) and `.astream()` (async) methods to yield streamed outputs as iterators.
+LangGraph graphs expose the [`.stream()`][langgraph.pregel.Pregel.stream] (sync) and [`.astream()`][langgraph.pregel.Pregel.astream] (async) methods to yield streamed outputs as iterators.
 
 Basic usage example:
 
@@ -20,9 +20,64 @@ Basic usage example:
         print(chunk)
     ```
 
+??? example "Extended example: streaming updates"
+
+      ```python
+      from typing import TypedDict
+      from langgraph.graph import StateGraph, START, END
+
+      class State(TypedDict):
+          topic: str
+          joke: str
+
+      def refine_topic(state: State):
+          return {"topic": state["topic"] + " and cats"}
+
+      def generate_joke(state: State):
+          return {"joke": f"This is a joke about {state['topic']}"}
+
+      graph = (
+          StateGraph(State)
+          .add_node(refine_topic)
+          .add_node(generate_joke)
+          .add_edge(START, "refine_topic")
+          .add_edge("refine_topic", "generate_joke")
+          .add_edge("generate_joke", END)
+          .compile()
+      )
+
+      # highlight-next-line
+      for chunk in graph.stream( # (1)!
+          {"topic": "ice cream"},
+          # highlight-next-line
+          stream_mode="updates", # (2)!
+      ):
+          print(chunk)
+      ```
+
+      1. The `stream()` method returns an iterator that yields streamed outputs.
+      2. Set `stream_mode="updates"` to stream only the updates to the graph state after each node. Other stream modes are also available. See [supported stream modes](#supported-stream-modes) for details.
+
+      ```output
+      {'refine_topic': {'topic': 'ice cream and cats'}}
+      {'generate_joke': {'joke': 'This is a joke about ice cream and cats'}}
+      ```
+
+
+### Supported stream modes
+
+| Mode                                            | Description                                                                                                                                                                         |
+|-------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [`values`](#stream-graph-state)                 | Streams the full value of the state after each step of the graph.                                                                                                                   |
+| [`updates`](../how-tos/streaming.md#updates)    | Streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g., multiple nodes are run), those updates are streamed separately. |
+| [`custom`](../how-tos/streaming.md#custom)      | Streams custom data from inside your graph nodes.                                                                                                                                   |
+| [`messages`](../how-tos/streaming-tokens.ipynb) | Streams LLM tokens and metadata for the graph node where the LLM is invoked.                                                                                                        |
+| [`debug`](../how-tos/streaming.md#debug)        | Streams as much information as possible throughout the execution of the graph.                                                                                                      |
+
+
 ### Stream multiple modes
 
-You can pass a list as the `stream_mode` parameter to stream multiple modes at once. 
+You can pass a list as the `stream_mode` parameter to stream multiple modes at once.
 
 The streamed outputs will be tuples of `(mode, chunk)` where `mode` is the name of the stream mode and `chunk` is the data streamed by that mode.
 
@@ -40,19 +95,9 @@ The streamed outputs will be tuples of `(mode, chunk)` where `mode` is the name 
         print(chunk)
     ```
 
-### Supported stream modes
-
-| Mode                                            | Description                                                                                                                                                                         |
-|-------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [`values`](#stream-graph-state)                 | Streams the full value of the state after each step of the graph.                                                                                                                   |
-| [`updates`](../how-tos/streaming.md#updates)    | Streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g., multiple nodes are run), those updates are streamed separately. |
-| [`custom`](../how-tos/streaming.md#custom)      | Streams custom data from inside your graph nodes.                                                                                                                                   |
-| [`messages`](../how-tos/streaming-tokens.ipynb) | Streams LLM tokens and metadata for the graph node where the LLM is invoked.                                                                                                        |
-| [`debug`](../how-tos/streaming.md#debug)        | Streams as much information as possible throughout the execution of the graph.                                                                                                      |
-
 ## Stream graph state
 
-Use `updates` and `values` to stream the state of the graph as it executes.
+Use the stream modes `updates` and `values` to stream the state of the graph as it executes.
 
 * `updates` streams the **updates** to the state after each step of the graph.
 * `values` streams the **full value** of the state after each step of the graph.
@@ -129,7 +174,7 @@ for chunk in graph.stream(
 
 1. Set `subgraphs=True` to stream outputs from subgraphs.
 
-??? example "Streaming from subgraphs"
+??? example "Extended example: streaming from subgraphs"
 
       ```python
       from langgraph.graph import START, StateGraph
@@ -289,7 +334,7 @@ async for msg, metadata in graph.astream(  # (3)!
 4. Filter the streamed tokens by the `tags` field in the metadata to only include the tokens from the LLM invocation with the "joke" tag.
 
 
-??? example "Filtering by tags"
+??? example "Extended example: filtering by tags"
 
       ```python
       from typing import TypedDict
@@ -364,7 +409,7 @@ for msg, metadata in graph.stream( # (1)!
 1. The "messages" stream mode returns a tuple of `(message_chunk, metadata)` where `message_chunk` is the token streamed by the LLM and `metadata` is a dictionary with information about the graph node where the LLM was called and other information.
 2. Filter the streamed tokens by the `langgraph_node` field in the metadata to only include the tokens from the `write_poem` node.
 
-??? example "Streaming LLM tokens from specific nodes"
+??? example "Extended example: streaming LLM tokens from specific nodes"
 
       ```python
       from typing import TypedDict
@@ -537,7 +582,7 @@ for chunk in graph.stream(
 4. Set `stream_mode="custom"` to receive the custom data in the stream.
 
 
-??? example "Streaming arbitrary chat model"
+??? example "Extended example: streaming arbitrary chat model"
       ```python
       import operator
       import json
@@ -698,7 +743,7 @@ This limits LangGraph ability to automatically propagate context, and affects La
 1. You **must** explicitly pass [`RunnableConfig`](https://python.langchain.com/docs/concepts/runnables/#runnableconfig) into async LLM calls (e.g., `ainvoke()`), as callbacks are not automatically propagated.
 2. You **cannot** use `get_stream_writer()` in async nodes or tools — you must pass a `writer` argument directly.
 
-??? example "async LLM call with manual config"
+??? example "Extended example: async LLM call with manual config"
 
       ```python
       from typing import TypedDict
@@ -741,7 +786,7 @@ This limits LangGraph ability to automatically propagate context, and affects La
       2. Pass `config` to `llm.ainvoke()` to ensure proper context propagation. 
       3. Set `stream_mode="messages"` to stream LLM tokens.
 
-??? example "async custom streaming with stream writer"
+??? example "Extended example: async custom streaming with stream writer"
 
       ```python
       from typing import TypedDict
