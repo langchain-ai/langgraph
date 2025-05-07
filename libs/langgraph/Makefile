@@ -1,4 +1,4 @@
-.PHONY: all format lint test test_watch integration_tests spell_check spell_fix benchmark profile
+.PHONY: all format lint test test_watch integration_tests spell_check spell_fix benchmark profile start-dev-server
 
 # Default target executed when no arguments are given to make.
 all: help
@@ -39,6 +39,9 @@ start-postgres:
 
 stop-postgres:
 	docker compose -f tests/compose-postgres.yml down -v
+
+start-dev-server:
+	uvx --with-requirements integration_tests/example_app/requirements.txt  --from "langgraph-cli[inmem]" langgraph dev --config integration_tests/example_app/langgraph.json --no-browser
 
 TEST ?= .
 

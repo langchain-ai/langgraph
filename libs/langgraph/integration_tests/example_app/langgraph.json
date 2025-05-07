@@ -1,0 +1,7 @@
+{
+  "$schema": "https://raw.githubusercontent.com/langchain-ai/langgraph/refs/heads/main/libs/cli/schemas/schema.json",
+  "graphs": {
+    "app": "integration_tests/example_app/example_graph.py:app"
+  },
+  "dependencies": ["integration_tests/example_app"]
+}
