@@ -422,6 +422,21 @@ def test_stream():
         StreamPart(event="values", data={"chunk": "data3"}),
         StreamPart(event="updates", data={"chunk": "data4"}),
         StreamPart(
+            event="messages",
+            data=[
+                {
+                    "content": [{"text": "Hello", "type": "text", "index": 0}],
+                    "type": "AIMessageChunk",
+                },
+                {
+                    "langgraph_step": 1,
+                    "langgraph_node": "call_llm",
+                    "langgraph_triggers": ["branch:to:call_llm"],
+                    "langgraph_path": ["__pregel_pull", "call_llm"],
+                },
+            ],
+        ),
+        StreamPart(
             event="updates",
             data={
                 "__interrupt__": [
@@ -476,6 +491,30 @@ def test_stream():
         {"chunk": "data1"},
         {"chunk": "data2"},
         {"chunk": "data3"},
+    ]
+
+    # stream_mode messages
+    stream_parts = []
+    for stream_part in remote_pregel.stream(
+        {"input": "data"},
+        config={"configurable": {"thread_id": "thread_1"}},
+        stream_mode="messages",
+    ):
+        stream_parts.append(stream_part)
+
+    assert stream_parts == [
+        (
+            {
+                "content": [{"text": "Hello", "type": "text", "index": 0}],
+                "type": "AIMessageChunk",
+            },
+            {
+                "langgraph_step": 1,
+                "langgraph_node": "call_llm",
+                "langgraph_triggers": ["branch:to:call_llm"],
+                "langgraph_path": ["__pregel_pull", "call_llm"],
+            },
+        ),
     ]
 
     mock_sync_client.runs.stream.return_value = [
@@ -556,6 +595,21 @@ async def test_astream():
         StreamPart(event="values", data={"chunk": "data3"}),
         StreamPart(event="updates", data={"chunk": "data4"}),
         StreamPart(
+            event="messages",
+            data=[
+                {
+                    "content": [{"text": "Hello", "type": "text", "index": 0}],
+                    "type": "AIMessageChunk",
+                },
+                {
+                    "langgraph_step": 1,
+                    "langgraph_node": "call_llm",
+                    "langgraph_triggers": ["branch:to:call_llm"],
+                    "langgraph_path": ["__pregel_pull", "call_llm"],
+                },
+            ],
+        ),
+        StreamPart(
             event="updates",
             data={
                 "__interrupt__": [
@@ -611,6 +665,30 @@ async def test_astream():
         {"chunk": "data1"},
         {"chunk": "data2"},
         {"chunk": "data3"},
+    ]
+
+    # stream_mode messages
+    stream_parts = []
+    async for stream_part in remote_pregel.astream(
+        {"input": "data"},
+        config={"configurable": {"thread_id": "thread_1"}},
+        stream_mode="messages",
+    ):
+        stream_parts.append(stream_part)
+
+    assert stream_parts == [
+        (
+            {
+                "content": [{"text": "Hello", "type": "text", "index": 0}],
+                "type": "AIMessageChunk",
+            },
+            {
+                "langgraph_step": 1,
+                "langgraph_node": "call_llm",
+                "langgraph_triggers": ["branch:to:call_llm"],
+                "langgraph_path": ["__pregel_pull", "call_llm"],
+            },
+        ),
     ]
 
     async_iter = MagicMock()
