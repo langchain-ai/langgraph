@@ -1,4 +1,4 @@
-# How to create agents with configuration
+# How to Configure Assistants
 
 One of the benefits of LangGraph API is that it lets you create agents with different configurations.
 This is useful when you want to:
