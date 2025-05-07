@@ -11,13 +11,23 @@ hide:
 
 This guide shows you how to set up and use LangGraph's **prebuilt**, **reusable** components, which are designed to help you construct agentic systems quickly and reliably.
 
+## Prerequisites
+
+Before you start this tutorial, ensure you have the following:
+
+- An [Anthropic](https://console.anthropic.com/settings/admin-keys) API key 
+
 ## 1. Install LangGraph
 
-If you haven't already, install LangGraph:
+If you haven't already, install LangGraph and LangChain:
 
 ```
 pip install -U langgraph "langchain[anthropic]"
 ```
+
+!!! info 
+
+    LangChain is installed so the agent can call the [model](https://python.langchain.com/docs/integrations/chat/).
 
 ## 2. Create an agent
 
