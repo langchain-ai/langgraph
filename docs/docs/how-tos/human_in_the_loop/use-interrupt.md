@@ -9,7 +9,7 @@ hide:
   - tags
 ---
 
-# Use human-in-the-loop
+# Use interrupt
 
 ## `interrupt`
 
