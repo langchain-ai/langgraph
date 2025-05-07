@@ -317,6 +317,76 @@
   
   '''
 # ---
+# name: test_get_graph_loop
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnablePassthrough"
+          ],
+          "name": "__start__"
+        }
+      },
+      {
+        "id": "human",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "runnable",
+            "RunnableCallable"
+          ],
+          "name": "human"
+        }
+      },
+      {
+        "id": "agent",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "runnable",
+            "RunnableCallable"
+          ],
+          "name": "agent"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "human"
+      },
+      {
+        "source": "agent",
+        "target": "human"
+      },
+      {
+        "source": "human",
+        "target": "agent"
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_get_graph_loop.1
+  '''
+  graph TD;
+  	__start__ --> human;
+  	agent --> human;
+  	human --> agent;
+  
+  '''
+# ---
 # name: test_in_one_fan_out_state_graph_waiting_edge[memory]
   '''
   graph TD;
