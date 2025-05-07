@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 env:
-  POETRY_VERSION: "1.7.1"
+  POETRY_VERSION: "2.1.2"
 
 permissions:
   contents: read
@@ -63,34 +63,15 @@ jobs:
           poetry-version: ${{ env.POETRY_VERSION }}
           cache-key: docs
 
-      - name: Use Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: "22"
-          cache: "yarn"
-          cache-dependency-path: docs/yarn.lock
-
       - name: Install dependencies
         run: |
           yarn
           poetry install --with test --with docs --no-root
-          poetry run pip install -U \
-            pytest \
-            pytest-check-links \
-            GitPython \
-            "git+https://github.com/benjamincburns/markdown-exec.git@cc0d39d737e5ffd4b83d23cd8729d7ea16e363c8"
-
           # we run this installation only for internal PRs
           # as GITHUB_TOKEN is not available for PRs from outside contributors
           if [ -n "${GITHUB_TOKEN}" ]; then
             poetry run pip install "git+https://${GITHUB_TOKEN}@github.com/langchain-ai/mkdocs-material-insiders.git"
           fi
-
-          poetry run jupyter kernelspec list
-          poetry run python3 -m ipykernel install --user --name=python3
-          npm install -g tslab
-          poetry run tslab install --python=python3
-          poetry run jupyter kernelspec list
 
       - name: Run unit tests
         # Run unit tests on the docs build pipeline
@@ -102,7 +83,14 @@ jobs:
       - name: Build llms-text
         run: make llms-text
       - name: Build site
-        run: make build-docs
+        run: |
+          # If this is main branch, then we want to download stats. we do this 
+          # with the env variable DOWNLOAD_STATS=true
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            DOWNLOAD_STATS=true make build-docs
+          else
+            make build-docs
+          fi
         env:
           MKDOCS_GIT_COMMITTERS_APIKEY: ${{ secrets.MKDOCS_GIT_COMMITTERS_APIKEY }}
           OPENAI_API_KEY: sf-proj-1234567890 # fake placeholder, shouldn't actually be used
@@ -111,7 +99,7 @@ jobs:
         env:
           LANGCHAIN_API_KEY: test
         run: |
-          if [ "${{ github.event_name }}" == "schedule" ] || [ "${{ github.event_name }}" == "workflow_dispatch" ] || ([ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]); then
+          if [ "${{ github.event_name }}" == "schedule" ]; then
             echo "Running link check on all HTML files matching notebooks in docs directory..."
             poetry run pytest -v \
               --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
@@ -127,6 +115,7 @@ jobs:
               --check-links-ignore "https://openai\.com/.*" \
               --check-links-ignore "https://www\.uber\.com/.*" \
               --check-links-ignore "https://pepy\.tech/.*" \
+              --check-links-ignore "docs/docs/static/wordmark_*" \
               --check-links $(find site -name "index.html" | grep -v 'storm/index.html')
               
           else
@@ -147,6 +136,7 @@ jobs:
                 --check-links-ignore "https://twitter.com/.*" \
                 --check-links-ignore "https://github\.com/.*" \
                 --check-links-ignore "/.*\.(ipynb|html)$" \
+                --check-links-ignore "docs/docs/static/wordmark_*" \
                 --check-links ${CHANGED_FILES} \
                 || ([ $? = 5 ] && exit 0 || exit $?)
             else

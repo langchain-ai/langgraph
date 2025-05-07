@@ -57,25 +57,25 @@ export interface GraphSchema {
    * The schema for the input state.
    * Missing if unable to generate JSON schema from graph.
    */
-  input_schema?: JSONSchema7;
+  input_schema?: JSONSchema7 | null | undefined;
 
   /**
    * The schema for the output state.
    * Missing if unable to generate JSON schema from graph.
    */
-  output_schema?: JSONSchema7;
+  output_schema?: JSONSchema7 | null | undefined;
 
   /**
    * The schema for the graph state.
    * Missing if unable to generate JSON schema from graph.
    */
-  state_schema?: JSONSchema7;
+  state_schema?: JSONSchema7 | null | undefined;
 
   /**
    * The schema for the graph config.
    * Missing if unable to generate JSON schema from graph.
    */
-  config_schema?: JSONSchema7;
+  config_schema?: JSONSchema7 | null | undefined;
 }
 
 export type Subgraphs = Record<string, GraphSchema>;
@@ -110,6 +110,12 @@ export interface AssistantBase {
 
   /** The version of the assistant. */
   version: number;
+
+  /** The name of the assistant */
+  name: string;
+
+  /** The description of the assistant */
+  description?: string;
 }
 
 export interface AssistantVersion extends AssistantBase {}
@@ -117,9 +123,6 @@ export interface AssistantVersion extends AssistantBase {}
 export interface Assistant extends AssistantBase {
   /** The last time the assistant was updated. */
   updated_at: string;
-
-  /** The name of the assistant */
-  name: string;
 }
 
 export interface AssistantGraph {
@@ -298,3 +301,14 @@ export interface CronCreateForThreadResponse
   extends Omit<CronCreateResponse, "thread_id"> {
   thread_id: string;
 }
+
+export type AssistantSortBy =
+  | "assistant_id"
+  | "graph_id"
+  | "name"
+  | "created_at"
+  | "updated_at";
+
+export type ThreadSortBy = "thread_id" | "status" | "created_at" | "updated_at";
+
+export type SortOrder = "asc" | "desc";

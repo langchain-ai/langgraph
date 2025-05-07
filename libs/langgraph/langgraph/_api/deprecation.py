@@ -1,6 +1,6 @@
 import functools
 import warnings
-from typing import Any, Callable, Type, TypeVar, Union, cast
+from typing import Any, Callable, TypeVar, Union, cast
 
 
 class LangGraphDeprecationWarning(DeprecationWarning):
@@ -8,7 +8,7 @@ class LangGraphDeprecationWarning(DeprecationWarning):
 
 
 F = TypeVar("F", bound=Callable[..., Any])
-C = TypeVar("C", bound=Type[Any])
+C = TypeVar("C", bound=type[Any])
 
 
 def deprecated(

@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import Any, Generic, Optional, Sequence, TypeVar
+from collections.abc import Sequence
+from typing import Any, Generic, TypeVar
 
 from typing_extensions import Self
 
+from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
 Value = TypeVar("Value")
@@ -11,6 +13,8 @@ C = TypeVar("C")
 
 
 class BaseChannel(Generic[Value, Update, C], ABC):
+    """Base class for all channels."""
+
     __slots__ = ("key", "typ")
 
     def __init__(self, typ: Any, key: str = "") -> None:
@@ -29,14 +33,23 @@ class BaseChannel(Generic[Value, Update, C], ABC):
 
     # serialize/deserialize methods
 
-    def checkpoint(self) -> Optional[C]:
+    def copy(self) -> Self:
+        """Return a copy of the channel.
+        By default, delegates to checkpoint() and from_checkpoint().
+        Subclasses can override this method with a more efficient implementation."""
+        return self.from_checkpoint(self.checkpoint())
+
+    def checkpoint(self) -> C:
         """Return a serializable representation of the channel's current state.
         Raises EmptyChannelError if the channel is empty (never updated yet),
         or doesn't support checkpoints."""
-        return self.get()
+        try:
+            return self.get()
+        except EmptyChannelError:
+            return MISSING
 
     @abstractmethod
-    def from_checkpoint(self, checkpoint: Optional[C]) -> Self:
+    def from_checkpoint(self, checkpoint: C) -> Self:
         """Return a new identical channel, optionally initialized from a checkpoint.
         If the checkpoint contains complex data structures, they should be copied."""
 
@@ -63,6 +76,17 @@ class BaseChannel(Generic[Value, Update, C], ABC):
         channels that triggered a node. If the channel was updated, return True.
         """
         return False
+
+    def is_available(self) -> bool:
+        """Return True if the channel is available (not empty), False otherwise.
+        Subclasses should override this method to provide a more efficient
+        implementation than calling get() and catching EmptyChannelError.
+        """
+        try:
+            self.get()
+            return True
+        except EmptyChannelError:
+            return False
 
 
 __all__ = [

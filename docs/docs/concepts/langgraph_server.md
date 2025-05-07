@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # LangGraph Server
 
 !!! info "Prerequisites"
@@ -20,7 +25,7 @@ The LangGraph Platform incorporates best practices for agent deployment, so you 
 * **Double texting support**: Many times users might interact with your graph in unintended ways. For instance, a user may send one message and before the graph has finished running send a second message. We call this ["double texting"](double_texting.md) and have added four different ways to handle this.
 * **Optimized checkpointer**: LangGraph Platform comes with a built-in [checkpointer](./persistence.md#checkpoints) optimized for LangGraph applications.
 * **Human-in-the-loop endpoints**: We've exposed all endpoints needed to support [human-in-the-loop](human_in_the_loop.md) features.
-* **Memory**: In addition to thread-level persistence (covered above by [checkpointers]l(./persistence.md#checkpoints)), LangGraph Platform also comes with a built-in [memory store](persistence.md#memory-store).
+* **Memory**: In addition to thread-level persistence (covered above by [checkpointers](./persistence.md#checkpoints)), LangGraph Platform also comes with a built-in [memory store](persistence.md#memory-store).
 * **Cron jobs**: Built-in support for scheduling tasks, enabling you to automate regular actions like data clean-up or batch processing within your applications.
 * **Webhooks**: Allows your application to send real-time notifications and data updates to external systems, making it easy to integrate with third-party services and trigger actions based on specific events.
 * **Monitoring**: LangGraph Server integrates seamlessly with the [LangSmith](https://docs.smith.langchain.com/) monitoring platform, providing real-time insights into your application's performance and health.

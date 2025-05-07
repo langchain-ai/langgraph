@@ -1,5 +1,7 @@
 import asyncio
+import binascii
 import concurrent.futures
+import weakref
 from collections.abc import Sequence
 from contextlib import (
     AbstractAsyncContextManager,
@@ -19,7 +21,7 @@ import langgraph.scheduler.kafka.serde as serde
 from langgraph.constants import CONFIG_KEY_DELEGATE, ERROR
 from langgraph.errors import CheckpointNotLatest, GraphDelegate, TaskNotFound
 from langgraph.pregel import Pregel
-from langgraph.pregel.algo import prepare_single_task
+from langgraph.pregel.algo import checkpoint_null_version, prepare_single_task
 from langgraph.pregel.executor import (
     AsyncBackgroundExecutor,
     BackgroundExecutor,
@@ -209,12 +211,17 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
                 for_execution=True,
                 checkpointer=self.graph.checkpointer,
                 store=self.graph.store,
+                checkpoint_id_bytes=binascii.unhexlify(
+                    saved.checkpoint["id"].replace("-", "")
+                ),
+                checkpoint_null_version=checkpoint_null_version(saved.checkpoint),
             ):
                 # execute task, saving writes
+                put_writes = partial(self._put_writes, submit, msg["config"])
                 runner = PregelRunner(
-                    submit=submit,
-                    put_writes=partial(self._put_writes, submit, msg["config"]),
-                    schedule_task=self._schedule_task,
+                    submit=weakref.ref(submit),
+                    put_writes=weakref.ref(put_writes),
+                    schedule_task=weakref.WeakMethod(self._schedule_task),
                 )
                 async for _ in runner.atick([task], reraise=False):
                     pass
@@ -421,12 +428,17 @@ class KafkaExecutor(AbstractContextManager):
                 step=saved.metadata["step"] + 1,
                 for_execution=True,
                 checkpointer=self.graph.checkpointer,
+                checkpoint_id_bytes=binascii.unhexlify(
+                    saved.checkpoint["id"].replace("-", "")
+                ),
+                checkpoint_null_version=checkpoint_null_version(saved.checkpoint),
             ):
                 # execute task, saving writes
+                put_writes = partial(self._put_writes, submit, msg["config"])
                 runner = PregelRunner(
-                    submit=submit,
-                    put_writes=partial(self._put_writes, submit, msg["config"]),
-                    schedule_task=self._schedule_task,
+                    submit=weakref.ref(submit),
+                    put_writes=weakref.ref(put_writes),
+                    schedule_task=weakref.WeakMethod(self._schedule_task),
                 )
                 for _ in runner.tick([task], reraise=False):
                     pass

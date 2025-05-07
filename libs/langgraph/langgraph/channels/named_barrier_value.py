@@ -1,8 +1,10 @@
-from typing import Generic, Optional, Sequence, Type
+from collections.abc import Sequence
+from typing import Generic
 
 from typing_extensions import Self
 
 from langgraph.channels.base import BaseChannel, Value
+from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
 
@@ -14,7 +16,7 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
     names: set[Value]
     seen: set[Value]
 
-    def __init__(self, typ: Type[Value], names: set[Value]) -> None:
+    def __init__(self, typ: type[Value], names: set[Value]) -> None:
         super().__init__(typ)
         self.names = names
         self.seen: set[str] = set()
@@ -23,22 +25,29 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
         return isinstance(value, NamedBarrierValue) and value.names == self.names
 
     @property
-    def ValueType(self) -> Type[Value]:
+    def ValueType(self) -> type[Value]:
         """The type of the value stored in the channel."""
         return self.typ
 
     @property
-    def UpdateType(self) -> Type[Value]:
+    def UpdateType(self) -> type[Value]:
         """The type of the update received by the channel."""
         return self.typ
+
+    def copy(self) -> Self:
+        """Return a copy of the channel."""
+        empty = self.__class__(self.typ, self.names)
+        empty.key = self.key
+        empty.seen = self.seen.copy()
+        return empty
 
     def checkpoint(self) -> set[Value]:
         return self.seen
 
-    def from_checkpoint(self, checkpoint: Optional[set[Value]]) -> Self:
+    def from_checkpoint(self, checkpoint: set[Value]) -> Self:
         empty = self.__class__(self.typ, self.names)
         empty.key = self.key
-        if checkpoint is not None:
+        if checkpoint is not MISSING:
             empty.seen = checkpoint
         return empty
 
@@ -59,6 +68,9 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
         if self.seen != self.names:
             raise EmptyChannelError()
         return None
+
+    def is_available(self) -> bool:
+        return self.seen == self.names
 
     def consume(self) -> bool:
         if self.seen == self.names:

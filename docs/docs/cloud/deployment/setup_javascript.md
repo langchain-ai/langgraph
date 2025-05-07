@@ -40,6 +40,14 @@ Example `package.json` file:
 }
 ```
 
+When deploying your app, the dependencies will be installed using the package manager of your choice, provided they adhere to the compatible version ranges listed below:
+
+```
+"@langchain/core": "^0.3.42",
+"@langchain/langgraph": "^0.2.57",
+"@langchain/langgraph-checkpoint": "~0.0.16",
+```
+
 Example file directory:
 
 ```bash
@@ -82,14 +90,10 @@ import { ChatOpenAI } from "@langchain/openai";
 import { MessagesAnnotation, StateGraph } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 
-const tools = [
-  new TavilySearchResults({ maxResults: 3, }),
-];
+const tools = [new TavilySearchResults({ maxResults: 3 })];
 
 // Define the function that calls the model
-async function callModel(
-  state: typeof MessagesAnnotation.State,
-) {
+async function callModel(state: typeof MessagesAnnotation.State) {
   /**
    * Call the LLM powering our agent.
    * Feel free to customize the prompt, model, and other logic!
@@ -101,9 +105,9 @@ async function callModel(
   const response = await model.invoke([
     {
       role: "system",
-      content: `You are a helpful assistant. The current date is ${new Date().getTime()}.`
+      content: `You are a helpful assistant. The current date is ${new Date().getTime()}.`,
     },
-    ...state.messages
+    ...state.messages,
   ]);
 
   // MessagesAnnotation supports returning a single message or array of messages
@@ -141,10 +145,7 @@ const workflow = new StateGraph(MessagesAnnotation)
     routeModelOutput,
     // List of the possible destinations the conditional edge can route to.
     // Required for conditional edges to properly render the graph in Studio
-    [
-      "tools",
-      "__end__"
-    ],
+    ["tools", "__end__"]
   )
   // This means that after `tools` is called, `callModel` node is called next.
   .addEdge("tools", "callModel");
@@ -155,6 +156,7 @@ export const graph = workflow.compile();
 ```
 
 !!! info "Assign `CompiledGraph` to Variable"
+
     The build process for LangGraph Cloud requires that the `CompiledGraph` object be assigned to a variable at the top-level of a JavaScript module (alternatively, you can provide [a function that creates a graph](./graph_rebuild.md)).
 
 Example file directory:
@@ -193,6 +195,7 @@ Example `langgraph.json` file:
 Note that the variable name of the `CompiledGraph` appears at the end of the value of each subkey in the top-level `graphs` key (i.e. `:<variable_name>`).
 
 !!! info "Configuration Location"
+
     The LangGraph API configuration file must be placed in a directory that is at the same level or higher than the TypeScript files that contain compiled graphs and associated dependencies.
 
 ## Next

@@ -366,11 +366,11 @@ const useControllableThreadId = (options?: {
     onThreadIdRef.current?.(threadId);
   }, []);
 
-  if (typeof options?.threadId === "undefined") {
+  if (!options || !("threadId" in options)) {
     return [localThreadId, onThreadId];
   }
 
-  return [options.threadId, onThreadId];
+  return [options.threadId ?? null, onThreadId];
 };
 
 type BagTemplate = {
@@ -405,7 +405,7 @@ type GetCustomEventType<Bag extends BagTemplate> = Bag extends {
   ? Bag["CustomEventType"]
   : unknown;
 
-interface UseStreamOptions<
+export interface UseStreamOptions<
   StateType extends Record<string, unknown> = Record<string, unknown>,
   Bag extends BagTemplate = BagTemplate,
 > {
@@ -415,14 +415,29 @@ interface UseStreamOptions<
   assistantId: string;
 
   /**
+   * Client used to send requests.
+   */
+  client?: Client;
+
+  /**
    * The URL of the API to use.
    */
-  apiUrl: ClientConfig["apiUrl"];
+  apiUrl?: ClientConfig["apiUrl"];
 
   /**
    * The API key to use.
    */
   apiKey?: ClientConfig["apiKey"];
+
+  /**
+   * Custom call options, such as custom fetch implementation.
+   */
+  callerOptions?: ClientConfig["callerOptions"];
+
+  /**
+   * Default headers to send with requests.
+   */
+  defaultHeaders?: ClientConfig["defaultHeaders"];
 
   /**
    * Specify the key within the state that contains messages.
@@ -454,12 +469,29 @@ interface UseStreamOptions<
    */
   onCustomEvent?: (
     data: CustomStreamEvent<GetCustomEventType<Bag>>["data"],
+    options: {
+      mutate: (
+        update: Partial<StateType> | ((prev: StateType) => Partial<StateType>),
+      ) => void;
+    },
   ) => void;
 
   /**
    * Callback that is called when a metadata event is received.
    */
   onMetadataEvent?: (data: MetadataStreamEvent["data"]) => void;
+
+  /**
+   * Callback that is called when a LangChain event is received.
+   * @see https://langchain-ai.github.io/langgraph/cloud/how-tos/stream_events/#stream-graph-in-events-mode for more details.
+   */
+  onLangChainEvent?: (data: EventsStreamEvent["data"]) => void;
+
+  /**
+   * Callback that is called when a debug event is received.
+   * @internal This API is experimental and subject to change.
+   */
+  onDebugEvent?: (data: DebugStreamEvent["data"]) => void;
 
   /**
    * The ID of the thread to fetch history and current values from.
@@ -472,7 +504,7 @@ interface UseStreamOptions<
   onThreadId?: (threadId: string) => void;
 }
 
-interface UseStream<
+export interface UseStream<
   StateType extends Record<string, unknown> = Record<string, unknown>,
   Bag extends BagTemplate = BagTemplate,
 > {
@@ -548,6 +580,16 @@ interface UseStream<
     message: Message,
     index?: number,
   ) => MessageMetadata<StateType> | undefined;
+
+  /**
+   * LangGraph SDK client used to send request and receive responses.
+   */
+  client: Client;
+
+  /**
+   * The ID of the assistant to use.
+   */
+  assistantId: string;
 }
 
 type ConfigWithConfigurable<ConfigurableType extends Record<string, unknown>> =
@@ -603,9 +645,23 @@ export function useStream<
   messagesKey ??= "messages";
 
   const client = useMemo(
-    () => new Client({ apiUrl: options.apiUrl, apiKey: options.apiKey }),
-    [options.apiKey, options.apiUrl],
+    () =>
+      options.client ??
+      new Client({
+        apiUrl: options.apiUrl,
+        apiKey: options.apiKey,
+        callerOptions: options.callerOptions,
+        defaultHeaders: options.defaultHeaders,
+      }),
+    [
+      options.client,
+      options.apiKey,
+      options.apiUrl,
+      options.callerOptions,
+      options.defaultHeaders,
+    ],
   );
+
   const [threadId, onThreadId] = useControllableThreadId(options);
 
   const [branch, setBranch] = useState<string>("");
@@ -623,22 +679,34 @@ export function useStream<
   >([]);
 
   const trackStreamMode = useCallback(
-    (mode: Exclude<StreamMode, "debug" | "messages">) => {
-      if (!trackStreamModeRef.current.includes(mode))
-        trackStreamModeRef.current.push(mode);
+    (...mode: Exclude<StreamMode, "debug" | "messages">[]) => {
+      for (const m of mode) {
+        if (!trackStreamModeRef.current.includes(m)) {
+          trackStreamModeRef.current.push(m);
+        }
+      }
     },
     [],
   );
 
   const hasUpdateListener = options.onUpdateEvent != null;
   const hasCustomListener = options.onCustomEvent != null;
+  const hasLangChainListener = options.onLangChainEvent != null;
+  const hasDebugListener = options.onDebugEvent != null;
 
   const callbackStreamMode = useMemo(() => {
-    const modes: Exclude<StreamMode, "debug" | "messages">[] = [];
+    const modes: Exclude<StreamMode, "messages">[] = [];
     if (hasUpdateListener) modes.push("updates");
     if (hasCustomListener) modes.push("custom");
+    if (hasLangChainListener) modes.push("events");
+    if (hasDebugListener) modes.push("debug");
     return modes;
-  }, [hasUpdateListener, hasCustomListener]);
+  }, [
+    hasUpdateListener,
+    hasCustomListener,
+    hasLangChainListener,
+    hasDebugListener,
+  ]);
 
   const clearCallbackRef = useRef<() => void>(null!);
   clearCallbackRef.current = () => {
@@ -742,42 +810,6 @@ export function useStream<
       submittingRef.current = true;
       abortRef.current = new AbortController();
 
-      let usableThreadId = threadId;
-      if (!usableThreadId) {
-        const thread = await client.threads.create();
-        onThreadId(thread.thread_id);
-        usableThreadId = thread.thread_id;
-      }
-
-      const streamMode = unique([
-        ...(submitOptions?.streamMode ?? []),
-        ...trackStreamModeRef.current,
-        ...callbackStreamMode,
-      ]);
-
-      const checkpoint =
-        submitOptions?.checkpoint ?? threadHead?.checkpoint ?? undefined;
-      // @ts-expect-error
-      if (checkpoint != null) delete checkpoint.thread_id;
-
-      const run = (await client.runs.stream(usableThreadId, assistantId, {
-        input: values as Record<string, unknown>,
-        config: submitOptions?.config,
-        command: submitOptions?.command,
-
-        interruptBefore: submitOptions?.interruptBefore,
-        interruptAfter: submitOptions?.interruptAfter,
-        metadata: submitOptions?.metadata,
-        multitaskStrategy: submitOptions?.multitaskStrategy,
-        onCompletion: submitOptions?.onCompletion,
-        onDisconnect: submitOptions?.onDisconnect ?? "cancel",
-
-        signal: abortRef.current.signal,
-
-        checkpoint,
-        streamMode,
-      })) as AsyncGenerator<EventStreamEvent>;
-
       // Unbranch things
       const newPath = submitOptions?.checkpoint?.checkpoint_id
         ? branchByCheckpoint[submitOptions?.checkpoint?.checkpoint_id]?.branch
@@ -802,6 +834,42 @@ export function useStream<
         return values;
       });
 
+      let usableThreadId = threadId;
+      if (!usableThreadId) {
+        const thread = await client.threads.create();
+        onThreadId(thread.thread_id);
+        usableThreadId = thread.thread_id;
+      }
+
+      const streamMode = unique([
+        ...(submitOptions?.streamMode ?? []),
+        ...trackStreamModeRef.current,
+        ...callbackStreamMode,
+      ]);
+
+      const checkpoint =
+        submitOptions?.checkpoint ?? threadHead?.checkpoint ?? undefined;
+      // @ts-expect-error
+      if (checkpoint != null) delete checkpoint.thread_id;
+
+      const run = client.runs.stream(usableThreadId, assistantId, {
+        input: values as Record<string, unknown>,
+        config: submitOptions?.config,
+        command: submitOptions?.command,
+
+        interruptBefore: submitOptions?.interruptBefore,
+        interruptAfter: submitOptions?.interruptAfter,
+        metadata: submitOptions?.metadata,
+        multitaskStrategy: submitOptions?.multitaskStrategy,
+        onCompletion: submitOptions?.onCompletion,
+        onDisconnect: submitOptions?.onDisconnect ?? "cancel",
+
+        signal: abortRef.current.signal,
+
+        checkpoint,
+        streamMode,
+      }) as AsyncGenerator<EventStreamEvent>;
+
       let streamError: StreamError | undefined;
       for await (const { event, data } of run) {
         if (event === "error") {
@@ -810,8 +878,21 @@ export function useStream<
         }
 
         if (event === "updates") options.onUpdateEvent?.(data);
-        if (event === "custom") options.onCustomEvent?.(data);
+        if (event === "custom")
+          options.onCustomEvent?.(data, {
+            mutate: (update) =>
+              setStreamValues((prev) => {
+                // should not happen
+                if (prev == null) return prev;
+                return {
+                  ...prev,
+                  ...(typeof update === "function" ? update(prev) : update),
+                };
+              }),
+          });
         if (event === "metadata") options.onMetadataEvent?.(data);
+        if (event === "events") options.onLangChainEvent?.(data);
+        if (event === "debug") options.onDebugEvent?.(data);
 
         if (event === "values") setStreamValues(data);
         if (event === "messages") {
@@ -879,6 +960,9 @@ export function useStream<
       return values;
     },
 
+    client,
+    assistantId,
+
     error,
     isLoading,
 
@@ -908,7 +992,7 @@ export function useStream<
     },
 
     get messages() {
-      trackStreamMode("messages-tuple");
+      trackStreamMode("messages-tuple", "values");
       return getMessages(values);
     },
 
@@ -916,7 +1000,7 @@ export function useStream<
       message: Message,
       index?: number,
     ): MessageMetadata<StateType> | undefined {
-      trackStreamMode("messages-tuple");
+      trackStreamMode("messages-tuple", "values");
       return messageMetadata?.find(
         (m) => m.messageId === (message.id ?? index),
       );

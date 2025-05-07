@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.graph import (
     Edge as DrawableEdge,
 )
@@ -12,6 +13,7 @@ from langgraph_sdk.schema import StreamPart
 from langgraph.errors import GraphInterrupt
 from langgraph.pregel.remote import RemoteGraph
 from langgraph.pregel.types import StateSnapshot
+from langgraph.types import Interrupt
 
 
 def test_with_config():
@@ -181,6 +183,7 @@ def test_get_state():
         created_at="timestamp",
         parent_config=None,
         tasks=(),
+        interrupts=(),
     )
 
 
@@ -238,6 +241,7 @@ async def test_aget_state():
             }
         },
         tasks=(),
+        interrupts=(),
     )
 
 
@@ -288,6 +292,7 @@ def test_get_state_history():
         created_at="timestamp",
         parent_config=None,
         tasks=(),
+        interrupts=(),
     )
 
 
@@ -341,6 +346,7 @@ async def test_aget_state_history():
         created_at="timestamp",
         parent_config=None,
         tasks=(),
+        interrupts=(),
     )
 
 
@@ -415,7 +421,19 @@ def test_stream():
         StreamPart(event="values", data={"chunk": "data2"}),
         StreamPart(event="values", data={"chunk": "data3"}),
         StreamPart(event="updates", data={"chunk": "data4"}),
-        StreamPart(event="updates", data={"__interrupt__": ()}),
+        StreamPart(
+            event="updates",
+            data={
+                "__interrupt__": [
+                    {
+                        "value": {"question": "Does this look good?"},
+                        "resumable": True,
+                        "ns": ["some_ns"],
+                        "when": "during",
+                    }
+                ]
+            },
+        ),
     ]
 
     # call method / assertions
@@ -424,15 +442,35 @@ def test_stream():
         sync_client=mock_sync_client,
     )
 
-    # stream modes doesn't include 'updates'
-    stream_parts = []
-    with pytest.raises(GraphInterrupt):
+    # test raising graph interrupt if invoked as a subgraph
+    with pytest.raises(GraphInterrupt) as exc:
         for stream_part in remote_pregel.stream(
             {"input": "data"},
-            config={"configurable": {"thread_id": "thread_1"}},
+            # pretend we invoked this as a subgraph
+            config={
+                "configurable": {"thread_id": "thread_1", "checkpoint_ns": "some_ns"}
+            },
             stream_mode="values",
         ):
-            stream_parts.append(stream_part)
+            pass
+
+    assert exc.value.args[0] == [
+        Interrupt(
+            value={"question": "Does this look good?"},
+            resumable=True,
+            ns=["some_ns"],
+            when="during",
+        )
+    ]
+
+    # stream modes doesn't include 'updates'
+    stream_parts = []
+    for stream_part in remote_pregel.stream(
+        {"input": "data"},
+        config={"configurable": {"thread_id": "thread_1"}},
+        stream_mode="values",
+    ):
+        stream_parts.append(stream_part)
 
     assert stream_parts == [
         {"chunk": "data1"},
@@ -448,62 +486,62 @@ def test_stream():
 
     # default stream_mode is updates
     stream_parts = []
-    with pytest.raises(GraphInterrupt):
-        for stream_part in remote_pregel.stream(
-            {"input": "data"},
-            config={"configurable": {"thread_id": "thread_1"}},
-        ):
-            stream_parts.append(stream_part)
+    for stream_part in remote_pregel.stream(
+        {"input": "data"},
+        config={"configurable": {"thread_id": "thread_1"}},
+    ):
+        stream_parts.append(stream_part)
 
     assert stream_parts == [
         {"chunk": "data3"},
         {"chunk": "data4"},
+        {"__interrupt__": ()},
     ]
 
     # list stream_mode includes mode names
     stream_parts = []
-    with pytest.raises(GraphInterrupt):
-        for stream_part in remote_pregel.stream(
-            {"input": "data"},
-            config={"configurable": {"thread_id": "thread_1"}},
-            stream_mode=["updates"],
-        ):
-            stream_parts.append(stream_part)
+    for stream_part in remote_pregel.stream(
+        {"input": "data"},
+        config={"configurable": {"thread_id": "thread_1"}},
+        stream_mode=["updates"],
+    ):
+        stream_parts.append(stream_part)
 
     assert stream_parts == [
         ("updates", {"chunk": "data3"}),
         ("updates", {"chunk": "data4"}),
+        ("updates", {"__interrupt__": ()}),
     ]
 
     # subgraphs + list modes
     stream_parts = []
-    with pytest.raises(GraphInterrupt):
-        for stream_part in remote_pregel.stream(
-            {"input": "data"},
-            config={"configurable": {"thread_id": "thread_1"}},
-            stream_mode=["updates"],
-            subgraphs=True,
-        ):
-            stream_parts.append(stream_part)
+    for stream_part in remote_pregel.stream(
+        {"input": "data"},
+        config={"configurable": {"thread_id": "thread_1"}},
+        stream_mode=["updates"],
+        subgraphs=True,
+    ):
+        stream_parts.append(stream_part)
 
     assert stream_parts == [
         ((), "updates", {"chunk": "data3"}),
         ((), "updates", {"chunk": "data4"}),
+        ((), "updates", {"__interrupt__": ()}),
     ]
 
     # subgraphs + single mode
     stream_parts = []
-    with pytest.raises(GraphInterrupt):
-        for stream_part in remote_pregel.stream(
-            {"input": "data"},
-            config={"configurable": {"thread_id": "thread_1"}},
-            subgraphs=True,
-        ):
-            stream_parts.append(stream_part)
+    for stream_part in remote_pregel.stream(
+        {"input": "data"},
+        config={"configurable": {"thread_id": "thread_1"}},
+        subgraphs=True,
+    ):
+        stream_parts.append(stream_part)
 
     assert stream_parts == [
         ((), {"chunk": "data3"}),
         ((), {"chunk": "data4"}),
+        ((), {"__interrupt__": ()}),
     ]
 
 
@@ -517,7 +555,19 @@ async def test_astream():
         StreamPart(event="values", data={"chunk": "data2"}),
         StreamPart(event="values", data={"chunk": "data3"}),
         StreamPart(event="updates", data={"chunk": "data4"}),
-        StreamPart(event="updates", data={"__interrupt__": ()}),
+        StreamPart(
+            event="updates",
+            data={
+                "__interrupt__": [
+                    {
+                        "value": {"question": "Does this look good?"},
+                        "resumable": True,
+                        "ns": ["some_ns"],
+                        "when": "during",
+                    }
+                ]
+            },
+        ),
     ]
     mock_async_client.runs.stream.return_value = async_iter
 
@@ -527,15 +577,35 @@ async def test_astream():
         client=mock_async_client,
     )
 
-    # stream modes doesn't include 'updates'
-    stream_parts = []
-    with pytest.raises(GraphInterrupt):
+    # test raising graph interrupt if invoked as a subgraph
+    with pytest.raises(GraphInterrupt) as exc:
         async for stream_part in remote_pregel.astream(
             {"input": "data"},
-            config={"configurable": {"thread_id": "thread_1"}},
+            # pretend we invoked this as a subgraph
+            config={
+                "configurable": {"thread_id": "thread_1", "checkpoint_ns": "some_ns"}
+            },
             stream_mode="values",
         ):
-            stream_parts.append(stream_part)
+            pass
+
+    assert exc.value.args[0] == [
+        Interrupt(
+            value={"question": "Does this look good?"},
+            resumable=True,
+            ns=["some_ns"],
+            when="during",
+        )
+    ]
+
+    # stream modes doesn't include 'updates'
+    stream_parts = []
+    async for stream_part in remote_pregel.astream(
+        {"input": "data"},
+        config={"configurable": {"thread_id": "thread_1"}},
+        stream_mode="values",
+    ):
+        stream_parts.append(stream_part)
 
     assert stream_parts == [
         {"chunk": "data1"},
@@ -553,62 +623,62 @@ async def test_astream():
 
     # default stream_mode is updates
     stream_parts = []
-    with pytest.raises(GraphInterrupt):
-        async for stream_part in remote_pregel.astream(
-            {"input": "data"},
-            config={"configurable": {"thread_id": "thread_1"}},
-        ):
-            stream_parts.append(stream_part)
+    async for stream_part in remote_pregel.astream(
+        {"input": "data"},
+        config={"configurable": {"thread_id": "thread_1"}},
+    ):
+        stream_parts.append(stream_part)
 
     assert stream_parts == [
         {"chunk": "data3"},
         {"chunk": "data4"},
+        {"__interrupt__": ()},
     ]
 
     # list stream_mode includes mode names
     stream_parts = []
-    with pytest.raises(GraphInterrupt):
-        async for stream_part in remote_pregel.astream(
-            {"input": "data"},
-            config={"configurable": {"thread_id": "thread_1"}},
-            stream_mode=["updates"],
-        ):
-            stream_parts.append(stream_part)
+    async for stream_part in remote_pregel.astream(
+        {"input": "data"},
+        config={"configurable": {"thread_id": "thread_1"}},
+        stream_mode=["updates"],
+    ):
+        stream_parts.append(stream_part)
 
     assert stream_parts == [
         ("updates", {"chunk": "data3"}),
         ("updates", {"chunk": "data4"}),
+        ("updates", {"__interrupt__": ()}),
     ]
 
     # subgraphs + list modes
     stream_parts = []
-    with pytest.raises(GraphInterrupt):
-        async for stream_part in remote_pregel.astream(
-            {"input": "data"},
-            config={"configurable": {"thread_id": "thread_1"}},
-            stream_mode=["updates"],
-            subgraphs=True,
-        ):
-            stream_parts.append(stream_part)
+    async for stream_part in remote_pregel.astream(
+        {"input": "data"},
+        config={"configurable": {"thread_id": "thread_1"}},
+        stream_mode=["updates"],
+        subgraphs=True,
+    ):
+        stream_parts.append(stream_part)
 
     assert stream_parts == [
         ((), "updates", {"chunk": "data3"}),
         ((), "updates", {"chunk": "data4"}),
+        ((), "updates", {"__interrupt__": ()}),
     ]
 
     # subgraphs + single mode
     stream_parts = []
-    with pytest.raises(GraphInterrupt):
-        async for stream_part in remote_pregel.astream(
-            {"input": "data"},
-            config={"configurable": {"thread_id": "thread_1"}},
-            subgraphs=True,
-        ):
-            stream_parts.append(stream_part)
+    async for stream_part in remote_pregel.astream(
+        {"input": "data"},
+        config={"configurable": {"thread_id": "thread_1"}},
+        subgraphs=True,
+    ):
+        stream_parts.append(stream_part)
 
     assert stream_parts == [
         ((), {"chunk": "data3"}),
         ((), {"chunk": "data4"}),
+        ((), {"__interrupt__": ()}),
     ]
 
     async_iter = MagicMock()
@@ -621,33 +691,33 @@ async def test_astream():
 
     # subgraphs + list modes
     stream_parts = []
-    with pytest.raises(GraphInterrupt):
-        async for stream_part in remote_pregel.astream(
-            {"input": "data"},
-            config={"configurable": {"thread_id": "thread_1"}},
-            stream_mode=["updates"],
-            subgraphs=True,
-        ):
-            stream_parts.append(stream_part)
+    async for stream_part in remote_pregel.astream(
+        {"input": "data"},
+        config={"configurable": {"thread_id": "thread_1"}},
+        stream_mode=["updates"],
+        subgraphs=True,
+    ):
+        stream_parts.append(stream_part)
 
     assert stream_parts == [
         (("my", "subgraph"), "updates", {"chunk": "data3"}),
         (("hello", "subgraph"), "updates", {"chunk": "data4"}),
+        (("bye", "subgraph"), "updates", {"__interrupt__": ()}),
     ]
 
     # subgraphs + single mode
     stream_parts = []
-    with pytest.raises(GraphInterrupt):
-        async for stream_part in remote_pregel.astream(
-            {"input": "data"},
-            config={"configurable": {"thread_id": "thread_1"}},
-            subgraphs=True,
-        ):
-            stream_parts.append(stream_part)
+    async for stream_part in remote_pregel.astream(
+        {"input": "data"},
+        config={"configurable": {"thread_id": "thread_1"}},
+        subgraphs=True,
+    ):
+        stream_parts.append(stream_part)
 
     assert stream_parts == [
         (("my", "subgraph"), {"chunk": "data3"}),
         (("hello", "subgraph"), {"chunk": "data4"}),
+        (("bye", "subgraph"), {"__interrupt__": ()}),
     ]
 
 
@@ -796,3 +866,100 @@ async def test_langgraph_cloud_integration():
     remote_pregel.graph_id = "fe096781-5601-53d2-b2f6-0d3403f7e9ca"  # must be UUID
     graph = await remote_pregel.aget_graph(xray=True)
     print("graph:", graph)
+
+
+def test_sanitize_config():
+    # Create a test instance
+    remote = RemoteGraph("test-graph")
+
+    # Test 1: Basic config with primitives
+    basic_config: RunnableConfig = {
+        "recursion_limit": 10,
+        "tags": ["tag1", "tag2"],
+        "metadata": {"str_key": "value", "int_key": 42, "bool_key": True},
+        "configurable": {"param1": "value1", "param2": 123},
+    }
+    sanitized = remote._sanitize_config(basic_config)
+    assert sanitized["recursion_limit"] == 10
+    assert sanitized["tags"] == ["tag1", "tag2"]
+    assert sanitized["metadata"] == {
+        "str_key": "value",
+        "int_key": 42,
+        "bool_key": True,
+    }
+    assert sanitized["configurable"] == {"param1": "value1", "param2": 123}
+
+    # Test 2: Config with non-string tags and complex metadata
+    complex_config: RunnableConfig = {
+        "tags": ["tag1", 123, {"obj": "tag"}, "tag2"],  # Only string tags should remain
+        "metadata": {
+            "nested": {
+                "key": "value",
+                "num": 42,
+                "invalid": lambda x: x,
+            },  # Last item should be removed
+            "list": [1, 2, "three"],
+            "invalid": lambda x: x,  # Should be removed
+            "tuple": (1, 2, 3),  # Should be converted to list
+        },
+    }
+    sanitized = remote._sanitize_config(complex_config)
+    assert sanitized["tags"] == ["tag1", "tag2"]
+    assert sanitized["metadata"] == {
+        "nested": {"key": "value", "num": 42},
+        "list": [1, 2, "three"],
+        "tuple": [1, 2, 3],
+    }
+    assert "invalid" not in sanitized["metadata"]
+
+    # Test 3: Config with configurable fields that should be dropped
+    config_with_drops: RunnableConfig = {
+        "configurable": {
+            "normal_param": "value",
+            "checkpoint_map": {"key": "value"},  # Should be dropped
+            "checkpoint_id": "123",  # Should be dropped
+            "checkpoint_ns": "ns",  # Should be dropped
+        }
+    }
+    sanitized = remote._sanitize_config(config_with_drops)
+    assert sanitized["configurable"] == {"normal_param": "value"}
+    assert "checkpoint_map" not in sanitized["configurable"]
+    assert "checkpoint_id" not in sanitized["configurable"]
+    assert "checkpoint_ns" not in sanitized["configurable"]
+
+    # Test 4: Empty config
+    empty_config: RunnableConfig = {}
+    sanitized = remote._sanitize_config(empty_config)
+    assert sanitized == {}
+
+    # Test 5: Config with non-string keys in configurable
+    invalid_keys_config: RunnableConfig = {
+        "configurable": {
+            "valid": "value",
+            123: "invalid",  # Should be dropped
+            ("tuple", "key"): "invalid",  # Should be dropped
+        }
+    }
+    sanitized = remote._sanitize_config(invalid_keys_config)
+    assert sanitized["configurable"] == {"valid": "value"}
+
+    # Test 6: Deeply nested structures
+    nested_config: RunnableConfig = {
+        "metadata": {
+            "level1": {
+                "level2": {
+                    "level3": {
+                        "str": "value",
+                        "list": [1, [2, [3]]],
+                        "dict": {"a": {"b": {"c": "d"}}},
+                    }
+                }
+            }
+        }
+    }
+    sanitized = remote._sanitize_config(nested_config)
+    assert sanitized["metadata"]["level1"]["level2"]["level3"]["str"] == "value"
+    assert sanitized["metadata"]["level1"]["level2"]["level3"]["list"] == [1, [2, [3]]]
+    assert sanitized["metadata"]["level1"]["level2"]["level3"]["dict"] == {
+        "a": {"b": {"c": "d"}}
+    }

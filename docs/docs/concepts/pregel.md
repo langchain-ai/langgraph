@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # LangGraph's Runtime (Pregel)
 
 [Pregel][langgraph.pregel.Pregel] implements LangGraph's runtime, managing the execution of LangGraph applications.
@@ -22,7 +27,7 @@ Repeat until no **actors** are selected for execution, or a maximum number of st
 
 ## Actors 
 
-An **actor** is a [PregelNode][langgraph.pregel.read.PregelNode]. It subscribes to channels, reads data from them, and writes data to them. It can be thought of as an **actor** in the Pregel algorithm. [PregelNodes][langgraph.pregel.read.PregelNode] implement LangChain's Runnable interface.
+An **actor** is a `PregelNode`. It subscribes to channels, reads data from them, and writes data to them. It can be thought of as an **actor** in the Pregel algorithm. `PregelNodes` implement LangChain's Runnable interface.
 
 ## Channels
 
@@ -284,7 +289,7 @@ LangGraph provides two high-level APIs for creating a Pregel application: the [S
     {'__start__': <langgraph.pregel.read.PregelNode at 0x7d05e3ba1810>,
      'write_essay': <langgraph.pregel.read.PregelNode at 0x7d05e3ba14d0>,
      'score_essay': <langgraph.pregel.read.PregelNode at 0x7d05e3ba1710>}
-     ```
+    ```
 
     ```python
     print(graph.channels)

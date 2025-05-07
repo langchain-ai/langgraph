@@ -39,7 +39,7 @@ You will eventually need to pass in the following environment variables to the L
 
         `<database_name_1>` and `database_name_2` are different databases within the same instance, but `<hostname_1>` is shared. **The same database cannot be used for separate deployments**.
 
-- `LANGSMITH_API_KEY`: (If using [Self-Hosted Lite](../concepts/deployment_options.md#self-hosted-lite)) LangSmith API key. This will be used to authenticate ONCE at server start up.
+- `LANGSMITH_API_KEY`: (If using [Self-Hosted Data Plane](../concepts/deployment_options.md#self-hosted-data-plane)) LangSmith API key. This will be used to authenticate ONCE at server start up.
 - `LANGGRAPH_CLOUD_LICENSE_KEY`: (If using [Self-Hosted Enterprise](../concepts/deployment_options.md#self-hosted-enterprise)) LangGraph Platform license key. This will be used to authenticate ONCE at server start up.
 - `LANGCHAIN_ENDPOINT`: To send traces to a [self-hosted LangSmith](https://docs.smith.langchain.com/self_hosting) instance, set `LANGCHAIN_ENDPOINT` to the hostname of the self-hosted LangSmith instance.
 

@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # Functional API
 
 ## Overview
@@ -23,8 +28,10 @@ This provides a minimal abstraction for building workflows with state management
 Below we demonstrate a simple application that writes an essay and [interrupts](human_in_the_loop.md) to request human review.
 
 ```python
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.func import entrypoint, task
 from langgraph.types import interrupt
+
 
 @task
 def write_essay(topic: str) -> str:

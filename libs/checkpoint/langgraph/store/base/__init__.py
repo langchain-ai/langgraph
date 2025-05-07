@@ -11,9 +11,19 @@ Core types:
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Iterable, Literal, NamedTuple, Optional, TypedDict, Union, cast
+from typing import (
+    Any,
+    Iterable,
+    Literal,
+    NamedTuple,
+    Optional,
+    TypedDict,
+    Union,
+    cast,
+)
 
 from langchain_core.embeddings import Embeddings
+from typing_extensions import override
 
 from langgraph.store.base.embed import (
     AEmbeddingsFunc,
@@ -24,17 +34,31 @@ from langgraph.store.base.embed import (
 )
 
 
+class NotProvided:
+    """Sentinel singleton."""
+
+    def __bool__(self) -> Literal[False]:
+        return False
+
+    @override
+    def __repr__(self) -> str:
+        return "NOT_GIVEN"
+
+
+NOT_PROVIDED = NotProvided()
+
+
 class Item:
     """Represents a stored item with metadata.
 
     Args:
-        value (dict[str, Any]): The stored data as a dictionary. Keys are filterable.
-        key (str): Unique identifier within the namespace.
-        namespace (tuple[str, ...]): Hierarchical path defining the collection in which this document resides.
+        value: The stored data as a dictionary. Keys are filterable.
+        key: Unique identifier within the namespace.
+        namespace: Hierarchical path defining the collection in which this document resides.
             Represented as a tuple of strings, allowing for nested categorization.
             For example: ("documents", 'user123')
-        created_at (datetime): Timestamp of item creation.
-        updated_at (datetime): Timestamp of last update.
+        created_at: Timestamp of item creation.
+        updated_at: Timestamp of last update.
     """
 
     __slots__ = ("value", "key", "namespace", "created_at", "updated_at")
@@ -59,7 +83,7 @@ class Item:
             else created_at
         )
         self.updated_at = (
-            datetime.fromisoformat(cast(str, created_at))
+            datetime.fromisoformat(cast(str, updated_at))
             if isinstance(updated_at, str)
             else updated_at
         )
@@ -166,6 +190,13 @@ class GetOp(NamedTuple):
         "doc456"  # For a document
         ```
     """
+    refresh_ttl: bool = True
+    """Whether to refresh TTLs for the returned item.
+
+    If no TTL was specified for the original item(s),
+    or if TTL support is not enabled for your adapter,
+    this argument is ignored.
+    """
 
 
 class SearchOp(NamedTuple):
@@ -259,6 +290,13 @@ class SearchOp(NamedTuple):
     ???+ example "Examples"
         - "technical documentation about REST APIs"
         - "machine learning papers from 2023"
+    """
+    refresh_ttl: bool = True
+    """Whether to refresh TTLs for the returned item.
+
+    If no TTL was specified for the original item(s),
+    or if TTL support is not enabled for your adapter,
+    this argument is ignored.
     """
 
 
@@ -463,6 +501,15 @@ class PutOp(NamedTuple):
         ]
         ```
     """
+    ttl: Optional[float] = None
+    """Controls the TTL (time-to-live) for the item in minutes.
+
+    If provided, and if the store you are using supports this feature, the item
+    will expire this many minutes after it was last accessed. The expiration timer
+    refreshes on both read operations (get/search) and write operations (put/update).
+    When the TTL expires, the item will be scheduled for deletion on a best-effort basis.
+    Defaults to None (no expiration).
+    """
 
 
 Op = Union[GetOp, SearchOp, PutOp, ListNamespacesOp]
@@ -471,6 +518,31 @@ Result = Union[Item, list[Item], list[SearchItem], list[tuple[str, ...]], None]
 
 class InvalidNamespaceError(ValueError):
     """Provided namespace is invalid."""
+
+
+class TTLConfig(TypedDict, total=False):
+    """Configuration for TTL (time-to-live) behavior in the store."""
+
+    refresh_on_read: bool
+    """Default behavior for refreshing TTLs on read operations (GET and SEARCH).
+    
+    If True, TTLs will be refreshed on read operations (get/search) by default.
+    This can be overridden per-operation by explicitly setting refresh_ttl.
+    Defaults to True if not configured.
+    """
+    default_ttl: Optional[float]
+    """Default TTL (time-to-live) in minutes for new items.
+    
+    If provided, new items will expire after this many minutes after their last access.
+    The expiration timer refreshes on both read and write operations.
+    Defaults to None (no expiration).
+    """
+    sweep_interval_minutes: Optional[int]
+    """Interval in minutes between TTL sweep operations.
+    
+    If provided, the store will periodically delete expired items based on TTL.
+    Defaults to None (no sweeping).
+    """
 
 
 class IndexConfig(TypedDict, total=False):
@@ -612,7 +684,13 @@ class BaseStore(ABC):
         by providing an `index` configuration at creation time. Without this
         configuration, semantic search is disabled and any `index` arguments
         to storage operations will have no effect.
+
+        Similarly, TTL (time-to-live) support is disabled by default.
+        Subclasses must explicitly set `supports_ttl = True` to enable this feature.
     """
+
+    supports_ttl: bool = False
+    ttl_config: Optional[TTLConfig] = None
 
     __slots__ = ("__weakref__",)
 
@@ -640,17 +718,28 @@ class BaseStore(ABC):
             The order of results matches the order of input operations.
         """
 
-    def get(self, namespace: tuple[str, ...], key: str) -> Optional[Item]:
+    def get(
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+        *,
+        refresh_ttl: Optional[bool] = None,
+    ) -> Optional[Item]:
         """Retrieve a single item.
 
         Args:
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
+            refresh_ttl: Whether to refresh TTLs for the returned item.
+                If None (default), uses the store's default refresh_ttl setting.
+                If no TTL is specified, this argument is ignored.
 
         Returns:
             The retrieved item or None if not found.
         """
-        return self.batch([GetOp(namespace, key)])[0]
+        return self.batch(
+            [GetOp(namespace, str(key), _ensure_refresh(self.ttl_config, refresh_ttl))]
+        )[0]
 
     def search(
         self,
@@ -661,6 +750,7 @@ class BaseStore(ABC):
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
+        refresh_ttl: Optional[bool] = None,
     ) -> list[SearchItem]:
         """Search for items within a namespace prefix.
 
@@ -670,6 +760,8 @@ class BaseStore(ABC):
             filter: Key-value pairs to filter results.
             limit: Maximum number of items to return.
             offset: Number of items to skip before returning results.
+            refresh_ttl: Whether to refresh TTLs for the returned items.
+                If no TTL is specified, this argument is ignored.
 
         Returns:
             List of items matching the search criteria.
@@ -707,7 +799,18 @@ class BaseStore(ABC):
             Note: Natural language search support depends on your store implementation
             and requires proper embedding configuration.
         """
-        return self.batch([SearchOp(namespace_prefix, filter, limit, offset, query)])[0]
+        return self.batch(
+            [
+                SearchOp(
+                    namespace_prefix,
+                    filter,
+                    limit,
+                    offset,
+                    query,
+                    _ensure_refresh(self.ttl_config, refresh_ttl),
+                )
+            ]
+        )[0]
 
     def put(
         self,
@@ -715,6 +818,8 @@ class BaseStore(ABC):
         key: str,
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
+        *,
+        ttl: Union[Optional[float], "NotProvided"] = NOT_PROVIDED,
     ) -> None:
         """Store or update an item in the store.
 
@@ -735,11 +840,19 @@ class BaseStore(ABC):
                     - Nested fields: "metadata.title"
                     - Array access: "chapters[*].content" (each indexed separately)
                     - Specific indices: "authors[0].name"
+            ttl: Time to live in minutes. Support for this argument depends on your store adapter.
+                If specified, the item will expire after this many minutes from when it was last accessed.
+                None means no expiration. Expired runs will be deleted opportunistically.
+                By default, the expiration timer refreshes on both read operations (get/search)
+                and write operations (put/update), whenever the item is included in the operation.
 
         Note:
             Indexing support depends on your store implementation.
             If you do not initialize the store with indexing capabilities,
             the `index` parameter will be ignored.
+
+            Similarly, TTL support depends on the specific store implementation.
+            Some implementations may not support expiration of items.
 
         ???+ example "Examples"
             Store item. Indexing depends on how you configure the store.
@@ -759,7 +872,22 @@ class BaseStore(ABC):
             ```
         """
         _validate_namespace(namespace)
-        self.batch([PutOp(namespace, key, value, index=index)])
+        if ttl not in (NOT_PROVIDED, None) and not self.supports_ttl:
+            raise NotImplementedError(
+                f"TTL is not supported by {self.__class__.__name__}. "
+                f"Use a store implementation that supports TTL or set ttl=None."
+            )
+        self.batch(
+            [
+                PutOp(
+                    namespace,
+                    str(key),
+                    value,
+                    index=index,
+                    ttl=_ensure_ttl(self.ttl_config, ttl),
+                )
+            ]
+        )
 
     def delete(self, namespace: tuple[str, ...], key: str) -> None:
         """Delete an item.
@@ -768,7 +896,7 @@ class BaseStore(ABC):
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
         """
-        self.batch([PutOp(namespace, key, None)])
+        self.batch([PutOp(namespace, str(key), None, ttl=None)])
 
     def list_namespaces(
         self,
@@ -785,12 +913,12 @@ class BaseStore(ABC):
         find specific collections, or navigate the namespace hierarchy.
 
         Args:
-            prefix (Optional[Tuple[str, ...]]): Filter namespaces that start with this path.
-            suffix (Optional[Tuple[str, ...]]): Filter namespaces that end with this path.
-            max_depth (Optional[int]): Return namespaces up to this depth in the hierarchy.
+            prefix: Filter namespaces that start with this path.
+            suffix: Filter namespaces that end with this path.
+            max_depth: Return namespaces up to this depth in the hierarchy.
                 Namespaces deeper than this level will be truncated.
-            limit (int): Maximum number of namespaces to return (default 100).
-            offset (int): Number of namespaces to skip for pagination (default 0).
+            limit: Maximum number of namespaces to return (default 100).
+            offset: Number of namespaces to skip for pagination (default 0).
 
         Returns:
             List[Tuple[str, ...]]: A list of namespace tuples that match the criteria.
@@ -823,7 +951,13 @@ class BaseStore(ABC):
         )
         return self.batch([op])[0]
 
-    async def aget(self, namespace: tuple[str, ...], key: str) -> Optional[Item]:
+    async def aget(
+        self,
+        namespace: tuple[str, ...],
+        key: str,
+        *,
+        refresh_ttl: Optional[bool] = None,
+    ) -> Optional[Item]:
         """Asynchronously retrieve a single item.
 
         Args:
@@ -833,7 +967,17 @@ class BaseStore(ABC):
         Returns:
             The retrieved item or None if not found.
         """
-        return (await self.abatch([GetOp(namespace, key)]))[0]
+        return (
+            await self.abatch(
+                [
+                    GetOp(
+                        namespace,
+                        str(key),
+                        _ensure_refresh(self.ttl_config, refresh_ttl),
+                    )
+                ]
+            )
+        )[0]
 
     async def asearch(
         self,
@@ -844,6 +988,7 @@ class BaseStore(ABC):
         filter: Optional[dict[str, Any]] = None,
         limit: int = 10,
         offset: int = 0,
+        refresh_ttl: Optional[bool] = None,
     ) -> list[SearchItem]:
         """Asynchronously search for items within a namespace prefix.
 
@@ -853,6 +998,9 @@ class BaseStore(ABC):
             filter: Key-value pairs to filter results.
             limit: Maximum number of items to return.
             offset: Number of items to skip before returning results.
+            refresh_ttl: Whether to refresh TTLs for the returned items.
+                If None (default), uses the store's TTLConfig.refresh_default setting.
+                If TTLConfig is not provided or no TTL is specified, this argument is ignored.
 
         Returns:
             List of items matching the search criteria.
@@ -892,7 +1040,16 @@ class BaseStore(ABC):
         """
         return (
             await self.abatch(
-                [SearchOp(namespace_prefix, filter, limit, offset, query)]
+                [
+                    SearchOp(
+                        namespace_prefix,
+                        filter,
+                        limit,
+                        offset,
+                        query,
+                        _ensure_refresh(self.ttl_config, refresh_ttl),
+                    )
+                ]
             )
         )[0]
 
@@ -902,6 +1059,8 @@ class BaseStore(ABC):
         key: str,
         value: dict[str, Any],
         index: Optional[Union[Literal[False], list[str]]] = None,
+        *,
+        ttl: Union[Optional[float], "NotProvided"] = NOT_PROVIDED,
     ) -> None:
         """Asynchronously store or update an item in the store.
 
@@ -922,11 +1081,19 @@ class BaseStore(ABC):
                     - Nested fields: "metadata.title"
                     - Array access: "chapters[*].content" (each indexed separately)
                     - Specific indices: "authors[0].name"
+            ttl: Time to live in minutes. Support for this argument depends on your store adapter.
+                If specified, the item will expire after this many minutes from when it was last accessed.
+                None means no expiration. Expired runs will be deleted opportunistically.
+                By default, the expiration timer refreshes on both read operations (get/search)
+                and write operations (put/update), whenever the item is included in the operation.
 
         Note:
             Indexing support depends on your store implementation.
             If you do not initialize the store with indexing capabilities,
             the `index` parameter will be ignored.
+
+            Similarly, TTL support depends on the specific store implementation.
+            Some implementations may not support expiration of items.
 
         ???+ example "Examples"
             Store item. Indexing depends on how you configure the store.
@@ -954,7 +1121,22 @@ class BaseStore(ABC):
             ```
         """
         _validate_namespace(namespace)
-        await self.abatch([PutOp(namespace, key, value, index=index)])
+        if ttl not in (NOT_PROVIDED, None) and not self.supports_ttl:
+            raise NotImplementedError(
+                f"TTL is not supported by {self.__class__.__name__}. "
+                f"Use a store implementation that supports TTL or set ttl=None."
+            )
+        await self.abatch(
+            [
+                PutOp(
+                    namespace,
+                    str(key),
+                    value,
+                    index=index,
+                    ttl=_ensure_ttl(self.ttl_config, ttl),
+                )
+            ]
+        )
 
     async def adelete(self, namespace: tuple[str, ...], key: str) -> None:
         """Asynchronously delete an item.
@@ -963,7 +1145,7 @@ class BaseStore(ABC):
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
         """
-        await self.abatch([PutOp(namespace, key, None)])
+        await self.abatch([PutOp(namespace, str(key), None)])
 
     async def alist_namespaces(
         self,
@@ -980,12 +1162,12 @@ class BaseStore(ABC):
         find specific collections, or navigate the namespace hierarchy.
 
         Args:
-            prefix (Optional[Tuple[str, ...]]): Filter namespaces that start with this path.
-            suffix (Optional[Tuple[str, ...]]): Filter namespaces that end with this path.
-            max_depth (Optional[int]): Return namespaces up to this depth in the hierarchy.
+            prefix: Filter namespaces that start with this path.
+            suffix: Filter namespaces that end with this path.
+            max_depth: Return namespaces up to this depth in the hierarchy.
                 Namespaces deeper than this level will be truncated to this depth.
-            limit (int): Maximum number of namespaces to return (default 100).
-            offset (int): Number of namespaces to skip for pagination (default 0).
+            limit: Maximum number of namespaces to return (default 100).
+            offset: Number of namespaces to skip for pagination (default 0).
 
         Returns:
             List[Tuple[str, ...]]: A list of namespace tuples that match the criteria.
@@ -1041,6 +1223,27 @@ def _validate_namespace(namespace: tuple[str, ...]) -> None:
         raise InvalidNamespaceError(
             f'Root label for namespace cannot be "langgraph". Got: {namespace}'
         )
+
+
+def _ensure_refresh(
+    ttl_config: Optional[TTLConfig], refresh_ttl: Optional[bool] = None
+) -> bool:
+    if refresh_ttl is not None:
+        return refresh_ttl
+    if ttl_config is not None:
+        return ttl_config.get("refresh_on_read", True)
+    return True
+
+
+def _ensure_ttl(
+    ttl_config: Optional[TTLConfig],
+    ttl: Union[Optional[float], "NotProvided"] = NOT_PROVIDED,
+) -> Optional[float]:
+    if ttl is NOT_PROVIDED:
+        if ttl_config:
+            return ttl_config.get("default_ttl")
+        return None
+    return ttl
 
 
 __all__ = [

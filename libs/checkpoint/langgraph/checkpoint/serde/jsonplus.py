@@ -20,7 +20,7 @@ from ipaddress import (
 from typing import Any, Callable, Optional, Union, cast
 from uuid import UUID
 
-import msgpack  # type: ignore[import-untyped]
+import ormsgpack
 from langchain_core.load.load import Reviver
 from langchain_core.load.serializable import Serializable
 from zoneinfo import ZoneInfo
@@ -30,9 +30,21 @@ from langgraph.checkpoint.serde.types import SendProtocol
 from langgraph.store.base import Item
 
 LC_REVIVER = Reviver()
+EMPTY_BYTES = b""
 
 
 class JsonPlusSerializer(SerializerProtocol):
+    """Serializer that uses ormsgpack, with a fallback to extended JSON serializer."""
+
+    def __init__(
+        self, *, __unpack_ext_hook__: Optional[Callable[[int, bytes], Any]] = None
+    ) -> None:
+        self._unpack_ext_hook = (
+            __unpack_ext_hook__
+            if __unpack_ext_hook__ is not None
+            else _msgpack_ext_hook
+        )
+
     def _encode_constructor_args(
         self,
         constructor: Union[Callable, type[Any]],
@@ -185,30 +197,36 @@ class JsonPlusSerializer(SerializerProtocol):
         )
 
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
-        if isinstance(obj, bytes):
+        if obj is None:
+            return "null", EMPTY_BYTES
+        elif isinstance(obj, bytes):
             return "bytes", obj
         elif isinstance(obj, bytearray):
             return "bytearray", obj
         else:
             try:
                 return "msgpack", _msgpack_enc(obj)
-            except UnicodeEncodeError:
-                return "json", self.dumps(obj)
+            except ormsgpack.MsgpackEncodeError as exc:
+                if "valid UTF-8" in str(exc):
+                    return "json", self.dumps(obj)
+                raise exc
 
     def loads(self, data: bytes) -> Any:
         return json.loads(data, object_hook=self._reviver)
 
     def loads_typed(self, data: tuple[str, bytes]) -> Any:
         type_, data_ = data
-        if type_ == "bytes":
+        if type_ == "null":
+            return None
+        elif type_ == "bytes":
             return data_
         elif type_ == "bytearray":
             return bytearray(data_)
         elif type_ == "json":
             return self.loads(data_)
         elif type_ == "msgpack":
-            return msgpack.unpackb(
-                data_, ext_hook=_msgpack_ext_hook, strict_map_key=False
+            return ormsgpack.unpackb(
+                data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
         else:
             raise NotImplementedError(f"Unknown serialization type: {type_}")
@@ -224,9 +242,9 @@ EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 
 
-def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
+def _msgpack_default(obj: Any) -> Union[str, ormsgpack.Ext]:
     if hasattr(obj, "model_dump") and callable(obj.model_dump):  # pydantic v2
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_PYDANTIC_V2,
             _msgpack_enc(
                 (
@@ -238,7 +256,7 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
             ),
         )
     elif hasattr(obj, "get_secret_value") and callable(obj.get_secret_value):
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
                 (
@@ -249,7 +267,7 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
             ),
         )
     elif hasattr(obj, "dict") and callable(obj.dict):  # pydantic v1
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_PYDANTIC_V1,
             _msgpack_enc(
                 (
@@ -260,7 +278,7 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
             ),
         )
     elif hasattr(obj, "_asdict") and callable(obj._asdict):  # namedtuple
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_CONSTRUCTOR_KW_ARGS,
             _msgpack_enc(
                 (
@@ -271,56 +289,63 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
             ),
         )
     elif isinstance(obj, pathlib.Path):
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_CONSTRUCTOR_POS_ARGS,
             _msgpack_enc(
                 (obj.__class__.__module__, obj.__class__.__name__, obj.parts),
             ),
         )
     elif isinstance(obj, re.Pattern):
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_CONSTRUCTOR_POS_ARGS,
             _msgpack_enc(
                 ("re", "compile", (obj.pattern, obj.flags)),
             ),
         )
     elif isinstance(obj, UUID):
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
                 (obj.__class__.__module__, obj.__class__.__name__, obj.hex),
             ),
         )
+    elif isinstance(obj, bytearray):
+        return ormsgpack.Ext(
+            EXT_CONSTRUCTOR_SINGLE_ARG,
+            _msgpack_enc(
+                (obj.__class__.__module__, obj.__class__.__name__, bytes(obj)),
+            ),
+        )
     elif isinstance(obj, decimal.Decimal):
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
                 (obj.__class__.__module__, obj.__class__.__name__, str(obj)),
             ),
         )
     elif isinstance(obj, (set, frozenset, deque)):
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
                 (obj.__class__.__module__, obj.__class__.__name__, tuple(obj)),
             ),
         )
     elif isinstance(obj, (IPv4Address, IPv4Interface, IPv4Network)):
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
                 (obj.__class__.__module__, obj.__class__.__name__, str(obj)),
             ),
         )
     elif isinstance(obj, (IPv6Address, IPv6Interface, IPv6Network)):
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
                 (obj.__class__.__module__, obj.__class__.__name__, str(obj)),
             ),
         )
     elif isinstance(obj, datetime):
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_METHOD_SINGLE_ARG,
             _msgpack_enc(
                 (
@@ -332,7 +357,7 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
             ),
         )
     elif isinstance(obj, timedelta):
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_CONSTRUCTOR_POS_ARGS,
             _msgpack_enc(
                 (
@@ -343,7 +368,7 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
             ),
         )
     elif isinstance(obj, date):
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_CONSTRUCTOR_POS_ARGS,
             _msgpack_enc(
                 (
@@ -354,7 +379,7 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
             ),
         )
     elif isinstance(obj, time):
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_CONSTRUCTOR_KW_ARGS,
             _msgpack_enc(
                 (
@@ -372,7 +397,7 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
             ),
         )
     elif isinstance(obj, timezone):
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_CONSTRUCTOR_POS_ARGS,
             _msgpack_enc(
                 (
@@ -383,21 +408,21 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
             ),
         )
     elif isinstance(obj, ZoneInfo):
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
                 (obj.__class__.__module__, obj.__class__.__name__, obj.key),
             ),
         )
     elif isinstance(obj, Enum):
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
                 (obj.__class__.__module__, obj.__class__.__name__, obj.value),
             ),
         )
     elif isinstance(obj, SendProtocol):
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_CONSTRUCTOR_POS_ARGS,
             _msgpack_enc(
                 (obj.__class__.__module__, obj.__class__.__name__, (obj.node, obj.arg)),
@@ -405,7 +430,7 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
         )
     elif dataclasses.is_dataclass(obj):
         # doesn't use dataclasses.asdict to avoid deepcopy and recursion
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_CONSTRUCTOR_KW_ARGS,
             _msgpack_enc(
                 (
@@ -419,7 +444,7 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
             ),
         )
     elif isinstance(obj, Item):
-        return msgpack.ExtType(
+        return ormsgpack.Ext(
             EXT_CONSTRUCTOR_KW_ARGS,
             _msgpack_enc(
                 (
@@ -429,7 +454,6 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
                 ),
             ),
         )
-
     elif isinstance(obj, BaseException):
         return repr(obj)
     else:
@@ -439,8 +463,8 @@ def _msgpack_default(obj: Any) -> Union[str, msgpack.ExtType]:
 def _msgpack_ext_hook(code: int, data: bytes) -> Any:
     if code == EXT_CONSTRUCTOR_SINGLE_ARG:
         try:
-            tup = msgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, strict_map_key=False
+            tup = ormsgpack.unpackb(
+                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
             # module, name, arg
             return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
@@ -448,8 +472,8 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             return
     elif code == EXT_CONSTRUCTOR_POS_ARGS:
         try:
-            tup = msgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, strict_map_key=False
+            tup = ormsgpack.unpackb(
+                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
             # module, name, args
             return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
@@ -457,8 +481,8 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             return
     elif code == EXT_CONSTRUCTOR_KW_ARGS:
         try:
-            tup = msgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, strict_map_key=False
+            tup = ormsgpack.unpackb(
+                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
             # module, name, args
             return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
@@ -466,8 +490,8 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             return
     elif code == EXT_METHOD_SINGLE_ARG:
         try:
-            tup = msgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, strict_map_key=False
+            tup = ormsgpack.unpackb(
+                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
             # module, name, arg, method
             return getattr(getattr(importlib.import_module(tup[0]), tup[1]), tup[3])(
@@ -477,8 +501,8 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             return
     elif code == EXT_PYDANTIC_V1:
         try:
-            tup = msgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, strict_map_key=False
+            tup = ormsgpack.unpackb(
+                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
             # module, name, kwargs
             cls = getattr(importlib.import_module(tup[0]), tup[1])
@@ -487,11 +511,16 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             except Exception:
                 return cls.construct(**tup[2])
         except Exception:
-            return
+            # for pydantic objects we can't find/reconstruct
+            # let's return the kwargs dict instead
+            try:
+                return tup[2]
+            except NameError:
+                return
     elif code == EXT_PYDANTIC_V2:
         try:
-            tup = msgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, strict_map_key=False
+            tup = ormsgpack.unpackb(
+                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
             # module, name, kwargs, method
             cls = getattr(importlib.import_module(tup[0]), tup[1])
@@ -500,8 +529,102 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             except Exception:
                 return cls.model_construct(**tup[2])
         except Exception:
+            # for pydantic objects we can't find/reconstruct
+            # let's return the kwargs dict instead
+            try:
+                return tup[2]
+            except NameError:
+                return
+
+
+def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
+    if code == EXT_CONSTRUCTOR_SINGLE_ARG:
+        try:
+            tup = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            if tup[0] == "uuid" and tup[1] == "UUID":
+                hex_ = tup[2]
+                return (
+                    f"{hex_[:8]}-{hex_[8:12]}-{hex_[12:16]}-{hex_[16:20]}-{hex_[20:]}"
+                )
+            # module, name, arg
+            return tup[2]
+        except Exception:
+            return
+    elif code == EXT_CONSTRUCTOR_POS_ARGS:
+        try:
+            tup = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            if tup[0] == "langgraph.types" and tup[1] == "Send":
+                from langgraph.types import Send  # type: ignore
+
+                return Send(*tup[2])
+            # module, name, args
+            return tup[2]
+        except Exception:
+            return
+    elif code == EXT_CONSTRUCTOR_KW_ARGS:
+        try:
+            tup = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            # module, name, args
+            return tup[2]
+        except Exception:
+            return
+    elif code == EXT_METHOD_SINGLE_ARG:
+        try:
+            tup = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            # module, name, arg, method
+            return tup[2]
+        except Exception:
+            return
+    elif code == EXT_PYDANTIC_V1:
+        try:
+            tup = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            # module, name, kwargs
+            return tup[2]
+        except Exception:
+            # for pydantic objects we can't find/reconstruct
+            # let's return the kwargs dict instead
+            return
+    elif code == EXT_PYDANTIC_V2:
+        try:
+            tup = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            # module, name, kwargs, method
+            return tup[2]
+        except Exception:
             return
 
 
+_option = (
+    ormsgpack.OPT_NON_STR_KEYS
+    | ormsgpack.OPT_PASSTHROUGH_DATACLASS
+    | ormsgpack.OPT_PASSTHROUGH_DATETIME
+    | ormsgpack.OPT_PASSTHROUGH_ENUM
+    | ormsgpack.OPT_PASSTHROUGH_UUID
+)
+
+
 def _msgpack_enc(data: Any) -> bytes:
-    return msgpack.packb(data, default=_msgpack_default)
+    return ormsgpack.packb(data, default=_msgpack_default, option=_option)

@@ -2,11 +2,10 @@ import functools
 import sys
 import uuid
 from typing import (
+    Annotated,
     Any,
     Callable,
-    Dict,
     ForwardRef,
-    List,
     Literal,
     Optional,
     TypeVar,
@@ -16,7 +15,7 @@ from unittest.mock import patch
 
 import langsmith
 import pytest
-from typing_extensions import Annotated, NotRequired, Required, TypedDict
+from typing_extensions import NotRequired, Required, TypedDict
 
 from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
@@ -150,9 +149,9 @@ def test_is_optional_type():
     assert not _is_optional_type(int)
     assert _is_optional_type(Optional[Literal[1, 2, 3]])
     assert not _is_optional_type(Literal[1, 2, 3])
-    assert _is_optional_type(Optional[List[int]])
-    assert _is_optional_type(Optional[Dict[str, int]])
-    assert not _is_optional_type(List[Optional[int]])
+    assert _is_optional_type(Optional[list[int]])
+    assert _is_optional_type(Optional[dict[str, int]])
+    assert not _is_optional_type(list[Optional[int]])
     assert _is_optional_type(Union[Optional[str], Optional[int]])
     assert _is_optional_type(
         Union[
@@ -177,8 +176,8 @@ def test_is_optional_type():
     assert _is_optional_type(Optional[ForwardRef("MyClass")])
     assert not _is_optional_type(ForwardRef("MyClass"))
 
-    assert _is_optional_type(Optional[Union[List[int], Dict[str, Optional[int]]]])
-    assert not _is_optional_type(Union[List[int], Dict[str, Optional[int]]])
+    assert _is_optional_type(Optional[Union[list[int], dict[str, Optional[int]]]])
+    assert not _is_optional_type(Union[list[int], dict[str, Optional[int]]])
 
     assert _is_optional_type(Optional[Callable[[int], str]])
     assert not _is_optional_type(Callable[[int], Optional[str]])

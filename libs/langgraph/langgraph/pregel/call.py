@@ -5,12 +5,13 @@ import functools
 import inspect
 import sys
 import types
-from typing import Any, Callable, Generator, Generic, Optional, TypeVar, cast
+from collections.abc import Generator, Sequence
+from typing import Any, Callable, Generic, Optional, TypeVar, cast
 
 from langchain_core.runnables import Runnable
 from typing_extensions import ParamSpec
 
-from langgraph.constants import CONF, CONFIG_KEY_CALL, RETURN, TAG_HIDDEN
+from langgraph.constants import CONF, CONFIG_KEY_CALL, RETURN
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.types import RetryPolicy
 from langgraph.utils.config import get_config
@@ -29,16 +30,12 @@ from langgraph.utils.runnable import (
 def _getattribute(obj: Any, name: str) -> Any:
     for subpath in name.split("."):
         if subpath == "<locals>":
-            raise AttributeError(
-                "Can't get local attribute {!r} on {!r}".format(name, obj)
-            )
+            raise AttributeError(f"Can't get local attribute {name!r} on {obj!r}")
         try:
             parent = obj
             obj = getattr(obj, subpath)
         except AttributeError:
-            raise AttributeError(
-                "Can't get attribute {!r} on {!r}".format(name, obj)
-            ) from None
+            raise AttributeError(f"Can't get attribute {name!r} on {obj!r}") from None
     return obj, parent
 
 
@@ -197,7 +194,7 @@ def get_runnable_for_task(func: Callable[..., Any]) -> RunnableSeq:
             )
         seq = RunnableSeq(
             run,
-            ChannelWrite([ChannelWriteEntry(RETURN)], tags=[TAG_HIDDEN]),
+            ChannelWrite([ChannelWriteEntry(RETURN)]),
             name=name,
             trace_inputs=functools.partial(
                 _explode_args_trace_inputs, inspect.signature(func)
@@ -224,7 +221,7 @@ class SyncAsyncFuture(Generic[T], concurrent.futures.Future[T]):
 def call(
     func: Callable[P, T],
     *args: Any,
-    retry: Optional[RetryPolicy] = None,
+    retry: Optional[Sequence[RetryPolicy]] = None,
     **kwargs: Any,
 ) -> SyncAsyncFuture[T]:
     config = get_config()

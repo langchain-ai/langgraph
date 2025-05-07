@@ -22,7 +22,7 @@
       "description": "A run is an invocation of a graph / assistant, with no state or memory persistence."
     },
     {
-      "name": "Crons (Enterprise-only)",
+      "name": "Crons (Plus tier)",
       "description": "A cron is a periodic run that recurs on a given schedule. The repeats can be isolated, or share state in a thread"
     },
     {
@@ -805,6 +805,58 @@
         }
       }
     },
+    "/threads/state/bulk": {
+      "post": {
+        "tags": [
+          "Threads"
+        ],
+        "summary": "Bulk Update Thread State",
+        "description": "Create a new thread from a batch of state updates.",
+        "operationId": "bulk_update_thread_state_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThreadStateBulkUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Thread"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/threads/{thread_id}/state": {
       "get": {
         "tags": [
@@ -1342,6 +1394,21 @@
             },
             "name": "offset",
             "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "error",
+                "success",
+                "timeout",
+                "interrupted"
+              ]
+            },
+            "name": "status",
+            "in": "query"
           }
         ],
         "responses": {
@@ -1458,7 +1525,7 @@
     "/threads/{thread_id}/runs/crons": {
       "post": {
         "tags": [
-          "Crons (Enterprise-only)"
+          "Crons (Plus tier)"
         ],
         "summary": "Create Thread Cron",
         "description": "Create a cron to schedule runs on a thread.",
@@ -1836,6 +1903,17 @@
             },
             "name": "run_id",
             "in": "path"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "title": "Cancel on Disconnect",
+              "description": "If true, the run will be cancelled if the client disconnects.",
+              "default": false
+            },
+            "name": "cancel_on_disconnect",
+            "in": "query"
           }
         ],
         "responses": {
@@ -2032,7 +2110,7 @@
     "/runs/crons": {
       "post": {
         "tags": [
-          "Crons (Enterprise-only)"
+          "Crons (Plus tier)"
         ],
         "summary": "Create Cron",
         "description": "Create a cron to schedule runs on new threads.",
@@ -2084,7 +2162,7 @@
     "/runs/crons/search": {
       "post": {
         "tags": [
-          "Crons (Enterprise-only)"
+          "Crons (Plus tier)"
         ],
         "summary": "Search Crons",
         "description": "Search all active crons",
@@ -2169,6 +2247,68 @@
           },
           "409": {
             "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/cancel": {
+      "post": {
+        "tags": [
+          "Thread Runs"
+        ],
+        "summary": "Cancel Runs",
+        "description": "Cancel one or more runs. Can cancel runs by thread ID and run IDs, or by status filter.",
+        "operationId": "cancel_runs_post",
+        "parameters": [
+          {
+            "description": "Action to take when cancelling the run. Possible values are `interrupt` or `rollback`. `interrupt` will simply cancel the run. `rollback` will cancel the run and delete the run and associated checkpoints afterwards.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "interrupt",
+                "rollback"
+              ],
+              "title": "Action",
+              "default": "interrupt"
+            },
+            "name": "action",
+            "in": "query"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunsCancel"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Success - Runs cancelled"
+          },
+          "404": {
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
@@ -2373,7 +2513,7 @@
     "/runs/crons/{cron_id}": {
       "delete": {
         "tags": [
-          "Crons (Enterprise-only)"
+          "Crons (Plus tier)"
         ],
         "summary": "Delete Cron",
         "description": "Delete a cron by ID.",
@@ -2936,7 +3076,7 @@
             "type": "string",
             "maxLength": 65536,
             "minLength": 1,
-            "format": "uri",
+            "format": "uri-reference",
             "title": "Webhook",
             "description": "Webhook to call after LangGraph API call is done."
           },
@@ -3216,7 +3356,11 @@
         "description": "The command to run.",
         "properties": {
           "update": {
-            "type": "object",
+            "type": [
+              "object",
+              "array",
+              "null"
+            ],
             "title": "Update",
             "description": "An update to the state."
           },
@@ -3226,12 +3370,13 @@
               "array",
               "number",
               "string",
+              "boolean",
               "null"
             ],
             "title": "Resume",
             "description": "A value to pass to an interrupted node."
           },
-          "send": {
+          "goto": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/Send"
@@ -3243,9 +3388,20 @@
                 }
               },
               {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Goto",
+            "description": "Name of the node(s) to navigate to next or node(s) to be executed with a provided input."
           }
         }
       },
@@ -3275,6 +3431,18 @@
             "anyOf": [
               {
                 "type": "object"
+              },
+              {
+                "type": "array"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
               },
               {
                 "type": "null"
@@ -3326,7 +3494,7 @@
             "type": "string",
             "maxLength": 65536,
             "minLength": 1,
-            "format": "uri",
+            "format": "uri-reference",
             "title": "Webhook",
             "description": "Webhook to call after LangGraph API call is done."
           },
@@ -3492,6 +3660,18 @@
                 "type": "object"
               },
               {
+                "type": "array"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
                 "type": "null"
               }
             ],
@@ -3541,7 +3721,7 @@
             "type": "string",
             "maxLength": 65536,
             "minLength": 1,
-            "format": "uri",
+            "format": "uri-reference",
             "title": "Webhook",
             "description": "Webhook to call after LangGraph API call is done."
           },
@@ -3840,6 +4020,36 @@
             "title": "If Exists",
             "description": "How to handle duplicate creation. Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing thread).",
             "default": "raise"
+          },
+          "ttl": {
+            "type": "object",
+            "title": "TTL",
+            "description": "The time-to-live for the thread.",
+            "properties": {
+              "strategy": {
+                "type": "string",
+                "enum": ["delete"],
+                "description": "The TTL strategy. 'delete' removes the entire thread.",
+                "default": "delete"
+              },
+              "ttl": {
+                "type": "number",
+                "description": "The time-to-live in minutes from now until thread should be swept."
+              }
+            }
+          },
+          "supersteps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "updates": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/ThreadSuperstepUpdate" }
+                }
+              },
+              "required": ["updates"]
+            }
           }
         },
         "type": "object",
@@ -4027,6 +4237,43 @@
         "type": "object",
         "title": "ThreadStateUpdate",
         "description": "Payload for updating the state of a thread."
+      },
+      "ThreadSuperstepUpdate": {
+        "properties": {
+          "values": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "command": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Command"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The command associated with the update."
+          },
+          "as_node": {
+            "type": "string",
+            "description": "Update the state as if this node had just executed."
+          }
+        },
+        "required": ["as_node"],
+        "type": "object"
       },
       "ThreadStateUpdateResponse": {
         "properties": {
@@ -4229,6 +4476,42 @@
           }
         },
         "description": "Represents a single document or data entry in the graph's Store. Items are used to store cross-thread memories."
+      },
+      "RunsCancel": {
+        "type": "object",
+        "title": "RunsCancel",
+        "description": "Payload for cancelling runs.",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["pending", "running", "all"],
+            "title": "Status",
+            "description": "Filter runs by status to cancel. Must be one of 'pending', 'running', or 'all'."
+          },
+          "thread_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Thread Id",
+            "description": "The ID of the thread containing runs to cancel."
+          },
+          "run_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "title": "Run Ids",
+            "description": "List of run IDs to cancel."
+          }
+        },
+        "oneOf": [
+          {
+            "required": ["status"]
+          },
+          {
+            "required": ["thread_id", "run_ids"]
+          }
+        ]
       },
       "SearchItemsResponse": {
         "type": "object",

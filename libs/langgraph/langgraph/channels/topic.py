@@ -1,8 +1,10 @@
-from typing import Any, Generic, Iterator, Optional, Sequence, Type, Union
+from collections.abc import Iterator, Sequence
+from typing import Any, Generic, Union
 
 from typing_extensions import Self
 
 from langgraph.channels.base import BaseChannel, Value
+from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError
 
 
@@ -16,9 +18,7 @@ def flatten(values: Sequence[Union[Value, list[Value]]]) -> Iterator[Value]:
 
 class Topic(
     Generic[Value],
-    BaseChannel[
-        Sequence[Value], Union[Value, list[Value]], tuple[set[Value], list[Value]]
-    ],
+    BaseChannel[Sequence[Value], Union[Value, list[Value]], list[Value]],
 ):
     """A configurable PubSub Topic.
 
@@ -29,7 +29,7 @@ class Topic(
 
     __slots__ = ("values", "accumulate")
 
-    def __init__(self, typ: Type[Value], accumulate: bool = False) -> None:
+    def __init__(self, typ: type[Value], accumulate: bool = False) -> None:
         super().__init__(typ)
         # attrs
         self.accumulate = accumulate
@@ -49,20 +49,28 @@ class Topic(
         """The type of the update received by the channel."""
         return Union[self.typ, list[self.typ]]  # type: ignore[name-defined]
 
-    def checkpoint(self) -> tuple[set[Value], list[Value]]:
-        return self.values
-
-    def from_checkpoint(self, checkpoint: Optional[list[Value]]) -> Self:
+    def copy(self) -> Self:
+        """Return a copy of the channel."""
         empty = self.__class__(self.typ, self.accumulate)
         empty.key = self.key
-        if checkpoint is not None:
+        empty.values = self.values.copy()
+        return empty
+
+    def checkpoint(self) -> list[Value]:
+        return self.values
+
+    def from_checkpoint(self, checkpoint: list[Value]) -> Self:
+        empty = self.__class__(self.typ, self.accumulate)
+        empty.key = self.key
+        if checkpoint is not MISSING:
             if isinstance(checkpoint, tuple):
+                # backwards compatibility
                 empty.values = checkpoint[1]
             else:
                 empty.values = checkpoint
         return empty
 
-    def update(self, values: Sequence[Union[Value, list[Value]]]) -> None:
+    def update(self, values: Sequence[Union[Value, list[Value]]]) -> bool:
         current = list(self.values)
         if not self.accumulate:
             self.values = list[Value]()
@@ -75,3 +83,6 @@ class Topic(
             return list(self.values)
         else:
             raise EmptyChannelError
+
+    def is_available(self) -> bool:
+        return bool(self.values)

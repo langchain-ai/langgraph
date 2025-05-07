@@ -1,15 +1,18 @@
 [tool.poetry]
-name = "langgraph-monorepo"
+name = "langgraph-docs"
 version = "0.0.1"
-description = "LangGraph monorepo"
+description = "LangGraph docs"
 authors = []
 license = "MIT"
 readme = "README.md"
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.10"
 aiohappyeyeballs = "2.4.3"
 hub = "^3.0.1"
+xxhash = "^3.5.0"
+black = "^25.1.0"
 
 [tool.poetry.group.docs.dependencies]
 langgraph = { path = "../libs/langgraph/", develop = true }
@@ -18,18 +21,22 @@ langgraph-checkpoint = { path = "../libs/checkpoint/", develop = true }
 langgraph-checkpoint-sqlite = { path = "../libs/checkpoint-sqlite", develop = true }
 langgraph-checkpoint-postgres = { path = "../libs/checkpoint-postgres", develop = true }
 langgraph-sdk = {path = "../libs/sdk-py", develop = true}
+# TODO: switch these to published versions
+langgraph-supervisor = { git = "https://github.com/langchain-ai/langgraph-supervisor-py" }
+langgraph-swarm = { git = "https://github.com/langchain-ai/langgraph-swarm-py" }
+langchain-mcp-adapters = { git = "https://github.com/langchain-ai/langchain-mcp-adapters" }
 langchain-ollama = "^0.2.3"
-mkdocs = "^1.6.0"
-mkdocs-autorefs = ">=1.0.1,<1.1.0"
-mkdocstrings = "^0.25.1"
-mkdocstrings-python = "^1.10.4"
-mkdocs-minify-plugin = "^0.8.0"
-mkdocs-rss-plugin = "^1.13.1"
-mkdocs-git-committers-plugin-2 = "^2.3.0"
-mkdocs-material = {extras = ["imaging"], version = "^9.5.27"}
-markdown-callouts = "^0.4.0"
-markdown-include = "^0.8.1"
-mkdocs-exclude = "^1.0.2"
+mkdocs = "*"
+mkdocs-autorefs = "*"
+mkdocstrings = "*"
+mkdocstrings-python = "*"
+mkdocs-minify-plugin = "*"
+mkdocs-rss-plugin = "*"
+mkdocs-git-committers-plugin-2 = "*"
+mkdocs-material = {extras = ["imaging"], version = "*"}
+markdown-callouts = "*"
+markdown-include = "*"
+mkdocs-exclude = "*"
 psycopg = {extras = ["binary"], version = "^3.2.0"}
 psycopg-pool = "^3.2.0"
 pygments-ansi-color = ">=0.3"
@@ -41,15 +48,18 @@ langchain-cohere = "^0.4.2"
 
 [tool.poetry.group.test.dependencies]
 langchain = "^0.3.8"
+langchain-core = "^0.3.54"
 langchain-openai = "^0.3.7"
 langchain-anthropic = "^0.3.8"
 langchain-nomic = "^0.1.3"
 langchain-fireworks = "^0.2.0"
 langchain-community = "^0.3.0"
+langchain-tavily = "^0.1.5"
 langchain-experimental = "^0.3.2"
 langchain-mistralai = "^0.2.6"
 langgraph-checkpoint-mongodb = "^0.1.0"
-langsmith = "^0.2.0"
+langmem = "^0.0.19"
+langsmith = "^0.3.0"
 chromadb = "^0.5.5"
 gpt4all = "^2.8.2"
 scikit-learn = "^1.5.2"
@@ -63,6 +73,8 @@ grandalf = "^0.8"
 pyppeteer = "^2.0.0"
 networkx = "^3.3"
 autogen = { version = "^0.3.0", python = "<3.13,>=3.8" }
+pytest = "^8.3.5"
+pytest-check-links = "^0.10.1"
 
 [tool.poetry.group.test]
 optional = true

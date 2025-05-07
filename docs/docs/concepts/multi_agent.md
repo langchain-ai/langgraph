@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # Multi-agent Systems
 
 An [agent](./agentic_concepts.md#agent-architectures) is _a system that uses an LLM to decide the control flow of an application_. As you develop these systems, they might grow more complex over time, making them harder to manage and scale. For example, you might run into the following problems:
@@ -50,7 +55,7 @@ def agent(state) -> Command[Literal["agent", "another_agent"]]:
 In a more complex scenario where each agent node is itself a graph (i.e., a [subgraph](./low_level.md#subgraphs)), a node in one of the agent subgraphs might want to navigate to a different agent. For example, if you have two agents, `alice` and `bob` (subgraph nodes in a parent graph), and `alice` needs to navigate to `bob`, you can set `graph=Command.PARENT` in the `Command` object:
 
 ```python
-def some_node_inside_alice(state)
+def some_node_inside_alice(state):
     return Command(
         goto="bob",
         update={"my_state_key": "my_state_value"},
@@ -89,7 +94,7 @@ def transfer_to_bob(state):
     )
 ```
 
-This is a special case of updating the graph state from tools where in addition the state update, the control flow is included as well.
+This is a special case of updating the graph state from tools where, in addition to the state update, the control flow is included as well.
 
 !!! important
 
@@ -235,7 +240,7 @@ supervisor = create_react_agent(model, tools)
 
 ### Hierarchical
 
-As you add more agents to your system, it might become too hard for the supervisor to manage all of them. The supervisor might start making poor decisions about which agent to call next, the context might become too complex for a single supervisor to keep track of. In other words, you end up with the same problems that motivated the multi-agent architecture in the first place.
+As you add more agents to your system, it might become too hard for the supervisor to manage all of them. The supervisor might start making poor decisions about which agent to call next, or the context might become too complex for a single supervisor to keep track of. In other words, you end up with the same problems that motivated the multi-agent architecture in the first place.
 
 To address this, you can design your system _hierarchically_. For example, you can create separate, specialized teams of agents managed by individual supervisors, and a top-level supervisor to manage the teams.
 

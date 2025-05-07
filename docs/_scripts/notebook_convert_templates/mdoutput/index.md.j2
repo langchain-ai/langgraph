@@ -1,5 +1,18 @@
 {% extends 'markdown/index.md.j2' %}
 
+{% block input %}{# cell.metadata.language is an addition of our docs pipeline. #}
+```{%- if 'language' in cell.metadata -%}
+{{ cell.metadata.language }}
+{%- elif 'magics_language' in cell.metadata -%}
+{{ cell.metadata.magics_language }}
+{%- elif 'name' in nb.metadata.get('language_info', {}) -%}
+{{ nb.metadata.language_info.name }}
+{%- endif %}
+{{ cell.source }}
+```
+{% endblock input %}
+
+
 {%- block traceback_line -%}
 ```output
 {{ line.rstrip() | strip_ansi }}
@@ -8,13 +21,13 @@
 
 {%- block stream -%}
 ```output
-{{ output.text.rstrip() }}
+{{ output.text.rstrip() | strip_ansi }}
 ```
 {%- endblock stream -%}
 
 {%- block data_text scoped -%}
 ```output
-{{ output.data['text/plain'].rstrip() }}
+{{ output.data['text/plain'].rstrip() | strip_ansi }}
 ```
 {%- endblock data_text -%}
 

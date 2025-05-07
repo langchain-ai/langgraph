@@ -1,6 +1,8 @@
 ---
 title: How-to Guides
 description: How to accomplish common tasks in LangGraph
+search:
+  boost: 0.5
 ---
 
 # How-to Guides
@@ -149,20 +151,13 @@ See the below guide for how to integrate with other frameworks using the [Functi
 
 - [How to integrate LangGraph (functional API) with AutoGen, CrewAI, and other frameworks](autogen-integration-functional.ipynb)
 
-### Prebuilt ReAct Agent
+### Prebuilt Agent
 
-The LangGraph [prebuilt ReAct agent](../reference/prebuilt.md#langgraph.prebuilt.chat_agent_executor.create_react_agent) is pre-built implementation of a [tool calling agent](../concepts/agentic_concepts.md#tool-calling-agent).
+LangGraph comes with a [prebuilt][langgraph.prebuilt.chat_agent_executor.create_react_agent] implementation of a [tool calling agent](../concepts/agentic_concepts.md#tool-calling-agent). See [Agents](../agents/overview.md) guides for more information.
 
-One of the big benefits of LangGraph is that you can easily create your own agent architectures. So while it's fine to start here to build an agent quickly, we would strongly recommend learning how to build your own agent so that you can take full advantage of LangGraph.
+!!! tip
 
-These guides show how to use the prebuilt ReAct agent:
-
-- [How to use the pre-built ReAct agent](create-react-agent.ipynb)
-- [How to add thread-level memory to a ReAct Agent](create-react-agent-memory.ipynb)
-- [How to add a custom system prompt to a ReAct agent](create-react-agent-system-prompt.ipynb)
-- [How to add human-in-the-loop processes to a ReAct agent](create-react-agent-hitl.ipynb)
-- [How to return structured output from a ReAct agent](create-react-agent-structured-output.ipynb)
-- [How to add semantic search for long-term memory to a ReAct agent](memory/semantic-search.ipynb#using-in-create-react-agent)
+    One of the big benefits of LangGraph is that you can easily create your own agent architectures. So while it's fine to start here to build an agent quickly, we would strongly recommend learning how to build your own agent so that you can take full advantage of LangGraph.
 
 Interested in further customizing the ReAct agent? This guide provides an
 overview of its underlying implementation to help you customize for your own needs:
@@ -198,15 +193,17 @@ Learn how to set up your app for deployment to LangGraph Platform:
 - [How to test locally](../cloud/deployment/test_locally.md)
 - [How to rebuild graph at runtime](../cloud/deployment/graph_rebuild.md)
 - [How to use LangGraph Platform to deploy CrewAI, AutoGen, and other frameworks](autogen-langgraph-platform.ipynb)
-- [How to integrate LangGraph into your React application](../cloud/how-tos/use_stream_react.md)
 
 ### Deployment
 
-LangGraph applications can be deployed using LangGraph Cloud, which provides a range of services to help you deploy, manage, and scale your applications.
+LangGraph applications can be deployed using LangGraph Platform, which provides a range of services to help you deploy, manage, and scale your applications.
 
-- [How to deploy to LangGraph cloud](../cloud/deployment/cloud.md)
-- [How to deploy to a self-hosted environment](./deploy-self-hosted.md)
+- [How to deploy to Cloud SaaS](../cloud/deployment/cloud.md)
+- [How to deploy the Self-Hosted Data Plane](../cloud/deployment/self_hosted_data_plane.md)
+- [How to deploy the Self-Hosted Control Plane](../cloud/deployment/self_hosted_control_plane.md)
+- [How to deploy a Standalone Container](../cloud/deployment/standalone_container.md)
 - [How to interact with the deployment using RemoteGraph](./use-remote-graph.md)
+- [How to add TTLs to your LangGraph application](./ttl/configure_ttl.md)
 
 ### Authentication & Access Control
 
@@ -245,8 +242,9 @@ LangGraph Platform supports multiple types of runs besides streaming runs.
 - [How to run multiple agents in the same thread](../cloud/how-tos/same-thread.md)
 - [How to create cron jobs](../cloud/how-tos/cron_jobs.md)
 - [How to create stateless runs](../cloud/how-tos/stateless_runs.md)
+- [How to use headers as runtime configuration](../cloud/how-tos/configurable_headers.md)
 
-### Streaming
+### Streaming {#streaming_1}
 
 Streaming the results of your LLM application is vital for ensuring a good user experience, especially when your graph may call multiple models and take a long time to fully complete a run. Read about how to stream values from your graph in these how to guides:
 
@@ -257,15 +255,28 @@ Streaming the results of your LLM application is vital for ensuring a good user 
 - [How to stream in debug mode](../cloud/how-tos/stream_debug.md)
 - [How to stream multiple modes](../cloud/how-tos/stream_multiple.md)
 
-### Human-in-the-loop
+### Frontend and Generative UI
 
-When designing complex graphs, relying entirely on the LLM for decision-making can be risky, particularly when it involves tools that interact with files, APIs, or databases. These interactions may lead to unintended data access or modifications, depending on the use case. To mitigate these risks, LangGraph allows you to integrate human-in-the-loop behavior, ensuring your LLM applications operate as intended without undesirable outcomes.
+With LangGraph Platform you can integrate LangGraph agents into your React applications and colocate UI components with your agent code. 
 
-- [How to add a breakpoint](../cloud/how-tos/human_in_the_loop_breakpoint.md)
+- [How to integrate LangGraph into your React application](../cloud/how-tos/use_stream_react.md)
+- [How to implement Generative User Interfaces with LangGraph](../cloud/how-tos/generative_ui_react.md)
+
+### Human-in-the-loop {#human-in-the-loop-1}
+
+[Human-in-the-loop](../concepts/human_in_the_loop.md) functionality allows
+you to involve humans in the decision-making process of your graph. These how-to guides show how to implement human-in-the-loop workflows in your graph.
+
 - [How to wait for user input](../cloud/how-tos/human_in_the_loop_user_input.md)
+- [How to review tool calls](../cloud/how-tos/human_in_the_loop_review_tool_calls.md)
+- [How to add static breakpoints](../cloud/how-tos/human_in_the_loop_breakpoint.md)
+
+### Time Travel
+
+[Time travel](../concepts/time-travel.md) allows you to replay past actions in your LangGraph application to explore alternative paths and debug issues. These how-to guides show how to use time travel in your graph.
+
 - [How to edit graph state](../cloud/how-tos/human_in_the_loop_edit_state.md)
 - [How to replay and branch from prior states](../cloud/how-tos/human_in_the_loop_time_travel.md)
-- [How to review tool calls](../cloud/how-tos/human_in_the_loop_review_tool_calls.md)
 
 ### Double-texting
 
@@ -294,6 +305,7 @@ LangGraph Studio is a built-in UI for visualizing, testing, and debugging your a
 - [How to interact with threads in LangGraph Studio](../cloud/how-tos/threads_studio.md)
 - [How to add nodes as dataset examples in LangGraph Studio](../cloud/how-tos/datasets_studio.md)
 - [How to engineer prompts in LangGraph Studio](../cloud/how-tos/iterate_graph_studio.md)
+- [How to test your agent against remote traces](../cloud/how-tos/clone_traces_studio.md)
 
 ## Troubleshooting
 

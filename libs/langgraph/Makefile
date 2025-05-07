@@ -58,9 +58,11 @@ WORKERS ?= auto
 XDIST_ARGS := $(if $(WORKERS),-n $(WORKERS) --dist worksteal,)
 MAXFAIL ?=
 MAXFAIL_ARGS := $(if $(MAXFAIL),--maxfail $(MAXFAIL),)
+# Add an '-x' if xdist is enabled
+XDIST_ARGS := $(if $(WORKERS),-x $(XDIST_ARGS),)
 
 test_watch:
-	make start-postgres && poetry run ptw . -- --ff -vv -x $(XDIST_ARGS) $(MAXFAIL_ARGS) --snapshot-update --tb short $(TEST); \
+	make start-postgres && poetry run ptw . -- --ff -vv $(XDIST_ARGS) $(MAXFAIL_ARGS) $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE
@@ -76,7 +78,7 @@ test_watch_all:
 PYTHON_FILES=.
 MYPY_CACHE=.mypy_cache
 lint format: PYTHON_FILES=.
-lint_diff format_diff: PYTHON_FILES=$(shell git diff --name-only --relative --diff-filter=d main . | grep -E '\.py$$|\.ipynb$$')
+lint_diff format_diff: PYTHON_FILES=$(shell git diff --name-only --relative --diff-filter=d main . | grep -E r'\.py$$|\.ipynb$$')
 lint_package: PYTHON_FILES=langgraph
 lint_tests: PYTHON_FILES=tests
 lint_tests: MYPY_CACHE=.mypy_cache_test

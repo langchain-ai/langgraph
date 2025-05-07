@@ -1,10 +1,8 @@
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import (
     Any,
-    AsyncIterator,
-    Iterator,
     Optional,
-    Sequence,
     Union,
 )
 
@@ -12,7 +10,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.graph import Graph as DrawableGraph
 from typing_extensions import Self
 
-from langgraph.pregel.types import All, StateSnapshot, StreamMode
+from langgraph.pregel.types import All, StateSnapshot, StateUpdate, StreamMode
 
 
 class PregelProtocol(
@@ -68,6 +66,20 @@ class PregelProtocol(
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> AsyncIterator[StateSnapshot]: ...
+
+    @abstractmethod
+    def bulk_update_state(
+        self,
+        config: RunnableConfig,
+        updates: Sequence[Sequence[StateUpdate]],
+    ) -> RunnableConfig: ...
+
+    @abstractmethod
+    async def abulk_update_state(
+        self,
+        config: RunnableConfig,
+        updates: Sequence[Sequence[StateUpdate]],
+    ) -> RunnableConfig: ...
 
     @abstractmethod
     def update_state(
