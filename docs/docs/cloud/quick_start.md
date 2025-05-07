@@ -1,17 +1,18 @@
-# Quickstart: Deploy on LangGraph Cloud
+# LangGraph Platform quickstart
 
-!!! note "Prerequisites"
+This guide shows you how to set up and use LangGraph Platform to do a cloud deployment.
 
-    Before you begin, ensure you have the following:
+## Prerequisites
 
-    - [GitHub account](https://github.com/)
-    - [LangSmith account](https://smith.langchain.com/)
+Before you begin, ensure you have the following:
 
-## Create a repository on GitHub
+- [GitHub account](https://github.com/)
+- [LangSmith account](https://smith.langchain.com/)
+- A [LangGraph application](../concepts/application_structure.md)
+
+## 1. Create a repository on GitHub
 
 To deploy a LangGraph application to **LangGraph Cloud**, your application code must reside in a GitHub repository. Both public and private repositories are supported.
-
-You can deploy any [LangGraph Application](../concepts/application_structure.md) to LangGraph Cloud.
 
 For this guide, we'll use the pre-built Python [**ReAct Agent**](https://github.com/langchain-ai/react-agent) template.
 
@@ -25,7 +26,7 @@ For this guide, we'll use the pre-built Python [**ReAct Agent**](https://github.
 1. Go to the [ReAct Agent](https://github.com/langchain-ai/react-agent) repository.
 2. Fork the repository to your GitHub account by clicking the `Fork` button in the top right corner.
 
-## Deploy to LangGraph Cloud
+## 2. Deploy to LangGraph Cloud
 
 ??? note "1. Log in to [LangSmith](https://smith.langchain.com/)"
 
