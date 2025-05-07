@@ -383,29 +383,13 @@ def my_node(state: State) -> Command[Literal["other_subgraph"]]:
 
 This is particularly useful when implementing [multi-agent handoffs](./multi_agent.md#handoffs).
 
+Check out [this guide](../how-tos/graph-api.ipynb#navigate-to-a-node-in-a-parent-graph) for detail.
+
 ### Using inside tools
 
-A common use case is updating graph state from inside a tool. For example, in a customer support application you might want to look up customer information based on their account number or ID in the beginning of the conversation. To update the graph state from the tool, you can return `Command(update={"my_custom_key": "foo", "messages": [...]})` from the tool:
+A common use case is updating graph state from inside a tool. For example, in a customer support application you might want to look up customer information based on their account number or ID in the beginning of the conversation.
 
-```python
-@tool
-def lookup_user_info(tool_call_id: Annotated[str, InjectedToolCallId], config: RunnableConfig):
-    """Use this to look up user information to better assist them with their questions."""
-    user_info = get_user_info(config.get("configurable", {}).get("user_id"))
-    return Command(
-        update={
-            # update the state keys
-            "user_info": user_info,
-            # update the message history
-            "messages": [ToolMessage("Successfully looked up user information", tool_call_id=tool_call_id)]
-        }
-    )
-```
-
-!!! important
-    You MUST include `messages` (or any state key used for the message history) in `Command.update` when returning `Command` from a tool and the list of messages in `messages` MUST contain a `ToolMessage`. This is necessary for the resulting message history to be valid (LLM providers require AI messages with tool calls to be followed by the tool result messages).
-
-If you are using tools that update state via `Command`, we recommend using prebuilt [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] which automatically handles tools returning `Command` objects and propagates them to the graph state. If you're writing a custom node that calls tools, you would need to manually propagate `Command` objects returned by the tools as the update from the node.
+Refer to [this guide](../how-tos/graph-api.ipynb#use-inside-tools) for detail.
 
 ### Human-in-the-loop
 
@@ -442,7 +426,7 @@ config = {"configurable": {"llm": "anthropic"}}
 graph.invoke(inputs, config=config)
 ```
 
-You can then access and use this configuration inside a node:
+You can then access and use this configuration inside a node or conditional edge:
 
 ```python
 def node_a(state, config):
@@ -462,12 +446,6 @@ graph.invoke(inputs, config={"recursion_limit": 5, "configurable":{"llm": "anthr
 ```
 
 Read [this how-to](https://langchain-ai.github.io/langgraph/how-tos/recursion-limit/) to learn more about how the recursion limit works.
-
-## Breakpoints
-
-Breakpoints pause graph execution at specific points and enable stepping through execution step by step. Breakpoints are powered by LangGraph's [**persistence layer**](./persistence.md), which saves the state after each graph step. Breakpoints can also be used to enable [**human-in-the-loop**](./human_in_the_loop.md) workflows, though we recommend using the [`interrupt` function](#interrupt) for this purpose.
-
-Read more about breakpoints in the [Breakpoints conceptual guide](./breakpoints.md).
 
 ## Visualization
 
