@@ -1,12 +1,10 @@
-from typing import Annotated, Any
+from typing import Annotated
 
-from langchain_core.language_models.fake_chat_models import (
-    FakeMessagesListChatModel,
-)
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.tools import tool
 from typing_extensions import TypedDict
 
+from integration_tests.example_app.fake_chat import FakeChatModel
 from langgraph.func import entrypoint, task
 from langgraph.graph.message import add_messages
 
@@ -24,8 +22,8 @@ def search_api(query: str) -> str:
 tools = [search_api]
 tools_by_name = {t.name: t for t in tools}
 
-model = FakeMessagesListChatModel(
-    responses=[
+model = FakeChatModel(
+    messages=[
         AIMessage(
             id="ai1",
             content="",
@@ -64,17 +62,19 @@ def foo():
 
 
 @entrypoint()
-async def app(state: dict[str, Any]) -> dict[str, Any]:
+async def app(state: AgentState) -> AgentState:
     max_steps = 100
     messages = state["messages"][:]
     await foo()  # Very useful call here ya know.
     for _ in range(max_steps):
-        message = await model.invoke(messages)
+        message = await model.ainvoke(messages)
         messages.append(message)
         if not message.tool_calls:
             break
         # Assume it's the search tool
-        tool_results = search_api.abatch([t.args["query"] for t in message.tool_calls])
+        tool_results = await search_api.abatch(
+            [t["args"]["query"] for t in message.tool_calls]
+        )
         messages.extend(
             [
                 ToolMessage(content=tool_res, tool_call_id=tc["id"])
@@ -82,4 +82,4 @@ async def app(state: dict[str, Any]) -> dict[str, Any]:
             ]
         )
 
-    return entrypoint.final(value=messages[-1], update={"messages": messages})
+    return entrypoint.final(value=messages[-1], save={"messages": messages})

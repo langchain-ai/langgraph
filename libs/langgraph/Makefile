@@ -40,8 +40,6 @@ start-postgres:
 stop-postgres:
 	docker compose -f tests/compose-postgres.yml down -v
 
-start-dev-server:
-	uvx --with-requirements integration_tests/example_app/requirements.txt  --from "langgraph-cli[inmem]" langgraph dev --config integration_tests/example_app/langgraph.json --no-browser
 
 TEST ?= .
 
@@ -56,6 +54,7 @@ test_parallel:
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE
+	
 
 WORKERS ?= auto
 XDIST_ARGS := $(if $(WORKERS),-n $(WORKERS) --dist worksteal,)
@@ -72,6 +71,9 @@ test_watch:
 
 test_watch_all:
 	npx concurrently -n langgraph,checkpoint,checkpoint-sqlite,postgres "make test_watch" "make -C ../checkpoint test_watch" "make -C ../checkpoint-sqlite test_watch" "make -C ../checkpoint-postgres test_watch"
+
+test_integration:
+	poetry run pytest integration_tests
 
 ######################
 # LINTING AND FORMATTING
