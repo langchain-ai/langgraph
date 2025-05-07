@@ -1,17 +1,12 @@
 from __future__ import annotations
 
-from typing import (
-    Literal,
-    Optional,
-    Union,
-    cast,
-    Any
-)
+from typing import Any, Literal, Optional, Union, cast
 
+from langchain_core.messages import ToolCall, ToolMessage
 from typing_extensions import TypedDict
+
+from langgraph.types import Command, interrupt
 from langgraph.utils.runnable import RunnableCallable
-from langgraph.types import Command, Send, interrupt
-from langchain_core.messages import AIMessage, ToolMessage, ToolCall
 
 
 class HumanInterruptConfig(TypedDict):
@@ -101,9 +96,9 @@ class HumanResponse(TypedDict):
     args: Union[None, str, ActionRequest]
 
 
-class ToolInterruptNode(RunnableCallable):    
+class ToolInterruptNode(RunnableCallable):
     def __init__(
-        self, 
+        self,
         interrupt_policy: dict[str, HumanInterruptConfig],
         *,
         name: str = "tools",
@@ -128,7 +123,7 @@ class ToolInterruptNode(RunnableCallable):
             ),
             config=interrupt_config,
             # TODO: add description, we don't have tool list here unfortunately
-            description="Please review tool call before execution"
+            description="Please review tool call before execution",
         )
         response = interrupt([request])
 
@@ -162,7 +157,7 @@ class ToolInterruptNode(RunnableCallable):
                 content=f"User ignored the tool call: {tool_name}:{call_id}",
                 name=tool_name,
                 tool_call_id=call_id,
-                status="error",
+                status="success",
             )
 
         allowed_types = [
@@ -180,43 +175,26 @@ class ToolInterruptNode(RunnableCallable):
             f"Expected one with `'type'` in {allowed_types}."
         )
 
-    def _func(self, input) -> Command:
+    def _func(self, input: dict[str, Any]) -> Command | None:
         ai_msg = input["messages"][-1]
-        tool_calls = ai_msg.tool_calls or []
+        tool_calls: list[ToolCall] = ai_msg.tool_calls or []
         tool_messages: list[ToolMessage] = []
+        pending_tool_calls: bool = False
         for idx, tool_call in enumerate(tool_calls):
             if interrupt_config := self.interrupt_policy.get(tool_call["name"]):
                 interrupt_result = self._interrupt(
-                    tool_call=tool_call,
-                    interrupt_config=interrupt_config,
+                    tool_call=tool_call, interrupt_config=interrupt_config
                 )
 
                 if isinstance(interrupt_result, ToolMessage):
                     tool_messages.append(interrupt_result)
                 else:
+                    pending_tool_calls = True
                     tool_calls[idx] = interrupt_result
-        # todo: do we need to update this or can we do in place?
-        ai_msg.tool_calls = tool_calls
-        # todo: conditional addition of tool_messages, also does order matter?
+
+        if tool_messages and not pending_tool_calls:
+            return Command(goto="agent", update={"messages": tool_messages})
         return Command(update={"messages": [ai_msg, *tool_messages]})
 
-
-    async def _afunc(self, input) -> Command:
-        ai_msg = input["messages"][-1]
-        tool_calls = ai_msg.tool_calls or []
-        tool_messages: list[ToolMessage] = []
-        for idx, tool_call in enumerate(tool_calls):
-            if interrupt_config := self.interrupt_policy.get(tool_call["name"]):
-                interrupt_result = self._interrupt(
-                    tool_call=tool_call,
-                    interrupt_config=interrupt_config,
-                )
-
-                if isinstance(interrupt_result, ToolMessage):
-                    tool_messages.append(interrupt_result)
-                else:
-                    tool_calls[idx] = interrupt_result
-        # todo: do we need to update this or can we do in place?
-        ai_msg.tool_calls = tool_calls
-        # todo: conditional addition of tool_messages, also does order matter?
-        return Command(update={"messages": [ai_msg, tool_messages]})
+    async def _afunc(self, input: dict[str, Any]) -> None:
+        """TODO: implement async version"""

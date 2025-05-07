@@ -667,40 +667,13 @@ def create_react_agent(
     # This means that this node is the first one called
     workflow.set_entry_point(entrypoint)
 
-    def post_model_to_tools(state: StateSchema) -> str:
-        # after the most model hook is called, we want to route to tools
-        # if there are remaining tool calls in the state without
-        # corresponding ToolMessage
-        
-        # find the last AI message
-        messages = _get_state_value(state, "messages")
-        tool_message_ids = [
-            m.tool_call_id for m in messages if isinstance(m, ToolMessage)
-        ]
-        last_ai_message = next(m for m in reversed(messages) if isinstance(m, AIMessage))
-        unaddressed_tool_calls = [
-            call for call in last_ai_message.tool_calls if call["id"] not in tool_message_ids
-        ]
-
-        if unaddressed_tool_calls:
-            # if there are unaddressed tool calls, we want to route to tools
-            return "tools"
-        return "call_model"
-        # return END if not response_format else "generate_structured_response"
+    agent_paths = ["tools", END]
+    post_model_hook_paths = ["tools", END]
 
     if post_model_hook is not None:
         workflow.add_node("post_model_hook", post_model_hook)
         workflow.add_edge("agent", "post_model_hook")
-
-        path_map = ["tools", END]
-        if response_format is not None:
-            path_map.append("generate_structured_response")
-
-        workflow.add_conditional_edges(
-            "post_model_hook",
-            post_model_to_tools,
-            path_map=path_map,
-        )
+        agent_paths.append("post_model_hook")
 
     # Add a structured output node if response_format is provided
     if response_format is not None:
@@ -711,29 +684,38 @@ def create_react_agent(
             ),
         )
         if post_model_hook is not None:
+            post_model_hook_paths.append("generate_structured_response")
             workflow.add_edge("post_model_hook", "generate_structured_response")
-            should_continue_destinations = [
-                "tools",
-                "post_model_hook",
-                "generate_structured_response",
-            ]
         else:
+            agent_paths.append("generate_structured_response")
             workflow.add_edge("agent", "generate_structured_response")
-            should_continue_destinations = ["tools", "generate_structured_response"]
-    else:
-        if post_model_hook is not None:
-            should_continue_destinations = ["tools", "post_model_hook", END]
-        else:
-            should_continue_destinations = ["tools", END]
 
-    # We now add a conditional edge
+    def post_model_hook_router(state: StateSchema) -> str | list:
+        # find the last AI message
+        messages = _get_state_value(state, "messages")
+        tool_messages = [m.tool_call_id for m in messages if isinstance(m, ToolMessage)]
+        last_ai_message = next(
+            m for m in reversed(messages) if isinstance(m, AIMessage)
+        )
+        pending_tool_calls = [
+            c for c in last_ai_message.tool_calls if c["id"] not in tool_messages
+        ]
+
+        if pending_tool_calls:
+            return [Send("tools", [tool_call]) for tool_call in pending_tool_calls]
+        elif response_format is not None:
+            return "generate_structured_response"
+        else:
+            return END
+
     workflow.add_conditional_edges(
-        # First, we define the start node. We use `agent`.
-        # This means these are the edges taken after the `agent` node is called.
         "agent",
-        # Next, we pass in the function that will determine which node is called next.
         should_continue,
-        path_map=should_continue_destinations,
+        path_map=agent_paths,
+    )
+
+    workflow.add_conditional_edges(
+        "post_model_hook", post_model_hook_router, path_map=post_model_hook_paths
     )
 
     def route_tool_responses(state: StateSchema) -> str:
