@@ -94,4 +94,3 @@ class HumanResponse(TypedDict):
 
     type: Literal["accept", "ignore", "response", "edit"]
     args: Union[None, str, ActionRequest]
-

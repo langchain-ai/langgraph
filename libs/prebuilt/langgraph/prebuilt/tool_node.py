@@ -375,12 +375,7 @@ class ToolNode(RunnableCallable):
                 f"Expected one with `'type'` in {allowed_types}."
             )
 
-        try:
-            response = self.tools_by_name[tool_name].invoke(tool_input, config)
-        except GraphBubbleUp as e:
-            raise e
-
-        return response
+        return self.tools_by_name[tool_name].invoke(tool_input, config)
 
     def _run_one(
         self,
