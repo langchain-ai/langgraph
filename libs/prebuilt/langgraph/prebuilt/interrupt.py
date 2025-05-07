@@ -1,10 +1,17 @@
+from __future__ import annotations
+
 from typing import (
     Literal,
     Optional,
     Union,
+    cast,
+    Any
 )
 
 from typing_extensions import TypedDict
+from langgraph.utils.runnable import RunnableCallable
+from langgraph.types import Command, Send, interrupt
+from langchain_core.messages import AIMessage, ToolMessage, ToolCall
 
 
 class HumanInterruptConfig(TypedDict):
@@ -92,3 +99,124 @@ class HumanResponse(TypedDict):
 
     type: Literal["accept", "ignore", "response", "edit"]
     args: Union[None, str, ActionRequest]
+
+
+class ToolInterruptNode(RunnableCallable):    
+    def __init__(
+        self, 
+        interrupt_policy: dict[str, HumanInterruptConfig],
+        *,
+        name: str = "tools",
+        tags: Optional[list[str]] = None,
+    ):
+        super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
+        self.interrupt_policy = interrupt_policy
+
+    def _interrupt(
+        self,
+        tool_call: ToolCall,
+        interrupt_config: HumanInterruptConfig,
+    ) -> ToolCall | ToolMessage:
+        """Interrupt before a tool call and ask for human input."""
+        call_id = tool_call["id"]
+        tool_name = tool_call["name"]
+
+        request = HumanInterrupt(
+            action_request=ActionRequest(
+                action=tool_name,
+                args=tool_call["args"],
+            ),
+            config=interrupt_config,
+            # TODO: add description, we don't have tool list here unfortunately
+            description="Please review tool call before execution"
+        )
+        response = interrupt([request])
+
+        # resume provided by agent inbox as a list
+        if isinstance(response, list):
+            response = response[0]
+
+        try:
+            response_type = response.get("type")
+        except AttributeError:
+            response_type = "invalid"
+
+        if response_type == "accept" and interrupt_config["allow_accept"]:
+            return tool_call
+        elif response_type == "edit" and interrupt_config["allow_edit"]:
+            return ToolCall(
+                args=cast(ActionRequest, response)["args"]["args"],
+                name=tool_name,
+                id=call_id,
+                type="tool_call",
+            )
+        elif response_type == "response" and interrupt_config["allow_respond"]:
+            return ToolMessage(
+                content=cast(str, response["args"]),
+                name=tool_name,
+                tool_call_id=call_id,
+                status="error",
+            )
+        elif response_type == "ignore" and interrupt_config["allow_ignore"]:
+            return ToolMessage(
+                content=f"User ignored the tool call: {tool_name}:{call_id}",
+                name=tool_name,
+                tool_call_id=call_id,
+                status="error",
+            )
+
+        allowed_types = [
+            type_name
+            for type_name, is_allowed in {
+                "accept": interrupt_config["allow_accept"],
+                "edit": interrupt_config["allow_edit"],
+                "response": interrupt_config["allow_respond"],
+                "ignore": interrupt_config["allow_ignore"],
+            }.items()
+            if is_allowed
+        ]
+        raise ValueError(
+            f"Unexpected human response: {response}."
+            f"Expected one with `'type'` in {allowed_types}."
+        )
+
+    def _func(self, input) -> Command:
+        ai_msg = input["messages"][-1]
+        tool_calls = ai_msg.tool_calls or []
+        tool_messages: list[ToolMessage] = []
+        for idx, tool_call in enumerate(tool_calls):
+            if interrupt_config := self.interrupt_policy.get(tool_call["name"]):
+                interrupt_result = self._interrupt(
+                    tool_call=tool_call,
+                    interrupt_config=interrupt_config,
+                )
+
+                if isinstance(interrupt_result, ToolMessage):
+                    tool_messages.append(interrupt_result)
+                else:
+                    tool_calls[idx] = interrupt_result
+        # todo: do we need to update this or can we do in place?
+        ai_msg.tool_calls = tool_calls
+        # todo: conditional addition of tool_messages, also does order matter?
+        return Command(update={"messages": [ai_msg, *tool_messages]})
+
+
+    async def _afunc(self, input) -> Command:
+        ai_msg = input["messages"][-1]
+        tool_calls = ai_msg.tool_calls or []
+        tool_messages: list[ToolMessage] = []
+        for idx, tool_call in enumerate(tool_calls):
+            if interrupt_config := self.interrupt_policy.get(tool_call["name"]):
+                interrupt_result = self._interrupt(
+                    tool_call=tool_call,
+                    interrupt_config=interrupt_config,
+                )
+
+                if isinstance(interrupt_result, ToolMessage):
+                    tool_messages.append(interrupt_result)
+                else:
+                    tool_calls[idx] = interrupt_result
+        # todo: do we need to update this or can we do in place?
+        ai_msg.tool_calls = tool_calls
+        # todo: conditional addition of tool_messages, also does order matter?
+        return Command(update={"messages": [ai_msg, tool_messages]})
