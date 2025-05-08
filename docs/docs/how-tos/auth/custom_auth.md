@@ -112,7 +112,7 @@ Assuming you are using JWT token authentication, you could access your deploymen
     const my_token = "your-token"; // In practice, you would generate a signed token with your auth provider
     const client = new Client({
       apiUrl: "http://localhost:2024",
-      headers: { Authorization: `Bearer ${my_token}` },
+      defaultHeaders: { Authorization: `Bearer ${my_token}` },
     });
     const threads = await client.threads.search();
     ```
