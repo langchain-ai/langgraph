@@ -67,6 +67,13 @@ REDIRECT_MAP = {
     "cloud/concepts/api.md": "concepts/langgraph_server.md",
     "cloud/concepts/cloud.md": "concepts/langgraph_cloud.md",
     "cloud/faq/studio.md": "concepts/langgraph_studio.md#studio-faqs",
+    # cloud streaming redirects
+    "cloud/how-tos/stream_values.md": "cloud/how-tos/streaming.md#stream-graph-state",
+    "cloud/how-tos/stream_updates.md": "cloud/how-tos/streaming.md#stream-graph-state",
+    "cloud/how-tos/stream_messages.md": "cloud/how-tos/streaming.md#messages",
+    "cloud/how-tos/stream_events.md": "cloud/how-tos/streaming.md#stream-events",
+    "cloud/how-tos/stream_debug.md": "cloud/how-tos/streaming.md#debug",
+    "cloud/how-tos/stream_multiple.md": "cloud/how-tos/streaming.md#stream-multiple-modes",
     # prebuit redirects
     "how-tos/create-react-agent.ipynb": "agents/agents.md#basic-configuration",
     "how-tos/create-react-agent-memory.ipynb": "agents/memory.md",
