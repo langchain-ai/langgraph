@@ -1,4 +1,4 @@
-# How to create an Assistant
+# How to create Assistants
 
 !!! info "Prerequisites"
 
@@ -34,6 +34,7 @@ First, as a brief refresher on the concept of configurations, consider the follo
 
     const ConfigSchema = Annotation.Root({
         model_name: Annotation<string>,
+        system_prompt:
     });
 
     const graph = new StateGraph(AgentState, ConfigSchema)
@@ -54,7 +55,9 @@ For more information on configurations, [see here](../../concepts/low_level.md#c
 
 ### LangGraph SDK
 
-Now let's see how we can use the [LangGraph SDK](../../concepts/sdk.md) to create an assistant. This example uses the same configuration schema as above, and creates an assistant with `model_name` set to `openai`.
+To create an assistant, use the [LangGraph SDK](../../concepts/sdk.md) `create` method. See the [Python](../reference/sdk/python_sdk_ref.md#langgraph_sdk.client.AssistantsClient.create) and [JS](../reference/sdk/js_ts_sdk_ref.md#create) SDK reference docs for more information.
+
+This example uses the same configuration schema as above, and creates an assistant with `model_name` set to `openai`.
 
 === "Python"
 
@@ -100,14 +103,14 @@ Output:
         "assistant_id": "62e209ca-9154-432a-b9e9-2d75c7a9219b",
         "graph_id": "agent",
         "name": "Open AI Assistant"
-        "created_at": "2024-08-31T03:09:10.230718+00:00",
-        "updated_at": "2024-08-31T03:09:10.230718+00:00",
         "config": {
             "configurable": {
                 "model_name": "openai"
             }
         },
         "metadata": {}
+        "created_at": "2024-08-31T03:09:10.230718+00:00",
+        "updated_at": "2024-08-31T03:09:10.230718+00:00",
     }
 
 ### LangGraph Platform UI
