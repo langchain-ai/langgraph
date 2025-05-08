@@ -5,12 +5,6 @@ search:
 
 # LangGraph Server
 
-!!! info "Prerequisites"
-    - [LangGraph Platform](./langgraph_platform.md)
-    - [LangGraph Glossary](low_level.md)
-
-## Overview
-
 **LangGraph Server** offers an API for creating and managing agent-based applications. It is built on the concept of [assistants](assistants.md), which are agents configured for specific tasks, and includes built-in [persistence](persistence.md#memory-store) and a **task queue**. This versatile API supports a wide range of agentic application use cases, from background processing to real-time interactions.
 
 Use LangGraph Serverto create and manage [assistants](assistants.md), [threads](../cloud/concepts/threads.md), [runs](../cloud/concepts/runs.md), [cron jobs](../cloud/concepts/cron_jobs.md), [webhooks](../cloud/concepts/webhooks.md), and more.
