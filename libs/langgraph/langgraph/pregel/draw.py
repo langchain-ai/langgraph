@@ -172,6 +172,8 @@ def draw_graph(
                         # if the edge is from this step, skip adding the implicit edges
                         if (trigger, cond, label) in step_sources.get(src, set()):
                             added = True
+                        else:
+                            sources[src].discard((trigger, cond, label))
                 # if no edges from this step, add implicit edges from all previous tasks
                 if not added:
                     for src in step_sources:
