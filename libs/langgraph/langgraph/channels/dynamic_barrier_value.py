@@ -81,12 +81,9 @@ class DynamicBarrierValue(
             updated = False
             for value in values:
                 assert not isinstance(value, WaitForNames)
-                if value in self.names:
-                    if value not in self.seen:
-                        self.seen.add(value)
-                        updated = True
-                else:
-                    raise InvalidUpdateError(f"Value {value} not in {self.names}")
+                if value in self.names and value not in self.seen:
+                    self.seen.add(value)
+                    updated = True
             return updated
 
     def get(self) -> Value:
@@ -181,12 +178,9 @@ class DynamicBarrierValueAfterFinish(
             updated = False
             for value in values:
                 assert not isinstance(value, WaitForNames)
-                if value in self.names:
-                    if value not in self.seen:
-                        self.seen.add(value)
-                        updated = True
-                else:
-                    raise InvalidUpdateError(f"Value {value} not in {self.names}")
+                if value in self.names and value not in self.seen:
+                    self.seen.add(value)
+                    updated = True
             return updated
 
     def get(self) -> Value:
