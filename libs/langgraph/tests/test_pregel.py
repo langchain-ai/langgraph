@@ -14,14 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from random import randrange
-from typing import (
-    Annotated,
-    Any,
-    Literal,
-    Optional,
-    Union,
-    get_type_hints,
-)
+from typing import Annotated, Any, Literal, Optional, Union, get_type_hints
 
 import httpx
 import pytest
@@ -3680,6 +3673,17 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple(
     ]
     assert rewrite_query_count == 2 if with_cache else 4
 
+    # clear the cache
+    if with_cache:
+        app.clear_cache()
+
+        assert app.invoke({"query": "what is weather in sf"}) == {
+            "query": "analyzed: query: analyzed: query: what is weather in sf",
+            "answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4",
+            "docs": ["doc1", "doc1", "doc2", "doc2", "doc3", "doc3", "doc4", "doc4"],
+        }
+        assert rewrite_query_count == 4
+
 
 def test_callable_in_conditional_edges_with_no_path_map() -> None:
     class State(TypedDict, total=False):
@@ -6662,6 +6666,39 @@ def test_multiple_interrupts_functional_cache(
         "values": [2, "a", 2, "b", 4, "c", 4, "d", 6, "e", 6, "f"],
     }
     assert counter == 3
+
+    # should all be cached now
+    configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    graph.invoke({}, configurable)
+    graph.invoke(Command(resume="a"), configurable)
+    graph.invoke(Command(resume="b"), configurable)
+    graph.invoke(Command(resume="c"), configurable)
+    graph.invoke(Command(resume="d"), configurable)
+    graph.invoke(Command(resume="e"), configurable)
+    result = graph.invoke(Command(resume="f"), configurable)
+    # `double` value should be cached appropriately when used w/ `interrupt`
+    assert result == {
+        "values": [2, "a", 2, "b", 4, "c", 4, "d", 6, "e", 6, "f"],
+    }
+    assert counter == 3
+
+    # clear cache
+    double.clear_cache(file_cache)
+
+    # should recompute now
+    configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    graph.invoke({}, configurable)
+    graph.invoke(Command(resume="a"), configurable)
+    graph.invoke(Command(resume="b"), configurable)
+    graph.invoke(Command(resume="c"), configurable)
+    graph.invoke(Command(resume="d"), configurable)
+    graph.invoke(Command(resume="e"), configurable)
+    result = graph.invoke(Command(resume="f"), configurable)
+    # `double` value should be cached appropriately when used w/ `interrupt`
+    assert result == {
+        "values": [2, "a", 2, "b", 4, "c", 4, "d", 6, "e", 6, "f"],
+    }
+    assert counter == 6
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)

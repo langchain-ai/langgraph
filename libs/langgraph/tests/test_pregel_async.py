@@ -5505,6 +5505,17 @@ async def test_in_one_fan_out_state_graph_waiting_edge_multiple(
     ]
     assert rewrite_query_count == 2 if with_cache else 4
 
+    # clear the cache
+    if with_cache:
+        await app.aclear_cache()
+
+        assert await app.ainvoke({"query": "what is weather in sf"}) == {
+            "query": "analyzed: query: analyzed: query: what is weather in sf",
+            "answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4",
+            "docs": ["doc1", "doc1", "doc2", "doc2", "doc3", "doc3", "doc4", "doc4"],
+        }
+        assert rewrite_query_count == 4
+
 
 async def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> None:
     def sorted_add(
@@ -7577,6 +7588,38 @@ async def test_multiple_interrupts_functional_cache(
             "values": [2, "a", 2, "b", 4, "c", 4, "d", 6, "e", 6, "f"],
         }
         assert counter == 3
+
+        configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
+        await graph.ainvoke({}, configurable)
+        await graph.ainvoke(Command(resume="a"), configurable)
+        await graph.ainvoke(Command(resume="b"), configurable)
+        await graph.ainvoke(Command(resume="c"), configurable)
+        await graph.ainvoke(Command(resume="d"), configurable)
+        await graph.ainvoke(Command(resume="e"), configurable)
+        result = await graph.ainvoke(Command(resume="f"), configurable)
+        # `double` value should be cached appropriately when used w/ `interrupt`
+        assert result == {
+            "values": [2, "a", 2, "b", 4, "c", 4, "d", 6, "e", 6, "f"],
+        }
+        assert counter == 3
+
+        # clear the cache
+        await double.aclear_cache(file_cache)
+
+        # now should recompute
+        configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}
+        await graph.ainvoke({}, configurable)
+        await graph.ainvoke(Command(resume="a"), configurable)
+        await graph.ainvoke(Command(resume="b"), configurable)
+        await graph.ainvoke(Command(resume="c"), configurable)
+        await graph.ainvoke(Command(resume="d"), configurable)
+        await graph.ainvoke(Command(resume="e"), configurable)
+        result = await graph.ainvoke(Command(resume="f"), configurable)
+        # `double` value should be cached appropriately when used w/ `interrupt`
+        assert result == {
+            "values": [2, "a", 2, "b", 4, "c", 4, "d", 6, "e", 6, "f"],
+        }
+        assert counter == 6
 
 
 @NEEDS_CONTEXTVARS

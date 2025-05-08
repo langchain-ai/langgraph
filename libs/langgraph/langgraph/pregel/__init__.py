@@ -47,6 +47,7 @@ from langgraph.checkpoint.base import (
     copy_checkpoint,
 )
 from langgraph.constants import (
+    CACHE_NS_WRITES,
     CONF,
     CONFIG_KEY_CACHE,
     CONFIG_KEY_CHECKPOINT_DURING,
@@ -87,6 +88,7 @@ from langgraph.pregel.algo import (
     local_write,
     prepare_next_tasks,
 )
+from langgraph.pregel.call import identifier
 from langgraph.pregel.checkpoint import create_checkpoint, empty_checkpoint
 from langgraph.pregel.debug import tasks_w_writes
 from langgraph.pregel.draw import draw_graph
@@ -2988,6 +2990,44 @@ class Pregel(PregelProtocol):
             return latest
         else:
             return chunks
+
+    def clear_cache(self, nodes: Sequence[str] | None = None) -> None:
+        """Clear the cache for the given nodes."""
+        if not self.cache:
+            raise ValueError("No cache is set for this graph. Cannot clear cache.")
+        nodes = nodes or self.nodes.keys()
+        # collect namespaces to clear
+        namespaces: list[tuple[str, ...]] = []
+        for node in nodes:
+            if node in self.nodes:
+                namespaces.append(
+                    (
+                        CACHE_NS_WRITES,
+                        (identifier(self.nodes[node]) or "__dynamic__"),
+                        node,
+                    ),
+                )
+        # clear cache
+        self.cache.delete(namespaces)
+
+    async def aclear_cache(self, nodes: Sequence[str] | None = None) -> None:
+        """Asynchronously clear the cache for the given nodes."""
+        if not self.cache:
+            raise ValueError("No cache is set for this graph. Cannot clear cache.")
+        nodes = nodes or self.nodes.keys()
+        # collect namespaces to clear
+        namespaces: list[tuple[str, ...]] = []
+        for node in nodes:
+            if node in self.nodes:
+                namespaces.append(
+                    (
+                        CACHE_NS_WRITES,
+                        (identifier(self.nodes[node]) or "__dynamic__"),
+                        node,
+                    ),
+                )
+        # clear cache
+        await self.cache.adelete(namespaces)
 
 
 def _trigger_to_nodes(nodes: dict[str, PregelNode]) -> Mapping[str, Sequence[str]]:
