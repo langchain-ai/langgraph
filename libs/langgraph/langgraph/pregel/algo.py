@@ -610,7 +610,6 @@ def prepare_single_task(
                         args_key.encode() if isinstance(args_key, str) else args_key,
                     ),
                     cache_policy.ttl,
-                    cache_policy.refresh,
                 )
             else:
                 cache_key = None
@@ -734,7 +733,6 @@ def prepare_single_task(
                         args_key.encode() if isinstance(args_key, str) else args_key,
                     ),
                     cache_policy.ttl,
-                    cache_policy.refresh,
                 )
             else:
                 cache_key = None
@@ -869,7 +867,6 @@ def prepare_single_task(
                                 else args_key,
                             ),
                             cache_policy.ttl,
-                            cache_policy.refresh,
                         )
                     else:
                         cache_key = None

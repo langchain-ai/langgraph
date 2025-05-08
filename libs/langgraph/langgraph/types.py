@@ -137,9 +137,6 @@ class CachePolicy(Generic[KeyFuncT]):
     ttl: Optional[int] = None
     """Time to live for the cache entry in seconds. If None, the entry never expires."""
 
-    refresh: bool = False
-    """Whether to force a refresh of the cache entry when it is accessed."""
-
 
 @dataclasses.dataclass(**_DC_KWARGS)
 class Interrupt:
@@ -193,8 +190,6 @@ class CacheKey(NamedTuple):
     """Key for the cache entry."""
     ttl: Optional[int]
     """Time to live for the cache entry in seconds."""
-    refresh: bool
-    """Whether to force a refresh of the cache entry when it is accessed."""
 
 
 @dataclasses.dataclass(**_T_DC_KWARGS)

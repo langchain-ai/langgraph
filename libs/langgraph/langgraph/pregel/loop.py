@@ -1071,7 +1071,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         if cached := {
             (t.cache_key.ns, t.cache_key.key): t
             for t in self.tasks.values()
-            if t.cache_key and not t.cache_key.refresh and not t.writes
+            if t.cache_key and not t.writes
         }:
             for key, values in self.cache.get(tuple(cached)).items():
                 task = cached[key]
@@ -1260,7 +1260,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         if cached := {
             (t.cache_key.ns, t.cache_key.key): t
             for t in self.tasks.values()
-            if t.cache_key and not t.cache_key.refresh and not t.writes
+            if t.cache_key and not t.writes
         }:
             for key, values in (await self.cache.aget(tuple(cached))).items():
                 task = cached[key]
