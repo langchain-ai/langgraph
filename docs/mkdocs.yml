@@ -219,9 +219,11 @@ nav:
         - cloud/how-tos/configuration_cloud.md
         - cloud/how-tos/assistant_versioning.md
       - Threads:
+        - Overview: cloud/concepts/threads.md
         - cloud/how-tos/copy_threads.md
         - cloud/how-tos/check_thread_status.md
       - Runs:
+        - Overview: cloud/concepts/runs.md
         - cloud/how-tos/background_run.md
         - cloud/how-tos/same-thread.md
         - cloud/how-tos/cron_jobs.md
@@ -248,8 +250,10 @@ nav:
         - cloud/how-tos/reject_concurrent.md
         - cloud/how-tos/enqueue_concurrent.md
       - Webhooks:
+        - Overview: cloud/concepts/webhooks.md
         - cloud/how-tos/webhooks.md
       - Cron Jobs:
+        - Overview: cloud/concepts/cron_jobs.md
         - cloud/how-tos/cron_jobs.md
       - Modifying the API:
         - how-tos/http/custom_lifespan.md
