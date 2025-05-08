@@ -16,7 +16,7 @@ First, as a brief refresher on the concept of configurations, consider the follo
     class ConfigSchema(TypedDict):
         model_name: str
 
-    graph = StateGraph(AgentState, config_schema=ConfigSchema)
+    builder = StateGraph(AgentState, config_schema=ConfigSchema)
 
     def call_model(state, config):
         messages = state["messages"]
@@ -37,7 +37,7 @@ First, as a brief refresher on the concept of configurations, consider the follo
         system_prompt:
     });
 
-    const graph = new StateGraph(AgentState, ConfigSchema)
+    const builder = new StateGraph(AgentState, ConfigSchema)
 
     function callModel(state: State, config: RunnableConfig) {
       const messages = state.messages;

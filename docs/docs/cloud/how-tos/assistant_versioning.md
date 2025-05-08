@@ -14,7 +14,7 @@ In this guide we will show you how to create, manage and use multiple versions o
         model_name: Literal["anthropic", "openai"] = "anthropic"
         system_prompt: str
 
-    agent = StateGraph(State, config_schema=Config)
+    builder = StateGraph(State, config_schema=Config)
     ```
 
 === "Javascript"
@@ -29,7 +29,7 @@ In this guide we will show you how to create, manage and use multiple versions o
 
     // the rest of your code
 
-    const agent = new StateGraph(StateAnnotation, ConfigAnnotation);
+    const builder = new StateGraph(StateAnnotation, ConfigAnnotation);
     ```
 
 And that you have the following assistant already created:
