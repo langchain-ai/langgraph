@@ -15,7 +15,6 @@ There are 4 main options for deploying with the LangGraph Platform:
 
 1. [Standalone Container](#standalone-container)
 
-1. [Self-Hosted Lite](#self-hosted-lite)
 
 A quick comparison:
 
@@ -68,18 +67,14 @@ For more information, please see:
 
 ## Standalone Container
 
-The [Standalone Container](./langgraph_standalone_container.md) deployment option is the least restrictive model for deployment. Deploy standalone instances of a LangGraph Server in your cloud.
+The [Standalone Container](./langgraph_standalone_container.md) deployment option is the least restrictive model for deployment. Deploy standalone instances of a LangGraph Server in your cloud, using any of the [available](./plans.md) license options.
 
 Build a Docker image using the [LangGraph CLI](./langgraph_cli.md) and deploy your LangGraph Server using the container deployment tooling of your choice. Images can be deployed to any compute platform.
 
 For more information, please see:
 
-* [Sandalone Container Conceptual Guide](./langgraph_standalone_container.md)
+* [Standalone Container Conceptual Guide](./langgraph_standalone_container.md)
 * [How to deploy a Standalone Container](../cloud/deployment/standalone_container.md)
-
-## Self-Hosted Lite
-
-TBD
 
 ## Related
 
