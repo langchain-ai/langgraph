@@ -6,7 +6,7 @@ This guide shows you how to run a LangGraph application locally.
 
 Before you begin, ensure you have the following:
 
-- An API key for [LangSmith](https://smith.langchain.com/settings)
+- An API key for [LangSmith](https://smith.langchain.com/settings) - free to sign up
 - An API key for [Anthropic](https://console.anthropic.com/)
 - An API key for [OpenAI](https://openai.com/)
 - An API key [Tavily](https://app.tavily.com/)

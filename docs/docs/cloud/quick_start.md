@@ -6,10 +6,10 @@ This guide shows you how to set up and use LangGraph Platform for a cloud deploy
 
 Before you begin, ensure you have the following:
 
-- A [GitHub account](https://github.com/).
-- A [LangSmith account](https://smith.langchain.com/). If you don't have an account, you can sign up for free.
-- An API key for [Anthropic](https://console.anthropic.com/).
-- An API key for [Tavily](https://app.tavily.com/).
+- A [GitHub account](https://github.com/)
+- A [LangSmith account](https://smith.langchain.com/) – free to sign up
+- An API key for [Anthropic](https://console.anthropic.com/)
+- An API key for [Tavily](https://app.tavily.com/)
 
 ## 1. Create a repository on GitHub
 
