@@ -232,6 +232,7 @@ def apply_writes(
     channels: Mapping[str, BaseChannel],
     tasks: Iterable[WritesProtocol],
     get_next_version: Optional[GetNextVersion],
+    trigger_to_nodes: Mapping[str, Sequence[str]],
 ) -> tuple[dict[str, list[Any]], set[str]]:
     """Apply writes from a set of tasks (usually the tasks from a Pregel step)
     to the checkpoint and channels, and return managed values writes to be applied
@@ -317,7 +318,9 @@ def apply_writes(
                     max_version,
                     channels[chan],
                 )
-            updated_channels.add(chan)
+                # unavailable channels can't trigger tasks, so don't add them
+                if channels[chan].is_available():
+                    updated_channels.add(chan)
 
     # Channels that weren't updated in this step are notified of a new step
     if bump_step:
@@ -328,6 +331,26 @@ def apply_writes(
                         max_version,
                         channels[chan],
                     )
+                    # unavailable channels can't trigger tasks, so don't add them
+                    if channels[chan].is_available():
+                        updated_channels.add(chan)
+
+    # If this is (tentatively) the last superstep, notify all channels of finish
+    if (
+        bump_step
+        and not checkpoint["pending_sends"]
+        and updated_channels.isdisjoint(trigger_to_nodes)
+    ):
+        for chan in channels:
+            if channels[chan].finish() and get_next_version is not None:
+                checkpoint["channel_versions"][chan] = get_next_version(
+                    max_version,
+                    channels[chan],
+                )
+                # unavailable channels can't trigger tasks, so don't add them
+                if channels[chan].is_available():
+                    updated_channels.add(chan)
+
     # Return managed values writes to be applied externally
     return pending_writes_by_managed, updated_channels
 

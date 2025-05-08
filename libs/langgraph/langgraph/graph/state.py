@@ -28,10 +28,17 @@ from typing_extensions import Self
 from langgraph._api.deprecation import LangGraphDeprecationWarning
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
-from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitForNames
+from langgraph.channels.dynamic_barrier_value import (
+    DynamicBarrierValue,
+    DynamicBarrierValueAfterFinish,
+    WaitForNames,
+)
 from langgraph.channels.ephemeral_value import EphemeralValue
-from langgraph.channels.last_value import LastValue
-from langgraph.channels.named_barrier_value import NamedBarrierValue
+from langgraph.channels.last_value import LastValue, LastValueAfterFinish
+from langgraph.channels.named_barrier_value import (
+    NamedBarrierValue,
+    NamedBarrierValueAfterFinish,
+)
 from langgraph.checkpoint.base import Checkpoint
 from langgraph.constants import (
     EMPTY_SEQ,
@@ -107,6 +114,7 @@ class StateNodeSpec(NamedTuple):
     input: type[Any]
     retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]]
     ends: Optional[Union[tuple[str, ...], dict[str, str]]] = EMPTY_SEQ
+    defer: bool = False
 
 
 class StateGraph(Graph):
@@ -247,6 +255,7 @@ class StateGraph(Graph):
         self,
         node: RunnableLike,
         *,
+        defer: bool = False,
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[type[Any]] = None,
         retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
@@ -263,6 +272,7 @@ class StateGraph(Graph):
         node: str,
         action: RunnableLike,
         *,
+        defer: bool = False,
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[type[Any]] = None,
         retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
@@ -276,6 +286,7 @@ class StateGraph(Graph):
         node: Union[str, RunnableLike],
         action: Optional[RunnableLike] = None,
         *,
+        defer: bool = False,
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[type[Any]] = None,
         retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
@@ -421,6 +432,7 @@ class StateGraph(Graph):
             input=input or self.schema,
             retry_policy=retry,
             ends=ends,
+            defer=defer,
         )
         return self
 
@@ -784,7 +796,11 @@ class CompiledStateGraph(CompiledGraph):
                 self.schema_to_mapper[input_schema] = mapper
 
             branch_channel = CHANNEL_BRANCH_TO.format(key)
-            self.channels[branch_channel] = EphemeralValue(Any, guard=False)
+            self.channels[branch_channel] = (
+                LastValueAfterFinish(Any)
+                if node.defer
+                else EphemeralValue(Any, guard=False)
+            )
             self.nodes[key] = PregelNode(
                 triggers=[branch_channel],
                 # read state keys and managed values
@@ -812,7 +828,12 @@ class CompiledStateGraph(CompiledGraph):
         elif end != END:
             channel_name = f"join:{'+'.join(starts)}:{end}"
             # register channel
-            self.channels[channel_name] = NamedBarrierValue(str, set(starts))
+            if self.builder.nodes[end].defer:
+                self.channels[channel_name] = NamedBarrierValueAfterFinish(
+                    str, set(starts)
+                )
+            else:
+                self.channels[channel_name] = NamedBarrierValue(str, set(starts))
             # subscribe to channel
             self.nodes[end].triggers.append(channel_name)
             # publish to channel
@@ -889,7 +910,10 @@ class CompiledStateGraph(CompiledGraph):
                 else [node for node in self.builder.nodes if node != branch.then]
             )
             channel_name = f"branch:{start}:{name}::then"
-            self.channels[channel_name] = DynamicBarrierValue(str)
+            if self.builder.nodes[branch.then].defer:
+                self.channels[channel_name] = DynamicBarrierValueAfterFinish(str)
+            else:
+                self.channels[channel_name] = DynamicBarrierValue(str)
             self.nodes[branch.then].triggers.append(channel_name)
             for end in ends:
                 if end != END:
