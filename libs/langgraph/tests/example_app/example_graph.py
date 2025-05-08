@@ -4,9 +4,9 @@ from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.tools import tool
 from typing_extensions import TypedDict
 
-from integration_tests.example_app.fake_chat import FakeChatModel
 from langgraph.func import entrypoint, task
 from langgraph.graph.message import add_messages
+from tests.fake_chat import FakeChatModel
 
 
 class AgentState(TypedDict):
