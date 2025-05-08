@@ -695,6 +695,10 @@ class RemoteGraph(PregelProtocol):
             # filter for what was actually requested
             if mode not in requested:
                 continue
+
+            if chunk.event.startswith("messages"):
+                chunk = chunk._replace(data=tuple(chunk.data))  # type: ignore
+
             # emit chunk
             if subgraphs:
                 if NS_SEP in chunk.event:
@@ -790,6 +794,10 @@ class RemoteGraph(PregelProtocol):
             # filter for what was actually requested
             if mode not in requested:
                 continue
+
+            if chunk.event.startswith("messages"):
+                chunk = chunk._replace(data=tuple(chunk.data))  # type: ignore
+
             # emit chunk
             if subgraphs:
                 if NS_SEP in chunk.event:
