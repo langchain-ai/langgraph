@@ -435,7 +435,7 @@ Please see the following examples for more details:
 
 ## Short-term memory
 
-See [state management](../concepts/functional_api.md#state-management) for more details about how short-term memory works in the functional API.
+Short-term memory allows storing information across different **invocations** of the same **thread id**. See [short-term memory](../concepts/functional_api.md#short-term-memory) for more details.
 
 ### Decouple return value from saved value
 
