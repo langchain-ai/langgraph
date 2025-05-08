@@ -7,7 +7,7 @@ search:
 
 ## Overview
 
-The **Functional API** allows you to add LangGraph's key features -- [persistence](./persistence.md), [memory](./memory.md), [human-in-the-loop](./human_in_the_loop.md), and [streaming](./streaming.md) — to your applications with minimal changes to your existing code.
+The **Functional API** allows you to add LangGraph's key features — [persistence](./persistence.md), [memory](./memory.md), [human-in-the-loop](./human_in_the_loop.md), and [streaming](./streaming.md) — to your applications with minimal changes to your existing code.
 
 It is designed to integrate these features into existing code that may use standard language primitives for branching and control flow, such as `if` statements, `for` loops, and function calls. Unlike many data orchestration frameworks that require restructuring code into an explicit pipeline or DAG, the Functional API allows you to incorporate these capabilities without enforcing a rigid execution model.  
 
@@ -179,7 +179,7 @@ You will usually want to pass a **checkpointer** to the `@entrypoint` decorator 
     The **inputs** and **outputs** of entrypoints must be JSON-serializable to support checkpointing. Please see the [serialization](#serialization) section for more details.
 
 
-### Injectable Parameters
+### Injectable parameters
 
 When declaring an `entrypoint`, you can request access to additional parameters that will be injected automatically at run time. These parameters include:
 
@@ -394,7 +394,7 @@ This assumes that the underlying **error** has been resolved and execution can p
         print(chunk)
     ```
 
-### State Management
+### State management
 
 When an `entrypoint` is defined with a `checkpointer`, it stores information between successive invocations on the same **thread id** in [checkpoints](persistence.md#checkpoints). 
 
