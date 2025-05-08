@@ -552,8 +552,7 @@ class Pregel(PregelProtocol):
         self.config_type = config_type
         self.input_model = input_model
         self.config = config
-        if trigger_to_nodes is not None:
-            self.trigger_to_nodes = trigger_to_nodes
+        self.trigger_to_nodes = trigger_to_nodes
         self.name = name
         if auto_validate:
             self.validate()
