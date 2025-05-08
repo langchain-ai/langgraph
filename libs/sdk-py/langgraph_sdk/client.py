@@ -2227,7 +2227,7 @@ class CronClient:
     A run is a single invocation of an assistant with optional input and config.
     This client allows scheduling recurring runs to occur automatically.
 
-    Example:
+    ???+ example "Example Usage"
 
         ```python
         client = get_client(url="http://localhost:2024"))
@@ -2238,6 +2238,11 @@ class CronClient:
             input={"message": "Daily update"}
         )
         ```
+
+    !!! note "Feature Availability"
+        The crons client functionality is not supported on all licenses.
+        Please check the relevant license documentation for the most up-to-date
+        details on feature availability.
     """
 
     def __init__(self, http_client: HttpClient) -> None:
@@ -4593,7 +4598,9 @@ class SyncRunsClient:
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
         )
         return self.http.post(
-            endpoint, json={k: v for k, v in payload.items() if v is not None}
+            endpoint,
+            json={k: v for k, v in payload.items() if v is not None},
+            headers=headers,
         )
 
     def list(
@@ -4820,9 +4827,14 @@ class SyncCronClient:
     ???+ example "Example"
 
         ```python
-        client = get_sync_client(url="http://localhost:2024")
+        client = get_sync_client(url="http://localhost:8123")
         cron_job = client.crons.create_for_thread(thread_id="thread_123", assistant_id="asst_456", schedule="0 * * * *")
         ```
+
+    !!! note "Feature Availability"
+        The crons client functionality is not supported on all licenses.
+        Please check the relevant license documentation for the most up-to-date
+        details on feature availability.
     """
 
     def __init__(self, http_client: SyncHttpClient) -> None:
