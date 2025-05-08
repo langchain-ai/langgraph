@@ -1,10 +1,13 @@
+import subprocess
 import sys
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Optional
 from uuid import UUID, uuid4
 
 import pytest
+import requests
 from langchain_core import __version__ as core_version
 from packaging import version
 from psycopg import AsyncConnection, Connection
@@ -439,6 +442,55 @@ async def awith_store(store_name: Optional[str]) -> AsyncIterator[BaseStore]:
             yield store
     else:
         raise NotImplementedError(f"Unknown store {store_name}")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def dev_server():
+    # Command to start the dev server
+    if sys.version_info < (3, 11):
+        # We'll skip these tests
+        yield
+        return
+    cmd = [
+        "poetry",
+        "run",
+        "langgraph",
+        "dev",
+        "--config",
+        "tests/example_app/langgraph.json",
+        "--no-browser",
+        "--port",
+        "2024",
+    ]
+    server = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    url = "http://localhost:2024/ok"
+    timeout = 30
+    start = time.time()
+    while True:
+        if server.poll() is not None:
+            out, err = server.communicate()
+            raise RuntimeError(
+                f"Dev server exited early.\nstdout: {out.decode()}\nstderr: {err.decode()}"
+            )
+        try:
+            resp = requests.get(url)
+            if resp.status_code == 200:
+                break
+        except Exception:
+            pass
+        if time.time() - start > timeout:
+            server.terminate()
+            out, err = server.communicate()
+            raise TimeoutError(
+                f"Timed out waiting for dev server to start.\nstdout: {out.decode()}\nstderr: {err.decode()}"
+            )
+        time.sleep(0.25)
+    yield
+    server.terminate()
+    try:
+        server.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        server.kill()
 
 
 SHALLOW_CHECKPOINTERS_SYNC = ["postgres_shallow"]
