@@ -14,9 +14,9 @@ There are two free options for deploying LangGraph applications via the LangGrap
 
 Additionally, you can deploy to production with [LangGraph Platform](../concepts/langgraph_platform.md):
 
-- [Cloud SaaS](../concepts/langgraph_cloud.md): Connect to your GitHub repositories and deploy LangGraph servers to LangChain's cloud. We manage everything.
-- [Self-Hosted Data Plane<sup>(Beta)</sup>](../concepts/langgraph_self_hosted_data_plane.md): Create deployments from the [Control Plane UI](../concepts/langgraph_control_plane.md#control-plane-ui) and deploy LangGraph Servers to your cloud. We manage the [control plane](../concepts/langgraph_control_plane.md), you manage the deployments.
-- [Self-Hosted Control Plane<sup>(Beta)</sup>](../concepts/langgraph_self_hosted_control_plane.md): Create deployments from a self-hosted [Control Plane UI](../concepts/langgraph_control_plane.md#control-plane-ui) and deploy LangGraph Servers to your cloud. You manage everything.
+- [Cloud SaaS](../concepts/langgraph_cloud.md): Connect your GitHub repositories and deploy LangGraph Servers within LangChain's cloud. *We manage everything.*
+- [Self-Hosted Data Plane<sup>(Beta)</sup>](../concepts/langgraph_self_hosted_data_plane.md): Create deployments from the [Control Plane UI](../concepts/langgraph_control_plane.md#control-plane-ui) and deploy LangGraph Servers to **your** cloud. *We manage the [control plane](../concepts/langgraph_control_plane.md). You manage the deployments.*
+- [Self-Hosted Control Plane<sup>(Beta)</sup>](../concepts/langgraph_self_hosted_control_plane.md): Create deployments from a self-hosted [Control Plane UI](../concepts/langgraph_control_plane.md#control-plane-ui) and deploy LangGraph Servers to **your** cloud. *You manage everything.*
 - [Standalone Container](../concepts/langgraph_standalone_container.md): Deploy LangGraph Server Docker images however you like.
 
 For more information, see [Deployment options](../concepts/deployment_options.md)
