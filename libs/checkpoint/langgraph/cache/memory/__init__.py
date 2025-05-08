@@ -3,13 +3,12 @@ from __future__ import annotations
 import datetime
 import threading
 from collections.abc import Mapping, Sequence
-from typing import Generic
 
 from langgraph.cache.base import BaseCache, FullKey, Namespace, ValueT
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
 
-class InMemoryCache(BaseCache[ValueT], Generic[ValueT]):
+class InMemoryCache(BaseCache[ValueT]):
     def __init__(self, *, serde: SerializerProtocol | None = None):
         super().__init__(serde=serde)
         self._cache: dict[Namespace, dict[str, tuple[str, bytes, float | None]]] = {}

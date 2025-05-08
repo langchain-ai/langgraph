@@ -5,13 +5,12 @@ import datetime
 import sqlite3
 import threading
 from collections.abc import Mapping, Sequence
-from typing import Generic
 
 from langgraph.cache.base import BaseCache, FullKey, Namespace, ValueT
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
 
-class SqliteCache(BaseCache[ValueT], Generic[ValueT]):
+class SqliteCache(BaseCache[ValueT]):
     """File-based cache using SQLite."""
 
     def __init__(
