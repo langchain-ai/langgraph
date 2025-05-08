@@ -378,7 +378,7 @@
         "target": "agent"
       },
       {
-        "source": "human",
+        "source": "agent",
         "target": "__end__",
         "conditional": true
       }
@@ -392,7 +392,7 @@
   	__start__ --> human;
   	agent --> human;
   	human --> agent;
-  	human -.-> __end__;
+  	agent -.-> __end__;
   
   '''
 # ---
@@ -400,12 +400,12 @@
   '''
   graph TD;
   	__start__ --> rewrite_query;
+  	analyzer_one -.-> qa;
   	retriever_one --> analyzer_one;
   	retriever_one --> qa;
   	retriever_two --> qa;
   	rewrite_query --> retriever_one;
   	rewrite_query --> retriever_two;
-  	analyzer_one --> __end__;
   	qa --> __end__;
   
   '''
@@ -414,12 +414,12 @@
   '''
   graph TD;
   	__start__ --> rewrite_query;
+  	analyzer_one -.-> qa;
   	retriever_one --> analyzer_one;
   	retriever_one --> qa;
   	retriever_two --> qa;
   	rewrite_query --> retriever_one;
   	rewrite_query --> retriever_two;
-  	analyzer_one --> __end__;
   	qa --> __end__;
   
   '''
@@ -430,12 +430,12 @@
   	__start__ --> rewrite_query;
   	analyzer_one --> qa;
   	analyzer_one --> retriever_one;
+  	retriever_one -.-> qa;
   	retriever_two --> qa;
   	rewrite_query -.-> analyzer_one;
   	rewrite_query -.-> qa;
   	rewrite_query -.-> retriever_two;
   	qa --> __end__;
-  	retriever_one --> __end__;
   
   '''
 # ---

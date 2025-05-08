@@ -99,7 +99,7 @@ def draw_graph(
         )
         start_tasks = tasks
         # run the pregel loop
-        for _ in range(limit):
+        for step in range(step, limit):
             if not tasks:
                 break
             conditionals: dict[tuple[str, str, Any], Optional[str]] = {}
@@ -165,9 +165,17 @@ def draw_graph(
             )
             # collect edges
             for task in tasks.values():
+                added = False
                 for trigger in task.triggers:
                     for src, cond, label in sorted(trigger_to_sources[trigger]):
                         edges.add((src, task.name, cond, label))
+                        # if the edge is from this step, skip adding the implicit edges
+                        if (trigger, cond, label) in step_sources.get(src, set()):
+                            added = True
+                # if no edges from this step, add implicit edges from all previous tasks
+                if not added:
+                    for src in step_sources:
+                        edges.add((src, task.name, True, None))
         # assemble the graph
         graph = Graph()
         # add nodes
