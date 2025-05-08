@@ -8031,3 +8031,26 @@ def test_migration_graph(snapshot: SnapshotAssertion) -> None:
     app = migration_graph.compile()
 
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+
+
+def test_get_graph_loop(snapshot: SnapshotAssertion) -> None:
+    class State(TypedDict):
+        foo: str
+
+    def human_node(state: State) -> State:
+        value = interrupt()
+        return {"foo": value}
+
+    def agent_node(state: State) -> State:
+        return {"foo": "Hi " + state["foo"]}
+
+    workflow = StateGraph(State)
+    workflow.add_node("human", human_node)
+    workflow.add_node("agent", agent_node)
+    workflow.add_edge(START, "human")
+    workflow.add_edge("human", "agent")
+    workflow.add_edge("agent", "human")
+
+    app = workflow.compile()
+    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot

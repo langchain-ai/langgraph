@@ -39,6 +39,7 @@ from langgraph.types import (
     interrupt,
 )
 from tests.agents import AgentAction, AgentFinish
+from tests.any_int import AnyInt
 from tests.any_str import AnyDict, AnyStr, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_SYNC,
@@ -2480,13 +2481,15 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         ]
     }
 
-    assert [
+    events = [
         c
         for c in app.stream(
             {"messages": [HumanMessage(content="what is weather in sf")]},
             stream_mode="messages",
         )
-    ] == [
+    ]
+
+    assert events[:3] == [
         (
             _AnyIdAIMessageChunk(
                 content="",
@@ -2528,8 +2531,8 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             {
                 "langgraph_step": 2,
                 "langgraph_node": "tools",
-                "langgraph_triggers": ("branch:to:tools",),
-                "langgraph_path": (PULL, "tools"),
+                "langgraph_triggers": (PUSH,),
+                "langgraph_path": (PUSH, AnyInt(), False),
                 "langgraph_checkpoint_ns": AnyStr("tools:"),
             },
         ),
@@ -2578,6 +2581,9 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "ls_model_type": "chat",
             },
         ),
+    ]
+
+    assert events[3:5] == UnsortedSequence(
         (
             _AnyIdToolMessage(
                 content="result for another",
@@ -2587,8 +2593,8 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             {
                 "langgraph_step": 4,
                 "langgraph_node": "tools",
-                "langgraph_triggers": ("branch:to:tools",),
-                "langgraph_path": (PULL, "tools"),
+                "langgraph_triggers": (PUSH,),
+                "langgraph_path": (PUSH, AnyInt(), False),
                 "langgraph_checkpoint_ns": AnyStr("tools:"),
             },
         ),
@@ -2601,11 +2607,13 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             {
                 "langgraph_step": 4,
                 "langgraph_node": "tools",
-                "langgraph_triggers": ("branch:to:tools",),
-                "langgraph_path": (PULL, "tools"),
+                "langgraph_triggers": (PUSH,),
+                "langgraph_path": (PUSH, AnyInt(), False),
                 "langgraph_checkpoint_ns": AnyStr("tools:"),
             },
         ),
+    )
+    assert events[5:] == [
         (
             _AnyIdAIMessageChunk(
                 content="answer",
@@ -2636,12 +2644,17 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
 
     model.i = 0  # reset the model
 
-    assert (
-        app.invoke(
-            {"messages": [HumanMessage(content="what is weather in sf")]},
-            stream_mode="updates",
-        )[0]["agent"]["messages"]
-        == [
+    invoke_updates_events = app.invoke(
+        {"messages": [HumanMessage(content="what is weather in sf")]},
+        stream_mode="updates",
+    )
+
+    stream_updates_events = [
+        *app.stream({"messages": [HumanMessage(content="what is weather in sf")]})
+    ]
+
+    for output in (invoke_updates_events, stream_updates_events):
+        assert output[:3] == [
             {
                 "agent": {
                     "messages": [
@@ -2690,6 +2703,8 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                     ]
                 }
             },
+        ]
+        assert output[3:5] == UnsortedSequence(
             {
                 "tools": {
                     "messages": [
@@ -2698,6 +2713,12 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                             name="search_api",
                             tool_call_id="tool_call234",
                         ),
+                    ]
+                }
+            },
+            {
+                "tools": {
+                    "messages": [
                         _AnyIdToolMessage(
                             content="result for a third one",
                             name="search_api",
@@ -2706,79 +2727,10 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                     ]
                 }
             },
-            {"agent": {"messages": [_AnyIdAIMessage(content="answer")]}},
-        ][0]["agent"]["messages"]
-    )
-
-    assert [
-        *app.stream({"messages": [HumanMessage(content="what is weather in sf")]})
-    ] == [
-        {
-            "agent": {
-                "messages": [
-                    _AnyIdAIMessage(
-                        content="",
-                        tool_calls=[
-                            {
-                                "id": "tool_call123",
-                                "name": "search_api",
-                                "args": {"query": "query"},
-                            },
-                        ],
-                    )
-                ]
-            }
-        },
-        {
-            "tools": {
-                "messages": [
-                    _AnyIdToolMessage(
-                        content="result for query",
-                        name="search_api",
-                        tool_call_id="tool_call123",
-                    )
-                ]
-            }
-        },
-        {
-            "agent": {
-                "messages": [
-                    _AnyIdAIMessage(
-                        content="",
-                        tool_calls=[
-                            {
-                                "id": "tool_call234",
-                                "name": "search_api",
-                                "args": {"query": "another"},
-                            },
-                            {
-                                "id": "tool_call567",
-                                "name": "search_api",
-                                "args": {"query": "a third one"},
-                            },
-                        ],
-                    )
-                ]
-            }
-        },
-        {
-            "tools": {
-                "messages": [
-                    _AnyIdToolMessage(
-                        content="result for another",
-                        name="search_api",
-                        tool_call_id="tool_call234",
-                    ),
-                    _AnyIdToolMessage(
-                        content="result for a third one",
-                        name="search_api",
-                        tool_call_id="tool_call567",
-                    ),
-                ]
-            }
-        },
-        {"agent": {"messages": [_AnyIdAIMessage(content="answer")]}},
-    ]
+        )
+        assert output[5:] == [
+            {"agent": {"messages": [_AnyIdAIMessage(content="answer")]}}
+        ]
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
