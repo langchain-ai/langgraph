@@ -8,6 +8,8 @@ from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 ValueT = TypeVar("ValueT")
+Namespace = tuple[str, ...]
+FullKey = tuple[Namespace, str]
 
 
 class BaseCache(ABC, Generic[ValueT]):
@@ -20,25 +22,25 @@ class BaseCache(ABC, Generic[ValueT]):
         self.serde = serde or self.serde
 
     @abstractmethod
-    def get(self, keys: Sequence[str]) -> dict[str, ValueT]:
+    def get(self, keys: Sequence[FullKey]) -> dict[FullKey, ValueT]:
         """Get the cached values for the given keys."""
 
     @abstractmethod
-    async def aget(self, keys: Sequence[str]) -> dict[str, ValueT]:
+    async def aget(self, keys: Sequence[FullKey]) -> dict[FullKey, ValueT]:
         """Asynchronously get the cached values for the given keys."""
 
     @abstractmethod
-    def set(self, mapping: Mapping[str, tuple[ValueT, int | None]]) -> None:
+    def set(self, pairs: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
         """Set the cached values for the given keys and TTLs."""
 
     @abstractmethod
-    async def aset(self, mapping: Mapping[str, tuple[ValueT, int | None]]) -> None:
+    async def aset(self, pairs: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
         """Asynchronously set the cached values for the given keys and TTLs."""
 
     @abstractmethod
-    def delete(self, keys: Sequence[str]) -> None:
+    def delete(self, keys: Sequence[Namespace]) -> None:
         """Delete the cached values for the given keys."""
 
     @abstractmethod
-    async def adelete(self, keys: Sequence[str]) -> None:
+    async def adelete(self, keys: Sequence[Namespace]) -> None:
         """Asynchronously delete the cached values for the given keys."""

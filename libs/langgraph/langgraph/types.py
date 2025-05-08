@@ -187,6 +187,8 @@ else:
 class CacheKey(NamedTuple):
     """Cache key for a task."""
 
+    ns: tuple[str, ...]
+    """Namespace for the cache entry."""
     key: str
     """Key for the cache entry."""
     ttl: Optional[int]

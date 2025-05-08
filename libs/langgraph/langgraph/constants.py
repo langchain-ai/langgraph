@@ -46,6 +46,10 @@ TASKS = sys.intern("__pregel_tasks")
 RETURN = sys.intern("__return__")
 # for writes of a task where we simply record the return value
 
+# --- Reserved cache namespaces ---
+CACHE_NS_WRITES = sys.intern("__pregel_ns_writes")
+# cache namespace for node writes
+
 # --- Reserved config.configurable keys ---
 CONFIG_KEY_SEND = sys.intern("__pregel_send")
 # holds the `write` function that accepts writes to state/edges/reserved keys

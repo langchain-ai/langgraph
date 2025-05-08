@@ -33,6 +33,7 @@ from langgraph.checkpoint.base import (
     V,
 )
 from langgraph.constants import (
+    CACHE_NS_WRITES,
     CONF,
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
@@ -79,7 +80,7 @@ from langgraph.types import (
     PregelTask,
     RetryPolicy,
 )
-from langgraph.utils.config import merge_configs, patch_config, recast_checkpoint_ns
+from langgraph.utils.config import merge_configs, patch_config
 
 GetNextVersion = Callable[[Optional[V], BaseChannel], V]
 SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
@@ -601,19 +602,12 @@ def prepare_single_task(
             if cache_policy:
                 args_key = cache_policy.key_func(*call.input[0], **call.input[1])
                 cache_key: Optional[CacheKey] = CacheKey(
+                    (
+                        CACHE_NS_WRITES,
+                        (identifier(call.func) or "__dynamic__"),
+                    ),
                     xxh3_128_hexdigest(
-                        b"".join(
-                            (
-                                b"__pregel_cache",
-                                recast_checkpoint_ns(parent_ns).encode()
-                                if parent_ns
-                                else b"",
-                                (identifier(call.func) or "__dynamic__").encode(),
-                                args_key.encode()
-                                if isinstance(args_key, str)
-                                else args_key,
-                            )
-                        )
+                        args_key.encode() if isinstance(args_key, str) else args_key,
                     ),
                     cache_policy.ttl,
                     cache_policy.refresh,
@@ -731,19 +725,13 @@ def prepare_single_task(
             if cache_policy:
                 args_key = cache_policy.key_func(packet.arg)
                 cache_key = CacheKey(
+                    (
+                        CACHE_NS_WRITES,
+                        (identifier(proc) or "__dynamic__"),
+                        packet.node,
+                    ),
                     xxh3_128_hexdigest(
-                        b"".join(
-                            (
-                                b"__pregel_cache",
-                                recast_checkpoint_ns(parent_ns).encode()
-                                if parent_ns
-                                else b"",
-                                packet.node.encode(),
-                                args_key.encode()
-                                if isinstance(args_key, str)
-                                else args_key,
-                            )
-                        )
+                        args_key.encode() if isinstance(args_key, str) else args_key,
                     ),
                     cache_policy.ttl,
                     cache_policy.refresh,
@@ -870,19 +858,15 @@ def prepare_single_task(
                     if cache_policy:
                         args_key = cache_policy.key_func(val)
                         cache_key = CacheKey(
+                            (
+                                CACHE_NS_WRITES,
+                                (identifier(proc) or "__dynamic__"),
+                                name,
+                            ),
                             xxh3_128_hexdigest(
-                                b"".join(
-                                    (
-                                        b"__pregel_cache",
-                                        recast_checkpoint_ns(parent_ns).encode()
-                                        if parent_ns
-                                        else b"",
-                                        name.encode(),
-                                        args_key.encode()
-                                        if isinstance(args_key, str)
-                                        else args_key,
-                                    )
-                                )
+                                args_key.encode()
+                                if isinstance(args_key, str)
+                                else args_key,
                             ),
                             cache_policy.ttl,
                             cache_policy.refresh,

@@ -1069,7 +1069,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             return ()
         matched: list[PregelExecutableTask] = []
         if cached := {
-            t.cache_key.key: t
+            (t.cache_key.ns, t.cache_key.key): t
             for t in self.tasks.values()
             if t.cache_key and not t.cache_key.refresh and not t.writes
         }:
@@ -1089,7 +1089,12 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             return
         self.submit(
             self.cache.set,
-            {task.cache_key.key: (task.writes, task.cache_key.ttl)},
+            {
+                (task.cache_key.ns, task.cache_key.key): (
+                    task.writes,
+                    task.cache_key.ttl,
+                )
+            },
         )
 
     # context manager
@@ -1253,7 +1258,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             return []
         matched: list[PregelExecutableTask] = []
         if cached := {
-            t.cache_key.key: t
+            (t.cache_key.ns, t.cache_key.key): t
             for t in self.tasks.values()
             if t.cache_key and not t.cache_key.refresh and not t.writes
         }:
@@ -1276,7 +1281,12 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             return
         self.submit(
             self.cache.aset,
-            {task.cache_key.key: (task.writes, task.cache_key.ttl)},
+            {
+                (task.cache_key.ns, task.cache_key.key): (
+                    task.writes,
+                    task.cache_key.ttl,
+                )
+            },
         )
 
     # context manager

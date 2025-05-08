@@ -75,6 +75,16 @@ def _whichmodule(obj: Any, name: str) -> Optional[str]:
 
 
 def identifier(obj: Any, name: Optional[str] = None) -> Optional[str]:
+    """Return the module and name of an object."""
+    from langgraph.pregel.read import PregelNode
+    from langgraph.utils.runnable import RunnableCallable, RunnableSeq
+
+    if isinstance(obj, PregelNode):
+        obj = obj.bound
+    if isinstance(obj, RunnableSeq):
+        obj = obj.steps[0]
+    if isinstance(obj, RunnableCallable):
+        obj = obj.func
     if name is None:
         name = getattr(obj, "__qualname__", None)
     if name is None:  # pragma: no cover
