@@ -144,9 +144,7 @@ nav:
         - how-tos/subgraph.ipynb
       - Multi-agent:
         - Overview: concepts/multi_agent.md
-        - how-tos/agent-handoffs.ipynb
-        - how-tos/multi-agent-network.ipynb
-        - how-tos/multi-agent-multi-turn-convo.ipynb
+        - how-tos/multi_agent.ipynb
       - Functional API:
         - Overview: concepts/functional_api.md
         - how-tos/wait-user-input-functional.ipynb
