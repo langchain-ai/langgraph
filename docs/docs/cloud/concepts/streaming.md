@@ -5,23 +5,18 @@ When creating a streaming run, the **streaming mode** determines what kinds of d
 
 ## Supported streaming modes
 
-LangGraph Cloud supports five streaming modes:
+LangGraph Platform supports the following streaming modes:
 
-| Mode                 | Description                                                                                                                                                    |
-|----------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **`values`**         | Stream the full graph state after each [super-step](https://langchain-ai.github.io/langgraph/concepts/low_level/#graphs). [Guide](../how-tos/stream_values.md) |
-| **`updates`**        | Stream only the updates to the graph state after each node. [Guide](../how-tos/stream_updates.md)                                                              |
-| **`messages-tuple`** | Stream LLM tokens for any messages generated inside the graph (useful for chat apps). [Guide](../how-tos/stream_messages.md)                                   |
-| **`debug`**          | Stream debug information throughout graph execution. [Guide](../how-tos/stream_debug.md)                                                                       |
-| **`custom`**         | Stream custom data                                                                                                                                             |
-| **`events`**         | Stream all events (including the state of the graph); mainly useful when migrating large LCEL apps. [Guide](../how-tos/stream_events.md)                       |
+| Mode                 | Description                                                                                                                                                    | LangGraph Library Method                                                |
+|----------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------|
+| **`values`**         | Stream the full graph state after each [super-step](https://langchain-ai.github.io/langgraph/concepts/low_level/#graphs). [Guide](../how-tos/streaming.md#stream-graph-state) | `.stream()` / `.astream()` with `stream_mode="values"`                  |
+| **`updates`**        | Stream only the updates to the graph state after each node. [Guide](../how-tos/streaming.md#stream-graph-state)                                                              | `.stream()` / `.astream()` with `stream_mode="updates"`                 |
+| **`messages-tuple`** | Stream LLM tokens for any messages generated inside the graph (useful for chat apps). [Guide](../how-tos/streaming.md#messages)                                   | `.stream()` / `.astream()` with `stream_mode="messages"`                |
+| **`debug`**          | Stream debug information throughout graph execution. [Guide](../how-tos/streaming.md#debug)                                                                       | `.stream()` / `.astream()` with `stream_mode="debug"`                   |
+| **`custom`**         | Stream custom data. [Guide](../../how-tos/streaming.md#stream-custom-data)                                                                                                                                             | `.stream()` / `.astream()` with `stream_mode="custom"`                  |
+| **`events`**         | Stream all events (including the state of the graph); mainly useful when migrating large LCEL apps. [Guide](../how-tos/streaming.md#stream-events)                       | `.astream_events()`                                                     |
 
-✅ You can also **combine multiple modes** at the same time.  See the [how-to guide](../how-tos/stream_multiple.md) for configuration details.
-
-## Mapping to LangGraph library
-
-- The `values`, `updates`, `messages-tuple`, and `debug` modes map to `.stream()` / `.astream()` in the LangGraph Python library.
-- The `events` mode corresponds to using `.astream_events()` in the LangGraph library.
+✅ You can also **combine multiple modes** at the same time.  See the [how-to guide](../how-tos/streaming.md#stream-multiple-modes) for configuration details.
 
 ## API Reference
 

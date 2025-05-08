@@ -69,10 +69,10 @@ Basic usage example:
 | Mode                                            | Description                                                                                                                                                                         |
 |-------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | [`values`](#stream-graph-state)                 | Streams the full value of the state after each step of the graph.                                                                                                                   |
-| [`updates`](../how-tos/streaming.md#updates)    | Streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g., multiple nodes are run), those updates are streamed separately. |
-| [`custom`](../how-tos/streaming.md#custom)      | Streams custom data from inside your graph nodes.                                                                                                                                   |
-| [`messages`](../how-tos/streaming-tokens.ipynb) | Streams LLM tokens and metadata for the graph node where the LLM is invoked.                                                                                                        |
-| [`debug`](../how-tos/streaming.md#debug)        | Streams as much information as possible throughout the execution of the graph.                                                                                                      |
+| [`updates`](#stream-graph-state)    | Streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g., multiple nodes are run), those updates are streamed separately. |
+| [`custom`](#custom)      | Streams custom data from inside your graph nodes.                                                                                                                                   |
+| [`messages`](#messages) | Streams LLM tokens and metadata for the graph node where the LLM is invoked.                                                                                                        |
+| [`debug`](#debug)        | Streams as much information as possible throughout the execution of the graph.                                                                                                      |
 
 
 ### Stream multiple modes
@@ -160,7 +160,7 @@ graph = (
 
 ## Subgraphs
 
-To include outputs from [subgraphs](../concepts/low_level.md#subgraphs) in the streamed outputs, you can set `subgraphs=True` in the `.stream()` method of the parent graph. This will stream outputs from both the parent graph and any subgraphs.
+To include outputs from [subgraphs](../concepts/subgraphs.md) in the streamed outputs, you can set `subgraphs=True` in the `.stream()` method of the parent graph. This will stream outputs from both the parent graph and any subgraphs.
 
 ```python
 for chunk in graph.stream(
@@ -259,8 +259,7 @@ The streamed output from [`messages` mode](#supported-stream-modes) is a tuple `
  
 !!! warning "Manual config required for async in Python < 3.11"
 
-    When using Python < 3.11 with async code, you must explicitly pass `RunnableConfig` to `ainvoke()` to enable proper streaming.  
-    See [Async with Python < 3.11](#async-with-python-3-11) for details or upgrade to Python 3.11+.
+    When using Python < 3.11 with async code, you must explicitly pass `RunnableConfig` to `ainvoke()` to enable proper streaming. See [Async with Python < 3.11](#async) for details or upgrade to Python 3.11+.
 
 ```python
 from dataclasses import dataclass
@@ -303,7 +302,7 @@ for message_chunk, metadata in graph.stream( # (2)!
         print(message_chunk.content, end="|", flush=True)
 ```
 
-1. Note that even though the LLM is run using `invoke` rather than `stream`. When using the `messages` stream mode, LangGraph will 
+1. Note that the message events are emitted even when the LLM is run using `.invoke` rather than `.stream`.
 2. The "messages" stream mode returns an iterator of tuples `(message_chunk, metadata)` where `message_chunk` is the token streamed by the LLM and `metadata` is a dictionary with information about the graph node where the LLM was called and other information.
 
 
@@ -703,8 +702,6 @@ for chunk in graph.stream(
 
 ## Disable streaming for specific chat models
 
-Some chat models, including the new O1 models from OpenAI (depending on when you're reading this), do not support streaming.
-
 If your application mixes models that support streaming with those that do not, you may need to explicitly disable streaming for 
 models that do not support it.
 
@@ -735,7 +732,7 @@ Set `disable_streaming=True` when initializing the model.
       1. Set `disable_streaming=True` to disable streaming for the chat model.
 
 
-## Async with Python < 3.11
+## Async with Python < 3.11 { #async }
 
 In Python versions < 3.11, [asyncio tasks](https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task) do not support the `context` parameter.  
 This limits LangGraph ability to automatically propagate context, and affects LangGraph’s streaming mechanisms in two key ways:
