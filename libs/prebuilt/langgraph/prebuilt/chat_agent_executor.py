@@ -1,4 +1,3 @@
-import functools
 import inspect
 from typing import (
     Any,
@@ -141,27 +140,6 @@ def _get_prompt_runnable(prompt: Optional[Prompt]) -> Runnable:
     return prompt_runnable
 
 
-def _convert_modifier_to_prompt(func: F) -> F:
-    """Decorator that converts state_modifier kwarg to prompt kwarg."""
-
-    @functools.wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        prompt = kwargs.get("prompt")
-        state_modifier = kwargs.pop("state_modifier", None)
-        if sum(p is not None for p in (prompt, state_modifier)) > 1:
-            raise ValueError(
-                "Expected only one of (prompt, state_modifier), got multiple values"
-            )
-
-        if state_modifier is not None:
-            prompt = state_modifier
-
-        kwargs["prompt"] = prompt
-        return func(*args, **kwargs)
-
-    return cast(F, wrapper)
-
-
 def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> bool:
     if isinstance(model, RunnableSequence):
         model = next(
@@ -260,7 +238,6 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
-@_convert_modifier_to_prompt
 def create_react_agent(
     model: Union[str, LanguageModelLike],
     tools: Union[Sequence[Union[BaseTool, Callable]], ToolNode],
@@ -277,7 +254,7 @@ def create_react_agent(
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
-    version: Literal["v1", "v2"] = "v1",
+    version: Literal["v1", "v2"] = "v2",
     name: Optional[str] = None,
 ) -> CompiledGraph:
     """Creates an agent graph that calls tools in a loop until a stopping condition is met.
@@ -701,6 +678,13 @@ def create_react_agent(
                 break
             if m.name in should_return_direct:
                 return END
+
+        # handle a case of parallel tool calls where
+        # the tool w/ `return_direct` was executed in a different `Send`
+        if isinstance(m, AIMessage) and m.tool_calls:
+            if any(call["name"] in should_return_direct for call in m.tool_calls):
+                return END
+
         return entrypoint
 
     if should_return_direct:
