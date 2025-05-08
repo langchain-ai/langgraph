@@ -16,9 +16,23 @@ You can create an application from a template using the LangGraph CLI.
 
 ## Install the LangGraph CLI
 
-```bash
-pip install "langgraph-cli[inmem]" --upgrade
-```
+=== "Python"
+
+    ```bash
+    pip install "langgraph-cli[inmem]" --upgrade
+    ```
+
+    Or via [`uv`](https://docs.astral.sh/uv/getting-started/installation/) (recommended):
+
+    ```bash
+    uvx --from "langgraph-cli[inmem]" langgraph dev --help
+    ```
+
+=== "JS"
+
+    ```bash
+    npx @langchain/langgraph-cli --help
+    ```
 
 ## Available Templates
 
@@ -35,9 +49,23 @@ pip install "langgraph-cli[inmem]" --upgrade
 
 To create a new app from a template, use the `langgraph new` command.
 
-```bash
-langgraph new
-```
+=== "Python"
+
+    ```bash
+    langgraph new
+    ```
+
+    Or via [`uv`](https://docs.astral.sh/uv/getting-started/installation/) (recommended):
+
+    ```bash
+    uvx --from "langgraph-cli[inmem]" langgraph new
+    ```
+
+=== "JS"
+
+    ```bash
+    npx @langchain/langgraph-cli new 
+    ```
 
 ## Next Steps
 
@@ -45,9 +73,26 @@ Review the `README.md` file in the root of your new LangGraph app for more infor
 
 After configuring the app properly and adding your API keys, you can start the app using the LangGraph CLI:
 
-```bash
-langgraph dev 
-```
+=== "Python"
+
+    ```bash
+    langgraph dev
+    ```
+
+    Or via [`uv`](https://docs.astral.sh/uv/getting-started/installation/) (recommended):
+
+    ```bash
+    uvx --from "langgraph-cli[inmem]" --with-editable . langgraph dev
+    ```
+
+    ??? info "Missing Local Package?"
+        If you are not using `uv` and run into a "`ModuleNotFoundError`" or "`ImportError`", even after installing the local package (`pip install -e .`), it is likely the case that you need to install the CLI into your local virtual environment to make the CLI "aware" of the local package. You can do this by running `python -m pip install "langgraph-cli[inmem]"` and re-activating your virtual environment before running `langgraph dev`.
+
+=== "JS"
+
+    ```bash
+    npx @langchain/langgraph-cli dev
+    ```
 
 See the following guides for more information on how to deploy your app:
 
