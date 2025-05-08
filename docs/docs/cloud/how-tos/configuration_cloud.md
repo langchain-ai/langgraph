@@ -121,7 +121,7 @@ Inside your deployment, select the "Assistants" tab. This will load a table of a
 
 To create a new assistant, select the "+ New assistant" button. This will open a form where you can specify the graph this assistant is for, as well as provide a name, description, and the desired configuration for the assistant based on the configuration schema for that graph.
 
-To confirm, click "Create assistant". This will take you to [LangGraph Studio](../../../concepts/langgraph_studio) where you can test the assistant. If you go back to the "Assistants" tab in the deployment, you will see the newly created assistant in the table.
+To confirm, click "Create assistant". This will take you to [LangGraph Studio](../../concepts/langgraph_studio.md) where you can test the assistant. If you go back to the "Assistants" tab in the deployment, you will see the newly created assistant in the table.
 
 ## Using an Assistant
 
