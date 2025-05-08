@@ -1,4 +1,4 @@
-# LangGraph Platform quickstart
+# Deployment quickstart
 
 This guide shows you how to set up and use LangGraph Platform for a cloud deployment.
 
