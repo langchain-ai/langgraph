@@ -149,13 +149,7 @@ nav:
         - how-tos/multi-agent-multi-turn-convo.ipynb
       - Functional API:
         - Overview: concepts/functional_api.md
-        - how-tos/wait-user-input-functional.ipynb
-        - how-tos/review-tool-calls-functional.ipynb
-        - how-tos/persistence-functional.ipynb
-        - how-tos/cross-thread-persistence-functional.ipynb
-        - how-tos/multi-agent-network-functional.ipynb
-        - how-tos/multi-agent-multi-turn-convo-functional.ipynb
-        - how-tos/autogen-integration-functional.ipynb
+        - how-tos/use-functional-api.md
       - Other:
         # Pregel is the underlying low level API that backs
         # both the Graph API and the Functional API.
