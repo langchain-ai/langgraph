@@ -8,9 +8,9 @@
     * [LangGraph Glossary](../../concepts/low_level.md)
     
 
-Human-in-the-loop (HIL) interactions are crucial for [agentic systems](../../concepts/agentic_concepts.md#human-in-the-loop). [Breakpoints](../../concepts/low_level.md#breakpoints) are a common HIL interaction pattern, allowing the graph to stop at specific steps and seek human approval before proceeding (e.g., for sensitive actions).
+Human-in-the-loop (HIL) interactions are crucial for [agentic systems](../../concepts/agentic_concepts.md#human-in-the-loop). [Breakpoints](../../concepts/breakpoints.md) are a common HIL interaction pattern, allowing the graph to stop at specific steps and seek human approval before proceeding (e.g., for sensitive actions).
 
-Breakpoints are built on top of LangGraph [checkpoints](../../concepts/low_level.md#persistence), which save the graph's state after each node execution. Checkpoints are saved in [threads](../../concepts/low_level.md#threads) that preserve graph state and can be accessed after a graph has finished execution. This allows for graph execution to pause at specific points, await human approval, and then resume execution from the last checkpoint.
+Breakpoints are built on top of LangGraph [checkpoints](../../concepts/persistence.md#checkpoints), which save the graph's state after each node execution. Checkpoints are saved in [threads](../../concepts/persistence.md#threads) that preserve graph state and can be accessed after a graph has finished execution. This allows for graph execution to pause at specific points, await human approval, and then resume execution from the last checkpoint.
 
 ## Setup
 

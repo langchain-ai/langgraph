@@ -24,7 +24,7 @@ Feature Differences:
 
 |       | Lite       | Enterprise |
 |-------|------------|------------|
-| [Cron Jobs](../concepts/langgraph_server.md#cron-jobs) |❌|✅|
+| [Cron Jobs](../clouds/concepts/cron-jobs.md) |❌|✅|
 | [Custom Authentication](../concepts/auth.md) |❌|✅|
 | [Deployment options](../concepts/deployment_options.md) | Standalone container | Cloud Saas, Self-Hosted Data Plane, Self-Hosted Control Plane, Standalone container
 
@@ -46,8 +46,6 @@ An [Assistant](assistants.md) is a graph paired with specific configuration sett
 that can be served by the same graph.
 
 Upon deployment, LangGraph Server will automatically create a default assistant for each graph using the graph's default configuration settings.
-
-You can interact with assistants through the [LangGraph Server API](#langgraph-server-api).
 
 !!! note
 

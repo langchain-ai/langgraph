@@ -7,7 +7,7 @@ search:
 
 There are two free options for deploying LangGraph applications via the LangGraph Server:
 
-- [Local](../cloud/deployment/test_locally.md): Deploy for local testing and development. 
+- [Local](./langgraph-platform/local-server.md): Deploy for local testing and development. 
 - Self-Hosted Lite: A limited version of Standalone Container for deployments unlikely to see more that 1 million node executions per year and that do not need crons and other enterprise features. Self-Hosted Lite is free with a LangSmith API key.
 
 ## Other deployment options

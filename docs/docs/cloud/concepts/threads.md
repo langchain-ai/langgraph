@@ -6,6 +6,6 @@ A thread's current and historical state can be retrieved. To persist state, a th
 
 The state of a thread at a particular point in time is called a [checkpoint](../../concepts/persistence.md#checkpoints). Checkpoints can be used to restore the state of a thread at a later time.
 
-For more on threads and checkpoints, see this section of the [LangGraph conceptual guide](../../concepts/low_level.md#persistence).
+For more on threads and checkpoints, see this section of the [LangGraph conceptual guide](../../concepts/persistence.md).
 
 The LangGraph Cloud API provides several endpoints for creating and managing threads and thread state. See the [API reference](../../cloud/reference/api/api_ref.html#tag/threads) for more details.

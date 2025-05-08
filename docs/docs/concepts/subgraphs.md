@@ -40,7 +40,7 @@ The main question when adding subgraphs is how the parent graph and subgraph com
     graph.invoke({"messages": [{"role": "user", "content": "hi!"}]})
     ```
 
-* parent graph and subgraph have **different schemas** (no shared state keys in their state [schemas](../../concepts/low_level.md#state)). In this case, you have to [call the subgraph from inside a node in the parent graph](../how-tos/subgraph.ipynb#different-state-schemas): this is useful when the parent graph and the subgraph have different state schemas and you need to transform state before or after calling the subgraph
+* parent graph and subgraph have **different schemas** (no shared state keys in their state [schemas](./low_level.md#state)). In this case, you have to [call the subgraph from inside a node in the parent graph](../how-tos/subgraph.ipynb#different-state-schemas): this is useful when the parent graph and the subgraph have different state schemas and you need to transform state before or after calling the subgraph
 
     ```python
     from typing_extensions import TypedDict, Annotated

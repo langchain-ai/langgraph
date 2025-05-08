@@ -213,7 +213,6 @@ nav:
         - Overview: concepts/auth.md
         - how-tos/auth/custom_auth.md
         - how-tos/auth/openapi_security.md
-      # NEED TO ADD MCP DOC FROM MAIN
       - Assistants:
         - Overview: concepts/assistants.md
         - cloud/how-tos/configuration_cloud.md
@@ -243,6 +242,8 @@ nav:
         - cloud/how-tos/human_in_the_loop_edit_state.md
         - cloud/how-tos/human_in_the_loop_time_travel.md
         - cloud/how-tos/human_in_the_loop_review_tool_calls.md
+      - MCP:
+        - Overview: concepts/server-mcp.md
       - Double-texting:
         - Overview: concepts/double_texting.md
         - cloud/how-tos/interrupt_concurrent.md
