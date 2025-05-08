@@ -181,7 +181,9 @@ nav:
         - agents/ui.md
     - LangGraph Platform:
       - Overview: concepts/langgraph_platform.md
-      - Quickstart: cloud/quick_start.md
+      - Get started:
+        - Quickstart: tutorials/langgraph-platform/local-server.md
+        - Deployment quickstart: cloud/quick_start.md
       - Components:
         - LangGraph Server:
           - Overview: concepts/langgraph_server.md
@@ -301,7 +303,6 @@ nav:
       - Environment variables: cloud/reference/env_var.md
 
   - Examples:
-    - Launch local server: tutorials/langgraph-platform/local-server.md
     - Agentic RAG: tutorials/rag/langgraph_agentic_rag.ipynb
     - Agent Supervisor: tutorials/multi_agent/agent_supervisor.ipynb
     - Customer Support: tutorials/customer-support/customer-support.ipynb
