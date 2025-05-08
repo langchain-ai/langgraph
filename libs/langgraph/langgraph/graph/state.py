@@ -114,7 +114,7 @@ class StateNodeSpec(NamedTuple):
     input: type[Any]
     retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]]
     ends: Optional[Union[tuple[str, ...], dict[str, str]]] = EMPTY_SEQ
-    barrier: bool = False
+    defer: bool = False
 
 
 class StateGraph(Graph):
@@ -255,6 +255,7 @@ class StateGraph(Graph):
         self,
         node: RunnableLike,
         *,
+        defer: bool = False,
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[type[Any]] = None,
         retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
@@ -271,6 +272,7 @@ class StateGraph(Graph):
         node: str,
         action: RunnableLike,
         *,
+        defer: bool = False,
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[type[Any]] = None,
         retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
@@ -284,7 +286,7 @@ class StateGraph(Graph):
         node: Union[str, RunnableLike],
         action: Optional[RunnableLike] = None,
         *,
-        barrier: bool = False,
+        defer: bool = False,
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[type[Any]] = None,
         retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
@@ -430,7 +432,7 @@ class StateGraph(Graph):
             input=input or self.schema,
             retry_policy=retry,
             ends=ends,
-            barrier=barrier,
+            defer=defer,
         )
         return self
 
@@ -796,7 +798,7 @@ class CompiledStateGraph(CompiledGraph):
             branch_channel = CHANNEL_BRANCH_TO.format(key)
             self.channels[branch_channel] = (
                 LastValueAfterFinish(Any)
-                if node.barrier
+                if node.defer
                 else EphemeralValue(Any, guard=False)
             )
             self.nodes[key] = PregelNode(
@@ -826,7 +828,7 @@ class CompiledStateGraph(CompiledGraph):
         elif end != END:
             channel_name = f"join:{'+'.join(starts)}:{end}"
             # register channel
-            if self.builder.nodes[end].barrier:
+            if self.builder.nodes[end].defer:
                 self.channels[channel_name] = NamedBarrierValueAfterFinish(
                     str, set(starts)
                 )
@@ -908,7 +910,7 @@ class CompiledStateGraph(CompiledGraph):
                 else [node for node in self.builder.nodes if node != branch.then]
             )
             channel_name = f"branch:{start}:{name}::then"
-            if self.builder.nodes[branch.then].barrier:
+            if self.builder.nodes[branch.then].defer:
                 self.channels[channel_name] = DynamicBarrierValueAfterFinish(str)
             else:
                 self.channels[channel_name] = DynamicBarrierValue(str)

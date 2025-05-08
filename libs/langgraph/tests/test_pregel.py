@@ -2502,7 +2502,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(
 
 @pytest.mark.parametrize("use_waiting_edge", (True, False))
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_in_one_fan_out_state_graph_barrier_node(
+def test_in_one_fan_out_state_graph_defer_node(
     snapshot: SnapshotAssertion,
     request: pytest.FixtureRequest,
     checkpointer_name: str,
@@ -2548,7 +2548,7 @@ def test_in_one_fan_out_state_graph_barrier_node(
     workflow.add_node(analyzer_one)
     workflow.add_node(retriever_one)
     workflow.add_node(retriever_two)
-    workflow.add_node(qa, barrier=True)
+    workflow.add_node(qa, defer=True)
 
     workflow.set_entry_point("rewrite_query")
     workflow.add_edge("rewrite_query", "retriever_one")
@@ -2771,6 +2771,7 @@ def test_in_one_fan_out_state_graph_barrier_node(
             "thread_id": "2",
         },
         parent_config=expected_parent_config,
+        interrupts=(),
     )
 
     assert [c for c in app_w_interrupt.stream(None, config, debug=1)] == [
