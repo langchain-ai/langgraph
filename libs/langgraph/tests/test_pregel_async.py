@@ -5399,7 +5399,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
 
 @pytest.mark.parametrize("with_cache", [True, False])
 async def test_in_one_fan_out_state_graph_waiting_edge_multiple(
-    with_cache: bool, file_cache: BaseCache
+    with_cache: bool, cache: BaseCache
 ) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
@@ -5465,7 +5465,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_multiple(
     workflow.add_conditional_edges("decider", decider_cond)
     workflow.set_finish_point("qa")
 
-    app = workflow.compile(cache=file_cache)
+    app = workflow.compile(cache=cache)
 
     assert await app.ainvoke({"query": "what is weather in sf"}) == {
         "query": "analyzed: query: analyzed: query: what is weather in sf",
@@ -7551,7 +7551,7 @@ async def test_multiple_interrupts_functional(checkpointer_name: str) -> None:
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_multiple_interrupts_functional_cache(
-    checkpointer_name: str, file_cache: BaseCache
+    checkpointer_name: str, cache: BaseCache
 ):
     """Test multiple interrupts with functional API."""
     async with awith_checkpointer(checkpointer_name) as checkpointer:
@@ -7564,7 +7564,7 @@ async def test_multiple_interrupts_functional_cache(
             counter += 1
             return 2 * x
 
-        @entrypoint(checkpointer=checkpointer, cache=file_cache)
+        @entrypoint(checkpointer=checkpointer, cache=cache)
         def graph(state: dict) -> dict:
             """React tool."""
 
@@ -7604,7 +7604,7 @@ async def test_multiple_interrupts_functional_cache(
         assert counter == 3
 
         # clear the cache
-        await double.aclear_cache(file_cache)
+        await double.aclear_cache(cache)
 
         # now should recompute
         configurable = {"configurable": {"thread_id": str(uuid.uuid4())}}

@@ -1,6 +1,4 @@
-import os
 import sys
-import tempfile
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -14,7 +12,8 @@ from psycopg_pool import AsyncConnectionPool, ConnectionPool
 from pytest_mock import MockerFixture
 
 from langgraph.cache.base import BaseCache
-from langgraph.cache.file import FileCache
+from langgraph.cache.memory import InMemoryCache
+from langgraph.cache.sqlite import SqliteCache
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.postgres import PostgresSaver, ShallowPostgresSaver
 from langgraph.checkpoint.postgres.aio import (
@@ -365,18 +364,14 @@ async def _store_postgres_aio_pool():
             await conn.execute(f"DROP DATABASE {database}")
 
 
-@pytest.fixture(scope="function")
-def file_cache() -> Iterator[BaseCache]:
-    _, path = tempfile.mkstemp()
-    os.remove(path)
-    try:
-        yield FileCache(path=path)
-    finally:
-        # Cleanup the file
-        try:
-            os.remove(path)
-        except OSError:
-            pass
+@pytest.fixture(scope="function", params=["sqlite", "memory"])
+def cache(request: pytest.FixtureRequest) -> Iterator[BaseCache]:
+    if request.param == "sqlite":
+        yield SqliteCache(path=":memory:")
+    elif request.param == "memory":
+        yield InMemoryCache()
+    else:
+        raise ValueError(f"Unknown cache type: {request.param}")
 
 
 @pytest.fixture(scope="function")
