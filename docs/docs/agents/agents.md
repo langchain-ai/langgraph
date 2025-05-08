@@ -7,13 +7,31 @@ hide:
   - tags
 ---
 
-# Agent quickstart
+# LangGraph quickstart
 
 This guide shows you how to set up and use LangGraph's **prebuilt**, **reusable** components, which are designed to help you construct agentic systems quickly and reliably.
 
-## 1. Create an agent
+## Prerequisites
 
-To create an agent, use [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent]:
+Before you start this tutorial, ensure you have the following:
+
+- An [Anthropic](https://console.anthropic.com/settings/admin-keys) API key 
+
+## 1. Install LangGraph and LangChain
+
+If you haven't already, install LangGraph and LangChain:
+
+```
+pip install -U langgraph "langchain[anthropic]"
+```
+
+!!! info 
+
+    LangChain is installed so the agent can call the [model](https://python.langchain.com/docs/integrations/chat/).
+
+## 2. Create an agent
+
+To create an agent, use [`create_react_agent`](langgraph.prebuilt.chat_agent_executor.create_react_agent):
 
 ```python
 from langgraph.prebuilt import create_react_agent
@@ -39,7 +57,7 @@ agent.invoke(
 3. Provide a list of tools for the model to use.
 4. Provide a system prompt (instructions) to the language model used by the agent.
 
-## 2. Configure an LLM
+## 3. Configure an LLM
 
 To configure an LLM with specific parameters, such as temperature, use [init_chat_model](https://python.langchain.com/api_reference/langchain/chat_models/langchain.chat_models.base.init_chat_model.html):
 
@@ -63,7 +81,7 @@ agent = create_react_agent(
 
 For more information on how to configure LLMs, see [Models](./models.md).
 
-## 3. Add a custom prompt
+## 4. Add a custom prompt
 
 Prompts instruct the LLM how to behave. Add one of the following types of prompts:
 
@@ -129,7 +147,7 @@ Prompts instruct the LLM how to behave. Add one of the following types of prompt
 
 For more information, see [Context](./context.md).
 
-## 4. Add memory
+## 5. Add memory
 
 To allow multi-turn conversations with an agent, you need to enable [persistence](../concepts/persistence.md) by providing a `checkpointer` when creating an agent. At runtime, you need to provide a config containing `thread_id` — a unique identifier for the conversation (session):
 
@@ -171,7 +189,7 @@ Note that in the above example, when the agent is invoked the second time with t
 
 For more information, see [Memory](./memory.md).
 
-## 5. Configure structured output
+## 6. Configure structured output
 
 To produce structured responses conforming to a schema, use the `response_format` parameter. The schema can be defined with a `Pydantic` model or `TypedDict`. The result will be accessible via the `structured_response` field.
 
@@ -209,4 +227,4 @@ response["structured_response"]
 
 - [Deploy your agent locally](../tutorials/langgraph-platform/local-server.md)
 - [Learn more about prebuilt agents](../agents/overview.md)
-
+- [LangGraph Platform quickstart](../cloud/quick_start.md)
