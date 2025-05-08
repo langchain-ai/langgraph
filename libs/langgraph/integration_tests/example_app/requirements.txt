@@ -1,2 +1,2 @@
 langchain-core
-langgraph
+-e .

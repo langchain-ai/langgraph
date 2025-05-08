@@ -17,11 +17,8 @@ def anyio_backend():
 def dev_server():
     # Command to start the dev server
     cmd = [
-        "uvx",
-        "--with-requirements",
-        "integration_tests/example_app/requirements.txt",
-        "--from",
-        "langgraph-cli[inmem]",
+        "poetry",
+        "run",
         "langgraph",
         "dev",
         "--config",

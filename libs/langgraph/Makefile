@@ -1,4 +1,4 @@
-.PHONY: all format lint test test_watch integration_tests spell_check spell_fix benchmark profile start-dev-server
+.PHONY: all format lint test test_watch integration_tests spell_check spell_fix benchmark profile start-dev-server integration_tests
 
 # Default target executed when no arguments are given to make.
 all: help
@@ -40,6 +40,8 @@ start-postgres:
 stop-postgres:
 	docker compose -f tests/compose-postgres.yml down -v
 
+start-dev-server:
+	poetry run langgraph dev --config integration_tests/example_app/langgraph.json --no-browser
 
 TEST ?= .
 
@@ -54,7 +56,9 @@ test_parallel:
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE
-	
+
+integration_tests:
+	poetry run pytest integration_tests
 
 WORKERS ?= auto
 XDIST_ARGS := $(if $(WORKERS),-n $(WORKERS) --dist worksteal,)
@@ -72,8 +76,6 @@ test_watch:
 test_watch_all:
 	npx concurrently -n langgraph,checkpoint,checkpoint-sqlite,postgres "make test_watch" "make -C ../checkpoint test_watch" "make -C ../checkpoint-sqlite test_watch" "make -C ../checkpoint-postgres test_watch"
 
-test_integration:
-	poetry run pytest integration_tests
 
 ######################
 # LINTING AND FORMATTING

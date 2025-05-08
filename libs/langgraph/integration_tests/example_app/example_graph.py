@@ -22,38 +22,41 @@ def search_api(query: str) -> str:
 tools = [search_api]
 tools_by_name = {t.name: t for t in tools}
 
-model = FakeChatModel(
-    messages=[
-        AIMessage(
-            id="ai1",
-            content="",
-            tool_calls=[
-                {
-                    "id": "tool_call123",
-                    "name": "search_api",
-                    "args": {"query": "query"},
-                },
-            ],
-        ),
-        AIMessage(
-            id="ai2",
-            content="",
-            tool_calls=[
-                {
-                    "id": "tool_call234",
-                    "name": "search_api",
-                    "args": {"query": "another", "idx": 0},
-                },
-                {
-                    "id": "tool_call567",
-                    "name": "search_api",
-                    "args": {"query": "a third one", "idx": 1},
-                },
-            ],
-        ),
-        AIMessage(id="ai3", content="answer"),
-    ]
-)
+
+def get_model():
+    model = FakeChatModel(
+        messages=[
+            AIMessage(
+                id="ai1",
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    },
+                ],
+            ),
+            AIMessage(
+                id="ai2",
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call234",
+                        "name": "search_api",
+                        "args": {"query": "another", "idx": 0},
+                    },
+                    {
+                        "id": "tool_call567",
+                        "name": "search_api",
+                        "args": {"query": "a third one", "idx": 1},
+                    },
+                ],
+            ),
+            AIMessage(id="ai3", content="answer"),
+        ]
+    )
+    return model
 
 
 @task
@@ -63,6 +66,7 @@ def foo():
 
 @entrypoint()
 async def app(state: AgentState) -> AgentState:
+    model = get_model()
     max_steps = 100
     messages = state["messages"][:]
     await foo()  # Very useful call here ya know.
