@@ -41,20 +41,36 @@ stop-postgres:
 	docker compose -f tests/compose-postgres.yml down -v
 
 start-dev-server:
-	poetry run langgraph dev --config integration_tests/example_app/langgraph.json --no-browser
+	poetry run langgraph dev --config tests/example_app/langgraph.json --no-browser &
+	@echo "Dev server started."
+	@echo "Dev server PID: $$!" > .devserver.pid
+
+stop-dev-server:
+	@if [ -f .devserver.pid ]; then \
+		kill `cat .devserver.pid` && rm .devserver.pid; \
+		 echo "Dev server stopped."; \
+	else \
+		echo "No dev server PID file found."; \
+	fi
 
 TEST ?= .
 
 test:
-	make start-postgres && poetry run pytest $(TEST); \
+	make start-postgres &&\
+	make start-dev-server &&\
+	poetry run pytest $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
+	make stop-dev-server; \
 	exit $$EXIT_CODE
 
 test_parallel:
-	make start-postgres && poetry run pytest -n auto --dist worksteal $(TEST); \
+	make start-postgres &&\
+	make start-dev-server &&\
+	poetry run pytest -n auto --dist worksteal $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
+	make stop-dev-server; \
 	exit $$EXIT_CODE
 
 integration_tests:
@@ -68,9 +84,12 @@ MAXFAIL_ARGS := $(if $(MAXFAIL),--maxfail $(MAXFAIL),)
 XDIST_ARGS := $(if $(WORKERS),-x $(XDIST_ARGS),)
 
 test_watch:
-	make start-postgres && poetry run ptw . -- --ff -vv $(XDIST_ARGS) $(MAXFAIL_ARGS) $(TEST); \
+	make start-postgres &&\
+	make start-dev-server &&\
+	poetry run ptw . -- --ff -vv $(XDIST_ARGS) $(MAXFAIL_ARGS) $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
+	make stop-dev-server; \
 	exit $$EXIT_CODE
 
 test_watch_all:
