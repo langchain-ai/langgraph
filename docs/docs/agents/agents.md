@@ -17,7 +17,7 @@ Before you start this tutorial, ensure you have the following:
 
 - An [Anthropic](https://console.anthropic.com/settings/admin-keys) API key 
 
-## 1. Install LangGraph
+## 1. Install LangGraph and LangChain
 
 If you haven't already, install LangGraph and LangChain:
 
