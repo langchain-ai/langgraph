@@ -10,7 +10,7 @@ Basic usage example:
 
     ```python
     from langgraph_sdk import get_client
-    client = get_client(url=<DEPLOYMENT_URL>)
+    client = get_client(url=<DEPLOYMENT_URL>, api_key=<API_KEY>)
 
     # Using the graph deployed with the name "agent"
     assistant_id = "agent"
@@ -34,7 +34,7 @@ Basic usage example:
 
     ```js
     import { Client } from "@langchain/langgraph-sdk";
-    const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    const client = new Client({ apiUrl: <DEPLOYMENT_URL>, apiKey: <API_KEY> });
 
     // Using the graph deployed with the name "agent"
     const assistantID = "agent";
@@ -75,12 +75,11 @@ Basic usage example:
     curl --request POST \
     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
     --header 'Content-Type: application/json' \
+    --header 'x-api-key: <API_KEY>'
     --data "{
       \"assistant_id\": \"agent\",
       \"input\": <inputs>,
-      \"stream_mode\": [
-        \"updates\"
-      ]
+      \"stream_mode\": \"updates\"
     }"
     ```
 
@@ -198,9 +197,7 @@ Basic usage example:
         --data "{
           \"assistant_id\": \"agent\",
           \"input\": {\"topic\": \"ice cream\"},
-          \"stream_mode\": [
-            \"updates\"
-          ]
+          \"stream_mode\": \"updates\"
         }"
         ```
 
@@ -880,22 +877,3 @@ To stream all events, including the state of the graph:
       \"stream_mode\": \"events\"
     }"
     ```
-
-## Use with any LLM
-
-You can use `stream_mode="custom"` to stream data from **any LLM API** — even if that API does **not** implement the LangChain chat model interface. See [this guide](../../how-tos/streaming.md#use-with-any-llm) for more information.
-
-## Disable streaming for specific chat models
-
-If your application mixes models that support streaming with those that do not, you may need to explicitly disable streaming for 
-models that do not support it. See [this guide](../../how-tos/streaming.md#disable-streaming-for-specific-chat-models) on how to disable streaming.
-
-## Async with Python < 3.11 { #async }
-
-In Python versions < 3.11, [asyncio tasks](https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task) do not support the `context` parameter.  
-This limits LangGraph ability to automatically propagate context, and affects LangGraph’s streaming mechanisms in two key ways:
-
-1. You **must** explicitly pass [`RunnableConfig`](https://python.langchain.com/docs/concepts/runnables/#runnableconfig) into async LLM calls (e.g., `ainvoke()`), as callbacks are not automatically propagated.
-2. You **cannot** use `get_stream_writer()` in async nodes or tools — you must pass a `writer` argument directly.
-
-See [this guide](../../how-tos/streaming.md#async) for more information and examples.
