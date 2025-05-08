@@ -47,7 +47,7 @@ from typing import Annotated
 
 from typing_extensions import TypedDict
 
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import StateGraph, START
 from langgraph.graph.message import add_messages
 
 
@@ -104,15 +104,7 @@ Add an `entry` point to tell the graph **where to start its work** each time it 
 graph_builder.add_edge(START, "chatbot")
 ```
 
-## 6. Set a `finish` point
-
-Set a `finish` point to instruct the graph **"any time this node is run, you can exit."**
-
-```python
-graph_builder.add_edge("chatbot", END)
-```
-
-## 7. Visualize the graph (optional)
+## 6. Visualize the graph (optional)
 
 You can visualize the graph using the `get_graph` method and one of the "draw" methods, like `draw_ascii` or `draw_png`. The `draw` methods each require additional dependencies.
 
@@ -129,7 +121,7 @@ except Exception:
 ![basic chatbot diagram](basic-chatbot.png)
 
 
-## 8. Run the chatbot
+## 7. Run the chatbot
 
 Now run the chatbot! 
 
@@ -174,7 +166,7 @@ from typing import Annotated
 from langchain.chat_models import init_chat_model
 from typing_extensions import TypedDict
 
-from langgraph.graph import StateGraph
+from langgraph.graph import StateGraph, START
 from langgraph.graph.message import add_messages
 
 
@@ -196,8 +188,7 @@ def chatbot(state: State):
 # The second argument is the function or object that will be called whenever
 # the node is used.
 graph_builder.add_node("chatbot", chatbot)
-graph_builder.set_entry_point("chatbot")
-graph_builder.set_finish_point("chatbot")
+graph_builder.add_edge(START, "chatbot")
 graph = graph_builder.compile()
 ```
 
