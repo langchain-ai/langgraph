@@ -144,18 +144,10 @@ nav:
         - how-tos/subgraph.ipynb
       - Multi-agent:
         - Overview: concepts/multi_agent.md
-        - how-tos/agent-handoffs.ipynb
-        - how-tos/multi-agent-network.ipynb
-        - how-tos/multi-agent-multi-turn-convo.ipynb
+        - how-tos/multi_agent.ipynb
       - Functional API:
         - Overview: concepts/functional_api.md
-        - how-tos/wait-user-input-functional.ipynb
-        - how-tos/review-tool-calls-functional.ipynb
-        - how-tos/persistence-functional.ipynb
-        - how-tos/cross-thread-persistence-functional.ipynb
-        - how-tos/multi-agent-network-functional.ipynb
-        - how-tos/multi-agent-multi-turn-convo-functional.ipynb
-        - how-tos/autogen-integration-functional.ipynb
+        - how-tos/use-functional-api.md
       - Other:
         # Pregel is the underlying low level API that backs
         # both the Graph API and the Functional API.
@@ -183,7 +175,9 @@ nav:
         - agents/ui.md
     - LangGraph Platform:
       - Overview: concepts/langgraph_platform.md
-      - Quickstart: cloud/quick_start.md
+      - Get started:
+        - Quickstart: tutorials/langgraph-platform/local-server.md
+        - Deployment quickstart: cloud/quick_start.md
       - Components:
         - LangGraph Server:
           - Overview: concepts/langgraph_server.md
@@ -213,15 +207,16 @@ nav:
         - Overview: concepts/auth.md
         - how-tos/auth/custom_auth.md
         - how-tos/auth/openapi_security.md
-      # NEED TO ADD MCP DOC FROM MAIN
       - Assistants:
         - Overview: concepts/assistants.md
         - cloud/how-tos/configuration_cloud.md
         - cloud/how-tos/assistant_versioning.md
       - Threads:
+        - Overview: cloud/concepts/threads.md
         - cloud/how-tos/copy_threads.md
         - cloud/how-tos/check_thread_status.md
       - Runs:
+        - Overview: cloud/concepts/runs.md
         - cloud/how-tos/background_run.md
         - cloud/how-tos/same-thread.md
         - cloud/how-tos/cron_jobs.md
@@ -236,6 +231,8 @@ nav:
         - cloud/how-tos/human_in_the_loop_edit_state.md
         - cloud/how-tos/human_in_the_loop_time_travel.md
         - cloud/how-tos/human_in_the_loop_review_tool_calls.md
+      - MCP:
+        - Overview: concepts/server-mcp.md
       - Double-texting:
         - Overview: concepts/double_texting.md
         - cloud/how-tos/interrupt_concurrent.md
@@ -243,8 +240,10 @@ nav:
         - cloud/how-tos/reject_concurrent.md
         - cloud/how-tos/enqueue_concurrent.md
       - Webhooks:
+        - Overview: cloud/concepts/webhooks.md
         - cloud/how-tos/webhooks.md
       - Cron Jobs:
+        - Overview: cloud/concepts/cron_jobs.md
         - cloud/how-tos/cron_jobs.md
       - Modifying the API:
         - how-tos/http/custom_lifespan.md
@@ -298,7 +297,6 @@ nav:
       - Environment variables: cloud/reference/env_var.md
 
   - Examples:
-    - Launch local server: tutorials/langgraph-platform/local-server.md
     - Agentic RAG: tutorials/rag/langgraph_agentic_rag.ipynb
     - Agent Supervisor: tutorials/multi_agent/agent_supervisor.ipynb
     - Customer Support: tutorials/customer-support/customer-support.ipynb

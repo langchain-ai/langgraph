@@ -121,7 +121,7 @@ curl --request POST \
 
 ## Webhook Payload
 
-LangGraph Cloud sends webhook notifications in the format of a [Run](../../concepts/langgraph_server.md/#runs). See the [API Reference](https://langchain-ai.github.io/langgraph/cloud/reference/api/api_ref.html#model/run) for details. The request payload includes run input, configuration, and other metadata in the `kwargs` field.
+LangGraph Cloud sends webhook notifications in the format of a [Run](../../cloud/concepts/runs.md). See the [API Reference](https://langchain-ai.github.io/langgraph/cloud/reference/api/api_ref.html#model/run) for details. The request payload includes run input, configuration, and other metadata in the `kwargs` field.
 
 ## Securing Webhooks
 

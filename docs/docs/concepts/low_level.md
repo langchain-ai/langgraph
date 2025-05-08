@@ -31,7 +31,7 @@ The `StateGraph` class is the main graph class to use. This is parameterized by 
 
 To build your graph, you first define the [state](#state), you then add [nodes](#nodes) and [edges](#edges), and then you compile it. What exactly is compiling your graph and why is it needed?
 
-Compiling is a pretty simple step. It provides a few basic checks on the structure of your graph (no orphaned nodes, etc). It is also where you can specify runtime args like [checkpointers](./persistence.md) and [breakpoints](#breakpoints). You compile your graph by just calling the `.compile` method:
+Compiling is a pretty simple step. It provides a few basic checks on the structure of your graph (no orphaned nodes, etc). It is also where you can specify runtime args like [checkpointers](./persistence.md) and breakpoints. You compile your graph by just calling the `.compile` method:
 
 ```python
 graph = graph_builder.compile(...)
