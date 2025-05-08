@@ -34,6 +34,7 @@ def draw_graph(
     trigger_to_nodes: Optional[Mapping[str, Sequence[str]]],
     checkpointer: Checkpointer,
     subgraphs: dict[str, Graph],
+    limit: int = 250,
 ) -> Graph:
     """Get the graph for this Pregel instance.
 
@@ -97,7 +98,9 @@ def draw_graph(
         )
         start_tasks = tasks
         # run the pregel loop
-        while tasks:
+        for _ in range(limit):
+            if not tasks:
+                break
             conditionals: dict[tuple[str, str, Any], Optional[str]] = {}
             # run task writers
             for task in tasks.values():
