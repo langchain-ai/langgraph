@@ -11,7 +11,7 @@ This guide reviews common patterns for agentic systems. In describing these syst
 
 Here is a simple way to visualize these differences:
 
-![Agent Workflow](../../concepts/img/agent_workflow.png)
+![Agent Workflow](../concepts/img/agent_workflow.png)
 
 When building agents and workflows, LangGraph offers a number of benefits including persistence, streaming, and support for debugging as well as deployment.
 
@@ -47,7 +47,7 @@ llm = ChatAnthropic(model="claude-3-5-sonnet-latest")
 
 LLM have augmentations that support building workflows and agents. These include [structured outputs](https://python.langchain.com/docs/concepts/structured_outputs/) and [tool calling](https://python.langchain.com/docs/concepts/tool_calling/), as shown in this image from the Anthropic blog on `Building Effective Agents`:
 
-![augmented_llm.png](./img/augmented_llm.png)
+![augmented_llm.png](./workflows/img/augmented_llm.png)
 
 
 ```python
@@ -91,7 +91,7 @@ As noted in the Anthropic blog on `Building Effective Agents`:
 
 > When to use this workflow: This workflow is ideal for situations where the task can be easily and cleanly decomposed into fixed subtasks. The main goal is to trade off latency for higher accuracy, by making each LLM call an easier task.
 
-![prompt_chain.png](./img/prompt_chain.png)
+![prompt_chain.png](./workflows/img/prompt_chain.png)
 
 === "Graph API"
 
@@ -252,7 +252,7 @@ With parallelization, LLMs work simultaneously on a task:
 
 > When to use this workflow: Parallelization is effective when the divided subtasks can be parallelized for speed, or when multiple perspectives or attempts are needed for higher confidence results. For complex tasks with multiple considerations, LLMs generally perform better when each consideration is handled by a separate LLM call, allowing focused attention on each specific aspect.
 
-![parallelization.png](./img/parallelization.png)
+![parallelization.png](./workflows/img/parallelization.png)
 
 === "Graph API"
 
@@ -402,7 +402,7 @@ Routing classifies an input and directs it to a followup task. As noted in the A
 
 > When to use this workflow: Routing works well for complex tasks where there are distinct categories that are better handled separately, and where classification can be handled accurately, either by an LLM or a more traditional classification model/algorithm.
 
-![routing.png](./img/routing.png)
+![routing.png](./workflows/img/routing.png)
 
 
 === "Graph API"
@@ -613,7 +613,7 @@ With orchestrator-worker, an orchestrator breaks down a task and delegates each 
 
 > When to use this workflow: This workflow is well-suited for complex tasks where you can’t predict the subtasks needed (in coding, for example, the number of files that need to be changed and the nature of the change in each file likely depend on the task). Whereas it’s topographically similar, the key difference from parallelization is its flexibility—subtasks aren't pre-defined, but determined by the orchestrator based on the specific input.
 
-![worker.png](./img/worker.png)
+![worker.png](./workflows/img/worker.png)
 
 
 === "Graph API"
@@ -857,7 +857,7 @@ In the evaluator-optimizer workflow, one LLM call generates a response while ano
 
 > When to use this workflow: This workflow is particularly effective when we have clear evaluation criteria, and when iterative refinement provides measurable value. The two signs of good fit are, first, that LLM responses can be demonstrably improved when a human articulates their feedback; and second, that the LLM can provide such feedback. This is analogous to the iterative writing process a human writer might go through when producing a polished document.
 
-![evaluator_optimizer.png](./img/evaluator_optimizer.png)
+![evaluator_optimizer.png](./workflows/img/evaluator_optimizer.png)
 
 === "Graph API"
 
@@ -1022,7 +1022,7 @@ Agents are typically implemented as an LLM performing actions (via tool-calling)
 
 > When to use agents: Agents can be used for open-ended problems where it’s difficult or impossible to predict the required number of steps, and where you can’t hardcode a fixed path. The LLM will potentially operate for many turns, and you must have some level of trust in its decision-making. Agents' autonomy makes them ideal for scaling tasks in trusted environments.
 
-![agent.png](./img/agent.png)
+![agent.png](./workflows/img/agent.png)
 
 
 ```python
