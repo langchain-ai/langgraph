@@ -2,7 +2,7 @@
 
 ## Streaming API
 
-[LangGraph SDK](../reference/sdk/) allows you to stream outputs from the LangGraph API server.
+[LangGraph SDK](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/) allows you to stream outputs from the LangGraph API server.
 
 Basic usage example:
 
@@ -116,7 +116,7 @@ Basic usage example:
     ```
 
     Once you have a running LangGraph API server, you can interact with it using
-    [LangGraph SDK](../reference/sdk/)
+    [LangGraph SDK](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/)
 
     === "Python"
 
@@ -504,7 +504,7 @@ for chunk in client.runs.stream(
     ```
 
     Once you have a running LangGraph API server, you can interact with it using
-    [LangGraph SDK](../reference/sdk/)
+    [LangGraph SDK](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/)
 
     === "Python"
 
