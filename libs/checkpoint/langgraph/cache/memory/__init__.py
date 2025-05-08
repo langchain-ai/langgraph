@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 import threading
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Generic
 
 from langgraph.cache.base import BaseCache, FullKey, Namespace, ValueT
@@ -12,7 +12,7 @@ from langgraph.checkpoint.serde.base import SerializerProtocol
 class InMemoryCache(BaseCache[ValueT], Generic[ValueT]):
     def __init__(self, *, serde: SerializerProtocol | None = None):
         super().__init__(serde=serde)
-        self._cache: dict[Namespace, dict[str, tuple[str, bytes, int | None]]] = {}
+        self._cache: dict[Namespace, dict[str, tuple[str, bytes, float | None]]] = {}
         self._lock = threading.RLock()
 
     def get(self, keys: Sequence[FullKey]) -> dict[FullKey, ValueT]:
@@ -36,10 +36,10 @@ class InMemoryCache(BaseCache[ValueT], Generic[ValueT]):
         """Asynchronously get the cached values for the given keys."""
         return self.get(keys)
 
-    def set(self, keys: dict[FullKey, tuple[ValueT, int | None]]) -> None:
+    def set(self, keys: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
         """Set the cached values for the given keys."""
         with self._lock:
-            now = datetime.datetime.now(datetime.timezone.utc).timestamp()
+            now = datetime.datetime.now(datetime.timezone.utc)
             for (ns, key), (value, ttl) in keys.items():
                 if ttl is not None:
                     delta = datetime.timedelta(seconds=ttl)
@@ -53,7 +53,7 @@ class InMemoryCache(BaseCache[ValueT], Generic[ValueT]):
                     expiry,
                 )
 
-    async def aset(self, keys: dict[FullKey, tuple[ValueT, int | None]]) -> None:
+    async def aset(self, keys: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
         """Asynchronously set the cached values for the given keys."""
         self.set(keys)
 
