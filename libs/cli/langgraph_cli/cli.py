@@ -176,6 +176,13 @@ def cli():
     " Useful if you want to test against an image already built using `langgraph build`.",
 )
 @click.option(
+    "--base-image",
+    default=None,
+    help="Base image to use for the LangGraph API server. Pin to specific versions using version tags. Defaults to langchain/langgraph-api or langchain/langgraphjs-api."
+    "\n\n    \b\nExamples:\n    --base-image langchain/langgraph-server:0.2.18  # Pin to a specific patch version"
+    "\n    --base-image langchain/langgraph-server:0.2  # Pin to a minor version (Python)",
+)
+@click.option(
     "--wait",
     is_flag=True,
     help="Wait for services to start before returning. Implies --detach",
@@ -195,6 +202,7 @@ def up(
     debugger_base_url: Optional[str],
     postgres_uri: Optional[str],
     image: Optional[str],
+    base_image: Optional[str],
 ):
     click.secho("Starting LangGraph API server...", fg="green")
     click.secho(
@@ -216,6 +224,7 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
             debugger_base_url=debugger_base_url,
             postgres_uri=postgres_uri,
             image=image,
+            base_image=base_image,
         )
         # add up + options
         args.extend(["up", "--remove-orphans"])
@@ -342,7 +351,9 @@ def _build(
 )
 @click.option(
     "--base-image",
-    hidden=True,
+    help="Base image to use for the LangGraph API server. Pin to specific versions using version tags. Defaults to langchain/langgraph-api or langchain/langgraphjs-api."
+    "\n\n    \b\nExamples:\n    --base-image langchain/langgraph-server:0.2.18  # Pin to a specific patch version"
+    "\n    --base-image langchain/langgraph-server:0.2  # Pin to a minor version (Python)",
 )
 @click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
 @cli.command(
@@ -440,7 +451,9 @@ tests
 )
 @click.option(
     "--base-image",
-    help="Base image to use for the LangGraph API server. Defaults to langchain/langgraph-api or langchain/langgraphjs-api",
+    help="Base image to use for the LangGraph API server. Pin to specific versions using version tags. Defaults to langchain/langgraph-api or langchain/langgraphjs-api."
+    "\n\n    \b\nExamples:\n    --base-image langchain/langgraph-server:0.2.18  # Pin to a specific patch version"
+    "\n    --base-image langchain/langgraph-server:0.2  # Pin to a minor version (Python)",
 )
 @log_command
 def dockerfile(
@@ -489,6 +502,7 @@ def dockerfile(
             compose_dict = langgraph_cli.docker.compose_as_dict(
                 capabilities,
                 port=8123,
+                base_image=base_image,
             )
             # Add .env file to the docker-compose.yml for the langgraph-api service
             compose_dict["services"]["langgraph-api"]["env_file"] = [".env"]
@@ -497,6 +511,11 @@ def dockerfile(
                 "context": ".",
                 "dockerfile": save_path.name,
             }
+            # Add the base_image as build arg if provided
+            if base_image:
+                compose_dict["services"]["langgraph-api"]["build"]["args"] = {
+                    "BASE_IMAGE": base_image
+                }
             f.write(langgraph_cli.docker.dict_to_yaml(compose_dict))
             secho("✅ Created: docker-compose.yml", fg="green")
 
@@ -732,6 +751,7 @@ def prepare_args_and_stdin(
         debugger_base_url=debugger_base_url,
         postgres_uri=postgres_uri,
         image=image,  # Pass image to compose YAML generator
+        base_image=base_image,
     )
     args = [
         "--project-directory",
@@ -766,6 +786,7 @@ def prepare(
     debugger_base_url: Optional[str] = None,
     postgres_uri: Optional[str] = None,
     image: Optional[str] = None,
+    base_image: Optional[str] = None,
 ) -> Tuple[List[str], str]:
     """Prepare the arguments and stdin for running the LangGraph API server."""
     config_json = langgraph_cli.config.validate_config_file(config_path)
@@ -775,7 +796,7 @@ def prepare(
             subp_exec(
                 "docker",
                 "pull",
-                langgraph_cli.config.docker_tag(config_json),
+                langgraph_cli.config.docker_tag(config_json, base_image),
                 verbose=verbose,
             )
         )
@@ -791,5 +812,6 @@ def prepare(
         debugger_base_url=debugger_base_url or f"http://127.0.0.1:{port}",
         postgres_uri=postgres_uri,
         image=image,
+        base_image=base_image,
     )
     return args, stdin
