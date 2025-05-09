@@ -68,7 +68,7 @@ When implementing a LangGraph application, a [checkpointer](../concepts/persiste
 
 There is no direct access to the database. All access to the database occurs through the [LangGraph Server](../concepts/langgraph_server.md).
 
-The database is never deleted until the deployment itself is deleted. See [Automatic Deletion](#automatic-deletion) for additional details.
+The database is never deleted until the deployment itself is deleted.
 
 !!! info
     A custom Postgres instance can be configured for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments.

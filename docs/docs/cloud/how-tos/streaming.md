@@ -645,10 +645,6 @@ The streamed output from [`messages-tuple` mode](#supported-stream-modes) is a t
 - `message_chunk`: the token or message segment from the LLM.
 - `metadata`: a dictionary containing details about the graph node and LLM invocation.
  
-!!! warning "Manual config required for async in Python < 3.11"
-
-    When using Python < 3.11 with async code in your graph, you must explicitly pass `RunnableConfig` to `ainvoke()` to enable proper streaming. See [Async with Python < 3.11](#async) for details or upgrade to Python 3.11+.
-
 ??? example "Example graph"
 
     ```python
