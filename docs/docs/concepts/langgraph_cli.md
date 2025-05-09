@@ -9,12 +9,7 @@ search:
 
 ## Installation
 
-The LangGraph CLI can be installed via Homebrew (on macOS) or pip:
-
-=== "Homebrew"
-    ```bash
-    brew install langgraph-cli
-    ```
+The LangGraph CLI can be installed via pip:
 
 === "pip" 
     ```bash
