@@ -98,6 +98,7 @@ jobs:
       - name: Check links in notebooks
         env:
           LANGCHAIN_API_KEY: test
+        if: github.event_name == 'schedule'
         run: |
           if [ "${{ github.event_name }}" == "schedule" ]; then
             echo "Running link check on all HTML files matching notebooks in docs directory..."
