@@ -136,7 +136,7 @@ def workflow(topic: str) -> dict:
 
 ## Entrypoint
 
-The [`@entrypoint`][langgraph.func.entrypoint] decorator can be used to create a workflow from a function. It encapsulates workflow logic and manages execution flow, including handling *long-running tasks* and [interrupts](./low_level.md#interrupt).
+The [`@entrypoint`][langgraph.func.entrypoint] decorator can be used to create a workflow from a function. It encapsulates workflow logic and manages execution flow, including handling *long-running tasks* and [interrupts](./human_in_the_loop.md).
 
 ### Definition
 
@@ -184,12 +184,12 @@ You will usually want to pass a **checkpointer** to the `@entrypoint` decorator 
 When declaring an `entrypoint`, you can request access to additional parameters that will be injected automatically at run time. These parameters include:
 
 
-| Parameter    | Description                                                                                                                                       |
-|--------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
-| **previous** | Access the the state associated with the previous `checkpoint` for the given thread. See [state management](#state-management).                   |
-| **store**    | An instance of [BaseStore][langgraph.store.base.BaseStore]. Useful for [long-term memory](#long-term-memory).                                     |
-| **writer**   | For streaming custom data, to write custom data to the `custom` stream. Useful for [streaming custom data](#streaming-custom-data).               |
-| **config**   | For accessing run time configuration. See [RunnableConfig](https://python.langchain.com/docs/concepts/runnables/#runnableconfig) for information. |
+| Parameter    | Description                                                                                                                                                        |
+|--------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **previous** | Access the the state associated with the previous `checkpoint` for the given thread. See [short-term-memory](#short-term-memory).                                  |
+| **store**    | An instance of [BaseStore][langgraph.store.base.BaseStore]. Useful for [long-term memory](../how-tos/use-functional-api.md#long-term-memory).                      |
+| **writer**   | Use to access the StreamWriter when working with Async Python < 3.11. See [streaming with functional API for details](../how-tos/use-functional-api.md#streaming). |
+| **config**   | For accessing run time configuration. See [RunnableConfig](https://python.langchain.com/docs/concepts/runnables/#runnableconfig) for information.                  |
 
 !!! important
 
