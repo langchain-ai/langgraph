@@ -210,14 +210,14 @@ Basic usage example:
 
 ### Supported stream modes
 
-| Mode                 | Description                                                                                                                                                    | LangGraph Library Method                                                |
-|----------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------|
-| [`values`](#stream-graph-state)         | Stream the full graph state after each [super-step](../../concepts/low_level.md#graphs). | `.stream()` / `.astream()` with [`stream_mode="values"`](../../how-tos/streaming.md#stream-graph-state)                  |
-| [`updates`](#stream-graph-state)        | Streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g., multiple nodes are run), those updates are streamed separately.                                                              | `.stream()` / `.astream()` with [`stream_mode="updates"`](../../how-tos/streaming.md#stream-graph-state)                 |
-| [`messages-tuple`](#messages) | Streams LLM tokens and metadata for the graph node where the LLM is invoked (useful for chat apps).                                   | `.stream()` / `.astream()` with [`stream_mode="messages"`](../../how-tos/streaming.md#messages)                |
-| [`debug`](#debug)          | Streams as much information as possible throughout the execution of the graph.                                                                       | `.stream()` / `.astream()` with [`stream_mode="debug"`](../../how-tos/streaming.md#stream-graph-state)                   |
-| [`custom`](#stream-custom-data)         | Streams custom data from inside your graph                                                                                                                                             | `.stream()` / `.astream()` with [`stream_mode="custom"`](../../how-tos/streaming.md#stream-custom-data)                  |
-| [`events`](#stream-events)         | Stream all events (including the state of the graph); mainly useful when migrating large LCEL apps.                       | `.astream_events()`
+| Mode                             | Description                                                                                                                                                                         | LangGraph Library Method                                                                                 |
+|----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
+| [`values`](#stream-graph-state)  | Stream the full graph state after each [super-step](../../concepts/low_level.md#graphs).                                                                                            | `.stream()` / `.astream()` with [`stream_mode="values"`](../../how-tos/streaming.md#stream-graph-state)  |
+| [`updates`](#stream-graph-state) | Streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g., multiple nodes are run), those updates are streamed separately. | `.stream()` / `.astream()` with [`stream_mode="updates"`](../../how-tos/streaming.md#stream-graph-state) |
+| [`messages-tuple`](#messages)    | Streams LLM tokens and metadata for the graph node where the LLM is invoked (useful for chat apps).                                                                                 | `.stream()` / `.astream()` with [`stream_mode="messages"`](../../how-tos/streaming.md#messages)          |
+| [`debug`](#debug)                | Streams as much information as possible throughout the execution of the graph.                                                                                                      | `.stream()` / `.astream()` with [`stream_mode="debug"`](../../how-tos/streaming.md#stream-graph-state)   |
+| [`custom`](#stream-custom-data)  | Streams custom data from inside your graph                                                                                                                                          | `.stream()` / `.astream()` with [`stream_mode="custom"`](../../how-tos/streaming.md#stream-custom-data)  |
+| [`events`](#stream-events)       | Stream all events (including the state of the graph); mainly useful when migrating large LCEL apps.                                                                                 | `.astream_events()`                                                                                      |
 
 ### Stream multiple modes
 
@@ -746,43 +746,7 @@ The streamed output from [`messages-tuple` mode](#supported-stream-modes) is a t
 
 ## Stream custom data
 
-To send **custom user-defined data** from inside a LangGraph node or tool, follow these steps:
-
-1. Use `get_stream_writer()` to access the stream writer and emit custom data.
-2. Set `stream_mode="custom"` when calling `.stream()` or `.astream()` to get the custom data in the stream. You can combine multiple modes (e.g., `["updates", "custom"]`), but at least one must be `"custom"`.
-
-!!! warning "No `get_stream_writer()` in async for Python < 3.11"
-
-    In async code running on Python < 3.11, `get_stream_writer()` will not work.  
-    Instead, add a `writer` parameter to your node or tool and pass it manually.  
-    See [Async with Python < 3.11](#async) for usage examples.
-
-??? example "Example graph"
-
-      ```python
-      from typing import TypedDict
-      from langgraph.config import get_stream_writer
-      from langgraph.graph import StateGraph, START
-
-      class State(TypedDict):
-          query: str
-          answer: str
-
-      def node(state: State):
-          writer = get_stream_writer()  # (1)!
-          writer({"custom_key": "Generating custom data inside node"}) # (2)!
-          return {"answer": "some data"}
-
-      graph = (
-          StateGraph(State)
-          .add_node(node)
-          .add_edge(START, "node")
-          .compile()
-      )
-      ```
-
-      1. Get the stream writer to send custom data.
-      2. Emit a custom key-value pair (e.g., progress update).
+To send **custom user-defined data**:
 
 === "Python"
 
@@ -826,8 +790,6 @@ To send **custom user-defined data** from inside a LangGraph node or tool, follo
       \"stream_mode\": \"custom\"
     }"
     ```
-
-See [this guide](../../how-tos/streaming.md#stream-custom-data) for more examples.
 
 ## Stream events
 
