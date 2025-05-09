@@ -29,7 +29,7 @@ If a hard shutdown occurs due to a server crash or an infrastructure failure, an
 
 ## Postgres resilience
 
-For deployment modalities where we manage the Postgres database we have periodic backups.
+For deployment modalities where we manage the Postgres database, we have periodic backups and continuously replicated standby replicas for automatic failover. This Postgres configuration is available in the [Cloud SaaS deployment option](../concepts/langgraph_cloud.md) for [`Production` deployment types](../concepts/langgraph_control_plane.md#deployment-types) only.
 
 All communication with Postgres implements retries for retry-able errors. If Postgres is momentarily unavailable, such as during a database restart, most/all traffic should continue to succeed. Prolonged failure of Postgres will render the LangGraph Server unavailable.
 
