@@ -18,28 +18,84 @@ DISABLED = os.getenv("DISABLE_NOTEBOOK_CONVERT") in ("1", "true", "True")
 
 REDIRECT_MAP = {
     # lib redirects
-    "how-tos/stream-values.ipynb": "how-tos/streaming.ipynb#values",
-    "how-tos/stream-updates.ipynb": "how-tos/streaming.ipynb#updates",
-    "how-tos/streaming-content.ipynb": "how-tos/streaming.ipynb#custom",
-    "how-tos/stream-multiple.ipynb": "how-tos/streaming.ipynb#multiple",
-    "how-tos/streaming-tokens-without-langchain.ipynb": "how-tos/streaming-tokens.ipynb#example-without-langchain",
+    "how-tos/stream-values.ipynb": "how-tos/streaming.md#stream-graph-state",
+    "how-tos/stream-updates.ipynb": "how-tos/streaming.md#stream-graph-state",
+    "how-tos/streaming-content.ipynb": "how-tos/streaming.md",
+    "how-tos/stream-multiple.ipynb": "how-tos/streaming.md#stream-multiple-nodes",
+    "how-tos/streaming-tokens-without-langchain.ipynb": "how-tos/streaming.md#use-with-any-llm",
     "how-tos/streaming-from-final-node.ipynb": "how-tos/streaming-specific-nodes.ipynb",
     "how-tos/streaming-events-from-within-tools-without-langchain.ipynb": "how-tos/streaming-events-from-within-tools.ipynb#example-without-langchain",
+    # graph-api
+    "how-tos/state-reducers.ipynb": "how-tos/graph-api#define-and-update-state",
+    "how-tos/sequence.ipynb": "how-tos/graph-api#create-a-sequence-of-steps",
+    "how-tos/branching.ipynb": "how-tos/graph-api#create-branches",
+    "how-tos/recursion-limit.ipynb": "how-tos/graph-api#create-and-control-loops",
+    "how-tos/visualization.ipynb": "how-tos/graph-api#visualize-your-graph",
+    "how-tos/input_output_schema.ipynb": "how-tos/graph-api#define-input-and-output-schemas",
+    "how-tos/pass_private_state.ipynb": "how-tos/graph-api#pass-private-state-between-nodes",
+    "how-tos/state-model.ipynb": "how-tos/graph-api#use-pydantic-models-for-graph-state",
+    "how-tos/map-reduce.ipynb": "how-tos/graph-api/#map-reduce-and-the-send-api",
+    "how-tos/command.ipynb": "how-tos/graph-api/#combine-control-flow-and-state-updates-with-command",
+    "how-tos/configuration.ipynb": "how-tos/graph-api/#add-runtime-configuration",
+    "how-tos/node-retries.ipynb": "how-tos/graph-api/#add-retry-policies",
+    "how-tos/return-when-recursion-limit-hits.ipynb": "how-tos/graph-api/#impose-a-recursion-limit",
+    # memory how-tos
+    "how-tos/memory/manage-conversation-history.ipynb": "how-tos/memory.ipynb",
+    "how-tos/memory/delete-messages.ipynb": "how-tos/memory.ipynb#delete-messages",
+    "how-tos/memory/add-summary-conversation-history.ipynb": "how-tos/memory.ipynb#summarize-messages",
+    # subgraph how-tos
+    "how-tos/subgraph-transform-state.ipynb": "how-tos/subgraph.ipynb#different-state-schemas",
+    "how-tos/subgraphs-manage-state.ipynb": "how-tos/subgraph.ipynb#add-persistence",
+    # persistence how-tos
+    "how-tos/persistence_postgres.ipynb": "how-tos/persistence.ipynb#use-in-production",
+    "how-tos/persistence_mongodb.ipynb": "how-tos/persistence.ipynb#use-in-production",
+    "how-tos/persistence_redis.ipynb": "how-tos/persistence.ipynb#use-in-production",
+    "how-tos/subgraph-persistence.ipynb": "how-tos/persistence.ipynb#use-with-subgraphs",
+    "how-tos/cross-thread-persistence.ipynb": "how-tos/persistence.ipynb#add-long-term-memory",
+    # tool calling how-tos
+    "how-tos/tool-calling-errors.ipynb": "how-tos/tool-calling.ipynb#handle-errors",
+    "how-tos/pass-config-to-tools.ipynb": "how-tos/tool-calling.ipynb#access-config",
+    "how-tos/pass-run-time-values-to-tools.ipynb": "how-tos/tool-calling.ipynb#read-state",
+    "how-tos/update-state-from-tools.ipynb": "how-tos/tool-calling.ipynb#update-state",
+    # multi-agent how-tos
+    "how-tos/agent-handoffs.ipynb": "how-tos/multi_agent.ipynb#handoffs",
+    "how-tos/multi-agent-network.ipynb": "how-tos/multi_agent.ipynb#use-in-a-multi-agent-system",
+    "how-tos/multi-agent-multi-turn-convo.ipynb": "how-tos/multi_agent.ipynb#multi-turn-conversation",
     # cloud redirects
-    "cloud/index.md": "concepts/index.md#langgraph-platform",
-    "cloud/how-tos/index.md": "how-tos/index.md#langgraph-platform",
+    "cloud/index.md": "index.md",
+    "cloud/how-tos/index.md": "concepts/langgraph_platform",
     "cloud/concepts/api.md": "concepts/langgraph_server.md",
     "cloud/concepts/cloud.md": "concepts/langgraph_cloud.md",
     "cloud/faq/studio.md": "concepts/langgraph_studio.md#studio-faqs",
+    # cloud streaming redirects
+    "cloud/how-tos/stream_values.md": "cloud/how-tos/streaming.md#stream-graph-state",
+    "cloud/how-tos/stream_updates.md": "cloud/how-tos/streaming.md#stream-graph-state",
+    "cloud/how-tos/stream_messages.md": "cloud/how-tos/streaming.md#messages",
+    "cloud/how-tos/stream_events.md": "cloud/how-tos/streaming.md#stream-events",
+    "cloud/how-tos/stream_debug.md": "cloud/how-tos/streaming.md#debug",
+    "cloud/how-tos/stream_multiple.md": "cloud/how-tos/streaming.md#stream-multiple-modes",
     # prebuit redirects
     "how-tos/create-react-agent.ipynb": "agents/agents.md#basic-configuration",
     "how-tos/create-react-agent-memory.ipynb": "agents/memory.md",
     "how-tos/create-react-agent-system-prompt.ipynb": "agents/context.md#prompts",
     "how-tos/create-react-agent-hitl.ipynb": "agents/human-in-the-loop.md",
     "how-tos/create-react-agent-structured-output.ipynb": "agents/agents.md#structured-output",
+    # Time-travel
+    "how-tos/human_in_the_loop/edit-graph-state.ipynb": "how-tos/human_in_the_loop/time-travel.ipynb",
+    # breakpoints
+    "how-tos/human_in_the_loop/dynamic_breakpoints.ipynb": "how-tos/human_in_the_loop/breakpoints.ipynb",
     # misc
     "prebuilt.md": "agents/prebuilt.md",
-    "reference/prebuilt.md": "reference/agents.md"
+    "reference/prebuilt.md": "reference/agents.md",
+    "concepts/high_level.md": "index.md",
+    "concepts/index.md": "index.md",
+    "concepts/v0-human-in-the-loop.md": "concepts/human-in-the-loop.md",
+    "how-tos/index.md": "index.md",
+    "tutorials/introduction.ipynb": "concepts/why-langgraph.md",
+    # deployment redirects
+    "how-tos/deploy-self-hosted.md": "cloud/deployment/self_hosted_data_plane.md",
+    "concepts/self_hosted.md": "concepts/langgraph_self_hosted_data_plane.md"
+
 }
 
 

@@ -11,7 +11,7 @@ To deploy a [LangGraph Server](../concepts/langgraph_server.md), follow the how-
 
 The Standalone Container deployment option is the least restrictive model for deployment. There is no [control plane](./langgraph_control_plane.md). [Data plane](./langgraph_data_plane.md) infrastructure is managed by you.
 
-|                   | [Control Plane](../concepts/langgraph_control_plane.md) | [Data Plane](../concepts/langgraph_data_plane.md) |
+|                   | [Control plane](../concepts/langgraph_control_plane.md) | [Data plane](../concepts/langgraph_data_plane.md) |
 |-------------------|-------------------|------------|
 | **What is it?** | n/a | <ul><li>LangGraph Servers</li><li>Postgres, Redis, etc</li></ul> |
 | **Where is it hosted?** | n/a | Your cloud |

@@ -9,10 +9,9 @@ search:
 
     - [LangGraph Platform](./langgraph_platform.md)
     - [LangGraph Server](./langgraph_server.md)
+    - [LangGraph CLI](./langgraph_cli.md)
 
-LangGraph Studio offers a new way to develop LLM applications by providing a specialized agent IDE that enables visualization, interaction, and debugging of complex agentic applications.
-
-With visual graphs and the ability to edit state, you can better understand agent workflows and iterate faster. LangGraph Studio integrates with LangSmith allowing you to collaborate with teammates to debug failure modes.
+LangGraph Studio is a specialized agent IDE that enables visualization, interaction, and debugging of agentic systems that implement the LangGraph Server API protocol. Studio also integrates with LangSmith to enable tracing, evaluation, and prompt engineering.
 
 ![](img/lg_studio.png)
 
@@ -20,44 +19,17 @@ With visual graphs and the ability to edit state, you can better understand agen
 
 The key features of LangGraph Studio are:
 
-- Visualize your graphs
-- Test your graph by running it from the UI
-- Debug your agent by [modifying its state and rerunning](human_in_the_loop.md)
+- Visualize your graph architecture
+- Run and interact with your graph in a GUI
 - Create and manage [assistants](assistants.md)
-- View and manage [threads](persistence.md#threads)
+- View and manage [threads](../cloud/concepts/threads.md)
 - View and manage [long term memory](memory.md)
-- Add node input/outputs to [LangSmith](https://smith.langchain.com/) datasets for testing
+- Debug agent state via [time travel](time-travel.md)
 
-## Getting started
 
-There are two ways to connect your LangGraph app with the studio:
+LangGraph Studio works for graphs that are deployed on [LangGraph Platform](../cloud/quick_start.md) or for graphs that are running locally via the [LangGraph Server](../tutorials/langgraph-platform/local-server.md).
 
-### Deployed Application
 
-If you have deployed your LangGraph application on LangGraph Platform, you can access the studio as part of that deployment. To do so, navigate to the deployment in LangGraph Platform within the LangSmith UI and click the "LangGraph Studio" button.
-
-### Local Development Server
-
-If you have a LangGraph application that is [running locally in-memory](../tutorials/langgraph-platform/local-server.md), you can connect it to LangGraph Studio in the browser within LangSmith.
-
-By default, starting the local server with `langgraph dev` will run the server at `http://127.0.0.1:2024` and automatically open Studio in your browser. However, you can also manually connect to Studio by either:
-
-1. In LangGraph Platform, clicking the "LangGraph Studio" button and entering the server URL in the dialog that appears.
-
-   or
-
-2. Navigating to the URL in your browser:
-
-```
-https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
-```
-
-## Related
-
-For more information please see the following:
-
-- [LangGraph Studio how-to guides](../how-tos/index.md#langgraph-studio)
-- [LangGraph CLI Documentation](../cloud/reference/cli.md)
 
 ## LangGraph Studio FAQs
 
@@ -105,35 +77,6 @@ def routing_function(state: GraphState) -> Literal["node_b","node_c"]:
         return "node_c"
 ```
 
-### Studio Desktop FAQs
-
-!!! warning "Deprecation Warning"
-    In order to support a wider range of platforms and users, we now recommend following the above instructions to connect to LangGraph Studio using the development server instead of the desktop app.
-
-The LangGraph Studio Desktop App is a standalone application that allows you to connect to your LangGraph application and visualize and interact with your graph. It is available for MacOS only and requires Docker to be installed.
-
-#### Why is my project failing to start?
-
-In addition to the reasons listed above, for the desktop app there are a few more reasons that your project might fail to start:
-
-!!! Important "Note "
-
-    LangGraph Studio Desktop automatically populates `LANGCHAIN_*` environment variables for license verification and tracing, regardless of the contents of the `.env` file. All other environment variables defined in `.env` will be read as normal.
-
-##### Docker issues
-
-LangGraph Studio (desktop) requires Docker Desktop version 4.24 or higher. Please make sure you have a version of Docker installed that satisfies that requirement and also make sure you have the Docker Desktop app up and running before trying to use LangGraph Studio. In addition, make sure you have docker-compose updated to version 2.22.0 or higher.
-
-##### Incorrect data region
-
-If you receive a license verification error when attempting to start the LangGraph Server, you may be logged into the incorrect LangSmith data region. Ensure that you're logged into the correct LangSmith data region and ensure that the LangSmith account has access to LangGraph platform.
-
-1. In the top right-hand corner, click the user icon and select `Logout`.
-1. At the login screen, click the `Data Region` dropdown menu and select the appropriate data region. Then click `Login to LangSmith`.
-
-### How do I reload the app?
-
-If you would like to reload the app, don't use Command+R as you might normally do. Instead, close and reopen the app for a full refresh.
 
 ### How does automatic rebuilding work?
 
