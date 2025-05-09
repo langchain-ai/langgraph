@@ -44,7 +44,7 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
 )
-from langgraph.checkpoint.memory import InMemorySaver, MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, PUSH, START
 from langgraph.errors import InvalidUpdateError, NodeInterrupt
 from langgraph.func import entrypoint, task
@@ -237,7 +237,7 @@ async def test_py_async_with_cancel_behavior() -> None:
 async def test_checkpoint_put_after_cancellation() -> None:
     logs: list[str] = []
 
-    class LongPutCheckpointer(MemorySaver):
+    class LongPutCheckpointer(InMemorySaver):
         async def aput(
             self,
             config: RunnableConfig,
@@ -301,7 +301,7 @@ async def test_checkpoint_put_after_cancellation() -> None:
 async def test_checkpoint_put_after_cancellation_stream_anext() -> None:
     logs: list[str] = []
 
-    class LongPutCheckpointer(MemorySaver):
+    class LongPutCheckpointer(InMemorySaver):
         async def aput(
             self,
             config: RunnableConfig,
@@ -366,7 +366,7 @@ async def test_checkpoint_put_after_cancellation_stream_anext() -> None:
 async def test_checkpoint_put_after_cancellation_stream_events_anext() -> None:
     logs: list[str] = []
 
-    class LongPutCheckpointer(MemorySaver):
+    class LongPutCheckpointer(InMemorySaver):
         async def aput(
             self,
             config: RunnableConfig,
@@ -6256,7 +6256,7 @@ async def test_doubly_nested_graph_interrupts(
         ]
 
 
-async def test_checkpoint_metadata() -> None:
+async def test_checkpoint_metadata(async_checkpointer: BaseCheckpointSaver) -> None:
     """This test verifies that a run's configurable fields are merged with the
     previous checkpoint config for each step in the run.
     """
@@ -6326,13 +6326,11 @@ async def test_checkpoint_metadata() -> None:
     workflow.add_edge("tools", "agent")
 
     # graph w/o interrupt
-    checkpointer_1 = InMemorySaver()
-    app = workflow.compile(checkpointer=checkpointer_1)
+    app = workflow.compile(checkpointer=async_checkpointer)
 
     # graph w/ interrupt
-    checkpointer_2 = InMemorySaver()
     app_w_interrupt = workflow.compile(
-        checkpointer=checkpointer_2, interrupt_before=["tools"]
+        checkpointer=async_checkpointer, interrupt_before=["tools"]
     )
 
     # assertions
@@ -6352,7 +6350,7 @@ async def test_checkpoint_metadata() -> None:
     config = {"configurable": {"thread_id": "1"}}
 
     # assert that checkpoint metadata contains the run's configurable fields
-    chkpnt_metadata_1 = (await checkpointer_1.aget_tuple(config)).metadata
+    chkpnt_metadata_1 = (await async_checkpointer.aget_tuple(config)).metadata
     assert chkpnt_metadata_1["thread_id"] == "1"
     assert chkpnt_metadata_1["test_config_1"] == "foo"
     assert chkpnt_metadata_1["test_config_2"] == "bar"
@@ -6360,7 +6358,7 @@ async def test_checkpoint_metadata() -> None:
     # Verify that all checkpoint metadata have the expected keys. This check
     # is needed because a run may have an arbitrary number of steps depending
     # on how the graph is constructed.
-    chkpnt_tuples_1 = checkpointer_1.alist(config)
+    chkpnt_tuples_1 = async_checkpointer.alist(config)
     async for chkpnt_tuple in chkpnt_tuples_1:
         assert chkpnt_tuple.metadata["thread_id"] == "1"
         assert chkpnt_tuple.metadata["test_config_1"] == "foo"
@@ -6381,7 +6379,7 @@ async def test_checkpoint_metadata() -> None:
     config = {"configurable": {"thread_id": "2"}}
 
     # assert that checkpoint metadata contains the run's configurable fields
-    chkpnt_metadata_2 = (await checkpointer_2.aget_tuple(config)).metadata
+    chkpnt_metadata_2 = (await async_checkpointer.aget_tuple(config)).metadata
     assert chkpnt_metadata_2["thread_id"] == "2"
     assert chkpnt_metadata_2["test_config_3"] == "foo"
     assert chkpnt_metadata_2["test_config_4"] == "bar"
@@ -6399,7 +6397,7 @@ async def test_checkpoint_metadata() -> None:
     )
 
     # assert that checkpoint metadata contains the run's configurable fields
-    chkpnt_metadata_3 = (await checkpointer_2.aget_tuple(config)).metadata
+    chkpnt_metadata_3 = (await async_checkpointer.aget_tuple(config)).metadata
     assert chkpnt_metadata_3["thread_id"] == "2"
     assert chkpnt_metadata_3["test_config_3"] == "foo"
     assert chkpnt_metadata_3["test_config_4"] == "bar"
@@ -6407,7 +6405,7 @@ async def test_checkpoint_metadata() -> None:
     # Verify that all checkpoint metadata have the expected keys. This check
     # is needed because a run may have an arbitrary number of steps depending
     # on how the graph is constructed.
-    chkpnt_tuples_2 = checkpointer_2.alist(config)
+    chkpnt_tuples_2 = async_checkpointer.alist(config)
     async for chkpnt_tuple in chkpnt_tuples_2:
         assert chkpnt_tuple.metadata["thread_id"] == "2"
         assert chkpnt_tuple.metadata["test_config_3"] == "foo"
@@ -6538,7 +6536,7 @@ async def test_store_injected_async(
         )  # still overwriting the same one
 
 
-async def test_debug_retry():
+async def test_debug_retry(async_checkpointer: BaseCheckpointSaver):
     class State(TypedDict):
         messages: Annotated[list[str], operator.add]
 
@@ -6555,15 +6553,13 @@ async def test_debug_retry():
     builder.add_edge("one", "two")
     builder.add_edge("two", END)
 
-    saver = InMemorySaver()
-
-    graph = builder.compile(checkpointer=saver)
+    graph = builder.compile(checkpointer=async_checkpointer)
 
     config = {"configurable": {"thread_id": "1"}}
     await graph.ainvoke({"messages": []}, config=config)
 
     # re-run step: 1
-    async for c in saver.alist(config):
+    async for c in async_checkpointer.alist(config):
         if c.metadata["step"] == 1:
             target_config = c.parent_config
             break
@@ -6603,7 +6599,7 @@ async def test_debug_retry():
         assert stream_parent_conf == history_parent_conf
 
 
-async def test_debug_subgraphs():
+async def test_debug_subgraphs(async_checkpointer: BaseCheckpointSaver):
     class State(TypedDict):
         messages: Annotated[list[str], operator.add]
 
@@ -6628,7 +6624,7 @@ async def test_debug_subgraphs():
     parent.add_edge("p_one", "p_two")
     parent.add_edge("p_two", END)
 
-    graph = parent.compile(checkpointer=InMemorySaver())
+    graph = parent.compile(checkpointer=async_checkpointer)
 
     config = {"configurable": {"thread_id": "1"}}
     events = [
@@ -6669,7 +6665,7 @@ async def test_debug_subgraphs():
             assert stream_task.get("state") == history_task.state
 
 
-async def test_debug_nested_subgraphs():
+async def test_debug_nested_subgraphs(async_checkpointer: BaseCheckpointSaver):
     from collections import defaultdict
 
     class State(TypedDict):
@@ -6703,7 +6699,7 @@ async def test_debug_nested_subgraphs():
     grand_parent.add_edge("gp_one", "gp_two")
     grand_parent.add_edge("gp_two", END)
 
-    graph = grand_parent.compile(checkpointer=InMemorySaver())
+    graph = grand_parent.compile(checkpointer=async_checkpointer)
 
     config = {"configurable": {"thread_id": "1"}}
     events = [
@@ -8245,10 +8241,10 @@ async def test_entrypoint_stateful_update_state(
 
 
 async def test_entrypoint_from_async_generator() -> None:
-    """@entrypoint does not support sync generators."""
+    """@entrypoint does not support async generators."""
     with pytest.raises(NotImplementedError):
 
-        @entrypoint(checkpointer=MemorySaver())
+        @entrypoint()
         async def foo(inputs) -> Any:
             yield "a"
             yield "b"
@@ -8627,7 +8623,9 @@ async def test_interrupt_subgraph_reenter_checkpointer_true(
 
 
 @NEEDS_CONTEXTVARS
-async def test_handles_multiple_interrupts_from_tasks() -> None:
+async def test_handles_multiple_interrupts_from_tasks(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
     @task
     async def add_participant(name: str) -> str:
         feedback = interrupt(f"Hey do you want to add {name}?")
@@ -8640,7 +8638,7 @@ async def test_handles_multiple_interrupts_from_tasks() -> None:
 
         raise ValueError("Invalid feedback")
 
-    @entrypoint(checkpointer=MemorySaver())
+    @entrypoint(checkpointer=async_checkpointer)
     async def program(_state: Any) -> list[str]:
         first = await add_participant("James")
         second = await add_participant("Will")
@@ -8696,7 +8694,9 @@ async def test_handles_multiple_interrupts_from_tasks() -> None:
 
 
 @NEEDS_CONTEXTVARS
-async def test_interrupts_in_tasks_surfaced_once() -> None:
+async def test_interrupts_in_tasks_surfaced_once(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
     @task
     async def add_participant(name: str) -> str:
         feedback = interrupt(f"Hey do you want to add {name}?")
@@ -8709,7 +8709,7 @@ async def test_interrupts_in_tasks_surfaced_once() -> None:
 
         raise ValueError("Invalid feedback")
 
-    @entrypoint(checkpointer=MemorySaver())
+    @entrypoint(checkpointer=async_checkpointer)
     async def program(_state: Any) -> list[str]:
         first = await add_participant("James")
         second = await add_participant("Will")

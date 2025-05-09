@@ -44,7 +44,7 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
 )
-from langgraph.checkpoint.memory import InMemorySaver, MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.config import get_stream_writer
 from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, START
 from langgraph.errors import InvalidUpdateError
@@ -217,7 +217,7 @@ def test_checkpoint_errors() -> None:
         def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
             raise ValueError("Faulty get_tuple")
 
-    class FaultyPutCheckpointer(MemorySaver):
+    class FaultyPutCheckpointer(InMemorySaver):
         def put(
             self,
             config: RunnableConfig,
@@ -4546,7 +4546,7 @@ def test_repeat_condition(snapshot: SnapshotAssertion) -> None:
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
 
-def test_checkpoint_metadata() -> None:
+def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:
     """This test verifies that a run's configurable fields are merged with the
     previous checkpoint config for each step in the run.
     """
@@ -4617,13 +4617,11 @@ def test_checkpoint_metadata() -> None:
     workflow.add_edge("tools", "agent")
 
     # graph w/o interrupt
-    checkpointer_1 = InMemorySaver()
-    app = workflow.compile(checkpointer=checkpointer_1)
+    app = workflow.compile(checkpointer=sync_checkpointer)
 
     # graph w/ interrupt
-    checkpointer_2 = InMemorySaver()
     app_w_interrupt = workflow.compile(
-        checkpointer=checkpointer_2, interrupt_before=["tools"]
+        checkpointer=sync_checkpointer, interrupt_before=["tools"]
     )
 
     # assertions
@@ -4664,7 +4662,7 @@ def test_checkpoint_metadata() -> None:
     config = {"configurable": {"thread_id": "1"}}
 
     # assert that checkpoint metadata contains the run's configurable fields
-    chkpnt_metadata_1 = checkpointer_1.get_tuple(config).metadata
+    chkpnt_metadata_1 = sync_checkpointer.get_tuple(config).metadata
     assert chkpnt_metadata_1["thread_id"] == "1"
     assert chkpnt_metadata_1["test_config_1"] == "foo"
     assert chkpnt_metadata_1["test_config_2"] == "bar"
@@ -4672,7 +4670,7 @@ def test_checkpoint_metadata() -> None:
     # Verify that all checkpoint metadata have the expected keys. This check
     # is needed because a run may have an arbitrary number of steps depending
     # on how the graph is constructed.
-    chkpnt_tuples_1 = checkpointer_1.list(config)
+    chkpnt_tuples_1 = sync_checkpointer.list(config)
     for chkpnt_tuple in chkpnt_tuples_1:
         assert chkpnt_tuple.metadata["thread_id"] == "1"
         assert chkpnt_tuple.metadata["test_config_1"] == "foo"
@@ -4693,7 +4691,7 @@ def test_checkpoint_metadata() -> None:
     config = {"configurable": {"thread_id": "2"}}
 
     # assert that checkpoint metadata contains the run's configurable fields
-    chkpnt_metadata_2 = checkpointer_2.get_tuple(config).metadata
+    chkpnt_metadata_2 = sync_checkpointer.get_tuple(config).metadata
     assert chkpnt_metadata_2["thread_id"] == "2"
     assert chkpnt_metadata_2["test_config_3"] == "foo"
     assert chkpnt_metadata_2["test_config_4"] == "bar"
@@ -4711,7 +4709,7 @@ def test_checkpoint_metadata() -> None:
     )
 
     # assert that checkpoint metadata contains the run's configurable fields
-    chkpnt_metadata_3 = checkpointer_2.get_tuple(config).metadata
+    chkpnt_metadata_3 = sync_checkpointer.get_tuple(config).metadata
     assert chkpnt_metadata_3["thread_id"] == "2"
     assert chkpnt_metadata_3["test_config_3"] == "foo"
     assert chkpnt_metadata_3["test_config_4"] == "bar"
@@ -4719,7 +4717,7 @@ def test_checkpoint_metadata() -> None:
     # Verify that all checkpoint metadata have the expected keys. This check
     # is needed because a run may have an arbitrary number of steps depending
     # on how the graph is constructed.
-    chkpnt_tuples_2 = checkpointer_2.list(config)
+    chkpnt_tuples_2 = sync_checkpointer.list(config)
     for chkpnt_tuple in chkpnt_tuples_2:
         assert chkpnt_tuple.metadata["thread_id"] == "2"
         assert chkpnt_tuple.metadata["test_config_3"] == "foo"
@@ -4862,11 +4860,8 @@ def test_xray_lance(snapshot: SnapshotAssertion):
         "answer_question", route_messages, ["ask_question", END]
     )
 
-    # Set up memory
-    memory = InMemorySaver()
-
     # Interview
-    interview_graph = interview_builder.compile(checkpointer=memory).with_config(
+    interview_graph = interview_builder.compile().with_config(
         run_name="Conduct Interviews"
     )
 
@@ -5142,7 +5137,7 @@ def test_enum_node_names():
     assert graph.invoke({"foo": "hello"}) == {"foo": "hello", "bar": "hello!"}
 
 
-def test_debug_retry():
+def test_debug_retry(sync_checkpointer: BaseCheckpointSaver):
     class State(TypedDict):
         messages: Annotated[list[str], operator.add]
 
@@ -5159,16 +5154,16 @@ def test_debug_retry():
     builder.add_edge("one", "two")
     builder.add_edge("two", END)
 
-    saver = InMemorySaver()
-
-    graph = builder.compile(checkpointer=saver)
+    graph = builder.compile(checkpointer=sync_checkpointer)
 
     config = {"configurable": {"thread_id": "1"}}
     graph.invoke({"messages": []}, config=config)
 
     # re-run step: 1
     target_config = next(
-        c.parent_config for c in saver.list(config) if c.metadata["step"] == 1
+        c.parent_config
+        for c in sync_checkpointer.list(config)
+        if c.metadata["step"] == 1
     )
     update_config = graph.update_state(target_config, values=None)
 
@@ -5202,7 +5197,7 @@ def test_debug_retry():
         assert stream_parent_conf == history_parent_conf
 
 
-def test_debug_subgraphs():
+def test_debug_subgraphs(sync_checkpointer: BaseCheckpointSaver):
     class State(TypedDict):
         messages: Annotated[list[str], operator.add]
 
@@ -5227,7 +5222,7 @@ def test_debug_subgraphs():
     parent.add_edge("p_one", "p_two")
     parent.add_edge("p_two", END)
 
-    graph = parent.compile(checkpointer=InMemorySaver())
+    graph = parent.compile(checkpointer=sync_checkpointer)
 
     config = {"configurable": {"thread_id": "1"}}
     events = [
@@ -5269,7 +5264,7 @@ def test_debug_subgraphs():
             assert stream_task.get("state") == history_task.state
 
 
-def test_debug_nested_subgraphs():
+def test_debug_nested_subgraphs(sync_checkpointer: BaseCheckpointSaver):
     from collections import defaultdict
 
     class State(TypedDict):
@@ -5303,7 +5298,7 @@ def test_debug_nested_subgraphs():
     grand_parent.add_edge("gp_one", "gp_two")
     grand_parent.add_edge("gp_two", END)
 
-    graph = grand_parent.compile(checkpointer=InMemorySaver())
+    graph = grand_parent.compile(checkpointer=sync_checkpointer)
 
     config = {"configurable": {"thread_id": "1"}}
     events = [
@@ -7024,7 +7019,7 @@ def test_entrypoint_from_sync_generator() -> None:
 
     with pytest.raises(NotImplementedError):
 
-        @entrypoint(checkpointer=MemorySaver())
+        @entrypoint()
         def foo(inputs, previous=None) -> Any:
             previous_return_values.append(previous)
             yield "a"
@@ -7393,11 +7388,13 @@ def test_entrypoint_output_schema_with_return_and_save() -> None:
             return entrypoint.final(value=1, save=1)  # type: ignore
 
 
-def test_entrypoint_with_return_and_save() -> None:
+def test_entrypoint_with_return_and_save(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
     """Test entrypoint with return and save."""
     previous_ = None
 
-    @entrypoint(checkpointer=MemorySaver())
+    @entrypoint(checkpointer=sync_checkpointer)
     def foo(msg: str, *, previous: Any) -> entrypoint.final[int, list[str]]:
         nonlocal previous_
         previous_ = previous
