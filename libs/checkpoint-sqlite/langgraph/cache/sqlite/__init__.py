@@ -95,20 +95,23 @@ class SqliteCache(BaseCache[ValueT]):
         """Asynchronously set the cached values for the given keys and TTLs."""
         await asyncio.to_thread(self.set, mapping)
 
-    def delete(self, keys: Sequence[Namespace]) -> None:
-        """Delete the cached values for the given namespaces."""
-        if not keys:
-            return
+    def clear(self, namespaces: Sequence[Namespace] | None = None) -> None:
+        """Delete the cached values for the given namespaces.
+        If no namespaces are provided, clear all cached values."""
         with self._lock, self._conn:
-            placeholders = ",".join("?" for _ in keys)
-            self._conn.execute(
-                f"DELETE FROM cache WHERE (ns) IN ({placeholders})",
-                tuple(",".join(key) for key in keys),
-            )
+            if namespaces is None:
+                self._conn.execute("DELETE FROM cache")
+            else:
+                placeholders = ",".join("?" for _ in namespaces)
+                self._conn.execute(
+                    f"DELETE FROM cache WHERE (ns) IN ({placeholders})",
+                    tuple(",".join(key) for key in namespaces),
+                )
 
-    async def adelete(self, keys: Sequence[Namespace]) -> None:
-        """Asynchronously delete the cached values for the given namespaces."""
-        await asyncio.to_thread(self.delete, keys)
+    async def aclear(self, namespaces: Sequence[Namespace] | None = None) -> None:
+        """Asynchronously delete the cached values for the given namespaces.
+        If no namespaces are provided, clear all cached values."""
+        await asyncio.to_thread(self.delete, namespaces)
 
     def __del__(self) -> None:
         try:

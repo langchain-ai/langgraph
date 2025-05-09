@@ -69,12 +69,12 @@ class TaskFunction(Generic[P, T]):
     def clear_cache(self, cache: BaseCache) -> None:
         """Clear the cache for this task."""
         if self.cache_policy is not None:
-            cache.delete(((CACHE_NS_WRITES, identifier(self.func) or "__dynamic__"),))
+            cache.clear(((CACHE_NS_WRITES, identifier(self.func) or "__dynamic__"),))
 
     async def aclear_cache(self, cache: BaseCache) -> None:
         """Clear the cache for this task."""
         if self.cache_policy is not None:
-            await cache.adelete(
+            await cache.aclear(
                 ((CACHE_NS_WRITES, identifier(self.func) or "__dynamic__"),)
             )
 

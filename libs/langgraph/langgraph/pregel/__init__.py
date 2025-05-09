@@ -3008,7 +3008,7 @@ class Pregel(PregelProtocol):
                     ),
                 )
         # clear cache
-        self.cache.delete(namespaces)
+        self.cache.clear(namespaces)
 
     async def aclear_cache(self, nodes: Sequence[str] | None = None) -> None:
         """Asynchronously clear the cache for the given nodes."""
@@ -3027,7 +3027,7 @@ class Pregel(PregelProtocol):
                     ),
                 )
         # clear cache
-        await self.cache.adelete(namespaces)
+        await self.cache.aclear(namespaces)
 
 
 def _trigger_to_nodes(nodes: dict[str, PregelNode]) -> Mapping[str, Sequence[str]]:

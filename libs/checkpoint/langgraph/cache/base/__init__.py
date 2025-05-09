@@ -38,9 +38,11 @@ class BaseCache(ABC, Generic[ValueT]):
         """Asynchronously set the cached values for the given keys and TTLs."""
 
     @abstractmethod
-    def delete(self, keys: Sequence[Namespace]) -> None:
-        """Delete the cached values for the given keys."""
+    def clear(self, namespaces: Sequence[Namespace] | None = None) -> None:
+        """Delete the cached values for the given namespaces.
+        If no namespaces are provided, clear all cached values."""
 
     @abstractmethod
-    async def adelete(self, keys: Sequence[Namespace]) -> None:
-        """Asynchronously delete the cached values for the given keys."""
+    async def aclear(self, namespaces: Sequence[Namespace] | None = None) -> None:
+        """Asynchronously delete the cached values for the given namespaces.
+        If no namespaces are provided, clear all cached values."""

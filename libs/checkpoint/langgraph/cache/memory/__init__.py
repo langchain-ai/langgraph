@@ -56,13 +56,18 @@ class InMemoryCache(BaseCache[ValueT]):
         """Asynchronously set the cached values for the given keys."""
         self.set(keys)
 
-    def delete(self, keys: Sequence[Namespace]) -> None:
-        """Delete the cached values for the given namespaces."""
+    def clear(self, namespaces: Sequence[Namespace] | None = None) -> None:
+        """Delete the cached values for the given namespaces.
+        If no namespaces are provided, clear all cached values."""
         with self._lock:
-            for ns in keys:
-                if ns in self._cache:
-                    del self._cache[ns]
+            if namespaces is None:
+                self._cache.clear()
+            else:
+                for ns in namespaces:
+                    if ns in self._cache:
+                        del self._cache[ns]
 
-    async def adelete(self, keys: Sequence[Namespace]) -> None:
-        """Asynchronously delete the cached values for the given namespaces."""
-        self.delete(keys)
+    async def aclear(self, namespaces: Sequence[Namespace] | None = None) -> None:
+        """Asynchronously delete the cached values for the given namespaces.
+        If no namespaces are provided, clear all cached values."""
+        self.clear(namespaces)
