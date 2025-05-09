@@ -3,7 +3,7 @@ search:
   boost: 2
 ---
 
-# LangGraph Platform: Scalability & Resilience
+# Scalability & Resilience
 
 LangGraph Platform is designed to scale horizontally with your workload. Each instance of the service is stateless, and keeps no resources in memory. The service is designed to gracefully handle new instances being added or removed, including hard shutdown cases.
 
@@ -25,16 +25,16 @@ When a graceful shutdown request is received (SIGINT) an instance enters shutdow
 - gives any in-progress runs a limited number of seconds to finish (if not finished it will be put back in the queue)
 - stops the instance from picking up more runs from the queue
 
-If a hard shutdown occurs, eg. due to a server crash, or an infra failure, any runs that were in progress will be picked up by a periodic sweeper task that looks for in-progress runs that have breached their heartbeat window, which will put them back in the queue for another instance to pick them up.
+If a hard shutdown occurs due to a server crash or an infrastructure failure, any runs that were in progress will be picked up by a internal sweeper task that looks for in-progress runs that have breached their heartbeat window. The sweeper runs every 2 minutes and will put the runs back in the queue for another instance to pick them up.
 
 ## Postgres resilience
 
-For deployment modalities where we manage the Postgres database we have periodic backups, continuously replicated standby replicas for automatic failover. Optionally, on request, we can also setup read replicas as well as other advanced failover capabilities.
+For deployment modalities where we manage the Postgres database, we have periodic backups and continuously replicated standby replicas for automatic failover. This Postgres configuration is available in the [Cloud SaaS deployment option](../concepts/langgraph_cloud.md) for [`Production` deployment types](../concepts/langgraph_control_plane.md#deployment-types) only.
 
-All communication with Postgres implements retries for retry-able errors. If Postgres is momentarily unavailable, such as during a database restart, most/all traffic should continue to succeed. Prolonged failure of the Postgres instance will switch traffic to the failover replica. If the failover replica also fails before the primary is brought back online the service would become unavailable.
+All communication with Postgres implements retries for retry-able errors. If Postgres is momentarily unavailable, such as during a database restart, most/all traffic should continue to succeed. Prolonged failure of Postgres will render the LangGraph Server unavailable.
 
 ## Redis resilience
 
-All data that requires durable storage is stored in Postgres, not Redis. Redis is used only for ephemeral metadata, and communication between instances. Refer to the [architecture](./platform_architecture.md) page for more details on how we use Redis. Therefore we place no durability requirements on Redis.
+All data that requires durable storage is stored in Postgres, not Redis. Redis is used only for ephemeral metadata, and communication between instances. Therefore we place no durability requirements on Redis.
 
-All communication with Redis implements retries for retry-able errors. If Redis is momentarily unavailable, such as during a database restart, most/all traffic should continue to succeed. Prolonged failure of Redis will render the LGP service unavailable.
+All communication with Redis implements retries for retry-able errors. If Redis is momentarily unavailable, such as during a database restart, most/all traffic should continue to succeed. Prolonged failure of Redis will render the LangGraph Server unavailable.

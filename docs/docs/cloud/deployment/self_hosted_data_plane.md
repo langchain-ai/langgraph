@@ -1,4 +1,4 @@
-# How to Deploy Self-Hosted Data Plane (Beta)
+# How to Deploy Self-Hosted Data Plane
 
 Before deploying, review the [conceptual guide for the Self-Hosted Data Plane](../../concepts/langgraph_self_hosted_data_plane.md) deployment option.
 
@@ -46,7 +46,7 @@ Before deploying, review the [conceptual guide for the Self-Hosted Data Plane](.
         langgraph-dataplane-listener-7fccd788-wn2dx   0/1     Running             0          9s
         langgraph-dataplane-redis-0                   0/1     ContainerCreating   0          9s
 
-1. You create a deployment from the [Control Plane UI](../../concepts/langgraph_control_plane.md#control-plane-ui).
+1. You create a deployment from the [control plane UI](../../concepts/langgraph_control_plane.md#control-plane-ui).
 
 ## Amazon ECS
 
