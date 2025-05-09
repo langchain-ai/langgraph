@@ -378,7 +378,7 @@
         "target": "agent"
       },
       {
-        "source": "human",
+        "source": "agent",
         "target": "__end__",
         "conditional": true
       }
@@ -392,7 +392,50 @@
   	__start__ --> human;
   	agent --> human;
   	human --> agent;
-  	human -.-> __end__;
+  	agent -.-> __end__;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_defer_node[memory-False]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one -.-> qa;
+  	retriever_one --> analyzer_one;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> retriever_one;
+  	rewrite_query --> retriever_two;
+  	qa --> __end__;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_defer_node[memory-True]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one -.-> qa;
+  	retriever_one --> analyzer_one;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> retriever_one;
+  	rewrite_query --> retriever_two;
+  	qa --> __end__;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_then_defer_node[memory-True]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> qa;
+  	analyzer_one --> retriever_one;
+  	retriever_one -.-> qa;
+  	retriever_two --> qa;
+  	rewrite_query -.-> analyzer_one;
+  	rewrite_query -.-> qa;
+  	rewrite_query -.-> retriever_two;
+  	qa --> __end__;
   
   '''
 # ---

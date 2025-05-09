@@ -26,11 +26,12 @@ First, install LangGraph:
 pip install -U langgraph
 ```
 
-There are three main ways to get started with LangGraph:
+There are two ways to get started with LangGraph:
 
-- [Use LangGraph](https://langchain-ai.github.io/langgraph/tutorials/introduction/): Customize your architectures, use long-term memory, and implement human-in-the-loop to reliably handle complex tasks.
 - [Use prebuilt components](https://langchain-ai.github.io/langgraph/agents/agents/): Construct agentic systems quickly and reliably without the need to implement orchestration, memory, or human feedback handling from scratch.
-- [Use LangGraph Platform](https://langchain-ai.github.io/langgraph/cloud/quick_start/): Test, debug, and deploy production applications.
+- [Use LangGraph](https://langchain-ai.github.io/langgraph/tutorials/introduction/): Customize your architectures, use long-term memory, and implement human-in-the-loop to reliably handle complex tasks.
+
+Once you have a LangGraph application and are ready to move into production, use [LangGraph Platform](https://langchain-ai.github.io/langgraph/cloud/quick_start/) to test, debug, and deploy your application.
 
 ## What LangGraph provides
 

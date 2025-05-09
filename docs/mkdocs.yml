@@ -104,7 +104,21 @@ nav:
         -  tutorials/get-started/5-customize-state.md
         -  tutorials/get-started/6-time-travel.md
       - Deployment: tutorials/deployment.md
-    - LangGraph:
+    - Prebuilt agents:
+      - Overview: agents/overview.md
+      - agents/run_agents.md
+      - agents/streaming.md
+      - agents/models.md
+      - agents/tools.md
+      - agents/mcp.md
+      - agents/context.md
+      - agents/memory.md
+      - agents/human-in-the-loop.md
+      - agents/multi-agent.md
+      - agents/evals.md
+      - agents/deployment.md
+      - agents/ui.md
+    - LangGraph framework:
       - Agent architectures:
         - Overview: concepts/agentic_concepts.md
         - Workflows & agents: tutorials/workflows.md
@@ -142,37 +156,21 @@ nav:
       - Functional API:
         - Overview: concepts/functional_api.md
         - how-tos/use-functional-api.md
+      - concepts/pregel.md
       - Other:
-        # Pregel is the underlying low level API that backs
-        # both the Graph API and the Functional API.
-        # It allows using the functional API from within the Graph API
-        # and vice versa.
-        - concepts/pregel.md
         # We want to push async higher (need to check the content inside it)
         # and convert it into a concept rather than a how-to page.
         - how-tos/async.ipynb
         - how-tos/run-id-langsmith.ipynb
         - how-tos/autogen-integration.ipynb
-    - Prebuilt agents:
-        - Overview: agents/overview.md
-        - agents/run_agents.md
-        - agents/streaming.md
-        - agents/models.md
-        - agents/tools.md
-        - agents/mcp.md
-        - agents/context.md
-        - agents/memory.md
-        - agents/human-in-the-loop.md
-        - agents/multi-agent.md
-        - agents/evals.md
-        - agents/deployment.md
-        - agents/ui.md
+
     - LangGraph Platform:
       - Overview: concepts/langgraph_platform.md
       - Get started:
         - Quickstart: tutorials/langgraph-platform/local-server.md
         - Deployment quickstart: cloud/quick_start.md
       - Components:
+        - Overview: concepts/langgraph_components.md
         - LangGraph Server:
           - Overview: concepts/langgraph_server.md
           - Application structure:
@@ -429,6 +427,7 @@ validation:
 copyright: >
   Copyright &copy; 2025 LangChain, Inc | <a href="#__consent">Consent Preferences</a>
 extra_css:
+  - stylesheets/navigation_title_ovverides.css
   - stylesheets/version_admonitions.css
   - stylesheets/logos.css
   - stylesheets/sticky_navigation.css

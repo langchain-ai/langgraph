@@ -3,6 +3,7 @@ import decimal
 import importlib
 import json
 import pathlib
+import pickle
 import re
 from collections import deque
 from collections.abc import Sequence
@@ -37,8 +38,12 @@ class JsonPlusSerializer(SerializerProtocol):
     """Serializer that uses ormsgpack, with a fallback to extended JSON serializer."""
 
     def __init__(
-        self, *, __unpack_ext_hook__: Optional[Callable[[int, bytes], Any]] = None
+        self,
+        *,
+        pickle_fallback: bool = False,
+        __unpack_ext_hook__: Optional[Callable[[int, bytes], Any]] = None,
     ) -> None:
+        self.pickle_fallback = pickle_fallback
         self._unpack_ext_hook = (
             __unpack_ext_hook__
             if __unpack_ext_hook__ is not None
@@ -209,6 +214,8 @@ class JsonPlusSerializer(SerializerProtocol):
             except ormsgpack.MsgpackEncodeError as exc:
                 if "valid UTF-8" in str(exc):
                     return "json", self.dumps(obj)
+                elif self.pickle_fallback:
+                    return "pickle", pickle.dumps(obj)
                 raise exc
 
     def loads(self, data: bytes) -> Any:
@@ -228,6 +235,8 @@ class JsonPlusSerializer(SerializerProtocol):
             return ormsgpack.unpackb(
                 data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
+        elif self.pickle_fallback and type_ == "pickle":
+            return pickle.loads(data_)
         else:
             raise NotImplementedError(f"Unknown serialization type: {type_}")
 

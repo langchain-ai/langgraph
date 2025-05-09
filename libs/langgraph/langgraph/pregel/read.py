@@ -14,14 +14,15 @@ from langchain_core.runnables import (
     RunnablePassthrough,
     RunnableSerializable,
 )
-from langchain_core.runnables.base import Input, Other, coerce_to_runnable
-from langchain_core.runnables.utils import ConfigurableFieldSpec
+from langchain_core.runnables.base import Other, coerce_to_runnable
+from langchain_core.runnables.utils import ConfigurableFieldSpec, Input
 
 from langgraph.constants import CONF, CONFIG_KEY_READ
 from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.utils import find_subgraph_pregel
 from langgraph.pregel.write import ChannelWrite
+from langgraph.types import CachePolicy
 from langgraph.utils.config import merge_configs
 from langgraph.utils.runnable import RunnableCallable, RunnableSeq
 
@@ -143,6 +144,9 @@ class PregelNode(Runnable):
     retry_policy: Sequence[RetryPolicy] | None
     """The retry policies to use when invoking the node."""
 
+    cache_policy: CachePolicy | None
+    """The cache policy to use when invoking the node."""
+
     tags: Sequence[str] | None
     """Tags to attach to the node for tracing."""
 
@@ -163,6 +167,7 @@ class PregelNode(Runnable):
         metadata: Mapping[str, Any] | None = None,
         bound: Runnable[Any, Any] | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+        cache_policy: CachePolicy | None = None,
         subgraphs: Sequence[PregelProtocol] | None = None,
     ) -> None:
         self.channels = channels
@@ -170,8 +175,9 @@ class PregelNode(Runnable):
         self.mapper = mapper
         self.writers = writers or []
         self.bound = bound if bound is not None else DEFAULT_BOUND
+        self.cache_policy = cache_policy
         if isinstance(retry_policy, RetryPolicy):
-            self.retry_policy: Sequence[RetryPolicy] = (retry_policy,)
+            self.retry_policy = (retry_policy,)
         else:
             self.retry_policy = retry_policy
         self.tags = tags
