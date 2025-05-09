@@ -154,6 +154,16 @@ The snapshot above contains the current state values, corresponding config, and 
   
 Check out the code snippet below to review the graph from this tutorial:
 
+{!snippets/chat_model_tabs.md!}
+
+<!---
+```python
+from langchain.chat_models import init_chat_model
+
+llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
+```
+-->
+
 ```python
 from typing import Annotated
 
@@ -165,7 +175,7 @@ from typing_extensions import TypedDict
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
-from langgraph.prebuilt import ToolNode
+from langgraph.prebuilt import ToolNode, tools_condition
 
 class State(TypedDict):
     messages: Annotated[list, add_messages]
@@ -174,7 +184,6 @@ graph_builder = StateGraph(State)
 
 tool = TavilySearch(max_results=2)
 tools = [tool]
-llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
 llm_with_tools = llm.bind_tools(tools)
 
 def chatbot(state: State):
