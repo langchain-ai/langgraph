@@ -18,14 +18,14 @@ There are 4 main options for deploying with the LangGraph Platform:
 
 A quick comparison:
 
-|                      | **Cloud SaaS** | **Self-Hosted Data Plane** | **Self-Hosted Control Plane** | **Standalone Container** | **Self-Hosted Lite** |
-|----------------------|----------------|----------------------------|-------------------------------|--------------------------| ---------------------|
-| **[Control plane UI/API](../concepts/langgraph_control_plane.md)** | Yes | Yes | Yes | No | No |
-| **CI/CD** | Managed internally by platform | Managed externally by you | Managed externally by you | Managed externally by you | Managed externally by you |
-| **Data/compute residency** | LangChain’s cloud | Your cloud | Your cloud | Your cloud | Your cloud |
-| **LangSmith compatibility** | Trace to LangSmith SaaS | Trace to LangSmith SaaS | Trace to Self-Hosted LangSmith | Optional tracing | Optional tracing |
-| **[Server version compatibility](../concepts/langgraph_server.md#server-versions)** | Enterprise | Enterprise | Enterprise | Lite, Enterprise | Lite |
-| **[Pricing](https://www.langchain.com/pricing-langgraph-platform)** | Plus | Enterprise | Enterprise | Developer | Free with LangSmith |
+|                      | **Cloud SaaS** | **Self-Hosted Data Plane** | **Self-Hosted Control Plane** | **Standalone Container** |
+|----------------------|----------------|----------------------------|-------------------------------|--------------------------|
+| **[Control plane UI/API](../concepts/langgraph_control_plane.md)** | Yes | Yes | Yes | No |
+| **CI/CD** | Managed internally by platform | Managed externally by you | Managed externally by you | Managed externally by you |
+| **Data/compute residency** | LangChain’s cloud | Your cloud | Your cloud | Your cloud |
+| **LangSmith compatibility** | Trace to LangSmith SaaS | Trace to LangSmith SaaS | Trace to Self-Hosted LangSmith | Optional tracing |
+| **[Server version compatibility](../concepts/langgraph_server.md#server-versions)** | Enterprise | Enterprise | Enterprise | Lite, Enterprise |
+| **[Pricing](https://www.langchain.com/pricing-langgraph-platform)** | Plus | Enterprise | Enterprise | Developer |
 
 ## Cloud SaaS
 
