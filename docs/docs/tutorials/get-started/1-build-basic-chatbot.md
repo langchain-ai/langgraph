@@ -76,11 +76,13 @@ Our graph can now handle two key tasks:
 
 Next, add a "`chatbot`" node. **Nodes** represent units of work and are typically regular Python functions.
 
+Let's first select a chat model:
+
+{!snippets/chat_model_tabs.md!}
+
+We can now incorporate the chat model into a simple node:
+
 ```python
-from langchain.chat_models import init_chat_model
-
-llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
-
 
 def chatbot(state: State):
     return {"messages": [llm.invoke(state["messages"])]}
