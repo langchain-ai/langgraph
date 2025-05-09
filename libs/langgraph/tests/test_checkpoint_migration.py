@@ -1672,16 +1672,11 @@ async def test_latest_checkpoint_state_graph_async(
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpoint_version", ["3", "2-start:*", "2-quadratic"])
 def test_saved_checkpoint_state_graph(
-    request: pytest.FixtureRequest,
-    checkpointer_name: str,
+    sync_checkpointer: BaseCheckpointSaver,
     checkpoint_version: str,
 ) -> None:
-    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
-        f"checkpointer_{checkpointer_name}"
-    )
-
     builder = make_state_graph()
-    app = builder.compile(checkpointer=checkpointer)
+    app = builder.compile(checkpointer=sync_checkpointer)
 
     thread1 = "1"
     config = {"configurable": {"thread_id": thread1, "checkpoint_ns": ""}}
@@ -1693,8 +1688,8 @@ def test_saved_checkpoint_state_graph(
         for write in checkpoint.pending_writes:
             grouped_writes[write[0]].append(write[1:])
         for tid, group in grouped_writes.items():
-            checkpointer.put_writes(checkpoint.config, group, tid)
-        checkpointer.put(
+            sync_checkpointer.put_writes(checkpoint.config, group, tid)
+        sync_checkpointer.put(
             patch_configurable(config, {"checkpoint_id": parent_id}),
             checkpoint.checkpoint,
             checkpoint.metadata,
