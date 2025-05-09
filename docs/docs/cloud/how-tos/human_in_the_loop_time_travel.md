@@ -4,7 +4,8 @@ With LangGraph Cloud you have the ability to return to any of your prior states 
 
 ## Setup
 
-We are not going to show the full code for the graph we are hosting, but you can see it [here](../../how-tos/human_in_the_loop/time-travel.ipynb#build-the-agent) if you want to. Once this graph is hosted, we are ready to invoke it and wait for user input. 
+The examples below are executed against a specific deployment on LangGraph Cloud. You will use
+the SDK in a similar way, but you will expect to see different results based on the graph you have deployed.
 
 ### SDK initialization
 

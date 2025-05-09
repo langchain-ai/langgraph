@@ -644,8 +644,6 @@ The streamed output from [`messages-tuple` mode](#supported-stream-modes) is a t
 
 - `message_chunk`: the token or message segment from the LLM.
 - `metadata`: a dictionary containing details about the graph node and LLM invocation.
-
-> If your LLM is not available as a LangChain integration, you can stream its outputs using `custom` mode instead. See [use with any LLM](#use-with-any-llm) for details.
  
 !!! warning "Manual config required for async in Python < 3.11"
 
