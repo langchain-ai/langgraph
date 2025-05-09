@@ -124,6 +124,7 @@ def get_client(
     url: Optional[str] = None,
     api_key: Optional[str] = None,
     headers: Optional[dict[str, str]] = None,
+    timeout: Optional[TimeoutTypes] = None,
 ) -> LangGraphClient:
     """Get a LangGraphClient instance.
 
@@ -171,11 +172,14 @@ def get_client(
 
     if transport is None:
         transport = httpx.AsyncHTTPTransport(retries=5)
-
     client = httpx.AsyncClient(
         base_url=url,
         transport=transport,
-        timeout=httpx.Timeout(connect=5, read=300, write=300, pool=5),
+        timeout=(
+            httpx.Timeout(timeout)
+            if timeout is not None
+            else httpx.Timeout(connect=5, read=300, write=300, pool=5)
+        ),
         headers=_get_headers(api_key, headers),
     )
     return LangGraphClient(client)
@@ -2775,6 +2779,7 @@ def get_sync_client(
     url: Optional[str] = None,
     api_key: Optional[str] = None,
     headers: Optional[dict[str, str]] = None,
+    timeout: Optional[TimeoutTypes] = None,
 ) -> SyncLangGraphClient:
     """Get a synchronous LangGraphClient instance.
 
@@ -2787,6 +2792,7 @@ def get_sync_client(
                 3. LANGSMITH_API_KEY
                 4. LANGCHAIN_API_KEY
         headers: Optional custom headers
+        timeout: Optional timeout configuration for the HTTP client. Accepts an httpx.Timeout instance, a float (seconds), or a tuple of timeouts. If not provided, defaults to connect=5s, read=300s, write=300s, and pool=5s.
     Returns:
         SyncLangGraphClient: The top-level synchronous client for accessing AssistantsClient,
         ThreadsClient, RunsClient, and CronClient.
@@ -2811,7 +2817,11 @@ def get_sync_client(
     client = httpx.Client(
         base_url=url,
         transport=transport,
-        timeout=httpx.Timeout(connect=5, read=300, write=300, pool=5),
+        timeout=(
+            httpx.Timeout(timeout)
+            if timeout is not None
+            else httpx.Timeout(connect=5, read=300, write=300, pool=5)
+        ),
         headers=_get_headers(api_key, headers),
     )
     return SyncLangGraphClient(client)
@@ -5363,3 +5373,10 @@ _registered_transports: list[httpx.ASGITransport] = []
 def configure_loopback_transports(app: Any) -> None:
     for transport in _registered_transports:
         transport.app = app
+
+
+TimeoutTypes = Union[
+    Optional[float],
+    tuple[Optional[float], Optional[float], Optional[float], Optional[float]],
+    httpx.Timeout,
+]
