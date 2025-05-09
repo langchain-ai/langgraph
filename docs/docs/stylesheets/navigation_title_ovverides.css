@@ -1,0 +1,23 @@
+.md-nav__link[href$="/langgraph/"] .md-ellipsis {
+  visibility: hidden;
+  position: relative;
+}
+
+.md-nav__link[href$="/langgraph/"] .md-ellipsis::after {
+  content: "Home";
+  visibility: visible;
+  position: absolute;
+  left: 0;
+}
+
+.md-nav__link[href$="/langgraph/reference/"] .md-ellipsis {
+  visibility: hidden;
+  position: relative;
+}
+
+.md-nav__link[href$="/langgraph/reference/"] .md-ellipsis::after {
+  content: "Home";
+  visibility: visible;
+  position: absolute;
+  left: 0;
+}
