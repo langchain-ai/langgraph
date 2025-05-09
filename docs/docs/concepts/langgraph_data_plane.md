@@ -18,7 +18,7 @@ In addition to the [LangGraph Server](./langgraph_server.md) itself, the followi
 
 ## "Listener" Application
 
-The data plane "listener" application periodically calls [Control Plane APIs](../concepts/langgraph_control_plane.md#control-plane-api) to:
+The data plane "listener" application periodically calls [control plane APIs](../concepts/langgraph_control_plane.md#control-plane-api) to:
 
 - Determine if new deployments should be created.
 - Determine if existing deployments should be updated (i.e. new revisions).

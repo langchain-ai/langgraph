@@ -20,7 +20,7 @@ A quick comparison:
 
 |                      | **Cloud SaaS** | **Self-Hosted Data Plane** | **Self-Hosted Control Plane** | **Standalone Container** | **Self-Hosted Lite** |
 |----------------------|----------------|----------------------------|-------------------------------|--------------------------| ---------------------|
-| **[Control Plane UI/API](../concepts/langgraph_control_plane.md)** | Yes | Yes | Yes | No | No |
+| **[Control plane UI/API](../concepts/langgraph_control_plane.md)** | Yes | Yes | Yes | No | No |
 | **CI/CD** | Managed internally by platform | Managed externally by you | Managed externally by you | Managed externally by you | Managed externally by you |
 | **Data/compute residency** | LangChain’s cloud | Your cloud | Your cloud | Your cloud | Your cloud |
 | **LangSmith compatibility** | Trace to LangSmith SaaS | Trace to LangSmith SaaS | Trace to Self-Hosted LangSmith | Optional tracing | Optional tracing |
@@ -31,7 +31,7 @@ A quick comparison:
 
 The [Cloud SaaS](./langgraph_cloud.md) deployment option is a fully managed model for deployment where we manage the [control plane](./langgraph_control_plane.md) and [data plane](./langgraph_data_plane.md) in our cloud. This option provides a simple way to deploy and manage your LangGraph Servers.
 
-Connect your GitHub repositories to the platform and deploy your LangGraph Servers from the [Control Plane UI](./langgraph_control_plane.md#control-plane-ui). The build process (i.e. CI/CD) is managed internally by the platform.
+Connect your GitHub repositories to the platform and deploy your LangGraph Servers from the [control plane UI](./langgraph_control_plane.md#control-plane-ui). The build process (i.e. CI/CD) is managed internally by the platform.
 
 For more information, please see:
 
@@ -42,7 +42,7 @@ For more information, please see:
 
 The [Self-Hosted Data Plane](./langgraph_self_hosted_data_plane.md) deployment option is a "hybrid" model for deployment where we manage the [control plane](./langgraph_control_plane.md) in our cloud and you manage the [data plane](./langgraph_data_plane.md) in your cloud. This option provides a way to securely manage your data plane infrastructure, while offloading control plane management to us.
 
-Build a Docker image using the [LangGraph CLI](./langgraph_cli.md) and deploy your LangGraph Server from the [Control Plane UI](./langgraph_control_plane.md#control-plane-ui).
+Build a Docker image using the [LangGraph CLI](./langgraph_cli.md) and deploy your LangGraph Server from the [control plane UI](./langgraph_control_plane.md#control-plane-ui).
 
 Supported Compute Platforms: [Kubernetes](https://kubernetes.io/), [Amazon ECS](https://aws.amazon.com/ecs/) (coming soon!)
 
@@ -55,7 +55,7 @@ For more information, please see:
 
 The [Self-Hosted Control Plane](./langgraph_self_hosted_control_plane.md) deployment option is a fully self-hosted model for deployment where you manage the [control plane](./langgraph_control_plane.md) and [data plane](./langgraph_data_plane.md) in your cloud. This option give you full control and responsibility of the control plane and data plane infrastructure.
 
-Build a Docker image using the [LangGraph CLI](./langgraph_cli.md) and deploy your LangGraph Server from the [Control Plane UI](./langgraph_control_plane.md#control-plane-ui).
+Build a Docker image using the [LangGraph CLI](./langgraph_cli.md) and deploy your LangGraph Server from the [control plane UI](./langgraph_control_plane.md#control-plane-ui).
 
 Supported Compute Platforms: [Kubernetes](https://kubernetes.io/)
 

@@ -46,4 +46,4 @@ Before deploying, review the [conceptual guide for the Self-Hosted Control Plane
 1. In your `values.yaml` file, configure the `hostBackendImage` and `operatorImage` options (if you need to mirror images)
 
 1. You can also configure base templates for your agents by overriding the base templates [here](https://github.com/langchain-ai/helm/blob/main/charts/langsmith/values.yaml#L898).
-1. You create a deployment from the [Control Plane UI](../../concepts/langgraph_control_plane.md#control-plane-ui).
+1. You create a deployment from the [control plane UI](../../concepts/langgraph_control_plane.md#control-plane-ui).
