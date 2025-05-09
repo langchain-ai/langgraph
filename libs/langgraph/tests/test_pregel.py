@@ -6926,13 +6926,13 @@ def test_entrypoint_without_checkpointer() -> None:
     assert foo.invoke({"a": "1"}, config) == {"current": {"a": "1"}, "previous": None}
 
 
-def test_entrypoint_stateful() -> None:
+def test_entrypoint_stateful(sync_checkpointer: BaseCheckpointSaver) -> None:
     """Test stateful entrypoint invoke."""
 
     # Test invoke
     states = []
 
-    @entrypoint(checkpointer=MemorySaver())
+    @entrypoint(checkpointer=sync_checkpointer)
     def foo(inputs, *, previous: Any) -> Any:
         states.append(previous)
         return {"previous": previous, "current": inputs}
@@ -6958,13 +6958,64 @@ def test_entrypoint_stateful() -> None:
     ]
 
     # Test stream
-    @entrypoint(checkpointer=MemorySaver())
+    @entrypoint(checkpointer=sync_checkpointer)
     def foo(inputs, *, previous: Any) -> Any:
         return {"previous": previous, "current": inputs}
 
-    config = {"configurable": {"thread_id": "1"}}
+    config = {"configurable": {"thread_id": "2"}}
     items = [item for item in foo.stream({"a": "1"}, config)]
     assert items == [{"foo": {"current": {"a": "1"}, "previous": None}}]
+
+
+def test_entrypoint_stateful_update_state(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test stateful entrypoint invoke."""
+
+    # Test invoke
+    states = []
+
+    @entrypoint(checkpointer=sync_checkpointer)
+    def foo(inputs, *, previous: Any) -> Any:
+        states.append(previous)
+        return {"previous": previous, "current": inputs}
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # assert print(foo.input_channels)
+    foo.update_state(config, {"a": "-1"})
+    assert foo.invoke({"a": "1"}, config) == {
+        "current": {"a": "1"},
+        "previous": {"a": "-1"},
+    }
+    assert foo.invoke({"a": "2"}, config) == {
+        "current": {"a": "2"},
+        "previous": {"current": {"a": "1"}, "previous": {"a": "-1"}},
+    }
+    assert foo.invoke({"a": "3"}, config) == {
+        "current": {"a": "3"},
+        "previous": {
+            "current": {"a": "2"},
+            "previous": {"current": {"a": "1"}, "previous": {"a": "-1"}},
+        },
+    }
+
+    # update state
+    foo.update_state(config, {"a": "3"})
+
+    # Test stream
+    assert [item for item in foo.stream({"a": "1"}, config)] == [
+        {"foo": {"current": {"a": "1"}, "previous": {"a": "3"}}}
+    ]
+    assert states == [
+        {"a": "-1"},
+        {"current": {"a": "1"}, "previous": {"a": "-1"}},
+        {
+            "current": {"a": "2"},
+            "previous": {"current": {"a": "1"}, "previous": {"a": "-1"}},
+        },
+        {"a": "3"},
+    ]
 
 
 def test_entrypoint_from_sync_generator() -> None:
