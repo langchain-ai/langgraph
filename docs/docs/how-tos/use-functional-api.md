@@ -290,10 +290,12 @@ for mode, chunk in main.stream( # (5)!
 ('updates', {'main': 5})
 ```
 
+
+
 !!! important "Async with Python < 3.11"
 
     If using Python < 3.11 and writing async code, using `get_stream_writer()` will not work. Instead please 
-    use the `StreamWriter` class directly. See [Async with Python < 3.11](../how-tos/streaming.md#async-with-python-<3.11) for more details.
+    use the `StreamWriter` class directly. See [Async with Python < 3.11](../how-tos/streaming.md#async) for more details.
 
     ```python
     from langgraph.types import StreamWriter
