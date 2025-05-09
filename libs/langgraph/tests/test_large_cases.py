@@ -41,11 +41,7 @@ from langgraph.types import (
 from tests.agents import AgentAction, AgentFinish
 from tests.any_int import AnyInt
 from tests.any_str import AnyDict, AnyStr, UnsortedSequence
-from tests.conftest import (
-    ALL_CHECKPOINTERS_SYNC,
-    REGULAR_CHECKPOINTERS_SYNC,
-    SHOULD_CHECK_SNAPSHOTS,
-)
+from tests.conftest import ALL_CHECKPOINTERS_SYNC, SHOULD_CHECK_SNAPSHOTS
 from tests.fake_chat import FakeChatModel
 from tests.fake_tracer import FakeTracer
 from tests.messages import (
@@ -314,18 +310,16 @@ def test_invoke_two_processes_in_out_interrupt(
     ]
 
 
-@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_SYNC)
 def test_fork_always_re_runs_nodes(
-    request: pytest.FixtureRequest, checkpointer_name: str, mocker: MockerFixture
+    sync_checkpointer: BaseCheckpointSaver, mocker: MockerFixture
 ) -> None:
-    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
     add_one = mocker.Mock(side_effect=lambda _: 1)
 
     builder = StateGraph(Annotated[int, operator.add])
     builder.add_node("add_one", add_one)
     builder.add_edge(START, "add_one")
     builder.add_conditional_edges("add_one", lambda cnt: "add_one" if cnt < 6 else END)
-    graph = builder.compile(checkpointer=checkpointer)
+    graph = builder.compile(checkpointer=sync_checkpointer)
 
     thread1 = {"configurable": {"thread_id": "1"}}
 
@@ -7341,13 +7335,9 @@ def test_branch_then(
     )
 
 
-@pytest.mark.parametrize("checkpoint_during", [True, False])
-@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_SYNC)
 def test_send_dedupe_on_resume(
-    request: pytest.FixtureRequest, checkpointer_name: str, checkpoint_during: bool
+    sync_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
 ) -> None:
-    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
-
     class InterruptOnce:
         ticks: int = 0
 
@@ -7398,7 +7388,7 @@ def test_send_dedupe_on_resume(
     builder.add_conditional_edges("1", send_for_fun)
     builder.add_conditional_edges("2", route_to_three)
 
-    graph = builder.compile(checkpointer=checkpointer)
+    graph = builder.compile(checkpointer=sync_checkpointer)
     thread1 = {"configurable": {"thread_id": "1"}}
     assert graph.invoke(["0"], thread1, checkpoint_during=checkpoint_during) == {
         "__interrupt__": [
@@ -7413,8 +7403,6 @@ def test_send_dedupe_on_resume(
     assert builder.nodes["flaky"].runnable.func.ticks == 1
     # check state
     state = graph.get_state(thread1)
-    if "shallow" in checkpointer_name:
-        pytest.xfail("TODO: shallow checkpointer reports wrong next set")
     assert state.next == ("flaky",)
     # check history
     history = [c for c in graph.get_state_history(thread1)]

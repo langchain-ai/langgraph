@@ -38,6 +38,7 @@ from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
@@ -68,8 +69,6 @@ from langgraph.types import (
 from tests.any_str import AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
-    ALL_CHECKPOINTERS_ASYNC_PLUS_NONE,
-    REGULAR_CHECKPOINTERS_ASYNC,
     SHOULD_CHECK_SNAPSHOTS,
     awith_checkpointer,
 )
@@ -1220,8 +1219,7 @@ async def test_step_timeout_on_stream_hang(stream_hang_s: float) -> None:
     assert inner_task_cancelled
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC_PLUS_NONE)
-async def test_cancel_graph_astream(checkpointer_name: str) -> None:
+async def test_cancel_graph_astream(async_checkpointer: BaseCheckpointSaver) -> None:
     class State(TypedDict):
         value: Annotated[int, operator.add]
 
@@ -1255,45 +1253,44 @@ async def test_cancel_graph_astream(checkpointer_name: str) -> None:
     builder.add_edge(START, "aparallelwhile")
     builder.add_edge("alittlewhile", "awhile")
 
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        graph = builder.compile(checkpointer=checkpointer)
+    graph = builder.compile(checkpointer=async_checkpointer)
 
-        # test interrupting astream
-        got_event = False
-        thread1: RunnableConfig = {"configurable": {"thread_id": "1"}}
-        async with aclosing(graph.astream({"value": 1}, thread1)) as stream:
-            async for chunk in stream:
-                assert chunk == {"alittlewhile": {"value": 2}}
-                got_event = True
-                break
+    # test interrupting astream
+    got_event = False
+    thread1: RunnableConfig = {"configurable": {"thread_id": "1"}}
+    async with aclosing(graph.astream({"value": 1}, thread1)) as stream:
+        async for chunk in stream:
+            assert chunk == {"alittlewhile": {"value": 2}}
+            got_event = True
+            break
 
-        assert got_event
+    assert got_event
 
-        # node aparallelwhile should start, but be cancelled
-        assert aparallelwhile.started is True
-        assert aparallelwhile.cancelled is True
+    # node aparallelwhile should start, but be cancelled
+    assert aparallelwhile.started is True
+    assert aparallelwhile.cancelled is True
 
-        # node "awhile" should never start
-        assert awhile.started is False
+    # node "awhile" should never start
+    assert awhile.started is False
 
-        # checkpoint with output of "alittlewhile" should not be saved
-        # but we should have applied pending writes
-        if checkpointer is not None:
-            state = await graph.aget_state(thread1)
-            assert state is not None
-            assert state.values == {"value": 3}  # 1 + 2
-            assert state.next == ("aparallelwhile",)
-            assert state.metadata == {
-                "parents": {},
-                "source": "loop",
-                "step": 0,
-                "writes": None,
-                "thread_id": "1",
-            }
+    # checkpoint with output of "alittlewhile" should not be saved
+    # but we should have applied pending writes
+    state = await graph.aget_state(thread1)
+    assert state is not None
+    assert state.values == {"value": 3}  # 1 + 2
+    assert state.next == ("aparallelwhile",)
+    assert state.metadata == {
+        "parents": {},
+        "source": "loop",
+        "step": 0,
+        "writes": None,
+        "thread_id": "1",
+    }
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC_PLUS_NONE)
-async def test_cancel_graph_astream_events_v2(checkpointer_name: Optional[str]) -> None:
+async def test_cancel_graph_astream_events_v2(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
     class State(TypedDict):
         value: int
 
@@ -1327,46 +1324,44 @@ async def test_cancel_graph_astream_events_v2(checkpointer_name: Optional[str]) 
     builder.add_edge("alittlewhile", "awhile")
     builder.add_edge("awhile", "anotherwhile")
 
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        graph = builder.compile(checkpointer=checkpointer)
+    graph = builder.compile(checkpointer=async_checkpointer)
 
-        # test interrupting astream_events v2
-        got_event = False
-        thread2: RunnableConfig = {"configurable": {"thread_id": "2"}}
-        async with aclosing(
-            graph.astream_events({"value": 1}, thread2, version="v2")
-        ) as stream:
-            async for chunk in stream:
-                if chunk["event"] == "on_chain_stream" and not chunk["parent_ids"]:
-                    got_event = True
-                    assert chunk["data"]["chunk"] == {"alittlewhile": {"value": 2}}
-                    await asyncio.sleep(0.1)
-                    break
+    # test interrupting astream_events v2
+    got_event = False
+    thread2: RunnableConfig = {"configurable": {"thread_id": "2"}}
+    async with aclosing(
+        graph.astream_events({"value": 1}, thread2, version="v2")
+    ) as stream:
+        async for chunk in stream:
+            if chunk["event"] == "on_chain_stream" and not chunk["parent_ids"]:
+                got_event = True
+                assert chunk["data"]["chunk"] == {"alittlewhile": {"value": 2}}
+                await asyncio.sleep(0.1)
+                break
 
-        # did break
-        assert got_event
+    # did break
+    assert got_event
 
-        # node "awhile" maybe starts (impl detail of astream_events)
-        # if it does start, it must be cancelled
-        if awhile.started:
-            assert awhile.cancelled is True
+    # node "awhile" maybe starts (impl detail of astream_events)
+    # if it does start, it must be cancelled
+    if awhile.started:
+        assert awhile.cancelled is True
 
-        # node "anotherwhile" should never start
-        assert anotherwhile.started is False
+    # node "anotherwhile" should never start
+    assert anotherwhile.started is False
 
-        # checkpoint with output of "alittlewhile" should not be saved
-        if checkpointer is not None:
-            state = await graph.aget_state(thread2)
-            assert state is not None
-            assert state.values == {"value": 2}
-            assert state.next == ("awhile",)
-            assert state.metadata == {
-                "parents": {},
-                "source": "loop",
-                "step": 1,
-                "writes": {"alittlewhile": {"value": 2}},
-                "thread_id": "2",
-            }
+    # checkpoint with output of "alittlewhile" should not be saved
+    state = await graph.aget_state(thread2)
+    assert state is not None
+    assert state.values == {"value": 2}
+    assert state.next == ("awhile",)
+    assert state.metadata == {
+        "parents": {},
+        "source": "loop",
+        "step": 1,
+        "writes": {"alittlewhile": {"value": 2}},
+        "thread_id": "2",
+    }
 
 
 async def test_node_schemas_custom_output() -> None:
@@ -2003,7 +1998,6 @@ async def test_invoke_checkpoint(mocker: MockerFixture, checkpointer_name: str) 
         assert checkpoint["channel_values"].get("total") == 5
 
 
-@pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_pending_writes_resume(
     checkpointer_name: str, checkpoint_during: bool
@@ -2284,9 +2278,8 @@ async def test_pending_writes_resume(
         )
 
 
-@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_run_from_checkpoint_id_retains_previous_writes(
-    checkpointer_name: str,
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     class MyState(TypedDict):
         myval: Annotated[int, operator.add]
@@ -2320,47 +2313,46 @@ async def test_run_from_checkpoint_id_retains_previous_writes(
 
     builder.add_conditional_edges("node_one", _getedge("node_one"))
     builder.add_conditional_edges("node_two", _getedge("node_two"))
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        graph = builder.compile(checkpointer=checkpointer)
+    graph = builder.compile(checkpointer=async_checkpointer)
 
-        thread_id = uuid.uuid4()
-        thread1 = {"configurable": {"thread_id": str(thread_id)}}
+    thread_id = uuid.uuid4()
+    thread1 = {"configurable": {"thread_id": str(thread_id)}}
 
-        result = await graph.ainvoke({"myval": 1}, thread1)
-        assert result["myval"] == 4
-        history = [c async for c in graph.aget_state_history(thread1)]
+    result = await graph.ainvoke({"myval": 1}, thread1)
+    assert result["myval"] == 4
+    history = [c async for c in graph.aget_state_history(thread1)]
 
-        assert len(history) == 4
-        assert history[0].values == {"myval": 4, "otherval": False}
-        assert history[-1].values == {"myval": 0}
+    assert len(history) == 4
+    assert history[0].values == {"myval": 4, "otherval": False}
+    assert history[-1].values == {"myval": 0}
 
-        second_run_config = {
-            **thread1,
-            "configurable": {
-                **thread1["configurable"],
-                "checkpoint_id": history[1].config["configurable"]["checkpoint_id"],
-            },
-        }
-        second_result = await graph.ainvoke(None, second_run_config)
-        assert second_result == {"myval": 5, "otherval": True}
+    second_run_config = {
+        **thread1,
+        "configurable": {
+            **thread1["configurable"],
+            "checkpoint_id": history[1].config["configurable"]["checkpoint_id"],
+        },
+    }
+    second_result = await graph.ainvoke(None, second_run_config)
+    assert second_result == {"myval": 5, "otherval": True}
 
-        new_history = [
-            c
-            async for c in graph.aget_state_history(
-                {"configurable": {"thread_id": str(thread_id), "checkpoint_ns": ""}}
-            )
-        ]
+    new_history = [
+        c
+        async for c in graph.aget_state_history(
+            {"configurable": {"thread_id": str(thread_id), "checkpoint_ns": ""}}
+        )
+    ]
 
-        assert len(new_history) == len(history) + 1
-        for original, new in zip(history, new_history[1:]):
-            assert original.values == new.values
-            assert original.next == new.next
-            assert original.metadata["step"] == new.metadata["step"]
+    assert len(new_history) == len(history) + 1
+    for original, new in zip(history, new_history[1:]):
+        assert original.values == new.values
+        assert original.next == new.next
+        assert original.metadata["step"] == new.metadata["step"]
 
-        def _get_tasks(hist: list, start: int):
-            return [h.tasks for h in hist[start:]]
+    def _get_tasks(hist: list, start: int):
+        return [h.tasks for h in hist[start:]]
 
-        assert _get_tasks(new_history, 1) == _get_tasks(history, 0)
+    assert _get_tasks(new_history, 1) == _get_tasks(history, 0)
 
 
 async def test_cond_edge_after_send() -> None:
@@ -2509,7 +2501,6 @@ async def test_send_sequences(checkpointer_name: str) -> None:
 
 
 @NEEDS_CONTEXTVARS
-@pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_task(checkpointer_name: str, checkpoint_during: bool) -> None:
     if not checkpoint_during and "shallow" in checkpointer_name:
@@ -2573,7 +2564,6 @@ async def test_imp_task(checkpointer_name: str, checkpoint_during: bool) -> None
 
 
 @NEEDS_CONTEXTVARS
-@pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_nested(checkpointer_name: str, checkpoint_during: bool) -> None:
     if not checkpoint_during and "shallow" in checkpointer_name:
@@ -2649,7 +2639,6 @@ async def test_imp_nested(checkpointer_name: str, checkpoint_during: bool) -> No
 
 
 @NEEDS_CONTEXTVARS
-@pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_task_cancel(checkpointer_name: str, checkpoint_during: bool) -> None:
     if not checkpoint_during and "shallow" in checkpointer_name:
@@ -2711,7 +2700,6 @@ async def test_imp_task_cancel(checkpointer_name: str, checkpoint_during: bool) 
 
 
 @NEEDS_CONTEXTVARS
-@pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_sync_from_async(
     checkpointer_name: str, checkpoint_during: bool
@@ -2755,7 +2743,6 @@ async def test_imp_sync_from_async(
 
 
 @NEEDS_CONTEXTVARS
-@pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_stream_order(
     checkpointer_name: str, checkpoint_during: bool
@@ -2799,10 +2786,8 @@ async def test_imp_stream_order(
         ]
 
 
-@pytest.mark.parametrize("checkpoint_during", [True, False])
-@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_send_dedupe_on_resume(
-    checkpointer_name: str, checkpoint_during: bool
+    async_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
 ) -> None:
     class InterruptOnce:
         ticks: int = 0
@@ -2851,329 +2836,324 @@ async def test_send_dedupe_on_resume(
     builder.add_conditional_edges("1", send_for_fun)
     builder.add_conditional_edges("2", route_to_three)
 
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        graph = builder.compile(checkpointer=checkpointer)
-        thread1 = {"configurable": {"thread_id": "1"}}
-        assert await graph.ainvoke(
-            ["0"], thread1, checkpoint_during=checkpoint_during
-        ) == {
-            "__interrupt__": [
-                Interrupt(
-                    value="Bahh",
-                    resumable=False,
-                    ns=None,
-                ),
+    graph = builder.compile(checkpointer=async_checkpointer)
+    thread1 = {"configurable": {"thread_id": "1"}}
+    assert await graph.ainvoke(["0"], thread1, checkpoint_during=checkpoint_during) == {
+        "__interrupt__": [
+            Interrupt(
+                value="Bahh",
+                resumable=False,
+                ns=None,
+            ),
+        ],
+    }
+    assert builder.nodes["2"].runnable.func.ticks == 3
+    assert builder.nodes["flaky"].runnable.func.ticks == 1
+    # resume execution
+    assert await graph.ainvoke(None, thread1, checkpoint_during=checkpoint_during) == [
+        "0",
+        "1",
+        "3.1",
+        "2|Command(goto=Send(node='2', arg=3))",
+        "2|Command(goto=Send(node='flaky', arg=4))",
+        "3",
+        "2|3",
+        "flaky|4",
+        "3",
+    ]
+    # node "2" doesn't get called again, as we recover writes saved before
+    assert builder.nodes["2"].runnable.func.ticks == 3
+    # node "flaky" gets called again, as it was interrupted
+    assert builder.nodes["flaky"].runnable.func.ticks == 2
+    # check history
+    history = [c async for c in graph.aget_state_history(thread1)]
+    assert len(history) == (6 if checkpoint_during else 2)
+    expected_history = [
+        StateSnapshot(
+            values=[
+                "0",
+                "1",
+                "3.1",
+                "2|Command(goto=Send(node='2', arg=3))",
+                "2|Command(goto=Send(node='flaky', arg=4))",
+                "3",
+                "2|3",
+                "flaky|4",
+                "3",
             ],
-        }
-        assert builder.nodes["2"].runnable.func.ticks == 3
-        assert builder.nodes["flaky"].runnable.func.ticks == 1
-        # resume execution
-        assert await graph.ainvoke(
-            None, thread1, checkpoint_during=checkpoint_during
-        ) == [
-            "0",
-            "1",
-            "3.1",
-            "2|Command(goto=Send(node='2', arg=3))",
-            "2|Command(goto=Send(node='flaky', arg=4))",
-            "3",
-            "2|3",
-            "flaky|4",
-            "3",
-        ]
-        # node "2" doesn't get called again, as we recover writes saved before
-        assert builder.nodes["2"].runnable.func.ticks == 3
-        # node "flaky" gets called again, as it was interrupted
-        assert builder.nodes["flaky"].runnable.func.ticks == 2
-        # check history
-        history = [c async for c in graph.aget_state_history(thread1)]
-        assert len(history) == (6 if checkpoint_during else 2)
-        expected_history = [
-            StateSnapshot(
-                values=[
-                    "0",
-                    "1",
-                    "3.1",
-                    "2|Command(goto=Send(node='2', arg=3))",
-                    "2|Command(goto=Send(node='flaky', arg=4))",
-                    "3",
-                    "2|3",
-                    "flaky|4",
-                    "3",
-                ],
-                next=(),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "source": "loop",
-                    "writes": {"3": ["3"]},
+            next=(),
+            config={
+                "configurable": {
                     "thread_id": "1",
-                    "step": 4,
-                    "parents": {},
-                },
-                created_at=AnyStr(),
-                parent_config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                tasks=(),
-                interrupts=(),
-            ),
-            StateSnapshot(
-                values=[
-                    "0",
-                    "1",
-                    "3.1",
-                    "2|Command(goto=Send(node='2', arg=3))",
-                    "2|Command(goto=Send(node='flaky', arg=4))",
-                    "3",
-                    "2|3",
-                    "flaky|4",
-                ],
-                next=("3",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "source": "loop",
-                    "writes": {"2": ["2|3"], "3": ["3"], "flaky": ["flaky|4"]},
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"3": ["3"]},
+                "thread_id": "1",
+                "step": 4,
+                "parents": {},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
                     "thread_id": "1",
-                    "step": 3,
-                    "parents": {},
-                },
-                created_at=AnyStr(),
-                parent_config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                tasks=(
-                    PregelTask(
-                        id=AnyStr(),
-                        name="3",
-                        path=("__pregel_pull", "3"),
-                        error=None,
-                        interrupts=(),
-                        state=None,
-                        result=["3"],
-                    ),
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            tasks=(),
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values=[
+                "0",
+                "1",
+                "3.1",
+                "2|Command(goto=Send(node='2', arg=3))",
+                "2|Command(goto=Send(node='flaky', arg=4))",
+                "3",
+                "2|3",
+                "flaky|4",
+            ],
+            next=("3",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"2": ["2|3"], "3": ["3"], "flaky": ["flaky|4"]},
+                "thread_id": "1",
+                "step": 3,
+                "parents": {},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            tasks=(
+                PregelTask(
+                    id=AnyStr(),
+                    name="3",
+                    path=("__pregel_pull", "3"),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result=["3"],
                 ),
-                interrupts=(),
             ),
-            StateSnapshot(
-                values=[
-                    "0",
-                    "1",
-                    "3.1",
-                    "2|Command(goto=Send(node='2', arg=3))",
-                    "2|Command(goto=Send(node='flaky', arg=4))",
-                ],
-                next=("2", "flaky", "3"),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "source": "loop",
-                    "writes": {
-                        "2": [
-                            ["2|Command(goto=Send(node='2', arg=3))"],
-                            ["2|Command(goto=Send(node='flaky', arg=4))"],
-                        ],
-                        "3.1": ["3.1"],
-                    },
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values=[
+                "0",
+                "1",
+                "3.1",
+                "2|Command(goto=Send(node='2', arg=3))",
+                "2|Command(goto=Send(node='flaky', arg=4))",
+            ],
+            next=("2", "flaky", "3"),
+            config={
+                "configurable": {
                     "thread_id": "1",
-                    "step": 2,
-                    "parents": {},
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {
+                    "2": [
+                        ["2|Command(goto=Send(node='2', arg=3))"],
+                        ["2|Command(goto=Send(node='flaky', arg=4))"],
+                    ],
+                    "3.1": ["3.1"],
                 },
-                created_at=AnyStr(),
-                parent_config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                tasks=(
-                    PregelTask(
-                        id=AnyStr(),
-                        name="2",
-                        path=("__pregel_push", 0, False),
-                        error=None,
-                        interrupts=(),
-                        state=None,
-                        result=["2|3"],
-                    ),
-                    PregelTask(
-                        id=AnyStr(),
-                        name="flaky",
-                        path=("__pregel_push", 1, False),
-                        error=None,
-                        interrupts=(Interrupt(value="Bahh", resumable=False, ns=None),),
-                        state=None,
-                        result=["flaky|4"] if checkpoint_during else None,
-                    ),
-                    PregelTask(
-                        id=AnyStr(),
-                        name="3",
-                        path=("__pregel_pull", "3"),
-                        error=None,
-                        interrupts=(),
-                        state=None,
-                        result=["3"],
-                    ),
-                ),
-                interrupts=(Interrupt(value="Bahh", resumable=False, ns=None),),
-            ),
-            StateSnapshot(
-                values=["0", "1"],
-                next=("2", "2", "3.1"),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "source": "loop",
-                    "writes": {"1": ["1"]},
+                "thread_id": "1",
+                "step": 2,
+                "parents": {},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
                     "thread_id": "1",
-                    "step": 1,
-                    "parents": {},
-                },
-                created_at=AnyStr(),
-                parent_config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                tasks=(
-                    PregelTask(
-                        id=AnyStr(),
-                        name="2",
-                        path=("__pregel_push", 0, False),
-                        error=None,
-                        interrupts=(),
-                        state=None,
-                        result=["2|Command(goto=Send(node='2', arg=3))"],
-                    ),
-                    PregelTask(
-                        id=AnyStr(),
-                        name="2",
-                        path=("__pregel_push", 1, False),
-                        error=None,
-                        interrupts=(),
-                        state=None,
-                        result=["2|Command(goto=Send(node='flaky', arg=4))"],
-                    ),
-                    PregelTask(
-                        id=AnyStr(),
-                        name="3.1",
-                        path=("__pregel_pull", "3.1"),
-                        error=None,
-                        interrupts=(),
-                        state=None,
-                        result=["3.1"],
-                    ),
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            tasks=(
+                PregelTask(
+                    id=AnyStr(),
+                    name="2",
+                    path=("__pregel_push", 0, False),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result=["2|3"],
                 ),
-                interrupts=(),
+                PregelTask(
+                    id=AnyStr(),
+                    name="flaky",
+                    path=("__pregel_push", 1, False),
+                    error=None,
+                    interrupts=(Interrupt(value="Bahh", resumable=False, ns=None),),
+                    state=None,
+                    result=["flaky|4"] if checkpoint_during else None,
+                ),
+                PregelTask(
+                    id=AnyStr(),
+                    name="3",
+                    path=("__pregel_pull", "3"),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result=["3"],
+                ),
             ),
-            StateSnapshot(
-                values=["0"],
-                next=("1",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "source": "loop",
-                    "writes": None,
+            interrupts=(Interrupt(value="Bahh", resumable=False, ns=None),),
+        ),
+        StateSnapshot(
+            values=["0", "1"],
+            next=("2", "2", "3.1"),
+            config={
+                "configurable": {
                     "thread_id": "1",
-                    "step": 0,
-                    "parents": {},
-                },
-                created_at=AnyStr(),
-                parent_config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                tasks=(
-                    PregelTask(
-                        id=AnyStr(),
-                        name="1",
-                        path=("__pregel_pull", "1"),
-                        error=None,
-                        interrupts=(),
-                        state=None,
-                        result=["1"],
-                    ),
-                ),
-                interrupts=(),
-            ),
-            StateSnapshot(
-                values=[],
-                next=("__start__",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "source": "input",
-                    "writes": {"__start__": ["0"]},
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"1": ["1"]},
+                "thread_id": "1",
+                "step": 1,
+                "parents": {},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
                     "thread_id": "1",
-                    "step": -1,
-                    "parents": {},
-                },
-                created_at=AnyStr(),
-                parent_config=None,
-                tasks=(
-                    PregelTask(
-                        id=AnyStr(),
-                        name="__start__",
-                        path=("__pregel_pull", "__start__"),
-                        error=None,
-                        interrupts=(),
-                        state=None,
-                        result=["0"],
-                    ),
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            tasks=(
+                PregelTask(
+                    id=AnyStr(),
+                    name="2",
+                    path=("__pregel_push", 0, False),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result=["2|Command(goto=Send(node='2', arg=3))"],
                 ),
-                interrupts=(),
+                PregelTask(
+                    id=AnyStr(),
+                    name="2",
+                    path=("__pregel_push", 1, False),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result=["2|Command(goto=Send(node='flaky', arg=4))"],
+                ),
+                PregelTask(
+                    id=AnyStr(),
+                    name="3.1",
+                    path=("__pregel_pull", "3.1"),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result=["3.1"],
+                ),
             ),
-        ]
-        if checkpoint_during:
-            assert history == expected_history
-        else:
-            assert history[0] == expected_history[0]
-            assert history[1] == expected_history[2]
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values=["0"],
+            next=("1",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": None,
+                "thread_id": "1",
+                "step": 0,
+                "parents": {},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            tasks=(
+                PregelTask(
+                    id=AnyStr(),
+                    name="1",
+                    path=("__pregel_pull", "1"),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result=["1"],
+                ),
+            ),
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values=[],
+            next=("__start__",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "input",
+                "writes": {"__start__": ["0"]},
+                "thread_id": "1",
+                "step": -1,
+                "parents": {},
+            },
+            created_at=AnyStr(),
+            parent_config=None,
+            tasks=(
+                PregelTask(
+                    id=AnyStr(),
+                    name="__start__",
+                    path=("__pregel_pull", "__start__"),
+                    error=None,
+                    interrupts=(),
+                    state=None,
+                    result=["0"],
+                ),
+            ),
+            interrupts=(),
+        ),
+    ]
+    if checkpoint_during:
+        assert history == expected_history
+    else:
+        assert history[0] == expected_history[0]
+        assert history[1] == expected_history[2]
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
@@ -5724,10 +5704,8 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     assert times_called == 1
 
 
-@pytest.mark.parametrize("checkpoint_during", [True, False])
-@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_subgraph_checkpoint_true(
-    checkpointer_name: str, checkpoint_during: bool
+    async_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
 ) -> None:
     class InnerState(TypedDict):
         my_key: Annotated[str, operator.add]
@@ -5756,48 +5734,45 @@ async def test_subgraph_checkpoint_true(
         "inner", lambda s: "inner" if s["my_key"].count("there") < 2 else END
     )
 
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        app = graph.compile(checkpointer=checkpointer)
+    app = graph.compile(checkpointer=async_checkpointer)
 
-        config = {"configurable": {"thread_id": "2"}}
-        assert [
-            c
-            async for c in app.astream(
-                {"my_key": ""},
-                config,
-                subgraphs=True,
-                checkpoint_during=checkpoint_during,
-            )
-        ] == [
-            (("inner",), {"inner_1": {"my_key": " got here", "my_other_key": ""}}),
-            (("inner",), {"inner_2": {"my_key": " and there"}}),
-            ((), {"inner": {"my_key": " got here and there"}}),
-            (
-                ("inner",),
-                {
-                    "inner_1": {
-                        "my_key": " got here",
-                        "my_other_key": " got here and there got here and there",
-                    }
-                },
-            ),
-            (("inner",), {"inner_2": {"my_key": " and there"}}),
-            (
-                (),
-                {
-                    "inner": {
-                        "my_key": " got here and there got here and there got here and there"
-                    }
-                },
-            ),
-        ]
+    config = {"configurable": {"thread_id": "2"}}
+    assert [
+        c
+        async for c in app.astream(
+            {"my_key": ""},
+            config,
+            subgraphs=True,
+            checkpoint_during=checkpoint_during,
+        )
+    ] == [
+        (("inner",), {"inner_1": {"my_key": " got here", "my_other_key": ""}}),
+        (("inner",), {"inner_2": {"my_key": " and there"}}),
+        ((), {"inner": {"my_key": " got here and there"}}),
+        (
+            ("inner",),
+            {
+                "inner_1": {
+                    "my_key": " got here",
+                    "my_other_key": " got here and there got here and there",
+                }
+            },
+        ),
+        (("inner",), {"inner_2": {"my_key": " and there"}}),
+        (
+            (),
+            {
+                "inner": {
+                    "my_key": " got here and there got here and there got here and there"
+                }
+            },
+        ),
+    ]
 
 
 @NEEDS_CONTEXTVARS
-@pytest.mark.parametrize("checkpoint_during", [True, False])
-@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_subgraph_checkpoint_true_interrupt(
-    checkpointer_name: str, checkpoint_during: bool
+    async_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
 ) -> None:
     # Define subgraph
     class SubgraphState(TypedDict):
@@ -5835,28 +5810,27 @@ async def test_subgraph_checkpoint_true_interrupt(
     builder.add_edge(START, "node_1")
     builder.add_edge("node_1", "node_2")
 
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        graph = builder.compile(checkpointer=checkpointer)
-        config = {"configurable": {"thread_id": "1"}}
+    graph = builder.compile(checkpointer=async_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
 
-        assert await graph.ainvoke(
-            {"foo": "foo"}, config, checkpoint_during=checkpoint_during
-        ) == {
-            "foo": "hi! foo",
-            "__interrupt__": [
-                Interrupt(
-                    value="Provide baz value",
-                    resumable=True,
-                    ns=[AnyStr("node_2"), AnyStr("subgraph_node_1:")],
-                )
-            ],
-        }
-        assert (await graph.aget_state(config, subgraphs=True)).tasks[
-            0
-        ].state.values == {"bar": "hi! foo"}
-        assert await graph.ainvoke(
-            Command(resume="baz"), config, checkpoint_during=checkpoint_during
-        ) == {"foo": "hi! foobaz"}
+    assert await graph.ainvoke(
+        {"foo": "foo"}, config, checkpoint_during=checkpoint_during
+    ) == {
+        "foo": "hi! foo",
+        "__interrupt__": [
+            Interrupt(
+                value="Provide baz value",
+                resumable=True,
+                ns=[AnyStr("node_2"), AnyStr("subgraph_node_1:")],
+            )
+        ],
+    }
+    assert (await graph.aget_state(config, subgraphs=True)).tasks[0].state.values == {
+        "bar": "hi! foo"
+    }
+    assert await graph.ainvoke(
+        Command(resume="baz"), config, checkpoint_during=checkpoint_during
+    ) == {"foo": "hi! foobaz"}
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
@@ -5967,7 +5941,6 @@ async def test_stream_buffering_single_node(checkpointer_name: str) -> None:
         ]
 
 
-@pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_nested_graph_interrupts_parallel(
     checkpointer_name: str, checkpoint_during: bool
@@ -6158,7 +6131,6 @@ async def test_nested_graph_interrupts_parallel(
         ]
 
 
-@pytest.mark.parametrize("checkpoint_during", [True, False])
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_doubly_nested_graph_interrupts(
     checkpointer_name: str, checkpoint_during: bool
@@ -8705,292 +8677,275 @@ async def test_pregel_loop_refcount():
         gc.enable()
 
 
-@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
-async def test_bulk_state_updates(checkpointer_name: str) -> None:
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
+async def test_bulk_state_updates(async_checkpointer: BaseCheckpointSaver) -> None:
+    class State(TypedDict):
+        foo: str
+        baz: str
 
-        class State(TypedDict):
-            foo: str
-            baz: str
+    def node_a(state: State) -> State:
+        return {"foo": "bar"}
 
-        def node_a(state: State) -> State:
-            return {"foo": "bar"}
+    def node_b(state: State) -> State:
+        return {"baz": "qux"}
 
-        def node_b(state: State) -> State:
-            return {"baz": "qux"}
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "node_b")
+        .compile(checkpointer=async_checkpointer)
+    )
 
-        graph = (
-            StateGraph(State)
-            .add_node("node_a", node_a)
-            .add_node("node_b", node_b)
-            .add_edge(START, "node_a")
-            .add_edge("node_a", "node_b")
-            .compile(checkpointer=checkpointer)
-        )
+    config = {"configurable": {"thread_id": "1"}}
 
-        config = {"configurable": {"thread_id": "1"}}
+    # First update with node_a
+    await graph.abulk_update_state(
+        config,
+        [
+            [
+                StateUpdate({"foo": "bar"}, "node_a"),
+            ]
+        ],
+    )
 
-        # First update with node_a
+    # Then bulk update with both nodes
+    await graph.abulk_update_state(
+        config,
+        [
+            [
+                StateUpdate({"foo": "updated"}, "node_a"),
+                StateUpdate({"baz": "new"}, "node_b"),
+            ]
+        ],
+    )
+
+    state = await graph.aget_state(config)
+    assert state.values == {"foo": "updated", "baz": "new"}
+
+    # Check if there are only two checkpoints
+    checkpoints = [
+        c async for c in async_checkpointer.alist({"configurable": {"thread_id": "1"}})
+    ]
+    assert len(checkpoints) == 2
+    assert checkpoints[0].metadata["writes"] == {
+        "node_a": {"foo": "updated"},
+        "node_b": {"baz": "new"},
+    }
+    assert checkpoints[1].metadata["writes"] == {"node_a": {"foo": "bar"}}
+
+    # perform multiple steps at the same time
+    config = {"configurable": {"thread_id": "2"}}
+
+    await graph.abulk_update_state(
+        config,
+        [
+            [
+                StateUpdate({"foo": "bar"}, "node_a"),
+            ],
+            [
+                StateUpdate({"foo": "updated"}, "node_a"),
+                StateUpdate({"baz": "new"}, "node_b"),
+            ],
+        ],
+    )
+
+    state = await graph.aget_state(config)
+    assert state.values == {"foo": "updated", "baz": "new"}
+
+    checkpoints = [
+        c async for c in async_checkpointer.alist({"configurable": {"thread_id": "1"}})
+    ]
+    assert len(checkpoints) == 2
+    assert checkpoints[0].metadata["writes"] == {
+        "node_a": {"foo": "updated"},
+        "node_b": {"baz": "new"},
+    }
+    assert checkpoints[1].metadata["writes"] == {"node_a": {"foo": "bar"}}
+
+    # Should raise error if updating without as_node
+    with pytest.raises(InvalidUpdateError):
         await graph.abulk_update_state(
             config,
             [
                 [
-                    StateUpdate({"foo": "bar"}, "node_a"),
+                    StateUpdate(values={"foo": "error"}, as_node=None),
+                    StateUpdate(values={"bar": "error"}, as_node=None),
                 ]
             ],
         )
 
-        # Then bulk update with both nodes
+    # Should raise if no updates are provided
+    with pytest.raises(ValueError, match="No supersteps provided"):
+        await graph.abulk_update_state(config, [])
+
+    # Should raise if no updates are provided
+    with pytest.raises(ValueError, match="No updates provided"):
+        await graph.abulk_update_state(config, [[], []])
+
+    # Should raise if __end__ or __copy__ update is applied in bulk
+    with pytest.raises(InvalidUpdateError):
         await graph.abulk_update_state(
             config,
             [
                 [
-                    StateUpdate({"foo": "updated"}, "node_a"),
-                    StateUpdate({"baz": "new"}, "node_b"),
-                ]
+                    StateUpdate(values=None, as_node="__end__"),
+                    StateUpdate(values=None, as_node="__copy__"),
+                ],
             ],
         )
 
-        state = await graph.aget_state(config)
-        assert state.values == {"foo": "updated", "baz": "new"}
 
-        # Check if there are only two checkpoints
-        checkpoints = [
-            c async for c in checkpointer.alist({"configurable": {"thread_id": "1"}})
-        ]
-        assert len(checkpoints) == 2
-        assert checkpoints[0].metadata["writes"] == {
-            "node_a": {"foo": "updated"},
-            "node_b": {"baz": "new"},
+async def test_update_as_input(async_checkpointer: BaseCheckpointSaver) -> None:
+    class State(TypedDict):
+        foo: str
+
+    def agent(state: State) -> State:
+        return {"foo": "agent"}
+
+    def tool(state: State) -> State:
+        return {"foo": "tool"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("agent", agent)
+        .add_node("tool", tool)
+        .add_edge(START, "agent")
+        .add_edge("agent", "tool")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    assert await graph.ainvoke(
+        {"foo": "input"}, {"configurable": {"thread_id": "1"}}
+    ) == {"foo": "tool"}
+
+    assert await graph.ainvoke(
+        {"foo": "input"}, {"configurable": {"thread_id": "1"}}
+    ) == {"foo": "tool"}
+
+    def map_snapshot(i: StateSnapshot) -> dict:
+        return {
+            "values": i.values,
+            "next": i.next,
+            "step": i.metadata.get("step"),
         }
-        assert checkpoints[1].metadata["writes"] == {"node_a": {"foo": "bar"}}
 
-        # perform multiple steps at the same time
-        config = {"configurable": {"thread_id": "2"}}
+    history = [
+        map_snapshot(s)
+        async for s in graph.aget_state_history({"configurable": {"thread_id": "1"}})
+    ]
 
-        await graph.abulk_update_state(
-            config,
-            [
-                [
-                    StateUpdate({"foo": "bar"}, "node_a"),
-                ],
-                [
-                    StateUpdate({"foo": "updated"}, "node_a"),
-                    StateUpdate({"baz": "new"}, "node_b"),
-                ],
+    await graph.abulk_update_state(
+        {"configurable": {"thread_id": "2"}},
+        [
+            # First turn
+            [StateUpdate({"foo": "input"}, "__input__")],
+            [StateUpdate({"foo": "input"}, "__start__")],
+            [StateUpdate({"foo": "agent"}, "agent")],
+            [StateUpdate({"foo": "tool"}, "tool")],
+            # Second turn
+            [StateUpdate({"foo": "input"}, "__input__")],
+            [StateUpdate({"foo": "input"}, "__start__")],
+            [StateUpdate({"foo": "agent"}, "agent")],
+            [StateUpdate({"foo": "tool"}, "tool")],
+        ],
+    )
+
+    state = await graph.aget_state({"configurable": {"thread_id": "2"}})
+    assert state.values == {"foo": "tool"}
+
+    new_history = [
+        map_snapshot(s)
+        async for s in graph.aget_state_history({"configurable": {"thread_id": "2"}})
+    ]
+
+    assert new_history == history
+
+
+async def test_batch_update_as_input(async_checkpointer: BaseCheckpointSaver) -> None:
+    class State(TypedDict):
+        foo: str
+        tasks: Annotated[list[int], operator.add]
+
+    def agent(state: State) -> State:
+        return {"foo": "agent"}
+
+    def map(state: State) -> Command["task"]:
+        return Command(
+            goto=[
+                Send("task", {"index": 0}),
+                Send("task", {"index": 1}),
+                Send("task", {"index": 2}),
             ],
+            update={"foo": "map"},
         )
 
-        state = await graph.aget_state(config)
-        assert state.values == {"foo": "updated", "baz": "new"}
+    def task(state: dict) -> State:
+        return {"tasks": [state["index"]]}
 
-        checkpoints = [
-            c async for c in checkpointer.alist({"configurable": {"thread_id": "1"}})
-        ]
-        assert len(checkpoints) == 2
-        assert checkpoints[0].metadata["writes"] == {
-            "node_a": {"foo": "updated"},
-            "node_b": {"baz": "new"},
+    graph = (
+        StateGraph(State)
+        .add_node("agent", agent)
+        .add_node("map", map)
+        .add_node("task", task)
+        .add_edge(START, "agent")
+        .add_edge("agent", "map")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    assert await graph.ainvoke(
+        {"foo": "input"}, {"configurable": {"thread_id": "1"}}
+    ) == {"foo": "map", "tasks": [0, 1, 2]}
+
+    def map_snapshot(i: StateSnapshot) -> dict:
+        return {
+            "values": i.values,
+            "next": i.next,
+            "step": i.metadata.get("step"),
+            "tasks": [t.name for t in i.tasks],
         }
-        assert checkpoints[1].metadata["writes"] == {"node_a": {"foo": "bar"}}
 
-        # Should raise error if updating without as_node
-        with pytest.raises(InvalidUpdateError):
-            await graph.abulk_update_state(
-                config,
-                [
-                    [
-                        StateUpdate(values={"foo": "error"}, as_node=None),
-                        StateUpdate(values={"bar": "error"}, as_node=None),
-                    ]
-                ],
-            )
+    history = [
+        map_snapshot(s)
+        async for s in graph.aget_state_history({"configurable": {"thread_id": "1"}})
+    ]
 
-        # Should raise if no updates are provided
-        with pytest.raises(ValueError, match="No supersteps provided"):
-            await graph.abulk_update_state(config, [])
-
-        # Should raise if no updates are provided
-        with pytest.raises(ValueError, match="No updates provided"):
-            await graph.abulk_update_state(config, [[], []])
-
-        # Should raise if __end__ or __copy__ update is applied in bulk
-        with pytest.raises(InvalidUpdateError):
-            await graph.abulk_update_state(
-                config,
-                [
-                    [
-                        StateUpdate(values=None, as_node="__end__"),
-                        StateUpdate(values=None, as_node="__copy__"),
-                    ],
-                ],
-            )
-
-
-@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
-async def test_update_as_input(checkpointer_name: str) -> None:
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-
-        class State(TypedDict):
-            foo: str
-
-        def agent(state: State) -> State:
-            return {"foo": "agent"}
-
-        def tool(state: State) -> State:
-            return {"foo": "tool"}
-
-        graph = (
-            StateGraph(State)
-            .add_node("agent", agent)
-            .add_node("tool", tool)
-            .add_edge(START, "agent")
-            .add_edge("agent", "tool")
-            .compile(checkpointer=checkpointer)
-        )
-
-        assert await graph.ainvoke(
-            {"foo": "input"}, {"configurable": {"thread_id": "1"}}
-        ) == {"foo": "tool"}
-
-        assert await graph.ainvoke(
-            {"foo": "input"}, {"configurable": {"thread_id": "1"}}
-        ) == {"foo": "tool"}
-
-        def map_snapshot(i: StateSnapshot) -> dict:
-            return {
-                "values": i.values,
-                "next": i.next,
-                "step": i.metadata.get("step"),
-            }
-
-        history = [
-            map_snapshot(s)
-            async for s in graph.aget_state_history(
-                {"configurable": {"thread_id": "1"}}
-            )
-        ]
-
-        await graph.abulk_update_state(
-            {"configurable": {"thread_id": "2"}},
+    await graph.abulk_update_state(
+        {"configurable": {"thread_id": "2"}},
+        [
+            [StateUpdate({"foo": "input"}, "__input__")],
+            [StateUpdate({"foo": "input"}, "__start__")],
+            [StateUpdate({"foo": "agent", "tasks": []}, "agent")],
             [
-                # First turn
-                [StateUpdate({"foo": "input"}, "__input__")],
-                [StateUpdate({"foo": "input"}, "__start__")],
-                [StateUpdate({"foo": "agent"}, "agent")],
-                [StateUpdate({"foo": "tool"}, "tool")],
-                # Second turn
-                [StateUpdate({"foo": "input"}, "__input__")],
-                [StateUpdate({"foo": "input"}, "__start__")],
-                [StateUpdate({"foo": "agent"}, "agent")],
-                [StateUpdate({"foo": "tool"}, "tool")],
+                StateUpdate(
+                    Command(
+                        goto=[
+                            Send("task", {"index": 0}),
+                            Send("task", {"index": 1}),
+                            Send("task", {"index": 2}),
+                        ],
+                        update={"foo": "map"},
+                    ),
+                    "map",
+                )
             ],
-        )
-
-        state = await graph.aget_state({"configurable": {"thread_id": "2"}})
-        assert state.values == {"foo": "tool"}
-
-        new_history = [
-            map_snapshot(s)
-            async for s in graph.aget_state_history(
-                {"configurable": {"thread_id": "2"}}
-            )
-        ]
-
-        assert new_history == history
-
-
-@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
-async def test_batch_update_as_input(checkpointer_name: str) -> None:
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-
-        class State(TypedDict):
-            foo: str
-            tasks: Annotated[list[int], operator.add]
-
-        def agent(state: State) -> State:
-            return {"foo": "agent"}
-
-        def map(state: State) -> Command["task"]:
-            return Command(
-                goto=[
-                    Send("task", {"index": 0}),
-                    Send("task", {"index": 1}),
-                    Send("task", {"index": 2}),
-                ],
-                update={"foo": "map"},
-            )
-
-        def task(state: dict) -> State:
-            return {"tasks": [state["index"]]}
-
-        graph = (
-            StateGraph(State)
-            .add_node("agent", agent)
-            .add_node("map", map)
-            .add_node("task", task)
-            .add_edge(START, "agent")
-            .add_edge("agent", "map")
-            .compile(checkpointer=checkpointer)
-        )
-
-        assert await graph.ainvoke(
-            {"foo": "input"}, {"configurable": {"thread_id": "1"}}
-        ) == {"foo": "map", "tasks": [0, 1, 2]}
-
-        def map_snapshot(i: StateSnapshot) -> dict:
-            return {
-                "values": i.values,
-                "next": i.next,
-                "step": i.metadata.get("step"),
-                "tasks": [t.name for t in i.tasks],
-            }
-
-        history = [
-            map_snapshot(s)
-            async for s in graph.aget_state_history(
-                {"configurable": {"thread_id": "1"}}
-            )
-        ]
-
-        await graph.abulk_update_state(
-            {"configurable": {"thread_id": "2"}},
             [
-                [StateUpdate({"foo": "input"}, "__input__")],
-                [StateUpdate({"foo": "input"}, "__start__")],
-                [StateUpdate({"foo": "agent", "tasks": []}, "agent")],
-                [
-                    StateUpdate(
-                        Command(
-                            goto=[
-                                Send("task", {"index": 0}),
-                                Send("task", {"index": 1}),
-                                Send("task", {"index": 2}),
-                            ],
-                            update={"foo": "map"},
-                        ),
-                        "map",
-                    )
-                ],
-                [
-                    StateUpdate({"tasks": [0]}, "task"),
-                    StateUpdate({"tasks": [1]}, "task"),
-                    StateUpdate({"tasks": [2]}, "task"),
-                ],
+                StateUpdate({"tasks": [0]}, "task"),
+                StateUpdate({"tasks": [1]}, "task"),
+                StateUpdate({"tasks": [2]}, "task"),
             ],
-        )
+        ],
+    )
 
-        state = await graph.aget_state({"configurable": {"thread_id": "2"}})
-        assert state.values == {"foo": "map", "tasks": [0, 1, 2]}
+    state = await graph.aget_state({"configurable": {"thread_id": "2"}})
+    assert state.values == {"foo": "map", "tasks": [0, 1, 2]}
 
-        new_history = [
-            map_snapshot(s)
-            async for s in graph.aget_state_history(
-                {"configurable": {"thread_id": "2"}}
-            )
-        ]
+    new_history = [
+        map_snapshot(s)
+        async for s in graph.aget_state_history({"configurable": {"thread_id": "2"}})
+    ]
 
-        assert new_history == history
+    assert new_history == history
 
 
 async def test_draw_invalid():
