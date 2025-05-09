@@ -71,7 +71,6 @@ from tests.agents import AgentAction, AgentFinish
 from tests.any_str import AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_SYNC,
-    ALL_STORES_SYNC,
     REGULAR_CHECKPOINTERS_SYNC,
     SHOULD_CHECK_SNAPSHOTS,
 )
@@ -5063,12 +5062,10 @@ def test_multiple_sinks_subgraphs(snapshot: SnapshotAssertion) -> None:
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-@pytest.mark.parametrize("store_name", ALL_STORES_SYNC)
 def test_store_injected(
-    request: pytest.FixtureRequest, checkpointer_name: str, store_name: str
+    request: pytest.FixtureRequest, checkpointer_name: str, sync_store: BaseStore
 ) -> None:
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
-    the_store = request.getfixturevalue(f"store_{store_name}")
 
     class State(TypedDict):
         count: Annotated[int, operator.add]
@@ -5112,7 +5109,7 @@ def test_store_injected(
         builder.add_node(f"node_{i}", Node(i))
         builder.add_edge("__start__", f"node_{i}")
 
-    graph = builder.compile(store=the_store, checkpointer=checkpointer)
+    graph = builder.compile(store=sync_store, checkpointer=checkpointer)
 
     results = graph.batch(
         [{"count": 0}] * M,
@@ -5121,25 +5118,25 @@ def test_store_injected(
     )
     result = results[-1]
     assert result == {"count": N + 1}
-    returned_doc = the_store.get(namespace, doc_id).value
+    returned_doc = sync_store.get(namespace, doc_id).value
     assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 0}
-    assert len(the_store.search(namespace)) == 1
+    assert len(sync_store.search(namespace)) == 1
     # Check results after another turn of the same thread
     result = graph.invoke({"count": 0}, {"configurable": {"thread_id": thread_1}})
     assert result == {"count": (N + 1) * 2}
-    returned_doc = the_store.get(namespace, doc_id).value
+    returned_doc = sync_store.get(namespace, doc_id).value
     assert returned_doc == {**doc, "from_thread": thread_1, "some_val": N + 1}
-    assert len(the_store.search(namespace)) == 1
+    assert len(sync_store.search(namespace)) == 1
 
     result = graph.invoke({"count": 0}, {"configurable": {"thread_id": thread_2}})
     assert result == {"count": N + 1}
-    returned_doc = the_store.get(namespace, doc_id).value
+    returned_doc = sync_store.get(namespace, doc_id).value
     assert returned_doc == {
         **doc,
         "from_thread": thread_2,
         "some_val": 0,
     }  # Overwrites the whole doc
-    assert len(the_store.search(namespace)) == 1  # still overwriting the same one
+    assert len(sync_store.search(namespace)) == 1  # still overwriting the same one
 
 
 def test_enum_node_names():
@@ -7392,16 +7389,15 @@ def test_entrypoint_with_return_and_save() -> None:
     assert previous_ == ["hello", "goodbye"]
 
 
-def test_overriding_injectable_args_with_tasks() -> None:
+def test_overriding_injectable_args_with_tasks(sync_store: BaseStore) -> None:
     """Test overriding injectable args in tasks."""
-    from langgraph.store.memory import InMemoryStore
 
     @task
     def foo(store: BaseStore, writer: StreamWriter, value: Any) -> None:
         assert store is value
         assert writer is value
 
-    @entrypoint(store=InMemoryStore())
+    @entrypoint(store=sync_store)
     def main(inputs, store: BaseStore) -> str:
         assert store is not None
         foo(store=None, writer=None, value=None).result()

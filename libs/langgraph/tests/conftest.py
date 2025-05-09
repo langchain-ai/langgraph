@@ -1,6 +1,6 @@
 import sys
 from collections.abc import AsyncIterator, Iterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from typing import Optional
 from uuid import UUID, uuid4
 
@@ -374,8 +374,8 @@ def cache(request: pytest.FixtureRequest) -> Iterator[BaseCache]:
         raise ValueError(f"Unknown cache type: {request.param}")
 
 
-@pytest.fixture(scope="function")
-def store_postgres():
+@contextmanager
+def _store_postgres():
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
@@ -391,8 +391,8 @@ def store_postgres():
             conn.execute(f"DROP DATABASE {database}")
 
 
-@pytest.fixture(scope="function")
-def store_postgres_pipe():
+@contextmanager
+def _store_postgres_pipe():
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
@@ -411,8 +411,8 @@ def store_postgres_pipe():
             conn.execute(f"DROP DATABASE {database}")
 
 
-@pytest.fixture(scope="function")
-def store_postgres_pool():
+@contextmanager
+def _store_postgres_pool():
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
@@ -430,13 +430,35 @@ def store_postgres_pool():
             conn.execute(f"DROP DATABASE {database}")
 
 
-@pytest.fixture(scope="function")
-def store_in_memory():
-    yield InMemoryStore()
+@pytest.fixture(
+    scope="function",
+    params=["in_memory", "postgres", "postgres_pipe", "postgres_pool"],
+)
+def sync_store(request: pytest.FixtureRequest) -> Iterator[BaseStore]:
+    store_name = request.param
+    if store_name is None:
+        yield None
+    elif store_name == "in_memory":
+        yield InMemoryStore()
+    elif store_name == "postgres":
+        with _store_postgres() as store:
+            yield store
+    elif store_name == "postgres_pipe":
+        with _store_postgres_pipe() as store:
+            yield store
+    elif store_name == "postgres_pool":
+        with _store_postgres_pool() as store:
+            yield store
+    else:
+        raise NotImplementedError(f"Unknown store {store_name}")
 
 
-@asynccontextmanager
-async def awith_store(store_name: Optional[str]) -> AsyncIterator[BaseStore]:
+@pytest.fixture(
+    scope="function",
+    params=["in_memory", "postgres_aio", "postgres_aio_pipe", "postgres_aio_pool"],
+)
+async def async_store(request: pytest.FixtureRequest) -> AsyncIterator[BaseStore]:
+    store_name = request.param
     if store_name is None:
         yield None
     elif store_name == "in_memory":
@@ -482,16 +504,4 @@ ALL_CHECKPOINTERS_ASYNC = [
 ALL_CHECKPOINTERS_ASYNC_PLUS_NONE = [
     *ALL_CHECKPOINTERS_ASYNC,
     None,
-]
-ALL_STORES_SYNC = [
-    "in_memory",
-    "postgres",
-    "postgres_pipe",
-    "postgres_pool",
-]
-ALL_STORES_ASYNC = [
-    "in_memory",
-    "postgres_aio",
-    "postgres_aio_pipe",
-    "postgres_aio_pool",
 ]
