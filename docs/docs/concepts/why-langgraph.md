@@ -19,8 +19,8 @@ To get acquainted with LangGraph's key concepts and features, complete the follo
 
 In completing this series of tutorials, you will build a support chatbot in LangGraph that can:
 
-✅ **Answer common questions** by searching the web
-✅ **Maintain conversation state** across calls  
-✅ **Route complex queries** to a human for review  
-✅ **Use custom state** to control its behavior  
-✅ **Rewind and explore** alternative conversation paths  
+* ✅ **Answer common questions** by searching the web
+* ✅ **Maintain conversation state** across calls  
+* ✅ **Route complex queries** to a human for review  
+* ✅ **Use custom state** to control its behavior  
+* ✅ **Rewind and explore** alternative conversation paths  
