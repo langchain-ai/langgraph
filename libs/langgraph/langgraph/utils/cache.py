@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-from collections.abc import Hashable
+from collections.abc import Hashable, Mapping, Sequence
 from typing import Any
 
 
-def _freeze(obj: Any) -> Hashable:
-    if isinstance(obj, dict):
+def _freeze(obj: Any, depth: int = 10) -> Hashable:
+    if isinstance(obj, Hashable) or depth <= 0:
+        # already hashable, no need to freeze
+        return obj
+    elif isinstance(obj, Mapping):
         # sort keys so {"a":1,"b":2} == {"b":2,"a":1}
-        return tuple(sorted((k, _freeze(v)) for k, v in obj.items()))
-    elif isinstance(obj, (list, tuple, set, frozenset)):
-        return tuple(_freeze(x) for x in obj)
+        return tuple(sorted((k, _freeze(v, depth - 1)) for k, v in obj.items()))
+    elif isinstance(obj, Sequence):
+        return tuple(_freeze(x, depth - 1) for x in obj)
     # numpy / pandas etc. can provide their own .tobytes()
     elif hasattr(obj, "tobytes"):
         return (
