@@ -1,4 +1,4 @@
-# 🚀 Why LangGraph?
+# Overview
 
 LangGraph is built for developers who want to build powerful, adaptable AI agents. Developers choose LangGraph for:
 
@@ -6,7 +6,7 @@ LangGraph is built for developers who want to build powerful, adaptable AI agent
 - **Low-level and extensible.** Build custom agents with fully descriptive, low-level primitives free from rigid abstractions that limit customization. Design scalable multi-agent systems, with each agent serving a specific role tailored to your use case.
 - **First-class streaming support.** With token-by-token streaming and streaming of intermediate steps, LangGraph gives users clear visibility into agent reasoning and actions as they unfold in real time.
 
-## Introduction to LangGraph
+## Learn LangGraph basics
 
 To get acquainted with LangGraph's key concepts and features, complete the following LangGraph basics tutorials series:
 
