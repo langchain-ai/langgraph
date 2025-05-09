@@ -39,7 +39,7 @@ LangGraph Platform provides different security defaults:
 
 !!! note "Custom auth"
     Custom auth is supported for **Enterprise** self-hosted deployments.
-    Standalone Container deployments do not support custom auth natively.
+    Standalone Container (Lite) deployments do not support custom auth natively.
 
 ## System Architecture
 
