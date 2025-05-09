@@ -1,0 +1,13 @@
+tldr; Placeholder until after https://jira.mongodb.org/browse/INTPYTHON-492 is resolved.
+
+This directory had previously held copies of test_pregel.py and test_pregel_async.py,
+as well as associated fixtures and utilities.
+[See here](https://github.com/langchain-ai/langgraph/blob/main/libs/langgraph/tests)
+What was here was only temporary.
+The files were copied from the langgraph library, not langgraph-checkpoint-X.
+While not in the checkpoint lib itself, they provided extensive testing of the checkpointers
+that were crucial to testing edge cases.
+
+As LangGraph development continued our copies have began to fail.
+We will determine how to proceed with maintenance in conversation with the
+Langchain-AI / LangGraph team.
