@@ -245,7 +245,7 @@ nav:
       - Cron Jobs:
         - Overview: cloud/concepts/cron_jobs.md
         - cloud/how-tos/cron_jobs.md
-      - Modifying the API:
+      - Server Customization:
         - how-tos/http/custom_lifespan.md
         - how-tos/http/custom_middleware.md
         - how-tos/http/custom_routes.md
