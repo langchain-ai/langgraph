@@ -69,11 +69,9 @@ from tests.any_str import AnyStr, AnyVersion, FloatBetween, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
     ALL_CHECKPOINTERS_ASYNC_PLUS_NONE,
-    ALL_STORES_ASYNC,
     REGULAR_CHECKPOINTERS_ASYNC,
     SHOULD_CHECK_SNAPSHOTS,
     awith_checkpointer,
-    awith_store,
 )
 from tests.fake_tracer import FakeTracer
 from tests.memory_assert import MemorySaverNoPending
@@ -6468,8 +6466,9 @@ async def test_checkpointer_null_pending_writes() -> None:
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-@pytest.mark.parametrize("store_name", ALL_STORES_ASYNC)
-async def test_store_injected_async(checkpointer_name: str, store_name: str) -> None:
+async def test_store_injected_async(
+    checkpointer_name: str, async_store: BaseStore
+) -> None:
     class State(TypedDict):
         count: Annotated[int, operator.add]
 
@@ -6527,9 +6526,8 @@ async def test_store_injected_async(checkpointer_name: str, store_name: str) -> 
 
     async with (
         awith_checkpointer(checkpointer_name) as checkpointer,
-        awith_store(store_name) as the_store,
     ):
-        graph = builder.compile(store=the_store, checkpointer=checkpointer)
+        graph = builder.compile(store=async_store, checkpointer=checkpointer)
 
         # Test batch operations with multiple threads
         results = await graph.abatch(
@@ -6539,32 +6537,32 @@ async def test_store_injected_async(checkpointer_name: str, store_name: str) -> 
         )
         result = results[-1]
         assert result == {"count": N + 1}
-        returned_doc = (await the_store.aget(namespace, doc_id)).value
+        returned_doc = (await async_store.aget(namespace, doc_id)).value
         assert returned_doc == {**doc, "from_thread": thread_1, "some_val": 0}
-        assert len(await the_store.asearch(namespace)) == 1
+        assert len(await async_store.asearch(namespace)) == 1
 
         # Check results after another turn of the same thread
         result = await graph.ainvoke(
             {"count": 0}, {"configurable": {"thread_id": thread_1}}
         )
         assert result == {"count": (N + 1) * 2}
-        returned_doc = (await the_store.aget(namespace, doc_id)).value
+        returned_doc = (await async_store.aget(namespace, doc_id)).value
         assert returned_doc == {**doc, "from_thread": thread_1, "some_val": N + 1}
-        assert len(await the_store.asearch(namespace)) == 1
+        assert len(await async_store.asearch(namespace)) == 1
 
         # Test with a different thread
         result = await graph.ainvoke(
             {"count": 0}, {"configurable": {"thread_id": thread_2}}
         )
         assert result == {"count": N + 1}
-        returned_doc = (await the_store.aget(namespace, doc_id)).value
+        returned_doc = (await async_store.aget(namespace, doc_id)).value
         assert returned_doc == {
             **doc,
             "from_thread": thread_2,
             "some_val": 0,
         }  # Overwrites the whole doc
         assert (
-            len(await the_store.asearch(namespace)) == 1
+            len(await async_store.asearch(namespace)) == 1
         )  # still overwriting the same one
 
 
@@ -8220,16 +8218,17 @@ async def test_named_tasks_functional() -> None:
 
 
 @NEEDS_CONTEXTVARS
-async def test_overriding_injectable_args_with_async_task() -> None:
+async def test_overriding_injectable_args_with_async_task(
+    async_store: BaseStore,
+) -> None:
     """Test overriding injectable args in tasks."""
-    from langgraph.store.memory import InMemoryStore
 
     @task
     async def foo(store: BaseStore, writer: StreamWriter, value: Any) -> None:
         assert store is value
         assert writer is value
 
-    @entrypoint(store=InMemoryStore())
+    @entrypoint(store=async_store)
     async def main(inputs, store: BaseStore) -> str:
         assert store is not None
         await foo(store=None, writer=None, value=None)
