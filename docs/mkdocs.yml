@@ -118,7 +118,7 @@ nav:
       - agents/evals.md
       - agents/deployment.md
       - agents/ui.md
-    - Customizable agents:
+    - LangGraph framework:
       - Agent architectures:
         - Overview: concepts/agentic_concepts.md
         - Workflows & agents: tutorials/workflows.md
@@ -156,12 +156,8 @@ nav:
       - Functional API:
         - Overview: concepts/functional_api.md
         - how-tos/use-functional-api.md
+      - concepts/pregel.md
       - Other:
-        # Pregel is the underlying low level API that backs
-        # both the Graph API and the Functional API.
-        # It allows using the functional API from within the Graph API
-        # and vice versa.
-        - concepts/pregel.md
         # We want to push async higher (need to check the content inside it)
         # and convert it into a concept rather than a how-to page.
         - how-tos/async.ipynb
