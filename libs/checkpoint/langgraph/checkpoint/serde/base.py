@@ -1,7 +1,17 @@
+from __future__ import annotations
+
 from typing import Any, Protocol
 
 
-class SerializerProtocol(Protocol):
+class UntypedSerializerProtocol(Protocol):
+    """Protocol for serialization and deserialization of objects."""
+
+    def dumps(self, obj: Any) -> bytes: ...
+
+    def loads(self, data: bytes) -> Any: ...
+
+
+class SerializerProtocol(UntypedSerializerProtocol, Protocol):
     """Protocol for serialization and deserialization of objects.
 
     - `dumps`: Serialize an object to bytes.
@@ -12,17 +22,13 @@ class SerializerProtocol(Protocol):
     Valid implementations include the `pickle`, `json` and `orjson` modules.
     """
 
-    def dumps(self, obj: Any) -> bytes: ...
-
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]: ...
-
-    def loads(self, data: bytes) -> Any: ...
 
     def loads_typed(self, data: tuple[str, bytes]) -> Any: ...
 
 
 class SerializerCompat(SerializerProtocol):
-    def __init__(self, serde: SerializerProtocol) -> None:
+    def __init__(self, serde: UntypedSerializerProtocol) -> None:
         self.serde = serde
 
     def dumps(self, obj: Any) -> bytes:
@@ -38,7 +44,9 @@ class SerializerCompat(SerializerProtocol):
         return self.serde.loads(data[1])
 
 
-def maybe_add_typed_methods(serde: SerializerProtocol) -> SerializerProtocol:
+def maybe_add_typed_methods(
+    serde: SerializerProtocol | UntypedSerializerProtocol,
+) -> SerializerProtocol:
     """Wrap serde old serde implementations in a class with loads_typed and dumps_typed for backwards compatibility."""
 
     if not hasattr(serde, "loads_typed") or not hasattr(serde, "dumps_typed"):

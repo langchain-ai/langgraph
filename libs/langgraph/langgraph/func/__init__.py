@@ -16,10 +16,11 @@ from typing import (
     overload,
 )
 
+from langgraph.cache.base import BaseCache
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.constants import END, PREVIOUS, START
+from langgraph.constants import CACHE_NS_WRITES, END, PREVIOUS, START
 from langgraph.pregel import Pregel
 from langgraph.pregel.call import (
     P,
@@ -27,11 +28,55 @@ from langgraph.pregel.call import (
     T,
     call,
     get_runnable_for_entrypoint,
+    identifier,
 )
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.types import _DC_KWARGS, RetryPolicy, StreamMode
+from langgraph.types import _DC_KWARGS, CachePolicy, RetryPolicy, StreamMode
+
+
+class TaskFunction(Generic[P, T]):
+    def __init__(
+        self,
+        func: Callable[P, T],
+        *,
+        retry: Optional[Sequence[RetryPolicy]] = (),
+        cache_policy: Optional[CachePolicy[Callable[P, Union[str, bytes]]]] = None,
+        name: Optional[str] = None,
+    ) -> None:
+        if name is not None:
+            if hasattr(func, "__func__"):
+                # handle class methods
+                # NOTE: we're modifying the instance method to avoid modifying
+                # the original class method in case it's shared across multiple tasks
+                instance_method = functools.partial(func.__func__, func.__self__)  # type: ignore [attr-defined]
+                instance_method.__name__ = name  # type: ignore [attr-defined]
+                func = instance_method
+            else:
+                # handle regular functions / partials / callable classes, etc.
+                func.__name__ = name
+        self.func = func
+        self.retry = retry
+        self.cache_policy = cache_policy
+        functools.update_wrapper(self, func)
+
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> SyncAsyncFuture[T]:
+        return call(
+            self.func, retry=self.retry, cache_policy=self.cache_policy, *args, **kwargs
+        )
+
+    def clear_cache(self, cache: BaseCache) -> None:
+        """Clear the cache for this task."""
+        if self.cache_policy is not None:
+            cache.clear(((CACHE_NS_WRITES, identifier(self.func) or "__dynamic__"),))
+
+    async def aclear_cache(self, cache: BaseCache) -> None:
+        """Clear the cache for this task."""
+        if self.cache_policy is not None:
+            await cache.aclear(
+                ((CACHE_NS_WRITES, identifier(self.func) or "__dynamic__"),)
+            )
 
 
 @overload
@@ -39,16 +84,17 @@ def task(
     *,
     name: Optional[str] = None,
     retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
+    cache_policy: Optional[CachePolicy[Callable[P, Union[str, bytes]]]] = None,
 ) -> Callable[
     [Union[Callable[P, Awaitable[T]], Callable[P, T]]],
-    Callable[P, SyncAsyncFuture[T]],
+    TaskFunction[P, T],
 ]: ...
 
 
 @overload
 def task(
     __func_or_none__: Union[Callable[P, Awaitable[T]], Callable[P, T]],
-) -> Callable[P, SyncAsyncFuture[T]]: ...
+) -> TaskFunction[P, T]: ...
 
 
 def task(
@@ -56,12 +102,13 @@ def task(
     *,
     name: Optional[str] = None,
     retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
+    cache_policy: Optional[CachePolicy[Callable[P, Union[str, bytes]]]] = None,
 ) -> Union[
     Callable[
         [Union[Callable[P, Awaitable[T]], Callable[P, T]]],
-        Callable[P, SyncAsyncFuture[T]],
+        TaskFunction[P, T],
     ],
-    Callable[P, SyncAsyncFuture[T]],
+    TaskFunction[P, T],
 ]:
     """Define a LangGraph task using the `task` decorator.
 
@@ -129,21 +176,9 @@ def task(
     ) -> Union[
         Callable[P, concurrent.futures.Future[T]], Callable[P, asyncio.Future[T]]
     ]:
-        if name is not None:
-            if hasattr(func, "__func__"):
-                # handle class methods
-                # NOTE: we're modifying the instance method to avoid modifying
-                # the original class method in case it's shared across multiple tasks
-                instance_method = functools.partial(func.__func__, func.__self__)  # type: ignore [union-attr]
-                instance_method.__name__ = name  # type: ignore [attr-defined]
-                func = instance_method
-            else:
-                # handle regular functions / partials / callable classes, etc.
-                func.__name__ = name
-
-        call_func = functools.partial(call, func, retry=retry_policies)
-        object.__setattr__(call_func, "_is_pregel_task", True)
-        return functools.update_wrapper(call_func, func)
+        return TaskFunction(
+            func, retry=retry_policies, cache_policy=cache_policy, name=name
+        )
 
     if __func_or_none__ is not None:
         return decorator(__func_or_none__)
@@ -316,11 +351,17 @@ class entrypoint:
         self,
         checkpointer: Optional[BaseCheckpointSaver] = None,
         store: Optional[BaseStore] = None,
+        cache: Optional[BaseCache] = None,
         config_schema: Optional[type[Any]] = None,
+        cache_policy: Optional[CachePolicy] = None,
+        retry: Union[RetryPolicy, Sequence[RetryPolicy]] = (),
     ) -> None:
         """Initialize the entrypoint decorator."""
         self.checkpointer = checkpointer
         self.store = store
+        self.cache = cache
+        self.cache_policy = cache_policy
+        self.retry = retry
         self.config_schema = config_schema
 
     @dataclass(**_DC_KWARGS)
@@ -450,5 +491,8 @@ class entrypoint:
             stream_eager=True,
             checkpointer=self.checkpointer,
             store=self.store,
+            cache=self.cache,
+            cache_policy=self.cache_policy,
+            retry_policy=self.retry,
             config_type=self.config_schema,
         )

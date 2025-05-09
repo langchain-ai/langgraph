@@ -46,6 +46,10 @@ TASKS = sys.intern("__pregel_tasks")
 RETURN = sys.intern("__return__")
 # for writes of a task where we simply record the return value
 
+# --- Reserved cache namespaces ---
+CACHE_NS_WRITES = sys.intern("__pregel_ns_writes")
+# cache namespace for node writes
+
 # --- Reserved config.configurable keys ---
 CONFIG_KEY_SEND = sys.intern("__pregel_send")
 # holds the `write` function that accepts writes to state/edges/reserved keys
@@ -61,6 +65,8 @@ CONFIG_KEY_STREAM_WRITER = sys.intern("__pregel_stream_writer")
 # holds a `StreamWriter` for stream_mode=custom
 CONFIG_KEY_STORE = sys.intern("__pregel_store")
 # holds a `BaseStore` made available to managed values
+CONFIG_KEY_CACHE = sys.intern("__pregel_cache")
+# holds a `BaseCache` made available to subgraphs
 CONFIG_KEY_RESUMING = sys.intern("__pregel_resuming")
 # holds a boolean indicating if subgraphs should resume from a previous checkpoint
 CONFIG_KEY_TASK_ID = sys.intern("__pregel_task_id")
