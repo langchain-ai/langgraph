@@ -313,8 +313,8 @@ class Command(Generic[N], ToolOutputMixin):
 
     graph: Optional[str] = None
     update: Optional[Any] = None
-    resume: Optional[Union[dict[str, Any], Any]] = None
-    goto: Union[Send, Sequence[Union[Send, str]], str] = ()
+    resume: Optional[Union[Any, dict[str, Any]]] = None
+    goto: Union[Send, Sequence[Union[Send, N]], N] = ()
 
     def __repr__(self) -> str:
         # get all non-None values

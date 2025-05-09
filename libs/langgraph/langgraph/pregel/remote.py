@@ -36,6 +36,7 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_STREAM,
+    CONFIG_KEY_TASK_ID,
     INTERRUPT,
     NS_SEP,
 )
@@ -50,6 +51,7 @@ CONF_DROPLIST = frozenset(
         CONFIG_KEY_CHECKPOINT_MAP,
         CONFIG_KEY_CHECKPOINT_ID,
         CONFIG_KEY_CHECKPOINT_NS,
+        CONFIG_KEY_TASK_ID,
     ),
 )
 
@@ -263,11 +265,15 @@ class RemoteGraph(PregelProtocol):
                     path=tuple(),
                     error=Exception(task["error"]) if task["error"] else None,
                     interrupts=tuple(interrupts),
-                    state=self._create_state_snapshot(task["state"])
-                    if task["state"]
-                    else cast(RunnableConfig, {"configurable": task["checkpoint"]})
-                    if task["checkpoint"]
-                    else None,
+                    state=(
+                        self._create_state_snapshot(task["state"])
+                        if task["state"]
+                        else (
+                            cast(RunnableConfig, {"configurable": task["checkpoint"]})
+                            if task["checkpoint"]
+                            else None
+                        )
+                    ),
                     result=task.get("result"),
                 )
             )
@@ -285,18 +291,20 @@ class RemoteGraph(PregelProtocol):
             },
             metadata=CheckpointMetadata(**state["metadata"]),
             created_at=state["created_at"],
-            parent_config={
-                "configurable": {
-                    "thread_id": state["parent_checkpoint"]["thread_id"],
-                    "checkpoint_ns": state["parent_checkpoint"]["checkpoint_ns"],
-                    "checkpoint_id": state["parent_checkpoint"]["checkpoint_id"],
-                    "checkpoint_map": state["parent_checkpoint"].get(
-                        "checkpoint_map", {}
-                    ),
+            parent_config=(
+                {
+                    "configurable": {
+                        "thread_id": state["parent_checkpoint"]["thread_id"],
+                        "checkpoint_ns": state["parent_checkpoint"]["checkpoint_ns"],
+                        "checkpoint_id": state["parent_checkpoint"]["checkpoint_id"],
+                        "checkpoint_map": state["parent_checkpoint"].get(
+                            "checkpoint_map", {}
+                        ),
+                    }
                 }
-            }
-            if state["parent_checkpoint"]
-            else None,
+                if state["parent_checkpoint"]
+                else None
+            ),
             tasks=tuple(tasks),
             interrupts=tuple([i for task in tasks for i in task.interrupts]),
         )
@@ -687,6 +695,10 @@ class RemoteGraph(PregelProtocol):
             # filter for what was actually requested
             if mode not in requested:
                 continue
+
+            if chunk.event.startswith("messages"):
+                chunk = chunk._replace(data=tuple(chunk.data))  # type: ignore
+
             # emit chunk
             if subgraphs:
                 if NS_SEP in chunk.event:
@@ -782,6 +794,10 @@ class RemoteGraph(PregelProtocol):
             # filter for what was actually requested
             if mode not in requested:
                 continue
+
+            if chunk.event.startswith("messages"):
+                chunk = chunk._replace(data=tuple(chunk.data))  # type: ignore
+
             # emit chunk
             if subgraphs:
                 if NS_SEP in chunk.event:
