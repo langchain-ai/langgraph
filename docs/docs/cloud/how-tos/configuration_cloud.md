@@ -1,19 +1,23 @@
-# How to create agents with configuration
+# How to create Assistants
 
-One of the benefits of LangGraph API is that it lets you create agents with different configurations.
-This is useful when you want to:
+!!! info "Prerequisites"
 
-- Define a cognitive architecture once as a LangGraph
-- Let that LangGraph be configurable across some attributes (for example, system message or LLM to use)
-- Let users create agents with arbitrary configurations, save them, and then use them in the future
+    - [Assistants Overview](../../concepts/assistants.md)
+    - [Configuration](../../concepts/low_level.md#configuration)
 
-In this guide we will show how to do that for the default agent we have built in.
+In this guide we will show how to create and configure an assistant.
 
-If you look at the agent we defined, you can see that inside the `call_model` node we have created the model based on some configuration. That node looks like:
+First, as a brief refresher on the concept of configurations, consider the following simple `call_model` node and configuration schema. Observe that this node tries to read and use the `model_name` as defined by the `config` object's `configurable`.
 
 === "Python"
 
     ```python
+
+    class ConfigSchema(TypedDict):
+        model_name: str
+
+    builder = StateGraph(AgentState, config_schema=ConfigSchema)
+
     def call_model(state, config):
         messages = state["messages"]
         model_name = config.get('configurable', {}).get("model_name", "anthropic")
@@ -26,6 +30,15 @@ If you look at the agent we defined, you can see that inside the `call_model` no
 === "Javascript"
 
     ```js
+    import { Annotation } from "@langchain/langgraph";
+
+    const ConfigSchema = Annotation.Root({
+        model_name: Annotation<string>,
+        system_prompt:
+    });
+
+    const builder = new StateGraph(AgentState, ConfigSchema)
+
     function callModel(state: State, config: RunnableConfig) {
       const messages = state.messages;
       const modelName = config.configurable?.model_name ?? "anthropic";
@@ -36,9 +49,15 @@ If you look at the agent we defined, you can see that inside the `call_model` no
     }
     ```
 
-We are looking inside the config for a `model_name` parameter (which defaults to `anthropic` if none is found). That means that by default we are using Anthropic as our model provider. In this example we will see an example of how to create an example agent that is configured to use OpenAI.
+For more information on configurations, [see here](../../concepts/low_level.md#configuration).
 
-First let's set up our client and thread:
+## Creating an Assistant
+
+### LangGraph SDK
+
+To create an assistant, use the [LangGraph SDK](../../concepts/sdk.md) `create` method. See the [Python](../reference/sdk/python_sdk_ref.md#langgraph_sdk.client.AssistantsClient.create) and [JS](../reference/sdk/js_ts_sdk_ref.md#create) SDK reference docs for more information.
+
+This example uses the same configuration schema as above, and creates an assistant with `model_name` set to `openai`.
 
 === "Python"
 
@@ -46,84 +65,9 @@ First let's set up our client and thread:
     from langgraph_sdk import get_client
 
     client = get_client(url=<DEPLOYMENT_URL>)
-    # Select an assistant that is not configured
-    assistants = await client.assistants.search()
-    assistant = [a for a in assistants if not a["config"]][0]
-    ```
-
-=== "Javascript"
-
-    ```js
-    import { Client } from "@langchain/langgraph-sdk";
-
-    const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
-    // Select an assistant that is not configured
-    const assistants = await client.assistants.search();
-    const assistant = assistants.find(a => !a.config);
-    ```
-
-=== "CURL"
-
-    ```bash
-    curl --request POST \
-        --url <DEPLOYMENT_URL>/assistants/search \
-        --header 'Content-Type: application/json' \
-        --data '{
-            "limit": 10,
-            "offset": 0
-        }' | jq -c 'map(select(.config == null or .config == {})) | .[0]'
-    ```
-
-We can now call `.get_schemas` to get schemas associated with this graph:
-
-=== "Python"
-
-    ```python
-    schemas = await client.assistants.get_schemas(
-        assistant_id=assistant["assistant_id"]
-    )
-    # There are multiple types of schemas
-    # We can get the `config_schema` to look at the configurable parameters
-    print(schemas["config_schema"])
-    ```
-
-=== "Javascript"
-
-    ```js
-    const schemas = await client.assistants.getSchemas(
-      assistant["assistant_id"]
-    );
-    // There are multiple types of schemas
-    // We can get the `config_schema` to look at the configurable parameters
-    console.log(schemas.config_schema);
-    ```
-
-=== "CURL"
-
-    ```bash
-    curl --request GET \
-        --url <DEPLOYMENT_URL>/assistants/<ASSISTANT_ID>/schemas | jq -r '.config_schema'
-    ```
-
-Output:
-
-    {
-        'model_name': 
-            {
-                'title': 'Model Name',
-                'enum': ['anthropic', 'openai'],
-                'type': 'string'
-            }
-    }
-
-Now we can initialize an assistant with config:
-
-=== "Python"
-
-    ```python
     openai_assistant = await client.assistants.create(
         # "agent" is the name of a graph we deployed
-        "agent", config={"configurable": {"model_name": "openai"}}
+        "agent", config={"configurable": {"model_name": "openai"}}, name="Open AI Assistant"
     )
 
     print(openai_assistant)
@@ -132,10 +76,14 @@ Now we can initialize an assistant with config:
 === "Javascript"
 
     ```js
-    let openAIAssistant = await client.assistants.create(
-      // "agent" is the name of a graph we deployed
-      "agent", { "configurable": { "model_name": "openai" } }
-    );
+    import { Client } from "@langchain/langgraph-sdk";
+
+    const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    let openAIAssistant = await client.assistants.create({
+        graphId: 'agent',
+        name: "Open AI Assistant",
+        config: { "configurable": { "model_name": "openai" } },
+    });
 
     console.log(openAIAssistant);
     ```
@@ -146,7 +94,7 @@ Now we can initialize an assistant with config:
     curl --request POST \
         --url <DEPLOYMENT_URL>/assistants \
         --header 'Content-Type: application/json' \
-        --data '{"graph_id":"agent","config":{"configurable":{"model_name":"open_ai"}}}'
+        --data '{"graph_id":"agent", "config":{"configurable":{"model_name":"openai"}}, "name": "Open AI Assistant"}'
     ```
 
 Output:
@@ -154,17 +102,32 @@ Output:
     {
         "assistant_id": "62e209ca-9154-432a-b9e9-2d75c7a9219b",
         "graph_id": "agent",
-        "created_at": "2024-08-31T03:09:10.230718+00:00",
-        "updated_at": "2024-08-31T03:09:10.230718+00:00",
+        "name": "Open AI Assistant"
         "config": {
             "configurable": {
-                "model_name": "open_ai"
+                "model_name": "openai"
             }
         },
         "metadata": {}
+        "created_at": "2024-08-31T03:09:10.230718+00:00",
+        "updated_at": "2024-08-31T03:09:10.230718+00:00",
     }
 
-We can verify the config is indeed taking effect:
+### LangGraph Platform UI
+
+You can also create assistants from the LangGraph Platform UI.
+
+Inside your deployment, select the "Assistants" tab. This will load a table of all of the assistants in your deployment, across all graphs.
+
+To create a new assistant, select the "+ New assistant" button. This will open a form where you can specify the graph this assistant is for, as well as provide a name, description, and the desired configuration for the assistant based on the configuration schema for that graph.
+
+To confirm, click "Create assistant". This will take you to [LangGraph Studio](../../concepts/langgraph_studio.md) where you can test the assistant. If you go back to the "Assistants" tab in the deployment, you will see the newly created assistant in the table.
+
+## Using an Assistant
+
+### LangGraph SDK
+
+We have now created an assistant called "Open AI Assistant" that has `model_name` defined as `openai`. We can now use this assistant with this configuration:
 
 === "Python"
 
@@ -173,6 +136,7 @@ We can verify the config is indeed taking effect:
     input = {"messages": [{"role": "user", "content": "who made you?"}]}
     async for event in client.runs.stream(
         thread["thread_id"],
+        # this is where we specify the assistant id to use
         openai_assistant["assistant_id"],
         input=input,
         stream_mode="updates",
@@ -190,6 +154,7 @@ We can verify the config is indeed taking effect:
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
+      // this is where we specify the assistant id to use
       openAIAssistant["assistant_id"],
       {
         input,
@@ -260,5 +225,6 @@ Output:
     Receiving event of type: updates
     {'agent': {'messages': [{'content': 'I was created by OpenAI, a research organization focused on developing and advancing artificial intelligence technology.', 'additional_kwargs': {}, 'response_metadata': {'finish_reason': 'stop', 'model_name': 'gpt-4o-2024-05-13', 'system_fingerprint': 'fp_157b3831f5'}, 'type': 'ai', 'name': None, 'id': 'run-e1a6b25c-8416-41f2-9981-f9cfe043f414', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': None}]}}
 
+### LangGraph Platform UI
 
-
+Inside your deployment, select the "Assistants" tab. For the assistant you would like to use, click the "Studio" button. This will open LangGraph Studio with the selected assistant. When you submit an input (either in Graph or Chat mode), the selected assistant and its configuration will be used.

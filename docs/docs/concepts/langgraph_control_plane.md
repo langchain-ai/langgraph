@@ -5,13 +5,13 @@ search:
 
 # LangGraph Control Plane
 
-The term "control plane" is used broadly to refer to the Control Plane UI where users create and update [LangGraph Servers](./langgraph_server.md) (deployments) and the Control Plane APIs that support the UI experience.
+The term "control plane" is used broadly to refer to the control plane UI where users create and update [LangGraph Servers](./langgraph_server.md) (deployments) and the control plane APIs that support the UI experience.
 
-When a user makes an update through the Control Plane UI, the update is stored in the control plane state. The [LangGraph Data Plane](./langgraph_data_plane.md) "listener" application polls for these updates by calling the Control Plane APIs.
+When a user makes an update through the control plane UI, the update is stored in the control plane state. The [LangGraph Data Plane](./langgraph_data_plane.md) "listener" application polls for these updates by calling the control plane APIs.
 
 ## Control Plane UI
 
-From the Control Plane UI, you can:
+From the control plane UI, you can:
 
 - View a list of outstanding deployments.
 - View details of an individual deployment.
@@ -25,7 +25,7 @@ The Control Plane UI is embedded in [LangSmith](https://docs.smith.langchain.com
 
 ## Control Plane API
 
-This section describes data model of the LangGraph Control Plane API. Control Plane API is used to create, update, and delete deployments. However, they are not publicly accessible.
+This section describes data model of the control plane API. The API is used to create, update, and delete deployments. However, they are not publicly accessible.
 
 ### Deployment
 
@@ -57,8 +57,8 @@ CPU and memory resources are per container.
 !!! info "For [Cloud SaaS](../concepts/langgraph_cloud.md)"
     For `Production` type deployments, resources can be manually increased on a case-by-case basis depending on use case and capacity constraints. Contact support@langchain.dev to request an increase in resources.
 
-!!! info "For [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md)"
-    Resources for [Self-Hosted Data Plane](../concepts/langgraph_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_control_plane.md) deployments can be fully customized.
+!!! info 
+    Resources for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments can be fully customized.
 
 ### Database Provisioning
 
@@ -70,8 +70,8 @@ There is no direct access to the database. All access to the database occurs thr
 
 The database is never deleted until the deployment itself is deleted. See [Automatic Deletion](#automatic-deletion) for additional details.
 
-!!! info "For [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md)"
-    A custom Postgres instance can be configured for [Self-Hosted Data Plane](../concepts/langgraph_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_control_plane.md) deployments.
+!!! info
+    A custom Postgres instance can be configured for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments.
 
 ### Asynchronous Deployment
 
@@ -82,19 +82,6 @@ Infrastructure for deployments and revisions are provisioned and deployed asynch
 - The deployment process for each revision contains a build step, which can take up to a few minutes.
 
 The control plane and [LangGraph Data Plane](./langgraph_data_plane.md) "listener" application coordinate to achieve asynchronous deployments.
-
-### Automatic Deletion
-
-!!! info "Only for [Cloud SaaS](../concepts/langgraph_cloud.md)"
-    Automatic deletion of deployments is only available for [Cloud SaaS](../concepts/langgraph_cloud.md).
-
-The control plane automatically deletes deployments after 28 consecutive days of non-use (it is in an unused state). A deployment is in an unused state if there are no traces emitted to LangSmith from the deployment after 28 consecutive days. On any given day, if a deployment emits a trace to LangSmith, the counter for consecutive days of non-use is reset.
-
-- An email notification is sent after 7 consecutive days of non-use.
-- A deployment is deleted after 28 consecutive days of non-use.
-
-!!! danger "Data Cannot Be Recovered"
-    After a deployment is deleted, the data (e.g. Postgres) from the deployment cannot be recovered.
 
 ### LangSmith Integration
 

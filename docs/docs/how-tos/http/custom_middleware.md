@@ -1,6 +1,6 @@
 # How to add custom middleware
 
-When deploying agents on the LangGraph platform, you can add custom middleware to your server to handle cross-cutting concerns like logging request metrics, injecting or checking headers, and enforcing security policies without modifying core server logic. This works the same way as [adding custom routes](./custom_routes.md) - you just need to provide your own [`Starlette`](https://www.starlette.io/applications/) app (including [`FastAPI`](https://fastapi.tiangolo.com/), [`FastHTML`](https://fastht.ml/) and other compatible apps).
+When deploying agents to LangGraph Platform, you can add custom middleware to your server to handle concerns like logging request metrics, injecting or checking headers, and enforcing security policies without modifying core server logic. This works the same way as [adding custom routes](./custom_routes.md). You just need to provide your own [`Starlette`](https://www.starlette.io/applications/) app (including [`FastAPI`](https://fastapi.tiangolo.com/), [`FastHTML`](https://fastht.ml/) and other compatible apps).
 
 Adding middleware lets you intercept and modify requests and responses globally across your deployment, whether they're hitting your custom endpoints or the built-in LangGraph Platform APIs.
 
@@ -40,7 +40,7 @@ app.add_middleware(CustomHeaderMiddleware)
 
 ## Configure `langgraph.json`
 
-Add the following to your `langgraph.json` file. Make sure the path points to the `webapp.py` file you created above.
+Add the following to your `langgraph.json` configuration file. Make sure the path points to the `webapp.py` file you created above.
 
 ```json
 {
@@ -68,7 +68,7 @@ Now any request to your server will include the custom header `X-Custom-Header` 
 
 ## Deploying
 
-You can deploy this app as-is to the managed langgraph cloud or to your self-hosted platform.
+You can deploy this app as-is to LangGraph Cloud or to your self-hosted platform.
 
 ## Next steps
 

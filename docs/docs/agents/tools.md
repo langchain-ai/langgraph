@@ -65,7 +65,7 @@ class MultiplyInputSchema(BaseModel):
 # highlight-next-line
 @tool("multiply_tool", args_schema=MultiplyInputSchema)
 def multiply(a: int, b: int) -> int:
-   return a * b
+    return a * b
 ```
 
 For additional customization, refer to the [custom tools guide](https://python.langchain.com/docs/how_to/custom_tools/).
