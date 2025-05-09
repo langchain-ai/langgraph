@@ -7,12 +7,15 @@ search:
 
 There are two versions of the self-hosted deployment: [Self-Hosted Data Plane](./deployment_options.md#self-hosted-data-plane) and [Self-Hosted Control Plane](./deployment_options.md#self-hosted-control-plane).
 
+!!! important "Beta"
+    The Self-Hosted Data Plane deployment option is currently in beta stage.
+
 ## Requirements
 
 - You use `langgraph-cli` and/or [LangGraph Studio](./langgraph_studio.md) app to test graph locally.
 - You use `langgraph build` command to build image.
 
-## Self-Hosted Data Plane (Beta)
+## Self-Hosted Data Plane
 
 The [Self-Hosted Data Plane](./self_hosted.md.md) deployment option is a "hybrid" model for deployment where we manage the [control plane](./langgraph_control_plane.md) in our cloud and you manage the [data plane](./langgraph_data_plane.md) in your cloud. This option provides a way to securely manage your data plane infrastructure, while offloading control plane management to us. When using the Self-Hosted Data Plane version, you authenticate with a [LangSmith](https://smith.langchain.com/) API key.
 
