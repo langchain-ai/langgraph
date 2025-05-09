@@ -11,7 +11,7 @@ An [agent](./agentic_concepts.md#agent-architectures) is _a system that uses an 
 - context grows too complex for a single agent to keep track of
 - there is a need for multiple specialization areas in the system (e.g. planner, researcher, math expert, etc.)
 
-To tackle these, you might consider breaking your application into multiple smaller, independent agents and composing them into a **multi-agent system**. These independent agents can be as simple as a prompt and an LLM call, or as complex as a [ReAct](./agentic_concepts.md#react-implementation) agent (and more!).
+To tackle these, you might consider breaking your application into multiple smaller, independent agents and composing them into a **multi-agent system**. These independent agents can be as simple as a prompt and an LLM call, or as complex as a [ReAct](./agentic_concepts.md#tool-calling-agent) agent (and more!).
 
 The primary benefits of using multi-agent systems are:
 
@@ -52,7 +52,7 @@ def agent(state) -> Command[Literal["agent", "another_agent"]]:
     )
 ```
 
-In a more complex scenario where each agent node is itself a graph (i.e., a [subgraph](./low_level.md#subgraphs)), a node in one of the agent subgraphs might want to navigate to a different agent. For example, if you have two agents, `alice` and `bob` (subgraph nodes in a parent graph), and `alice` needs to navigate to `bob`, you can set `graph=Command.PARENT` in the `Command` object:
+In a more complex scenario where each agent node is itself a graph (i.e., a [subgraph](./subgraphs.md)), a node in one of the agent subgraphs might want to navigate to a different agent. For example, if you have two agents, `alice` and `bob` (subgraph nodes in a parent graph), and `alice` needs to navigate to `bob`, you can set `graph=Command.PARENT` in the `Command` object:
 
 ```python
 def some_node_inside_alice(state):
