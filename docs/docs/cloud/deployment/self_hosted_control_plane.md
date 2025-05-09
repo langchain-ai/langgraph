@@ -1,4 +1,4 @@
-# How to Deploy Self-Hosted Control Plane (Beta)
+# How to Deploy Self-Hosted Control Plane
 
 Before deploying, review the [conceptual guide for the Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md) deployment option.
 

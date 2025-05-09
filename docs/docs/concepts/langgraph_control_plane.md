@@ -83,19 +83,6 @@ Infrastructure for deployments and revisions are provisioned and deployed asynch
 
 The control plane and [LangGraph Data Plane](./langgraph_data_plane.md) "listener" application coordinate to achieve asynchronous deployments.
 
-### Automatic Deletion
-
-!!! info "Only for [Cloud SaaS](../concepts/langgraph_cloud.md)"
-    Automatic deletion of deployments is only available for [Cloud SaaS](../concepts/langgraph_cloud.md).
-
-The control plane automatically deletes deployments after 28 consecutive days of non-use (it is in an unused state). A deployment is in an unused state if there are no traces emitted to LangSmith from the deployment after 28 consecutive days. On any given day, if a deployment emits a trace to LangSmith, the counter for consecutive days of non-use is reset.
-
-- An email notification is sent after 7 consecutive days of non-use.
-- A deployment is deleted after 28 consecutive days of non-use.
-
-!!! danger "Data Cannot Be Recovered"
-    After a deployment is deleted, the data (e.g. Postgres) from the deployment cannot be recovered.
-
 ### LangSmith Integration
 
 A [LangSmith](https://docs.smith.langchain.com/) tracing project is automatically created for each deployment. The tracing project has the same name as the deployment. When creating a deployment, the `LANGCHAIN_TRACING` and `LANGSMITH_API_KEY`/`LANGCHAIN_API_KEY` environment variables do not need to be specified; they are set automatically by the control plane.

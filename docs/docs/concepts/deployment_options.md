@@ -23,7 +23,6 @@ A quick comparison:
 | **[Control Plane UI/API](../concepts/langgraph_control_plane.md)** | Yes | Yes | Yes | No | No |
 | **CI/CD** | Managed internally by platform | Managed externally by you | Managed externally by you | Managed externally by you | Managed externally by you |
 | **Data/compute residency** | LangChain’s cloud | Your cloud | Your cloud | Your cloud | Your cloud |
-| **Required permissions** | None | See details [here](). | See details [here](). | None | None |
 | **LangSmith compatibility** | Trace to LangSmith SaaS | Trace to LangSmith SaaS | Trace to Self-Hosted LangSmith | Optional tracing | Optional tracing |
 | **[Server version compatibility](../concepts/langgraph_server.md#server-versions)** | Enterprise | Enterprise | Enterprise | Lite, Enterprise | Lite |
 | **[Pricing](https://www.langchain.com/pricing-langgraph-platform)** | Plus | Enterprise | Enterprise | Developer | Free with LangSmith |
