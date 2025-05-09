@@ -11,12 +11,10 @@ The term "data plane" is used broadly to refer to [LangGraph Servers](./langgrap
 
 In addition to the [LangGraph Server](./langgraph_server.md) itself, the following infrastructure for each server are also included in the broad definition of "data plane":
 
-- [Postgres](../concepts/platform_architecture.md#how-we-use-postgres)
-- [Redis](../concepts/platform_architecture.md#how-we-use-redis)
+- Postgres
+- Redis
 - Secrets store
 - Autoscalers
-
-See [LangGraph Platform Architecture](../concepts/platform_architecture.md) for more details.
 
 ## "Listener" Application
 
@@ -27,6 +25,26 @@ The data plane "listener" application periodically calls [Control Plane APIs](..
 - Determine if existing deployments should be deleted.
 
 In other words, the data plane "listener" reads the latest state of the control plane (desired state) and takes action to reconcile outstanding deployments (current state) to match the latest state.
+
+## Postgres
+
+Postgres is the persistence layer for all user, run, and long-term memory data in a LangGraph Server. This stores both checkpoints (see more info [here](./persistence.md)), server resources (threads, runs, assistants and crons), as well as items saved in the long-term memory store (see more info [here](./persistence.md#memory-store)).
+
+## Redis
+
+Redis is used in each LangGraph Server as a way for server and queue workers to communicate, and to store ephemeral metadata. No user or run data is stored in Redis.
+
+### Communication
+
+All runs in a LangGraph Server are executed by a pool of background workers that are part of each deployment. In order to enable some features for those runs (such as cancellation and output streaming) we need a channel for two-way communication between the server and the worker handling a particular run. We use Redis to organize that communication.
+
+1. A Redis list is used as a mechanism to wake up a worker as soon as a new run is created. Only a sentinel value is stored in this list, no actual run information. The run information is then retrieved from Postgres by the worker.
+2. A combination of a Redis string and Redis PubSub channel is used for the server to communicate a run cancellation request to the appropriate worker.
+3. A Redis PubSub channel is used by the worker to broadcast streaming output from an agent while the run is being handled. Any open `/stream` request in the server will subscribe to that channel and forward any events to the response as they arrive. No events are stored in Redis at any time.
+
+### Ephemeral metadata
+
+Runs in a LangGraph Server may be retried for specific failures (currently only for transient Postgres errors encountered during the run). In order to limit the number of retries (currently limited to 3 attempts per run) we record the attempt number in a Redis string when is picked up. This contains no run-specific info other than its ID, and expires after a short delay.
 
 ## Data Plane Features
 
