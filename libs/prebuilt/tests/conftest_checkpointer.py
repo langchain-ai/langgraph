@@ -8,7 +8,6 @@ from psycopg_pool import AsyncConnectionPool, ConnectionPool
 
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from tests.memory_assert import MemorySaverAssertImmutable
@@ -24,15 +23,6 @@ def _checkpointer_memory():
 @contextmanager
 def _checkpointer_sqlite():
     with SqliteSaver.from_conn_string(":memory:") as checkpointer:
-        yield checkpointer
-
-
-@contextmanager
-def _checkpointer_sqlite_aes():
-    with SqliteSaver.from_conn_string(":memory:") as checkpointer:
-        checkpointer.serde = EncryptedSerializer.from_pycryptodome_aes(
-            key=b"1234567890123456"
-        )
         yield checkpointer
 
 
@@ -185,7 +175,6 @@ async def _checkpointer_postgres_aio_pool():
 __all__ = [
     "_checkpointer_memory",
     "_checkpointer_sqlite",
-    "_checkpointer_sqlite_aes",
     "_checkpointer_postgres",
     "_checkpointer_postgres_pipe",
     "_checkpointer_postgres_pool",
