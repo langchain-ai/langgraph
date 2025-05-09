@@ -16,7 +16,7 @@ There are three main categories of data you can stream:
 
 ## What’s possible with LangGraph streaming
 
-- [**Stream LLM tokens**](../how-tos/streaming.md#llm-tokens-messages) — capture token streams from anywhere: inside nodes, subgraphs, or tools.
+- [**Stream LLM tokens**](../how-tos/streaming.md#messages) — capture token streams from anywhere: inside nodes, subgraphs, or tools.
 - [**Emit progress notifications from tools**](../how-tos/streaming.md#stream-custom-data) — send custom updates or progress signals directly from tool functions.
 - [**Stream from subgraphs**](../how-tos/streaming.md#subgraphs) — include outputs from both the parent graph and any nested subgraphs.
 - [**Use any LLM**](../how-tos/streaming.md#use-with-any-llm) — stream tokens from any LLM, even if it's not a LangChain model using the `custom` streaming mode.
