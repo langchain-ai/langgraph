@@ -16,14 +16,14 @@ Before you start this tutorial, ensure you have the following:
 
 Install the requirements to use the [Tavily Search Engine](https://python.langchain.com/docs/integrations/tools/tavily_search/):
 
-``` bash
+```bash
 pip install -U langchain-tavily
 ```
 ## 2. Configure your environment
 
 Configure your environment with your search engine API key:
 
-``` bash
+```bash
 _set_env("TAVILY_API_KEY")
 ```
 
@@ -34,8 +34,8 @@ TAVILY_API_KEY:  ········
 ## 3. Define the tool
 
 Define the web search tool:
-    
-``` python
+
+```python
 from langchain_tavily import TavilySearch
 
 tool = TavilySearch(max_results=2)
@@ -67,10 +67,23 @@ The results are page summaries our chat bot can use to answer questions:
 
 For the `StateGraph` you created in the [first tutorial](./1-build-basic-chatbot.md#2-create-a-stategraph), add `bind_tools` on the LLM. This lets the LLM know the correct JSON format to use if it wants to use the search engine.
 
-``` python hl_lines="17"
+Let's first select our LLM:
+
+{!snippets/chat_model_tabs.md!}
+
+<!---
+```python
+from langchain.chat_models import init_chat_model
+
+llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
+```
+-->
+
+We can now incorporate it into a `StateGraph`:
+
+```python hl_lines="15"
 from typing import Annotated
 
-from langchain.chat_models import init_chat_model
 from typing_extensions import TypedDict
 
 from langgraph.graph import StateGraph, START, END
@@ -81,7 +94,6 @@ class State(TypedDict):
 
 graph_builder = StateGraph(State)
 
-llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
 # Modification: tell the LLM which tools it can call
 # highlight-next-line
 llm_with_tools = llm.bind_tools(tools)
@@ -96,7 +108,7 @@ graph_builder.add_node("chatbot", chatbot)
 
 Now, create a function to run the tools if they are called. Do this by adding the tools to a new node called`BasicToolNode` that checks the most recent message in the state and calls tools if the message contains `tool_calls`. It relies on the LLM's `tool_calling` support, which is available in Anthropic, OpenAI, Google Gemini, and a number of other LLM providers.
 
-``` python
+```python
 import json
 
 from langchain_core.messages import ToolMessage
@@ -146,7 +158,7 @@ Next, define a router function called `route_tools` that checks for `tool_calls`
 
 The condition will route to `tools` if tool calls are present and `END` if not. Because the condition can return `END`, you do not need to explicitly set a `finish_point` this time.
 
-``` python
+```python
 def route_tools(
     state: State,
 ):
@@ -191,7 +203,7 @@ graph = graph_builder.compile()
 
 You can visualize the graph using the `get_graph` method and one of the "draw" methods, like `draw_ascii` or `draw_png`. The `draw` methods each require additional dependencies.
 
-``` python
+```python
 from IPython.display import Image, display
 
 try:
@@ -208,6 +220,11 @@ except Exception:
 Now you can ask the chatbot questions outside its training data:
 
 ```python
+def stream_graph_updates(user_input: str):
+    for event in graph.stream({"messages": [{"role": "user", "content": user_input}]}):
+        for value in event.values():
+            print("Assistant:", value["messages"][-1].content)
+
 while True:
     try:
         user_input = input("User: ")
@@ -265,10 +282,12 @@ For ease of use, adjust your code to replace the following with LangGraph prebui
 - `BasicToolNode` is replaced with the prebuilt [ToolNode](https://langchain-ai.github.io/langgraph/reference/prebuilt/#toolnode)
 - `route_tools` is replaced with the prebuilt [tools_condition](https://langchain-ai.github.io/langgraph/reference/prebuilt/#tools_condition)
 
-``` python hl_lines="27 32"
+{!snippets/chat_model_tabs.md!}
+
+
+```python hl_lines="25 30"
 from typing import Annotated
 
-from langchain.chat_models import init_chat_model
 from langchain_tavily import TavilySearch
 from langchain_core.messages import BaseMessage
 from typing_extensions import TypedDict
@@ -284,7 +303,6 @@ graph_builder = StateGraph(State)
 
 tool = TavilySearch(max_results=2)
 tools = [tool]
-llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
 llm_with_tools = llm.bind_tools(tools)
 
 def chatbot(state: State):
@@ -302,6 +320,7 @@ graph_builder.add_conditional_edges(
 # Any time a tool is called, we return to the chatbot to decide the next step
 graph_builder.add_edge("tools", "chatbot")
 graph_builder.add_edge(START, "chatbot")
+graph = graph_builder.compile()
 ```
 
 **Congratulations!** You've created a conversational agent in LangGraph that can use a search engine to retrieve updated information when needed. Now it can handle a wider range of user queries. To inspect all the steps your agent just took, check out this [LangSmith trace](https://smith.langchain.com/public/4fbd7636-25af-4638-9587-5a02fdbb0172/r).
