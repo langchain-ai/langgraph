@@ -36,7 +36,7 @@ There are several ways to connect agents in a multi-agent system:
 In multi-agent architectures, agents can be represented as graph nodes. Each agent node executes its step(s) and decides whether to finish execution or route to another agent, including potentially routing to itself (e.g., running in a loop). A common pattern in multi-agent interactions is **handoffs**, where one agent *hands off* control to another. Handoffs allow you to specify:
 
 - __destination__: target agent to navigate to (e.g., name of the node to go to)
-- __payload__: [information to pass to that agent](#communication-between-agents) (e.g., state update)
+- __payload__: [information to pass to that agent](#communication-and-state-management) (e.g., state update)
 
 To implement handoffs in LangGraph, agent nodes can return [`Command`](./low_level.md#command) object that allows you to combine both control flow and state updates:
 
@@ -214,7 +214,7 @@ Check out this [tutorial](https://langchain-ai.github.io/langgraph/tutorials/mul
 
 ### Supervisor (tool-calling)
 
-In this variant of the [supervisor](#supervisor) architecture, we define individual agents as **tools** and use a tool-calling LLM in the supervisor node. This can be implemented as a [ReAct](./agentic_concepts.md#react-implementation)-style agent with two nodes — an LLM node (supervisor) and a tool-calling node that executes tools (agents in this case).
+In this variant of the [supervisor](#supervisor) architecture, we define a supervisor [agent](./agentic_concepts.md#agent-architectures) which is responsible for calling sub-agents. The sub-agents are exposed to the supervisor as tools, and the supervisor agent decides which tool to call next. The supervisor agent follows a [standard implementation](./agentic_concepts.md#tool-calling-agent) as an LLM running in a while loop calling tools until it decides to stop.
 
 ```python
 from typing import Annotated
@@ -413,5 +413,5 @@ There are two high-level approaches to achieve that:
 
 An agent might need to have a different state schema from the rest of the agents. For example, a search agent might only need to keep track of queries and retrieved documents. There are two ways to achieve this in LangGraph:
 
-- Define [subgraph](./low_level.md#subgraphs) agents with a separate state schema. If there are no shared state keys (channels) between the subgraph and the parent graph, it’s important to [add input / output transformations](../how-tos/subgraph.ipynb#different-state-schemas) so that the parent graph knows how to communicate with the subgraphs.
+- Define [subgraph](./subgraphs.md) agents with a separate state schema. If there are no shared state keys (channels) between the subgraph and the parent graph, it’s important to [add input / output transformations](../how-tos/subgraph.ipynb#different-state-schemas) so that the parent graph knows how to communicate with the subgraphs.
 - Define agent node functions with a [private input state schema](../how-tos/graph-api.ipynb/#pass-private-state-between-nodes) that is distinct from the overall graph state schema. This allows passing information that is only needed for executing that particular agent.
