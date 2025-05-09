@@ -137,6 +137,10 @@ def get_client(
                 3. LANGSMITH_API_KEY
                 4. LANGCHAIN_API_KEY
         headers: Optional custom headers
+        timeout: Optional timeout configuration for the HTTP client.
+            Accepts an httpx.Timeout instance, a float (seconds), or a tuple of timeouts.
+            Tuple format is (connect, read, write, pool)
+            If not provided, defaults to connect=5s, read=300s, write=300s, and pool=5s.
 
     Returns:
         LangGraphClient: The top-level client for accessing AssistantsClient,
@@ -2792,7 +2796,10 @@ def get_sync_client(
                 3. LANGSMITH_API_KEY
                 4. LANGCHAIN_API_KEY
         headers: Optional custom headers
-        timeout: Optional timeout configuration for the HTTP client. Accepts an httpx.Timeout instance, a float (seconds), or a tuple of timeouts. If not provided, defaults to connect=5s, read=300s, write=300s, and pool=5s.
+        timeout: Optional timeout configuration for the HTTP client.
+            Accepts an httpx.Timeout instance, a float (seconds), or a tuple of timeouts.
+            Tuple format is (connect, read, write, pool)
+            If not provided, defaults to connect=5s, read=300s, write=300s, and pool=5s.
     Returns:
         SyncLangGraphClient: The top-level synchronous client for accessing AssistantsClient,
         ThreadsClient, RunsClient, and CronClient.
