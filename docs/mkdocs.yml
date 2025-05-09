@@ -188,6 +188,7 @@ nav:
           - cloud/how-tos/datasets_studio.md
           - cloud/how-tos/iterate_graph_studio.md
           - cloud/how-tos/clone_traces_studio.md
+          - cloud/how-tos/studio/faqs.md
         - LangGraph SDK: concepts/sdk.md
       - Data management:
         - cloud/deployment/semantic_search.md

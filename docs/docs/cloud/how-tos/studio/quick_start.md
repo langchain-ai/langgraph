@@ -44,7 +44,15 @@ If successful, you will see the following logs:
 >
 > - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
 
-Once running, you will automatically be directed to LangGraph Studio. You can manually access Studio by navigating to the following URL: `https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024`. If running your server at a different host or port, simply update the `baseUrl` to match.
+Once running, you will automatically be directed to LangGraph Studio. 
+
+
+If your server is already running, to access Studio, either:
+
+ 1. Directly navigate to the following URL: `https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024`. 
+ 2. Within LangSmith, navigate to the LangGraph Platform Deployments tab, click the "LangGraph Studio" button, enter `http://127.0.0.1:2024` and click "Connect".
+ 
+ If running your server at a different host or port, simply update the `baseUrl` to match.
 
 ### (Optional) Attach a debugger
 
@@ -61,21 +69,27 @@ langgraph dev --debug-port 5678
 Then attach your preferred debugger:
 
 === "VS Code"
-Add this configuration to `launch.json`:
-`json
-    {
-      "name": "Attach to LangGraph",
-      "type": "debugpy",
-      "request": "attach",
-      "connect": {
-        "host": "0.0.0.0",
-        "port": 5678
+    Add this configuration to `launch.json`:
+    ```json
+      {
+        "name": "Attach to LangGraph",
+        "type": "debugpy",
+        "request": "attach",
+        "connect": {
+          "host": "0.0.0.0",
+          "port": 5678
+        }
       }
-    }
-    `
-Specify the port number you chose in the previous step.
+    ```
+    Specify the port number you chose in the previous step.
 
-=== "PyCharm" 1. Go to Run → Edit Configurations 2. Click + and select "Python Debug Server" 3. Set IDE host name: `localhost` 4. Set port: `5678` (or the port number you chose in the previous step) 5. Click "OK" and start debugging
+=== "PyCharm" 
+    1. Go to Run → Edit Configurations 
+    2. Click + and select "Python Debug Server" 
+    3. Set IDE host name: `localhost` 
+    4. Set port: `5678` (or the port number you chose in the previous step) 
+    5. Click "OK" and start debugging
+
 
 ## Next steps
 
