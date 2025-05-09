@@ -8127,6 +8127,123 @@ async def test_async_entrypoint_without_checkpointer() -> None:
     }
 
 
+def test_entrypoint_without_checkpointer() -> None:
+    """Test no checkpointer."""
+    states = []
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Test without previous
+    @entrypoint()
+    def foo(inputs: Any) -> Any:
+        states.append(inputs)
+        return inputs
+
+    assert foo.invoke({"a": "1"}, config) == {"a": "1"}
+
+    @entrypoint()
+    def foo(inputs: Any, *, previous: Any) -> Any:
+        states.append(previous)
+        return {"previous": previous, "current": inputs}
+
+    assert foo.invoke({"a": "1"}, config) == {"current": {"a": "1"}, "previous": None}
+    assert foo.invoke({"a": "1"}, config) == {"current": {"a": "1"}, "previous": None}
+
+
+async def test_entrypoint_stateful(async_checkpointer: BaseCheckpointSaver) -> None:
+    """Test stateful entrypoint invoke."""
+
+    # Test invoke
+    states = []
+
+    @entrypoint(checkpointer=async_checkpointer)
+    async def foo(inputs: Any, *, previous: Any) -> Any:
+        states.append(previous)
+        return {"previous": previous, "current": inputs}
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert await foo.ainvoke({"a": "1"}, config) == {
+        "current": {"a": "1"},
+        "previous": None,
+    }
+    assert await foo.ainvoke({"a": "2"}, config) == {
+        "current": {"a": "2"},
+        "previous": {"current": {"a": "1"}, "previous": None},
+    }
+    assert await foo.ainvoke({"a": "3"}, config) == {
+        "current": {"a": "3"},
+        "previous": {
+            "current": {"a": "2"},
+            "previous": {"current": {"a": "1"}, "previous": None},
+        },
+    }
+    assert states == [
+        None,
+        {"current": {"a": "1"}, "previous": None},
+        {"current": {"a": "2"}, "previous": {"current": {"a": "1"}, "previous": None}},
+    ]
+
+    # Test stream
+    @entrypoint(checkpointer=async_checkpointer)
+    async def foo(inputs, *, previous: Any) -> Any:
+        return {"previous": previous, "current": inputs}
+
+    config = {"configurable": {"thread_id": "2"}}
+    items = [item async for item in foo.astream({"a": "1"}, config)]
+    assert items == [{"foo": {"current": {"a": "1"}, "previous": None}}]
+
+
+async def test_entrypoint_stateful_update_state(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test stateful entrypoint invoke."""
+
+    # Test invoke
+    states = []
+
+    @entrypoint(checkpointer=async_checkpointer)
+    async def foo(inputs: Any, *, previous: Any) -> Any:
+        states.append(previous)
+        return {"previous": previous, "current": inputs}
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # assert print(foo.input_channels)
+    await foo.aupdate_state(config, {"a": "-1"})
+    assert await foo.ainvoke({"a": "1"}, config) == {
+        "current": {"a": "1"},
+        "previous": {"a": "-1"},
+    }
+    assert await foo.ainvoke({"a": "2"}, config) == {
+        "current": {"a": "2"},
+        "previous": {"current": {"a": "1"}, "previous": {"a": "-1"}},
+    }
+    assert await foo.ainvoke({"a": "3"}, config) == {
+        "current": {"a": "3"},
+        "previous": {
+            "current": {"a": "2"},
+            "previous": {"current": {"a": "1"}, "previous": {"a": "-1"}},
+        },
+    }
+
+    # update state
+    await foo.aupdate_state(config, {"a": "3"})
+
+    # Test stream
+    assert [item async for item in foo.astream({"a": "1"}, config)] == [
+        {"foo": {"current": {"a": "1"}, "previous": {"a": "3"}}}
+    ]
+    assert states == [
+        {"a": "-1"},
+        {"current": {"a": "1"}, "previous": {"a": "-1"}},
+        {
+            "current": {"a": "2"},
+            "previous": {"current": {"a": "1"}, "previous": {"a": "-1"}},
+        },
+        {"a": "3"},
+    ]
+
+
 async def test_entrypoint_from_async_generator() -> None:
     """@entrypoint does not support sync generators."""
     with pytest.raises(NotImplementedError):
