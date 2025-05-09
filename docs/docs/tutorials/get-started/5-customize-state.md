@@ -221,10 +221,19 @@ Manual state updates will [generate a trace](https://smith.langchain.com/public/
 
 Check out the code snippet below to review the graph from this tutorial:
 
+{!snippets/chat_model_tabs.md!}
+
+<!---
+```python
+from langchain.chat_models import init_chat_model
+
+llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
+```
+-->
+
 ```python
 from typing import Annotated
 
-from langchain.chat_models import init_chat_model
 from langchain_tavily import TavilySearch
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import InjectedToolCallId, tool
@@ -272,7 +281,6 @@ def human_assistance(
 
 tool = TavilySearch(max_results=2)
 tools = [tool, human_assistance]
-llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
 llm_with_tools = llm.bind_tools(tools)
 
 def chatbot(state: State):
