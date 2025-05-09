@@ -4,39 +4,24 @@ In this tutorial, you will build a basic chatbot. This chatbot is the basis for 
 
 ## Prerequisites
 
-Before you start this tutorial, ensure you have the following:
-
-- An API key for an LLM. This tutorial series uses [Anthropic](https://console.anthropic.com/settings/admin-keys).
+Before you start this tutorial, ensure you have access to a LLM that supports
+tool-calling features, such as [OpenAI](https://platform.openai.com/api-keys),
+[Anthropic](https://console.anthropic.com/settings/admin-keys), or
+[Google Gemini](https://ai.google.dev/gemini-api/docs/api-key).
 
 ## 1. Install packages
 
 Install the required packages:
 
 ```bash
-pip install -U langgraph langsmith "langchain[anthropic]"
-```
-
-## 2. Configure your environment
-
-Configure your environment with your LLM API key:
-
-``` python
-import getpass
-import os
-
-def _set_env(var: str):
-    if not os.environ.get(var):
-        os.environ[var] = getpass.getpass(f"{var}: ")
-
-
-_set_env("ANTHROPIC_API_KEY")
+pip install -U langgraph langsmith
 ```
 
 !!! tip
 
     Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM apps built with LangGraph. For more information on how to get started, see [LangSmith docs](https://docs.smith.langchain.com). 
 
-## 3. Create a `StateGraph`
+## 2. Create a `StateGraph`
 
 Now you can create a basic chatbot using LangGraph. This chatbot will respond directly to user messages.
 
@@ -72,15 +57,26 @@ Our graph can now handle two key tasks:
 
     When defining a graph, the first step is to define its `State`. The `State` includes the graph's schema and [reducer functions](https://langchain-ai.github.io/langgraph/concepts/low_level/#reducers) that handle state updates. In our example, `State` is a `TypedDict` with one key: `messages`. The [`add_messages`](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.message.add_messages) reducer function is used to append new messages to the list instead of overwriting it. Keys without a reducer annotation will overwrite previous values. To learn more about state, reducers, and related concepts, see [LangGraph reference docs](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.message.add_messages).
 
-## 4. Add a node
+## 3. Add a node
 
 Next, add a "`chatbot`" node. **Nodes** represent units of work and are typically regular Python functions.
 
+Let's first select a chat model:
+
+{!snippets/chat_model_tabs.md!}
+
+<!---
 ```python
 from langchain.chat_models import init_chat_model
 
 llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
+```
+-->
 
+
+We can now incorporate the chat model into a simple node:
+
+```python
 
 def chatbot(state: State):
     return {"messages": [llm.invoke(state["messages"])]}
@@ -96,12 +92,21 @@ graph_builder.add_node("chatbot", chatbot)
 
 The `add_messages` function in our `State` will append the LLM's response messages to whatever messages are already in the state.
 
-## 5. Add an `entry` point
+## 4. Add an `entry` point
 
 Add an `entry` point to tell the graph **where to start its work** each time it is run:
 
 ```python
 graph_builder.add_edge(START, "chatbot")
+```
+
+## 5. Compile the graph
+
+Before running the graph, we'll need to compile it. We can do so by calling `compile()`
+on the graph builder. This creates a `CompiledGraph` we can invoke on our state.
+
+```python
+graph = graph_builder.compile()
 ```
 
 ## 6. Visualize the graph (optional)

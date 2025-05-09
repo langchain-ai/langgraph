@@ -14,10 +14,19 @@ You can create these types of experiences using LangGraph's built-in **time trav
 
 Rewind your graph by fetching a checkpoint using the graph's `get_state_history` method. You can then resume execution at this previous point in time.
 
+{!snippets/chat_model_tabs.md!}
+
+<!---
+```python
+from langchain.chat_models import init_chat_model
+
+llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
+```
+-->
+
 ```python
 from typing import Annotated
 
-from langchain.chat_models import init_chat_model
 from langchain_tavily import TavilySearch
 from langchain_core.messages import BaseMessage
 from typing_extensions import TypedDict
@@ -34,7 +43,6 @@ graph_builder = StateGraph(State)
 
 tool = TavilySearch(max_results=2)
 tools = [tool]
-llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
 llm_with_tools = llm.bind_tools(tools)
 
 def chatbot(state: State):
