@@ -287,7 +287,6 @@ nav:
   - Examples:
     - Agentic RAG: tutorials/rag/langgraph_agentic_rag.ipynb
     - Agent Supervisor: tutorials/multi_agent/agent_supervisor.ipynb
-    - Customer Support: tutorials/customer-support/customer-support.ipynb
     - SQL agent: tutorials/sql-agent.ipynb
     - LangGraph Platform:
       - Authentication:
