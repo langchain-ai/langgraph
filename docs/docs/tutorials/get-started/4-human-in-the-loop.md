@@ -12,10 +12,23 @@ LangGraph's [persistence](../../concepts/persistence.md) layer supports **human-
 
 Starting with the existing code from the [Add memory to the chatbot](./3-add-memory.md) tutorial, add the `human_assistance` tool to the chatbot. This tool uses `interrupt` to receive information from a human.
 
-``` python hl_lines="13 21 22 23 24 25"
+Let's first select a chat model:
+
+{!snippets/chat_model_tabs.md!}
+
+<!---
+```python
+from langchain.chat_models import init_chat_model
+
+llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
+```
+-->
+
+We can now incorporate it into our `StateGraph` with an additional tool:
+
+``` python hl_lines="12 19 20 21 22 23"
 from typing import Annotated
 
-from langchain.chat_models import init_chat_model
 from langchain_tavily import TavilySearch
 from langchain_core.tools import tool
 from typing_extensions import TypedDict
@@ -40,7 +53,6 @@ def human_assistance(query: str) -> str:
 
 tool = TavilySearch(max_results=2)
 tools = [tool, human_assistance]
-llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
 llm_with_tools = llm.bind_tools(tools)
 
 def chatbot(state: State):
@@ -209,10 +221,11 @@ The input has been received and processed as a tool message. Review this call's 
 
 Check out the code snippet below to review the graph from this tutorial:
 
+{!snippets/chat_model_tabs.md!}
+
 ```python
 from typing import Annotated
 
-from langchain.chat_models import init_chat_model
 from langchain_tavily import TavilySearch
 from langchain_core.tools import tool
 from typing_extensions import TypedDict
@@ -236,7 +249,6 @@ def human_assistance(query: str) -> str:
 
 tool = TavilySearch(max_results=2)
 tools = [tool, human_assistance]
-llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
 llm_with_tools = llm.bind_tools(tools)
 
 def chatbot(state: State):
