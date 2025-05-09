@@ -45,12 +45,21 @@ class TaskFunction(Generic[P, T]):
         cache_policy: Optional[CachePolicy[Callable[P, Union[str, bytes]]]] = None,
         name: Optional[str] = None,
     ) -> None:
+        if name is not None:
+            if hasattr(func, "__func__"):
+                # handle class methods
+                # NOTE: we're modifying the instance method to avoid modifying
+                # the original class method in case it's shared across multiple tasks
+                instance_method = functools.partial(func.__func__, func.__self__)  # type: ignore [union-attr]
+                instance_method.__name__ = name  # type: ignore [attr-defined]
+                func = instance_method
+            else:
+                # handle regular functions / partials / callable classes, etc.
+                func.__name__ = name
         self.func = func
         self.retry = retry
         self.cache_policy = cache_policy
         functools.update_wrapper(self, func)
-        if name is not None:
-            setattr(self, "__name__", name)
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> SyncAsyncFuture[T]:
         return call(
