@@ -10,7 +10,7 @@ This walkthrough is based on [this repository](https://github.com/langchain-ai/l
 !!! tip "Setup with a Monorepo"
     If you are interested in deploying a graph located inside a monorepo, take a look at [this](https://github.com/langchain-ai/langgraph-example-monorepo) repository for an example of how to do so.
 
-The final repo structure will look something like this:
+The final repository structure will look something like this:
 
 ```bash
 my-app/
