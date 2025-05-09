@@ -50,7 +50,7 @@ class TaskFunction(Generic[P, T]):
                 # handle class methods
                 # NOTE: we're modifying the instance method to avoid modifying
                 # the original class method in case it's shared across multiple tasks
-                instance_method = functools.partial(func.__func__, func.__self__)  # type: ignore [union-attr]
+                instance_method = functools.partial(func.__func__, func.__self__)  # type: ignore [attr-defined]
                 instance_method.__name__ = name  # type: ignore [attr-defined]
                 func = instance_method
             else:
