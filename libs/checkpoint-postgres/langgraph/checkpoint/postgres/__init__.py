@@ -99,7 +99,7 @@ class PostgresSaver(BasePostgresSaver):
 
     def list(
         self,
-        config: Optional[RunnableConfig],
+        config: Optional[RunnableConfig] = None,
         *,
         filter: Optional[dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
