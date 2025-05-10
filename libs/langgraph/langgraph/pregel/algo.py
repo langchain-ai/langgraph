@@ -1069,7 +1069,7 @@ def _proc_input(
             return MISSING
     else:
         raise RuntimeError(
-            "Invalid channels type, expected list or dict, got {proc.channels}"
+            f"Invalid channels type, expected list or dict, got {proc.channels}"
         )
 
     # If the process has a mapper, apply it to the value
