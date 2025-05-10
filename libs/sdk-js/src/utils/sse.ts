@@ -93,6 +93,7 @@ export class BytesLineDecoder extends TransformStream<Uint8Array, Uint8Array> {
 }
 
 interface StreamPart {
+  id: string | undefined;
   event: string;
   data: unknown;
 }
@@ -113,6 +114,7 @@ export class SSEDecoder extends TransformStream<Uint8Array, StreamPart> {
           if (!event && !data.length && !lastEventId && retry == null) return;
 
           const sse = {
+            id: lastEventId || undefined,
             event,
             data: data.length ? decodeArraysToJson(decoder, data) : null,
           };
@@ -151,6 +153,7 @@ export class SSEDecoder extends TransformStream<Uint8Array, StreamPart> {
       flush(controller) {
         if (event) {
           controller.enqueue({
+            id: lastEventId || undefined,
             event,
             data: data.length ? decodeArraysToJson(decoder, data) : null,
           });

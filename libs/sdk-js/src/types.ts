@@ -135,6 +135,17 @@ interface RunsInvokePayload {
    * One or more commands to invoke the graph with.
    */
   command?: Command;
+
+  /**
+   * Callback when request is completed.
+   * Useful when obtaining headers from the response.
+   */
+  onResponse?: (response: Response) => void;
+
+  /**
+   * Callback when a run is created.
+   */
+  onRunCreated?: (params: { run_id: string; thread_id?: string }) => void;
 }
 
 export interface RunsStreamPayload<
