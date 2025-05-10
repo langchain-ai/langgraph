@@ -558,6 +558,6 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
             else:
                 async with (
                     self.lock,
-                    conn.cursor(binary=True) as cur,
+                    conn.cursor(binary=True, row_factory=dict_row) as cur,
                 ):
                     yield cur
