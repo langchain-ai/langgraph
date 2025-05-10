@@ -431,22 +431,25 @@ class ToolNode(RunnableCallable):
                 return tool_calls, input_type
             else:
                 input_type = "list"
-                message: AnyMessage = input[-1]
+                messages = input
         elif isinstance(input, dict) and (messages := input.get(self.messages_key, [])):
             input_type = "dict"
-            message = messages[-1]
-        elif messages := getattr(input, self.messages_key, None):
+        elif messages := getattr(input, self.messages_key, []):
             # Assume dataclass-like state that can coerce from dict
             input_type = "dict"
-            message = messages[-1]
         else:
             raise ValueError("No message found in input")
 
-        if not isinstance(message, AIMessage):
-            raise ValueError("Last message is not an AIMessage")
+        try:
+            latest_ai_message = next(
+                m for m in reversed(messages) if isinstance(m, AIMessage)
+            )
+        except StopIteration:
+            raise ValueError("No AIMessage found in input")
 
         tool_calls = [
-            self.inject_tool_args(call, input, store) for call in message.tool_calls
+            self.inject_tool_args(call, input, store)
+            for call in latest_ai_message.tool_calls
         ]
         return tool_calls, input_type
 
