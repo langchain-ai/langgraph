@@ -2,6 +2,9 @@
 
 Before deploying, review the [conceptual guide for the Self-Hosted Data Plane](../../concepts/langgraph_self_hosted_data_plane.md) deployment option.
 
+!!! important "Beta"
+    The Self-Hosted Data Plane deployment option is currently in beta stage.
+
 ## Prerequisites
 
 1. Use the [LangGraph CLI](../../concepts/langgraph_cli.md) to [test your application locally](../../tutorials/langgraph-platform/local-server.md).
