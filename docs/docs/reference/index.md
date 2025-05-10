@@ -15,7 +15,12 @@ search:
 
 Welcome to the LangGraph reference docs! These pages detail the core interfaces you will use when building with LangGraph. Each section covers a different part of the ecosystem.
 
-## LangGraph core
+!!! tip
+
+    If you are just getting started, see [LangGraph basics](../concepts/why-langgraph.md) for an introduction to the main concepts and usage patterns.
+
+
+## LangGraph
 
 The core APIs for the LangGraph opens source library.
 
@@ -49,7 +54,3 @@ Tools for deploying and connecting to the LangGraph Platform.
 - [SDK (JS/TS)](../cloud/reference/sdk/js_ts_sdk_ref.md): JavaScript/TypeScript SDK for interacting with instances of the LangGraph Server.
 - [RemoteGraph](remote_graph.md): `Pregel` abstraction for connecting to LangGraph Server instances.
 - [Environment variables](../cloud/reference/env_var.md): Supported configuration variables when deploying with the LangGraph Platform.
-
-!!! tip
-
-    If you are just getting started, see [LangGraph basics](../concepts/why-langgraph.md) for an introduction to the main concepts and usage patterns.
