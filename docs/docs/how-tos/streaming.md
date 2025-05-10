@@ -66,14 +66,13 @@ Basic usage example:
 
 ### Supported stream modes
 
-| Mode                                            | Description                                                                                                                                                                         |
-|-------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [`values`](#stream-graph-state)                 | Streams the full value of the state after each step of the graph.                                                                                                                   |
-| [`updates`](#stream-graph-state)    | Streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g., multiple nodes are run), those updates are streamed separately. |
-| [`custom`](#custom)      | Streams custom data from inside your graph nodes.                                                                                                                                   |
-| [`messages`](#messages) | Streams LLM tokens and metadata for the graph node where the LLM is invoked.                                                                                                        |
-| [`debug`](#debug)        | Streams as much information as possible throughout the execution of the graph.                                                                                                      |
-
+| Mode                             | Description                                                                                                                                                                         |
+|----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [`values`](#stream-graph-state)  | Streams the full value of the state after each step of the graph.                                                                                                                   |
+| [`updates`](#stream-graph-state) | Streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g., multiple nodes are run), those updates are streamed separately. |
+| [`custom`](#stream-custom-data)  | Streams custom data from inside your graph nodes.                                                                                                                                   |
+| [`messages`](#messages)          | Streams LLM tokens and metadata for the graph node where the LLM is invoked.                                                                                                        |
+| [`debug`](#debug)                | Streams as much information as possible throughout the execution of the graph.                                                                                                      |
 
 ### Stream multiple modes
 
@@ -474,7 +473,7 @@ To send **custom user-defined data** from inside a LangGraph node or tool, follo
 
     In async code running on Python < 3.11, `get_stream_writer()` will not work.  
     Instead, add a `writer` parameter to your node or tool and pass it manually.  
-    See [Async with Python < 3.11](#async-with-python-3-11) for usage examples.
+    See [Async with Python < 3.11](#async) for usage examples.
 
 
 === "node"

@@ -125,6 +125,9 @@ nav:
       - Graphs:
         - Overview: concepts/low_level.md
         - Use the Graph API: how-tos/graph-api.ipynb
+      - Streaming:
+          - Overview: concepts/streaming.md
+          - "Stream outputs": how-tos/streaming.md
       - Persistence:
         - Overview: concepts/persistence.md
         - concepts/durable_execution.md
@@ -135,9 +138,6 @@ nav:
       - Human-in-the-loop:
         - Overview: concepts/human_in_the_loop.md
         - how-tos/human_in_the_loop/add-human-in-the-loop.md
-      - Streaming:
-        - Overview: concepts/streaming.md
-        - "Stream outputs": how-tos/streaming.md
       - Breakpoints:
         - Overview: concepts/breakpoints.md
         - how-tos/human_in_the_loop/breakpoints.ipynb
@@ -188,6 +188,7 @@ nav:
           - cloud/how-tos/datasets_studio.md
           - cloud/how-tos/iterate_graph_studio.md
           - cloud/how-tos/clone_traces_studio.md
+          - cloud/how-tos/studio/faqs.md
         - LangGraph SDK: concepts/sdk.md
       - Data management:
         - cloud/deployment/semantic_search.md
@@ -421,7 +422,7 @@ validation:
   # it's only an issue for tutorials/storm/storm.ipynb
   # because it creates anchors in the generated report
   # and those anchors are not available in the actual doc
-  anchors: info
+  anchors: warn
   # this is needed to handle headers with anchors for nav
   not_found: info
 copyright: >

@@ -362,7 +362,7 @@ Use [conditional edges](#conditional-edges) to route between nodes conditionally
 
 ### Navigating to a node in a parent graph
 
-If you are using [subgraphs](#subgraphs), you might want to navigate from a node within a subgraph to a different subgraph (i.e. a different node in the parent graph). To do so, you can specify `graph=Command.PARENT` in `Command`:
+If you are using [subgraphs](./subgraphs.md), you might want to navigate from a node within a subgraph to a different subgraph (i.e. a different node in the parent graph). To do so, you can specify `graph=Command.PARENT` in `Command`:
 
 ```python
 def my_node(state: State) -> Command[Literal["other_subgraph"]]:
