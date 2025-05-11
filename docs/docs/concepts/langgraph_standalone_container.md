@@ -33,6 +33,6 @@ The Standalone Container deployment option supports deploying data plane infrast
 
 ## Lite vs. Enterprise
 
-The Standalone Container deployment option supports the [server versions](../concepts/langgraph_server.md#langgraph-server): `Lite` and `Enterprise`.
+The Standalone Container deployment option supports the both [server versions](../concepts/langgraph_server.md#langgraph-server):
 
 The `Lite` version is free, but has limited features. The `Enterprise` version has custom pricing and is fully featured. More details on feature differences are [here](../concepts/langgraph_server.md#server-versions).
