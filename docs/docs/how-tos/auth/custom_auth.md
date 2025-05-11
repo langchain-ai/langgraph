@@ -5,7 +5,7 @@
     This guide assumes familiarity with the following concepts:
 
       *  [**Authentication & Access Control**](../../concepts/auth.md)
-      *  [**LangGraph Platform**](../../concepts/index.md#langgraph-platform)
+      *  [**LangGraph Platform**](../../concepts/langgraph_platform.md)
     
     For a more guided walkthrough, see [**setting up custom authentication**](../../tutorials/auth/getting_started.md) tutorial.
 
@@ -13,7 +13,7 @@
 
     Custom auth is supported for all deployments in the **managed LangGraph Cloud**, as well as **Enterprise** self-hosted plans. It is not supported for **Lite** self-hosted plans.
 
-This guide shows how to add custom authentication to your LangGraph Platform application. This guide applies to both LangGraph Cloud, BYOC, and self-hosted deployments. It does not apply to isolated usage of the LangGraph open source library in your own custom server.
+This guide shows how to add custom authentication to your LangGraph Platform application. This guide applies to both LangGraph Cloud and self-hosted deployments. It does not apply to isolated usage of the LangGraph open source library in your own custom server.
 
 ## 1. Implement authentication
 
@@ -112,7 +112,7 @@ Assuming you are using JWT token authentication, you could access your deploymen
     const my_token = "your-token"; // In practice, you would generate a signed token with your auth provider
     const client = new Client({
       apiUrl: "http://localhost:2024",
-      headers: { Authorization: `Bearer ${my_token}` },
+      defaultHeaders: { Authorization: `Bearer ${my_token}` },
     });
     const threads = await client.threads.search();
     ```

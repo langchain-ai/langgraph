@@ -14,6 +14,7 @@ from typing import (
 from langchain_core.runnables import Runnable
 from typing_extensions import Self
 
+from langgraph.cache.base import BaseCache
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.constants import (
     EMPTY_SEQ,
@@ -28,6 +29,7 @@ from langgraph.graph.branch import Branch
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
+from langgraph.store.base import BaseStore
 from langgraph.types import All, Checkpointer
 from langgraph.utils.runnable import RunnableLike, coerce_to_runnable
 
@@ -316,6 +318,9 @@ class Graph:
         interrupt_after: Optional[Union[All, list[str]]] = None,
         debug: bool = False,
         name: Optional[str] = None,
+        *,
+        cache: Optional[BaseCache] = None,
+        store: Optional[BaseStore] = None,
     ) -> "CompiledGraph":
         """Compiles the graph into a `CompiledGraph` object.
 
@@ -364,6 +369,8 @@ class Graph:
             auto_validate=False,
             debug=debug,
             name=name or "LangGraph",
+            cache=cache,
+            store=store,
         )
 
         # attach nodes, edges, and branches

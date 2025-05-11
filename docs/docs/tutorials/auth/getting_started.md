@@ -11,7 +11,7 @@
     This guide assumes basic familiarity with the following concepts:
 
       *  [**Authentication & Access Control**](../../concepts/auth.md)
-      *  [**LangGraph Platform**](../../concepts/index.md#langgraph-platform)
+      *  [**LangGraph Platform**](../../concepts/langgraph_platform.md)
 
 !!! note "Python only"
 

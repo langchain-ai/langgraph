@@ -10,7 +10,7 @@ New to LangGraph or LLM app development? Read this material to get up and runnin
 
 ## Get Started 🚀 {#quick-start}
 
-- [LangGraph Quickstart](introduction.ipynb): Build a chatbot that can use tools and keep track of conversation history. Add human-in-the-loop capabilities and explore how time-travel works.
+- [LangGraph basics](get-started/1-build-basic-chatbot.md): Build a chatbot that can use tools and keep track of conversation history. Add human-in-the-loop capabilities and explore how time-travel works.
 - [Common Workflows](workflows/index.md): Overview of the most common workflows using LLMs implemented with LangGraph.
 - [LangGraph Server Quickstart](langgraph-platform/local-server.md): Launch a LangGraph server locally and interact with it using REST API and LangGraph Studio Web UI.
 - [LangGraph Template Quickstart](../concepts/template_applications.md): Start building with LangGraph Platform using a template application.
@@ -30,12 +30,6 @@ Explore practical implementations tailored for specific scenarios:
 ### RAG
 
 - [Agentic RAG](rag/langgraph_agentic_rag.ipynb): Use an agent to figure out how to retrieve the most relevant information before using the retrieved information to answer the user's question.
-- [Adaptive RAG](rag/langgraph_adaptive_rag.ipynb): Adaptive RAG is a strategy for RAG that unites (1) query analysis with (2) active / self-corrective RAG. Implementation of: https://arxiv.org/abs/2403.14403
-    - For a version that uses a local LLM: [Adaptive RAG using local LLMs](rag/langgraph_adaptive_rag_local.ipynb)
-- [Corrective RAG](rag/langgraph_crag.ipynb): Uses an LLM to grade the quality of the retrieved information from the given source, and if the quality is low, it will try to retrieve the information from another source. Implementation of: https://arxiv.org/pdf/2401.15884.pdf 
-    - For a version that uses a local LLM: [Corrective RAG using local LLMs](rag/langgraph_crag_local.ipynb)
-- [Self-RAG](rag/langgraph_self_rag.ipynb): Self-RAG is a strategy for RAG that incorporates self-reflection / self-grading on retrieved documents and generations. Implementation of https://arxiv.org/abs/2310.11511.
-    - For a version that uses a local LLM: [Self-RAG using local LLMs](rag/langgraph_self_rag_local.ipynb) 
 - [SQL Agent](sql-agent.ipynb): Build a SQL agent that can answer questions about a SQL database.
 
 

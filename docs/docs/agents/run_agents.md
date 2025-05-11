@@ -72,7 +72,7 @@ more about [LangChain messages](https://python.langchain.com/docs/concepts/messa
 Agent output is a dictionary containing:
 
 - `messages`: A list of all messages exchanged during execution (user input, assistant replies, tool invocations).
-- Optionally, `structured_response` if [structured output](./agents.md#structured-output) is configured.
+- Optionally, `structured_response` if [structured output](./agents.md#6-configure-structured-output) is configured.
 - If using a custom `state_schema`, additional keys corresponding to your defined fields may also be present in the output. These can hold updated state values from tool execution or prompt logic.
 
 See the [context guide](./context.md) for more details on working with custom state schemas and accessing context.

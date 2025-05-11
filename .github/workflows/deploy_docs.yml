@@ -38,12 +38,13 @@ jobs:
         with:
           filter: "docs/docs/**"
 
-  run-changed-notebooks:
-    needs: get-changed-files
-    uses: ./.github/workflows/run_notebooks.yml
-    secrets: inherit
-    with:
-      changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
+  # TODO: Uncomment this to run on PRs
+  # run-changed-notebooks:
+  #   needs: get-changed-files
+  #   uses: ./.github/workflows/run_notebooks.yml
+  #   secrets: inherit
+  #   with:
+  #     changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
 
   deploy:
     # needs: run-changed-notebooks
@@ -98,6 +99,7 @@ jobs:
       - name: Check links in notebooks
         env:
           LANGCHAIN_API_KEY: test
+        if: github.event_name == 'schedule'
         run: |
           if [ "${{ github.event_name }}" == "schedule" ]; then
             echo "Running link check on all HTML files matching notebooks in docs directory..."

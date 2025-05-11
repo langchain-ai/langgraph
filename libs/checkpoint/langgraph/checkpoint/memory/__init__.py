@@ -68,8 +68,9 @@ class InMemorySaver(
             str, dict[str, tuple[tuple[str, bytes], tuple[str, bytes], Optional[str]]]
         ],
     ]
+    # (thread ID, checkpoint NS, checkpoint ID) -> (task ID, write idx)
     writes: defaultdict[
-        tuple[str, str, str],  # thread ID, checkpoint NS, checkpoint ID
+        tuple[str, str, str],
         dict[tuple[str, int], tuple[str, str, tuple[str, bytes], str]],
     ]
     blobs: dict[

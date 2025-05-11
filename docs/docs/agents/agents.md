@@ -7,22 +7,31 @@ hide:
   - tags
 ---
 
-# Agents
+# LangGraph quickstart
 
-## What is an agent?
+This guide shows you how to set up and use LangGraph's **prebuilt**, **reusable** components, which are designed to help you construct agentic systems quickly and reliably.
 
-An *agent* consists of three components: a **large language model (LLM)**, a set of **tools** it can use, and a **prompt** that provides instructions.
+## Prerequisites
 
-The LLM operates in a loop. In each iteration, it selects a tool to invoke, provides input, receives the result (an observation), and uses that observation to inform the next action. The loop continues until a stopping condition is met — typically when the agent has gathered enough information to respond to the user.
+Before you start this tutorial, ensure you have the following:
 
-<figure markdown="1">
-![image](./assets/agent.png){: style="max-height:400px"}
-<figcaption>Agent loop: the LLM selects tools and uses their outputs to fulfill a user request.</figcaption>
-</figure>
+- An [Anthropic](https://console.anthropic.com/settings/admin-keys) API key 
 
-## Basic configuration
+## 1. Install dependencies
 
-Use [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent] to instantiate an agent:
+If you haven't already, install LangGraph and LangChain:
+
+```
+pip install -U langgraph "langchain[anthropic]"
+```
+
+!!! info 
+
+    LangChain is installed so the agent can call the [model](https://python.langchain.com/docs/integrations/chat/).
+
+## 2. Create an agent
+
+To create an agent, use [`create_react_agent`](langgraph.prebuilt.chat_agent_executor.create_react_agent):
 
 ```python
 from langgraph.prebuilt import create_react_agent
@@ -48,10 +57,9 @@ agent.invoke(
 3. Provide a list of tools for the model to use.
 4. Provide a system prompt (instructions) to the language model used by the agent.
 
-## LLM configuration
+## 3. Configure an LLM
 
-Use [init_chat_model](https://python.langchain.com/api_reference/langchain/chat_models/langchain.chat_models.base.init_chat_model.html) to configure an LLM with specific parameters,
-such as temperature:
+To configure an LLM with specific parameters, such as temperature, use [init_chat_model](https://python.langchain.com/api_reference/langchain/chat_models/langchain.chat_models.base.init_chat_model.html):
 
 ```python
 from langchain.chat_models import init_chat_model
@@ -71,77 +79,77 @@ agent = create_react_agent(
 )
 ```
 
-See the [models](./models.md) page for more information on how to configure LLMs.
+For more information on how to configure LLMs, see [Models](./models.md).
 
-## Custom Prompts
+## 4. Add a custom prompt
 
-Prompts instruct the LLM how to behave. They can be:
+Prompts instruct the LLM how to behave. Add one of the following types of prompts:
 
-* **Static**: A string is interpreted as a **system message**
-* **Dynamic**: a list of messages generated at **runtime** based on input or configuration
+* **Static**: A string is interpreted as a **system message**.
+* **Dynamic**: A list of messages generated at **runtime**, based on input or configuration.
 
-### Static prompts
+=== "Static prompt"
 
-Define a fixed prompt string or list of messages.
+    Define a fixed prompt string or list of messages:
 
-```python
-from langgraph.prebuilt import create_react_agent
+    ```python
+    from langgraph.prebuilt import create_react_agent
 
-agent = create_react_agent(
-    model="anthropic:claude-3-7-sonnet-latest",
-    tools=[get_weather],
-    # A static prompt that never changes
+    agent = create_react_agent(
+        model="anthropic:claude-3-7-sonnet-latest",
+        tools=[get_weather],
+        # A static prompt that never changes
+        # highlight-next-line
+        prompt="Never answer questions about the weather."
+    )
+
+    agent.invoke(
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
+    )
+    ```
+
+=== "Dynamic prompt"
+
+    Define a function that returns a message list based on the agent's state and configuration:
+
+    ```python
+    from langchain_core.messages import AnyMessage
+    from langchain_core.runnables import RunnableConfig
+    from langgraph.prebuilt.chat_agent_executor import AgentState
+    from langgraph.prebuilt import create_react_agent
+
     # highlight-next-line
-    prompt="Never answer questions about the weather."
-)
+    def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:  # (1)!
+        user_name = config["configurable"].get("user_name")
+        system_msg = f"You are a helpful assistant. Address the user as {user_name}."
+        return [{"role": "system", "content": system_msg}] + state["messages"]
 
-agent.invoke(
-    {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
-)
-```
+    agent = create_react_agent(
+        model="anthropic:claude-3-7-sonnet-latest",
+        tools=[get_weather],
+        # highlight-next-line
+        prompt=prompt
+    )
 
-### Dynamic prompts
+    agent.invoke(
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
+        # highlight-next-line
+        config={"configurable": {"user_name": "John Smith"}}
+    )
+    ```
 
-Define a function that returns a message list based on the agent's state and configuration:
+    1. Dynamic prompts allow including non-message [context](./context.md) when constructing an input to the LLM, such as:
 
-```python
-from langchain_core.messages import AnyMessage
-from langchain_core.runnables import RunnableConfig
-from langgraph.prebuilt.chat_agent_executor import AgentState
-from langgraph.prebuilt import create_react_agent
+        - Information passed at runtime, like a `user_id` or API credentials (using `config`).
+        - Internal agent state updated during a multi-step reasoning process (using `state`).
 
-# highlight-next-line
-def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:  # (1)!
-    user_name = config["configurable"].get("user_name")
-    system_msg = f"You are a helpful assistant. Address the user as {user_name}."
-    return [{"role": "system", "content": system_msg}] + state["messages"]
+        Dynamic prompts can be defined as functions that take `state` and `config` and return a list of messages to send to the LLM.
 
-agent = create_react_agent(
-    model="anthropic:claude-3-7-sonnet-latest",
-    tools=[get_weather],
-    # highlight-next-line
-    prompt=prompt
-)
+For more information, see [Context](./context.md).
 
-agent.invoke(
-    {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
-    # highlight-next-line
-    config={"configurable": {"user_name": "John Smith"}}
-)
-```
+## 5. Add memory
 
-1. Dynamic prompts allow including non-message [context](./context.md) when constructing an input to the LLM, such as:
-
-    - Information passed at runtime, like a `user_id` or API credentials (using `config`).
-    - Internal agent state updated during a multi-step reasoning process (using `state`).
-
-    Dynamic prompts can be defined as functions that take `state` and `config` and return a list of messages to send to the LLM.
-
-See the [context](./context.md) page for more information.
-
-## Memory
-
-To allow multi-turn conversations with an agent, you need to enable [persistence](../concepts/persistence.md) by providing a `checkpointer` when creating an agent. At runtime you need to provide a config containing `thread_id` — a unique identifier for the conversation (session):
+To allow multi-turn conversations with an agent, you need to enable [persistence](../concepts/persistence.md) by providing a `checkpointer` when creating an agent. At runtime, you need to provide a config containing `thread_id` — a unique identifier for the conversation (session):
 
 ```python
 from langgraph.prebuilt import create_react_agent
@@ -179,10 +187,9 @@ When you enable the checkpointer, it stores agent state at every step in the pro
 
 Note that in the above example, when the agent is invoked the second time with the same `thread_id`, the original message history from the first conversation is automatically included, together with the new user input.
 
-Please see the [memory guide](./memory.md) for more details on how to work with memory.
+For more information, see [Memory](./memory.md).
 
-
-## Structured output
+## 6. Configure structured output
 
 To produce structured responses conforming to a schema, use the `response_format` parameter. The schema can be defined with a `Pydantic` model or `TypedDict`. The result will be accessible via the `structured_response` field.
 
@@ -216,3 +223,8 @@ response["structured_response"]
 
     Structured output requires an additional call to the LLM to format the response according to the schema.
 
+## Next steps
+
+- [Deploy your agent locally](../tutorials/langgraph-platform/local-server.md)
+- [Learn more about prebuilt agents](../agents/overview.md)
+- [LangGraph Platform quickstart](../cloud/quick_start.md)

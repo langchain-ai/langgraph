@@ -33,14 +33,8 @@ An **actor** is a `PregelNode`. It subscribes to channels, reads data from them,
 
 Channels are used to communicate between actors (PregelNodes). Each channel has a value type, an update type, and an update function – which takes a sequence of updates and modifies the stored value. Channels can be used to send data from one chain to another, or to send data from a chain to itself in a future step. LangGraph provides a number of built-in channels:
 
-### Basic channels: LastValue and Topic
-
 - [LastValue][langgraph.channels.LastValue]: The default channel, stores the last value sent to the channel, useful for input and output values, or for sending data from one step to the next.
 - [Topic][langgraph.channels.Topic]: A configurable PubSub Topic, useful for sending multiple values between **actors**, or for accumulating output. Can be configured to deduplicate values or to accumulate values over the course of multiple steps.
-
-### Advanced channels: Context and BinaryOperatorAggregate
-
-- `Context`: exposes the value of a context manager, managing its lifecycle. Useful for accessing external resources that require setup and/or teardown; e.g., `client = Context(httpx.Client)`.
 - [BinaryOperatorAggregate][langgraph.channels.BinaryOperatorAggregate]: stores a persistent value, updated by applying a binary operator to the current value and each update sent to the channel, useful for computing aggregates over multiple steps; e.g.,`total = BinaryOperatorAggregate(int, operator.add)`
 
 ## Examples

@@ -20,15 +20,8 @@ def _make_llms_text(output_file: str) -> str:
         output_file: Path to output the consolidated text file
     """
     # Collect all markdown and notebook files
-    relative_paths = [
-        # Files relative to docs/docs/
-        "tutorials/introduction.ipynb",
-    ]
-    all_files = [os.path.join(SOURCE_DIR, path) for path in relative_paths]
+    all_files = glob.glob(os.path.join(SOURCE_DIR, "how-tos/*.md"), recursive=True)
 
-    all_files.extend(
-        glob.glob(os.path.join(SOURCE_DIR, "how-tos/*.md"), recursive=True)
-    )
     all_files.extend(
         glob.glob(os.path.join(SOURCE_DIR, "how-tos/*.ipynb"), recursive=True)
     )
