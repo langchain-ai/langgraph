@@ -1,22 +1,12 @@
-# Connecting an Authentication Provider (Part 3/3)
+# Connect an authentication provider
 
-!!! note "This is part 3 of our authentication series:"
+In the [the last tutorial](resource_auth.md), you added [resource authorization](../../tutorials/auth/resource_auth.md) to give users private conversations. However, you are still using hard-coded tokens for authentication, which is not secure. Now you'll replace those tokens with real user accounts using [OAuth2](../auth/getting_started.md).
 
-    1. [Basic Authentication](getting_started.md) - Control who can access your bot
-    2. [Resource Authorization](resource_auth.md) - Let users have private conversations
-    3. Production Auth (you are here) - Add real user accounts and validate using OAuth2
-
-In the [Making Conversations Private](resource_auth.md) tutorial, we added [resource authorization](../../tutorials/auth/resource_auth.md) to give users private conversations. However, we were still using hard-coded tokens for authentication, which is not secure. Now we'll replace those tokens with real user accounts using [OAuth2](../auth/getting_started.md).
-
-We'll keep the same [`Auth`](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth) object and [resource-level access control](../../concepts/auth.md#single-owner-resources), but upgrade our authentication to use Supabase as our identity provider. While we use Supabase in this tutorial, the concepts apply to any OAuth2 provider. You'll learn how to:
+You'll keep the same [`Auth`](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth) object and [resource-level access control](../../concepts/auth.md#single-owner-resources), but upgrade authentication to use Supabase as your identity provider. While Supabase is used in this tutorial, the concepts apply to any OAuth2 provider. You'll learn how to:
 
 1. Replace test tokens with real JWT tokens
 2. Integrate with OAuth2 providers for secure user authentication
 3. Handle user sessions and metadata while maintaining our existing authorization logic
-
-## Requirements
-
-You will need to set up a Supabase project to use its authentication server for this tutorial. You can do so [here](https://supabase.com/dashboard).
 
 ## Background
 
@@ -45,53 +35,57 @@ sequenceDiagram
     LangGraph Backend->>Client: Serve request (e.g., run agent or graph)
 ```
 
-In the following example, we'll use Supabase as our auth server. The LangGraph application will provide the backend for your app, and we will write test code for the client app.
-Let's get started!
+## Prerequisites
 
-## Setting Up Authentication Provider {#setup-auth-provider}
+Before you start this tutorial, ensure you have:
 
-First, let's install the required dependencies. Start in your `custom-auth` directory and ensure you have the `langgraph-cli` installed:
+- The [bot from the second tutorial](resource_auth.md) running without errors.
+- A [Supabase project](https://supabase.com/dashboard) to use its authentication server.
+
+
+## 1. Install dependencies
+
+Install the required dependencies. Start in your `custom-auth` directory and ensure you have the `langgraph-cli` installed:
 
 ```bash
 cd custom-auth
 pip install -U "langgraph-cli[inmem]"
 ```
 
-Next, we'll need to fech the URL of our auth server and the private key for authentication.
-Since we're using Supabase for this, we can do this in the Supabase dashboard:
+## 2. Set up the authentication provider {#setup-auth-provider}
+
+Next, fetch the URL of your auth server and the private key for authentication.
+Since you're using Supabase for this, you can do this in the Supabase dashboard:
 
 1. In the left sidebar, click on t️⚙ Project Settings" and then click "API"
-2. Copy your project URL and add it to your `.env` file
+1. Copy your project URL and add it to your `.env` file
 
-```shell
-echo "SUPABASE_URL=your-project-url" >> .env
-```
-3. Next, copy your service role secret key and add it to your `.env` file
-```shell
-echo "SUPABASE_SERVICE_KEY=your-service-role-key" >> .env
-```
-4. Finally, copy your "anon public" key and note it down. This will be used later when we set up our client code.
+    ```shell
+    echo "SUPABASE_URL=your-project-url" >> .env
+    ```
+1. Copy your service role secret key and add it to your `.env` file:
 
-```bash
-SUPABASE_URL=your-project-url
-SUPABASE_SERVICE_KEY=your-service-role-key
-```
+    ```shell
+    echo "SUPABASE_SERVICE_KEY=your-service-role-key" >> .env
+    ```
+1. Copy your "anon public" key and note it down. This will be used later when you set up our client code.
 
-## Implementing Token Validation
+    ```bash
+    SUPABASE_URL=your-project-url
+    SUPABASE_SERVICE_KEY=your-service-role-key
+    ```
 
-In the previous tutorials, we used the [`Auth`](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth) object to:
+## 3. Implement token validation
 
-1. Validate hard-coded tokens in the [authentication tutorial](getting_started.md)
-2. Add resource ownership in the [authorization tutorial](resource_auth.md)
+In the previous tutorials, you used the [`Auth`](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth) object to [validate hard-coded tokens](getting_started.md) and [add resource ownership](resource_auth.md).
 
-Now we'll upgrade our authentication to validate real JWT tokens from Supabase. The key changes will all be in the [`@auth.authenticate`](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.authenticate) decorated function:
+Now you'll upgrade your authentication to validate real JWT tokens from Supabase. The main changes will all be in the [`@auth.authenticate`](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.authenticate) decorated function:
 
-1. Instead of checking against a hard-coded list of tokens, we'll make an HTTP request to Supabase to validate the token
-2. We'll extract real user information (ID, email) from the validated token
+- Instead of checking against a hard-coded list of tokens, you'll make an HTTP request to Supabase to validate the token.
+- You'll extract real user information (ID, email) from the validated token.
+- The existing resource authorization logic remains unchanged.
 
-And we'll keep our existing resource authorization logic unchanged
-
-Let's update `src/security/auth.py` to implement this:
+Update `src/security/auth.py` to implement this:
 
 ```python hl_lines="8-9 20-30" title="src/security/auth.py"
 import os
@@ -146,11 +140,9 @@ async def add_owner(ctx, value):
 
 The most important change is that we're now validating tokens with a real authentication server. Our authentication handler has the private key for our Supabase project, which we can use to validate the user's token and extract their information.
 
-Let's test this with a real user account!
+## 4. Test authentication flow
 
-## Testing Authentication Flow
-
-Let's test out our new authentication flow. You can run the following code in a file or notebook. You will need to provide:
+Let's test out the new authentication flow. You can run the following code in a file or notebook. You will need to provide:
 
 - A valid email address
 - A Supabase project URL (from [above](#setup-auth-provider))
@@ -198,14 +190,9 @@ await sign_up(email1, password)
 await sign_up(email2, password)
 ```
 
-Then run the code.
-
-!!! tip "About test emails"
-    We'll create two test accounts by adding "+1" and "+2" to your email. For example, if you use "myemail@gmail.com", we'll create "myemail+1@gmail.com" and "myemail+2@gmail.com". All emails will be delivered to your original address.
-
 ⚠️ Before continuing: Check your email and click both confirmation links. Supabase will will reject `/login` requests until after you have confirmed your users' email.
 
-Now let's test that users can only see their own data. Make sure the server is running (run `langgraph dev`) before proceeding. The following snippet requires the "anon public" key that you copied from the Supabase dashboard while [setting up the auth provider](#setup-auth-provider) previously. 
+Now test that users can only see their own data. Make sure the server is running (run `langgraph dev`) before proceeding. The following snippet requires the "anon public" key that you copied from the Supabase dashboard while [setting up the auth provider](#setup-auth-provider) previously. 
 
 ```python
 async def login(email: str, password: str):
@@ -264,13 +251,14 @@ The output should look like this:
 ✅ User 2 blocked from User 1's thread: Client error '404 Not Found' for url 'http://localhost:2024/threads/d6af3754-95df-4176-aa10-dbd8dca40f1a'
 ```
 
-Perfect! Our authentication and authorization are working together:
+Your authentication and authorization are working together:
+
 1. Users must log in to access the bot
 2. Each user can only see their own threads
 
-All our users are managed by the Supabase auth provider, so we don't need to implement any additional user management logic.
+All users are managed by the Supabase auth provider, so you don't need to implement any additional user management logic.
 
-## Congratulations! 🎉
+## Next steps
 
 You've successfully built a production-ready authentication system for your LangGraph application! Let's review what you've accomplished:
 
@@ -279,10 +267,6 @@ You've successfully built a production-ready authentication system for your Lang
 3. Integrated JWT token validation into your LangGraph server
 4. Implemented proper authorization to ensure users can only access their own data
 5. Created a foundation that's ready to handle your next authentication challenge 🚀
-
-This completes our authentication tutorial series. You now have the building blocks for a secure, production-ready LangGraph application.
-
-## What's Next?
 
 Now that you have production authentication, consider:
 

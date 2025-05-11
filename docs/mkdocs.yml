@@ -295,8 +295,8 @@ nav:
         - tutorials/auth/resource_auth.md
         - tutorials/auth/add_auth_server.md
       - Rebuild graph at runtime: cloud/deployment/graph_rebuild.md
-      - how-tos/use-remote-graph.md
-      - how-tos/autogen-langgraph-platform.ipynb
+      - Use RemoteGraph: how-tos/use-remote-graph.md
+      - Deploy CrewAI, AutoGen, and other frameworks: how-tos/autogen-langgraph-platform.ipynb
       - Front-end and generative UI:
         - Integrate LangGraph into a React app: cloud/how-tos/use_stream_react.md
         - Implement generative UI with LangGraph: cloud/how-tos/generative_ui_react.md

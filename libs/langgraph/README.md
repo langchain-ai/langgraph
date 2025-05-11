@@ -13,44 +13,50 @@
 [![Open Issues](https://img.shields.io/github/issues-raw/langchain-ai/langgraph)](https://github.com/langchain-ai/langgraph/issues)
 [![Docs](https://img.shields.io/badge/docs-latest-blue)](https://langchain-ai.github.io/langgraph/)
 
-> [!NOTE]
-> Looking for the JS version? See the [JS repo](https://github.com/langchain-ai/langgraphjs) and the [JS docs](https://langchain-ai.github.io/langgraphjs/).
-
-LangGraph is a low-level orchestration framework for building controllable agents. While [LangChain](https://python.langchain.com/docs/introduction/) provides integrations and composable components to streamline LLM application development, the LangGraph library enables agent orchestration — offering customizable architectures, long-term memory, and human-in-the-loop to reliably handle complex tasks.
+Trusted by [companies](https://langchain-ai.github.io/langgraph/adopters/) shaping the future of agents, LangGraph is a powerful low-level orchestration framework for building, managing, and deploying long-running, stateful agents. 
 
 ## Get started
 
-First, install LangGraph:
+Install LangGraph:
 
 ```
 pip install -U langgraph
 ```
 
-There are two ways to get started with LangGraph:
+Then, create an agent [using prebuilt components](https://langchain-ai.github.io/langgraph/agents/agents/):
 
-- [Use prebuilt components](https://langchain-ai.github.io/langgraph/agents/agents/): Construct agentic systems quickly and reliably without the need to implement orchestration, memory, or human feedback handling from scratch.
-- [Use LangGraph](https://langchain-ai.github.io/langgraph/tutorials/introduction/): Customize your architectures, use long-term memory, and implement human-in-the-loop to reliably handle complex tasks.
+```python
+# pip install -qU "langchain[anthropic]" to call the model
 
-Once you have a LangGraph application and are ready to move into production, use [LangGraph Platform](https://langchain-ai.github.io/langgraph/cloud/quick_start/) to test, debug, and deploy your application.
+from langgraph.prebuilt import create_react_agent
 
-## What LangGraph provides
+def get_weather(city: str) -> str:  # (1)!
+    """Get weather for a given city."""
+    return f"It's always sunny in {city}!"
 
-LangGraph provides low-level supporting infrastructure that sits underneath *any* workflow or agent. It does not abstract prompts or architecture, and provides three central benefits:
+agent = create_react_agent(
+    model="anthropic:claude-3-7-sonnet-latest",  # (2)!
+    tools=[get_weather],  # (3)!
+    prompt="You are a helpful assistant"  # (4)!
+)
 
-### Persistence
+# Run the agent
+agent.invoke(
+    {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
+)
+```
 
-LangGraph has a [persistence layer](https://langchain-ai.github.io/langgraph/concepts/persistence/), which offers a number of benefits:
+For more information, see the [Quickstart](https://langchain-ai.github.io/langgraph/agents/agents/). Or, to build a [complex, looping workflow](https://langchain-ai.github.io/langgraph/concepts/low_level/) with customizable architecture, long-term memory, and other complex task handling, [use the LangGraph framework](https://langchain-ai.github.io/langgraph/concepts/why-langgraph/).
 
-- [Memory](https://langchain-ai.github.io/langgraph/concepts/memory/): LangGraph persists arbitrary aspects of your application's state, supporting memory of conversations and other updates within and across user interactions;
-- [Human-in-the-loop](https://langchain-ai.github.io/langgraph/concepts/human_in_the_loop/): Because state is checkpointed, execution can be interrupted and resumed, allowing for decisions, validation, and corrections via human input.
+## Core benefits
 
-### Streaming
+LangGraph provides low-level supporting infrastructure for *any* long-running, stateful workflow or agent. LangGraph does not abstract prompts or architecture, and provides the following central benefits:
 
-LangGraph provides support for [streaming](https://langchain-ai.github.io/langgraph/concepts/streaming/) workflow / agent state to the user (or developer) over the course of execution. LangGraph supports streaming of both events ([such as feedback from a tool call](https://langchain-ai.github.io/langgraph/how-tos/streaming.ipynb#updates)) and [tokens from LLM calls](https://langchain-ai.github.io/langgraph/how-tos/streaming-tokens.ipynb) embedded in an application.
-
-### Debugging and deployment
-
-LangGraph provides an easy onramp for testing, debugging, and deploying applications via [LangGraph Platform](https://langchain-ai.github.io/langgraph/concepts/langgraph_platform/). This includes [Studio](https://langchain-ai.github.io/langgraph/concepts/langgraph_studio/), an IDE that enables visualization, interaction, and debugging of workflows or agents. This also includes numerous [options](https://langchain-ai.github.io/langgraph/tutorials/deployment/) for deployment. 
+- [Durable execution](https://langchain-ai.github.io/langgraph/concepts/durable_execution/): Build agents that persist through failures and can run for extended periods, automatically resuming from exactly where they left off.
+- [Human-in-the-loop](https://langchain-ai.github.io/langgraph/concepts/human_in_the_loop/): Seamlessly incorporate human oversight by inspecting and modifying agent state at any point during execution.
+- [Comprehensive memory](https://langchain-ai.github.io/langgraph/concepts/memory/): Create truly stateful agents with both short-term working memory for ongoing reasoning and long-term persistent memory across sessions.
+- [Debugging with LangSmith](http://www.langchain.com/langsmith): Gain deep visibility into complex agent behavior with visualization tools that trace execution paths, capture state transitions, and provide detailed runtime metrics.
+- [Production-ready deployment](https://langchain-ai.github.io/langgraph/concepts/deployment_options/): Deploy sophisticated agent systems confidently with scalable infrastructure designed to handle the unique challenges of stateful, long-running workflows.
 
 ## LangGraph’s ecosystem
 
@@ -58,6 +64,10 @@ While LangGraph can be used standalone, it also integrates seamlessly with any L
 
 - [LangSmith](http://www.langchain.com/langsmith) — Helpful for agent evals and observability. Debug poor-performing LLM app runs, evaluate agent trajectories, gain visibility in production, and improve performance over time.
 - [LangGraph Platform](https://langchain-ai.github.io/langgraph/concepts/#langgraph-platform) — Deploy and scale agents effortlessly with a purpose-built deployment platform for long running, stateful workflows. Discover, reuse, configure, and share agents across teams — and iterate quickly with visual prototyping in [LangGraph Studio](https://langchain-ai.github.io/langgraph/concepts/langgraph_studio/).
+- [LangChain](https://python.langchain.com/docs/introduction/) – Provides integrations and composable components to streamline LLM application development.
+
+> [!NOTE]
+> Looking for the JS version of LangGraph? See the [JS repo](https://github.com/langchain-ai/langgraphjs) and the [JS docs](https://langchain-ai.github.io/langgraphjs/).
 
 ## Additional resources
 
