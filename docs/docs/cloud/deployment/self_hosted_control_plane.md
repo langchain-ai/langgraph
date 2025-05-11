@@ -2,6 +2,9 @@
 
 Before deploying, review the [conceptual guide for the Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md) deployment option.
 
+!!! important "Beta"
+    The Self-Hosted Control Plane deployment option is currently in beta stage.
+
 ## Prerequisites
 
 1. You are using Kubernetes.
