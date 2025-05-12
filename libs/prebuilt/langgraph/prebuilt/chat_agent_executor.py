@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import inspect
 from typing import (
     Any,
@@ -435,7 +437,7 @@ def create_react_agent(
                 "Please install langchain (`pip install langchain`) to use '<provider>:<model>' string syntax for `model` parameter."
             )
 
-        model = cast(BaseChatModel, init_chat_model(model))
+        model = init_chat_model(model)
 
     tool_calling_enabled = len(tool_classes) > 0
 
@@ -621,7 +623,7 @@ def create_react_agent(
         )
 
     # Define the function that determines whether to continue or not
-    def should_continue(state: StateSchema) -> Union[str, list]:
+    def should_continue(state: StateSchema) -> str | list[Send]:
         messages = _get_state_value(state, "messages")
         last_message = messages[-1]
         # If there is no function call, then we finish
@@ -670,6 +672,7 @@ def create_react_agent(
     agent_paths = ["tools", END]
     post_model_hook_paths = ["tools", END]
 
+    # Add a post model hook node if post_model_hook is provided
     if post_model_hook is not None:
         workflow.add_node("post_model_hook", post_model_hook)
         workflow.add_edge("agent", "post_model_hook")
@@ -690,8 +693,15 @@ def create_react_agent(
             agent_paths.append("generate_structured_response")
             workflow.add_edge("agent", "generate_structured_response")
 
-    def post_model_hook_router(state: StateSchema) -> str | list:
-        # find the last AI message
+    def post_model_hook_router(state: StateSchema) -> str | list[Send]:
+        """Route to the next node after post_model_hook.
+
+        Routes to one of:
+        * "tools": if there are pending tool calls without a corresponding message.
+        * "generate_structured_response": if no pending tool calls exist and response_format is specified.
+        * END: if no pending tool calls exist and no response_format is specified.
+        """
+
         messages = _get_state_value(state, "messages")
         tool_messages = [m.tool_call_id for m in messages if isinstance(m, ToolMessage)]
         last_ai_message = next(
@@ -710,12 +720,14 @@ def create_react_agent(
 
     workflow.add_conditional_edges(
         "agent",
-        should_continue,
+        should_continue,  # type: ignore[arg-type]
         path_map=agent_paths,
     )
 
     workflow.add_conditional_edges(
-        "post_model_hook", post_model_hook_router, path_map=post_model_hook_paths
+        "post_model_hook",
+        post_model_hook_router,  # type: ignore[arg-type]
+        path_map=post_model_hook_paths,
     )
 
     def route_tool_responses(state: StateSchema) -> str:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, Literal, Optional, Union, cast
 
 from langchain_core.messages import ToolCall, ToolMessage
@@ -97,12 +98,72 @@ class HumanResponse(TypedDict):
 
 
 class ToolInterruptNode(RunnableCallable):
+    """Prebuilt post model hook node used to enable common patterns for tool interrupts.
+
+    For any tools with specified policies, an interrupt will be raised when the LLM returns
+    a tool call for said tool. The interrupt policy will be used to determine what sort of resume logic is allowed.
+    Any of the following resume patterns are supported:
+
+    * ignore: the current tool call is ignored / skipped
+    * response: text response/feedback is fed back into the LLM
+    * edit: the args for the tool call are edited and then the tool call is executed
+    * accept: the tool call is executed as planned
+
+    Args:
+        interrupt_policy: a mapping of tool names to [`HumanInterruptConfig`][prebuilt.interrupt.HumanInterruptConfig] dictionaries
+            specifying which interrupt patterns to enable for said tool.
+        name: The name of the ToolInterruptNode in the graph. Defaults to "post_model_hook".
+        tags: Optional tags to associate with the node. Defaults to None.
+
+        Example:
+        ```python
+        from langchain_openai import ChatOpenAI
+        from langgraph.prebuilt import create_react_agent
+        from langgraph.checkpoint.memory import InMemorySaver
+        from langgraph.prebuilt.interrupt import HumanInterruptConfig, ToolInterruptNode
+        from langgraph.types import Command
+
+
+        def book_hotel(hotel_name: str) -> str:
+            '''Book a room at the provided hotel.'''
+            # Some hotel API calls, a sensitive / expensive operation
+            return f"Booked a hotel at {hotel_name}."
+
+
+        agent = create_react_agent(
+            ChatOpenAI(model="gpt-4o",),
+            tools=[book_hotel],
+            prompt="You are a hotel booking assistant.",
+            post_model_hook=ToolInterruptNode(
+                interrupt_policy={
+                    "book_hotel": HumanInterruptConfig(
+                        allow_accept=True,
+                        allow_edit=True,
+                        allow_ignore=True,
+                        allow_respond=True,
+                    )
+                }
+            ),
+            checkpointer=InMemorySaver(),
+        )
+
+        config = {"configurable": {"thread_id": 1}}
+
+        response = agent.invoke(
+            {"messages": [{"role": "user", "content": "please book a hotel at the hilton inn in boston."}]},
+            config=config,
+        )
+
+        response = agent.invoke(Command(resume={"type": "accept"}), config=config)
+        ```
+    """
+
     def __init__(
         self,
         interrupt_policy: dict[str, HumanInterruptConfig],
         *,
-        name: str = "tools",
-        tags: Optional[list[str]] = None,
+        name: str = "post_model_hook",
+        tags: list[str] | None = None,
     ):
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self.interrupt_policy = interrupt_policy
@@ -128,8 +189,7 @@ class ToolInterruptNode(RunnableCallable):
         response = interrupt([request])
 
         # resume provided by agent inbox as a list
-        if isinstance(response, list):
-            response = response[0]
+        response = response[0] if isinstance(response, list) else response
 
         try:
             response_type = response.get("type")
@@ -177,9 +237,10 @@ class ToolInterruptNode(RunnableCallable):
 
     def _func(self, input: dict[str, Any]) -> Command | None:
         ai_msg = input["messages"][-1]
-        tool_calls: list[ToolCall] = ai_msg.tool_calls or []
+        tool_calls: list[ToolCall] = deepcopy(ai_msg.tool_calls) or []
         tool_messages: list[ToolMessage] = []
         pending_tool_calls: bool = False
+
         for idx, tool_call in enumerate(tool_calls):
             if interrupt_config := self.interrupt_policy.get(tool_call["name"]):
                 interrupt_result = self._interrupt(
@@ -192,8 +253,14 @@ class ToolInterruptNode(RunnableCallable):
                     pending_tool_calls = True
                     tool_calls[idx] = interrupt_result
 
+        ai_msg.tool_calls = tool_calls
+
         if tool_messages and not pending_tool_calls:
+            # TODO: we should go to pre_model_hook if that exists, how can we figure
+            # that out from here?
             return Command(goto="agent", update={"messages": tool_messages})
+        # if there are pending tool calls, the conditional routing logic for
+        # post_model_hook will direct to the tools node
         return Command(update={"messages": [ai_msg, *tool_messages]})
 
     async def _afunc(self, input: dict[str, Any]) -> None:
