@@ -27,6 +27,7 @@ from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 from typing_extensions import ParamSpec, Self
 
+from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import (
     EXCLUDED_METADATA_KEYS,
@@ -117,10 +118,12 @@ from langgraph.pregel.utils import get_new_channel_versions, is_xxh3_128_hexdige
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
+    CachePolicy,
     Command,
     LoopProtocol,
     PregelExecutableTask,
     PregelScratchpad,
+    RetryPolicy,
     StreamChunk,
     StreamProtocol,
 )
@@ -133,6 +136,7 @@ INPUT_DONE = object()
 INPUT_RESUMING = object()
 INPUT_SHOULD_VALIDATE = object()
 SPECIAL_CHANNELS = (ERROR, INTERRUPT, SCHEDULED)
+WritesT = Sequence[tuple[str, Any]]
 
 
 def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
@@ -147,6 +151,7 @@ def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
 class PregelLoop(LoopProtocol):
     input: Optional[Any]
     input_model: Optional[type[BaseModel]]
+    cache: Optional[BaseCache[WritesT]]
     checkpointer: Optional[BaseCheckpointSaver]
     nodes: Mapping[str, PregelNode]
     specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]]
@@ -159,18 +164,18 @@ class PregelLoop(LoopProtocol):
     interrupt_before: Union[All, Sequence[str]]
     checkpoint_during: bool
     debug: bool
+    retry_policy: Sequence[RetryPolicy]
+    cache_policy: Optional[CachePolicy]
 
     checkpointer_get_next_version: GetNextVersion
-    checkpointer_put_writes: Optional[
-        Callable[[RunnableConfig, Sequence[tuple[str, Any]], str], Any]
-    ]
+    checkpointer_put_writes: Optional[Callable[[RunnableConfig, WritesT, str], Any]]
     checkpointer_put_writes_accepts_task_path: bool
     _checkpointer_put_after_previous: Optional[
         Callable[
             [
                 Optional[concurrent.futures.Future],
                 RunnableConfig,
-                Sequence[tuple[str, Any]],
+                Checkpoint,
                 str,
                 ChannelVersions,
             ],
@@ -206,18 +211,21 @@ class PregelLoop(LoopProtocol):
         stream: Optional[StreamProtocol],
         config: RunnableConfig,
         store: Optional[BaseStore],
+        cache: Optional[BaseCache],
         checkpointer: Optional[BaseCheckpointSaver],
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
         output_keys: Union[str, Sequence[str]],
         stream_keys: Union[str, Sequence[str]],
+        trigger_to_nodes: Mapping[str, Sequence[str]],
         interrupt_after: Union[All, Sequence[str]] = EMPTY_SEQ,
         interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
         input_model: Optional[type[BaseModel]] = None,
         debug: bool = False,
         migrate_checkpoint: Optional[Callable[[Checkpoint], None]] = None,
-        trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
+        retry_policy: Sequence[RetryPolicy] = (),
+        cache_policy: Optional[CachePolicy] = None,
         checkpoint_during: bool = True,
     ) -> None:
         super().__init__(
@@ -230,6 +238,7 @@ class PregelLoop(LoopProtocol):
         self.input = input
         self.input_model = input_model
         self.checkpointer = checkpointer
+        self.cache = cache
         self.nodes = nodes
         self.specs = specs
         self.output_keys = output_keys
@@ -244,6 +253,8 @@ class PregelLoop(LoopProtocol):
         )
         self._migrate_checkpoint = migrate_checkpoint
         self.trigger_to_nodes = trigger_to_nodes
+        self.retry_policy = retry_policy
+        self.cache_policy = cache_policy
         self.checkpoint_during = checkpoint_during
         self.debug = debug
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
@@ -299,7 +310,7 @@ class PregelLoop(LoopProtocol):
         )
         self.prev_checkpoint_config = None
 
-    def put_writes(self, task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
+    def put_writes(self, task_id: str, writes: WritesT) -> None:
         """Put writes for a task, to be read by the next tick."""
         if not writes:
             return
@@ -346,7 +357,7 @@ class PregelLoop(LoopProtocol):
                 )
         # output writes
         if hasattr(self, "tasks"):
-            self._output_writes(task_id, writes)
+            self.output_writes(task_id, writes)
 
     def _put_pending_writes(self) -> None:
         if self.checkpointer_put_writes is None:
@@ -418,6 +429,8 @@ class PregelLoop(LoopProtocol):
                 store=self.store,
                 checkpointer=self.checkpointer,
                 manager=self.manager,
+                retry_policy=self.retry_policy,
+                cache_policy=self.cache_policy,
             ),
         ):
             # don't start if we should interrupt *before* the new task
@@ -483,6 +496,7 @@ class PregelLoop(LoopProtocol):
                 self.channels,
                 self.tasks.values(),
                 self.checkpointer_get_next_version,
+                self.trigger_to_nodes,
             )
             # apply writes to managed values
             for key, values in mv_writes.items():
@@ -546,6 +560,8 @@ class PregelLoop(LoopProtocol):
             checkpointer=self.checkpointer,
             trigger_to_nodes=self.trigger_to_nodes,
             updated_channels=updated_channels,
+            retry_policy=self.retry_policy,
+            cache_policy=self.cache_policy,
         )
         self.to_interrupt = []
 
@@ -608,9 +624,15 @@ class PregelLoop(LoopProtocol):
         # print output for any tasks we applied previous writes to
         for task in self.tasks.values():
             if task.writes:
-                self._output_writes(task.id, task.writes, cached=True)
+                self.output_writes(task.id, task.writes, cached=True)
 
         return True
+
+    def match_cached_writes(self) -> Sequence[PregelExecutableTask]:
+        raise NotImplementedError
+
+    async def amatch_cached_writes(self) -> Sequence[PregelExecutableTask]:
+        raise NotImplementedError
 
     # private
 
@@ -679,6 +701,7 @@ class PregelLoop(LoopProtocol):
                 self.channels,
                 [PregelTaskWrites((), INPUT, null_writes, [])],
                 self.checkpointer_get_next_version,
+                self.trigger_to_nodes,
             )
             for key, values in mv_writes.items():
                 self._update_mv(key, values)
@@ -731,6 +754,7 @@ class PregelLoop(LoopProtocol):
                     PregelTaskWrites((), INPUT, input_writes, []),
                 ],
                 self.checkpointer_get_next_version,
+                self.trigger_to_nodes,
             )
             assert not mv_writes, "Can't write to SharedValues in graph input"
             # save input checkpoint
@@ -868,6 +892,7 @@ class PregelLoop(LoopProtocol):
                     self.channels,
                     self.tasks.values(),
                     self.checkpointer_get_next_version,
+                    self.trigger_to_nodes,
                 )
                 for key, values in mv_writes.items():
                     self._update_mv(key, values)
@@ -908,8 +933,8 @@ class PregelLoop(LoopProtocol):
         for v in values(*args, **kwargs):
             self.stream((self.checkpoint_ns, mode, v))
 
-    def _output_writes(
-        self, task_id: str, writes: Sequence[tuple[str, Any]], *, cached: bool = False
+    def output_writes(
+        self, task_id: str, writes: WritesT, *, cached: bool = False
     ) -> None:
         if task := self.tasks.get(task_id):
             if task.config is not None and TAG_HIDDEN in task.config.get(
@@ -963,9 +988,11 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         stream: Optional[StreamProtocol],
         config: RunnableConfig,
         store: Optional[BaseStore],
+        cache: Optional[BaseCache],
         checkpointer: Optional[BaseCheckpointSaver],
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
+        trigger_to_nodes: Mapping[str, Sequence[str]],
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
         interrupt_after: Union[All, Sequence[str]] = EMPTY_SEQ,
         interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
@@ -974,7 +1001,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         input_model: Optional[type[BaseModel]] = None,
         debug: bool = False,
         migrate_checkpoint: Optional[Callable[[Checkpoint], None]] = None,
-        trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
+        retry_policy: Sequence[RetryPolicy] = (),
+        cache_policy: Optional[CachePolicy] = None,
         checkpoint_during: bool = True,
     ) -> None:
         super().__init__(
@@ -983,6 +1011,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             stream=stream,
             config=config,
             checkpointer=checkpointer,
+            cache=cache,
             store=store,
             nodes=nodes,
             specs=specs,
@@ -994,6 +1023,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             debug=debug,
             migrate_checkpoint=migrate_checkpoint,
             trigger_to_nodes=trigger_to_nodes,
+            retry_policy=retry_policy,
+            cache_policy=cache_policy,
             checkpoint_during=checkpoint_during,
         )
         self.stack = ExitStack()
@@ -1032,6 +1063,39 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             return
 
         return self.submit(cast(WritableManagedValue, managed_value).update, values)
+
+    def match_cached_writes(self) -> Sequence[PregelExecutableTask]:
+        if self.cache is None:
+            return ()
+        matched: list[PregelExecutableTask] = []
+        if cached := {
+            (t.cache_key.ns, t.cache_key.key): t
+            for t in self.tasks.values()
+            if t.cache_key and not t.writes
+        }:
+            for key, values in self.cache.get(tuple(cached)).items():
+                task = cached[key]
+                task.writes.extend(values)
+                matched.append(task)
+        return matched
+
+    def put_writes(self, task_id: str, writes: WritesT) -> None:
+        """Put writes for a task, to be read by the next tick."""
+        super().put_writes(task_id, writes)
+        if not writes or self.cache is None or not hasattr(self, "tasks"):
+            return
+        task = self.tasks.get(task_id)
+        if task is None or task.cache_key is None:
+            return
+        self.submit(
+            self.cache.set,
+            {
+                (task.cache_key.ns, task.cache_key.key): (
+                    task.writes,
+                    task.cache_key.ttl,
+                )
+            },
+        )
 
     # context manager
 
@@ -1113,9 +1177,11 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         stream: Optional[StreamProtocol],
         config: RunnableConfig,
         store: Optional[BaseStore],
+        cache: Optional[BaseCache],
         checkpointer: Optional[BaseCheckpointSaver],
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
+        trigger_to_nodes: Mapping[str, Sequence[str]],
         interrupt_after: Union[All, Sequence[str]] = EMPTY_SEQ,
         interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
@@ -1124,7 +1190,8 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         input_model: Optional[type[BaseModel]] = None,
         debug: bool = False,
         migrate_checkpoint: Optional[Callable[[Checkpoint], None]] = None,
-        trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
+        retry_policy: Sequence[RetryPolicy] = (),
+        cache_policy: Optional[CachePolicy] = None,
         checkpoint_during: bool = True,
     ) -> None:
         super().__init__(
@@ -1133,6 +1200,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             stream=stream,
             config=config,
             checkpointer=checkpointer,
+            cache=cache,
             store=store,
             nodes=nodes,
             specs=specs,
@@ -1144,6 +1212,8 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             debug=debug,
             migrate_checkpoint=migrate_checkpoint,
             trigger_to_nodes=trigger_to_nodes,
+            retry_policy=retry_policy,
+            cache_policy=cache_policy,
             checkpoint_during=checkpoint_during,
         )
         self.stack = AsyncExitStack()
@@ -1182,6 +1252,42 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             return
 
         return self.submit(cast(WritableManagedValue, managed_value).aupdate, values)
+
+    async def amatch_cached_writes(self) -> Sequence[PregelExecutableTask]:
+        if self.cache is None:
+            return []
+        matched: list[PregelExecutableTask] = []
+        if cached := {
+            (t.cache_key.ns, t.cache_key.key): t
+            for t in self.tasks.values()
+            if t.cache_key and not t.writes
+        }:
+            for key, values in (await self.cache.aget(tuple(cached))).items():
+                task = cached[key]
+                task.writes.extend(values)
+                matched.append(task)
+        return matched
+
+    def put_writes(self, task_id: str, writes: WritesT) -> None:
+        """Put writes for a task, to be read by the next tick."""
+        super().put_writes(task_id, writes)
+        if not writes or self.cache is None or not hasattr(self, "tasks"):
+            return
+        task = self.tasks.get(task_id)
+        if task is None or task.cache_key is None:
+            return
+        if writes[0][0] in (INTERRUPT, ERROR):
+            # only cache successful tasks
+            return
+        self.submit(
+            self.cache.aset,
+            {
+                (task.cache_key.ns, task.cache_key.key): (
+                    task.writes,
+                    task.cache_key.ttl,
+                )
+            },
+        )
 
     # context manager
 

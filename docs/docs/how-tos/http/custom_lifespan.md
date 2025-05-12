@@ -1,8 +1,8 @@
 # How to add custom lifespan events
 
-When deploying agents on the LangGraph platform, you often need to initialize resources like database connections when your server starts up, and ensure they're properly closed when it shuts down. Lifespan events let you hook into your server's startup and shutdown sequence to handle these critical setup and teardown tasks.
+When deploying agents to LangGraph Platform, you often need to initialize resources like database connections when your server starts up, and ensure they're properly closed when it shuts down. Lifespan events let you hook into your server's startup and shutdown sequence to handle these critical setup and teardown tasks.
 
-This works the same way as [adding custom routes](./custom_routes.md) - you just need to provide your own [`Starlette`](https://www.starlette.io/applications/) app (including [`FastAPI`](https://fastapi.tiangolo.com/), [`FastHTML`](https://fastht.ml/) and other compatible apps).
+This works the same way as [adding custom routes](./custom_routes.md). You just need to provide your own [`Starlette`](https://www.starlette.io/applications/) app (including [`FastAPI`](https://fastapi.tiangolo.com/), [`FastHTML`](https://fastht.ml/) and other compatible apps).
 
 Below is an example using FastAPI.
 
@@ -47,7 +47,7 @@ app = FastAPI(lifespan=lifespan)
 
 ## Configure `langgraph.json`
 
-Add the following to your `langgraph.json` file. Make sure the path points to the `webapp.py` file you created above.
+Add the following to your `langgraph.json` configuration file. Make sure the path points to the `webapp.py` file you created above.
 
 ```json
 {
@@ -71,11 +71,11 @@ Test the server out locally:
 langgraph dev --no-browser
 ```
 
-You should see your startup message printed when the server starts, and your cleanup message when you stop it with Ctrl+C.
+You should see your startup message printed when the server starts, and your cleanup message when you stop it with `Ctrl+C`.
 
 ## Deploying
 
-You can deploy your app as-is to the managed langgraph cloud or to your self-hosted platform.
+You can deploy your app as-is to LangGraph Cloud or to your self-hosted platform.
 
 ## Next steps
 

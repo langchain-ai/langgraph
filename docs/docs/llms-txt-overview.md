@@ -1,6 +1,4 @@
-# LLMs-txt Overview
-
-## Overview
+# llms.txt
 
 Below you can find a list of documentation files in the [`llms.txt`](https://llmstxt.org/) format, specifically `llms.txt` and `llms-full.txt`. These files allow large language models (LLMs) and agents to access programming documentation and APIs, particularly useful within integrated development environments (IDEs).
 

@@ -1,10 +1,11 @@
 """The LangGraph client implementations connect to the LangGraph API.
 
-This module provides both asynchronous (LangGraphClient) and synchronous (SyncLanggraphClient)
+This module provides both asynchronous ([get_client(url="http://localhost:2024"))](#get_client) or [LangGraphClient](#LangGraphClient))
+and synchronous ([get_sync_client(url="http://localhost:2024"))](#get_sync_client) or [SyncLanggraphClient](#SyncLanggraphClient))
 clients to interacting with the LangGraph API's core resources such as
 Assistants, Threads, Runs, and Cron jobs, as well as its persistent
 document Store.
-"""
+"""  # noqa: E501
 
 from __future__ import annotations
 
@@ -87,7 +88,7 @@ def _get_api_key(api_key: Optional[str] = None) -> Optional[str]:
     return None  # type: ignore
 
 
-def get_headers(
+def _get_headers(
     api_key: Optional[str], custom_headers: Optional[dict[str, str]]
 ) -> dict[str, str]:
     """Combine api_key and custom user-provided headers."""
@@ -107,7 +108,7 @@ def get_headers(
     return headers
 
 
-def orjson_default(obj: Any) -> Any:
+def _orjson_default(obj: Any) -> Any:
     if hasattr(obj, "model_dump") and callable(obj.model_dump):
         return obj.model_dump()
     elif hasattr(obj, "dict") and callable(obj.dict):
@@ -123,6 +124,7 @@ def get_client(
     url: Optional[str] = None,
     api_key: Optional[str] = None,
     headers: Optional[dict[str, str]] = None,
+    timeout: Optional[TimeoutTypes] = None,
 ) -> LangGraphClient:
     """Get a LangGraphClient instance.
 
@@ -135,13 +137,18 @@ def get_client(
                 3. LANGSMITH_API_KEY
                 4. LANGCHAIN_API_KEY
         headers: Optional custom headers
+        timeout: Optional timeout configuration for the HTTP client.
+            Accepts an httpx.Timeout instance, a float (seconds), or a tuple of timeouts.
+            Tuple format is (connect, read, write, pool)
+            If not provided, defaults to connect=5s, read=300s, write=300s, and pool=5s.
 
     Returns:
         LangGraphClient: The top-level client for accessing AssistantsClient,
         ThreadsClient, RunsClient, and CronClient.
 
-    Example:
+    ???+ example "Example"
 
+        ```python
         from langgraph_sdk import get_client
 
         # get top-level LangGraphClient
@@ -149,6 +156,7 @@ def get_client(
 
         # example usage: client.<model>.<method_name>()
         assistants = await client.assistants.get(assistant_id="some_uuid")
+        ```
     """
 
     transport: Optional[httpx.AsyncBaseTransport] = None
@@ -168,12 +176,15 @@ def get_client(
 
     if transport is None:
         transport = httpx.AsyncHTTPTransport(retries=5)
-
     client = httpx.AsyncClient(
         base_url=url,
         transport=transport,
-        timeout=httpx.Timeout(connect=5, read=300, write=300, pool=5),
-        headers=get_headers(api_key, headers),
+        timeout=(
+            httpx.Timeout(timeout)
+            if timeout is not None
+            else httpx.Timeout(connect=5, read=300, write=300, pool=5)
+        ),
+        headers=_get_headers(api_key, headers),
     )
     return LangGraphClient(client)
 
@@ -229,7 +240,7 @@ class HttpClient:
             else:
                 logger.error(f"Error from langgraph-api: {body}", exc_info=e)
             raise e
-        return await adecode_json(r)
+        return await _adecode_json(r)
 
     async def post(
         self,
@@ -240,7 +251,7 @@ class HttpClient:
     ) -> Any:
         """Send a POST request."""
         if json is not None:
-            request_headers, content = await aencode_json(json)
+            request_headers, content = await _aencode_json(json)
         else:
             request_headers, content = {}, b""
         # Merge headers, with runtime headers taking precedence
@@ -256,13 +267,13 @@ class HttpClient:
             else:
                 logger.error(f"Error from langgraph-api: {body}", exc_info=e)
             raise e
-        return await adecode_json(r)
+        return await _adecode_json(r)
 
     async def put(
         self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None
     ) -> Any:
         """Send a PUT request."""
-        request_headers, content = await aencode_json(json)
+        request_headers, content = await _aencode_json(json)
         if headers:
             request_headers.update(headers)
         r = await self.client.put(path, headers=request_headers, content=content)
@@ -275,13 +286,13 @@ class HttpClient:
             else:
                 logger.error(f"Error from langgraph-api: {body}", exc_info=e)
             raise e
-        return await adecode_json(r)
+        return await _adecode_json(r)
 
     async def patch(
         self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None
     ) -> Any:
         """Send a PATCH request."""
-        request_headers, content = await aencode_json(json)
+        request_headers, content = await _aencode_json(json)
         if headers:
             request_headers.update(headers)
         r = await self.client.patch(path, headers=request_headers, content=content)
@@ -294,7 +305,7 @@ class HttpClient:
             else:
                 logger.error(f"Error from langgraph-api: {body}", exc_info=e)
             raise e
-        return await adecode_json(r)
+        return await _adecode_json(r)
 
     async def delete(
         self,
@@ -325,7 +336,7 @@ class HttpClient:
         headers: Optional[dict[str, str]] = None,
     ) -> AsyncIterator[StreamPart]:
         """Stream results using SSE."""
-        request_headers, content = await aencode_json(json)
+        request_headers, content = await _aencode_json(json)
         request_headers["Accept"] = "text/event-stream"
         request_headers["Cache-Control"] = "no-store"
         # Add runtime headers with precedence
@@ -360,14 +371,14 @@ class HttpClient:
                     yield sse
 
 
-async def aencode_json(json: Any) -> tuple[dict[str, str], bytes]:
+async def _aencode_json(json: Any) -> tuple[dict[str, str], bytes]:
     if json is None:
         return {}, None
     body = await asyncio.get_running_loop().run_in_executor(
         None,
         orjson.dumps,
         json,
-        orjson_default,
+        _orjson_default,
         orjson.OPT_SERIALIZE_NUMPY | orjson.OPT_NON_STR_KEYS,
     )
     content_length = str(len(body))
@@ -376,7 +387,7 @@ async def aencode_json(json: Any) -> tuple[dict[str, str], bytes]:
     return headers, body
 
 
-async def adecode_json(r: httpx.Response) -> Any:
+async def _adecode_json(r: httpx.Response) -> Any:
     body = await r.aread()
     return (
         await asyncio.get_running_loop().run_in_executor(None, orjson.loads, body)
@@ -391,10 +402,12 @@ class AssistantsClient:
     This class provides methods to interact with assistants,
     which are versioned configurations of your graph.
 
-    Example:
+    ???+ example "Example"
 
-        client = get_client()
+        ```python
+        client = get_client(url="http://localhost:2024")
         assistant = await client.assistants.get("assistant_id_123")
+        ```
     """
 
     def __init__(self, http: HttpClient) -> None:
@@ -412,13 +425,16 @@ class AssistantsClient:
         Returns:
             Assistant: Assistant Object.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
             assistant = await client.assistants.get(
                 assistant_id="my_assistant_id"
             )
             print(assistant)
+            ```
 
+            ```shell
             ----------------------------------------------------
 
             {
@@ -431,7 +447,7 @@ class AssistantsClient:
                 'version': 1,
                 'name': 'my_assistant'
             }
-
+            ```
         """  # noqa: E501
         return await self.http.get(f"/assistants/{assistant_id}", headers=headers)
 
@@ -452,12 +468,17 @@ class AssistantsClient:
         Returns:
             Graph: The graph information for the assistant in JSON format.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             graph_info = await client.assistants.get_graph(
                 assistant_id="my_assistant_id"
             )
             print(graph_info)
+            ```
+
+            ```shell
 
             --------------------------------------------------------------------------------------------------------------------------
 
@@ -474,6 +495,7 @@ class AssistantsClient:
                         {'source': 'agent','target': '__end__'}
                     ]
             }
+            ```
 
 
         """  # noqa: E501
@@ -493,12 +515,17 @@ class AssistantsClient:
         Returns:
             GraphSchema: The graph schema for the assistant.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             schema = await client.assistants.get_schemas(
                 assistant_id="my_assistant_id"
             )
             print(schema)
+            ```
+
+            ```shell
 
             ----------------------------------------------------------------------------------------------------------------------------
 
@@ -585,6 +612,7 @@ class AssistantsClient:
                             }
                     }
             }
+            ```
 
         """  # noqa: E501
         return await self.http.get(
@@ -655,8 +683,10 @@ class AssistantsClient:
         Returns:
             Assistant: The created assistant.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             assistant = await client.assistants.create(
                 graph_id="agent",
                 config={"configurable": {"model_name": "openai"}},
@@ -665,6 +695,7 @@ class AssistantsClient:
                 if_exists="do_nothing",
                 name="my_name"
             )
+            ```
         """  # noqa: E501
         payload: Dict[str, Any] = {
             "graph_id": graph_id,
@@ -712,14 +743,17 @@ class AssistantsClient:
         Returns:
             Assistant: The updated assistant.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             assistant = await client.assistants.update(
                 assistant_id='e280dad7-8618-443f-87f1-8e41841c180f',
                 graph_id="other-graph",
                 config={"configurable": {"model_name": "anthropic"}},
                 metadata={"number":2}
             )
+            ```
 
         """  # noqa: E501
         payload: Dict[str, Any] = {}
@@ -754,11 +788,14 @@ class AssistantsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             await client.assistants.delete(
                 assistant_id="my_assistant_id"
             )
+            ```
 
         """  # noqa: E501
         await self.http.delete(f"/assistants/{assistant_id}", headers=headers)
@@ -789,14 +826,17 @@ class AssistantsClient:
         Returns:
             list[Assistant]: A list of assistants.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             assistants = await client.assistants.search(
                 metadata = {"name":"my_name"},
                 graph_id="my_graph_id",
                 limit=5,
                 offset=5
             )
+            ```
         """
         payload: Dict[str, Any] = {
             "limit": limit,
@@ -837,12 +877,14 @@ class AssistantsClient:
         Returns:
             list[AssistantVersion]: A list of assistant versions.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             assistant_versions = await client.assistants.get_versions(
                 assistant_id="my_assistant_id"
             )
-
+            ```
         """  # noqa: E501
 
         payload: Dict[str, Any] = {
@@ -872,12 +914,15 @@ class AssistantsClient:
         Returns:
             Assistant: Assistant Object.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             new_version_assistant = await client.assistants.set_latest(
                 assistant_id="my_assistant_id",
                 version=3
             )
+            ```
 
         """  # noqa: E501
 
@@ -895,10 +940,12 @@ class ThreadsClient:
     It accumulates and persists the graph's state, allowing for continuity between separate
     invocations of the graph.
 
-    Example:
+    ???+ example "Example"
 
-        client = get_client()
+        ```python
+        client = get_client(url="http://localhost:2024"))
         new_thread = await client.threads.create(metadata={"user_id": "123"})
+        ```
     """
 
     def __init__(self, http: HttpClient) -> None:
@@ -916,13 +963,17 @@ class ThreadsClient:
         Returns:
             Thread: Thread object.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             thread = await client.threads.get(
                 thread_id="my_thread_id"
             )
             print(thread)
+            ```
 
+            ```shell
             -----------------------------------------------------
 
             {
@@ -931,6 +982,7 @@ class ThreadsClient:
                 'updated_at': '2024-07-18T18:35:15.540834+00:00',
                 'metadata': {'graph_id': 'agent'}
             }
+            ```
 
         """  # noqa: E501
 
@@ -962,13 +1014,16 @@ class ThreadsClient:
         Returns:
             Thread: The created thread.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             thread = await client.threads.create(
                 metadata={"number":1},
                 thread_id="my-thread-id",
                 if_exists="raise"
             )
+            ```
         """  # noqa: E501
         payload: Dict[str, Any] = {}
         if thread_id:
@@ -1014,12 +1069,15 @@ class ThreadsClient:
         Returns:
             Thread: The created thread.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             thread = await client.threads.update(
                 thread_id="my-thread-id",
                 metadata={"number":1},
             )
+            ```
         """  # noqa: E501
         return await self.http.patch(
             f"/threads/{thread_id}", json={"metadata": metadata}, headers=headers
@@ -1037,11 +1095,14 @@ class ThreadsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost2024)
             await client.threads.delete(
                 thread_id="my_thread_id"
             )
+            ```
 
         """  # noqa: E501
         await self.http.delete(f"/threads/{thread_id}", headers=headers)
@@ -1074,14 +1135,17 @@ class ThreadsClient:
         Returns:
             list[Thread]: List of the threads matching the search parameters.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             threads = await client.threads.search(
                 metadata={"number":1},
                 status="interrupted",
                 limit=15,
                 offset=5
             )
+            ```
 
         """  # noqa: E501
         payload: Dict[str, Any] = {
@@ -1116,11 +1180,14 @@ class ThreadsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024)
             await client.threads.copy(
                 thread_id="my_thread_id"
             )
+            ```
 
         """  # noqa: E501
         return await self.http.post(
@@ -1148,14 +1215,18 @@ class ThreadsClient:
         Returns:
             ThreadState: the thread of the state.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024)
             thread_state = await client.threads.get_state(
                 thread_id="my_thread_id",
                 checkpoint_id="my_checkpoint_id"
             )
             print(thread_state)
+            ```
 
+            ```shell
             ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
             {
@@ -1229,7 +1300,7 @@ class ThreadsClient:
                         'checkpoint_id': '1ef4a9b8-d80d-6fa7-8000-9300467fad0f'
                     }
             }
-
+            ```
         """  # noqa: E501
         if checkpoint:
             return await self.http.post(
@@ -1273,14 +1344,18 @@ class ThreadsClient:
         Returns:
             ThreadUpdateStateResponse: Response after updating a thread's state.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024)
             response = await client.threads.update_state(
                 thread_id="my_thread_id",
                 values={"messages":[{"role": "user", "content": "hello!"}]},
                 as_node="my_node",
             )
             print(response)
+            ```
+            ```shell
 
             ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -1292,7 +1367,7 @@ class ThreadsClient:
                     'checkpoint_map': {}
                 }
             }
-
+            ```
         """  # noqa: E501
         payload: Dict[str, Any] = {
             "values": values,
@@ -1330,12 +1405,15 @@ class ThreadsClient:
         Returns:
             list[ThreadState]: the state history of the thread.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024)
             thread_state = await client.threads.get_history(
                 thread_id="my_thread_id",
                 limit=5,
             )
+            ```
 
         """  # noqa: E501
         payload: Dict[str, Any] = {
@@ -1358,10 +1436,12 @@ class RunsClient:
     A run is a single assistant invocation with optional input, config, and metadata.
     This client manages runs, which can be stateful (on threads) or stateless.
 
-    Example:
+    ???+ example "Example"
 
-        client = get_client()
+        ```python
+        client = get_client(url="http://localhost:2024")
         run = await client.runs.create(assistant_id="asst_123", thread_id="thread_456", input={"query": "Hello"})
+        ```
     """
 
     def __init__(self, http: HttpClient) -> None:
@@ -1475,8 +1555,10 @@ class RunsClient:
         Returns:
             AsyncIterator[StreamPart]: Asynchronous iterator of stream results.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024)
             async for chunk in client.runs.stream(
                 thread_id=None,
                 assistant_id="agent",
@@ -1491,6 +1573,9 @@ class RunsClient:
                 multitask_strategy="interrupt"
             ):
                 print(chunk)
+            ```
+
+            ```shell
 
             ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -1498,6 +1583,7 @@ class RunsClient:
             StreamPart(event='values', data={'messages': [{'content': 'how are you?', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'human', 'name': None, 'id': 'fe0a5778-cfe9-42ee-b807-0adaa1873c10', 'example': False}]})
             StreamPart(event='values', data={'messages': [{'content': 'how are you?', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'human', 'name': None, 'id': 'fe0a5778-cfe9-42ee-b807-0adaa1873c10', 'example': False}, {'content': "I'm doing well, thanks for asking! I'm an AI assistant created by Anthropic to be helpful, honest, and harmless.", 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'ai', 'name': None, 'id': 'run-159b782c-b679-4830-83c6-cef87798fe8b', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': None}]})
             StreamPart(event='end', data=None)
+            ```
 
         """  # noqa: E501
         payload = {
@@ -1635,7 +1721,9 @@ class RunsClient:
         Returns:
             Run: The created background run.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             background_run = await client.runs.create(
                 thread_id="my_thread_id",
@@ -1649,7 +1737,9 @@ class RunsClient:
                 multitask_strategy="interrupt"
             )
             print(background_run)
+            ```
 
+            ```shell
             --------------------------------------------------------------------------------
 
             {
@@ -1697,7 +1787,7 @@ class RunsClient:
                     },
                 'multitask_strategy': 'interrupt'
             }
-
+            ```
         """  # noqa: E501
         payload = {
             "input": input,
@@ -1835,8 +1925,10 @@ class RunsClient:
         Returns:
             Union[list[dict], dict[str, Any]]: The output of the run.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             final_state_of_run = await client.runs.wait(
                 thread_id=None,
                 assistant_id="agent",
@@ -1849,7 +1941,9 @@ class RunsClient:
                 multitask_strategy="interrupt"
             )
             print(final_state_of_run)
+            ```
 
+            ```shell
             -------------------------------------------------------------------------------------------------------------------------------------------
 
             {
@@ -1877,6 +1971,7 @@ class RunsClient:
                     }
                 ]
             }
+            ```
 
         """  # noqa: E501
         payload = {
@@ -1939,13 +2034,16 @@ class RunsClient:
         Returns:
             List[Run]: The runs for the thread.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             await client.runs.list(
                 thread_id="thread_id",
                 limit=5,
                 offset=5,
             )
+            ```
 
         """  # noqa: E501
         params = {
@@ -1971,12 +2069,15 @@ class RunsClient:
         Returns:
             Run: Run object.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             run = await client.runs.get(
                 thread_id="thread_id_to_delete",
                 run_id="run_id_to_delete",
             )
+            ```
 
         """  # noqa: E501
 
@@ -2006,14 +2107,17 @@ class RunsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             await client.runs.cancel(
                 thread_id="thread_id_to_cancel",
                 run_id="run_id_to_cancel",
                 wait=True,
                 action="interrupt"
             )
+            ```
 
         """  # noqa: E501
         return await self.http.post(
@@ -2035,12 +2139,15 @@ class RunsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             result =await client.runs.join(
                 thread_id="thread_id_to_join",
                 run_id="run_id_to_join"
             )
+            ```
 
         """  # noqa: E501
         return await self.http.get(
@@ -2072,13 +2179,17 @@ class RunsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
-            await client.runs.join_stream(
+            ```python
+            client = get_client(url="http://localhost:2024")
+            async for part in client.runs.join_stream(
                 thread_id="thread_id_to_join",
                 run_id="run_id_to_join",
                 stream_mode=["values", "debug"]
-            )
+            ):
+                print(part)
+            ```
 
         """  # noqa: E501
         return self.http.stream(
@@ -2104,12 +2215,15 @@ class RunsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             await client.runs.delete(
                 thread_id="thread_id_to_delete",
                 run_id="run_id_to_delete"
             )
+            ```
 
         """  # noqa: E501
         await self.http.delete(f"/threads/{thread_id}/runs/{run_id}", headers=headers)
@@ -2121,15 +2235,22 @@ class CronClient:
     A run is a single invocation of an assistant with optional input and config.
     This client allows scheduling recurring runs to occur automatically.
 
-    Example:
+    ???+ example "Example Usage"
 
-        client = get_client()
+        ```python
+        client = get_client(url="http://localhost:2024"))
         cron_job = await client.crons.create_for_thread(
             thread_id="thread_123",
             assistant_id="asst_456",
             schedule="0 9 * * *",
             input={"message": "Daily update"}
         )
+        ```
+
+    !!! note "Feature Availability"
+        The crons client functionality is not supported on all licenses.
+        Please check the relevant license documentation for the most up-to-date
+        details on feature availability.
     """
 
     def __init__(self, http_client: HttpClient) -> None:
@@ -2174,8 +2295,10 @@ class CronClient:
         Returns:
             Run: The cron run.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             cron_run = await client.crons.create_for_thread(
                 thread_id="my-thread-id",
                 assistant_id="agent",
@@ -2188,7 +2311,7 @@ class CronClient:
                 webhook="https://my.fake.webhook.com",
                 multitask_strategy="interrupt"
             )
-
+            ```
         """  # noqa: E501
         payload = {
             "schedule": schedule,
@@ -2243,8 +2366,10 @@ class CronClient:
         Returns:
             Run: The cron run.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             cron_run = client.crons.create(
                 assistant_id="agent",
                 schedule="27 15 * * *",
@@ -2256,6 +2381,7 @@ class CronClient:
                 webhook="https://my.fake.webhook.com",
                 multitask_strategy="interrupt"
             )
+            ```
 
         """  # noqa: E501
         payload = {
@@ -2288,11 +2414,14 @@ class CronClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             await client.crons.delete(
                 cron_id="cron_to_delete"
             )
+            ```
 
         """  # noqa: E501
         await self.http.delete(f"/runs/crons/{cron_id}", headers=headers)
@@ -2318,8 +2447,10 @@ class CronClient:
         Returns:
             list[Cron]: The list of cron jobs returned by the search,
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             cron_jobs = await client.crons.search(
                 assistant_id="my_assistant_id",
                 thread_id="my_thread_id",
@@ -2327,6 +2458,8 @@ class CronClient:
                 offset=5,
             )
             print(cron_jobs)
+            ```
+            ```shell
 
             ----------------------------------------------------------
 
@@ -2349,6 +2482,7 @@ class CronClient:
                     'updated_at': '2024-07-08T06:02:23.073257+00:00'
                 }
             ]
+            ```
 
         """  # noqa: E501
         payload = {
@@ -2367,10 +2501,12 @@ class StoreClient:
     The Store provides a key-value storage system for persisting data across graph executions,
     allowing for stateful operations and data sharing across threads.
 
-    Example:
+    ???+ example "Example"
 
-        client = get_client()
+        ```python
+        client = get_client(url="http://localhost:2024")
         await client.store.put_item(["users", "user123"], "mem-123451342", {"name": "Alice", "score": 100})
+        ```
     """
 
     def __init__(self, http: HttpClient) -> None:
@@ -2399,13 +2535,16 @@ class StoreClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             await client.store.put_item(
                 ["documents", "user123"],
                 key="item456",
                 value={"title": "My Document", "content": "Hello World"}
             )
+            ```
         """
         for label in namespace:
             if "." in label:
@@ -2443,13 +2582,17 @@ class StoreClient:
             Item: The retrieved item.
             headers: Optional custom headers to include with the request.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             item = await client.store.get_item(
                 ["documents", "user123"],
                 key="item456",
             )
             print(item)
+            ```
+            ```shell
 
             ----------------------------------------------------------------
 
@@ -2460,6 +2603,7 @@ class StoreClient:
                 'created_at': '2024-07-30T12:00:00Z',
                 'updated_at': '2024-07-30T12:00:00Z'
             }
+            ```
         """
         for label in namespace:
             if "." in label:
@@ -2488,12 +2632,15 @@ class StoreClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             await client.store.delete_item(
                 ["documents", "user123"],
                 key="item456",
             )
+            ```
         """
         await self.http.delete(
             "/store/items",
@@ -2526,8 +2673,10 @@ class StoreClient:
         Returns:
             List[Item]: A list of items matching the search criteria.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             items = await client.store.search_items(
                 ["documents"],
                 filter={"author": "John Doe"},
@@ -2535,6 +2684,8 @@ class StoreClient:
                 offset=0
             )
             print(items)
+            ```
+            ```shell
 
             ----------------------------------------------------------------
 
@@ -2553,6 +2704,7 @@ class StoreClient:
                     # ... additional items ...
                 ]
             }
+            ```
         """
         payload = {
             "namespace_prefix": namespace_prefix,
@@ -2591,8 +2743,10 @@ class StoreClient:
         Returns:
             List[List[str]]: A list of namespaces matching the criteria.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_client(url="http://localhost:2024")
             namespaces = await client.store.list_namespaces(
                 prefix=["documents"],
                 max_depth=3,
@@ -2608,6 +2762,7 @@ class StoreClient:
                 ["documents", "user456", "invoices"],
                 ...
             ]
+            ```
         """
         payload = {
             "prefix": prefix,
@@ -2628,6 +2783,7 @@ def get_sync_client(
     url: Optional[str] = None,
     api_key: Optional[str] = None,
     headers: Optional[dict[str, str]] = None,
+    timeout: Optional[TimeoutTypes] = None,
 ) -> SyncLangGraphClient:
     """Get a synchronous LangGraphClient instance.
 
@@ -2640,12 +2796,17 @@ def get_sync_client(
                 3. LANGSMITH_API_KEY
                 4. LANGCHAIN_API_KEY
         headers: Optional custom headers
+        timeout: Optional timeout configuration for the HTTP client.
+            Accepts an httpx.Timeout instance, a float (seconds), or a tuple of timeouts.
+            Tuple format is (connect, read, write, pool)
+            If not provided, defaults to connect=5s, read=300s, write=300s, and pool=5s.
     Returns:
         SyncLangGraphClient: The top-level synchronous client for accessing AssistantsClient,
         ThreadsClient, RunsClient, and CronClient.
 
-    Example:
+    ???+ example "Example"
 
+        ```python
         from langgraph_sdk import get_sync_client
 
         # get top-level synchronous LangGraphClient
@@ -2653,6 +2814,7 @@ def get_sync_client(
 
         # example usage: client.<model>.<method_name>()
         assistant = client.assistants.get(assistant_id="some_uuid")
+        ```
     """
 
     if url is None:
@@ -2662,8 +2824,12 @@ def get_sync_client(
     client = httpx.Client(
         base_url=url,
         transport=transport,
-        timeout=httpx.Timeout(connect=5, read=300, write=300, pool=5),
-        headers=get_headers(api_key, headers),
+        timeout=(
+            httpx.Timeout(timeout)
+            if timeout is not None
+            else httpx.Timeout(connect=5, read=300, write=300, pool=5)
+        ),
+        headers=_get_headers(api_key, headers),
     )
     return SyncLangGraphClient(client)
 
@@ -2674,10 +2840,12 @@ class SyncLangGraphClient:
     This class provides synchronous access to LangGraph API endpoints for managing
     assistants, threads, runs, cron jobs, and data storage.
 
-    Example:
+    ???+ example "Example"
 
-        client = get_sync_client()
+        ```python
+        client = get_sync_client(url="http://localhost:2024")
         assistant = client.assistants.get("asst_123")
+        ```
     """
 
     def __init__(self, client: httpx.Client) -> None:
@@ -2690,6 +2858,16 @@ class SyncLangGraphClient:
 
 
 class SyncHttpClient:
+    """Handle synchronous requests to the LangGraph API.
+
+    Provides error messaging and content handling enhancements above the
+    underlying httpx client, mirroring the interface of [HttpClient](#HttpClient)
+    but for sync usage.
+
+    Attributes:
+        client (httpx.Client): Underlying HTTPX sync client.
+    """
+
     def __init__(self, client: httpx.Client) -> None:
         self.client = client
 
@@ -2711,7 +2889,7 @@ class SyncHttpClient:
             else:
                 logger.error(f"Error from langgraph-api: {body}", exc_info=e)
             raise e
-        return decode_json(r)
+        return _decode_json(r)
 
     def post(
         self,
@@ -2722,7 +2900,7 @@ class SyncHttpClient:
     ) -> Any:
         """Send a POST request."""
         if json is not None:
-            request_headers, content = encode_json(json)
+            request_headers, content = _encode_json(json)
         else:
             request_headers, content = {}, b""
         if headers:
@@ -2737,13 +2915,13 @@ class SyncHttpClient:
             else:
                 logger.error(f"Error from langgraph-api: {body}", exc_info=e)
             raise e
-        return decode_json(r)
+        return _decode_json(r)
 
     def put(
         self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None
     ) -> Any:
         """Send a PUT request."""
-        request_headers, content = encode_json(json)
+        request_headers, content = _encode_json(json)
         if headers:
             request_headers.update(headers)
 
@@ -2757,13 +2935,13 @@ class SyncHttpClient:
             else:
                 logger.error(f"Error from langgraph-api: {body}", exc_info=e)
             raise e
-        return decode_json(r)
+        return _decode_json(r)
 
     def patch(
         self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None
     ) -> Any:
         """Send a PATCH request."""
-        request_headers, content = encode_json(json)
+        request_headers, content = _encode_json(json)
         if headers:
             request_headers.update(headers)
         r = self.client.patch(path, headers=request_headers, content=content)
@@ -2776,7 +2954,7 @@ class SyncHttpClient:
             else:
                 logger.error(f"Error from langgraph-api: {body}", exc_info=e)
             raise e
-        return decode_json(r)
+        return _decode_json(r)
 
     def delete(
         self,
@@ -2807,7 +2985,7 @@ class SyncHttpClient:
         headers: Optional[dict[str, str]] = None,
     ) -> Iterator[StreamPart]:
         """Stream the results of a request using SSE."""
-        request_headers, content = encode_json(json)
+        request_headers, content = _encode_json(json)
         request_headers["Accept"] = "text/event-stream"
         request_headers["Cache-Control"] = "no-store"
         if headers:
@@ -2840,10 +3018,10 @@ class SyncHttpClient:
                     yield sse
 
 
-def encode_json(json: Any) -> tuple[dict[str, str], bytes]:
+def _encode_json(json: Any) -> tuple[dict[str, str], bytes]:
     body = orjson.dumps(
         json,
-        orjson_default,
+        _orjson_default,
         orjson.OPT_SERIALIZE_NUMPY | orjson.OPT_NON_STR_KEYS,
     )
     content_length = str(len(body))
@@ -2852,7 +3030,7 @@ def encode_json(json: Any) -> tuple[dict[str, str], bytes]:
     return headers, body
 
 
-def decode_json(r: httpx.Response) -> Any:
+def _decode_json(r: httpx.Response) -> Any:
     body = r.read()
     return orjson.loads(body) if body else None
 
@@ -2862,10 +3040,12 @@ class SyncAssistantsClient:
 
     This class provides methods to interact with assistants, which are versioned configurations of your graph.
 
-    Example:
+    ???+ example "Examples"
 
-        client = get_client()
+        ```python
+        client = get_sync_client(url="http://localhost:2024")
         assistant = client.assistants.get("assistant_id_123")
+        ```
     """
 
     def __init__(self, http: SyncHttpClient) -> None:
@@ -2880,19 +3060,22 @@ class SyncAssistantsClient:
         """Get an assistant by ID.
 
         Args:
-            assistant_id: The ID of the assistant to get.
+            assistant_id: The ID of the assistant to get OR the name of the graph (to use the default assistant).
             headers: Optional custom headers to include with the request.
 
         Returns:
             Assistant: Assistant Object.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
             assistant = client.assistants.get(
                 assistant_id="my_assistant_id"
             )
             print(assistant)
+            ```
 
+            ```shell
             ----------------------------------------------------
 
             {
@@ -2903,6 +3086,7 @@ class SyncAssistantsClient:
                 'config': {},
                 'metadata': {'created_by': 'system'}
             }
+            ```
 
         """  # noqa: E501
         return self.http.get(f"/assistants/{assistant_id}", headers=headers)
@@ -2924,8 +3108,10 @@ class SyncAssistantsClient:
         Returns:
             Graph: The graph information for the assistant in JSON format.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             graph_info = client.assistants.get_graph(
                 assistant_id="my_assistant_id"
             )
@@ -2946,7 +3132,7 @@ class SyncAssistantsClient:
                         {'source': 'agent','target': '__end__'}
                     ]
             }
-
+            ```
 
         """  # noqa: E501
         return self.http.get(
@@ -2968,13 +3154,16 @@ class SyncAssistantsClient:
         Returns:
             GraphSchema: The graph schema for the assistant.
 
-        Example Usage:
+        ???+ example "  Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             schema = client.assistants.get_schemas(
                 assistant_id="my_assistant_id"
             )
             print(schema)
-
+            ```
+            ```shell
             ----------------------------------------------------------------------------------------------------------------------------
 
             {
@@ -3060,6 +3249,7 @@ class SyncAssistantsClient:
                             }
                     }
             }
+            ```
 
         """  # noqa: E501
         return self.http.get(f"/assistants/{assistant_id}/schemas", headers=headers)
@@ -3126,8 +3316,10 @@ class SyncAssistantsClient:
         Returns:
             Assistant: The created assistant.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             assistant = client.assistants.create(
                 graph_id="agent",
                 config={"configurable": {"model_name": "openai"}},
@@ -3136,6 +3328,7 @@ class SyncAssistantsClient:
                 if_exists="do_nothing",
                 name="my_name"
             )
+            ```
         """  # noqa: E501
         payload: Dict[str, Any] = {
             "graph_id": graph_id,
@@ -3183,15 +3376,17 @@ class SyncAssistantsClient:
         Returns:
             Assistant: The updated assistant.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             assistant = client.assistants.update(
                 assistant_id='e280dad7-8618-443f-87f1-8e41841c180f',
                 graph_id="other-graph",
                 config={"configurable": {"model_name": "anthropic"}},
                 metadata={"number":2}
             )
-
+            ```
         """  # noqa: E501
         payload: Dict[str, Any] = {}
         if graph_id:
@@ -3225,11 +3420,14 @@ class SyncAssistantsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             client.assistants.delete(
                 assistant_id="my_assistant_id"
             )
+            ```
 
         """  # noqa: E501
         self.http.delete(f"/assistants/{assistant_id}", headers=headers)
@@ -3256,14 +3454,17 @@ class SyncAssistantsClient:
         Returns:
             list[Assistant]: A list of assistants.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             assistants = client.assistants.search(
                 metadata = {"name":"my_name"},
                 graph_id="my_graph_id",
                 limit=5,
                 offset=5
             )
+            ```
         """
         payload: Dict[str, Any] = {
             "limit": limit,
@@ -3300,11 +3501,14 @@ class SyncAssistantsClient:
         Returns:
             list[Assistant]: A list of assistants.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
-            assistant_versions = await client.assistants.get_versions(
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
+            assistant_versions = client.assistants.get_versions(
                 assistant_id="my_assistant_id"
             )
+            ```
 
         """  # noqa: E501
 
@@ -3335,12 +3539,15 @@ class SyncAssistantsClient:
         Returns:
             Assistant: Assistant Object.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
-            new_version_assistant = await client.assistants.set_latest(
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
+            new_version_assistant = client.assistants.set_latest(
                 assistant_id="my_assistant_id",
                 version=3
             )
+            ```
 
         """  # noqa: E501
 
@@ -3357,10 +3564,12 @@ class SyncThreadsClient:
     This class provides methods to create, retrieve, and manage threads,
     which represent conversations or stateful interactions.
 
-    Example:
+    ???+ example "Example"
 
-        client = get_sync_client()
+        ```python
+        client = get_sync_client(url="http://localhost:2024")
         thread = client.threads.create(metadata={"user_id": "123"})
+        ```
     """
 
     def __init__(self, http: SyncHttpClient) -> None:
@@ -3381,13 +3590,16 @@ class SyncThreadsClient:
         Returns:
             Thread: Thread object.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             thread = client.threads.get(
                 thread_id="my_thread_id"
             )
             print(thread)
-
+            ```
+            ```shell
             -----------------------------------------------------
 
             {
@@ -3396,6 +3608,7 @@ class SyncThreadsClient:
                 'updated_at': '2024-07-18T18:35:15.540834+00:00',
                 'metadata': {'graph_id': 'agent'}
             }
+            ```
 
         """  # noqa: E501
 
@@ -3427,12 +3640,16 @@ class SyncThreadsClient:
         Returns:
             Thread: The created thread.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             thread = client.threads.create(
                 metadata={"number":1},
                 thread_id="my-thread-id",
                 if_exists="raise"
+            )
+            ```
             )
         """  # noqa: E501
         payload: Dict[str, Any] = {}
@@ -3479,12 +3696,15 @@ class SyncThreadsClient:
         Returns:
             Thread: The created thread.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             thread = client.threads.update(
                 thread_id="my-thread-id",
                 metadata={"number":1},
             )
+            ```
         """  # noqa: E501
         return self.http.patch(
             f"/threads/{thread_id}", json={"metadata": metadata}, headers=headers
@@ -3505,11 +3725,13 @@ class SyncThreadsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
             client.threads.delete(
                 thread_id="my_thread_id"
             )
+            ```
 
         """  # noqa: E501
         self.http.delete(f"/threads/{thread_id}", headers=headers)
@@ -3538,15 +3760,17 @@ class SyncThreadsClient:
         Returns:
             list[Thread]: List of the threads matching the search parameters.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             threads = client.threads.search(
                 metadata={"number":1},
                 status="interrupted",
                 limit=15,
                 offset=5
             )
-
+            ```
         """  # noqa: E501
         payload: Dict[str, Any] = {
             "limit": limit,
@@ -3575,11 +3799,14 @@ class SyncThreadsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             client.threads.copy(
                 thread_id="my_thread_id"
             )
+            ```
 
         """  # noqa: E501
         return self.http.post(f"/threads/{thread_id}/copy", json=None, headers=headers)
@@ -3604,14 +3831,18 @@ class SyncThreadsClient:
         Returns:
             ThreadState: the thread of the state.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             thread_state = client.threads.get_state(
                 thread_id="my_thread_id",
                 checkpoint_id="my_checkpoint_id"
             )
             print(thread_state)
+            ```
 
+            ```shell
             ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
             {
@@ -3685,6 +3916,7 @@ class SyncThreadsClient:
                         'checkpoint_id': '1ef4a9b8-d80d-6fa7-8000-9300467fad0f'
                     }
             }
+            ```
 
         """  # noqa: E501
         if checkpoint:
@@ -3728,7 +3960,9 @@ class SyncThreadsClient:
         Returns:
             ThreadUpdateStateResponse: Response after updating a thread's state.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             response = await client.threads.update_state(
                 thread_id="my_thread_id",
@@ -3747,6 +3981,7 @@ class SyncThreadsClient:
                     'checkpoint_map': {}
                 }
             }
+            ```
 
         """  # noqa: E501
         payload: Dict[str, Any] = {
@@ -3785,7 +4020,9 @@ class SyncThreadsClient:
         Returns:
             list[ThreadState]: the state history of the thread.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             thread_state = client.threads.get_history(
                 thread_id="my_thread_id",
@@ -3793,6 +4030,7 @@ class SyncThreadsClient:
                 before="my_timestamp",
                 metadata={"name":"my_name"}
             )
+            ```
 
         """  # noqa: E501
         payload: Dict[str, Any] = {
@@ -3815,10 +4053,12 @@ class SyncRunsClient:
     This class provides methods to create, retrieve, and manage runs, which represent
     individual executions of graphs.
 
-    Example:
+    ???+ example "Example"
 
-        client = get_sync_client()
+        ```python
+        client = get_sync_client(url="http://localhost:2024")
         run = client.runs.create(thread_id="thread_123", assistant_id="asst_456")
+        ```
     """
 
     def __init__(self, http: SyncHttpClient) -> None:
@@ -3933,8 +4173,10 @@ class SyncRunsClient:
         Returns:
             Iterator[StreamPart]: Iterator of stream results.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             async for chunk in client.runs.stream(
                 thread_id=None,
                 assistant_id="agent",
@@ -3949,14 +4191,15 @@ class SyncRunsClient:
                 multitask_strategy="interrupt"
             ):
                 print(chunk)
-
+            ```
+            ```shell
             ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
             StreamPart(event='metadata', data={'run_id': '1ef4a9b8-d7da-679a-a45a-872054341df2'})
             StreamPart(event='values', data={'messages': [{'content': 'how are you?', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'human', 'name': None, 'id': 'fe0a5778-cfe9-42ee-b807-0adaa1873c10', 'example': False}]})
             StreamPart(event='values', data={'messages': [{'content': 'how are you?', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'human', 'name': None, 'id': 'fe0a5778-cfe9-42ee-b807-0adaa1873c10', 'example': False}, {'content': "I'm doing well, thanks for asking! I'm an AI assistant created by Anthropic to be helpful, honest, and harmless.", 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'ai', 'name': None, 'id': 'run-159b782c-b679-4830-83c6-cef87798fe8b', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': None}]})
             StreamPart(event='end', data=None)
-
+            ```
         """  # noqa: E501
         payload = {
             "input": input,
@@ -4093,8 +4336,10 @@ class SyncRunsClient:
         Returns:
             Run: The created background run.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             background_run = client.runs.create(
                 thread_id="my_thread_id",
                 assistant_id="my_assistant_id",
@@ -4107,7 +4352,9 @@ class SyncRunsClient:
                 multitask_strategy="interrupt"
             )
             print(background_run)
+            ```
 
+            ```shell
             --------------------------------------------------------------------------------
 
             {
@@ -4155,7 +4402,7 @@ class SyncRunsClient:
                     },
                 'multitask_strategy': 'interrupt'
             }
-
+            ```
         """  # noqa: E501
         payload = {
             "input": input,
@@ -4294,7 +4541,9 @@ class SyncRunsClient:
         Returns:
             Union[list[dict], dict[str, Any]]: The output of the run.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             final_state_of_run = client.runs.wait(
                 thread_id=None,
@@ -4308,6 +4557,9 @@ class SyncRunsClient:
                 multitask_strategy="interrupt"
             )
             print(final_state_of_run)
+            ```
+
+            ```shell
 
             -------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -4336,6 +4588,7 @@ class SyncRunsClient:
                     }
                 ]
             }
+            ```
 
         """  # noqa: E501
         payload = {
@@ -4362,7 +4615,9 @@ class SyncRunsClient:
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
         )
         return self.http.post(
-            endpoint, json={k: v for k, v in payload.items() if v is not None}
+            endpoint,
+            json={k: v for k, v in payload.items() if v is not None},
+            headers=headers,
         )
 
     def list(
@@ -4384,13 +4639,16 @@ class SyncRunsClient:
         Returns:
             List[Run]: The runs for the thread.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             client.runs.list(
                 thread_id="thread_id",
                 limit=5,
                 offset=5,
             )
+            ```
 
         """  # noqa: E501
         return self.http.get(
@@ -4414,13 +4672,15 @@ class SyncRunsClient:
         Returns:
             Run: Run object.
 
-        Example Usage:
+        ???+ example "Example Usage"
+
+            ```python
 
             run = client.runs.get(
                 thread_id="thread_id_to_delete",
                 run_id="run_id_to_delete",
             )
-
+            ```
         """  # noqa: E501
 
         return self.http.get(f"/threads/{thread_id}/runs/{run_id}", headers=headers)
@@ -4447,14 +4707,17 @@ class SyncRunsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             client.runs.cancel(
                 thread_id="thread_id_to_cancel",
                 run_id="run_id_to_cancel",
                 wait=True,
                 action="interrupt"
             )
+            ```
 
         """  # noqa: E501
         return self.http.post(
@@ -4480,12 +4743,15 @@ class SyncRunsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             client.runs.join(
                 thread_id="thread_id_to_join",
                 run_id="run_id_to_join"
             )
+            ```
 
         """  # noqa: E501
         return self.http.get(
@@ -4517,13 +4783,16 @@ class SyncRunsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             client.runs.join_stream(
                 thread_id="thread_id_to_join",
                 run_id="run_id_to_join",
                 stream_mode=["values", "debug"]
             )
+            ```
 
         """  # noqa: E501
         return self.http.stream(
@@ -4553,12 +4822,15 @@ class SyncRunsClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
             client.runs.delete(
                 thread_id="thread_id_to_delete",
                 run_id="run_id_to_delete"
             )
+            ```
 
         """  # noqa: E501
         self.http.delete(f"/threads/{thread_id}/runs/{run_id}", headers=headers)
@@ -4569,10 +4841,17 @@ class SyncCronClient:
 
     This class provides methods to create and manage scheduled tasks (cron jobs) for automated graph executions.
 
-    Example:
+    ???+ example "Example"
 
-        client = get_sync_client()
+        ```python
+        client = get_sync_client(url="http://localhost:8123")
         cron_job = client.crons.create_for_thread(thread_id="thread_123", assistant_id="asst_456", schedule="0 * * * *")
+        ```
+
+    !!! note "Feature Availability"
+        The crons client functionality is not supported on all licenses.
+        Please check the relevant license documentation for the most up-to-date
+        details on feature availability.
     """
 
     def __init__(self, http_client: SyncHttpClient) -> None:
@@ -4615,8 +4894,10 @@ class SyncCronClient:
         Returns:
             Run: The cron run.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:8123")
             cron_run = client.crons.create_for_thread(
                 thread_id="my-thread-id",
                 assistant_id="agent",
@@ -4629,7 +4910,7 @@ class SyncCronClient:
                 webhook="https://my.fake.webhook.com",
                 multitask_strategy="interrupt"
             )
-
+            ```
         """  # noqa: E501
         payload = {
             "schedule": schedule,
@@ -4683,8 +4964,10 @@ class SyncCronClient:
         Returns:
             Run: The cron run.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:8123")
             cron_run = client.crons.create(
                 assistant_id="agent",
                 schedule="27 15 * * *",
@@ -4697,6 +4980,7 @@ class SyncCronClient:
                 webhook="https://my.fake.webhook.com",
                 multitask_strategy="interrupt"
             )
+            ```
 
         """  # noqa: E501
         payload = {
@@ -4729,11 +5013,14 @@ class SyncCronClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:8123")
             client.crons.delete(
                 cron_id="cron_to_delete"
             )
+            ```
 
         """  # noqa: E501
         self.http.delete(f"/runs/crons/{cron_id}", headers=headers)
@@ -4759,8 +5046,10 @@ class SyncCronClient:
         Returns:
             list[Cron]: The list of cron jobs returned by the search,
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:8123")
             cron_jobs = client.crons.search(
                 assistant_id="my_assistant_id",
                 thread_id="my_thread_id",
@@ -4768,7 +5057,9 @@ class SyncCronClient:
                 offset=5,
             )
             print(cron_jobs)
+            ```
 
+            ```shell
             ----------------------------------------------------------
 
             [
@@ -4790,7 +5081,7 @@ class SyncCronClient:
                     'updated_at': '2024-07-08T06:02:23.073257+00:00'
                 }
             ]
-
+            ```
         """  # noqa: E501
         payload = {
             "assistant_id": assistant_id,
@@ -4808,10 +5099,12 @@ class SyncStoreClient:
     Provides methods to interact with a remote key-value store, allowing
     storage and retrieval of items within namespaced hierarchies.
 
-    Example:
+    ???+ example "Example"
 
-        client = get_sync_client()
+        ```python
+        client = get_sync_client(url="http://localhost:2024"))
         client.store.put_item(["users", "profiles"], "user123", {"name": "Alice", "age": 30})
+        ```
     """
 
     def __init__(self, http: SyncHttpClient) -> None:
@@ -4840,13 +5133,16 @@ class SyncStoreClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:8123")
             client.store.put_item(
                 ["documents", "user123"],
                 key="item456",
                 value={"title": "My Document", "content": "Hello World"}
             )
+            ```
         """
         for label in namespace:
             if "." in label:
@@ -4882,14 +5178,18 @@ class SyncStoreClient:
         Returns:
             Item: The retrieved item.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:8123")
             item = client.store.get_item(
                 ["documents", "user123"],
                 key="item456",
             )
             print(item)
+            ```
 
+            ```shell
             ----------------------------------------------------------------
 
             {
@@ -4899,6 +5199,7 @@ class SyncStoreClient:
                 'created_at': '2024-07-30T12:00:00Z',
                 'updated_at': '2024-07-30T12:00:00Z'
             }
+            ```
         """
         for label in namespace:
             if "." in label:
@@ -4928,12 +5229,15 @@ class SyncStoreClient:
         Returns:
             None
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:8123")
             client.store.delete_item(
                 ["documents", "user123"],
                 key="item456",
             )
+            ```
         """
         self.http.delete(
             "/store/items", json={"key": key, "namespace": namespace}, headers=headers
@@ -4964,8 +5268,10 @@ class SyncStoreClient:
         Returns:
             List[Item]: A list of items matching the search criteria.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:8123")
             items = client.store.search_items(
                 ["documents"],
                 filter={"author": "John Doe"},
@@ -4973,7 +5279,8 @@ class SyncStoreClient:
                 offset=0
             )
             print(items)
-
+            ```
+            ```shell
             ----------------------------------------------------------------
 
             {
@@ -4991,6 +5298,7 @@ class SyncStoreClient:
                     # ... additional items ...
                 ]
             }
+            ```
         """
         payload = {
             "namespace_prefix": namespace_prefix,
@@ -5026,8 +5334,10 @@ class SyncStoreClient:
         Returns:
             List[List[str]]: A list of namespaces matching the criteria.
 
-        Example Usage:
+        ???+ example "Example Usage"
 
+            ```python
+            client = get_sync_client(url="http://localhost:8123")
             namespaces = client.store.list_namespaces(
                 prefix=["documents"],
                 max_depth=3,
@@ -5035,7 +5345,9 @@ class SyncStoreClient:
                 offset=0
             )
             print(namespaces)
+            ```
 
+            ```shell
             ----------------------------------------------------------------
 
             [
@@ -5043,6 +5355,7 @@ class SyncStoreClient:
                 ["documents", "user456", "invoices"],
                 ...
             ]
+            ```
         """
         payload = {
             "prefix": prefix,
@@ -5067,3 +5380,10 @@ _registered_transports: list[httpx.ASGITransport] = []
 def configure_loopback_transports(app: Any) -> None:
     for transport in _registered_transports:
         transport.app = app
+
+
+TimeoutTypes = Union[
+    Optional[float],
+    tuple[Optional[float], Optional[float], Optional[float], Optional[float]],
+    httpx.Timeout,
+]
