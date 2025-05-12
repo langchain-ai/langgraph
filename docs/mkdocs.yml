@@ -197,8 +197,7 @@ nav:
         - cloud/how-tos/assistant_versioning.md
       - Threads:
         - Overview: cloud/concepts/threads.md
-        - cloud/how-tos/create_threads.md
-        - cloud/how-tos/view_threads.md
+        - cloud/how-tos/use_threads.md
       - Runs:
         - Overview: cloud/concepts/runs.md
         - cloud/how-tos/background_run.md
