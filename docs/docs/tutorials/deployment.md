@@ -19,4 +19,4 @@ Additionally, you can deploy to production with [LangGraph Platform](../concepts
 - [Self-Hosted Control Plane<sup>(Beta)</sup>](../concepts/langgraph_self_hosted_control_plane.md): Create deployments from a self-hosted [Control Plane UI](../concepts/langgraph_control_plane.md#control-plane-ui) and deploy LangGraph Servers to **your** cloud. *You manage everything.*
 - [Standalone Container](../concepts/langgraph_standalone_container.md): Deploy LangGraph Server Docker images however you like.
 
-For more information, see [Deployment options](../concepts/deployment_options.md)
+For more information, see [Deployment options](../concepts/deployment_options.md).
