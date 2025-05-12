@@ -22,8 +22,7 @@ def test(
         # check docker available
         capabilities = langgraph_cli.docker.check_capabilities(runner)
         # open config
-        with open(config) as f:
-            config_json = langgraph_cli.config.validate_config(json.load(f))
+        config_json = langgraph_cli.config.validate_config_file(config)
 
         set("Running...")
         args = [

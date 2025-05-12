@@ -1,11 +1,13 @@
-.PHONY: test lint format
+.PHONY: test lint format test-integration update-schema
 
 ######################
 # TESTING AND COVERAGE
 ######################
 
 test:
-	poetry run pytest tests
+	poetry run pytest tests/unit_tests
+test-integration:
+	poetry run pytest tests/integration_tests
 
 ######################
 # LINTING AND FORMATTING
@@ -29,3 +31,6 @@ lint lint_diff lint_package lint_tests:
 format format_diff:
 	poetry run ruff format $(PYTHON_FILES)
 	poetry run ruff check --select I --fix $(PYTHON_FILES)
+
+update-schema:
+	poetry run python generate_schema.py

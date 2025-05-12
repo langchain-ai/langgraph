@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph-checkpoint"
-version = "2.0.2"
+version = "2.0.25"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 authors = []
 license = "MIT"
@@ -9,9 +9,9 @@ repository = "https://www.github.com/langchain-ai/langgraph"
 packages = [{ include = "langgraph" }]
 
 [tool.poetry.dependencies]
-python = "^3.9.0,<4.0"
-langchain-core = ">=0.2.38,<0.4"
-msgpack = "^1.1.0"
+python = ">=3.9"
+langchain-core = { version = ">=0.2.38", python = "<4.0" }
+ormsgpack = "^1.8.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.6.2"
@@ -19,9 +19,9 @@ codespell = "^2.2.0"
 pytest = "^7.2.1"
 pytest-asyncio = "^0.21.1"
 pytest-mock = "^3.11.1"
-pytest-watcher = "^0.4.1"
+pytest-watcher = { version = ">=0.4.1", python = "<4.0" }
 mypy = "^1.10.0"
-dataclasses-json = "^0.6.7"
+dataclasses-json = { version = ">=0.6.7", python = "<4.0" }
 
 [tool.pytest.ini_options]
 # --strict-markers will raise errors on unknown marks.

@@ -1,12 +1,9 @@
 import collections.abc
+from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager, contextmanager
 from typing import (
     Any,
-    AsyncIterator,
-    Iterator,
     Optional,
-    Sequence,
-    Type,
 )
 
 from typing_extensions import NotRequired, Required, Self
@@ -71,7 +68,7 @@ class SharedValue(WritableManagedValue[Value, Update]):
             yield value
 
     def __init__(
-        self, loop: LoopProtocol, *, typ: Type[Any], scope: str, key: str
+        self, loop: LoopProtocol, *, typ: type[Any], scope: str, key: str
     ) -> None:
         super().__init__(loop)
         if typ := _strip_extras(typ):

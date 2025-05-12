@@ -1,7 +1,9 @@
 import operator
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Annotated, Optional, Sequence
+from random import choice
+from typing import Annotated, Optional
 
 from langgraph.constants import END, START
 from langgraph.graph.state import StateGraph
@@ -49,12 +51,34 @@ def wide_state(n: int) -> StateGraph:
         """The ID of the bot user in the slack channel."""
         notified_assignees: Annotated[dict, operator.or_] = field(default_factory=dict)
 
+    list_fields = {
+        "messages",
+        "trigger_events",
+        "categorizations",
+        "responses",
+        "memory_docs",
+        "relevant_rules",
+    }
+    dict_fields = {
+        "user_info",
+        "crm_info",
+        "slack_participants",
+        "notified_assignees",
+        "autoresponse",
+        "issue",
+    }
+
     def read_write(read: str, write: Sequence[str], input: State) -> dict:
         val = getattr(input, read)
+        val = {val: val} if isinstance(val, str) else val
         val_single = val[-1] if isinstance(val, list) else val
         val_list = val if isinstance(val, list) else [val]
         return {
-            k: val_list if isinstance(getattr(input, k), list) else val_single
+            k: val_list
+            if k in list_fields
+            else val_single
+            if k in dict_fields
+            else "".join(choice("abcdefghijklmnopqrstuvwxyz") for _ in range(n))
             for k in write
         }
 
@@ -124,9 +148,9 @@ if __name__ == "__main__":
             {
                 str(i) * 10: {
                     str(j) * 10: ["hi?" * 10, True, 1, 6327816386138, None] * 5
-                    for j in range(5)
+                    for j in range(50)
                 }
-                for i in range(5)
+                for i in range(50)
             }
         ]
     }

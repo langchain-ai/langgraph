@@ -1,15 +1,26 @@
 """Data models for interacting with the LangGraph API."""
 
 from datetime import datetime
-from typing import Any, Literal, NamedTuple, Optional, Sequence, TypedDict, Union
+from typing import (
+    Any,
+    Dict,
+    Literal,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Tuple,
+    TypedDict,
+    Union,
+)
 
 Json = Optional[dict[str, Any]]
 """Represents a JSON-like structure, which can be None or a dictionary with string keys and any values."""
 
-RunStatus = Literal["pending", "error", "success", "timeout", "interrupted"]
+RunStatus = Literal["pending", "running", "error", "success", "timeout", "interrupted"]
 """
 Represents the status of a run:
 - "pending": The run is waiting to start.
+- "running": The run is currently executing.
 - "error": The run encountered an error and stopped.
 - "success": The run completed successfully.
 - "timeout": The run exceeded its time limit.
@@ -85,6 +96,23 @@ Action to take when cancelling the run.
 - "rollback": Cancel the run. Then delete the run and associated checkpoints.
 """
 
+AssistantSortBy = Literal[
+    "assistant_id", "graph_id", "name", "created_at", "updated_at"
+]
+"""
+The field to sort by.
+"""
+
+ThreadSortBy = Literal["thread_id", "status", "created_at", "updated_at"]
+"""
+The field to sort by.
+"""
+
+SortOrder = Literal["asc", "desc"]
+"""
+The order to sort by.
+"""
+
 
 class Config(TypedDict, total=False):
     """Configuration options for a call."""
@@ -115,7 +143,7 @@ class Checkpoint(TypedDict):
     thread_id: str
     """Unique identifier for the thread associated with this checkpoint."""
     checkpoint_ns: str
-    """Namespace for the checkpoint, used for organization and retrieval."""
+    """Namespace for the checkpoint; used internally to manage subgraph state."""
     checkpoint_id: Optional[str]
     """Optional unique identifier for the checkpoint itself."""
     checkpoint_map: Optional[dict[str, Any]]
@@ -159,6 +187,10 @@ class AssistantBase(TypedDict):
     """The assistant metadata."""
     version: int
     """The version of the assistant"""
+    name: str
+    """The name of the assistant"""
+    description: Optional[str]
+    """The description of the assistant"""
 
 
 class AssistantVersion(AssistantBase):
@@ -172,8 +204,19 @@ class Assistant(AssistantBase):
 
     updated_at: datetime
     """The last time the assistant was updated."""
-    name: str
-    """The name of the assistant"""
+
+
+class Interrupt(TypedDict, total=False):
+    """Represents an interruption in the execution flow."""
+
+    value: Any
+    """The value associated with the interrupt."""
+    when: Literal["during"]
+    """When the interrupt occurred."""
+    resumable: bool
+    """Whether the interrupt can be resumed."""
+    ns: Optional[list[str]]
+    """Optional namespace for the interrupt."""
 
 
 class Thread(TypedDict):
@@ -191,6 +234,8 @@ class Thread(TypedDict):
     """The status of the thread, one of 'idle', 'busy', 'interrupted'."""
     values: Json
     """The current state of the thread."""
+    interrupts: Dict[str, list[Interrupt]]
+    """Interrupts which were thrown in this thread"""
 
 
 class ThreadTask(TypedDict):
@@ -199,7 +244,7 @@ class ThreadTask(TypedDict):
     id: str
     name: str
     error: Optional[str]
-    interrupts: list[dict]
+    interrupts: list[Interrupt]
     checkpoint: Optional[Checkpoint]
     state: Optional["ThreadState"]
     result: Optional[dict[str, Any]]
@@ -325,10 +370,21 @@ class ListNamespaceResponse(TypedDict):
     """A list of namespace paths, where each path is a list of strings."""
 
 
+class SearchItem(Item, total=False):
+    """Item with an optional relevance score from search operations.
+
+    Attributes:
+        score (Optional[float]): Relevance/similarity score. Included when
+            searching a compatible store with a natural language query.
+    """
+
+    score: Optional[float]
+
+
 class SearchItemsResponse(TypedDict):
     """Response structure for searching items."""
 
-    items: list[Item]
+    items: list[SearchItem]
     """A list of items matching the search criteria."""
 
 
@@ -339,3 +395,45 @@ class StreamPart(NamedTuple):
     """The type of event for this stream part."""
     data: dict
     """The data payload associated with the event."""
+
+
+class Send(TypedDict):
+    """Represents a message to be sent to a specific node in the graph.
+
+    This type is used to explicitly send messages to nodes in the graph, typically
+    used within Command objects to control graph execution flow.
+    """
+
+    node: str
+    """The name of the target node to send the message to."""
+    input: Optional[dict[str, Any]]
+    """Optional dictionary containing the input data to be passed to the node.
+
+    If None, the node will be called with no input."""
+
+
+class Command(TypedDict, total=False):
+    """Represents one or more commands to control graph execution flow and state.
+
+    This type defines the control commands that can be returned by nodes to influence
+    graph execution. It lets you navigate to other nodes, update graph state,
+    and resume from interruptions.
+    """
+
+    goto: Union[Send, str, Sequence[Union[Send, str]]]
+    """Specifies where execution should continue. Can be:
+
+        - A string node name to navigate to
+        - A Send object to execute a node with specific input
+        - A sequence of node names or Send objects to execute in order
+    """
+    update: Union[dict[str, Any], Sequence[Tuple[str, Any]]]
+    """Updates to apply to the graph's state. Can be:
+
+        - A dictionary of state updates to merge
+        - A sequence of (key, value) tuples for ordered updates
+    """
+    resume: Any
+    """Value to resume execution with after an interruption.
+       Used in conjunction with interrupt() to implement control flow.
+    """

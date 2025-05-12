@@ -1,6 +1,10 @@
+---
+search:
+  boost: 0.5
+---
 # Error reference
 
-This page contains guides around resolving common errors you may find while building with LangChain.
+This page contains guides around resolving common errors you may find while building with LangGraph.
 Errors referenced below will have an `lc_error_code` property corresponding to one of the below codes when they are thrown in code.
 
 - [GRAPH_RECURSION_LIMIT](./GRAPH_RECURSION_LIMIT.md)
@@ -8,3 +12,10 @@ Errors referenced below will have an `lc_error_code` property corresponding to o
 - [INVALID_GRAPH_NODE_RETURN_VALUE](./INVALID_GRAPH_NODE_RETURN_VALUE.md)
 - [MULTIPLE_SUBGRAPHS](./MULTIPLE_SUBGRAPHS.md)
 - [INVALID_CHAT_HISTORY](./INVALID_CHAT_HISTORY.md)
+
+## LangGraph Platform
+
+These guides provide troubleshooting information for errors that are specific to the LangGraph Platform.
+
+- [INVALID_LICENSE](./INVALID_LICENSE.md)
+- [Studio Errors](../studio.md)

@@ -9,7 +9,7 @@ on:
         description: "From which folder this pipeline executes"
 
 env:
-  POETRY_VERSION: "1.7.1"
+  POETRY_VERSION: "2.1.2"
   PYTHON_VERSION: "3.10"
 
 jobs:
@@ -29,7 +29,6 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           poetry-version: ${{ env.POETRY_VERSION }}
-          working-directory: ${{ inputs.working-directory }}
           cache-key: release
 
       # We want to keep this build stage *separate* from the release stage,

@@ -1,16 +1,16 @@
-# How to Wait for User Input
+# How to wait for user input using `interrupt`
 
-One of the main human-in-the-loop interaction patterns is waiting for human input. A key use case involves asking the user clarifying questions. One way to accomplish this is simply go to the `END` node and exit the graph. Then, any user response comes back in as fresh invocation of the graph. This is basically just creating a chatbot architecture.
+!!! tip "Prerequisites"
 
-The issue with this is it is tough to resume back in a particular point in the graph. Often times the agent is halfway through some process, and just needs a bit of a user input. Although it is possible to design your graph in such a way where you have a `conditional_entry_point` to route user messages back to the right place, that is not super scalable (as it essentially involves having a routing function that can end up almost anywhere).
+    This guide assumes familiarity with the following concepts:
 
-A separate way to do this is to have a node explicitly for getting user input. This is easy to implement in a notebook setting - you just put an `input()` call in the node. But that isn't exactly production ready.
+    * [Human-in-the-loop](../../concepts/human_in_the_loop.md)
+    * [LangGraph Glossary](../../concepts/low_level.md)
+    
 
-Luckily, LangGraph makes it possible to do similar things in a production way. The basic idea is:
+**Human-in-the-loop (HIL)** interactions are crucial for [agentic systems](../../concepts/agentic_concepts.md#human-in-the-loop). Waiting for human input is a common HIL interaction pattern, allowing the agent to ask the user clarifying questions and await input before proceeding.
 
-- Set up a node that represents human input. This can have specific incoming/outgoing edges (as you desire). There shouldn't actually be any logic inside this node.
-- Add a breakpoint before the node. This will stop the graph before this node executes (which is good, because there's no real logic in it anyways)
-- Use `.update_state` to update the state of the graph. Pass in whatever human response you get. The key here is to use the `as_node` parameter to apply this update **as if you were that node**. This will have the effect of making it so that when you resume execution next it resumes as if that node just acted, and not from the beginning.
+We can implement this in LangGraph using the [`interrupt()`][langgraph.types.interrupt] function. `interrupt` allows us to stop graph execution to collect input from a user and continue execution with collected input.
 
 ## Setup
 
@@ -54,7 +54,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
 
 ### Initial invocation
 
-Now, let's invoke our graph by interrupting before `ask_human` node:
+Now, let's invoke our graph.
 
 === "Python"
 
@@ -63,7 +63,7 @@ Now, let's invoke our graph by interrupting before `ask_human` node:
         "messages": [
             {
                 "role": "user",
-                "content": "Use the search tool to ask the user where they are, then look up the weather there",
+                "content": "Ask the user where they are, then look up the weather there",
             }
         ]
     }
@@ -73,7 +73,6 @@ Now, let's invoke our graph by interrupting before `ask_human` node:
         assistant_id,
         input=input,
         stream_mode="updates",
-        interrupt_before=["ask_human"],
     ):
         if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
@@ -85,8 +84,7 @@ Now, let's invoke our graph by interrupting before `ask_human` node:
       messages: [
         {
           role: "human",
-          content: "Use the search tool to ask the user where they are, then look up the weather there"
-        }
+          content: "Ask the user where they are, then look up the weather there" }
       ]
     };
 
@@ -96,7 +94,6 @@ Now, let's invoke our graph by interrupting before `ask_human` node:
       {
         input: input,
         streamMode: "updates",
-        interruptBefore: ["ask_human"]
       }
     );
 
@@ -115,118 +112,35 @@ Now, let's invoke our graph by interrupting before `ask_human` node:
      --header 'Content-Type: application/json' \
      --data "{
        \"assistant_id\": \"agent\",
-       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"Use the search tool to ask the user where they are, then look up the weather there\"}]},
-       \"interrupt_before\": [\"ask_human\"],
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"Ask the user where they are, then look up the weather there\"}]},
        \"stream_mode\": [
          \"updates\"
        ]
-     }" | \
-     sed 's/\r$//' | \
-     awk '
-     /^event:/ {
-         if (data_content != "" && event_type != "metadata") {
-             print data_content "\n"
-         }
-         sub(/^event: /, "", $0)
-         event_type = $0
-         data_content = ""
-     }
-     /^data:/ {
-         sub(/^data: /, "", $0)
-         data_content = $0
-     }
-     END {
-         if (data_content != "" && event_type != "metadata") {
-             print data_content "\n"
-         }
-     }
-     '
+     }"
     ```
     
 Output:
 
-    {'agent': {'messages': [{'content': [{'text': "Certainly! I'll use the AskHuman function to ask the user about their location, and then I'll use the search function to look up the weather for that location. Let's start by asking the user where they are.", 'type': 'text'}, {'id': 'toolu_01RFahzYPvnPWTb2USk2RdKR', 'input': {'question': 'Where are you currently located?'}, 'name': 'AskHuman', 'type': 'tool_use'}], 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'ai', 'name': None, 'id': 'run-a8422215-71d3-4093-afb4-9db141c94ddb', 'example': False, 'tool_calls': [{'name': 'AskHuman', 'args': {'question': 'Where are you currently located?'}, 'id': 'toolu_01RFahzYPvnPWTb2USk2RdKR'}], 'invalid_tool_calls': [], 'usage_metadata': None}]}}
+    {'agent': {'messages': [{'content': [{'text': "I'll help you ask the user about their location and then search for weather information.", 'type': 'text'}, {'id': 'toolu_012JeNEvyePZFWK39d52Wdwi', 'input': {'question': 'Where are you located?'}, 'name': 'AskHuman', 'type': 'tool_use'}], 'additional_kwargs': {}, 'response_metadata': {'id': 'msg_01UBEdS6UvuFMetdokNsykVG', 'model': 'claude-3-5-sonnet-20241022', 'stop_reason': 'tool_use', 'stop_sequence': None, 'usage': {'cache_creation_input_tokens': 0, 'cache_read_input_tokens': 0, 'input_tokens': 438, 'output_tokens': 76}, 'model_name': 'claude-3-5-sonnet-20241022'}, 'type': 'ai', 'name': None, 'id': 'run-1b1210d8-39e0-4607-9f0e-0ea932d28d5c-0', 'example': False, 'tool_calls': [{'name': 'AskHuman', 'args': {'question': 'Where are you located?'}, 'id': 'toolu_012JeNEvyePZFWK39d52Wdwi', 'type': 'tool_call'}], 'invalid_tool_calls': [], 'usage_metadata': {'input_tokens': 438, 'output_tokens': 76, 'total_tokens': 514, 'input_token_details': {'cache_read': 0, 'cache_creation': 0}}}]}}
+    {'__interrupt__': [{'value': 'Where are you located?', 'resumable': True, 'ns': ['ask_human:2d41f894-f297-211e-9bfe-1d162ecba54a'], 'when': 'during'}]}
 
+You can see that our graph got interrupted inside the `ask_human` node, which is now waiting for a `location` to be provided.
 
-### Adding user input to state
+### Providing human input
 
-We now want to update this thread with a response from the user. We then can kick off another run.
-
-Because we are treating this as a tool call, we will need to update the state as if it is a response from a tool call. In order to do this, we will need to check the state to get the ID of the tool call.
-
-
-=== "Python"
-
-    ```python
-    state = await client.threads.get_state(thread['thread_id'])
-    tool_call_id = state['values']['messages'][-1]['tool_calls'][0]['id']
-
-    # We now create the tool call with the id and the response we want
-    tool_message = [{"tool_call_id": tool_call_id, "type": "tool", "content": "san francisco"}]
-
-    await client.threads.update_state(thread['thread_id'], {"messages": tool_message}, as_node="ask_human")
-    ```
-
-=== "Javascript"
-
-    ```js
-    const state = await client.threads.getState(thread["thread_id"]);
-    const toolCallId = state.values.messages[state.values.messages.length - 1].tool_calls[0].id;
-
-    // We now create the tool call with the id and the response we want
-    const toolMessage = [
-      {
-        tool_call_id: toolCallId,
-        type: "tool",
-        content: "san francisco"
-      }
-    ];
-
-    await client.threads.updateState(
-      thread["thread_id"],
-      { values: { messages: toolMessage } },
-      { asNode: "ask_human" }
-    );
-    ```
-
-=== "CURL"
-
-    ```bash
-    curl --request GET \
-     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state \
-     | jq -r '.values.messages[-1].tool_calls[0].id' \
-     | sh -c '
-         TOOL_CALL_ID="$1"
-         
-         # Construct the JSON payload
-         JSON_PAYLOAD=$(printf "{\"messages\": [{\"tool_call_id\": \"%s\", \"type\": \"tool\", \"content\": \"san francisco\"}], \"as_node\": \"ask_human\"}" "$TOOL_CALL_ID")
-         
-         # Send the updated state
-         curl --request POST \
-              --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state \
-              --header "Content-Type: application/json" \
-              --data "${JSON_PAYLOAD}"
-     ' _ 
-    ```
-
-Output:
-
-    {'configurable': {'thread_id': 'a9f322ae-4ed1-41ec-942b-38cb3d342c3a',
-    'checkpoint_ns': '',
-    'checkpoint_id': '1ef58e97-a623-63dd-8002-39a9a9b20be3'}}
-
-
-### Invoking after receiving human input
-
-We can now tell the agent to continue. We can just pass in None as the input to the graph, since no additional input is needed:
+We can provide human input (`location`) by invoking the graph with a `Command(resume="<location>")`:
 
 === "Python"
 
     ```python
+    # highlight-next-line
+    from langgraph_sdk.schema import Command
+
     async for chunk in client.runs.stream(
         thread["thread_id"],
         assistant_id,
-        input=None,
+        # highlight-next-line
+        command=Command(resume="san francisco"),
         stream_mode="updates",
     ):
         if chunk.data and chunk.event != "metadata": 
@@ -239,7 +153,8 @@ We can now tell the agent to continue. We can just pass in None as the input to 
       thread["thread_id"],
       assistantId,
       {
-        input: null,
+        // highlight-next-line
+        command: { resume: "san francisco" },
         streamMode: "updates"
       }
     );
@@ -254,40 +169,23 @@ We can now tell the agent to continue. We can just pass in None as the input to 
 === "CURL"
 
     ```bash
-    curl --request POST \                                                                             
+    curl --request POST \
      --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
      --header 'Content-Type: application/json' \
      --data "{
        \"assistant_id\": \"agent\",
+       \"command\": {
+         \"resume\": \"san francisco\"
+       },
        \"stream_mode\": [
          \"updates\"
        ]
-     }"| \ 
-     sed 's/\r$//' | \
-     awk '
-     /^event:/ {
-         if (data_content != "" && event_type != "metadata") {
-             print data_content "\n"
-         }
-         sub(/^event: /, "", $0)
-         event_type = $0
-         data_content = ""
-     }
-     /^data:/ {
-         sub(/^data: /, "", $0)
-         data_content = $0
-     }
-     END {
-         if (data_content != "" && event_type != "metadata") {
-             print data_content "\n"
-         }
-     }
-     '
+     }"
     ```
 
 Output:
 
-    {'agent': {'messages': [{'content': [{'text': "Thank you for letting me know that you're in San Francisco. Now, I'll use the search function to look up the weather in San Francisco.", 'type': 'text'}, {'id': 'toolu_01K57ofmgG2wyJ8tYJjbq5k7', 'input': {'query': 'current weather in San Francisco'}, 'name': 'search', 'type': 'tool_use'}], 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'ai', 'name': None, 'id': 'run-241baed7-db5e-44ce-ac3c-56431705c22b', 'example': False, 'tool_calls': [{'name': 'search', 'args': {'query': 'current weather in San Francisco'}, 'id': 'toolu_01K57ofmgG2wyJ8tYJjbq5k7'}], 'invalid_tool_calls': [], 'usage_metadata': None}]}}
-    {'action': {'messages': [{'content': '["I looked up: current weather in San Francisco. Result: It\'s sunny in San Francisco, but you better look out if you\'re a Gemini 😈."]', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'tool', 'name': 'search', 'id': '8b699b95-8546-4557-8e66-14ea71a15ed8', 'tool_call_id': 'toolu_01K57ofmgG2wyJ8tYJjbq5k7'}]}}
-    {'agent': {'messages': [{'content': "Based on the search results, I can provide you with information about the current weather in San Francisco:\n\nThe weather in San Francisco is currently sunny. It's a beautiful day in the city! \n\nHowever, I should note that the search result included an unusual comment about Gemini zodiac signs. This appears to be either a joke or potentially irrelevant information added by the search engine. For accurate and detailed weather information, you might want to check a reliable weather service or app for San Francisco.\n\nIs there anything else you'd like to know about the weather or San Francisco?", 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'ai', 'name': None, 'id': 'run-b4d7309f-f849-46aa-b6ef-475bcabd2be9', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': None}]}}
-
+    {'ask_human': {'messages': [{'tool_call_id': 'toolu_012JeNEvyePZFWK39d52Wdwi', 'type': 'tool', 'content': 'san francisco'}]}}
+    {'agent': {'messages': [{'content': [{'text': 'Let me search for the weather in San Francisco.', 'type': 'text'}, {'id': 'toolu_019f9Y7ST6rNeDQkDjFCHk6C', 'input': {'query': 'current weather in san francisco'}, 'name': 'search', 'type': 'tool_use'}], 'additional_kwargs': {}, 'response_metadata': {'id': 'msg_0152YFm7DtnzfZQuiMUzaSsw', 'model': 'claude-3-5-sonnet-20241022', 'stop_reason': 'tool_use', 'stop_sequence': None, 'usage': {'cache_creation_input_tokens': 0, 'cache_read_input_tokens': 0, 'input_tokens': 527, 'output_tokens': 67}, 'model_name': 'claude-3-5-sonnet-20241022'}, 'type': 'ai', 'name': None, 'id': 'run-f509b5b2-eb30-4200-a8da-fa79ed68812a-0', 'example': False, 'tool_calls': [{'name': 'search', 'args': {'query': 'current weather in san francisco'}, 'id': 'toolu_019f9Y7ST6rNeDQkDjFCHk6C', 'type': 'tool_call'}], 'invalid_tool_calls': [], 'usage_metadata': {'input_tokens': 527, 'output_tokens': 67, 'total_tokens': 594, 'input_token_details': {'cache_read': 0, 'cache_creation': 0}}}]}}
+    {'action': {'messages': [{'content': "I looked up: current weather in san francisco. Result: It's sunny in San Francisco, but you better look out if you're a Gemini 😈.", 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'tool', 'name': 'search', 'id': 'cbd0f623-cc12-48a2-8c18-3cbb943e46e0', 'tool_call_id': 'toolu_019f9Y7ST6rNeDQkDjFCHk6C', 'artifact': None, 'status': 'success'}]}}
+    {'agent': {'messages': [{'content': "Based on the search results, it's currently sunny in San Francisco. Would you like any specific details about the weather forecast?", 'additional_kwargs': {}, 'response_metadata': {'id': 'msg_01FhzXj72CehBYkJGX69vsBc', 'model': 'claude-3-5-sonnet-20241022', 'stop_reason': 'end_turn', 'stop_sequence': None, 'usage': {'cache_creation_input_tokens': 0, 'cache_read_input_tokens': 0, 'input_tokens': 639, 'output_tokens': 29}, 'model_name': 'claude-3-5-sonnet-20241022'}, 'type': 'ai', 'name': None, 'id': 'run-f48e818e-dd88-415e-9a0b-4a958498b553-0', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': {'input_tokens': 639, 'output_tokens': 29, 'total_tokens': 668, 'input_token_details': {'cache_read': 0, 'cache_creation': 0}}}]}}

@@ -9,7 +9,7 @@ on:
         description: "From which folder this pipeline executes"
 
 env:
-  POETRY_VERSION: "1.7.1"
+  POETRY_VERSION: "2.1.2"
 
   # This env var allows us to get inline annotations when ruff has complaints.
   RUFF_OUTPUT_FORMAT: github
@@ -42,7 +42,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           poetry-version: ${{ env.POETRY_VERSION }}
-          working-directory: ${{ inputs.working-directory }}
           cache-key: lint-${{ inputs.working-directory }}
 
       - name: Check Poetry File
@@ -50,12 +49,6 @@ jobs:
         shell: bash
         working-directory: ${{ inputs.working-directory }}
         run: poetry check
-
-      - name: Check lock file
-        if: steps.changed-files.outputs.all
-        shell: bash
-        working-directory: ${{ inputs.working-directory }}
-        run: poetry lock --check
 
       - name: Install dependencies
         if: steps.changed-files.outputs.all

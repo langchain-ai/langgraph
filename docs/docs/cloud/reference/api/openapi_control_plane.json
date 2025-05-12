@@ -1,0 +1,873 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "LangGraph Control Plane API (Beta)",
+    "version": "0.0.1",
+    "description": "The LangGraph Control Plane API is used to programmatically create and manage LangGraph Server deployments. For example, the APIs can be orchestrated to create custom CI/CD workflows.\n\n### Beta\nThis API is currently in beta and may change or break without notice. This API documentation may not be up-to-date with actual API functionality.\n### Host\nhttps://api.host.langchain.com/\n\n### Authentication\nTo authenticate with the LangGraph Control Plane API, set the `X-Api-Key` header to a valid LangSmith API key for each request.\n\n### Versioning\nEach endpoint path is prefixed with a version (e.g. `v1`).\n\n### Quick Start\n\n1. Call `POST /{version}/projects` to create a new `Project`.\n2. Call `GET /{version}/projects` to retrieve the `Project` `id`. The `Project` `id` is needed in subsequent API calls.\n3. Call `POST /{version}/projects/{project_id}/revisions` to create a new `Revision` for the `Project`.\n4. Call `GET /{version}/projects/{project_id}/revisions` to get the latest `Revision` (first element in returned list). Get the `Revision` `id`.\n5. Poll for `Revision` `status` until `status` is `DEPLOYED` by calling `GET /{version}/projects/{project_id}/revisions/{revision_id}`."
+  },
+  "servers": [
+    {
+      "url": "https://api.host.langchain.com"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Projects (v1)",
+      "description": "A project corresponds to a LangGraph Server deployment and the associated LangSmith tracing project.\n\nCreating a project via API is not currently supported/documented."
+    },
+    {
+      "name": "Revisions (v1)",
+      "description": "A revision is a version of a LangGraph Server deployment. Different revisions may contain different code and/or environment variables. A project can have many revisions."
+    }
+  ],
+  "paths": {
+    "/v1/projects": {
+      "post": {
+        "tags": ["Projects (v1)"],
+        "summary": "Create Project",
+        "description": "Create a new project.",
+        "operationId": "create_project_projects_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": ["Projects (v1)"],
+        "summary": "List Projects",
+        "description": "List all projects.",
+        "operationId": "list_projects_projects_get",
+        "parameters": [
+          {
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Limit",
+              "description": "Maximum number of results to return. Minimum: 1. Maximum: 100.",
+              "default": 20
+            },
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Offset",
+              "description": "Pagination offset value. Pass this value in subsequent requests to retrieve the next page of results. Minimum: 0.",
+              "default": 0
+            },
+            "name": "offset",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Name Contains",
+              "description": "Filter string to filter projects by `name`."
+            },
+            "name": "name_contains",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Project"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}": {
+      "get": {
+        "tags": ["Projects (v1)"],
+        "summary": "Get Project",
+        "description": "Get project by ID.",
+        "operationId": "get_project_projects__project_id__get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project ID"
+            },
+            "name": "project_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Projects (v1)"],
+        "summary": "Delete Project",
+        "description": "Delete project by ID.",
+        "operationId": "delete_project_projects__project_id__delete",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project ID"
+            },
+            "name": "project_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/revisions": {
+      "get": {
+        "tags": ["Revisions (v1)"],
+        "summary": "List Revisions",
+        "description": "List revisions of a project.",
+        "operationId": "list_revisions_projects__project_id__revisions_get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project ID"
+            },
+            "name": "project_id",
+            "in": "path"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Limit",
+              "description": "Maximum number of results to return. Minimum: 1. Maximum: 100.",
+              "default": 20
+            },
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Offset",
+              "description": "Pagination offset value. Pass this value in subsequent requests to retrieve the next page of results. Minimum: 0.",
+              "default": 0
+            },
+            "name": "offset",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Revision"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Revisions (v1)"],
+        "summary": "Create Revision",
+        "description": "Create a new revision for a project.",
+        "operationId": "create_revision_projects__project_id__revisions_post",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project ID"
+            },
+            "name": "project_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRevisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/revisions/{revision_id}": {
+      "get": {
+        "tags": ["Revisions (v1)"],
+        "summary": "Get Revision",
+        "description": "Get revision by ID.",
+        "operationId": "get_revision_projects__project_id__revisions__revision_id__get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project ID"
+            },
+            "name": "project_id",
+            "in": "path"
+          },
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Revision ID"
+            },
+            "name": "revision_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Revision"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/revisions/{revision_id}/deploy": {
+      "post": {
+        "tags": ["Revisions (v1)"],
+        "summary": "Deploy Revision",
+        "description": "Deploy revision by ID.\n\nThis endpoint redeploys the deployment of a revision without rebuilding the image for the deployment. Redeploying the deployment of a revision may mitigate intermittent issues with a deployment.\n\nThe revision must be in the `DEPLOYED` status and must be the latest revision of the project.",
+        "operationId": "deploy_revision_projects__project_id__revisions__revision_id__deploy_post",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project ID"
+            },
+            "name": "project_id",
+            "in": "path"
+          },
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Revision ID"
+            },
+            "name": "revision_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Revision is not in DEPLOYED status or revision is not the latest revision for the project.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Revision not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/projects/{project_id}/revisions/{revision_id}/interrupt": {
+      "post": {
+        "tags": ["Revisions (v1)"],
+        "summary": "Interrupt Revision",
+        "description": "Interrupt revision by ID.\n\nIf the deployment of a revision appears \"stuck\", the revision may need to be interrupted. A new revision cannot be created if the latest revision is in a non-terminal `status`. In this scenario, the revision may need to be interrupted.",
+        "operationId": "interrupt_revision_projects__project_id__revisions__revision_id__interrupt_post",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project ID"
+            },
+            "name": "project_id",
+            "in": "path"
+          },
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Revision ID"
+            },
+            "name": "revision_id",
+            "in": "path"
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "apiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Api-Key"
+      }
+    },
+    "schemas": {
+      "ContainerSpec": {
+        "type": "object",
+        "description": "Container specification for a revision's deployment.\n\nIf any field is omitted or set to `null`, the internal default value is used depending on the deployment type (`dev` or `prod`).",
+        "properties": {
+          "min_scale": {
+            "type": ["integer", "null"],
+            "description": "Minimum number of replicas in deployment.",
+            "default": "null"
+          },
+          "max_scale": {
+            "type": ["integer", "null"],
+            "description": "Maximum number of replicas in deployment.",
+            "default": "null"
+          },
+          "cpu": {
+            "type": ["integer", "null"],
+            "description": "Number of vCPU cores per replica.",
+            "default": "null"
+          },
+          "memory_mb": {
+            "type": ["integer", "null"],
+            "description": "Amount of memory in MB per replica.",
+            "default": "null"
+          }
+        }
+      },
+      "CreateProjectRequest":{
+        "type": "object",
+        "description": "Object for creating a new project.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the project.",
+            "required": true
+          },
+          "lc_hosted": {
+            "type": "boolean",
+            "description": "Whether the project is hosted on LangChain's cloud (i.e. Cloud SaaS deployment option). Set to `false` for Self-Hosted Data Plane and Self-Hosted Control Plane deployment options.",
+            "default": true
+          },
+          "repo_url": {
+            "type": ["string", "null"],
+            "description": "URL of the GitHub repository to use for the project. Omit this field if creating a new project from a Docker image.",
+            "default": "null"
+          },
+          "repo_path": {
+            "type": ["string", "null"],
+            "description": "Path to `langgraph.json` configuration file. For example, `langgraph.json` or `src/langgraph.json`.\n\nIf this field is omitted or set to `null`, the previous revision's `repo_path` value is used. Set this field for deployments from a GitHub repository. Omit this field if creating a new revision from a Docker image.",
+            "default": "null"
+          },
+          "repo_commit": {
+            "type": ["string", "null"],
+            "description": "Git branch name of deployment.\n\nThis field only applies to deployments from a GitHub repository.",
+            "default": "null"
+          },
+          "env_vars": {
+            "type": "array",
+            "description": "List of environment variables or secrets.\n\nIf this field is omitted or set to `null`, the previous revision's `env_vars` value is used.",
+            "items": {
+              "$ref": "#/components/schemas/EnvVar"
+            },
+            "default": "null"
+          },
+          "host_integration_id": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "Do not use."
+          },
+          "deployment_type": {
+            "type": "string",
+            "description": "Development (`dev`) or Production (`prod`) type deployment.",
+            "enum": [
+              "dev",
+              "prod"
+            ]
+          },
+          "shareable": {
+            "type": ["boolean", "null"],
+            "description": "Boolean flag to configure if a deployment is shareable through LangGraph Studio.\n\nIf this field is omitted or set to `null`, the previous revision's `shareable` value is used. This field does not apply to BYOC deployments.",
+            "default": "null"
+          },
+          "platform": {
+            "type": "object",
+            "description": "Do not use.",
+            "default": "null"
+          },
+          "image_path": {
+            "type": ["string", "null"],
+            "description": "URI of the Docker image to deploy.\n\nIf this field is omitted or set to `null`, the previous revision's `image_path` value is used. Set this field for BYOC deployments. Omit this field if creating a new revision from a GitHub repository.",
+            "default": "null"
+          },
+          "build_on_push": {
+            "type": "boolean",
+            "description": "Boolean flag to indicate if a new revision is automatically created on push to GitHub branch (`repo_branch`).\n\nThis field does not apply for BYOC deployments.",
+            "default": false
+          },
+          "container_spec": {
+            "description": "If this field is omitted or set to `null`, the previous revision's `container_spec` value is used.",
+            "$ref": "#/components/schemas/ContainerSpec",
+            "default": "null"
+          }
+        }
+      },
+      "CreateRevisionRequest": {
+        "type": "object",
+        "description": "Object for creating a new revision.",
+        "properties": {
+          "image_path": {
+            "type": ["string", "null"],
+            "description": "URI of the Docker image to deploy.\n\nIf this field is omitted or set to `null`, the previous revision's `image_path` value is used. Set this field for BYOC deployments. Omit this field if creating a new revision from a GitHub repository.",
+            "default": "null"
+          },
+          "repo_path": {
+            "type": ["string", "null"],
+            "description": "Path to `langgraph.json` configuration file. For example, `langgraph.json` or `src/langgraph.json`.\n\nIf this field is omitted or set to `null`, the previous revision's `repo_path` value is used. Set this field for deployments from a GitHub repository. Omit this field if creating a new revision from a Docker image.",
+            "default": "null"
+          },
+          "env_vars": {
+            "type": "array",
+            "description": "List of environment variables or secrets.\n\nIf this field is omitted or set to `null`, the previous revision's `env_vars` value is used.",
+            "items": {
+              "$ref": "#/components/schemas/EnvVar"
+            },
+            "default": "null"
+          },
+          "shareable": {
+            "type": ["boolean", "null"],
+            "description": "Boolean flag to configure if a deployment is shareable through LangGraph Studio.\n\nIf this field is omitted or set to `null`, the previous revision's `shareable` value is used. This field does not apply to BYOC deployments.",
+            "default": "null"
+          },
+          "container_spec": {
+            "description": "If this field is omitted or set to `null`, the previous revision's `container_spec` value is used.",
+            "$ref": "#/components/schemas/ContainerSpec",
+            "default": "null"
+          }
+        }
+      },
+      "EnvVar": {
+        "type": "object",
+        "description": "An environment variable or secret.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Environment variable or secret name.",
+            "required": true
+          },
+          "value": {
+            "type": "string",
+            "description": "Environment variable or secret value.",
+            "required": true
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "default",
+              "secret"
+            ],
+            "description": "Field to designate type of the environment variable (default) or secret.",
+            "required": true
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "description": "Error response.",
+        "properties": {
+          "detail": {
+            "type": "string",
+            "description": "Error details.",
+            "required": true
+          }
+        }
+      },
+      "Project": {
+        "type": "object",
+        "description": "A project corresponds to a LangGraph Server deployment and the associated LangSmith tracing project.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the project.",
+            "required": true
+          },
+          "tool_name": {
+            "type": ["string", "null"],
+            "description": "Do not use."
+          },
+          "display_name": {
+            "type": ["string", "null"],
+            "description": "Do not use."
+          },
+          "description": {
+            "type": ["string", "null"],
+            "description": "Do not use."
+          },
+          "example_input": {
+            "type": ["object", "null"],
+            "description": "Do not use."
+          },
+          "tenant_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the tenant/workspace of the project.",
+            "required": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp of when the project was created.",
+            "required": true
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp of when the project was updated.",
+            "required": true
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the project.\n\nThis is also the name of the LangSmith tracing project for the LangGraph deployment.",
+            "required": true
+          },
+          "lc_hosted": {
+            "type": "boolean",
+            "description": "Boolean flag to indicate if the deployment is hosted in LangChain's cloud or an external cloud (e.g. BYOC).",
+            "required": true
+          },
+          "repo_url": {
+            "type": ["string", "null"],
+            "description": "URL of the GitHub repository.\n\nThis field is not used for deployments from a Docker image."
+          },
+          "repo_branch": {
+            "type": ["string", "null"],
+            "description": "Branch of the GitHub repository.\n\nThis field is not used for deployments from a Docker image."
+          },
+          "tracer_session_id": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "Do not use."
+          },
+          "api_key_id": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "Do not use."
+          },
+          "build_on_push": {
+            "type": "boolean",
+            "description": "Boolean flag to indicate if a new revision is automatically created on push to GitHub branch (`repo_branch`).\n\nThis field does not apply for BYOC deployments."
+          },
+          "input_json_schemas": {
+            "type": ["object", "null"],
+            "description": "Do not use."
+          },
+          "output_json_schemas": {
+            "type": ["object", "null"],
+            "description": "Do not use."
+          },
+          "host_integration_id": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "Do not use."
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ProjectMetadata"
+          },
+          "resource": {
+            "$ref": "#/components/schemas/ResourceService"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "AWAITING_DATABASE",
+              "READY",
+              "AWAITING_DELETE",
+              "UNKNOWN"
+            ],
+            "description": "Deployment status of the project.\n\nNon-terminal statuses: `AWAITING_DATABASE`, `AWAITING_DELETE`. All other statuses are terminal."
+          }
+        }
+      },
+      "ProjectMetadata": {
+        "type": "object",
+        "description": "Metadata associated with a `Project`.",
+        "properties": {
+          "deployment_type": {
+            "type": "string",
+            "description": "Development (`dev`) or Production (`prod`) type deployment.",
+            "enum": [
+              "dev",
+              "prod"
+            ]
+          },
+          "image_source": {
+            "type": "string",
+            "description": "Do not use.",
+            "enum": [
+              "github",
+              "internal_docker",
+              "external_docker"
+            ]
+          },
+          "shareable": {
+            "type": "boolean",
+            "description": "Boolean flag to configure if a deployment is shareable through LangGraph Studio.\n\nThis field does not apply to BYOC deployments."
+          },
+          "region": {
+            "type": "string",
+            "description": "Region of deployment.\n\nRegion value is cloud provider specific."
+          },
+          "aws_account_id": {
+            "type": "string",
+            "description": "AWS account ID of BYOC deployment.\n\nThis field does not apply to non-BYOC deployments."
+          },
+          "aws_external_id": {
+            "type": "string",
+            "description": "Do not use."
+          }
+        }
+      },
+      "ResourceId": {
+        "type": "object",
+        "description": "Internal identifier for a `ResourceRevision` or `ResourceService`.",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "revisions",
+              "services"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ResourceRevision": {
+        "type": "object",
+        "description": "Internal revision resource for a `ResourceService`.",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ResourceId"
+          },
+          "env_vars": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EnvVar"
+            }
+          },
+          "hosted_langserve_revision_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "References `id` of a `Revision`."
+          }
+        }
+      },
+      "ResourceService": {
+        "type": "object",
+        "description": "Internal service resource for a `Project`.",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ResourceId"
+          },
+          "url": {
+            "type": ["string", "null"],
+            "description": "URL of LangGraph Server deployment."
+          },
+          "latest_revision": {
+            "description": "References latest `ResourceRevision`.\n\nThe latest `ResourceRevision` may not be active if it's currently being deployed.",
+            "$ref": "#/components/schemas/ResourceRevision"
+          },
+          "latest_active_revision": {
+            "description": "References latest active `ResourceRevision`.\n\nThe latest active `ResourceRevision` is not always the latest `ResourceRevision`.",
+            "$ref": "#/components/schemas/ResourceRevision"
+          }
+        }
+      },
+      "Revision": {
+        "type": "object",
+        "description": "A revision is a version of a LangGraph Server deployment.\n\nDifferent revisions may contain different code and/or environment variables. A project can have many revisions.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the revision.",
+            "required": true
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "References `id` of `Project`.",
+            "required": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp of when the revision was created.",
+            "required": true
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp of when the revision was updated.",
+            "required": true
+          },
+          "repo_path": {
+            "type": ["string", "null"],
+            "description": "Path to `langgraph.json` configuration file. For example, `langgraph.json` or `src/langgraph.json`.\n\nThis field only applies to deployments from a GitHub repository.",
+            "default": "null"
+          },
+          "repo_commit": {
+            "type": ["string", "null"],
+            "description": "Git branch name of deployment.\n\nThis field only applies to deployments from a GitHub repository.",
+            "default": "null"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "CREATING",
+              "AWAITING_BUILD",
+              "BUILDING",
+              "AWAITING_DEPLOY",
+              "DEPLOYING",
+              "CREATE_FAILED",
+              "BUILD_FAILED",
+              "DEPLOY_FAILED",
+              "DEPLOYED",
+              "INTERRUPTED",
+              "UNKNOWN"
+            ],
+            "description": "Deployment status of the revision.\n\nNon-terminal statuses: `CREATING`, `AWAITING_BUILD`, `BUILDING`, `AWAITING_DEPLOY`, `DEPLOYING`. All other statuses are terminal."
+          },
+          "status_message": {
+            "type": "string",
+            "description": "Message associated with the `status`."
+          },
+          "gcp_build_name": {
+            "type": ["string", "null"],
+            "description": "Do not use."
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/RevisionMetadata"
+          },
+          "image_path": {
+            "type": ["string", "null"],
+            "description": "URI of the Docker image to deploy.\n\nThis field does not apply to deployments from a GitHub repository.",
+            "default": "null"
+          },
+          "container_spec": {
+            "$ref": "#/components/schemas/ContainerSpec"
+          },
+          "resource": {
+            "$ref": "#/components/schemas/ResourceRevision"
+          }
+        }
+      },
+      "RevisionMetadata": {
+        "type": "object",
+        "description": "Metadata associated with a `Revision`.",
+        "properties": {
+          "created_by": {
+            "type": "object",
+            "description": "Do not use."
+          },
+          "repo_commit_sha": {
+            "type": "string",
+            "description": "Git commit SHA of the deployment.\n\nThis field only applies to deployments from a GitHub repository."
+          }
+        }
+      }
+    }
+  }
+}

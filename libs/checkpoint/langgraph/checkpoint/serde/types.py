@@ -4,7 +4,6 @@ from typing import (
     Protocol,
     Sequence,
     TypeVar,
-    Union,
     runtime_checkable,
 )
 
@@ -12,6 +11,8 @@ from typing_extensions import Self
 
 ERROR = "__error__"
 SCHEDULED = "__scheduled__"
+INTERRUPT = "__interrupt__"
+RESUME = "__resume__"
 TASKS = "__pregel_tasks"
 
 Value = TypeVar("Value", covariant=True)
@@ -49,13 +50,3 @@ class SendProtocol(Protocol):
     def __repr__(self) -> str: ...
 
     def __eq__(self, value: object) -> bool: ...
-
-
-@runtime_checkable
-class ControlProtocol(Protocol):
-    # Mirrors langgraph.constants.Control
-    update_state: Optional[dict[str, Any]]
-    trigger: Union[str, Sequence[str]]
-    send: Union[Any, Sequence[Any]]
-
-    def __repr__(self) -> str: ...

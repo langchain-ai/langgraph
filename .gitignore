@@ -178,4 +178,6 @@ Untitled*.ipynb
 
 Chinook.db
 
-libs/langgraph/out
+.vercel
+.turbo
+.editorconfig

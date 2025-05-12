@@ -1,114 +1,243 @@
 # type: ignore
+import asyncio
+import itertools
+import sys
 import uuid
-from datetime import datetime
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from collections.abc import AsyncIterator
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
+from typing import Any, Optional
 
 import pytest
-from conftest import DEFAULT_URI  # type: ignore
+from langchain_core.embeddings import Embeddings
+from psycopg import AsyncConnection
 
-from langgraph.store.base import GetOp, Item, ListNamespacesOp, PutOp, SearchOp
+from langgraph.store.base import (
+    GetOp,
+    Item,
+    ListNamespacesOp,
+    PutOp,
+    SearchOp,
+)
 from langgraph.store.postgres import AsyncPostgresStore
+from tests.conftest import (
+    DEFAULT_URI,
+    VECTOR_TYPES,
+    CharacterEmbeddings,
+)
+
+TTL_SECONDS = 6
+TTL_MINUTES = TTL_SECONDS / 60
 
 
-class MockAsyncCursor:
-    def __init__(self, fetch_result: Any) -> None:
-        self.fetch_result = fetch_result
-        self.execute = AsyncMock()
-        self.fetchall = AsyncMock(return_value=self.fetch_result)
+@pytest.fixture(scope="function", params=["default", "pipe", "pool"])
+async def store(request) -> AsyncIterator[AsyncPostgresStore]:
+    if sys.version_info < (3, 10):
+        pytest.skip("Async Postgres tests require Python 3.10+")
+
+    database = f"test_{uuid.uuid4().hex[:16]}"
+    uri_parts = DEFAULT_URI.split("/")
+    uri_base = "/".join(uri_parts[:-1])
+    query_params = ""
+    if "?" in uri_parts[-1]:
+        db_name, query_params = uri_parts[-1].split("?", 1)
+        query_params = "?" + query_params
+
+    conn_string = f"{uri_base}/{database}{query_params}"
+    admin_conn_string = DEFAULT_URI
+    ttl_config = {
+        "default_ttl": TTL_MINUTES,
+        "refresh_on_read": True,
+        "sweep_interval_minutes": TTL_MINUTES / 2,
+    }
+    async with await AsyncConnection.connect(
+        admin_conn_string, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        async with AsyncPostgresStore.from_conn_string(
+            conn_string, ttl=ttl_config
+        ) as store:
+            store.MIGRATIONS = [
+                (
+                    mig.replace("ttl_minutes INT;", "ttl_minutes FLOAT;")
+                    if isinstance(mig, str)
+                    else mig
+                )
+                for mig in store.MIGRATIONS
+            ]
+            await store.setup()
+            async with store._cursor() as cur:
+                # drop the migration index
+                await cur.execute("DROP TABLE IF EXISTS store_migrations")
+            await store.setup()  # Will fail if migrations aren't idempotent
+
+        if request.param == "pipe":
+            async with AsyncPostgresStore.from_conn_string(
+                conn_string, pipeline=True, ttl=ttl_config
+            ) as store:
+                await store.start_ttl_sweeper()
+                yield store
+                await store.stop_ttl_sweeper()
+        elif request.param == "pool":
+            async with AsyncPostgresStore.from_conn_string(
+                conn_string, pool_config={"min_size": 1, "max_size": 10}, ttl=ttl_config
+            ) as store:
+                await store.start_ttl_sweeper()
+                yield store
+                await store.stop_ttl_sweeper()
+        else:  # default
+            async with AsyncPostgresStore.from_conn_string(
+                conn_string, ttl=ttl_config
+            ) as store:
+                await store.start_ttl_sweeper()
+                yield store
+                await store.stop_ttl_sweeper()
+    finally:
+        async with await AsyncConnection.connect(
+            admin_conn_string, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")
 
 
-class MockAsyncConnection:
-    def __init__(self) -> None:
-        self.cursor = MagicMock()
-        self.pipeline = MagicMock(
-            return_value=AsyncMock(__aenter__=AsyncMock(), __aexit__=AsyncMock())
+async def test_no_running_loop(store: AsyncPostgresStore) -> None:
+    with pytest.raises(asyncio.InvalidStateError):
+        store.put(("foo", "bar"), "baz", {"val": "baz"})
+    with pytest.raises(asyncio.InvalidStateError):
+        store.get(("foo", "bar"), "baz")
+    with pytest.raises(asyncio.InvalidStateError):
+        store.delete(("foo", "bar"), "baz")
+    with pytest.raises(asyncio.InvalidStateError):
+        store.search(("foo", "bar"))
+    with pytest.raises(asyncio.InvalidStateError):
+        store.list_namespaces(prefix=("foo",))
+    with pytest.raises(asyncio.InvalidStateError):
+        store.batch([PutOp(namespace=("foo", "bar"), key="baz", value={"val": "baz"})])
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(store.put, ("foo", "bar"), "baz", {"val": "baz"})
+        result = await asyncio.wrap_future(future)
+        assert result is None
+        future = executor.submit(store.get, ("foo", "bar"), "baz")
+        result = await asyncio.wrap_future(future)
+        assert result.value == {"val": "baz"}
+        result = await asyncio.wrap_future(
+            executor.submit(store.list_namespaces, prefix=("foo",))
         )
 
 
-@pytest.fixture
-def mock_connection() -> MockAsyncConnection:
-    return MockAsyncConnection()
+async def test_large_batches(request: Any, store: AsyncPostgresStore) -> None:
+    N = 100  # less important that we are performant here
+    M = 10
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = []
+        for m in range(M):
+            for i in range(N):
+                futures += [
+                    executor.submit(
+                        store.put,
+                        ("test", "foo", "bar", "baz", str(m % 2)),
+                        f"key{i}",
+                        value={"foo": "bar" + str(i)},
+                    ),
+                    executor.submit(
+                        store.get,
+                        ("test", "foo", "bar", "baz", str(m % 2)),
+                        f"key{i}",
+                    ),
+                    executor.submit(
+                        store.list_namespaces,
+                        prefix=None,
+                        max_depth=m + 1,
+                    ),
+                    executor.submit(
+                        store.search,
+                        ("test",),
+                    ),
+                    executor.submit(
+                        store.put,
+                        ("test", "foo", "bar", "baz", str(m % 2)),
+                        f"key{i}",
+                        value={"foo": "bar" + str(i)},
+                    ),
+                    executor.submit(
+                        store.put,
+                        ("test", "foo", "bar", "baz", str(m % 2)),
+                        f"key{i}",
+                        None,
+                    ),
+                ]
+
+        results = await asyncio.gather(
+            *(asyncio.wrap_future(future) for future in futures)
+        )
+    assert len(results) == M * N * 6
 
 
-@pytest.fixture
-async def store(mock_connection: MockAsyncConnection) -> AsyncPostgresStore:
-    return AsyncPostgresStore(mock_connection)
+async def test_large_batches_async(store: AsyncPostgresStore) -> None:
+    N = 1000
+    M = 10
+    coros = []
+    for m in range(M):
+        for i in range(N):
+            coros.append(
+                store.aput(
+                    ("test", "foo", "bar", "baz", str(m % 2)),
+                    f"key{i}",
+                    value={"foo": "bar" + str(i)},
+                )
+            )
+            coros.append(
+                store.aget(
+                    ("test", "foo", "bar", "baz", str(m % 2)),
+                    f"key{i}",
+                )
+            )
+            coros.append(
+                store.alist_namespaces(
+                    prefix=None,
+                    max_depth=m + 1,
+                )
+            )
+            coros.append(
+                store.asearch(
+                    ("test",),
+                )
+            )
+            coros.append(
+                store.aput(
+                    ("test", "foo", "bar", "baz", str(m % 2)),
+                    f"key{i}",
+                    value={"foo": "bar" + str(i)},
+                )
+            )
+            coros.append(
+                store.adelete(
+                    ("test", "foo", "bar", "baz", str(m % 2)),
+                    f"key{i}",
+                )
+            )
+
+    results = await asyncio.gather(*coros)
+    assert len(results) == M * N * 6
 
 
 async def test_abatch_order(store: AsyncPostgresStore) -> None:
-    mock_connection = store.conn
-    mock_get_cursor = MockAsyncCursor(
-        [
-            {
-                "key": "key1",
-                "value": '{"data": "value1"}',
-                "created_at": datetime.now(),
-                "updated_at": datetime.now(),
-                "prefix": "test.foo",
-            },
-            {
-                "key": "key2",
-                "value": '{"data": "value2"}',
-                "created_at": datetime.now(),
-                "updated_at": datetime.now(),
-                "prefix": "test.bar",
-            },
-        ]
-    )
-    mock_search_cursor = MockAsyncCursor(
-        [
-            {
-                "key": "key1",
-                "value": '{"data": "value1"}',
-                "created_at": datetime.now(),
-                "updated_at": datetime.now(),
-                "prefix": "test.foo",
-            },
-        ]
-    )
-    mock_list_namespaces_cursor = MockAsyncCursor(
-        [
-            {"truncated_prefix": b"\x01test"},
-        ]
-    )
-
-    failures = []
-
-    def cursor_side_effect(binary: bool = False) -> Any:
-        cursor = MagicMock()
-
-        async def execute_side_effect(query: str, *params: Any) -> None:
-            # My super sophisticated database.
-            if "SELECT prefix, key," in query:
-                cursor.fetchall = mock_search_cursor.fetchall
-            elif "SELECT DISTINCT ON (truncated_prefix)" in query:
-                cursor.fetchall = mock_list_namespaces_cursor.fetchall
-            elif "WHERE prefix = %s AND key" in query:
-                cursor.fetchall = mock_get_cursor.fetchall
-            elif "INSERT INTO " in query:
-                pass
-            else:
-                e = ValueError(f"Unmatched query: {query}")
-                failures.append(e)
-                raise e
-
-        cursor.execute = AsyncMock(side_effect=execute_side_effect)
-        return cursor
-
-    mock_connection.cursor.side_effect = cursor_side_effect  # type: ignore
+    # Setup test data
+    await store.aput(("test", "foo"), "key1", {"data": "value1"})
+    await store.aput(("test", "bar"), "key2", {"data": "value2"})
 
     ops = [
-        GetOp(namespace=("test",), key="key1"),
-        PutOp(namespace=("test",), key="key2", value={"data": "value2"}),
+        GetOp(namespace=("test", "foo"), key="key1"),
+        PutOp(namespace=("test", "bar"), key="key2", value={"data": "value2"}),
         SearchOp(
             namespace_prefix=("test",), filter={"data": "value1"}, limit=10, offset=0
         ),
         ListNamespacesOp(match_conditions=None, max_depth=None, limit=10, offset=0),
         GetOp(namespace=("test",), key="key3"),
     ]
+
     results = await store.abatch(ops)
-    assert not failures
     assert len(results) == 5
     assert isinstance(results[0], Item)
     assert isinstance(results[0].value, dict)
@@ -118,27 +247,29 @@ async def test_abatch_order(store: AsyncPostgresStore) -> None:
     assert isinstance(results[2], list)
     assert len(results[2]) == 1
     assert isinstance(results[3], list)
-    assert results[3] == [("test",)]
+    assert ("test", "foo") in results[3] and ("test", "bar") in results[3]
     assert results[4] is None
 
     ops_reordered = [
         SearchOp(namespace_prefix=("test",), filter=None, limit=5, offset=0),
-        GetOp(namespace=("test",), key="key2"),
+        GetOp(namespace=("test", "bar"), key="key2"),
         ListNamespacesOp(match_conditions=None, max_depth=None, limit=5, offset=0),
         PutOp(namespace=("test",), key="key3", value={"data": "value3"}),
-        GetOp(namespace=("test",), key="key1"),
+        GetOp(namespace=("test", "foo"), key="key1"),
     ]
 
     results_reordered = await store.abatch(ops_reordered)
-    assert not failures
     assert len(results_reordered) == 5
     assert isinstance(results_reordered[0], list)
-    assert len(results_reordered[0]) == 1
+    assert len(results_reordered[0]) == 2
     assert isinstance(results_reordered[1], Item)
     assert results_reordered[1].value == {"data": "value2"}
     assert results_reordered[1].key == "key2"
     assert isinstance(results_reordered[2], list)
-    assert results_reordered[2] == [("test",)]
+    assert ("test", "foo") in results_reordered[2] and (
+        "test",
+        "bar",
+    ) in results_reordered[2]
     assert results_reordered[3] is None
     assert isinstance(results_reordered[4], Item)
     assert results_reordered[4].value == {"data": "value1"}
@@ -146,26 +277,9 @@ async def test_abatch_order(store: AsyncPostgresStore) -> None:
 
 
 async def test_batch_get_ops(store: AsyncPostgresStore) -> None:
-    mock_connection = store.conn
-    mock_cursor = MockAsyncCursor(
-        [
-            {
-                "key": "key1",
-                "value": '{"data": "value1"}',
-                "created_at": datetime.now(),
-                "updated_at": datetime.now(),
-                "prefix": "test.foo",
-            },
-            {
-                "key": "key2",
-                "value": '{"data": "value2"}',
-                "created_at": datetime.now(),
-                "updated_at": datetime.now(),
-                "prefix": "test.bar",
-            },
-        ]
-    )
-    mock_connection.cursor.return_value = mock_cursor
+    # Setup test data
+    await store.aput(("test",), "key1", {"data": "value1"})
+    await store.aput(("test",), "key2", {"data": "value2"})
 
     ops = [
         GetOp(namespace=("test",), key="key1"),
@@ -184,10 +298,6 @@ async def test_batch_get_ops(store: AsyncPostgresStore) -> None:
 
 
 async def test_batch_put_ops(store: AsyncPostgresStore) -> None:
-    mock_connection = store.conn
-    mock_cursor = MockAsyncCursor([])
-    mock_connection.cursor.return_value = mock_cursor
-
     ops = [
         PutOp(namespace=("test",), key="key1", value={"data": "value1"}),
         PutOp(namespace=("test",), key="key2", value={"data": "value2"}),
@@ -198,30 +308,16 @@ async def test_batch_put_ops(store: AsyncPostgresStore) -> None:
 
     assert len(results) == 3
     assert all(result is None for result in results)
-    assert mock_cursor.execute.call_count == 2
+
+    # Verify the puts worked
+    items = await store.asearch(["test"], limit=10)
+    assert len(items) == 2  # key3 had None value so wasn't stored
 
 
 async def test_batch_search_ops(store: AsyncPostgresStore) -> None:
-    mock_connection = store.conn
-    mock_cursor = MockAsyncCursor(
-        [
-            {
-                "key": "key1",
-                "value": '{"data": "value1"}',
-                "created_at": datetime.now(),
-                "updated_at": datetime.now(),
-                "prefix": "test.foo",
-            },
-            {
-                "key": "key2",
-                "value": '{"data": "value2"}',
-                "created_at": datetime.now(),
-                "updated_at": datetime.now(),
-                "prefix": "test.bar",
-            },
-        ]
-    )
-    mock_connection.cursor.return_value = mock_cursor
+    # Setup test data
+    await store.aput(("test", "foo"), "key1", {"data": "value1"})
+    await store.aput(("test", "bar"), "key2", {"data": "value2"})
 
     ops = [
         SearchOp(
@@ -233,297 +329,363 @@ async def test_batch_search_ops(store: AsyncPostgresStore) -> None:
     results = await store.abatch(ops)
 
     assert len(results) == 2
-    assert len(results[0]) == 2
-    assert len(results[1]) == 2
+    assert len(results[0]) == 1  # Filtered results
+    assert len(results[1]) == 2  # All results
 
 
 async def test_batch_list_namespaces_ops(store: AsyncPostgresStore) -> None:
-    mock_connection = store.conn
-    mock_cursor = MockAsyncCursor(
-        [
-            {"truncated_prefix": b"\x01test.namespace1"},
-            {"truncated_prefix": b"\x01test.namespace2"},
-        ]
-    )
-    mock_connection.cursor.return_value = mock_cursor
+    # Setup test data
+    await store.aput(("test", "namespace1"), "key1", {"data": "value1"})
+    await store.aput(("test", "namespace2"), "key2", {"data": "value2"})
 
     ops = [ListNamespacesOp(match_conditions=None, max_depth=None, limit=10, offset=0)]
 
     results = await store.abatch(ops)
 
     assert len(results) == 1
-    assert results[0] == [("test", "namespace1"), ("test", "namespace2")]
+    assert len(results[0]) == 2
+    assert ("test", "namespace1") in results[0]
+    assert ("test", "namespace2") in results[0]
 
 
-# The following use the actual DB connection
+@asynccontextmanager
+async def _create_vector_store(
+    vector_type: str,
+    distance_type: str,
+    fake_embeddings: CharacterEmbeddings,
+    text_fields: Optional[list[str]] = None,
+) -> AsyncIterator[AsyncPostgresStore]:
+    """Create a store with vector search enabled."""
+    if sys.version_info < (3, 10):
+        pytest.skip("Async Postgres tests require Python 3.10+")
 
+    database = f"test_{uuid.uuid4().hex[:16]}"
+    uri_parts = DEFAULT_URI.split("/")
+    uri_base = "/".join(uri_parts[:-1])
+    query_params = ""
+    if "?" in uri_parts[-1]:
+        db_name, query_params = uri_parts[-1].split("?", 1)
+        query_params = "?" + query_params
 
-class TestAsyncPostgresStore:
-    @pytest.fixture(autouse=True)
-    async def setup(self) -> None:
-        async with AsyncPostgresStore.from_conn_string(DEFAULT_URI) as store:
+    conn_string = f"{uri_base}/{database}{query_params}"
+    admin_conn_string = DEFAULT_URI
+
+    index_config = {
+        "dims": fake_embeddings.dims,
+        "embed": fake_embeddings,
+        "ann_index_config": {
+            "vector_type": vector_type,
+        },
+        "distance_type": distance_type,
+        "fields": text_fields,
+    }
+
+    async with await AsyncConnection.connect(
+        admin_conn_string, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        async with AsyncPostgresStore.from_conn_string(
+            conn_string,
+            index=index_config,
+        ) as store:
             await store.setup()
+            yield store
+    finally:
+        async with await AsyncConnection.connect(
+            admin_conn_string, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")
 
-    async def test_basic_store_ops(self) -> None:
-        async with AsyncPostgresStore.from_conn_string(DEFAULT_URI) as store:
-            namespace = ("test", "documents")
-            item_id = "doc1"
-            item_value = {"title": "Test Document", "content": "Hello, World!"}
 
-            await store.aput(namespace, item_id, item_value)
-            item = await store.aget(namespace, item_id)
+@pytest.fixture(
+    scope="function",
+    params=[
+        (vector_type, distance_type)
+        for vector_type in VECTOR_TYPES
+        for distance_type in (
+            ["hamming"] if vector_type == "bit" else ["l2", "inner_product", "cosine"]
+        )
+    ],
+    ids=lambda p: f"{p[0]}_{p[1]}",
+)
+async def vector_store(
+    request,
+    fake_embeddings: CharacterEmbeddings,
+) -> AsyncIterator[AsyncPostgresStore]:
+    """Create a store with vector search enabled."""
+    vector_type, distance_type = request.param
+    async with _create_vector_store(
+        vector_type, distance_type, fake_embeddings
+    ) as store:
+        yield store
 
-            assert item
-            assert item.namespace == namespace
-            assert item.key == item_id
-            assert item.value == item_value
 
-            updated_value = {
-                "title": "Updated Test Document",
-                "content": "Hello, LangGraph!",
-            }
-            await store.aput(namespace, item_id, updated_value)
-            updated_item = await store.aget(namespace, item_id)
+async def test_vector_store_initialization(
+    vector_store: AsyncPostgresStore, fake_embeddings: CharacterEmbeddings
+) -> None:
+    """Test store initialization with embedding config."""
+    assert vector_store.index_config is not None
+    assert vector_store.index_config["dims"] == fake_embeddings.dims
+    if isinstance(vector_store.index_config["embed"], Embeddings):
+        assert vector_store.index_config["embed"] == fake_embeddings
 
-            assert updated_item.value == updated_value
-            assert updated_item.updated_at > item.updated_at
-            different_namespace = ("test", "other_documents")
-            item_in_different_namespace = await store.aget(different_namespace, item_id)
-            assert item_in_different_namespace is None
 
-            new_item_id = "doc2"
-            new_item_value = {"title": "Another Document", "content": "Greetings!"}
-            await store.aput(namespace, new_item_id, new_item_value)
+async def test_vector_insert_with_auto_embedding(
+    vector_store: AsyncPostgresStore,
+) -> None:
+    """Test inserting items that get auto-embedded."""
+    docs = [
+        ("doc1", {"text": "short text"}),
+        ("doc2", {"text": "longer text document"}),
+        ("doc3", {"text": "longest text document here"}),
+        ("doc4", {"description": "text in description field"}),
+        ("doc5", {"content": "text in content field"}),
+        ("doc6", {"body": "text in body field"}),
+    ]
 
-            search_results = await store.asearch(["test"], limit=10)
-            items = search_results
-            assert len(items) == 2
-            assert any(item.key == item_id for item in items)
-            assert any(item.key == new_item_id for item in items)
+    for key, value in docs:
+        await vector_store.aput(("test",), key, value)
 
-            namespaces = await store.alist_namespaces(prefix=["test"])
-            assert ("test", "documents") in namespaces
+    results = await vector_store.asearch(("test",), query="long text")
+    assert len(results) > 0
 
-            await store.adelete(namespace, item_id)
-            await store.adelete(namespace, new_item_id)
-            deleted_item = await store.aget(namespace, item_id)
-            assert deleted_item is None
+    doc_order = [r.key for r in results]
+    assert "doc2" in doc_order
+    assert "doc3" in doc_order
 
-            deleted_item = await store.aget(namespace, new_item_id)
-            assert deleted_item is None
 
-            empty_search_results = await store.asearch(["test"], limit=10)
-            assert len(empty_search_results) == 0
+async def test_vector_update_with_embedding(vector_store: AsyncPostgresStore) -> None:
+    """Test that updating items properly updates their embeddings."""
+    await vector_store.aput(("test",), "doc1", {"text": "zany zebra Xerxes"})
+    await vector_store.aput(("test",), "doc2", {"text": "something about dogs"})
+    await vector_store.aput(("test",), "doc3", {"text": "text about birds"})
 
-    async def test_list_namespaces(self) -> None:
-        async with AsyncPostgresStore.from_conn_string(DEFAULT_URI) as store:
-            test_pref = str(uuid.uuid4())
-            test_namespaces = [
-                (test_pref, "test", "documents", "public", test_pref),
-                (test_pref, "test", "documents", "private", test_pref),
-                (test_pref, "test", "images", "public", test_pref),
-                (test_pref, "test", "images", "private", test_pref),
-                (test_pref, "prod", "documents", "public", test_pref),
-                (
-                    test_pref,
-                    "prod",
-                    "documents",
-                    "some",
-                    "nesting",
-                    "public",
-                    test_pref,
-                ),
-                (test_pref, "prod", "documents", "private", test_pref),
-            ]
+    results_initial = await vector_store.asearch(("test",), query="Zany Xerxes")
+    assert len(results_initial) > 0
+    assert results_initial[0].key == "doc1"
+    initial_score = results_initial[0].score
 
-            for namespace in test_namespaces:
-                await store.aput(namespace, "dummy", {"content": "dummy"})
+    await vector_store.aput(("test",), "doc1", {"text": "new text about dogs"})
 
-            prefix_result = await store.alist_namespaces(prefix=[test_pref, "test"])
-            assert len(prefix_result) == 4
-            assert all([ns[1] == "test" for ns in prefix_result])
+    results_after = await vector_store.asearch(("test",), query="Zany Xerxes")
+    after_score = next((r.score for r in results_after if r.key == "doc1"), 0.0)
+    assert after_score < initial_score
 
-            specific_prefix_result = await store.alist_namespaces(
-                prefix=[test_pref, "test", "documents"]
-            )
-            assert len(specific_prefix_result) == 2
-            assert all(
-                [ns[1:3] == ("test", "documents") for ns in specific_prefix_result]
-            )
+    results_new = await vector_store.asearch(("test",), query="new text about dogs")
+    for r in results_new:
+        if r.key == "doc1":
+            assert r.score > after_score
 
-            suffix_result = await store.alist_namespaces(suffix=["public", test_pref])
-            assert len(suffix_result) == 4
-            assert all(ns[-2] == "public" for ns in suffix_result)
+    # Don't index this one
+    await vector_store.aput(
+        ("test",), "doc4", {"text": "new text about dogs"}, index=False
+    )
+    results_new = await vector_store.asearch(
+        ("test",), query="new text about dogs", limit=3
+    )
+    assert not any(r.key == "doc4" for r in results_new)
 
-            prefix_suffix_result = await store.alist_namespaces(
-                prefix=[test_pref, "test"], suffix=["public", test_pref]
-            )
-            assert len(prefix_suffix_result) == 2
-            assert all(
-                ns[1] == "test" and ns[-2] == "public" for ns in prefix_suffix_result
-            )
 
-            wildcard_prefix_result = await store.alist_namespaces(
-                prefix=[test_pref, "*", "documents"]
-            )
-            assert len(wildcard_prefix_result) == 5
-            assert all(ns[2] == "documents" for ns in wildcard_prefix_result)
+async def test_vector_search_with_filters(vector_store: AsyncPostgresStore) -> None:
+    """Test combining vector search with filters."""
+    docs = [
+        ("doc1", {"text": "red apple", "color": "red", "score": 4.5}),
+        ("doc2", {"text": "red car", "color": "red", "score": 3.0}),
+        ("doc3", {"text": "green apple", "color": "green", "score": 4.0}),
+        ("doc4", {"text": "blue car", "color": "blue", "score": 3.5}),
+    ]
 
-            wildcard_suffix_result = await store.alist_namespaces(
-                suffix=["*", "public", test_pref]
-            )
-            assert len(wildcard_suffix_result) == 4
-            assert all(ns[-2] == "public" for ns in wildcard_suffix_result)
-            wildcard_single = await store.alist_namespaces(
-                suffix=["some", "*", "public", test_pref]
-            )
-            assert len(wildcard_single) == 1
-            assert wildcard_single[0] == (
-                test_pref,
-                "prod",
-                "documents",
-                "some",
-                "nesting",
-                "public",
-                test_pref,
-            )
+    for key, value in docs:
+        await vector_store.aput(("test",), key, value)
 
-            max_depth_result = await store.alist_namespaces(max_depth=3)
-            assert all([len(ns) <= 3 for ns in max_depth_result])
-            max_depth_result = await store.alist_namespaces(
-                max_depth=4, prefix=[test_pref, "*", "documents"]
-            )
-            assert (
-                len(set(tuple(res) for res in max_depth_result))
-                == len(max_depth_result)
-                == 5
-            )
+    results = await vector_store.asearch(
+        ("test",), query="apple", filter={"color": "red"}
+    )
+    assert len(results) == 2
+    assert results[0].key == "doc1"
 
-            limit_result = await store.alist_namespaces(prefix=[test_pref], limit=3)
-            assert len(limit_result) == 3
+    results = await vector_store.asearch(
+        ("test",), query="car", filter={"color": "red"}
+    )
+    assert len(results) == 2
+    assert results[0].key == "doc2"
 
-            offset_result = await store.alist_namespaces(prefix=[test_pref], offset=3)
-            assert len(offset_result) == len(test_namespaces) - 3
+    results = await vector_store.asearch(
+        ("test",), query="bbbbluuu", filter={"score": {"$gt": 3.2}}
+    )
+    assert len(results) == 3
+    assert results[0].key == "doc4"
 
-            empty_prefix_result = await store.alist_namespaces(prefix=[test_pref])
-            assert len(empty_prefix_result) == len(test_namespaces)
-            assert set(tuple(ns) for ns in empty_prefix_result) == set(
-                tuple(ns) for ns in test_namespaces
-            )
+    results = await vector_store.asearch(
+        ("test",), query="apple", filter={"score": {"$gte": 4.0}, "color": "green"}
+    )
+    assert len(results) == 1
+    assert results[0].key == "doc3"
 
-            for namespace in test_namespaces:
-                await store.adelete(namespace, "dummy")
 
-    async def test_search(self):
-        async with AsyncPostgresStore.from_conn_string(DEFAULT_URI) as store:
-            test_namespaces = [
-                ("test_search", "documents", "user1"),
-                ("test_search", "documents", "user2"),
-                ("test_search", "reports", "department1"),
-                ("test_search", "reports", "department2"),
-            ]
-            test_items = [
-                {"title": "Doc 1", "author": "John Doe", "tags": ["important"]},
-                {"title": "Doc 2", "author": "Jane Smith", "tags": ["draft"]},
-                {"title": "Report A", "author": "John Doe", "tags": ["final"]},
-                {"title": "Report B", "author": "Alice Johnson", "tags": ["draft"]},
-            ]
-            empty = await store.asearch(
-                (
-                    "scoped",
-                    "assistant_id",
-                    "shared",
-                    "6c5356f6-63ab-4158-868d-cd9fd14c736e",
-                ),
-                limit=10,
-                offset=0,
-            )
-            assert len(empty) == 0
+async def test_vector_search_pagination(vector_store: AsyncPostgresStore) -> None:
+    """Test pagination with vector search."""
+    for i in range(5):
+        await vector_store.aput(
+            ("test",), f"doc{i}", {"text": f"test document number {i}"}
+        )
 
-            for namespace, item in zip(test_namespaces, test_items):
-                await store.aput(namespace, f"item_{namespace[-1]}", item)
+    results_page1 = await vector_store.asearch(("test",), query="test", limit=2)
+    results_page2 = await vector_store.asearch(
+        ("test",), query="test", limit=2, offset=2
+    )
 
-            docs_result = await store.asearch(["test_search", "documents"])
-            assert len(docs_result) == 2
-            assert all([item.namespace[1] == "documents" for item in docs_result]), [
-                item.namespace for item in docs_result
-            ]
+    assert len(results_page1) == 2
+    assert len(results_page2) == 2
+    assert results_page1[0].key != results_page2[0].key
 
-            reports_result = await store.asearch(["test_search", "reports"])
-            assert len(reports_result) == 2
-            assert all(item.namespace[1] == "reports" for item in reports_result)
+    all_results = await vector_store.asearch(("test",), query="test", limit=10)
+    assert len(all_results) == 5
 
-            limited_result = await store.asearch(["test_search"], limit=2)
-            assert len(limited_result) == 2
-            offset_result = await store.asearch(["test_search"])
-            assert len(offset_result) == 4
 
-            offset_result = await store.asearch(["test_search"], offset=2)
-            assert len(offset_result) == 2
-            assert all(item not in limited_result for item in offset_result)
+async def test_vector_search_edge_cases(vector_store: AsyncPostgresStore) -> None:
+    """Test edge cases in vector search."""
+    await vector_store.aput(("test",), "doc1", {"text": "test document"})
 
-            john_doe_result = await store.asearch(
-                ["test_search"], filter={"author": "John Doe"}
-            )
-            assert len(john_doe_result) == 2
-            assert all(item.value["author"] == "John Doe" for item in john_doe_result)
+    perfect_match = await vector_store.asearch(("test",), query="text test document")
+    perfect_score = perfect_match[0].score
 
-            draft_result = await store.asearch(
-                ["test_search"], filter={"tags": ["draft"]}
-            )
-            assert len(draft_result) == 2
-            assert all("draft" in item.value["tags"] for item in draft_result)
+    results = await vector_store.asearch(("test",), query="")
+    assert len(results) == 1
+    assert results[0].score is None
 
-            page1 = await store.asearch(["test_search"], limit=2, offset=0)
-            page2 = await store.asearch(["test_search"], limit=2, offset=2)
-            all_items = page1 + page2
-            assert len(all_items) == 4
-            assert len(set(item.key for item in all_items)) == 4
-            empty = await store.asearch(
-                (
-                    "scoped",
-                    "assistant_id",
-                    "shared",
-                    "again",
-                    "maybe",
-                    "some-long",
-                    "6be5cb0e-2eb4-42e6-bb6b-fba3c269db25",
-                ),
-                limit=10,
-                offset=0,
-            )
-            assert len(empty) == 0
+    results = await vector_store.asearch(("test",), query=None)
+    assert len(results) == 1
+    assert results[0].score is None
 
-            # Test with a namespace beginning with a number (like a UUID)
-            uuid_namespace = (str(uuid.uuid4()), "documents")
-            uuid_item_id = "uuid_doc"
-            uuid_item_value = {
-                "title": "UUID Document",
-                "content": "This document has a UUID namespace.",
-            }
+    long_query = "foo " * 100
+    results = await vector_store.asearch(("test",), query=long_query)
+    assert len(results) == 1
+    assert results[0].score < perfect_score
 
-            # Insert the item with the UUID namespace
-            await store.aput(uuid_namespace, uuid_item_id, uuid_item_value)
+    special_query = "test!@#$%^&*()"
+    results = await vector_store.asearch(("test",), query=special_query)
+    assert len(results) == 1
+    assert results[0].score < perfect_score
 
-            # Retrieve the item to verify it was stored correctly
-            retrieved_item = await store.aget(uuid_namespace, uuid_item_id)
-            assert retrieved_item is not None
-            assert retrieved_item.namespace == uuid_namespace
-            assert retrieved_item.key == uuid_item_id
-            assert retrieved_item.value == uuid_item_value
 
-            # Search for the item using the UUID namespace
-            search_result = await store.asearch([uuid_namespace[0]])
-            assert len(search_result) == 1
-            assert search_result[0].key == uuid_item_id
-            assert search_result[0].value == uuid_item_value
+@pytest.mark.parametrize(
+    "vector_type,distance_type",
+    [
+        *itertools.product(["vector", "halfvec"], ["cosine", "inner_product", "l2"]),
+    ],
+)
+async def test_embed_with_path(
+    request: Any,
+    fake_embeddings: CharacterEmbeddings,
+    vector_type: str,
+    distance_type: str,
+) -> None:
+    """Test vector search with specific text fields in Postgres store."""
+    async with _create_vector_store(
+        vector_type,
+        distance_type,
+        fake_embeddings,
+        text_fields=["key0", "key1", "key3"],
+    ) as store:
+        # This will have 2 vectors representing it
+        doc1 = {
+            # Omit key0 - check it doesn't raise an error
+            "key1": "xxx",
+            "key2": "yyy",
+            "key3": "zzz",
+        }
+        # This will have 3 vectors representing it
+        doc2 = {
+            "key0": "uuu",
+            "key1": "vvv",
+            "key2": "www",
+            "key3": "xxx",
+        }
+        await store.aput(("test",), "doc1", doc1)
+        await store.aput(("test",), "doc2", doc2)
 
-            # Clean up: delete the item with the UUID namespace
-            await store.adelete(uuid_namespace, uuid_item_id)
+        # doc2.key3 and doc1.key1 both would have the highest score
+        results = await store.asearch(("test",), query="xxx")
+        assert len(results) == 2
+        assert results[0].key != results[1].key
+        ascore = results[0].score
+        bscore = results[1].score
+        assert ascore == pytest.approx(bscore, abs=1e-3)
 
-            # Verify the item was deleted
-            deleted_item = await store.aget(uuid_namespace, uuid_item_id)
-            assert deleted_item is None
+        results = await store.asearch(("test",), query="uuu")
+        assert len(results) == 2
+        assert results[0].key != results[1].key
+        assert results[0].key == "doc2"
+        assert results[0].score > results[1].score
+        assert ascore == pytest.approx(results[0].score, abs=1e-3)
 
-            for namespace in test_namespaces:
-                await store.adelete(namespace, f"item_{namespace[-1]}")
+        # Un-indexed - will have low results for both. Not zero (because we're projecting)
+        # but less than the above.
+        results = await store.asearch(("test",), query="www")
+        assert len(results) == 2
+        assert results[0].score < ascore
+        assert results[1].score < ascore
+
+
+@pytest.mark.parametrize(
+    "vector_type,distance_type",
+    [
+        *itertools.product(["vector", "halfvec"], ["cosine", "inner_product", "l2"]),
+    ],
+)
+async def test_search_sorting(
+    request: Any,
+    fake_embeddings: CharacterEmbeddings,
+    vector_type: str,
+    distance_type: str,
+) -> None:
+    """Test operation-level field configuration for vector search."""
+    async with _create_vector_store(
+        vector_type,
+        distance_type,
+        fake_embeddings,
+        text_fields=["key1"],  # Default fields that won't match our test data
+    ) as store:
+        amatch = {
+            "key1": "mmm",
+        }
+
+        await store.aput(("test", "M"), "M", amatch)
+        N = 100
+        for i in range(N):
+            await store.aput(("test", "A"), f"A{i}", {"key1": "no"})
+        for i in range(N):
+            await store.aput(("test", "Z"), f"Z{i}", {"key1": "no"})
+
+        results = await store.asearch(("test",), query="mmm", limit=10)
+        assert len(results) == 10
+        assert len(set(r.key for r in results)) == 10
+        assert results[0].key == "M"
+        assert results[0].score > results[1].score
+
+
+async def test_store_ttl(store):
+    # Assumes a TTL of 1 minute = 60 seconds
+    ns = ("foo",)
+    await store.start_ttl_sweeper()
+    await store.aput(
+        ns,
+        key="item1",
+        value={"foo": "bar"},
+        ttl=TTL_MINUTES,  # type: ignore
+    )
+    await asyncio.sleep(TTL_SECONDS - 2)
+    res = await store.aget(ns, key="item1", refresh_ttl=True)
+    assert res is not None
+    await asyncio.sleep(TTL_SECONDS - 2)
+    results = await store.asearch(ns, query="foo", refresh_ttl=True)
+    assert len(results) == 1
+    await asyncio.sleep(TTL_SECONDS - 2)
+    res = await store.aget(ns, key="item1", refresh_ttl=False)
+    assert res is not None
+    await asyncio.sleep(TTL_SECONDS - 1)
+    # Now has been (TTL_SECONDS-2)*2 > TTL_SECONDS + TTL_SECONDS/2
+    results = await store.asearch(ns, query="bar", refresh_ttl=False)
+    assert len(results) == 0

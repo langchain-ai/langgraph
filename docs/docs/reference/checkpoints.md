@@ -25,5 +25,11 @@
 ::: langgraph.checkpoint.sqlite.aio
 
 ::: langgraph.checkpoint.postgres
+    options:
+      members:
+        - PostgresSaver
 
 ::: langgraph.checkpoint.postgres.aio
+    options:
+      members:
+        - AsyncPostgresSaver

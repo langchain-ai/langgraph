@@ -22,7 +22,7 @@
       "description": "A run is an invocation of a graph / assistant, with no state or memory persistence."
     },
     {
-      "name": "Crons (Enterprise-only)",
+      "name": "Crons (Plus tier)",
       "description": "A cron is a periodic run that recurs on a given schedule. The repeats can be isolated, or share state in a thread"
     },
     {
@@ -33,9 +33,7 @@
   "paths": {
     "/assistants": {
       "post": {
-        "tags": [
-          "Assistants"
-        ],
+        "tags": ["Assistants"],
         "summary": "Create Assistant",
         "description": "Create an assistant.\n\nAn initial version of the assistant will be created and the assistant is set to that version. To change versions, use the `POST /assistants/{assistant_id}/latest` endpoint.",
         "operationId": "create_assistant_assistants_post",
@@ -56,6 +54,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Assistant"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -85,9 +93,7 @@
     },
     "/assistants/search": {
       "post": {
-        "tags": [
-          "Assistants"
-        ],
+        "tags": ["Assistants"],
         "summary": "Search Assistants",
         "description": "Search for assistants.\n\nThis endpoint also functions as the endpoint to list all assistants.",
         "operationId": "search_assistants_assistants_search_post",
@@ -116,6 +122,16 @@
               }
             }
           },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -131,9 +147,7 @@
     },
     "/assistants/{assistant_id}": {
       "get": {
-        "tags": [
-          "Assistants"
-        ],
+        "tags": ["Assistants"],
         "summary": "Get Assistant",
         "description": "Get an assistant by ID.",
         "operationId": "get_assistant_assistants__assistant_id__get",
@@ -175,9 +189,7 @@
         }
       },
       "delete": {
-        "tags": [
-          "Assistants"
-        ],
+        "tags": ["Assistants"],
         "summary": "Delete Assistant",
         "description": "Delete an assistant by ID.\n\nAll versions of the assistant will be deleted as well.",
         "operationId": "delete_assistant_assistants__assistant_id__delete",
@@ -227,9 +239,7 @@
         }
       },
       "patch": {
-        "tags": [
-          "Assistants"
-        ],
+        "tags": ["Assistants"],
         "summary": "Patch Assistant",
         "description": "Update an assistant.",
         "operationId": "patch_assistant_assistants__assistant_id__patch",
@@ -293,9 +303,7 @@
     },
     "/assistants/{assistant_id}/graph": {
       "get": {
-        "tags": [
-          "Assistants"
-        ],
+        "tags": ["Assistants"],
         "summary": "Get Assistant Graph",
         "description": "Get an assistant by ID.",
         "operationId": "get_assistant_graph_assistants__assistant_id__graph_get",
@@ -384,9 +392,7 @@
     },
     "/assistants/{assistant_id}/subgraphs": {
       "get": {
-        "tags": [
-          "Assistants"
-        ],
+        "tags": ["Assistants"],
         "summary": "Get Assistant Subgraphs",
         "description": "Get an assistant's subgraphs.",
         "operationId": "get_assistant_subgraphs_assistants__assistant_id__subgraphs_get",
@@ -450,9 +456,7 @@
     },
     "/assistants/{assistant_id}/subgraphs/{namespace}": {
       "get": {
-        "tags": [
-          "Assistants"
-        ],
+        "tags": ["Assistants"],
         "summary": "Get Assistant Subgraphs by Namespace",
         "description": "Get an assistant's subgraphs filtered by namespace.",
         "operationId": "get_assistant_subgraphs_assistants__assistant_id__subgraphs__namespace__get",
@@ -516,9 +520,7 @@
     },
     "/assistants/{assistant_id}/schemas": {
       "get": {
-        "tags": [
-          "Assistants"
-        ],
+        "tags": ["Assistants"],
         "summary": "Get Assistant Schemas",
         "description": "Get an assistant by ID.",
         "operationId": "get_assistant_schemas_assistants__assistant_id__schemas_get",
@@ -572,9 +574,7 @@
     },
     "/assistants/{assistant_id}/versions": {
       "post": {
-        "tags": [
-          "Assistants"
-        ],
+        "tags": ["Assistants"],
         "summary": "Get Assistant Versions",
         "description": "Get all versions of an assistant.",
         "operationId": "get_assistant_versions_assistants__assistant_id__versions_get",
@@ -622,9 +622,7 @@
     },
     "/assistants/{assistant_id}/latest": {
       "post": {
-        "tags": [
-          "Assistants"
-        ],
+        "tags": ["Assistants"],
         "summary": "Set Latest Assistant Version",
         "description": "Set the latest version for an assistant.",
         "operationId": "set_latest_assistant_version_assistants__assistant_id__versions_post",
@@ -689,9 +687,7 @@
     },
     "/threads": {
       "post": {
-        "tags": [
-          "Threads"
-        ],
+        "tags": ["Threads"],
         "summary": "Create Thread",
         "description": "Create a thread.",
         "operationId": "create_thread_threads_post",
@@ -741,9 +737,7 @@
     },
     "/threads/search": {
       "post": {
-        "tags": [
-          "Threads"
-        ],
+        "tags": ["Threads"],
         "summary": "Search Threads",
         "description": "Search for threads.\n\nThis endpoint also functions as the endpoint to list all threads.",
         "operationId": "search_threads_threads_search_post",
@@ -785,11 +779,59 @@
         }
       }
     },
+    "/threads/state/bulk": {
+      "post": {
+        "tags": ["Threads"],
+        "summary": "Bulk Update Thread State",
+        "description": "Create a new thread from a batch of state updates.",
+        "operationId": "bulk_update_thread_state_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThreadStateBulkUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Thread"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/threads/{thread_id}/state": {
       "get": {
-        "tags": [
-          "Threads"
-        ],
+        "tags": ["Threads"],
         "summary": "Get Thread State",
         "description": "Get state for a thread.\n\nThe latest state of the thread (i.e. latest checkpoint) is returned.",
         "operationId": "get_latest_thread_state_threads__thread_id__state_get",
@@ -831,9 +873,7 @@
         }
       },
       "post": {
-        "tags": [
-          "Threads"
-        ],
+        "tags": ["Threads"],
         "summary": "Update Thread State",
         "description": "Add state to a thread.",
         "operationId": "update_thread_state_threads__thread_id__state_post",
@@ -887,9 +927,7 @@
     },
     "/threads/{thread_id}/state/checkpoint": {
       "post": {
-        "tags": [
-          "Threads"
-        ],
+        "tags": ["Threads"],
         "summary": "Get Thread State At Checkpoint",
         "description": "Get state for a thread at a specific checkpoint.",
         "operationId": "post_thread_state_at_checkpoint_threads__thread_id__state__checkpoint_id__get",
@@ -929,9 +967,7 @@
     },
     "/threads/{thread_id}/history": {
       "get": {
-        "tags": [
-          "Threads"
-        ],
+        "tags": ["Threads"],
         "summary": "Get Thread History",
         "description": "Get all past states for a thread.",
         "operationId": "get_thread_history_threads__thread_id__history_get",
@@ -996,9 +1032,7 @@
         }
       },
       "post": {
-        "tags": [
-          "Threads"
-        ],
+        "tags": ["Threads"],
         "summary": "Get Thread History Post",
         "description": "Get all past states for a thread.",
         "operationId": "get_thread_history_post_threads__thread_id__history_post",
@@ -1056,9 +1090,7 @@
     },
     "/threads/{thread_id}/copy": {
       "post": {
-        "tags": [
-          "Threads"
-        ],
+        "tags": ["Threads"],
         "summary": "Copy Thread",
         "description": "Create a new thread with a copy of the state and checkpoints from an existing thread.",
         "operationId": "copy_thread_post_threads__thread_id__copy_post",
@@ -1112,9 +1144,7 @@
     },
     "/threads/{thread_id}": {
       "get": {
-        "tags": [
-          "Threads"
-        ],
+        "tags": ["Threads"],
         "summary": "Get Thread",
         "description": "Get a thread by ID.",
         "operationId": "get_thread_threads__thread_id__get",
@@ -1166,9 +1196,7 @@
         }
       },
       "delete": {
-        "tags": [
-          "Threads"
-        ],
+        "tags": ["Threads"],
         "summary": "Delete Thread",
         "description": "Delete a thread by ID.",
         "operationId": "delete_thread_threads__thread_id__delete",
@@ -1218,9 +1246,7 @@
         }
       },
       "patch": {
-        "tags": [
-          "Threads"
-        ],
+        "tags": ["Threads"],
         "summary": "Patch Thread",
         "description": "Update a thread.",
         "operationId": "patch_thread_threads__thread_id__patch",
@@ -1284,9 +1310,7 @@
     },
     "/threads/{thread_id}/runs": {
       "get": {
-        "tags": [
-          "Thread Runs"
-        ],
+        "tags": ["Thread Runs"],
         "summary": "List Runs",
         "description": "List runs for a thread.",
         "operationId": "list_runs_http_threads__thread_id__runs_get",
@@ -1321,6 +1345,15 @@
               "default": 0
             },
             "name": "offset",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["pending", "error", "success", "timeout", "interrupted"]
+            },
+            "name": "status",
             "in": "query"
           }
         ],
@@ -1361,9 +1394,7 @@
         }
       },
       "post": {
-        "tags": [
-          "Thread Runs"
-        ],
+        "tags": ["Thread Runs"],
         "summary": "Create Background Run",
         "description": "Create a run in existing thread, return the run ID immediately. Don't wait for the final run output.",
         "operationId": "create_run_threads__thread_id__runs_post",
@@ -1437,9 +1468,7 @@
     },
     "/threads/{thread_id}/runs/crons": {
       "post": {
-        "tags": [
-          "Crons (Enterprise-only)"
-        ],
+        "tags": ["Crons (Plus tier)"],
         "summary": "Create Thread Cron",
         "description": "Create a cron to schedule runs on a thread.",
         "operationId": "create_thread_cron_threads__thread_id__runs_crons_post",
@@ -1503,9 +1532,7 @@
     },
     "/threads/{thread_id}/runs/stream": {
       "post": {
-        "tags": [
-          "Thread Runs"
-        ],
+        "tags": ["Thread Runs"],
         "summary": "Create Run, Stream Output",
         "description": "Create a run in existing thread. Stream the output.",
         "operationId": "stream_run_threads__thread_id__runs_stream_post",
@@ -1537,8 +1564,11 @@
           "200": {
             "description": "Success",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "The server will send a stream of events in SSE format.\n\n**Example event**:\n\nid: 1\n\nevent: message\n\ndata: {}"
+                }
               }
             }
           },
@@ -1577,9 +1607,7 @@
     },
     "/threads/{thread_id}/runs/wait": {
       "post": {
-        "tags": [
-          "Thread Runs"
-        ],
+        "tags": ["Thread Runs"],
         "summary": "Create Run, Wait for Output",
         "description": "Create a run in existing thread. Wait for the final output and then return it.",
         "operationId": "wait_run_threads__thread_id__runs_wait_post",
@@ -1651,9 +1679,7 @@
     },
     "/threads/{thread_id}/runs/{run_id}": {
       "get": {
-        "tags": [
-          "Thread Runs"
-        ],
+        "tags": ["Thread Runs"],
         "summary": "Get Run",
         "description": "Get a run by ID.",
         "operationId": "get_run_http_threads__thread_id__runs__run_id__get",
@@ -1717,9 +1743,7 @@
         }
       },
       "delete": {
-        "tags": [
-          "Thread Runs"
-        ],
+        "tags": ["Thread Runs"],
         "summary": "Delete Run",
         "description": "Delete a run by ID.",
         "operationId": "delete_run_threads__thread_id__runs__run_id__delete",
@@ -1783,9 +1807,7 @@
     },
     "/threads/{thread_id}/runs/{run_id}/join": {
       "get": {
-        "tags": [
-          "Thread Runs"
-        ],
+        "tags": ["Thread Runs"],
         "summary": "Join Run",
         "description": "Wait for a run to finish.",
         "operationId": "join_run_http_threads__thread_id__runs__run_id__join_get",
@@ -1813,6 +1835,17 @@
             },
             "name": "run_id",
             "in": "path"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "title": "Cancel on Disconnect",
+              "description": "If true, the run will be cancelled if the client disconnects.",
+              "default": false
+            },
+            "name": "cancel_on_disconnect",
+            "in": "query"
           }
         ],
         "responses": {
@@ -1849,9 +1882,7 @@
     },
     "/threads/{thread_id}/runs/{run_id}/stream": {
       "get": {
-        "tags": [
-          "Thread Runs"
-        ],
+        "tags": ["Thread Runs"],
         "summary": "Join Run Stream",
         "description": "Join a run stream. This endpoint streams output in real-time from a run similar to the /threads/__THREAD_ID__/runs/stream endpoint. Only output produced after this endpoint is called will be streamed.",
         "operationId": "stream_run_http_threads__thread_id__runs__run_id__join_get",
@@ -1885,8 +1916,11 @@
           "200": {
             "description": "Success",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "The server will send a stream of events in SSE format.\n\n**Example event**:\n\nid: 1\n\nevent: message\n\ndata: {}"
+                }
               }
             }
           },
@@ -1915,9 +1949,7 @@
     },
     "/threads/{thread_id}/runs/{run_id}/cancel": {
       "post": {
-        "tags": [
-          "Thread Runs"
-        ],
+        "tags": ["Thread Runs"],
         "summary": "Cancel Run",
         "operationId": "cancel_run_http_threads__thread_id__runs__run_id__cancel_post",
         "parameters": [
@@ -1960,10 +1992,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "enum": [
-                "interrupt",
-                "rollback"
-              ],
+              "enum": ["interrupt", "rollback"],
               "title": "Action",
               "default": "interrupt"
             },
@@ -2005,9 +2034,7 @@
     },
     "/runs/crons": {
       "post": {
-        "tags": [
-          "Crons (Enterprise-only)"
-        ],
+        "tags": ["Crons (Plus tier)"],
         "summary": "Create Cron",
         "description": "Create a cron to schedule runs on new threads.",
         "operationId": "create_cron_runs_crons_post",
@@ -2057,9 +2084,7 @@
     },
     "/runs/crons/search": {
       "post": {
-        "tags": [
-          "Crons (Enterprise-only)"
-        ],
+        "tags": ["Crons (Plus tier)"],
         "summary": "Search Crons",
         "description": "Search all active crons",
         "operationId": "search_crons_runs_crons_post",
@@ -2103,9 +2128,7 @@
     },
     "/runs/stream": {
       "post": {
-        "tags": [
-          "Stateless Runs"
-        ],
+        "tags": ["Stateless Runs"],
         "summary": "Create Run, Stream Output",
         "description": "Create a run in a new thread, stream the output.",
         "operationId": "stream_run_stateless_runs_stream_post",
@@ -2123,8 +2146,11 @@
           "200": {
             "description": "Success",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "The server will send a stream of events in SSE format.\n\n**Example event**:\n\nid: 1\n\nevent: message\n\ndata: {}"
+                }
               }
             }
           },
@@ -2161,11 +2187,66 @@
         }
       }
     },
+    "/runs/cancel": {
+      "post": {
+        "tags": ["Thread Runs"],
+        "summary": "Cancel Runs",
+        "description": "Cancel one or more runs. Can cancel runs by thread ID and run IDs, or by status filter.",
+        "operationId": "cancel_runs_post",
+        "parameters": [
+          {
+            "description": "Action to take when cancelling the run. Possible values are `interrupt` or `rollback`. `interrupt` will simply cancel the run. `rollback` will cancel the run and delete the run and associated checkpoints afterwards.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["interrupt", "rollback"],
+              "title": "Action",
+              "default": "interrupt"
+            },
+            "name": "action",
+            "in": "query"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunsCancel"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Success - Runs cancelled"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/runs/wait": {
       "post": {
-        "tags": [
-          "Stateless Runs"
-        ],
+        "tags": ["Stateless Runs"],
         "summary": "Create Run, Wait for Output",
         "description": "Create a run in a new thread. Wait for the final output and then return it.",
         "operationId": "wait_run_stateless_runs_wait_post",
@@ -2223,9 +2304,7 @@
     },
     "/runs": {
       "post": {
-        "tags": [
-          "Stateless Runs"
-        ],
+        "tags": ["Stateless Runs"],
         "summary": "Create Background Run",
         "description": "Create a run in a new thread, return the run ID immediately. Don't wait for the final run output.",
         "operationId": "run_stateless_runs_post",
@@ -2283,9 +2362,7 @@
     },
     "/runs/batch": {
       "post": {
-        "tags": [
-          "Stateless Runs"
-        ],
+        "tags": ["Stateless Runs"],
         "summary": "Create Run Batch",
         "description": "Create a batch of runs in new threads, return immediately.",
         "operationId": "run_batch_stateless_runs_post",
@@ -2343,9 +2420,7 @@
     },
     "/runs/crons/{cron_id}": {
       "delete": {
-        "tags": [
-          "Crons (Enterprise-only)"
-        ],
+        "tags": ["Crons (Plus tier)"],
         "summary": "Delete Cron",
         "description": "Delete a cron by ID.",
         "operationId": "delete_cron_runs_crons__cron_id__delete",
@@ -2395,9 +2470,7 @@
     },
     "/store/items": {
       "put": {
-        "tags": [
-          "Store"
-        ],
+        "tags": ["Store"],
         "summary": "Store or update an item.",
         "operationId": "put_item",
         "requestBody": {
@@ -2427,9 +2500,7 @@
         }
       },
       "delete": {
-        "tags": [
-          "Store"
-        ],
+        "tags": ["Store"],
         "summary": "Delete an item.",
         "operationId": "delete_item",
         "requestBody": {
@@ -2459,9 +2530,7 @@
         }
       },
       "get": {
-        "tags": [
-          "Store"
-        ],
+        "tags": ["Store"],
         "summary": "Retrieve a single item.",
         "operationId": "get_item",
         "parameters": [
@@ -2521,9 +2590,7 @@
     },
     "/store/items/search": {
       "post": {
-        "tags": [
-          "Store"
-        ],
+        "tags": ["Store"],
         "summary": "Search for items within a namespace prefix.",
         "operationId": "search_items",
         "requestBody": {
@@ -2562,9 +2629,7 @@
     },
     "/store/namespaces": {
       "post": {
-        "tags": [
-          "Store"
-        ],
+        "tags": ["Store"],
         "summary": "List namespaces with optional match conditions.",
         "operationId": "list_namespaces",
         "requestBody": {
@@ -2599,6 +2664,88 @@
             }
           }
         }
+      }
+    },
+    "/mcp/": {
+      "get": {
+        "operationId": "get_mcp",
+        "summary": "MCP Get",
+        "description": "Implemented according to the Streamable HTTP Transport specification.",
+        "responses": {
+          "405": {
+            "description": "GET method not allowed; streaming not supported."
+          }
+        },
+        "tags": ["MCP"]
+      },
+      "post": {
+        "operationId": "post_mcp",
+        "summary": "MCP Post",
+        "description": "Implemented according to the Streamable HTTP Transport specification.\nSends a JSON-RPC 2.0 message to the server.\n\n- **Request**: Provide an object with `jsonrpc`, `id`, `method`, and optional `params`.\n- **Response**: Returns a JSON-RPC response or acknowledgment.\n\n**Notes:**\n- Stateless: Sessions are not persisted across requests.\n",
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["application/json, text/event-stream"]
+            },
+            "description": "Accept header must include both 'application/json' and 'text/event-stream' media types."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "type": "object" },
+              "description": "A JSON-RPC 2.0 request, notification, or response object.",
+              "example": {
+                "jsonrpc": "2.0",
+                "id": "1",
+                "method": "initialize",
+                "params": {
+                  "clientInfo": {
+                    "name": "test_client",
+                    "version": "1.0.0"
+                  },
+                  "protocolVersion": "2024-11-05",
+                  "capabilities": {}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful JSON-RPC response.",
+            "content": {
+              "application/json": { "schema": { "type": "object" } }
+            }
+          },
+          "202": {
+            "description": "Notification or response accepted; no content body."
+          },
+          "400": {
+            "description": "Bad request: invalid JSON or message format, or unacceptable Accept header."
+          },
+          "405": {
+            "description": "HTTP method not allowed."
+          },
+          "500": {
+            "description": "Internal server error or unexpected failure."
+          }
+        },
+        "tags": ["MCP"]
+      },
+      "delete": {
+        "operationId": "delete_mcp",
+        "summary": "Terminate Session",
+        "description": "Implemented according to the Streamable HTTP Transport specification.\nTerminate an MCP session. The server implementation is stateless, so this is a no-op.\n\n",
+        "responses": {
+          "404": {}
+        },
+        "tags": ["MCP"]
       }
     }
   },
@@ -2665,6 +2812,11 @@
             "type": "string",
             "title": "Assistant Name",
             "description": "The name of the assistant"
+          },
+          "description": {
+            "type": ["string", "null"],
+            "title": "Assistant Description",
+            "description": "The description of the assistant"
           }
         },
         "type": "object",
@@ -2703,10 +2855,7 @@
           },
           "if_exists": {
             "type": "string",
-            "enum": [
-              "raise",
-              "do_nothing"
-            ],
+            "enum": ["raise", "do_nothing"],
             "title": "If Exists",
             "description": "How to handle duplicate creation. Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing assistant).",
             "default": "raise"
@@ -2715,12 +2864,15 @@
             "type": "string",
             "title": "Name",
             "description": "The name of the assistant. Defaults to 'Untitled'."
+          },
+          "description": {
+            "type": ["string", "null"],
+            "title": "Description",
+            "description": "The description of the assistant. Defaults to null."
           }
         },
         "type": "object",
-        "required": [
-          "graph_id"
-        ],
+        "required": ["graph_id"],
         "title": "AssistantCreate",
         "description": "Payload for creating an assistant."
       },
@@ -2745,6 +2897,11 @@
             "type": "string",
             "title": "Name",
             "description": "The new name for the assistant. If not provided, assistant will keep its current name."
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "The new description for the assistant. If not provided, assistant will keep its current description."
           }
         },
         "type": "object",
@@ -2848,9 +3005,18 @@
             "description": "The cron schedule to execute this job on."
           },
           "assistant_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Assistant Id"
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "title": "Assistant Id"
+              },
+              {
+                "type": "string",
+                "title": "Graph Id"
+              }
+            ],
+            "description": "The assistant ID or graph name to run. If using graph name, will default to the assistant automatically created from that graph by the server."
           },
           "input": {
             "anyOf": [
@@ -2898,7 +3064,7 @@
             "type": "string",
             "maxLength": 65536,
             "minLength": 1,
-            "format": "uri",
+            "format": "uri-reference",
             "title": "Webhook",
             "description": "Webhook to call after LangGraph API call is done."
           },
@@ -2906,9 +3072,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": [
-                  "*"
-                ]
+                "enum": ["*"]
               },
               {
                 "items": {
@@ -2924,9 +3088,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": [
-                  "*"
-                ]
+                "enum": ["*"]
               },
               {
                 "items": {
@@ -2940,22 +3102,14 @@
           },
           "multitask_strategy": {
             "type": "string",
-            "enum": [
-              "reject",
-              "rollback",
-              "interrupt",
-              "enqueue"
-            ],
+            "enum": ["reject", "rollback", "interrupt", "enqueue"],
             "title": "Multitask Strategy",
             "description": "Multitask strategy to use. Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.",
             "default": "reject"
           }
         },
         "type": "object",
-        "required": [
-          "assistant_id",
-          "schedule"
-        ],
+        "required": ["assistant_id", "schedule"],
         "title": "CronCreate",
         "description": "Payload for creating a cron job."
       },
@@ -3023,11 +3177,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "graph_id",
-          "state_schema",
-          "config_schema"
-        ],
+        "required": ["graph_id", "state_schema", "config_schema"],
         "title": "GraphSchema",
         "description": "Defines the structure and properties of a graph."
       },
@@ -3106,13 +3256,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "pending",
-              "error",
-              "success",
-              "timeout",
-              "interrupted"
-            ],
+            "enum": ["pending", "error", "success", "timeout", "interrupted"],
             "title": "Status",
             "description": "The status of the run. One of 'pending', 'error', 'success', 'timeout', 'interrupted'."
           },
@@ -3127,12 +3271,7 @@
           },
           "multitask_strategy": {
             "type": "string",
-            "enum": [
-              "reject",
-              "rollback",
-              "interrupt",
-              "enqueue"
-            ],
+            "enum": ["reject", "rollback", "interrupt", "enqueue"],
             "title": "Multitask Strategy",
             "description": "Strategy to handle concurrent runs on the same thread."
           }
@@ -3150,6 +3289,68 @@
           "multitask_strategy"
         ],
         "title": "Run"
+      },
+      "Send": {
+        "type": "object",
+        "title": "Send",
+        "description": "A message to send to a node.",
+        "properties": {
+          "node": {
+            "type": "string",
+            "title": "Node",
+            "description": "The node to send the message to."
+          },
+          "input": {
+            "type": ["object", "array", "number", "string", "boolean", "null"],
+            "title": "Message",
+            "description": "The message to send."
+          }
+        },
+        "required": ["node", "input"]
+      },
+      "Command": {
+        "type": "object",
+        "title": "Command",
+        "description": "The command to run.",
+        "properties": {
+          "update": {
+            "type": ["object", "array", "null"],
+            "title": "Update",
+            "description": "An update to the state."
+          },
+          "resume": {
+            "type": ["object", "array", "number", "string", "boolean", "null"],
+            "title": "Resume",
+            "description": "A value to pass to an interrupted node."
+          },
+          "goto": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Send"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Send"
+                }
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goto",
+            "description": "Name of the node(s) to navigate to next or node(s) to be executed with a provided input."
+          }
+        }
       },
       "RunCreateStateful": {
         "properties": {
@@ -3176,13 +3377,31 @@
           "input": {
             "anyOf": [
               {
-                "items": {
-                  "type": "object"
-                },
+                "type": "object"
+              },
+              {
                 "type": "array"
               },
               {
-                "type": "object"
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input",
+            "description": "The input to the graph."
+          },
+          "command": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Command"
               },
               {
                 "type": "null"
@@ -3222,7 +3441,7 @@
             "type": "string",
             "maxLength": 65536,
             "minLength": 1,
-            "format": "uri",
+            "format": "uri-reference",
             "title": "Webhook",
             "description": "Webhook to call after LangGraph API call is done."
           },
@@ -3230,9 +3449,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": [
-                  "*"
-                ]
+                "enum": ["*"]
               },
               {
                 "items": {
@@ -3248,9 +3465,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": [
-                  "*"
-                ]
+                "enum": ["*"]
               },
               {
                 "items": {
@@ -3294,9 +3509,7 @@
             ],
             "title": "Stream Mode",
             "description": "The stream mode(s) to use.",
-            "default": [
-              "values"
-            ]
+            "default": ["values"]
           },
           "stream_subgraphs": {
             "type": "boolean",
@@ -3306,10 +3519,7 @@
           },
           "on_disconnect": {
             "type": "string",
-            "enum": [
-              "cancel",
-              "continue"
-            ],
+            "enum": ["cancel", "continue"],
             "title": "On Disconnect",
             "description": "The disconnect mode to use. Must be one of 'cancel' or 'continue'.",
             "default": "cancel"
@@ -3324,22 +3534,14 @@
           },
           "multitask_strategy": {
             "type": "string",
-            "enum": [
-              "reject",
-              "rollback",
-              "interrupt",
-              "enqueue"
-            ],
+            "enum": ["reject", "rollback", "interrupt", "enqueue"],
             "title": "Multitask Strategy",
             "description": "Multitask strategy to use. Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.",
             "default": "reject"
           },
           "if_not_exists": {
             "type": "string",
-            "enum": [
-              "create",
-              "reject"
-            ],
+            "enum": ["create", "reject"],
             "title": "If Not Exists",
             "description": "How to handle missing thread. Must be either 'reject' (raise error if missing), or 'create' (create new thread).",
             "default": "reject"
@@ -3348,12 +3550,16 @@
             "type": "integer",
             "title": "After Seconds",
             "description": "The number of seconds to wait before starting the run. Use to schedule future runs."
+          },
+          "checkpoint_during": {
+            "type": "boolean",
+            "title": "Checkpoint During",
+            "description": "Whether to checkpoint during the run.",
+            "default": false
           }
         },
         "type": "object",
-        "required": [
-          "assistant_id"
-        ],
+        "required": ["assistant_id"],
         "title": "RunCreateStateful",
         "description": "Payload for creating a run."
       },
@@ -3385,13 +3591,31 @@
           "input": {
             "anyOf": [
               {
-                "items": {
-                  "type": "object"
-                },
+                "type": "object"
+              },
+              {
                 "type": "array"
               },
               {
-                "type": "object"
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input",
+            "description": "The input to the graph."
+          },
+          "command": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Command"
               },
               {
                 "type": "null"
@@ -3431,7 +3655,7 @@
             "type": "string",
             "maxLength": 65536,
             "minLength": 1,
-            "format": "uri",
+            "format": "uri-reference",
             "title": "Webhook",
             "description": "Webhook to call after LangGraph API call is done."
           },
@@ -3439,9 +3663,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": [
-                  "*"
-                ]
+                "enum": ["*"]
               },
               {
                 "items": {
@@ -3457,9 +3679,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": [
-                  "*"
-                ]
+                "enum": ["*"]
               },
               {
                 "items": {
@@ -3503,9 +3723,7 @@
             ],
             "title": "Stream Mode",
             "description": "The stream mode(s) to use.",
-            "default": [
-              "values"
-            ]
+            "default": ["values"]
           },
           "feedback_keys": {
             "items": {
@@ -3523,20 +3741,14 @@
           },
           "on_completion": {
             "type": "string",
-            "enum": [
-              "delete",
-              "keep"
-            ],
+            "enum": ["delete", "keep"],
             "title": "On Completion",
             "description": "Whether to delete or keep the thread created for a stateless run. Must be one of 'delete' or 'keep'.",
             "default": "delete"
           },
           "on_disconnect": {
             "type": "string",
-            "enum": [
-              "cancel",
-              "continue"
-            ],
+            "enum": ["cancel", "continue"],
             "title": "On Disconnect",
             "description": "The disconnect mode to use. Must be one of 'cancel' or 'continue'.",
             "default": "cancel"
@@ -3545,12 +3757,16 @@
             "type": "integer",
             "title": "After Seconds",
             "description": "The number of seconds to wait before starting the run. Use to schedule future runs."
+          },
+          "checkpoint_during": {
+            "type": "boolean",
+            "title": "Checkpoint During",
+            "description": "Whether to checkpoint during the run.",
+            "default": false
           }
         },
         "type": "object",
-        "required": [
-          "assistant_id"
-        ],
+        "required": ["assistant_id"],
         "title": "RunCreateStateless",
         "description": "Payload for creating a run."
       },
@@ -3580,6 +3796,24 @@
             "description": "The number of results to skip.",
             "default": 0,
             "minimum": 0
+          },
+          "sort_by": {
+            "type": "string",
+            "enum": [
+              "assistant_id",
+              "created_at",
+              "updated_at",
+              "name",
+              "graph_id"
+            ],
+            "title": "Sort By",
+            "description": "The field to sort by."
+          },
+          "sort_order": {
+            "type": "string",
+            "enum": ["asc", "desc"],
+            "title": "Sort Order",
+            "description": "The order to sort by."
           }
         },
         "type": "object",
@@ -3627,12 +3861,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "idle",
-              "busy",
-              "interrupted",
-              "error"
-            ],
+            "enum": ["idle", "busy", "interrupted", "error"],
             "title": "Status",
             "description": "Thread status to filter on."
           },
@@ -3650,6 +3879,18 @@
             "description": "Offset to start from.",
             "default": 0,
             "minimum": 0
+          },
+          "sort_by": {
+            "type": "string",
+            "enum": ["thread_id", "status", "created_at", "updated_at"],
+            "title": "Sort By",
+            "description": "Sort by field."
+          },
+          "sort_order": {
+            "type": "string",
+            "enum": ["asc", "desc"],
+            "title": "Sort Order",
+            "description": "Sort order."
           }
         },
         "type": "object",
@@ -3683,12 +3924,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "idle",
-              "busy",
-              "interrupted",
-              "error"
-            ],
+            "enum": ["idle", "busy", "interrupted", "error"],
             "title": "Status",
             "description": "The status of the thread."
           },
@@ -3723,13 +3959,42 @@
           },
           "if_exists": {
             "type": "string",
-            "enum": [
-              "raise",
-              "do_nothing"
-            ],
+            "enum": ["raise", "do_nothing"],
             "title": "If Exists",
             "description": "How to handle duplicate creation. Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing thread).",
             "default": "raise"
+          },
+          "ttl": {
+            "type": "object",
+            "title": "TTL",
+            "description": "The time-to-live for the thread.",
+            "properties": {
+              "strategy": {
+                "type": "string",
+                "enum": ["delete"],
+                "description": "The TTL strategy. 'delete' removes the entire thread.",
+                "default": "delete"
+              },
+              "ttl": {
+                "type": "number",
+                "description": "The time-to-live in minutes from now until thread should be swept."
+              }
+            }
+          },
+          "supersteps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "updates": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ThreadSuperstepUpdate"
+                  }
+                }
+              },
+              "required": ["updates"]
+            }
           }
         },
         "type": "object",
@@ -3761,9 +4026,7 @@
             "description": "Include subgraph states."
           }
         },
-        "required": [
-          "checkpoint"
-        ],
+        "required": ["checkpoint"],
         "type": "object",
         "title": "ThreadStateCheckpointRequest",
         "description": "Payload for getting the state of a thread at a checkpoint."
@@ -3819,10 +4082,7 @@
                   "$ref": "#/components/schemas/ThreadState"
                 }
               },
-              "required": [
-                "id",
-                "name"
-              ]
+              "required": ["id", "name"]
             },
             "type": "array",
             "title": "Tasks"
@@ -3845,13 +4105,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "values",
-          "next",
-          "checkpoint",
-          "metadata",
-          "created_at"
-        ],
+        "required": ["values", "next", "checkpoint", "metadata", "created_at"],
         "title": "ThreadState"
       },
       "ThreadStateSearch": {
@@ -3918,6 +4172,43 @@
         "title": "ThreadStateUpdate",
         "description": "Payload for updating the state of a thread."
       },
+      "ThreadSuperstepUpdate": {
+        "properties": {
+          "values": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "command": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Command"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The command associated with the update."
+          },
+          "as_node": {
+            "type": "string",
+            "description": "Update the state as if this node had just executed."
+          }
+        },
+        "required": ["as_node"],
+        "type": "object"
+      },
       "ThreadStateUpdateResponse": {
         "properties": {
           "checkpoint": {
@@ -3954,11 +4245,7 @@
       },
       "StorePutRequest": {
         "type": "object",
-        "required": [
-          "namespace",
-          "key",
-          "value"
-        ],
+        "required": ["namespace", "key", "value"],
         "properties": {
           "namespace": {
             "type": "array",
@@ -3984,9 +4271,7 @@
       },
       "StoreDeleteRequest": {
         "type": "object",
-        "required": [
-          "key"
-        ],
+        "required": ["key"],
         "properties": {
           "namespace": {
             "type": "array",
@@ -4009,10 +4294,7 @@
         "type": "object",
         "properties": {
           "namespace_prefix": {
-            "type": [
-              "array",
-              "null"
-            ],
+            "type": ["array", "null"],
             "items": {
               "type": "string"
             },
@@ -4020,10 +4302,7 @@
             "description": "List of strings representing the namespace prefix."
           },
           "filter": {
-            "type": [
-              "object",
-              "null"
-            ],
+            "type": ["object", "null"],
             "additionalProperties": true,
             "title": "Filter",
             "description": "Optional dictionary of key-value pairs to filter results."
@@ -4084,13 +4363,7 @@
       },
       "Item": {
         "type": "object",
-        "required": [
-          "namespace",
-          "key",
-          "value",
-          "created_at",
-          "updated_at"
-        ],
+        "required": ["namespace", "key", "value", "created_at", "updated_at"],
         "properties": {
           "namespace": {
             "type": "array",
@@ -4120,11 +4393,45 @@
         },
         "description": "Represents a single document or data entry in the graph's Store. Items are used to store cross-thread memories."
       },
+      "RunsCancel": {
+        "type": "object",
+        "title": "RunsCancel",
+        "description": "Payload for cancelling runs.",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["pending", "running", "all"],
+            "title": "Status",
+            "description": "Filter runs by status to cancel. Must be one of 'pending', 'running', or 'all'."
+          },
+          "thread_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Thread Id",
+            "description": "The ID of the thread containing runs to cancel."
+          },
+          "run_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "title": "Run Ids",
+            "description": "List of run IDs to cancel."
+          }
+        },
+        "oneOf": [
+          {
+            "required": ["status"]
+          },
+          {
+            "required": ["thread_id", "run_ids"]
+          }
+        ]
+      },
       "SearchItemsResponse": {
         "type": "object",
-        "required": [
-          "items"
-        ],
+        "required": ["items"],
         "properties": {
           "items": {
             "type": "array",

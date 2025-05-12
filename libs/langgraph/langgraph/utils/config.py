@@ -1,5 +1,7 @@
 from collections import ChainMap
-from typing import Any, Optional, Sequence
+from collections.abc import Sequence
+from os import getenv
+from typing import Any, Optional, cast
 
 from langchain_core.callbacks import (
     AsyncCallbackManager,
@@ -11,17 +13,35 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import (
     CONFIG_KEYS,
     COPIABLE_KEYS,
-    DEFAULT_RECURSION_LIMIT,
     var_child_runnable_config,
 )
 
 from langgraph.checkpoint.base import CheckpointMetadata
+from langgraph.config import get_config, get_store, get_stream_writer  # noqa
 from langgraph.constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
+    NS_END,
+    NS_SEP,
 )
+
+DEFAULT_RECURSION_LIMIT = int(getenv("LANGGRAPH_DEFAULT_RECURSION_LIMIT", "25"))
+
+
+def recast_checkpoint_ns(ns: str) -> str:
+    """Remove task IDs from checkpoint namespace.
+
+    Args:
+        ns: The checkpoint namespace with task IDs.
+
+    Returns:
+        str: The checkpoint namespace without task IDs.
+    """
+    return NS_SEP.join(
+        part.split(NS_END)[0] for part in ns.split(NS_SEP) if not part.isdigit()
+    )
 
 
 def patch_configurable(
@@ -59,7 +79,7 @@ def merge_configs(*configs: Optional[RunnableConfig]) -> RunnableConfig:
     """Merge multiple configs into one.
 
     Args:
-        *configs (Optional[RunnableConfig]): The configs to merge.
+        *configs: The configs to merge.
 
     Returns:
         RunnableConfig: The merged config.
@@ -130,7 +150,7 @@ def merge_configs(*configs: Optional[RunnableConfig]) -> RunnableConfig:
 def patch_config(
     config: Optional[RunnableConfig],
     *,
-    callbacks: Optional[Callbacks] = None,
+    callbacks: Callbacks = None,
     recursion_limit: Optional[int] = None,
     max_concurrency: Optional[int] = None,
     run_name: Optional[str] = None,
@@ -139,15 +159,15 @@ def patch_config(
     """Patch a config with new values.
 
     Args:
-        config (Optional[RunnableConfig]): The config to patch.
-        callbacks (Optional[BaseCallbackManager], optional): The callbacks to set.
+        config: The config to patch.
+        callbacks: The callbacks to set.
           Defaults to None.
-        recursion_limit (Optional[int], optional): The recursion limit to set.
+        recursion_limit: The recursion limit to set.
           Defaults to None.
-        max_concurrency (Optional[int], optional): The max concurrency to set.
+        max_concurrency: The max concurrency to set.
           Defaults to None.
-        run_name (Optional[str], optional): The run name to set. Defaults to None.
-        configurable (Optional[Dict[str, Any]], optional): The configurable to set.
+        run_name: The run name to set. Defaults to None.
+        configurable: The configurable to set.
           Defaults to None.
 
     Returns:
@@ -179,7 +199,7 @@ def get_callback_manager_for_config(
     """Get a callback manager for a config.
 
     Args:
-        config (RunnableConfig): The config.
+        config: The config.
 
     Returns:
         CallbackManager: The callback manager.
@@ -217,7 +237,7 @@ def get_async_callback_manager_for_config(
     """Get an async callback manager for a config.
 
     Args:
-        config (RunnableConfig): The config.
+        config: The config.
 
     Returns:
         AsyncCallbackManager: The async callback manager.
@@ -248,6 +268,13 @@ def get_async_callback_manager_for_config(
         )
 
 
+def _is_not_empty(value: Any) -> bool:
+    if isinstance(value, (list, tuple, dict)):
+        return len(value) > 0
+    else:
+        return value is not None
+
+
 def ensure_config(*configs: Optional[RunnableConfig]) -> RunnableConfig:
     """Ensure that a config is a dict with all keys present.
 
@@ -270,17 +297,20 @@ def ensure_config(*configs: Optional[RunnableConfig]) -> RunnableConfig:
             {
                 k: v.copy() if k in COPIABLE_KEYS else v  # type: ignore[attr-defined]
                 for k, v in var_config.items()
-                if v is not None
+                if _is_not_empty(v)
             },
         )
     for config in configs:
         if config is None:
             continue
         for k, v in config.items():
-            if v is not None and k in CONFIG_KEYS:
-                empty[k] = v  # type: ignore[literal-required]
+            if _is_not_empty(v) and k in CONFIG_KEYS:
+                if k == CONF:
+                    empty[k] = cast(dict, v).copy()
+                else:
+                    empty[k] = v  # type: ignore[literal-required]
         for k, v in config.items():
-            if v is not None and k not in CONFIG_KEYS:
+            if _is_not_empty(v) and k not in CONFIG_KEYS:
                 empty[CONF][k] = v
     for key, value in empty[CONF].items():
         if (

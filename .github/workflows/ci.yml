@@ -17,10 +17,34 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  POETRY_VERSION: "1.7.1"
+  POETRY_VERSION: "2.1.2"
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.filter.outputs.python }}
+      sdk-js: ${{ steps.filter.outputs.sdk-js }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            python:
+              - 'libs/langgraph/**'
+              - 'libs/sdk-py/**'
+              - 'libs/cli/**'
+              - 'libs/checkpoint/**'
+              - 'libs/checkpoint-sqlite/**'
+              - 'libs/checkpoint-postgres/**'
+              - 'libs/scheduler-kafka/**'
+              - 'libs/prebuilt/**'
+            sdk-js:
+              - 'libs/sdk-js/**'
+
   lint:
+    needs: changes
     name: cd ${{ matrix.working-directory }}
     strategy:
       matrix:
@@ -31,26 +55,30 @@ jobs:
             "libs/cli",
             "libs/checkpoint",
             "libs/checkpoint-sqlite",
-            "libs/checkpoint-duckdb",
             "libs/checkpoint-postgres",
             "libs/scheduler-kafka",
+            "libs/prebuilt",
           ]
+    if: needs.changes.outputs.python == 'true'
     uses: ./.github/workflows/_lint.yml
     with:
       working-directory: ${{ matrix.working-directory }}
     secrets: inherit
 
   test:
+    needs: changes
     name: cd ${{ matrix.working-directory }}
     strategy:
       matrix:
-        working-directory: [
+        working-directory:
+          [
             "libs/cli",
             "libs/checkpoint",
             "libs/checkpoint-sqlite",
-            "libs/checkpoint-duckdb",
-            "libs/checkpoint-postgres"
+            "libs/checkpoint-postgres",
+            "libs/prebuilt",
           ]
+    if: needs.changes.outputs.python == 'true'
     uses: ./.github/workflows/_test.yml
     with:
       working-directory: ${{ matrix.working-directory }}
@@ -58,17 +86,23 @@ jobs:
 
   # NOTE: we're testing langgraph separately because it requires a different matrix
   test-langgraph:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     name: "cd libs/langgraph"
     uses: ./.github/workflows/_test_langgraph.yml
     secrets: inherit
 
   # NOTE: we're testing scheduler-kafka separately because it requires a different matrix
   test-scheduler-kafka:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     name: "cd libs/scheduler-kafka"
     uses: ./.github/workflows/_test_scheduler_kafka.yml
     secrets: inherit
 
   check-sdk-methods:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     name: "Check SDK methods matching"
     runs-on: ubuntu-latest
     steps:
@@ -76,16 +110,56 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
       - name: Run check_sdk_methods script
         run: python .github/scripts/check_sdk_methods.py
 
+  check-schema:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
+    name: "Check CLI schema hasn't changed #${{ matrix.python-version }}"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.11"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
+        uses: "./.github/actions/poetry_setup"
+        with:
+          python-version: "3.11"
+          poetry-version: ${{ env.POETRY_VERSION }}
+          cache-key: schema-check-cli
+      - name: Install CLI dependencies
+        run: |
+          cd libs/cli
+          poetry install
+      - name: Generate schema and check for changes
+        run: |
+          cd libs/cli
+          # Create a temporary copy of the current schema
+          cp schemas/schema.json schemas/schema.current.json
+          # Generate new schema
+          poetry run python generate_schema.py
+          # Compare the new schema with the original
+          if ! diff -q schemas/schema.json schemas/schema.current.json > /dev/null; then
+            echo "Error: Langgraph.json configuration schema has changed. Please run 'poetry run python generate_schema.py' in the libs/cli directory and commit the changes."
+            diff schemas/schema.json schemas/schema.current.json
+            exit 1
+          fi
+          echo "Schema check passed - no changes detected"
+
   integration-test:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     name: CLI integration test
     uses: ./.github/workflows/_integration_test.yml
     secrets: inherit
 
   lint-js:
+    needs: changes
+    if: needs.changes.outputs.sdk-js == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -109,9 +183,44 @@ jobs:
       - name: Build
         run: yarn build
 
+  test-js:
+    needs: changes
+    if: needs.changes.outputs.sdk-js == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        working-directory:
+          - "libs/sdk-js"
+    defaults:
+      run:
+        working-directory: ${{ matrix.working-directory }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node.js (LTS)
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: ${{ matrix.working-directory }}/yarn.lock
+      - name: Install dependencies
+        run: yarn install
+      - name: Run tests
+        run: yarn test
+
   ci_success:
     name: "CI Success"
-    needs: [lint, lint-js, test, test-langgraph, test-scheduler-kafka, integration-test]
+    needs:
+      [
+        lint,
+        lint-js,
+        test,
+        test-langgraph,
+        test-scheduler-kafka,
+        check-sdk-methods,
+        check-schema,
+        integration-test,
+        test-js,
+      ]
     if: |
       always()
     runs-on: ubuntu-latest

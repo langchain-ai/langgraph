@@ -20,5 +20,5 @@ lint lint_diff:
 	[ "$(PYTHON_FILES)" = "" ] || mkdir -p $(MYPY_CACHE) || poetry run mypy $(PYTHON_FILES) --cache-dir $(MYPY_CACHE)
 
 format format_diff:
-	poetry run ruff format $(PYTHON_FILES)
 	poetry run ruff check --select I --fix $(PYTHON_FILES)
+	poetry run ruff format $(PYTHON_FILES)

@@ -1,10 +1,10 @@
 import threading
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from typing import Any, Iterator, Optional, Sequence, Union
+from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
-from psycopg import Connection, Cursor, Pipeline
-from psycopg.errors import UndefinedTable
+from psycopg import Capabilities, Connection, Cursor, Pipeline
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
@@ -16,30 +16,24 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
     get_checkpoint_id,
+    get_checkpoint_metadata,
 )
+from langgraph.checkpoint.postgres import _internal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
+from langgraph.checkpoint.postgres.shallow import ShallowPostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
-Conn = Union[Connection[DictRow], ConnectionPool[Connection[DictRow]]]
-
-
-@contextmanager
-def _get_connection(conn: Conn) -> Iterator[Connection[DictRow]]:
-    if isinstance(conn, Connection):
-        yield conn
-    elif isinstance(conn, ConnectionPool):
-        with conn.connection() as conn:
-            yield conn
-    else:
-        raise TypeError(f"Invalid connection type: {type(conn)}")
+Conn = _internal.Conn  # For backward compatibility
 
 
 class PostgresSaver(BasePostgresSaver):
+    """Checkpointer that stores checkpoints in a Postgres database."""
+
     lock: threading.Lock
 
     def __init__(
         self,
-        conn: Conn,
+        conn: _internal.Conn,
         pipe: Optional[Pipeline] = None,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
@@ -52,6 +46,7 @@ class PostgresSaver(BasePostgresSaver):
         self.conn = conn
         self.pipe = pipe
         self.lock = threading.Lock()
+        self.supports_pipeline = Capabilities().has_pipeline()
 
     @classmethod
     @contextmanager
@@ -61,8 +56,8 @@ class PostgresSaver(BasePostgresSaver):
         """Create a new PostgresSaver instance from a connection string.
 
         Args:
-            conn_string (str): The Postgres connection info string.
-            pipeline (bool): whether to use Pipeline
+            conn_string: The Postgres connection info string.
+            pipeline: whether to use Pipeline
 
         Returns:
             PostgresSaver: A new PostgresSaver instance.
@@ -72,9 +67,9 @@ class PostgresSaver(BasePostgresSaver):
         ) as conn:
             if pipeline:
                 with conn.pipeline() as pipe:
-                    yield PostgresSaver(conn, pipe)
+                    yield cls(conn, pipe)
             else:
-                yield PostgresSaver(conn)
+                yield cls(conn)
 
     def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
@@ -84,16 +79,15 @@ class PostgresSaver(BasePostgresSaver):
         the first time checkpointer is used.
         """
         with self._cursor() as cur:
-            try:
-                row = cur.execute(
-                    "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
-                ).fetchone()
-                if row is None:
-                    version = -1
-                else:
-                    version = row["v"]
-            except UndefinedTable:
+            cur.execute(self.MIGRATIONS[0])
+            results = cur.execute(
+                "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
+            )
+            row = results.fetchone()
+            if row is None:
                 version = -1
+            else:
+                version = row["v"]
             for v, migration in zip(
                 range(version + 1, len(self.MIGRATIONS)),
                 self.MIGRATIONS[version + 1 :],
@@ -117,10 +111,10 @@ class PostgresSaver(BasePostgresSaver):
         on the provided config. The checkpoints are ordered by checkpoint ID in descending order (newest first).
 
         Args:
-            config (RunnableConfig): The config to use for listing the checkpoints.
-            filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata. Defaults to None.
-            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified checkpoint ID are returned. Defaults to None.
-            limit (Optional[int]): The maximum number of checkpoints to return. Defaults to None.
+            config: The config to use for listing the checkpoints.
+            filter: Additional filtering criteria for metadata. Defaults to None.
+            before: If provided, only checkpoints before the specified checkpoint ID are returned. Defaults to None.
+            limit: The maximum number of checkpoints to return. Defaults to None.
 
         Yields:
             Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
@@ -188,7 +182,7 @@ class PostgresSaver(BasePostgresSaver):
         for the given thread ID is retrieved.
 
         Args:
-            config (RunnableConfig): The config to use for retrieving the checkpoint.
+            config: The config to use for retrieving the checkpoint.
 
         Returns:
             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
@@ -273,10 +267,10 @@ class PostgresSaver(BasePostgresSaver):
         with the provided config and its parent config (if any).
 
         Args:
-            config (RunnableConfig): The config to associate with the checkpoint.
-            checkpoint (Checkpoint): The checkpoint to save.
-            metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
-            new_versions (ChannelVersions): New channel versions as of this write.
+            config: The config to associate with the checkpoint.
+            checkpoint: The checkpoint to save.
+            metadata: Additional metadata to save with the checkpoint.
+            new_versions: New channel versions as of this write.
 
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.
@@ -326,7 +320,7 @@ class PostgresSaver(BasePostgresSaver):
                     checkpoint["id"],
                     checkpoint_id,
                     Jsonb(self._dump_checkpoint(copy)),
-                    self._dump_metadata(metadata),
+                    self._dump_metadata(get_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config
@@ -336,15 +330,16 @@ class PostgresSaver(BasePostgresSaver):
         config: RunnableConfig,
         writes: Sequence[tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Store intermediate writes linked to a checkpoint.
 
         This method saves intermediate writes associated with a checkpoint to the Postgres database.
 
         Args:
-            config (RunnableConfig): Configuration of the related checkpoint.
-            writes (List[Tuple[str, Any]]): List of writes to store.
-            task_id (str): Identifier for the task creating the writes.
+            config: Configuration of the related checkpoint.
+            writes: List of writes to store.
+            task_id: Identifier for the task creating the writes.
         """
         query = (
             self.UPSERT_CHECKPOINT_WRITES_SQL
@@ -359,13 +354,44 @@ class PostgresSaver(BasePostgresSaver):
                     config["configurable"]["checkpoint_ns"],
                     config["configurable"]["checkpoint_id"],
                     task_id,
+                    task_path,
                     writes,
                 ),
             )
 
+    def delete_thread(self, thread_id: str) -> None:
+        """Delete all checkpoints and writes associated with a thread ID.
+
+        Args:
+            thread_id: The thread ID to delete.
+
+        Returns:
+            None
+        """
+        with self._cursor(pipeline=True) as cur:
+            cur.execute(
+                "DELETE FROM checkpoints WHERE thread_id = %s",
+                (str(thread_id),),
+            )
+            cur.execute(
+                "DELETE FROM checkpoint_blobs WHERE thread_id = %s",
+                (str(thread_id),),
+            )
+            cur.execute(
+                "DELETE FROM checkpoint_writes WHERE thread_id = %s",
+                (str(thread_id),),
+            )
+
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
-        with _get_connection(self.conn) as conn:
+        """Create a database cursor as a context manager.
+
+        Args:
+            pipeline: whether to use pipeline for the DB operations inside the context manager.
+                Will be applied regardless of whether the PostgresSaver instance was initialized with a pipeline.
+                If pipeline mode is not supported, will fall back to using transaction context manager.
+        """
+        with _internal.get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
                 # in multiple threads/coroutines, but only one cursor can be
@@ -379,13 +405,24 @@ class PostgresSaver(BasePostgresSaver):
             elif pipeline:
                 # a connection not in pipeline mode can only be used by one
                 # thread/coroutine at a time, so we acquire a lock
-                with self.lock, conn.pipeline(), conn.cursor(
-                    binary=True, row_factory=dict_row
-                ) as cur:
-                    yield cur
+                if self.supports_pipeline:
+                    with (
+                        self.lock,
+                        conn.pipeline(),
+                        conn.cursor(binary=True, row_factory=dict_row) as cur,
+                    ):
+                        yield cur
+                else:
+                    # Use connection's transaction context manager when pipeline mode not supported
+                    with (
+                        self.lock,
+                        conn.transaction(),
+                        conn.cursor(binary=True, row_factory=dict_row) as cur,
+                    ):
+                        yield cur
             else:
                 with self.lock, conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
 
-__all__ = ["PostgresSaver", "Conn"]
+__all__ = ["PostgresSaver", "BasePostgresSaver", "ShallowPostgresSaver", "Conn"]

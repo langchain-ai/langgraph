@@ -1,8 +1,10 @@
-from typing import Generic, Optional, Sequence, Type
+from collections.abc import Sequence
+from typing import Any, Generic
 
 from typing_extensions import Self
 
 from langgraph.channels.base import BaseChannel, Value
+from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError
 
 
@@ -12,39 +14,53 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
 
     __slots__ = ("typ", "value")
 
+    def __init__(self, typ: Any, key: str = "") -> None:
+        super().__init__(typ, key)
+        self.value = MISSING
+
     def __eq__(self, value: object) -> bool:
         return isinstance(value, AnyValue)
 
     @property
-    def ValueType(self) -> Type[Value]:
+    def ValueType(self) -> type[Value]:
         """The type of the value stored in the channel."""
         return self.typ
 
     @property
-    def UpdateType(self) -> Type[Value]:
+    def UpdateType(self) -> type[Value]:
         """The type of the update received by the channel."""
         return self.typ
 
-    def from_checkpoint(self, checkpoint: Optional[Value]) -> Self:
-        empty = self.__class__(self.typ)
-        empty.key = self.key
-        if checkpoint is not None:
+    def copy(self) -> Self:
+        """Return a copy of the channel."""
+        empty = self.__class__(self.typ, self.key)
+        empty.value = self.value
+        return empty
+
+    def from_checkpoint(self, checkpoint: Value) -> Self:
+        empty = self.__class__(self.typ, self.key)
+        if checkpoint is not MISSING:
             empty.value = checkpoint
         return empty
 
     def update(self, values: Sequence[Value]) -> bool:
         if len(values) == 0:
-            try:
-                del self.value
-                return True
-            except AttributeError:
+            if self.value is MISSING:
                 return False
+            else:
+                self.value = MISSING
+                return True
 
         self.value = values[-1]
         return True
 
     def get(self) -> Value:
-        try:
-            return self.value
-        except AttributeError:
+        if self.value is MISSING:
             raise EmptyChannelError()
+        return self.value
+
+    def is_available(self) -> bool:
+        return self.value is not MISSING
+
+    def checkpoint(self) -> Value:
+        return self.value

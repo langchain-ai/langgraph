@@ -1,0 +1,5 @@
+{
+  "pageTitleTemplates": {
+    "index": "{projectName}/react"
+  }
+}
