@@ -23,3 +23,7 @@ In practice, an assistant is just an _instance_ of a graph with a specific confi
 
 Assistants support versioning to track changes over time.
 Once you've created an assistant, subsequent edits to that assistant will create new versions. See [this how-to](../cloud/how-tos/assistant_versioning.md) for more details on how to manage assistant versions.
+
+## Learn more
+
+* The LangGraph Cloud API provides several endpoints for creating and managing assistants their versions. See the [API reference](../../cloud/reference/api/api_ref.html#tag/assistants) for more details.
