@@ -1,6 +1,6 @@
 # LangGraph CLI
 
-The LangGraph command line interface includes commands to build and run a LangGraph Cloud API server locally in [Docker](https://www.docker.com/). For development and testing, you can use the CLI to deploy a local API server.
+The LangGraph command line interface includes commands to build and run a LangGraph Platform API server locally in [Docker](https://www.docker.com/). For development and testing, you can use the CLI to deploy a local API server.
 
 ## Installation
 
@@ -39,7 +39,7 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
 
     | Key                                                          | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
     | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-    | <span style="white-space: nowrap;">`dependencies`</span>     | **Required**. Array of dependencies for LangGraph Cloud API server. Dependencies can be one of the following: <ul><li>A single period (`"."`), which will look for local Python packages.</li><li>The directory path where `pyproject.toml`, `setup.py` or `requirements.txt` is located.</br></br>For example, if `requirements.txt` is located in the root of the project directory, specify `"./"`. If it's located in a subdirectory called `local_package`, specify `"./local_package"`. Do not specify the string `"requirements.txt"` itself.</li><li>A Python package name.</li></ul> |
+    | <span style="white-space: nowrap;">`dependencies`</span>     | **Required**. Array of dependencies for LangGraph Platform API server. Dependencies can be one of the following: <ul><li>A single period (`"."`), which will look for local Python packages.</li><li>The directory path where `pyproject.toml`, `setup.py` or `requirements.txt` is located.</br></br>For example, if `requirements.txt` is located in the root of the project directory, specify `"./"`. If it's located in a subdirectory called `local_package`, specify `"./local_package"`. Do not specify the string `"requirements.txt"` itself.</li><li>A Python package name.</li></ul> |
     | <span style="white-space: nowrap;">`graphs`</span>           | **Required**. Mapping from graph ID to path where the compiled graph or a function that makes a graph is defined. Example: <ul><li>`./your_package/your_file.py:variable`, where `variable` is an instance of `langgraph.graph.state.CompiledStateGraph`</li><li>`./your_package/your_file.py:make_graph`, where `make_graph` is a function that takes a config dictionary (`langchain_core.runnables.RunnableConfig`) and creates an instance of `langgraph.graph.state.StateGraph` / `langgraph.graph.state.CompiledStateGraph`.</li></ul>                                    |
     | <span style="white-space: nowrap;">`auth`</span>             | _(Added in v0.0.11)_ Auth configuration containing the path to your authentication handler. Example: `./your_package/auth.py:auth`, where `auth` is an instance of `langgraph_sdk.Auth`. See [authentication guide](../../concepts/auth.md) for details.                                                                                                                                                                                                                                                                                                                        |
     | <span style="white-space: nowrap;">`base_image`</span>       | Optional. Base image to use for the LangGraph API server. Defaults to `langchain/langgraph-api` or `langchain/langgraphjs-api`. Use this to pin your builds to a particular version of the langgraph API, such as `"langchain/langgraph-server:0.2"`. See https://hub.docker.com/r/langchain/langgraph-server/tags for more details. (added in `langgraph-cli==0.2.8`) |
@@ -336,7 +336,7 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
 
 === "Python"
 
-    Build LangGraph Cloud API server Docker image.
+    Build LangGraph Platform API server Docker image.
 
     **Usage**
 
@@ -350,13 +350,13 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
     | -------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
     | `--platform TEXT`    |                  | Target platform(s) to build the Docker image for. Example: `langgraph build --platform linux/amd64,linux/arm64`              |
     | `-t, --tag TEXT`     |                  | **Required**. Tag for the Docker image. Example: `langgraph build -t my-image`                                               |
-    | `--pull / --no-pull` | `--pull`         | Build with latest remote Docker image. Use `--no-pull` for running the LangGraph Cloud API server with locally built images. |
+    | `--pull / --no-pull` | `--pull`         | Build with latest remote Docker image. Use `--no-pull` for running the LangGraph Platform API server with locally built images. |
     | `-c, --config FILE`  | `langgraph.json` | Path to configuration file declaring dependencies, graphs and environment variables.                                         |
     | `--help`             |                  | Display command documentation.                                                                                               |
 
 === "JS"
 
-    Build LangGraph Cloud API server Docker image.
+    Build LangGraph Platform API server Docker image.
 
     **Usage**
 
@@ -379,7 +379,7 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
 
 === "Python"
 
-    Start LangGraph API server. For local testing, requires a LangSmith API key with access to LangGraph Cloud closed beta. Requires a license key for production use.
+    Start LangGraph API server. For local testing, requires a LangSmith API key with access to LangGraph Platform closed beta. Requires a license key for production use.
 
     **Usage**
 
@@ -406,7 +406,7 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
 
 === "JS"
 
-    Start LangGraph API server. For local testing, requires a LangSmith API key with access to LangGraph Cloud closed beta. Requires a license key for production use.
+    Start LangGraph API server. For local testing, requires a LangSmith API key with access to LangGraph Platform closed beta. Requires a license key for production use.
 
     **Usage**
 
@@ -432,7 +432,7 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
 
 === "Python"
 
-    Generate a Dockerfile for building a LangGraph Cloud API server Docker image.
+    Generate a Dockerfile for building a LangGraph Platform API server Docker image.
 
     **Usage**
 
@@ -482,7 +482,7 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
 
 === "JS"
 
-    Generate a Dockerfile for building a LangGraph Cloud API server Docker image.
+    Generate a Dockerfile for building a LangGraph Platform API server Docker image.
 
     **Usage**
 

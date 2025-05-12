@@ -67,7 +67,7 @@ If you navigate to `localhost:2024/hello` in your browser (`2024` is the default
 
 ## Deploying
 
-You can deploy this app as-is to LangGraph Cloud or to your self-hosted platform.
+You can deploy this app as-is to LangGraph Platform or to your self-hosted platform.
 
 ## Next steps
 

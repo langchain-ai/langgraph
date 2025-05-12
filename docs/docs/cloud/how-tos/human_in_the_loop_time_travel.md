@@ -1,10 +1,10 @@
 # How to Replay and Branch from Prior States
 
-With LangGraph Cloud you have the ability to return to any of your prior states and either re-run the graph to reproduce issues noticed during testing, or branch out in a different way from what was originally done in the prior states. In this guide we will show a quick example of how to rerun past states and how to branch off from previous states as well.
+With LangGraph Platform you have the ability to return to any of your prior states and either re-run the graph to reproduce issues noticed during testing, or branch out in a different way from what was originally done in the prior states. In this guide we will show a quick example of how to rerun past states and how to branch off from previous states as well.
 
 ## Setup
 
-The examples below are executed against a specific deployment on LangGraph Cloud. You will use
+The examples below are executed against a specific deployment on LangGraph Platform. You will use
 the SDK in a similar way, but you will expect to see different results based on the graph you have deployed.
 
 ### SDK initialization
