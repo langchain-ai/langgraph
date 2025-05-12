@@ -12,6 +12,7 @@
 [![Downloads](https://static.pepy.tech/badge/langgraph/month)](https://pepy.tech/project/langgraph)
 [![Open Issues](https://img.shields.io/github/issues-raw/langchain-ai/langgraph)](https://github.com/langchain-ai/langgraph/issues)
 [![Docs](https://img.shields.io/badge/docs-latest-blue)](https://langchain-ai.github.io/langgraph/)
+[![GitMCP](https://img.shields.io/endpoint?url=https://gitmcp.io/badge/langchain-ai/langgraph)](https://gitmcp.io/langchain-ai/langgraph)
 
 Trusted by companies shaping the future of agents – including Klarna, Replit, Elastic, and more – LangGraph is a powerful low-level orchestration framework for building, managing, and deploying long-running, stateful agents. 
 
