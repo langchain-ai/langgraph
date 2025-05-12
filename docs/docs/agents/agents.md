@@ -31,7 +31,7 @@ pip install -U langgraph "langchain[anthropic]"
 
 ## 2. Create an agent
 
-To create an agent, use [`create_react_agent`](langgraph.prebuilt.chat_agent_executor.create_react_agent):
+To create an agent, use [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent]:
 
 ```python
 from langgraph.prebuilt import create_react_agent
