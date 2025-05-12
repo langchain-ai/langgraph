@@ -3,7 +3,7 @@ search:
   boost: 2
 ---
 
-# LangGraph's Runtime (Pregel)
+# LangGraph runtime
 
 [Pregel][langgraph.pregel.Pregel] implements LangGraph's runtime, managing the execution of LangGraph applications.
 

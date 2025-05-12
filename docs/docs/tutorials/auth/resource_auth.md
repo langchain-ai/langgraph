@@ -1,43 +1,20 @@
-# Making Conversations Private (Part 2/3)
+# Make conversations private
 
-!!! note "This is part 2 of our authentication series:" 
-
-    1. [Basic Authentication](getting_started.md) - Control who can access your bot 
-    2. Resource Authorization (you are here) - Let users have private conversations
-    3. [Production Auth](add_auth_server.md) - Add real user accounts and validate using OAuth2
-
-In this tutorial, we will extend our chatbot to give each user their own private conversations. We'll add [resource-level access control](../../concepts/auth.md#single-owner-resources) so users can only see their own threads.
+In this tutorial, you will extend [the chatbot created in the last tutorial](getting_started.md) to give each user their own private conversations. You'll add [resource-level access control](../../concepts/auth.md#single-owner-resources) so users can only see their own threads.
 
 ![Authorization handlers](./img/authorization.png)
 
-???+ tip "Placeholder token"
-    
-    As we did in [part 1](getting_started.md), for this section, we will use a hard-coded token for illustration purposes.
-    We will get to a "production-ready" authentication scheme in part 3, after mastering the basics.
+## Prerequisites
 
-## Understanding Resource Authorization
+Before you start this tutorial, ensure you have the [bot from the first tutorial](getting_started.md) running without errors.
 
-In the last tutorial, we controlled who could access our bot. But right now, any authenticated user can see everyone else's conversations! Let's fix that by adding [resource authorization](../auth/resource_auth.md).
+## 1. Add resource authorization
 
-First, make sure you have completed the [Basic Authentication](getting_started.md) tutorial and that your secure bot can be run without errors:
-
-```bash
-cd custom-auth
-pip install -e .
-langgraph dev --no-browser
-```
-
-> - 🚀 API: http://127.0.0.1:2024
-> - 🎨 Studio UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
-> - 📚 API Docs: http://127.0.0.1:2024/docs
-
-## Adding Resource Authorization
-
-Recall that in the last tutorial, the [`Auth`](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth) object let us register an [authentication function](../../concepts/auth.md#authentication), which the LangGraph platform uses to validate the bearer tokens in incoming requests. Now we'll use it to register an **authorization** handler.
+Recall that in the last tutorial, the [`Auth`](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth) object lets you register an [authentication function](../../concepts/auth.md#authentication), which LangGraph Platform uses to validate the bearer tokens in incoming requests. Now you'll use it to register an **authorization** handler.
 
 Authorization handlers are functions that run **after** authentication succeeds. These handlers can add [metadata](../../concepts/auth.md#filter-operations) to resources (like who owns them) and filter what each user can see.
 
-Let's update our `src/security/auth.py` and add one authorization handler that is run on every request:
+Update your `src/security/auth.py` and add one authorization handler to run on every request:
 
 ```python hl_lines="29-39" title="src/security/auth.py"
 from langgraph_sdk import Auth
@@ -114,7 +91,7 @@ async def add_owner(
     #     }
     # }
 
-    # Do 2 things:
+    # Does 2 things:
     # 1. Add the user's ID to the resource's metadata. Each LangGraph resource has a `metadata` dict that persists with the resource.
     # this metadata is useful for filtering in read and update operations
     # 2. Return a filter that lets users only see their own resources
@@ -131,14 +108,14 @@ The handler receives two parameters:
 1. `ctx` ([AuthContext](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.AuthContext)): contains info about the current `user`, the user's `permissions`, the `resource` ("threads", "crons", "assistants"), and the `action` being taken ("create", "read", "update", "delete", "search", "create_run")
 2. `value` (`dict`): data that is being created or accessed. The contents of this dict depend on the resource and action being accessed. See [adding scoped authorization handlers](#scoped-authorization) below for information on how to get more tightly scoped access control.
 
-Notice that our simple handler does two things:
+Notice that the simple handler does two things:
 
 1. Adds the user's ID to the resource's metadata.
 2. Returns a metadata filter so users only see resources they own.
 
-## Testing Private Conversations
+## 2. Test private conversations
 
-Let's test our authorization. If we have set things up correctly, we should expect to see all ✅ messages. Be sure to have your development server running (run `langgraph dev`):
+Test your authorization. If you have set things up correctly, you will see all ✅ messages. Be sure to have your development server running (run `langgraph dev`):
 
 ```python
 from langgraph_sdk import get_client
@@ -191,7 +168,7 @@ print(f"✅ Alice sees {len(alice_threads)} thread")
 print(f"✅ Bob sees {len(bob_threads)} thread")
 ```
 
-Run the test code and you should see output like this:
+Output:
 
 ```bash
 ✅ Alice created assistant: fc50fb08-78da-45a9-93cc-1d3928a3fc37
@@ -209,9 +186,9 @@ This means:
 2. Users can't see each other's threads
 3. Listing threads only shows your own
 
-## Adding scoped authorization handlers {#scoped-authorization}
+## 3. Add scoped authorization handlers {#scoped-authorization}
 
-The broad `@auth.on` handler matches on all [authorization events](../../concepts/auth.md#supported-resources). This is concise, but it means the contents of the `value` dict are not well-scoped, and we apply the same user-level access control to every resource. If we want to be more fine-grained, we can also control specific actions on resources.
+The broad `@auth.on` handler matches on all [authorization events](../../concepts/auth.md#supported-resources). This is concise, but it means the contents of the `value` dict are not well-scoped, and the same user-level access control is applied to every resource. If you want to be more fine-grained, you can also control specific actions on resources.
 
 Update `src/security/auth.py` to add handlers for specific resource types:
 
@@ -284,7 +261,7 @@ async def authorize_store(ctx: Auth.types.AuthContext, value: dict):
     assert namespace[0] == ctx.user.identity, "Not authorized"
 ```
 
-Notice that instead of one global handler, we now have specific handlers for:
+Notice that instead of one global handler, you now have specific handlers for:
 
 1. Creating threads
 2. Reading threads
@@ -315,7 +292,7 @@ alice_thread = await alice.threads.create()
 print(f"✅ Alice created thread: {alice_thread['thread_id']}")
 ```
 
-And then run the test code again:
+Output:
 
 ```bash
 ✅ Alice created thread: dcea5cd8-eb70-4a01-a4b6-643b14e8f754
@@ -329,12 +306,12 @@ For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/St
 ✅ Alice correctly denied access to searching assistants:
 ```
 
-Congratulations! You've built a chatbot where each user has their own private conversations. While this system uses simple token-based authentication, the authorization patterns we've learned will work with implementing any real authentication system. In the next tutorial, we'll replace our test users with real user accounts using OAuth2.
+Congratulations! You've built a chatbot where each user has their own private conversations. While this system uses simple token-based authentication, these authorization patterns will work with implementing any real authentication system. In the next tutorial, you'll replace your test users with real user accounts using OAuth2.
 
 ## What's Next?
 
 Now that you can control access to resources, you might want to:
 
-1. Move on to [Production Auth](add_auth_server.md) to add real user accounts
-2. Read more about [authorization patterns](../../concepts/auth.md#authorization)
-3. Check out the [API reference](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth) for details about the interfaces and methods used in this tutorial
+1. Move on to [Connect an authentication provider](add_auth_server.md) to add real user accounts.
+2. Read more about [authorization patterns](../../concepts/auth.md#authorization).
+3. Check out the [API reference](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth) for details about the interfaces and methods used in this tutorial.
