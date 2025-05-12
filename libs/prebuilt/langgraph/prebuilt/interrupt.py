@@ -183,8 +183,7 @@ class InterruptToolNode(RunnableCallable):
                 args=tool_call["args"],
             ),
             config=interrupt_config,
-            # TODO: add description, we don't have tool list here unfortunately
-            description="Please review tool call before execution",
+            description=f"Please review tool call for `{tool_name}` before execution.",
         )
         response = interrupt([request])
 
@@ -214,7 +213,7 @@ class InterruptToolNode(RunnableCallable):
             )
         elif response_type == "ignore" and interrupt_config["allow_ignore"]:
             return ToolMessage(
-                content=f"User ignored the tool call: {tool_name}:{call_id}",
+                content=f"User ignored the tool call for `{tool_name}` with id {call_id}",
                 name=tool_name,
                 tool_call_id=call_id,
                 status="success",
@@ -231,7 +230,7 @@ class InterruptToolNode(RunnableCallable):
             if is_allowed
         ]
         raise ValueError(
-            f"Unexpected human response: {response}."
+            f"Unexpected human response: {response}. "
             f"Expected one with `'type'` in {allowed_types}."
         )
 
