@@ -52,13 +52,13 @@ class Item:
     """Represents a stored item with metadata.
 
     Args:
-        value (dict[str, Any]): The stored data as a dictionary. Keys are filterable.
-        key (str): Unique identifier within the namespace.
-        namespace (tuple[str, ...]): Hierarchical path defining the collection in which this document resides.
+        value: The stored data as a dictionary. Keys are filterable.
+        key: Unique identifier within the namespace.
+        namespace: Hierarchical path defining the collection in which this document resides.
             Represented as a tuple of strings, allowing for nested categorization.
             For example: ("documents", 'user123')
-        created_at (datetime): Timestamp of item creation.
-        updated_at (datetime): Timestamp of last update.
+        created_at: Timestamp of item creation.
+        updated_at: Timestamp of last update.
     """
 
     __slots__ = ("value", "key", "namespace", "created_at", "updated_at")
@@ -913,12 +913,12 @@ class BaseStore(ABC):
         find specific collections, or navigate the namespace hierarchy.
 
         Args:
-            prefix (Optional[Tuple[str, ...]]): Filter namespaces that start with this path.
-            suffix (Optional[Tuple[str, ...]]): Filter namespaces that end with this path.
-            max_depth (Optional[int]): Return namespaces up to this depth in the hierarchy.
+            prefix: Filter namespaces that start with this path.
+            suffix: Filter namespaces that end with this path.
+            max_depth: Return namespaces up to this depth in the hierarchy.
                 Namespaces deeper than this level will be truncated.
-            limit (int): Maximum number of namespaces to return (default 100).
-            offset (int): Number of namespaces to skip for pagination (default 0).
+            limit: Maximum number of namespaces to return (default 100).
+            offset: Number of namespaces to skip for pagination (default 0).
 
         Returns:
             List[Tuple[str, ...]]: A list of namespace tuples that match the criteria.
@@ -1162,12 +1162,12 @@ class BaseStore(ABC):
         find specific collections, or navigate the namespace hierarchy.
 
         Args:
-            prefix (Optional[Tuple[str, ...]]): Filter namespaces that start with this path.
-            suffix (Optional[Tuple[str, ...]]): Filter namespaces that end with this path.
-            max_depth (Optional[int]): Return namespaces up to this depth in the hierarchy.
+            prefix: Filter namespaces that start with this path.
+            suffix: Filter namespaces that end with this path.
+            max_depth: Return namespaces up to this depth in the hierarchy.
                 Namespaces deeper than this level will be truncated to this depth.
-            limit (int): Maximum number of namespaces to return (default 100).
-            offset (int): Number of namespaces to skip for pagination (default 0).
+            limit: Maximum number of namespaces to return (default 100).
+            offset: Number of namespaces to skip for pagination (default 0).
 
         Returns:
             List[Tuple[str, ...]]: A list of namespace tuples that match the criteria.

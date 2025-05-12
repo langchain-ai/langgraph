@@ -6,6 +6,10 @@ client.cjs
 client.js
 client.d.ts
 client.d.cts
+auth.cjs
+auth.js
+auth.d.ts
+auth.d.cts
 react.cjs
 react.js
 react.d.ts

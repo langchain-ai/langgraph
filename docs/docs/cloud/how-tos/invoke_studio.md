@@ -1,15 +1,19 @@
-# Invoke Assistant
+# How to manage Assistants
 
-The LangGraph Studio lets you test different configurations and inputs to your graph. It also provides a nice visualization of your graph during execution so it is easy to see which nodes are being run and what the outputs of each individual node are.
+!!! info "Prerequisites"
 
-1. The LangGraph Studio UI displays a visualization of the selected assistant.
-    1. In the top-left dropdown menu of the left-hand pane, select an assistant.
-    1. In the bottom of the left-hand pane, edit the `Input` and `Configure` the assistant.
-    1. Select `Submit` to invoke the selected assistant.
-1. View output of the invocation in the right-hand pane.
+    - [Assistants Overview](../../concepts/assistants.md)
 
-The following video shows these exact steps being carried out:
+LangGraph Studio lets you view, edit, and update your assistants, and allows you to run your graph using these assistant configurations.
 
-<video controls allowfullscreen="true" poster="../img/studio_input_poster.png">
-    <source src="../img/studio_input.mp4" type="video/mp4">
-</video>
+## Graph mode
+
+To view your assistants, click the "Manage Assistants" button in the bottom left corner.
+
+This opens a modal for you to view all the assistants for the selected graph. Specify the assistant and its version you would like to mark as "Active", and this assistant will be used when submitting runs.
+
+By default, the "Default configuration" option will be active. This option reflects the default configuration defined in your graph. Edits made to this configuration will be used to update the run-time configuration, but will not update or create a new assistant unless you click "Create new assistant".
+
+## Chat mode
+
+Chat mode enables you to switch through the different assistants in your graph via the dropdown selector at the top of the page. To create, edit, or delete assistants, use Graph mode.

@@ -1,1 +1,6 @@
-export { useStream, type MessageMetadata } from "./stream.js";
+export {
+  useStream,
+  type MessageMetadata,
+  type UseStream,
+  type UseStreamOptions,
+} from "./stream.js";

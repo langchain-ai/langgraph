@@ -10,11 +10,10 @@ class HTTPException(Exception):
     Since this is defined in the auth module, we default to a 401 status code.
 
     Args:
-        status_code (int, optional): HTTP status code for the error. Defaults to 401 "Unauthorized".
-        detail (str | None, optional): Detailed error message. If None, uses a default
+        status_code: HTTP status code for the error. Defaults to 401 "Unauthorized".
+        detail: Detailed error message. If None, uses a default
             message based on the status code.
-        headers (typing.Mapping[str, str] | None, optional): Additional HTTP headers to
-            include in the error response.
+        headers: Additional HTTP headers to include in the error response.
 
     Example:
         Default:

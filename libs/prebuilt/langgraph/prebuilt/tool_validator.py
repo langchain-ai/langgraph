@@ -73,87 +73,57 @@ class ValidationNode(RunnableCallable):
     Returns:
         (Union[Dict[str, List[ToolMessage]], Sequence[ToolMessage]]): A list of ToolMessages with the validated content or error messages.
 
-    Examples:
-        Example usage for re-prompting the model to generate a valid response:
-        >>> from typing import Literal, Annotated
-        >>> from typing_extensions import TypedDict
-        ...
-        >>> from langchain_anthropic import ChatAnthropic
-        >>> from pydantic import BaseModel, field_validator
-        ...
-        >>> from langgraph.graph import END, START, StateGraph
-        >>> from langgraph.prebuilt import ValidationNode
-        >>> from langgraph.graph.message import add_messages
-        ...
-        ...
-        >>> class SelectNumber(BaseModel):
-        ...     a: int
-        ...
-        ...     @field_validator("a")
-        ...     def a_must_be_meaningful(cls, v):
-        ...         if v != 37:
-        ...             raise ValueError("Only 37 is allowed")
-        ...         return v
-        ...
-        ...
-        >>> builder = StateGraph(Annotated[list, add_messages])
-        >>> llm = ChatAnthropic(model="claude-3-5-haiku-latest").bind_tools([SelectNumber])
-        >>> builder.add_node("model", llm)
-        >>> builder.add_node("validation", ValidationNode([SelectNumber]))
-        >>> builder.add_edge(START, "model")
-        ...
-        ...
-        >>> def should_validate(state: list) -> Literal["validation", "__end__"]:
-        ...     if state[-1].tool_calls:
-        ...         return "validation"
-        ...     return END
-        ...
-        ...
-        >>> builder.add_conditional_edges("model", should_validate)
-        ...
-        ...
-        >>> def should_reprompt(state: list) -> Literal["model", "__end__"]:
-        ...     for msg in state[::-1]:
-        ...         # None of the tool calls were errors
-        ...         if msg.type == "ai":
-        ...             return END
-        ...         if msg.additional_kwargs.get("is_error"):
-        ...             return "model"
-        ...     return END
-        ...
-        ...
-        >>> builder.add_conditional_edges("validation", should_reprompt)
-        ...
-        ...
-        >>> graph = builder.compile()
-        >>> res = graph.invoke(("user", "Select a number, any number"))
-        >>> # Show the retry logic
-        >>> for msg in res:
-        ...     msg.pretty_print()
-        ================================ Human Message =================================
-        Select a number, any number
-        ================================== Ai Message ==================================
-        [{'id': 'toolu_01JSjT9Pq8hGmTgmMPc6KnvM', 'input': {'a': 42}, 'name': 'SelectNumber', 'type': 'tool_use'}]
-        Tool Calls:
-        SelectNumber (toolu_01JSjT9Pq8hGmTgmMPc6KnvM)
-        Call ID: toolu_01JSjT9Pq8hGmTgmMPc6KnvM
-        Args:
-            a: 42
-        ================================= Tool Message =================================
-        Name: SelectNumber
-        ValidationError(model='SelectNumber', errors=[{'loc': ('a',), 'msg': 'Only 37 is allowed', 'type': 'value_error'}])
-        Respond after fixing all validation errors.
-        ================================== Ai Message ==================================
-        [{'id': 'toolu_01PkxSVxNxc5wqwCPW1FiSmV', 'input': {'a': 37}, 'name': 'SelectNumber', 'type': 'tool_use'}]
-        Tool Calls:
-        SelectNumber (toolu_01PkxSVxNxc5wqwCPW1FiSmV)
-        Call ID: toolu_01PkxSVxNxc5wqwCPW1FiSmV
-        Args:
-            a: 37
-        ================================= Tool Message =================================
-        Name: SelectNumber
-        {"a": 37}
+    Example:
+        ```python title="Example usage for re-prompting the model to generate a valid response:"
+        from typing import Literal, Annotated
+        from typing_extensions import TypedDict
 
+        from langchain_anthropic import ChatAnthropic
+        from pydantic import BaseModel, field_validator
+
+        from langgraph.graph import END, START, StateGraph
+        from langgraph.prebuilt import ValidationNode
+        from langgraph.graph.message import add_messages
+
+        class SelectNumber(BaseModel):
+            a: int
+
+            @field_validator("a")
+            def a_must_be_meaningful(cls, v):
+                if v != 37:
+                    raise ValueError("Only 37 is allowed")
+                return v
+
+        builder = StateGraph(Annotated[list, add_messages])
+        llm = ChatAnthropic(model="claude-3-5-haiku-latest").bind_tools([SelectNumber])
+        builder.add_node("model", llm)
+        builder.add_node("validation", ValidationNode([SelectNumber]))
+        builder.add_edge(START, "model")
+
+        def should_validate(state: list) -> Literal["validation", "__end__"]:
+            if state[-1].tool_calls:
+                return "validation"
+            return END
+
+        builder.add_conditional_edges("model", should_validate)
+
+        def should_reprompt(state: list) -> Literal["model", "__end__"]:
+            for msg in state[::-1]:
+                # None of the tool calls were errors
+                if msg.type == "ai":
+                    return END
+                if msg.additional_kwargs.get("is_error"):
+                    return "model"
+            return END
+
+        builder.add_conditional_edges("validation", should_reprompt)
+
+        graph = builder.compile()
+        res = graph.invoke(("user", "Select a number, any number"))
+        # Show the retry logic
+        for msg in res:
+            msg.pretty_print()
+        ```
     """
 
     def __init__(

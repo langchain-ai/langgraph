@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block extrahead %}
+  <meta name="algolia-site-verification" content="165B7E7C89E49946" />
   <style>
     @import url("https://fonts.googleapis.com/css2?family=Public+Sans&display=swap");
     :root {
@@ -27,7 +28,7 @@
     }
 
     .md-footer-meta {
-      background-color: #EEEEEE;
+      background-color: #4d4d4d;
     }
 
     .md-typeset a {
@@ -118,7 +119,7 @@
     }
 
     [data-md-color-scheme="slate"] .md-footer-meta {
-      background-color: #1E1E1E;
+      background-color: #4d4d4d;
     }
 
     [data-md-color-scheme="slate"] .md-typeset a {
@@ -168,6 +169,10 @@
       color: #000000;
     }
 
+    .md-header__title {
+      visibility: hidden;
+    }
+
     /* Dark mode banner links */
     [data-md-color-scheme="slate"] .md-banner a {
       color: #000000;
@@ -177,15 +182,6 @@
       color: #000000;
     }
 
-    /* control the navbar depth */
-    [data-md-level="2"] .md-nav {
-      display: none;
-    }
-
-    /* disable the collapse/expand icon in the navar */
-    .md-nav__icon {
-      display: none;
-    }
   </style>
 {% endblock %}
 
@@ -215,5 +211,5 @@
 
 
 {% block announce %}
-  <b>Join us at <a href="https://interrupt.langchain.com/" target="_blank" rel="noopener noreferrer"> Interrupt: The Agent AI Conference by LangChain</a> on May 13 & 14 in San Francisco!</b>
+<strong>We are growing and hiring for multiple roles for LangChain, LangGraph and LangSmith. <a href="https://www.langchain.com/careers" target="_blank" rel="noopener noreferrer"> Join our team!</a></strong>
 {% endblock %}

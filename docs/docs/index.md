@@ -1,6 +1,6 @@
 ---
 hide_comments: true
-title: Home
+title: LangGraph
 ---
 
 <script>
@@ -21,6 +21,9 @@ title: Home
 
 <style>
 .md-content h1 {
+  display: none;
+}
+.md-header__topic {
   display: none;
 }
 </style>

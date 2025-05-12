@@ -3,18 +3,13 @@ import concurrent.futures
 import threading
 import time
 import weakref
+from collections.abc import AsyncIterator, Awaitable, Iterable, Iterator, Sequence
 from functools import partial
 from typing import (
     Any,
-    AsyncIterator,
-    Awaitable,
     Callable,
     Generic,
-    Iterable,
-    Iterator,
     Optional,
-    Sequence,
-    Type,
     TypeVar,
     Union,
     cast,
@@ -38,7 +33,12 @@ from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.pregel.algo import Call
 from langgraph.pregel.executor import Submit
 from langgraph.pregel.retry import arun_with_retry, run_with_retry
-from langgraph.types import PregelExecutableTask, PregelScratchpad, RetryPolicy
+from langgraph.types import (
+    CachePolicy,
+    PregelExecutableTask,
+    PregelScratchpad,
+    RetryPolicy,
+)
 from langgraph.utils.future import chain_future
 
 F = TypeVar("F", concurrent.futures.Future, asyncio.Future)
@@ -72,7 +72,7 @@ class FuturesDict(Generic[F, E], dict[F, Optional[PregelExecutableTask]]):
         callback: weakref.ref[
             Callable[[PregelExecutableTask, Optional[BaseException]], None]
         ],
-        future_type: Type[F],
+        future_type: type[F],
         # used for generic typing, newer py supports FutureDict[...](...)
     ) -> None:
         super().__init__()
@@ -140,8 +140,11 @@ class PregelRunner:
         *,
         reraise: bool = True,
         timeout: Optional[float] = None,
-        retry_policy: Optional[RetryPolicy] = None,
+        retry_policy: Optional[Sequence[RetryPolicy]] = None,
         get_waiter: Optional[Callable[[], concurrent.futures.Future[None]]] = None,
+        match_cached_writes: Optional[
+            Callable[[], Sequence[PregelExecutableTask]]
+        ] = None,
     ) -> Iterator[None]:
         tasks = tuple(tasks)
         futures = FuturesDict(
@@ -152,7 +155,9 @@ class PregelRunner:
         # give control back to the caller
         yield
         # fast path if single task with no timeout and no waiter
-        if len(tasks) == 1 and timeout is None and get_waiter is None:
+        if len(tasks) == 0:
+            return
+        elif len(tasks) == 1 and timeout is None and get_waiter is None:
             t = tasks[0]
             try:
                 run_with_retry(
@@ -165,6 +170,7 @@ class PregelRunner:
                             retry=retry_policy,
                             futures=weakref.ref(futures),
                             schedule_task=self.schedule_task,
+                            match_cached_writes=match_cached_writes,
                             submit=self.submit,
                             reraise=reraise,
                         ),
@@ -196,25 +202,25 @@ class PregelRunner:
             futures[get_waiter()] = None
         # schedule tasks
         for t in tasks:
-            if not t.writes:
-                fut = self.submit()(  # type: ignore[misc]
-                    run_with_retry,
-                    t,
-                    retry_policy,
-                    configurable={
-                        CONFIG_KEY_CALL: partial(
-                            _call,
-                            weakref.ref(t),
-                            retry=retry_policy,
-                            futures=weakref.ref(futures),
-                            schedule_task=self.schedule_task,
-                            submit=self.submit,
-                            reraise=reraise,
-                        ),
-                    },
-                    __reraise_on_exit__=reraise,
-                )
-                futures[fut] = t
+            fut = self.submit()(  # type: ignore[misc]
+                run_with_retry,
+                t,
+                retry_policy,
+                configurable={
+                    CONFIG_KEY_CALL: partial(
+                        _call,
+                        weakref.ref(t),
+                        retry=retry_policy,
+                        futures=weakref.ref(futures),
+                        schedule_task=self.schedule_task,
+                        match_cached_writes=match_cached_writes,
+                        submit=self.submit,
+                        reraise=reraise,
+                    ),
+                },
+                __reraise_on_exit__=reraise,
+            )
+            futures[fut] = t
         # execute tasks, and wait for one to fail or all to finish.
         # each task is independent from all other concurrent tasks
         # yield updates/debug output as each task finishes
@@ -269,8 +275,11 @@ class PregelRunner:
         *,
         reraise: bool = True,
         timeout: Optional[float] = None,
-        retry_policy: Optional[RetryPolicy] = None,
+        retry_policy: Optional[Sequence[RetryPolicy]] = None,
         get_waiter: Optional[Callable[[], asyncio.Future[None]]] = None,
+        match_cached_writes: Optional[
+            Callable[[], Awaitable[Sequence[PregelExecutableTask]]]
+        ] = None,
     ) -> AsyncIterator[None]:
         loop = asyncio.get_event_loop()
         tasks = tuple(tasks)
@@ -282,7 +291,9 @@ class PregelRunner:
         # give control back to the caller
         yield
         # fast path if single task with no waiter and no timeout
-        if len(tasks) == 1 and get_waiter is None and timeout is None:
+        if len(tasks) == 0:
+            return
+        elif len(tasks) == 1 and get_waiter is None and timeout is None:
             t = tasks[0]
             try:
                 await arun_with_retry(
@@ -297,6 +308,7 @@ class PregelRunner:
                             retry=retry_policy,
                             futures=weakref.ref(futures),
                             schedule_task=self.schedule_task,
+                            match_cached_writes=match_cached_writes,
                             submit=self.submit,
                             reraise=reraise,
                             loop=loop,
@@ -329,33 +341,33 @@ class PregelRunner:
             futures[get_waiter()] = None
         # schedule tasks
         for t in tasks:
-            if not t.writes:
-                fut = cast(
-                    asyncio.Future,
-                    self.submit()(  # type: ignore[misc]
-                        arun_with_retry,
-                        t,
-                        retry_policy,
-                        stream=self.use_astream,
-                        configurable={
-                            CONFIG_KEY_CALL: partial(
-                                _acall,
-                                weakref.ref(t),
-                                retry=retry_policy,
-                                stream=self.use_astream,
-                                futures=weakref.ref(futures),
-                                schedule_task=self.schedule_task,
-                                submit=self.submit,
-                                reraise=reraise,
-                                loop=loop,
-                            ),
-                        },
-                        __name__=t.name,
-                        __cancel_on_exit__=True,
-                        __reraise_on_exit__=reraise,
-                    ),
-                )
-                futures[fut] = t
+            fut = cast(
+                asyncio.Future,
+                self.submit()(  # type: ignore[misc]
+                    arun_with_retry,
+                    t,
+                    retry_policy,
+                    stream=self.use_astream,
+                    configurable={
+                        CONFIG_KEY_CALL: partial(
+                            _acall,
+                            weakref.ref(t),
+                            retry=retry_policy,
+                            stream=self.use_astream,
+                            futures=weakref.ref(futures),
+                            schedule_task=self.schedule_task,
+                            match_cached_writes=match_cached_writes,
+                            submit=self.submit,
+                            reraise=reraise,
+                            loop=loop,
+                        ),
+                    },
+                    __name__=t.name,
+                    __cancel_on_exit__=True,
+                    __reraise_on_exit__=reraise,
+                ),
+            )
+            futures[fut] = t
         # execute tasks, and wait for one to fail or all to finish.
         # each task is independent from all other concurrent tasks
         # yield updates/debug output as each task finishes
@@ -475,7 +487,7 @@ def _exception(
 def _panic_or_proceed(
     futs: Union[set[concurrent.futures.Future], set[asyncio.Future]],
     *,
-    timeout_exc_cls: Type[Exception] = TimeoutError,
+    timeout_exc_cls: type[Exception] = TimeoutError,
     panic: bool = True,
 ) -> None:
     """Cancel remaining tasks if any failed, re-raise exception if panic is True."""
@@ -519,7 +531,8 @@ def _call(
     func: Callable[[Any], Union[Awaitable[Any], Any]],
     input: Any,
     *,
-    retry: Optional[RetryPolicy] = None,
+    retry: Optional[Sequence[RetryPolicy]] = None,
+    cache_policy: Optional[CachePolicy] = None,
     callbacks: Callbacks = None,
     futures: weakref.ref[FuturesDict],
     schedule_task: weakref.ref[
@@ -527,6 +540,7 @@ def _call(
             [PregelExecutableTask, int, Optional[Call]], Optional[PregelExecutableTask]
         ]
     ],
+    match_cached_writes: Optional[Callable[[], Sequence[PregelExecutableTask]]],
     submit: weakref.ref[Submit],
     reraise: bool,
 ) -> concurrent.futures.Future[Any]:
@@ -540,8 +554,10 @@ def _call(
     if next_task := schedule_task()(  # type: ignore[misc]
         task(),  # type: ignore[arg-type]
         scratchpad.call_counter(),
-        Call(func, input, retry=retry, callbacks=callbacks),
+        Call(func, input, retry=retry, cache_policy=cache_policy, callbacks=callbacks),
     ):
+        if match_cached_writes:
+            match_cached_writes()
         if fut := next(
             (
                 f
@@ -579,6 +595,7 @@ def _call(
                         retry=retry,
                         callbacks=callbacks,
                         schedule_task=schedule_task,
+                        match_cached_writes=match_cached_writes,
                         submit=submit,
                         reraise=reraise,
                     ),
@@ -600,7 +617,8 @@ def _acall(
     func: Callable[[Any], Union[Awaitable[Any], Any]],
     input: Any,
     *,
-    retry: Optional[RetryPolicy] = None,
+    retry: Optional[Sequence[RetryPolicy]] = None,
+    cache_policy: Optional[CachePolicy] = None,
     callbacks: Callbacks = None,
     # injected dependencies
     futures: weakref.ref[FuturesDict],
@@ -609,6 +627,9 @@ def _acall(
             [PregelExecutableTask, int, Optional[Call]], Optional[PregelExecutableTask]
         ]
     ],
+    match_cached_writes: Optional[
+        Callable[[], Awaitable[Sequence[PregelExecutableTask]]]
+    ] = None,
     submit: weakref.ref[Submit],
     loop: asyncio.AbstractEventLoop,
     reraise: bool = False,
@@ -621,7 +642,7 @@ def _acall(
     if next_task := schedule_task()(  # type: ignore[misc]
         task(),  # type: ignore[arg-type]
         scratchpad.call_counter(),
-        Call(func, input, retry=retry, callbacks=callbacks),
+        Call(func, input, retry=retry, cache_policy=cache_policy, callbacks=callbacks),
     ):
         if fut := next(
             (
@@ -657,6 +678,7 @@ def _acall(
                     next_task,
                     retry,
                     stream=stream,
+                    match_cached_writes=match_cached_writes,
                     configurable={
                         CONFIG_KEY_CALL: partial(
                             _acall,
@@ -664,6 +686,7 @@ def _acall(
                             stream=stream,
                             futures=futures,
                             schedule_task=schedule_task,
+                            match_cached_writes=match_cached_writes,
                             submit=submit,
                             loop=loop,
                             reraise=reraise,

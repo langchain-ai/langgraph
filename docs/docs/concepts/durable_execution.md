@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # Durable Execution
 
 **Durable execution** is a technique in which a process or workflow saves its progress at key points, allowing it to pause and later resume exactly where it left off. This is particularly useful in scenarios that require [human-in-the-loop](./human_in_the_loop.md), where users can inspect, validate, or modify the process before continuing, and in long-running tasks that might encounter interruptions or errors (e.g., calls to an LLM timing out). By preserving completed work, durable execution enables a process to resume without reprocessing previous steps -- even after a significant delay (e.g., a week later). 
@@ -142,7 +147,7 @@ If a [node](./low_level.md#nodes) contains multiple operations, you may find it 
 Once you have enabled durable execution in your workflow, you can resume execution for the following scenarios:
 
 - **Pausing and Resuming Workflows:** Use the [interrupt][langgraph.types.interrupt] function to pause a workflow at specific points and the [Command][langgraph.types.Command] primitive to resume it with updated state. See [**Human-in-the-Loop**](./human_in_the_loop.md) for more details.
-- **Recovering from Failures:** Automatically resume workflows from the last successful checkpoint after an exception (e.g., LLM provider outage). This involves executing the workflow with the same thread identifier by providing it with a `None` as the input value (see this [example](./functional_api.md#resuming-after-an-error) with the functional API).
+- **Recovering from Failures:** Automatically resume workflows from the last successful checkpoint after an exception (e.g., LLM provider outage). This involves executing the workflow with the same thread identifier by providing it with a `None` as the input value (see this [example](../how-tos/use-functional-api.md#resuming-after-an-error) with the functional API).
 
 ## Starting Points for Resuming Workflows
 

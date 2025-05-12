@@ -1,5 +1,6 @@
 import ast
 import inspect
+import re
 import textwrap
 from typing import Any, Callable, Optional
 
@@ -207,3 +208,8 @@ class NonLocals(ast.NodeVisitor):
                         parent = parent.value
                     if isinstance(parent, ast.Name):
                         self.loads.add(parent.id + "." + attr_expr)
+
+
+def is_xxh3_128_hexdigest(value: str) -> bool:
+    """Check if the given string matches the format of xxh3_128_hexdigest."""
+    return bool(re.fullmatch(r"[0-9a-f]{32}", value))

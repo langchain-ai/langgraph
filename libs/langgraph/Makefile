@@ -1,4 +1,4 @@
-.PHONY: all format lint test test_watch integration_tests spell_check spell_fix benchmark profile
+.PHONY: all format lint test test_watch integration_tests spell_check spell_fix benchmark profile start-dev-server integration_tests
 
 # Default target executed when no arguments are given to make.
 all: help
@@ -40,19 +40,41 @@ start-postgres:
 stop-postgres:
 	docker compose -f tests/compose-postgres.yml down -v
 
+start-dev-server:
+	poetry run langgraph dev --config tests/example_app/langgraph.json --no-browser &
+	@echo "Dev server started."
+	@echo "Dev server PID: $$!" > .devserver.pid
+
+stop-dev-server:
+	@if [ -f .devserver.pid ]; then \
+		kill `cat .devserver.pid` && rm .devserver.pid; \
+		 echo "Dev server stopped."; \
+	else \
+		echo "No dev server PID file found."; \
+	fi
+
 TEST ?= .
 
 test:
-	make start-postgres && poetry run pytest $(TEST); \
+	make start-postgres &&\
+	make start-dev-server &&\
+	poetry run pytest $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
+	make stop-dev-server; \
 	exit $$EXIT_CODE
 
 test_parallel:
-	make start-postgres && poetry run pytest -n auto --dist worksteal $(TEST); \
+	make start-postgres &&\
+	make start-dev-server &&\
+	poetry run pytest -n auto --dist worksteal $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
+	make stop-dev-server; \
 	exit $$EXIT_CODE
+
+integration_tests:
+	poetry run pytest integration_tests
 
 WORKERS ?= auto
 XDIST_ARGS := $(if $(WORKERS),-n $(WORKERS) --dist worksteal,)
@@ -62,13 +84,17 @@ MAXFAIL_ARGS := $(if $(MAXFAIL),--maxfail $(MAXFAIL),)
 XDIST_ARGS := $(if $(WORKERS),-x $(XDIST_ARGS),)
 
 test_watch:
-	make start-postgres && poetry run ptw . -- --ff -vv $(XDIST_ARGS) $(MAXFAIL_ARGS) --snapshot-update --tb short $(TEST); \
+	make start-postgres &&\
+	make start-dev-server &&\
+	poetry run ptw . -- --ff -vv $(XDIST_ARGS) $(MAXFAIL_ARGS) $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
+	make stop-dev-server; \
 	exit $$EXIT_CODE
 
 test_watch_all:
 	npx concurrently -n langgraph,checkpoint,checkpoint-sqlite,postgres "make test_watch" "make -C ../checkpoint test_watch" "make -C ../checkpoint-sqlite test_watch" "make -C ../checkpoint-postgres test_watch"
+
 
 ######################
 # LINTING AND FORMATTING
@@ -78,7 +104,7 @@ test_watch_all:
 PYTHON_FILES=.
 MYPY_CACHE=.mypy_cache
 lint format: PYTHON_FILES=.
-lint_diff format_diff: PYTHON_FILES=$(shell git diff --name-only --relative --diff-filter=d main . | grep -E '\.py$$|\.ipynb$$')
+lint_diff format_diff: PYTHON_FILES=$(shell git diff --name-only --relative --diff-filter=d main . | grep -E r'\.py$$|\.ipynb$$')
 lint_package: PYTHON_FILES=langgraph
 lint_tests: PYTHON_FILES=tests
 lint_tests: MYPY_CACHE=.mypy_cache_test

@@ -1,11 +1,17 @@
-export interface UIMessage {
+export interface UIMessage<
+  TName extends string = string,
+  TProps extends Record<string, unknown> = Record<string, unknown>,
+> {
   type: "ui";
 
   id: string;
-  name: string;
-  props: Record<string, unknown>;
+  name: TName;
+  props: TProps;
   metadata: {
-    run_id: string;
+    merge?: boolean;
+    run_id?: string;
+    name?: string;
+    tags?: string[];
     message_id?: string;
     [key: string]: unknown;
   };
@@ -14,6 +20,20 @@ export interface UIMessage {
 export interface RemoveUIMessage {
   type: "remove-ui";
   id: string;
+}
+
+export function isUIMessage(message: unknown): message is UIMessage {
+  if (typeof message !== "object" || message == null) return false;
+  if (!("type" in message)) return false;
+  return message.type === "ui";
+}
+
+export function isRemoveUIMessage(
+  message: unknown,
+): message is RemoveUIMessage {
+  if (typeof message !== "object" || message == null) return false;
+  if (!("type" in message)) return false;
+  return message.type === "remove-ui";
 }
 
 export function uiMessageReducer(
@@ -31,7 +51,9 @@ export function uiMessageReducer(
 
     const index = state.findIndex((ui) => ui.id === event.id);
     if (index !== -1) {
-      newState[index] = event;
+      newState[index] = event.metadata.merge
+        ? { ...event, props: { ...state[index].props, ...event.props } }
+        : event;
     } else {
       newState.push(event);
     }

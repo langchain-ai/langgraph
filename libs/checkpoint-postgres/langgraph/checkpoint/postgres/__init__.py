@@ -27,6 +27,8 @@ Conn = _internal.Conn  # For backward compatibility
 
 
 class PostgresSaver(BasePostgresSaver):
+    """Checkpointer that stores checkpoints in a Postgres database."""
+
     lock: threading.Lock
 
     def __init__(
@@ -54,8 +56,8 @@ class PostgresSaver(BasePostgresSaver):
         """Create a new PostgresSaver instance from a connection string.
 
         Args:
-            conn_string (str): The Postgres connection info string.
-            pipeline (bool): whether to use Pipeline
+            conn_string: The Postgres connection info string.
+            pipeline: whether to use Pipeline
 
         Returns:
             PostgresSaver: A new PostgresSaver instance.
@@ -109,10 +111,10 @@ class PostgresSaver(BasePostgresSaver):
         on the provided config. The checkpoints are ordered by checkpoint ID in descending order (newest first).
 
         Args:
-            config (RunnableConfig): The config to use for listing the checkpoints.
-            filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata. Defaults to None.
-            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified checkpoint ID are returned. Defaults to None.
-            limit (Optional[int]): The maximum number of checkpoints to return. Defaults to None.
+            config: The config to use for listing the checkpoints.
+            filter: Additional filtering criteria for metadata. Defaults to None.
+            before: If provided, only checkpoints before the specified checkpoint ID are returned. Defaults to None.
+            limit: The maximum number of checkpoints to return. Defaults to None.
 
         Yields:
             Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
@@ -180,7 +182,7 @@ class PostgresSaver(BasePostgresSaver):
         for the given thread ID is retrieved.
 
         Args:
-            config (RunnableConfig): The config to use for retrieving the checkpoint.
+            config: The config to use for retrieving the checkpoint.
 
         Returns:
             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
@@ -265,10 +267,10 @@ class PostgresSaver(BasePostgresSaver):
         with the provided config and its parent config (if any).
 
         Args:
-            config (RunnableConfig): The config to associate with the checkpoint.
-            checkpoint (Checkpoint): The checkpoint to save.
-            metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
-            new_versions (ChannelVersions): New channel versions as of this write.
+            config: The config to associate with the checkpoint.
+            checkpoint: The checkpoint to save.
+            metadata: Additional metadata to save with the checkpoint.
+            new_versions: New channel versions as of this write.
 
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.
@@ -335,9 +337,9 @@ class PostgresSaver(BasePostgresSaver):
         This method saves intermediate writes associated with a checkpoint to the Postgres database.
 
         Args:
-            config (RunnableConfig): Configuration of the related checkpoint.
-            writes (List[Tuple[str, Any]]): List of writes to store.
-            task_id (str): Identifier for the task creating the writes.
+            config: Configuration of the related checkpoint.
+            writes: List of writes to store.
+            task_id: Identifier for the task creating the writes.
         """
         query = (
             self.UPSERT_CHECKPOINT_WRITES_SQL
@@ -357,12 +359,35 @@ class PostgresSaver(BasePostgresSaver):
                 ),
             )
 
+    def delete_thread(self, thread_id: str) -> None:
+        """Delete all checkpoints and writes associated with a thread ID.
+
+        Args:
+            thread_id: The thread ID to delete.
+
+        Returns:
+            None
+        """
+        with self._cursor(pipeline=True) as cur:
+            cur.execute(
+                "DELETE FROM checkpoints WHERE thread_id = %s",
+                (str(thread_id),),
+            )
+            cur.execute(
+                "DELETE FROM checkpoint_blobs WHERE thread_id = %s",
+                (str(thread_id),),
+            )
+            cur.execute(
+                "DELETE FROM checkpoint_writes WHERE thread_id = %s",
+                (str(thread_id),),
+            )
+
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
         """Create a database cursor as a context manager.
 
         Args:
-            pipeline (bool): whether to use pipeline for the DB operations inside the context manager.
+            pipeline: whether to use pipeline for the DB operations inside the context manager.
                 Will be applied regardless of whether the PostgresSaver instance was initialized with a pipeline.
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """

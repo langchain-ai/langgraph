@@ -1,16 +1,13 @@
+from collections.abc import AsyncIterator, Iterator, Sequence
 from dataclasses import asdict
 from typing import (
     Any,
-    AsyncIterator,
-    Iterator,
     Literal,
     Optional,
-    Sequence,
     Union,
     cast,
 )
 
-import orjson
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.graph import (
     Edge as DrawableEdge,
@@ -35,8 +32,11 @@ from typing_extensions import Self
 from langgraph.checkpoint.base import CheckpointMetadata
 from langgraph.constants import (
     CONF,
+    CONFIG_KEY_CHECKPOINT_ID,
+    CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_STREAM,
+    CONFIG_KEY_TASK_ID,
     INTERRUPT,
     NS_SEP,
 )
@@ -45,6 +45,37 @@ from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.types import All, PregelTask, StateSnapshot, StreamMode
 from langgraph.types import Command, Interrupt, StreamProtocol
 from langgraph.utils.config import merge_configs
+
+CONF_DROPLIST = frozenset(
+    (
+        CONFIG_KEY_CHECKPOINT_MAP,
+        CONFIG_KEY_CHECKPOINT_ID,
+        CONFIG_KEY_CHECKPOINT_NS,
+        CONFIG_KEY_TASK_ID,
+    ),
+)
+
+
+def sanitize_config_value(v: Any) -> Any:
+    """Recursively sanitize a config value to ensure it contains only primitives."""
+    if isinstance(v, (str, int, float, bool)):
+        return v
+    elif isinstance(v, dict):
+        sanitized_dict = {}
+        for k, val in v.items():
+            if isinstance(k, str):
+                sanitized_value = sanitize_config_value(val)
+                if sanitized_value is not None:
+                    sanitized_dict[k] = sanitized_value
+        return sanitized_dict
+    elif isinstance(v, (list, tuple)):
+        sanitized_list = []
+        for item in v:
+            sanitized_item = sanitize_config_value(item)
+            if sanitized_item is not None:
+                sanitized_list.append(sanitized_item)
+        return sanitized_list
+    return None
 
 
 class RemoteException(Exception):
@@ -64,11 +95,12 @@ class RemoteGraph(PregelProtocol):
     a node in another `Graph`.
     """
 
-    name: str
+    assistant_id: str
+    name: Optional[str]
 
     def __init__(
         self,
-        name: str,  # graph_id
+        assistant_id: str,  # graph_id
         /,
         *,
         url: Optional[str] = None,
@@ -77,6 +109,7 @@ class RemoteGraph(PregelProtocol):
         client: Optional[LangGraphClient] = None,
         sync_client: Optional[SyncLangGraphClient] = None,
         config: Optional[RunnableConfig] = None,
+        name: Optional[str] = None,
     ):
         """Specify `url`, `api_key`, and/or `headers` to create default sync and async clients.
 
@@ -85,15 +118,22 @@ class RemoteGraph(PregelProtocol):
         one of `url`, `client`, or `sync_client` must be provided.
 
         Args:
-            name: The name of the graph.
+            assistant_id: The assistant ID or graph name of the remote graph to use.
             url: The URL of the remote API.
             api_key: The API key to use for authentication. If not provided, it will be read from the environment (`LANGGRAPH_API_KEY`, `LANGSMITH_API_KEY`, or `LANGCHAIN_API_KEY`).
             headers: Additional headers to include in the requests.
             client: A `LangGraphClient` instance to use instead of creating a default client.
             sync_client: A `SyncLangGraphClient` instance to use instead of creating a default client.
             config: An optional `RunnableConfig` instance with additional configuration.
+            name: Human-readable name to attach to the RemoteGraph instance.
+                This is useful for adding `RemoteGraph` as a subgraph via `graph.add_node(remote_graph)`.
+                If not provided, defaults to the assistant ID.
         """
-        self.name = name
+        self.assistant_id = assistant_id
+        if name is None:
+            self.name = assistant_id
+        else:
+            self.name = name
         self.config = config
 
         if client is None and url is not None:
@@ -120,7 +160,7 @@ class RemoteGraph(PregelProtocol):
 
     def copy(self, update: dict[str, Any]) -> Self:
         attrs = {**self.__dict__, **update}
-        return self.__class__(attrs.pop("name"), **attrs)
+        return self.__class__(attrs.pop("assistant_id"), **attrs)
 
     def with_config(
         self, config: Optional[RunnableConfig] = None, **kwargs: Any
@@ -174,7 +214,7 @@ class RemoteGraph(PregelProtocol):
         """
         sync_client = self._validate_sync_client()
         graph = sync_client.assistants.get_graph(
-            assistant_id=self.name,
+            assistant_id=self.assistant_id,
             xray=xray,
         )
         return DrawableGraph(
@@ -203,7 +243,7 @@ class RemoteGraph(PregelProtocol):
         """
         client = self._validate_client()
         graph = await client.assistants.get_graph(
-            assistant_id=self.name,
+            assistant_id=self.assistant_id,
             xray=xray,
         )
         return DrawableGraph(
@@ -212,7 +252,7 @@ class RemoteGraph(PregelProtocol):
         )
 
     def _create_state_snapshot(self, state: ThreadState) -> StateSnapshot:
-        tasks = []
+        tasks: list[PregelTask] = []
         for task in state["tasks"]:
             interrupts = []
             for interrupt in task["interrupts"]:
@@ -225,11 +265,15 @@ class RemoteGraph(PregelProtocol):
                     path=tuple(),
                     error=Exception(task["error"]) if task["error"] else None,
                     interrupts=tuple(interrupts),
-                    state=self._create_state_snapshot(task["state"])
-                    if task["state"]
-                    else cast(RunnableConfig, {"configurable": task["checkpoint"]})
-                    if task["checkpoint"]
-                    else None,
+                    state=(
+                        self._create_state_snapshot(task["state"])
+                        if task["state"]
+                        else (
+                            cast(RunnableConfig, {"configurable": task["checkpoint"]})
+                            if task["checkpoint"]
+                            else None
+                        )
+                    ),
                     result=task.get("result"),
                 )
             )
@@ -247,19 +291,22 @@ class RemoteGraph(PregelProtocol):
             },
             metadata=CheckpointMetadata(**state["metadata"]),
             created_at=state["created_at"],
-            parent_config={
-                "configurable": {
-                    "thread_id": state["parent_checkpoint"]["thread_id"],
-                    "checkpoint_ns": state["parent_checkpoint"]["checkpoint_ns"],
-                    "checkpoint_id": state["parent_checkpoint"]["checkpoint_id"],
-                    "checkpoint_map": state["parent_checkpoint"].get(
-                        "checkpoint_map", {}
-                    ),
+            parent_config=(
+                {
+                    "configurable": {
+                        "thread_id": state["parent_checkpoint"]["thread_id"],
+                        "checkpoint_ns": state["parent_checkpoint"]["checkpoint_ns"],
+                        "checkpoint_id": state["parent_checkpoint"]["checkpoint_id"],
+                        "checkpoint_map": state["parent_checkpoint"].get(
+                            "checkpoint_map", {}
+                        ),
+                    }
                 }
-            }
-            if state["parent_checkpoint"]
-            else None,
+                if state["parent_checkpoint"]
+                else None
+            ),
             tasks=tuple(tasks),
+            interrupts=tuple([i for task in tasks for i in task.interrupts]),
         )
 
     def _get_checkpoint(self, config: Optional[RunnableConfig]) -> Optional[Checkpoint]:
@@ -290,46 +337,31 @@ class RemoteGraph(PregelProtocol):
         }
 
     def _sanitize_config(self, config: RunnableConfig) -> RunnableConfig:
-        reserved_configurable_keys = frozenset(
-            [
-                "callbacks",
-                "checkpoint_map",
-                "checkpoint_id",
-                "checkpoint_ns",
-            ]
-        )
-
-        def _sanitize_obj(obj: Any) -> Any:
-            """Remove non-JSON serializable fields from the given object."""
-            if isinstance(obj, dict):
-                return {k: _sanitize_obj(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [_sanitize_obj(v) for v in obj]
-            else:
-                try:
-                    orjson.dumps(obj)
-                    return obj
-                except orjson.JSONEncodeError:
-                    return None
-
-        # Remove non-JSON serializable fields from the config.
-        config = _sanitize_obj(config)
-
-        # Only include configurable keys that are not reserved and
-        # not starting with "__pregel_" prefix.
-        new_configurable = {
-            k: v
-            for k, v in config["configurable"].items()
-            if k not in reserved_configurable_keys and not k.startswith("__pregel_")
-        }
-
-        sanitized: RunnableConfig = {
-            "tags": config.get("tags") or [],
-            "metadata": config.get("metadata") or {},
-            "configurable": new_configurable,
-        }
+        """Sanitize the config to remove non-serializable fields."""
+        sanitized: RunnableConfig = {}
         if "recursion_limit" in config:
             sanitized["recursion_limit"] = config["recursion_limit"]
+        if "tags" in config:
+            sanitized["tags"] = [tag for tag in config["tags"] if isinstance(tag, str)]
+
+        if "metadata" in config:
+            sanitized["metadata"] = {}
+            for k, v in config["metadata"].items():
+                if (
+                    isinstance(k, str)
+                    and (sanitized_value := sanitize_config_value(v)) is not None
+                ):
+                    sanitized["metadata"][k] = sanitized_value
+
+        if "configurable" in config:
+            sanitized["configurable"] = {}
+            for k, v in config["configurable"].items():
+                if (
+                    isinstance(k, str)
+                    and k not in CONF_DROPLIST
+                    and (sanitized_value := sanitize_config_value(v)) is not None
+                ):
+                    sanitized["configurable"][k] = sanitized_value
 
         return sanitized
 
@@ -627,7 +659,7 @@ class RemoteGraph(PregelProtocol):
 
         for chunk in sync_client.runs.stream(
             thread_id=sanitized_config["configurable"].get("thread_id"),
-            assistant_id=self.name,
+            assistant_id=self.assistant_id,
             input=input,
             command=command,
             config=sanitized_config,
@@ -654,14 +686,19 @@ class RemoteGraph(PregelProtocol):
             # raise interrupt or errors
             if chunk.event.startswith("updates"):
                 if isinstance(chunk.data, dict) and INTERRUPT in chunk.data:
-                    raise GraphInterrupt(
-                        [Interrupt(**i) for i in chunk.data[INTERRUPT]]
-                    )
+                    if caller_ns:
+                        raise GraphInterrupt(
+                            [Interrupt(**i) for i in chunk.data[INTERRUPT]]
+                        )
             elif chunk.event.startswith("error"):
                 raise RemoteException(chunk.data)
             # filter for what was actually requested
             if mode not in requested:
                 continue
+
+            if chunk.event.startswith("messages"):
+                chunk = chunk._replace(data=tuple(chunk.data))  # type: ignore
+
             # emit chunk
             if subgraphs:
                 if NS_SEP in chunk.event:
@@ -721,7 +758,7 @@ class RemoteGraph(PregelProtocol):
 
         async for chunk in client.runs.stream(
             thread_id=sanitized_config["configurable"].get("thread_id"),
-            assistant_id=self.name,
+            assistant_id=self.assistant_id,
             input=input,
             command=command,
             config=sanitized_config,
@@ -748,14 +785,19 @@ class RemoteGraph(PregelProtocol):
             # raise interrupt or errors
             if chunk.event.startswith("updates"):
                 if isinstance(chunk.data, dict) and INTERRUPT in chunk.data:
-                    raise GraphInterrupt(
-                        [Interrupt(**i) for i in chunk.data[INTERRUPT]]
-                    )
+                    if caller_ns:
+                        raise GraphInterrupt(
+                            [Interrupt(**i) for i in chunk.data[INTERRUPT]]
+                        )
             elif chunk.event.startswith("error"):
                 raise RemoteException(chunk.data)
             # filter for what was actually requested
             if mode not in requested:
                 continue
+
+            if chunk.event.startswith("messages"):
+                chunk = chunk._replace(data=tuple(chunk.data))  # type: ignore
+
             # emit chunk
             if subgraphs:
                 if NS_SEP in chunk.event:

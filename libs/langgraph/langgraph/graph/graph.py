@@ -1,25 +1,20 @@
-import asyncio
 import logging
 from collections import defaultdict
+from collections.abc import Awaitable, Hashable, Sequence
 from typing import (
     Any,
-    Awaitable,
     Callable,
-    Hashable,
     NamedTuple,
     Optional,
-    Sequence,
     Union,
     cast,
     overload,
 )
 
 from langchain_core.runnables import Runnable
-from langchain_core.runnables.config import RunnableConfig
-from langchain_core.runnables.graph import Graph as DrawableGraph
-from langchain_core.runnables.graph import Node as DrawableNode
 from typing_extensions import Self
 
+from langgraph.cache.base import BaseCache
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.constants import (
     EMPTY_SEQ,
@@ -32,9 +27,9 @@ from langgraph.constants import (
 )
 from langgraph.graph.branch import Branch
 from langgraph.pregel import Channel, Pregel
-from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
+from langgraph.store.base import BaseStore
 from langgraph.types import All, Checkpointer
 from langgraph.utils.runnable import RunnableLike, coerce_to_runnable
 
@@ -83,6 +78,15 @@ class Graph:
         *,
         metadata: Optional[dict[str, Any]] = None,
     ) -> Self:
+        """Add a new node to the graph.
+
+        Args:
+            node: The function or runnable this node will run.
+                If a string is provided, it will be used as the node name, and action will be used as the function or runnable.
+            action: The action associated with the node. (default: None)
+                Will be used as the node function or runnable if `node` is a string (node name).
+            metadata: The metadata associated with the node. (default: None)
+        """
         if isinstance(node, str):
             for character in (NS_SEP, NS_END):
                 if character in node:
@@ -117,6 +121,12 @@ class Graph:
         return self
 
     def add_edge(self, start_key: str, end_key: str) -> Self:
+        """Add a directed edge from the start node to the end node.
+
+        Args:
+            start_key: The key of the start node of the edge.
+            end_key: The key of the end node of the edge.
+        """
         if self.compiled:
             logger.warning(
                 "Adding an edge to a graph that has already been compiled. This will "
@@ -153,14 +163,14 @@ class Graph:
         """Add a conditional edge from the starting node to any number of destination nodes.
 
         Args:
-            source (str): The starting node. This conditional edge will run when
+            source: The starting node. This conditional edge will run when
                 exiting this node.
-            path (Union[Callable, Runnable]): The callable that determines the next
+            path: The callable that determines the next
                 node or nodes. If not specifying `path_map` it should return one or
                 more nodes. If it returns END, the graph will stop execution.
-            path_map (Optional[dict[Hashable, str]]): Optional mapping of paths to node
+            path_map: Optional mapping of paths to node
                 names. If omitted the paths returned by `path` should be node names.
-            then (Optional[str]): The name of a node to execute after the nodes
+            then: The name of a node to execute after the nodes
                 selected by `path`.
 
         Returns:
@@ -182,7 +192,7 @@ class Graph:
         # validate the condition
         if name in self.branches[source]:
             raise ValueError(
-                f"Branch with name `{path.name}` already exists for node " f"`{source}`"
+                f"Branch with name `{path.name}` already exists for node `{source}`"
             )
         # save it
         self.branches[source][name] = Branch.from_path(path, path_map, then, False)
@@ -214,12 +224,12 @@ class Graph:
         """Sets a conditional entry point in the graph.
 
         Args:
-            path (Union[Callable, Runnable]): The callable that determines the next
+            path: The callable that determines the next
                 node or nodes. If not specifying `path_map` it should return one or
                 more nodes. If it returns END, the graph will stop execution.
-            path_map (Optional[dict[str, str]]): Optional mapping of paths to node
+            path_map: Optional mapping of paths to node
                 names. If omitted the paths returned by `path` should be node names.
-            then (Optional[str]): The name of a node to execute after the nodes
+            then: The name of a node to execute after the nodes
                 selected by `path`.
 
         Returns:
@@ -308,7 +318,29 @@ class Graph:
         interrupt_after: Optional[Union[All, list[str]]] = None,
         debug: bool = False,
         name: Optional[str] = None,
+        *,
+        cache: Optional[BaseCache] = None,
+        store: Optional[BaseStore] = None,
     ) -> "CompiledGraph":
+        """Compiles the graph into a `CompiledGraph` object.
+
+        The compiled graph implements the `Runnable` interface and can be invoked,
+        streamed, batched, and run asynchronously.
+
+        Args:
+            checkpointer: A checkpoint saver object or flag.
+                If provided, this Checkpointer serves as a fully versioned "short-term memory" for the graph,
+                allowing it to be paused, resumed, and replayed from any point.
+                If None, it may inherit the parent graph's checkpointer when used as a subgraph.
+                If False, it will not use or inherit any checkpointer.
+            interrupt_before: An optional list of node names to interrupt before.
+            interrupt_after: An optional list of node names to interrupt after.
+            debug: A flag indicating whether to enable debug mode.
+            name: The name to use for the compiled graph.
+
+        Returns:
+            CompiledGraph: The compiled graph.
+        """
         # assign default values
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
@@ -337,6 +369,8 @@ class Graph:
             auto_validate=False,
             debug=debug,
             name=name or "LangGraph",
+            cache=cache,
+            store=store,
         )
 
         # attach nodes, edges, and branches
@@ -366,26 +400,24 @@ class CompiledGraph(Pregel):
         self.nodes[key] = (
             PregelNode(channels=[], triggers=[], metadata=node.metadata)
             | node.runnable
-            | ChannelWrite([ChannelWriteEntry(key)], tags=[TAG_HIDDEN])
+            | ChannelWrite([ChannelWriteEntry(key)])
         )
         cast(list[str], self.stream_channels).append(key)
 
     def attach_edge(self, start: str, end: str) -> None:
         if end == END:
             # publish to end channel
-            self.nodes[start].writers.append(
-                ChannelWrite([ChannelWriteEntry(END)], tags=[TAG_HIDDEN])
-            )
+            self.nodes[start].writers.append(ChannelWrite([ChannelWriteEntry(END)]))
         else:
             # subscribe to start channel
             self.nodes[end].triggers.append(start)
             cast(list[str], self.nodes[end].channels).append(start)
 
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
-        def branch_writer(
-            packets: Sequence[Union[str, Send]], config: RunnableConfig
-        ) -> Optional[ChannelWrite]:
-            writes = [
+        def get_writes(
+            packets: Sequence[Union[str, Send]], static: bool = False
+        ) -> Sequence[Union[ChannelWriteEntry, Send]]:
+            return [
                 (
                     ChannelWriteEntry(f"branch:{start}:{name}:{p}" if p != END else END)
                     if not isinstance(p, Send)
@@ -393,17 +425,13 @@ class CompiledGraph(Pregel):
                 )
                 for p in packets
             ]
-            return ChannelWrite(
-                cast(Sequence[Union[ChannelWriteEntry, Send]], writes),
-                tags=[TAG_HIDDEN],
-            )
 
         # add hidden start node
         if start == START and start not in self.nodes:
             self.nodes[start] = Channel.subscribe_to(START, tags=[TAG_HIDDEN])
 
         # attach branch writer
-        self.nodes[start] |= branch.run(branch_writer)
+        self.nodes[start] |= branch.run(get_writes)
 
         # attach branch readers
         ends = branch.ends.values() if branch.ends else [node for node in self.nodes]
@@ -413,171 +441,3 @@ class CompiledGraph(Pregel):
                 self.channels[channel_name] = EphemeralValue(Any)
                 self.nodes[end].triggers.append(channel_name)
                 cast(list[str], self.nodes[end].channels).append(channel_name)
-
-    async def aget_graph(
-        self,
-        config: Optional[RunnableConfig] = None,
-        *,
-        xray: Union[int, bool] = False,
-    ) -> DrawableGraph:
-        """Returns a drawable representation of the computation graph."""
-        from langgraph.pregel.remote import RemoteGraph
-
-        # gather subgraphs
-        if xray:
-            subpregels: dict[str, PregelProtocol] = {
-                k: v
-                async for k, v in self.aget_subgraphs()
-                if isinstance(v, (CompiledGraph, RemoteGraph))
-            }
-            subgraphs = {
-                k: v
-                for k, v in zip(
-                    subpregels,
-                    await asyncio.gather(
-                        *(
-                            p.aget_graph(
-                                config,
-                                xray=xray
-                                if isinstance(xray, bool) or xray <= 0
-                                else xray - 1,
-                            )
-                            for p in subpregels.values()
-                        )
-                    ),
-                )
-            }
-        else:
-            subgraphs = {}
-
-        # draw the graph
-        return self._draw_graph(config, subgraphs=subgraphs)
-
-    def get_graph(
-        self,
-        config: Optional[RunnableConfig] = None,
-        *,
-        xray: Union[int, bool] = False,
-    ) -> DrawableGraph:
-        """Returns a drawable representation of the computation graph."""
-        from langgraph.pregel.remote import RemoteGraph
-
-        # gather subgraphs
-        if xray:
-            subgraphs = {
-                k: v.get_graph(
-                    config,
-                    xray=xray if isinstance(xray, bool) or xray <= 0 else xray - 1,
-                )
-                for k, v in self.get_subgraphs()
-                if isinstance(v, (CompiledGraph, RemoteGraph))
-            }
-        else:
-            subgraphs = {}
-
-        # draw the graph
-        return self._draw_graph(config, subgraphs=subgraphs)
-
-    def _draw_graph(
-        self,
-        config: Optional[RunnableConfig] = None,
-        *,
-        subgraphs: dict[str, DrawableGraph] = {},
-    ) -> DrawableGraph:
-        # create the graph
-        graph = DrawableGraph()
-        start_nodes: dict[str, DrawableNode] = {
-            START: graph.add_node(self.get_input_schema(config), START)
-        }
-        end_nodes: dict[str, DrawableNode] = {}
-
-        def add_edge(
-            start: str,
-            end: str,
-            label: Optional[Hashable] = None,
-            conditional: bool = False,
-        ) -> None:
-            if end == END and END not in end_nodes:
-                end_nodes[END] = graph.add_node(self.get_output_schema(config), END)
-            if start not in start_nodes or end not in end_nodes:
-                logger.warning(
-                    f"Could not add edge from '{start}' to '{end}' due to missing nodes"
-                )
-                return
-            return graph.add_edge(
-                start_nodes[start],
-                end_nodes[end],
-                str(label) if label is not None else None,
-                conditional,
-            )
-
-        for key, n in self.builder.nodes.items():
-            node = n.runnable
-            metadata = n.metadata or {}
-            if key in self.interrupt_before_nodes and key in self.interrupt_after_nodes:
-                metadata["__interrupt"] = "before,after"
-            elif key in self.interrupt_before_nodes:
-                metadata["__interrupt"] = "before"
-            elif key in self.interrupt_after_nodes:
-                metadata["__interrupt"] = "after"
-            if key in subgraphs:
-                subgraph = subgraphs[key]
-                subgraph.trim_first_node()
-                subgraph.trim_last_node()
-                if len(subgraph.nodes) >= 1:
-                    e, s = graph.extend(subgraph, prefix=key)
-                    if e is None:
-                        logger.warning(
-                            f"Could not extend subgraph '{key}' due to missing entrypoint"
-                        )
-                        continue
-                    if s is not None:
-                        start_nodes[key] = s
-                    end_nodes[key] = e
-                else:
-                    nn = graph.add_node(node, key, metadata=metadata or None)
-                    start_nodes[key] = nn
-                    end_nodes[key] = nn
-            else:
-                nn = graph.add_node(node, key, metadata=metadata or None)
-                start_nodes[key] = nn
-                end_nodes[key] = nn
-        for start, end in sorted(self.builder._all_edges):
-            add_edge(start, end)
-        for start, branches in self.builder.branches.items():
-            default_ends = {
-                **{k: k for k in self.builder.nodes if k != start},
-                END: END,
-            }
-            for _, branch in branches.items():
-                if branch.ends is not None:
-                    ends = branch.ends
-                elif branch.then is not None:
-                    ends = {k: k for k in default_ends if k not in (END, branch.then)}
-                else:
-                    ends = cast(dict[Hashable, str], default_ends)
-                for label, end in ends.items():
-                    add_edge(
-                        start,
-                        end,
-                        label if label != end else None,
-                        conditional=True,
-                    )
-                    if branch.then is not None:
-                        add_edge(end, branch.then)
-        for key, n in self.builder.nodes.items():
-            if isinstance(n.ends, dict):
-                for end, label in n.ends.items():
-                    add_edge(key, end, label, conditional=True)
-            elif isinstance(n.ends, tuple):
-                for end in n.ends:
-                    add_edge(key, end, conditional=True)
-
-        return graph
-
-    def _repr_mimebundle_(self, **kwargs: Any) -> dict[str, Any]:
-        """Mime bundle used by Jupyter to display the graph"""
-        return {
-            "text/plain": repr(self),
-            "image/png": self.get_graph().draw_mermaid_png(),
-        }
