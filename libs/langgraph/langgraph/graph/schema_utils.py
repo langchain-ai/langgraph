@@ -7,15 +7,19 @@ from typing import (
     Annotated,
     Any,
     Callable,
+    Hashable,
     Optional,
+    TypeVar,
     Union,
     get_args,
     get_origin,
-    get_type_hints,
+    get_type_hints, is_typeddict,
 )
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter
-from typing_extensions import is_typeddict
+from pydantic import BaseModel, Discriminator, ConfigDict, TypeAdapter
+from pydantic.fields import FieldInfo
+from pydantic.v1 import BaseModel as BaseModelV1
+from typing_extensions import Annotated, Literal
 
 __all__ = ["SchemaCoercionMapper"]
 
@@ -108,15 +112,38 @@ class SchemaCoercionMapper:
         if depth == 0:
             return self._passthrough
 
+        field_type, metadata = self._unwrap_annotated(field_type)
         origin = get_origin(field_type)
 
         if (field_type in _IDENTITY_TYPES) or (origin in _IDENTITY_TYPES):
             return self._passthrough
 
-        if origin is Annotated:
-            real_type, *_ = get_args(field_type)
-            sub = self._build_coercer(real_type, depth - 1)
-            return lambda v, d: sub(v, d)
+        if isinstance(field_type, TypeVar):
+            concrete = self.type_hints.get(field_type)  # type: ignore
+            if concrete is not None:
+                return self._build_coercer(concrete, depth - 1)
+            return self._passthrough
+
+        if hasattr(field_type, "__parameters__") and hasattr(
+            field_type, "model_fields"
+        ):
+            try:
+                type_hints = self.resolve_concrete_type_hints(field_type)
+
+                def generic_model_coercer(v: Any, d: int) -> Any:
+                    if not isinstance(v, dict):
+                        if throw:
+                            raise TypeError(
+                                f"Expected dict for {field_type}, got {type(v)}"
+                            )
+                        return v
+                    mapper = SchemaCoercionMapper(field_type, type_hints, max_depth=d)
+                    return mapper.coerce(v, d)
+
+                return generic_model_coercer
+            except Exception as e:
+                logger.debug(f"Generic type resolution failed: {e}")
+                return self._passthrough
 
         if isclass(field_type):
             # This is needed bcs. of issubclass issues on older versions of python
@@ -197,27 +224,75 @@ class SchemaCoercionMapper:
             )
 
         if origin is Union:
-            uargs = get_args(field_type)
-            subs, none_in_union = [], False
-            for ix, arg in enumerate(uargs):
+            args = get_args(field_type)
+            discriminator_key = self._extract_discriminator_key(metadata)
+            none_in_union = False
+            discriminator_map = {}
+
+            for arg in args:
                 if arg is type(None):
                     none_in_union = True
-                else:
-                    subs.append(
-                        self._build_coercer(arg, depth - 1, throw=ix < len(uargs) - 1)
-                    )
+                    continue
+                base_type = arg
+                if get_origin(arg) is Annotated:
+                    base_type, _ = get_args(arg)[0], get_args(arg)[1:]
+                try:
+                    hint = get_type_hints(base_type)
+                    lit = hint.get(discriminator_key)
+                    if get_origin(lit) is Literal:
+                        for val in get_args(lit):
+                            discriminator_map[val] = base_type
+                except Exception as e:
+                    if throw:
+                        raise e
+                    else:
+                        logger.debug(f"Failed to extract discriminator: {e}")
 
             def union_coercer(v: Any, d: Any) -> Any:
                 if v is None and none_in_union:
                     return None
-                err = None
-                for sp in subs:
+
+                tag = None
+                if callable(discriminator_key):
                     try:
-                        return sp(v, d - 1)
-                    except TypeError as e:
-                        err = e
-                if err:
-                    raise err
+                        tag = discriminator_key(v)
+                    except Exception as e:
+                        logger.debug(f"Failed to call discriminator func: {e}")
+                elif (
+                    isinstance(v, dict)
+                    and isinstance(discriminator_key, str)
+                    and discriminator_key in v
+                ):
+                    tag = v[discriminator_key]
+
+                if tag is not None:
+                    for arg in args:
+                        base_type = arg
+                        if get_origin(arg) is Annotated:
+                            base_type, _ = get_args(arg)[0], get_args(arg)[1:]
+
+                        try:
+                            if issubclass(base_type, (BaseModel, BaseModelV1)):
+                                return SchemaCoercionMapper(
+                                    base_type, max_depth=d
+                                ).coerce(v, d)
+                        except Exception as e:
+                            logger.debug(
+                                f"Coercion with {base_type} failed for tag={tag}: {e}"
+                            )
+                            continue
+
+                # fallback: try coercing each branch
+                for arg in args:
+                    try:
+                        sub = self._build_coercer(arg, d - 1)
+                        return sub(v, d - 1)
+                    except Exception as e:
+                        if throw:
+                            raise e
+                        else:
+                            logger.debug(f"Fallback coercion failed for arg={arg}: {e}")
+
                 return v
 
             return union_coercer
@@ -228,6 +303,55 @@ class SchemaCoercionMapper:
     @staticmethod
     def _passthrough(v: Any, _d: Any) -> Any:  # noqa: D401
         return v
+
+    @staticmethod
+    def _unwrap_annotated(tp: Any) -> tuple[Any, list[Any]]:
+        """Unwrap nested Annotated types, extracting the base type and all metadata"""
+        metadata = []
+        while get_origin(tp) is Annotated:
+            tp, *meta = get_args(tp)
+            metadata.extend(meta)
+        return tp, metadata
+
+    @staticmethod
+    def _extract_discriminator_key(meta: list[Any]) -> str | Callable[[Any], Hashable]:
+        """Extract discriminator field name or function from Annotated metadata"""
+        for m in meta:
+            if isinstance(m, FieldInfo):
+                disc = getattr(m, "discriminator", None)
+                if isinstance(disc, Discriminator):
+                    return disc.discriminator
+                elif isinstance(disc, str):
+                    return disc
+        return "type"
+
+    @staticmethod
+    def resolve_concrete_type_hints(generic_model_type: Any) -> dict[Any, Any]:
+        """Resolve concrete type hints in a generic model"""
+        origin = get_origin(generic_model_type)
+        args = get_args(generic_model_type)
+        param_names = getattr(origin, "__parameters__", [])
+
+        if not args or not param_names:
+            return {}
+
+        type_map = dict(zip(param_names, args))
+        result = {}
+
+        for field_name, model_field in origin.model_fields.items():
+            anno = model_field.annotation
+            if get_origin(anno) is Annotated:
+                base, *meta = get_args(anno)
+                if isinstance(base, TypeVar) and base in type_map:
+                    result[field_name] = Annotated[type_map[base], *meta]
+                else:
+                    result[field_name] = anno
+            elif isinstance(anno, TypeVar) and anno in type_map:
+                result[field_name] = type_map[anno]
+            else:
+                result[field_name] = anno
+
+        return result
 
 
 _adapter_cache: dict[Any, Callable[[Any], Any]] = {}
