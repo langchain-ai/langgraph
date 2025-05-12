@@ -99,7 +99,7 @@ Parallel processing is vital for efficient multi-agent systems and complex tasks
 - Implementation of map-reduce-like operations
 - Efficient handling of independent subtasks
 
-For practical implementation, see our [map-reduce tutorial](../how-tos/map-reduce.ipynb).
+For practical implementation, see our [map-reduce tutorial](../how-tos/graph-api.ipynb#map-reduce-and-the-send-api)
 
 ### Subgraphs
 
