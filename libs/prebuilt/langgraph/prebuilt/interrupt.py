@@ -235,7 +235,7 @@ class ToolInterruptNode(RunnableCallable):
             f"Expected one with `'type'` in {allowed_types}."
         )
 
-    def _func(self, input: dict[str, Any]) -> Command | None:
+    def _func(self, input: dict[str, Any]) -> Command:
         ai_msg = input["messages"][-1]
         tool_calls: list[ToolCall] = deepcopy(ai_msg.tool_calls) or []
         tool_messages: list[ToolMessage] = []
@@ -263,5 +263,5 @@ class ToolInterruptNode(RunnableCallable):
         # post_model_hook will direct to the tools node
         return Command(update={"messages": [ai_msg, *tool_messages]})
 
-    async def _afunc(self, input: dict[str, Any]) -> None:
-        """TODO: implement async version"""
+    async def _afunc(self, input: dict[str, Any]) -> Command:
+        return self._func(input)
