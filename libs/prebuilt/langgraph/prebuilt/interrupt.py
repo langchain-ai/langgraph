@@ -97,7 +97,7 @@ class HumanResponse(TypedDict):
     args: Union[None, str, ActionRequest]
 
 
-class ToolInterruptNode(RunnableCallable):
+class InterruptToolNode(RunnableCallable):
     """Prebuilt post model hook node used to enable common patterns for tool interrupts.
 
     For any tools with specified policies, an interrupt will be raised when the LLM returns
@@ -112,7 +112,7 @@ class ToolInterruptNode(RunnableCallable):
     Args:
         interrupt_policy: a mapping of tool names to [`HumanInterruptConfig`][prebuilt.interrupt.HumanInterruptConfig] dictionaries
             specifying which interrupt patterns to enable for said tool.
-        name: The name of the ToolInterruptNode in the graph. Defaults to "post_model_hook".
+        name: The name of the InterruptToolNode in the graph. Defaults to "post_model_hook".
         tags: Optional tags to associate with the node. Defaults to None.
 
         Example:
@@ -120,7 +120,7 @@ class ToolInterruptNode(RunnableCallable):
         from langchain_openai import ChatOpenAI
         from langgraph.prebuilt import create_react_agent
         from langgraph.checkpoint.memory import InMemorySaver
-        from langgraph.prebuilt.interrupt import HumanInterruptConfig, ToolInterruptNode
+        from langgraph.prebuilt.interrupt import HumanInterruptConfig, InterruptToolNode
         from langgraph.types import Command
 
 
@@ -134,7 +134,7 @@ class ToolInterruptNode(RunnableCallable):
             ChatOpenAI(model="gpt-4o",),
             tools=[book_hotel],
             prompt="You are a hotel booking assistant.",
-            post_model_hook=ToolInterruptNode(
+            post_model_hook=InterruptToolNode(
                 interrupt_policy={
                     "book_hotel": HumanInterruptConfig(
                         allow_accept=True,
