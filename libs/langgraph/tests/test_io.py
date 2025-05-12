@@ -1,4 +1,4 @@
-from typing import Iterator
+from collections.abc import Iterator
 
 from langgraph.pregel.io import single
 

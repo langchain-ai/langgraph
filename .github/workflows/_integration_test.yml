@@ -4,7 +4,7 @@ on:
   workflow_call:
 
 env:
-  POETRY_VERSION: "1.7.1"
+  POETRY_VERSION: "2.1.2"
 
 jobs:
   build:
@@ -39,22 +39,35 @@ jobs:
       - name: Install cli globally
         if: steps.changed-files.outputs.all
         run: pip install -e .
-      - name: Start service A
+      - name: Build and test service A
         if: steps.changed-files.outputs.all
+        working-directory: libs/cli/examples
         run: |
-          timeout 60 langgraph test -c examples/langgraph.json --verbose || (exit "$(($? == 124 ? 0 : $?))")
-      - name: Start service B
+          # The build-arg isn't used; just testing that we accept other args
+          langgraph build -t langgraph-test-a  --base-image "langchain/langgraph-trial"
+          cp .env.example .envg
+          timeout 60 python ../../../.github/scripts/run_langgraph_cli_test.py -c langgraph.json -t langgraph-test-a
+      - name: Build and test service B
         if: steps.changed-files.outputs.all
         working-directory: libs/cli/examples/graphs
         run: |
-          timeout 60 langgraph test --verbose || (exit "$(($? == 124 ? 0 : $?))")
-      - name: Start service C
+          langgraph build -t langgraph-test-b  --base-image "langchain/langgraph-trial"
+          timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-b
+      - name: Build and test service C
         if: steps.changed-files.outputs.all
         working-directory: libs/cli/examples/graphs_reqs_a
         run: |
-          timeout 60 langgraph test --verbose || (exit "$(($? == 124 ? 0 : $?))")
-      - name: Start service D
+          langgraph build -t langgraph-test-c  --base-image "langchain/langgraph-trial"
+          timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-c
+      - name: Build and test service D
         if: steps.changed-files.outputs.all
         working-directory: libs/cli/examples/graphs_reqs_b
         run: |
-          timeout 60 langgraph test --verbose || (exit "$(($? == 124 ? 0 : $?))")
+          langgraph build -t langgraph-test-d  --base-image "langchain/langgraph-trial"
+          timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-d
+
+      - name: Build JS service
+        if: steps.changed-files.outputs.all
+        working-directory: libs/cli/js-examples
+        run: |
+          langgraph build -t langgraph-test-e

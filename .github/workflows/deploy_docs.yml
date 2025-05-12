@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 env:
-  POETRY_VERSION: "1.7.1"
+  POETRY_VERSION: "2.1.2"
 
 permissions:
   contents: read
@@ -20,6 +20,10 @@ permissions:
 concurrency:
   group: "pages"
   cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: docs
 
 jobs:
   get-changed-files:
@@ -34,16 +38,20 @@ jobs:
         with:
           filter: "docs/docs/**"
 
-  run-changed-notebooks:
-    needs: get-changed-files
-    uses: ./.github/workflows/run_notebooks.yml
-    secrets: inherit
-    with:
-      changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
+  # TODO: Uncomment this to run on PRs
+  # run-changed-notebooks:
+  #   needs: get-changed-files
+  #   uses: ./.github/workflows/run_notebooks.yml
+  #   secrets: inherit
+  #   with:
+  #     changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
 
   deploy:
     # needs: run-changed-notebooks
     runs-on: ubuntu-latest
+    timeout-minutes: 10 # Job will be cancelled if it runs for more than 10 minutes
+    env:
+      GITHUB_TOKEN: ${{ secrets.MKDOCS_GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,43 +66,79 @@ jobs:
 
       - name: Install dependencies
         run: |
-          poetry install --with docs
-          poetry run pip install -U pytest pytest-check-links langsmith langchain GitPython
+          yarn
+          poetry install --with test --with docs --no-root
+          # we run this installation only for internal PRs
+          # as GITHUB_TOKEN is not available for PRs from outside contributors
+          if [ -n "${GITHUB_TOKEN}" ]; then
+            poetry run pip install "git+https://${GITHUB_TOKEN}@github.com/langchain-ai/mkdocs-material-insiders.git"
+          fi
 
+      - name: Run unit tests
+        # Run unit tests on the docs build pipeline
+        run: make tests
       - name: Lint Docs
         # This step lints the docs using the existing linting set up.
         # It should be very fast and should not require any external services.
         run: make lint-docs
+      - name: Build llms-text
+        run: make llms-text
       - name: Build site
-        run: make build-docs
+        run: |
+          # If this is main branch, then we want to download stats. we do this 
+          # with the env variable DOWNLOAD_STATS=true
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            DOWNLOAD_STATS=true make build-docs
+          else
+            make build-docs
+          fi
         env:
           MKDOCS_GIT_COMMITTERS_APIKEY: ${{ secrets.MKDOCS_GIT_COMMITTERS_APIKEY }}
-
+          OPENAI_API_KEY: sf-proj-1234567890 # fake placeholder, shouldn't actually be used
+          ANTHROPIC_API_KEY: sk-ant-api03-1234567890 # fake placeholder, shouldn't actually be used
       - name: Check links in notebooks
         env:
           LANGCHAIN_API_KEY: test
+        if: github.event_name == 'schedule'
         run: |
-          if [ "${{ github.event_name }}" == "schedule" ] || [ "${{ github.event_name }}" == "workflow_dispatch" ] || ([ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]); then
+          if [ "${{ github.event_name }}" == "schedule" ]; then
             echo "Running link check on all HTML files matching notebooks in docs directory..."
             poetry run pytest -v \
               --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
+              --check-links-ignore "https://academy\.langchain\.com/.*" \
               --check-links-ignore "https://x.com/.*" \
+              --check-links-ignore "https://twitter.com/.*" \
               --check-links-ignore "https://github\.com/.*" \
+              --check-links-ignore "http://localhost:8123/.*" \
+              --check-links-ignore "http://localhost:2024.*" \
+              --check-links-ignore "http://127.0.0.1:.*" \
               --check-links-ignore "/.*\.(ipynb|html)$" \
-              --check-links $(find docs/site -name "index.html" | grep -v 'storm/index.html')
+              --check-links-ignore "https://python\.langchain\.com/.*" \
+              --check-links-ignore "https://openai\.com/.*" \
+              --check-links-ignore "https://www\.uber\.com/.*" \
+              --check-links-ignore "https://pepy\.tech/.*" \
+              --check-links-ignore "docs/docs/static/wordmark_*" \
+              --check-links $(find site -name "index.html" | grep -v 'storm/index.html')
+              
           else
             echo "Fetching changes from origin/main..."
             git fetch origin main
             echo "Checking for changed notebook files..."
-            CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/main | grep 'docs/docs/.*\.ipynb$' | grep -v 'storm.ipynb' | sed -E 's|^docs/docs/|docs/site/|; s/\.ipynb$/\/index.html/' || true)
+            CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/main | grep 'docs/docs/.*\.ipynb$' | grep -v 'storm.ipynb' | sed -E 's|^docs/docs/|site/|; s/\.ipynb$/\/index.html/' || true)
             echo "Changed files: ${CHANGED_FILES}"
             if [ -n "${CHANGED_FILES}" ]; then
               echo "Running link check on HTML files matching changed notebook files..."
               poetry run pytest -v \
                 --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
+                --check-links-ignore "https://academy\.langchain\.com/.*" \
+                --check-links-ignore "http://localhost:8123/.*" \
+                --check-links-ignore "http://localhost:2024.*" \
+                --check-links-ignore "http://127.0.0.1:.*" \
                 --check-links-ignore "https://x.com/.*" \
+                --check-links-ignore "https://twitter.com/.*" \
                 --check-links-ignore "https://github\.com/.*" \
                 --check-links-ignore "/.*\.(ipynb|html)$" \
+                --check-links-ignore "docs/docs/static/wordmark_*" \
                 --check-links ${CHANGED_FILES} \
                 || ([ $? = 5 ] && exit 0 || exit $?)
             else
@@ -107,7 +151,7 @@ jobs:
         uses: actions/configure-pages@v4
 
       - name: Upload Pages Artifact
-        if: github.ref == 'refs/heads/main'
+        # if: github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./docs/site/

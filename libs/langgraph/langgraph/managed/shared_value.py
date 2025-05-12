@@ -1,19 +1,14 @@
 import collections.abc
+from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager, contextmanager
 from typing import (
     Any,
-    AsyncIterator,
-    Iterator,
     Optional,
-    Sequence,
-    Type,
-    cast,
 )
 
-from langchain_core.runnables import RunnableConfig
 from typing_extensions import NotRequired, Required, Self
 
-from langgraph.constants import CONF, CONFIG_KEY_STORE
+from langgraph.constants import CONF
 from langgraph.errors import InvalidUpdateError
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
@@ -21,7 +16,8 @@ from langgraph.managed.base import (
     ConfiguredManagedValue,
     WritableManagedValue,
 )
-from langgraph.store.base import BaseStore, PutOp
+from langgraph.store.base import PutOp
+from langgraph.types import LoopProtocol
 
 V = dict[str, Any]
 
@@ -55,25 +51,26 @@ class SharedValue(WritableManagedValue[Value, Update]):
 
     @classmethod
     @contextmanager
-    def enter(cls, config: RunnableConfig, **kwargs: Any) -> Iterator[Self]:
-        with super().enter(config, **kwargs) as value:
-            if value.store is not None:
-                saved = value.store.search(value.ns)
+    def enter(cls, loop: LoopProtocol, **kwargs: Any) -> Iterator[Self]:
+        with super().enter(loop, **kwargs) as value:
+            if loop.store is not None:
+                saved = loop.store.search(value.ns)
                 value.value = {it.key: it.value for it in saved}
             yield value
 
     @classmethod
     @asynccontextmanager
-    async def aenter(cls, config: RunnableConfig, **kwargs: Any) -> AsyncIterator[Self]:
-        async with super().aenter(config, **kwargs) as value:
-            if value.store is not None:
-                saved = await value.store.asearch(value.ns)
+    async def aenter(cls, loop: LoopProtocol, **kwargs: Any) -> AsyncIterator[Self]:
+        async with super().aenter(loop, **kwargs) as value:
+            if loop.store is not None:
+                saved = await loop.store.asearch(value.ns)
                 value.value = {it.key: it.value for it in saved}
             yield value
 
     def __init__(
-        self, config: RunnableConfig, *, typ: Type[Any], scope: str, key: str
+        self, loop: LoopProtocol, *, typ: type[Any], scope: str, key: str
     ) -> None:
+        super().__init__(loop)
         if typ := _strip_extras(typ):
             if typ not in (
                 dict,
@@ -83,18 +80,17 @@ class SharedValue(WritableManagedValue[Value, Update]):
                 raise ValueError("SharedValue must be a dict")
         self.scope = scope
         self.value: Value = {}
-        self.store = cast(BaseStore, config[CONF].get(CONFIG_KEY_STORE))
-        if self.store is None:
+        if self.loop.store is None:
             pass
-        elif scope_value := config[CONF].get(self.scope):
+        elif scope_value := self.loop.config[CONF].get(self.scope):
             self.ns = ("scoped", scope, key, scope_value)
         else:
             raise ValueError(
                 f"Scope {scope} for shared state key not in config.configurable"
             )
 
-    def __call__(self, step: int) -> Value:
-        return self.value.copy()
+    def __call__(self) -> Value:
+        return self.value
 
     def _process_update(self, values: Sequence[Update]) -> list[PutOp]:
         writes: list[PutOp] = []
@@ -112,13 +108,13 @@ class SharedValue(WritableManagedValue[Value, Update]):
         return writes
 
     def update(self, values: Sequence[Update]) -> None:
-        if self.store is None:
+        if self.loop.store is None:
             self._process_update(values)
         else:
-            return self.store.batch(self._process_update(values))
+            return self.loop.store.batch(self._process_update(values))
 
     async def aupdate(self, writes: Sequence[Update]) -> None:
-        if self.store is None:
+        if self.loop.store is None:
             self._process_update(writes)
         else:
-            return await self.store.abatch(self._process_update(writes))
+            return await self.loop.store.abatch(self._process_update(writes))

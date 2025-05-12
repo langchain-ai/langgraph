@@ -9,7 +9,11 @@
     
     permissions:
       contents: read
-    
+
+    defaults:
+      run:
+        working-directory: docs
+
     jobs:
       codespell:
         name: (Check for spelling errors)
@@ -21,18 +25,18 @@
     
           - name: Install Dependencies
             run: |
-              pip install toml codespell jupytext
+              pip install toml codespell==2.3.0 jupytext
     
           - name: Extract Ignore Words List
             run: |
               # Use a Python script to extract the ignore words list from pyproject.toml
-              python .github/workflows/extract_ignored_words_list.py
+              python ../.github/workflows/extract_ignored_words_list.py
             id: extract_ignore_words
     
           - name: Codespell
             uses: codespell-project/actions-codespell@v2
             with:
-              skip: '*.ambr,*.lock,*.ipynb,*.yaml,*.zlib'
+              skip: '*.ambr,*.lock,*.ipynb,*.yaml,*.zlib,*.md'
               ignore_words_list: ${{ steps.extract_ignore_words.outputs.ignore_words_list }}
           # We do this to avoid spellchecking cell outputs
           - name: Codespell Notebooks

@@ -1,16 +1,13 @@
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from datetime import datetime, timezone
-from typing import (
+from typing import (  # noqa: UP035
     Any,
-    AsyncIterator,
     Dict,
     Generic,
-    Iterator,
     List,
     Literal,
-    Mapping,
     NamedTuple,
     Optional,
-    Sequence,
     Tuple,
     TypedDict,
     TypeVar,
@@ -24,6 +21,8 @@ from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import (
     ERROR,
+    INTERRUPT,
+    RESUME,
     SCHEDULED,
     ChannelProtocol,
     SendProtocol,
@@ -31,18 +30,21 @@ from langgraph.checkpoint.serde.types import (
 
 V = TypeVar("V", int, float, str)
 PendingWrite = Tuple[str, str, Any]
+# Kept for backwards compat, newer versions of LangGraph no longer use this.
+LATEST_VERSION = 2
 
 
 # Marked as total=False to allow for future expansion.
 class CheckpointMetadata(TypedDict, total=False):
     """Metadata associated with a checkpoint."""
 
-    source: Literal["input", "loop", "update"]
+    source: Literal["input", "loop", "update", "fork"]
     """The source of the checkpoint.
 
     - "input": The checkpoint was created from an input to invoke/stream/batch.
     - "loop": The checkpoint was created from inside the pregel loop.
     - "update": The checkpoint was created from a manual state update.
+    - "fork": The checkpoint was created as a copy of another checkpoint.
     """
     step: int
     """The step number of the checkpoint.
@@ -99,9 +101,10 @@ class Checkpoint(TypedDict):
     Cleared by the next checkpoint."""
 
 
+# Kept for backwards compat, newer versions of LangGraph no longer use this.
 def empty_checkpoint() -> Checkpoint:
     return Checkpoint(
-        v=1,
+        v=LATEST_VERSION,
         id=str(uuid6(clock_seq=-2)),
         ts=datetime.now(timezone.utc).isoformat(),
         channel_values={},
@@ -123,6 +126,7 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
     )
 
 
+# Kept for backwards compat, newer versions of LangGraph no longer use this.
 def create_checkpoint(
     checkpoint: Checkpoint,
     channels: Optional[Mapping[str, ChannelProtocol]],
@@ -144,7 +148,7 @@ def create_checkpoint(
             except EmptyChannelError:
                 pass
     return Checkpoint(
-        v=1,
+        v=LATEST_VERSION,
         ts=ts,
         id=id or str(uuid6(clock_seq=step)),
         channel_values=values,
@@ -178,7 +182,7 @@ CheckpointNS = ConfigurableFieldSpec(
     annotation=str,
     name="Checkpoint NS",
     description='Checkpoint namespace. Denotes the path to the subgraph node the checkpoint originates from, separated by `|` character, e.g. `"child|grandchild"`. Defaults to "" (root graph).',
-    default=None,
+    default="",
     is_shared=True,
 )
 
@@ -228,7 +232,7 @@ class BaseCheckpointSaver(Generic[V]):
         """Fetch a checkpoint using the given configuration.
 
         Args:
-            config (RunnableConfig): Configuration specifying which checkpoint to retrieve.
+            config: Configuration specifying which checkpoint to retrieve.
 
         Returns:
             Optional[Checkpoint]: The requested checkpoint, or None if not found.
@@ -240,7 +244,7 @@ class BaseCheckpointSaver(Generic[V]):
         """Fetch a checkpoint tuple using the given configuration.
 
         Args:
-            config (RunnableConfig): Configuration specifying which checkpoint to retrieve.
+            config: Configuration specifying which checkpoint to retrieve.
 
         Returns:
             Optional[CheckpointTuple]: The requested checkpoint tuple, or None if not found.
@@ -261,10 +265,10 @@ class BaseCheckpointSaver(Generic[V]):
         """List checkpoints that match the given criteria.
 
         Args:
-            config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.
-            filter (Optional[Dict[str, Any]]): Additional filtering criteria.
-            before (Optional[RunnableConfig]): List checkpoints created before this configuration.
-            limit (Optional[int]): Maximum number of checkpoints to return.
+            config: Base configuration for filtering checkpoints.
+            filter: Additional filtering criteria.
+            before: List checkpoints created before this configuration.
+            limit: Maximum number of checkpoints to return.
 
         Returns:
             Iterator[CheckpointTuple]: Iterator of matching checkpoint tuples.
@@ -284,10 +288,10 @@ class BaseCheckpointSaver(Generic[V]):
         """Store a checkpoint with its configuration and metadata.
 
         Args:
-            config (RunnableConfig): Configuration for the checkpoint.
-            checkpoint (Checkpoint): The checkpoint to store.
-            metadata (CheckpointMetadata): Additional metadata for the checkpoint.
-            new_versions (ChannelVersions): New channel versions as of this write.
+            config: Configuration for the checkpoint.
+            checkpoint: The checkpoint to store.
+            metadata: Additional metadata for the checkpoint.
+            new_versions: New channel versions as of this write.
 
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.
@@ -302,16 +306,29 @@ class BaseCheckpointSaver(Generic[V]):
         config: RunnableConfig,
         writes: Sequence[Tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Store intermediate writes linked to a checkpoint.
 
         Args:
-            config (RunnableConfig): Configuration of the related checkpoint.
-            writes (List[Tuple[str, Any]]): List of writes to store.
-            task_id (str): Identifier for the task creating the writes.
+            config: Configuration of the related checkpoint.
+            writes: List of writes to store.
+            task_id: Identifier for the task creating the writes.
+            task_path: Path of the task creating the writes.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
+        """
+        raise NotImplementedError
+
+    def delete_thread(
+        self,
+        thread_id: str,
+    ) -> None:
+        """Delete all checkpoints and writes associated with a specific thread ID.
+
+        Args:
+            thread_id: The thread ID whose checkpoints should be deleted.
         """
         raise NotImplementedError
 
@@ -319,7 +336,7 @@ class BaseCheckpointSaver(Generic[V]):
         """Asynchronously fetch a checkpoint using the given configuration.
 
         Args:
-            config (RunnableConfig): Configuration specifying which checkpoint to retrieve.
+            config: Configuration specifying which checkpoint to retrieve.
 
         Returns:
             Optional[Checkpoint]: The requested checkpoint, or None if not found.
@@ -331,7 +348,7 @@ class BaseCheckpointSaver(Generic[V]):
         """Asynchronously fetch a checkpoint tuple using the given configuration.
 
         Args:
-            config (RunnableConfig): Configuration specifying which checkpoint to retrieve.
+            config: Configuration specifying which checkpoint to retrieve.
 
         Returns:
             Optional[CheckpointTuple]: The requested checkpoint tuple, or None if not found.
@@ -352,10 +369,10 @@ class BaseCheckpointSaver(Generic[V]):
         """Asynchronously list checkpoints that match the given criteria.
 
         Args:
-            config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.
-            filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata.
-            before (Optional[RunnableConfig]): List checkpoints created before this configuration.
-            limit (Optional[int]): Maximum number of checkpoints to return.
+            config: Base configuration for filtering checkpoints.
+            filter: Additional filtering criteria for metadata.
+            before: List checkpoints created before this configuration.
+            limit: Maximum number of checkpoints to return.
 
         Returns:
             AsyncIterator[CheckpointTuple]: Async iterator of matching checkpoint tuples.
@@ -376,10 +393,10 @@ class BaseCheckpointSaver(Generic[V]):
         """Asynchronously store a checkpoint with its configuration and metadata.
 
         Args:
-            config (RunnableConfig): Configuration for the checkpoint.
-            checkpoint (Checkpoint): The checkpoint to store.
-            metadata (CheckpointMetadata): Additional metadata for the checkpoint.
-            new_versions (ChannelVersions): New channel versions as of this write.
+            config: Configuration for the checkpoint.
+            checkpoint: The checkpoint to store.
+            metadata: Additional metadata for the checkpoint.
+            new_versions: New channel versions as of this write.
 
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.
@@ -394,16 +411,29 @@ class BaseCheckpointSaver(Generic[V]):
         config: RunnableConfig,
         writes: Sequence[Tuple[str, Any]],
         task_id: str,
+        task_path: str = "",
     ) -> None:
         """Asynchronously store intermediate writes linked to a checkpoint.
 
         Args:
-            config (RunnableConfig): Configuration of the related checkpoint.
-            writes (List[Tuple[str, Any]]): List of writes to store.
-            task_id (str): Identifier for the task creating the writes.
+            config: Configuration of the related checkpoint.
+            writes: List of writes to store.
+            task_id: Identifier for the task creating the writes.
+            task_path: Path of the task creating the writes.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
+        """
+        raise NotImplementedError
+
+    async def adelete_thread(
+        self,
+        thread_id: str,
+    ) -> None:
+        """Delete all checkpoints and writes associated with a specific thread ID.
+
+        Args:
+            thread_id: The thread ID whose checkpoints should be deleted.
         """
         raise NotImplementedError
 
@@ -414,8 +444,8 @@ class BaseCheckpointSaver(Generic[V]):
         as long as they are monotonically increasing.
 
         Args:
-            current (Optional[V]): The current version identifier (int, float, or str).
-            channel (BaseChannel): The channel being versioned.
+            current: The current version identifier (int, float, or str).
+            channel: The channel being versioned.
 
         Returns:
             V: The next version identifier, which must be increasing.
@@ -442,6 +472,23 @@ def get_checkpoint_id(config: RunnableConfig) -> Optional[str]:
     )
 
 
+def get_checkpoint_metadata(
+    config: RunnableConfig, metadata: CheckpointMetadata
+) -> CheckpointMetadata:
+    """Get checkpoint metadata in a backwards-compatible manner."""
+    metadata = metadata.copy()
+    for obj in (config.get("metadata"), config.get("configurable")):
+        if not obj:
+            continue
+        for key in obj:
+            if key in metadata or key in EXCLUDED_METADATA_KEYS or key.startswith("__"):
+                continue
+            v = obj[key]
+            if isinstance(v, (str, int, bool, float)):
+                metadata[key] = v  # type: ignore[literal-required]
+    return metadata
+
+
 """
 Mapping from error type to error index.
 Regular writes just map to their index in the list of writes being saved.
@@ -449,4 +496,10 @@ Special writes (e.g. errors) map to negative indices, to avoid those writes from
 conflicting with regular writes.
 Each Checkpointer implementation should use this mapping in put_writes.
 """
-WRITES_IDX_MAP = {ERROR: -1, SCHEDULED: -2}
+WRITES_IDX_MAP = {ERROR: -1, SCHEDULED: -2, INTERRUPT: -3, RESUME: -4}
+
+EXCLUDED_METADATA_KEYS = {
+    "checkpoint_id",
+    "checkpoint_ns",
+    "checkpoint_map",
+}

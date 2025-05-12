@@ -1,11 +1,25 @@
-from typing import Any, Iterator, Literal, Mapping, Optional, Sequence, TypeVar, Union
+from collections import Counter
+from collections.abc import Iterator, Mapping, Sequence
+from typing import Any, Literal, Optional, TypeVar, Union
 
 from langchain_core.runnables.utils import AddableDict
 
 from langgraph.channels.base import BaseChannel, EmptyChannelError
-from langgraph.constants import EMPTY_SEQ, ERROR, INTERRUPT, TAG_HIDDEN
+from langgraph.constants import (
+    EMPTY_SEQ,
+    ERROR,
+    INTERRUPT,
+    MISSING,
+    NULL_TASK_ID,
+    RESUME,
+    RETURN,
+    START,
+    TAG_HIDDEN,
+    TASKS,
+)
+from langgraph.errors import InvalidUpdateError
 from langgraph.pregel.log import logger
-from langgraph.types import PregelExecutableTask
+from langgraph.types import Command, PregelExecutableTask, Send
 
 
 def read_channel(
@@ -13,14 +27,11 @@ def read_channel(
     chan: str,
     *,
     catch: bool = True,
-    return_exception: bool = False,
 ) -> Any:
     try:
         return channels[chan].get()
-    except EmptyChannelError as exc:
-        if return_exception:
-            return exc
-        elif catch:
+    except EmptyChannelError:
+        if catch:
             return None
         else:
             raise
@@ -42,6 +53,31 @@ def read_channels(
             except EmptyChannelError:
                 pass
         return values
+
+
+def map_command(cmd: Command) -> Iterator[tuple[str, str, Any]]:
+    """Map input chunk to a sequence of pending writes in the form (channel, value)."""
+    if cmd.graph == Command.PARENT:
+        raise InvalidUpdateError("There is no parent graph")
+    if cmd.goto:
+        if isinstance(cmd.goto, (tuple, list)):
+            sends = cmd.goto
+        else:
+            sends = [cmd.goto]
+        for send in sends:
+            if isinstance(send, Send):
+                yield (NULL_TASK_ID, TASKS, send)
+            elif isinstance(send, str):
+                yield (NULL_TASK_ID, f"branch:to:{send}", START)
+            else:
+                raise TypeError(
+                    f"In Command.goto, expected Send/str, got {type(send).__name__}"
+                )
+    if cmd.resume is not None:
+        yield (NULL_TASK_ID, RESUME, cmd.resume)
+    if cmd.update:
+        for k, v in cmd._update_as_tuples():
+            yield (NULL_TASK_ID, k, v)
 
 
 def map_input(
@@ -112,22 +148,37 @@ def map_output_updates(
     ]
     if not output_tasks:
         return
-    if isinstance(output_channels, str):
-        updated = (
-            (task.name, value)
-            for task, writes in output_tasks
-            for chan, value in writes
-            if chan == output_channels
-        )
-    else:
-        updated = (
-            (
-                task.name,
-                {chan: value for chan, value in task.writes if chan in output_channels},
+    updated: list[tuple[str, Any]] = []
+    for task, writes in output_tasks:
+        rtn = next((value for chan, value in writes if chan == RETURN), MISSING)
+        if rtn is not MISSING:
+            updated.append((task.name, rtn))
+        elif isinstance(output_channels, str):
+            updated.extend(
+                (task.name, value) for chan, value in writes if chan == output_channels
             )
-            for task, writes in output_tasks
-            if any(chan in output_channels for chan, _ in writes)
-        )
+        elif any(chan in output_channels for chan, _ in writes):
+            counts = Counter(chan for chan, _ in writes)
+            if any(counts[chan] > 1 for chan in output_channels):
+                updated.extend(
+                    (
+                        task.name,
+                        {chan: value},
+                    )
+                    for chan, value in writes
+                    if chan in output_channels
+                )
+            else:
+                updated.append(
+                    (
+                        task.name,
+                        {
+                            chan: value
+                            for chan, value in writes
+                            if chan in output_channels
+                        },
+                    )
+                )
     grouped: dict[str, list[Any]] = {t.name: [] for t, _ in output_tasks}
     for node, value in updated:
         grouped[node].append(value)

@@ -16,8 +16,6 @@ from langgraph.constants import (
     CONFIG_KEY_DEDUPE_TASKS,
     CONFIG_KEY_ENSURE_LATEST,
     INTERRUPT,
-    NS_END,
-    NS_SEP,
     SCHEDULED,
 )
 from langgraph.errors import CheckpointNotLatest, GraphInterrupt
@@ -37,7 +35,7 @@ from langgraph.scheduler.kafka.types import (
     Topics,
 )
 from langgraph.types import RetryPolicy
-from langgraph.utils.config import patch_configurable
+from langgraph.utils.config import patch_configurable, recast_checkpoint_ns
 
 
 class AsyncKafkaOrchestrator(AbstractAsyncContextManager):
@@ -67,6 +65,7 @@ class AsyncKafkaOrchestrator(AbstractAsyncContextManager):
         self.retry_policy = retry_policy
 
     async def __aenter__(self) -> Self:
+        loop = asyncio.get_running_loop()
         self.subgraphs = {
             k: v async for k, v in self.graph.aget_subgraphs(recurse=True)
         }
@@ -79,6 +78,7 @@ class AsyncKafkaOrchestrator(AbstractAsyncContextManager):
                     auto_offset_reset="earliest",
                     group_id="orchestrator",
                     enable_auto_commit=False,
+                    loop=loop,
                     **self.kwargs,
                 )
             )
@@ -87,6 +87,7 @@ class AsyncKafkaOrchestrator(AbstractAsyncContextManager):
 
             self.producer = await self.stack.enter_async_context(
                 DefaultAsyncProducer(
+                    loop=loop,
                     **self.kwargs,
                 )
             )
@@ -137,14 +138,12 @@ class AsyncKafkaOrchestrator(AbstractAsyncContextManager):
         # find graph
         if checkpoint_ns := msg["config"]["configurable"].get("checkpoint_ns"):
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            if recast_checkpoint_ns in self.subgraphs:
-                graph = self.subgraphs[recast_checkpoint_ns]
+            if recast in self.subgraphs:
+                graph = self.subgraphs[recast]
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
         else:
             graph = self.graph
         # process message
@@ -152,24 +151,33 @@ class AsyncKafkaOrchestrator(AbstractAsyncContextManager):
             msg["input"],
             config=ensure_config(msg["config"]),
             stream=None,
+            cache=self.graph.cache,
             store=self.graph.store,
             checkpointer=self.graph.checkpointer,
             nodes=graph.nodes,
             specs=graph.channels,
             output_keys=graph.output_channels,
             stream_keys=graph.stream_channels,
-            check_subgraphs=False,
+            interrupt_after=graph.interrupt_after_nodes,
+            interrupt_before=graph.interrupt_before_nodes,
+            trigger_to_nodes=graph.trigger_to_nodes,
         ) as loop:
-            if loop.tick(
-                input_keys=graph.input_channels,
-                interrupt_after=graph.interrupt_after_nodes,
-                interrupt_before=graph.interrupt_before_nodes,
-            ):
+            if loop.tick(input_keys=graph.input_channels):
                 # wait for checkpoint to be saved
                 if hasattr(loop, "_put_checkpoint_fut"):
                     await loop._put_checkpoint_fut
                 # schedule any new tasks
-                if new_tasks := [t for t in loop.tasks.values() if not t.scheduled]:
+                if new_tasks := [
+                    t for t in loop.tasks.values() if not t.scheduled and not t.writes
+                ]:
+                    config = patch_configurable(
+                        loop.config,
+                        {
+                            **loop.checkpoint_config["configurable"],
+                            CONFIG_KEY_DEDUPE_TASKS: True,
+                            CONFIG_KEY_ENSURE_LATEST: True,
+                        },
+                    )
                     # send messages to executor
                     futures = await asyncio.gather(
                         *(
@@ -177,16 +185,7 @@ class AsyncKafkaOrchestrator(AbstractAsyncContextManager):
                                 self.topics.executor,
                                 value=serde.dumps(
                                     MessageToExecutor(
-                                        config=patch_configurable(
-                                            loop.config,
-                                            {
-                                                **loop.checkpoint_config[
-                                                    "configurable"
-                                                ],
-                                                CONFIG_KEY_DEDUPE_TASKS: True,
-                                                CONFIG_KEY_ENSURE_LATEST: True,
-                                            },
-                                        ),
+                                        config=config,
                                         task=ExecutorTask(id=task.id, path=task.path),
                                         finally_send=msg.get("finally_send"),
                                     )
@@ -327,14 +326,12 @@ class KafkaOrchestrator(AbstractContextManager):
         # find graph
         if checkpoint_ns := msg["config"]["configurable"].get("checkpoint_ns"):
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            if recast_checkpoint_ns in self.subgraphs:
-                graph = self.subgraphs[recast_checkpoint_ns]
+            if recast in self.subgraphs:
+                graph = self.subgraphs[recast]
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
         else:
             graph = self.graph
         # process message
@@ -342,38 +339,40 @@ class KafkaOrchestrator(AbstractContextManager):
             msg["input"],
             config=ensure_config(msg["config"]),
             stream=None,
+            cache=self.graph.cache,
             store=self.graph.store,
             checkpointer=self.graph.checkpointer,
             nodes=graph.nodes,
             specs=graph.channels,
             output_keys=graph.output_channels,
             stream_keys=graph.stream_channels,
-            check_subgraphs=False,
+            interrupt_after=graph.interrupt_after_nodes,
+            interrupt_before=graph.interrupt_before_nodes,
+            trigger_to_nodes=graph.trigger_to_nodes,
         ) as loop:
-            if loop.tick(
-                input_keys=graph.input_channels,
-                interrupt_after=graph.interrupt_after_nodes,
-                interrupt_before=graph.interrupt_before_nodes,
-            ):
+            if loop.tick(input_keys=graph.input_channels):
                 # wait for checkpoint to be saved
                 if hasattr(loop, "_put_checkpoint_fut"):
                     loop._put_checkpoint_fut.result()
                 # schedule any new tasks
-                if new_tasks := [t for t in loop.tasks.values() if not t.scheduled]:
+                if new_tasks := [
+                    t for t in loop.tasks.values() if not t.scheduled and not t.writes
+                ]:
+                    config = patch_configurable(
+                        loop.config,
+                        {
+                            **loop.checkpoint_config["configurable"],
+                            CONFIG_KEY_DEDUPE_TASKS: True,
+                            CONFIG_KEY_ENSURE_LATEST: True,
+                        },
+                    )
                     # send messages to executor
                     futures = [
                         self.producer.send(
                             self.topics.executor,
                             value=serde.dumps(
                                 MessageToExecutor(
-                                    config=patch_configurable(
-                                        loop.config,
-                                        {
-                                            **loop.checkpoint_config["configurable"],
-                                            CONFIG_KEY_DEDUPE_TASKS: True,
-                                            CONFIG_KEY_ENSURE_LATEST: True,
-                                        },
-                                    ),
+                                    config=config,
                                     task=ExecutorTask(id=task.id, path=task.path),
                                     finally_send=msg.get("finally_send"),
                                 )

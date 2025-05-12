@@ -1,5 +1,8 @@
 import asyncio
+import binascii
 import concurrent.futures
+import weakref
+from collections.abc import Sequence
 from contextlib import (
     AbstractAsyncContextManager,
     AbstractContextManager,
@@ -7,17 +10,18 @@ from contextlib import (
     ExitStack,
 )
 from functools import partial
-from typing import Any, Optional, Sequence
+from typing import Any, Optional
+from uuid import UUID
 
 import orjson
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
 import langgraph.scheduler.kafka.serde as serde
-from langgraph.constants import CONFIG_KEY_DELEGATE, ERROR, NS_END, NS_SEP
+from langgraph.constants import CONFIG_KEY_DELEGATE, ERROR
 from langgraph.errors import CheckpointNotLatest, GraphDelegate, TaskNotFound
 from langgraph.pregel import Pregel
-from langgraph.pregel.algo import prepare_single_task
+from langgraph.pregel.algo import checkpoint_null_version, prepare_single_task
 from langgraph.pregel.executor import (
     AsyncBackgroundExecutor,
     BackgroundExecutor,
@@ -37,8 +41,8 @@ from langgraph.scheduler.kafka.types import (
     Sendable,
     Topics,
 )
-from langgraph.types import RetryPolicy
-from langgraph.utils.config import patch_configurable
+from langgraph.types import LoopProtocol, PregelExecutableTask, RetryPolicy
+from langgraph.utils.config import patch_configurable, recast_checkpoint_ns
 
 
 class AsyncKafkaExecutor(AbstractAsyncContextManager):
@@ -69,6 +73,7 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
         self.retry_policy = retry_policy
 
     async def __aenter__(self) -> Self:
+        loop = asyncio.get_running_loop()
         self.subgraphs = {
             k: v async for k, v in self.graph.aget_subgraphs(recurse=True)
         }
@@ -81,6 +86,7 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
                     auto_offset_reset="earliest",
                     group_id="executor",
                     enable_auto_commit=False,
+                    loop=loop,
                     **self.kwargs,
                 )
             )
@@ -89,6 +95,7 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
 
             self.producer = await self.stack.enter_async_context(
                 DefaultAsyncProducer(
+                    loop=loop,
                     **self.kwargs,
                 )
             )
@@ -161,14 +168,12 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
         # find graph
         if checkpoint_ns := msg["config"]["configurable"].get("checkpoint_ns"):
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            if recast_checkpoint_ns in self.subgraphs:
-                graph = self.subgraphs[recast_checkpoint_ns]
+            if recast in self.subgraphs:
+                graph = self.subgraphs[recast]
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
         else:
             graph = self.graph
         # process message
@@ -179,14 +184,25 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
             raise RuntimeError("Checkpoint not found")
         if saved.checkpoint["id"] != msg["config"]["configurable"]["checkpoint_id"]:
             raise CheckpointNotLatest()
-        async with AsyncChannelsManager(
-            graph.channels, saved.checkpoint, msg["config"], self.graph.store
-        ) as (channels, managed), AsyncBackgroundExecutor() as submit:
+        async with (
+            AsyncChannelsManager(
+                graph.channels,
+                saved.checkpoint,
+                LoopProtocol(
+                    config=msg["config"],
+                    store=self.graph.store,
+                    step=saved.metadata["step"] + 1,
+                    stop=saved.metadata["step"] + 2,
+                ),
+            ) as (channels, managed),
+            AsyncBackgroundExecutor(msg["config"]) as submit,
+        ):
             if task := await asyncio.to_thread(
                 prepare_single_task,
                 msg["task"]["path"],
                 msg["task"]["id"],
                 checkpoint=saved.checkpoint,
+                pending_writes=saved.pending_writes or [],
                 processes=graph.nodes,
                 channels=channels,
                 managed=managed,
@@ -195,18 +211,24 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
                 for_execution=True,
                 checkpointer=self.graph.checkpointer,
                 store=self.graph.store,
+                checkpoint_id_bytes=binascii.unhexlify(
+                    saved.checkpoint["id"].replace("-", "")
+                ),
+                checkpoint_null_version=checkpoint_null_version(saved.checkpoint),
             ):
                 # execute task, saving writes
+                put_writes = partial(self._put_writes, submit, msg["config"])
                 runner = PregelRunner(
-                    submit=submit,
-                    put_writes=partial(self._put_writes, submit, msg["config"]),
+                    submit=weakref.ref(submit),
+                    put_writes=weakref.ref(put_writes),
+                    schedule_task=weakref.WeakMethod(self._schedule_task),
                 )
                 async for _ in runner.atick([task], reraise=False):
                     pass
             else:
                 # task was not found
                 await self.graph.checkpointer.aput_writes(
-                    msg["config"], [(ERROR, TaskNotFound())]
+                    msg["config"], [(ERROR, TaskNotFound())], str(UUID(int=0))
                 )
         # notify orchestrator
         fut = await self.producer.send(
@@ -227,6 +249,14 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
             ),
         )
         await fut
+
+    def _schedule_task(
+        self,
+        task: PregelExecutableTask,
+        idx: int,
+    ) -> None:
+        # will be scheduled by orchestrator when executor finishes
+        pass
 
     def _put_writes(
         self,
@@ -357,14 +387,12 @@ class KafkaExecutor(AbstractContextManager):
         # find graph
         if checkpoint_ns := msg["config"]["configurable"].get("checkpoint_ns"):
             # remove task_ids from checkpoint_ns
-            recast_checkpoint_ns = NS_SEP.join(
-                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
-            )
+            recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
-            if recast_checkpoint_ns in self.subgraphs:
-                graph = self.subgraphs[recast_checkpoint_ns]
+            if recast in self.subgraphs:
+                graph = self.subgraphs[recast]
             else:
-                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+                raise ValueError(f"Subgraph {recast} not found")
         else:
             graph = self.graph
         # process message
@@ -375,13 +403,24 @@ class KafkaExecutor(AbstractContextManager):
             raise RuntimeError("Checkpoint not found")
         if saved.checkpoint["id"] != msg["config"]["configurable"]["checkpoint_id"]:
             raise CheckpointNotLatest()
-        with ChannelsManager(
-            graph.channels, saved.checkpoint, msg["config"], self.graph.store
-        ) as (channels, managed), BackgroundExecutor({}) as submit:
+        with (
+            ChannelsManager(
+                graph.channels,
+                saved.checkpoint,
+                LoopProtocol(
+                    config=msg["config"],
+                    store=self.graph.store,
+                    step=saved.metadata["step"] + 1,
+                    stop=saved.metadata["step"] + 2,
+                ),
+            ) as (channels, managed),
+            BackgroundExecutor({}) as submit,
+        ):
             if task := prepare_single_task(
                 msg["task"]["path"],
                 msg["task"]["id"],
                 checkpoint=saved.checkpoint,
+                pending_writes=saved.pending_writes or [],
                 processes=graph.nodes,
                 channels=channels,
                 managed=managed,
@@ -389,18 +428,24 @@ class KafkaExecutor(AbstractContextManager):
                 step=saved.metadata["step"] + 1,
                 for_execution=True,
                 checkpointer=self.graph.checkpointer,
+                checkpoint_id_bytes=binascii.unhexlify(
+                    saved.checkpoint["id"].replace("-", "")
+                ),
+                checkpoint_null_version=checkpoint_null_version(saved.checkpoint),
             ):
                 # execute task, saving writes
+                put_writes = partial(self._put_writes, submit, msg["config"])
                 runner = PregelRunner(
-                    submit=submit,
-                    put_writes=partial(self._put_writes, submit, msg["config"]),
+                    submit=weakref.ref(submit),
+                    put_writes=weakref.ref(put_writes),
+                    schedule_task=weakref.WeakMethod(self._schedule_task),
                 )
                 for _ in runner.tick([task], reraise=False):
                     pass
             else:
                 # task was not found
                 self.graph.checkpointer.put_writes(
-                    msg["config"], [(ERROR, TaskNotFound())]
+                    msg["config"], [(ERROR, TaskNotFound())], str(UUID(int=0))
                 )
         # notify orchestrator
         fut = self.producer.send(
@@ -421,6 +466,14 @@ class KafkaExecutor(AbstractContextManager):
             ),
         )
         fut.result()
+
+    def _schedule_task(
+        self,
+        task: PregelExecutableTask,
+        idx: int,
+    ) -> None:
+        # will be scheduled by orchestrator when executor finishes
+        pass
 
     def _put_writes(
         self,

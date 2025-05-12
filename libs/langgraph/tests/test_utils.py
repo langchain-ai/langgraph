@@ -2,14 +2,12 @@ import functools
 import sys
 import uuid
 from typing import (
+    Annotated,
     Any,
     Callable,
-    Dict,
     ForwardRef,
-    List,
     Literal,
     Optional,
-    TypedDict,
     TypeVar,
     Union,
 )
@@ -17,12 +15,20 @@ from unittest.mock import patch
 
 import langsmith
 import pytest
-from typing_extensions import Annotated, NotRequired, Required
+from typing_extensions import NotRequired, Required, TypedDict
 
 from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
-from langgraph.utils.fields import _is_optional_type, get_field_default
-from langgraph.utils.runnable import is_async_callable, is_async_generator
+from langgraph.utils.config import _is_not_empty
+from langgraph.utils.fields import (
+    _is_optional_type,
+    get_enhanced_type_hints,
+    get_field_default,
+)
+from langgraph.utils.runnable import (
+    is_async_callable,
+    is_async_generator,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -143,9 +149,9 @@ def test_is_optional_type():
     assert not _is_optional_type(int)
     assert _is_optional_type(Optional[Literal[1, 2, 3]])
     assert not _is_optional_type(Literal[1, 2, 3])
-    assert _is_optional_type(Optional[List[int]])
-    assert _is_optional_type(Optional[Dict[str, int]])
-    assert not _is_optional_type(List[Optional[int]])
+    assert _is_optional_type(Optional[list[int]])
+    assert _is_optional_type(Optional[dict[str, int]])
+    assert not _is_optional_type(list[Optional[int]])
     assert _is_optional_type(Union[Optional[str], Optional[int]])
     assert _is_optional_type(
         Union[
@@ -170,8 +176,8 @@ def test_is_optional_type():
     assert _is_optional_type(Optional[ForwardRef("MyClass")])
     assert not _is_optional_type(ForwardRef("MyClass"))
 
-    assert _is_optional_type(Optional[Union[List[int], Dict[str, Optional[int]]]])
-    assert not _is_optional_type(Union[List[int], Dict[str, Optional[int]]])
+    assert _is_optional_type(Optional[Union[list[int], dict[str, Optional[int]]]])
+    assert not _is_optional_type(Union[list[int], dict[str, Optional[int]]])
 
     assert _is_optional_type(Optional[Callable[[int], str]])
     assert not _is_optional_type(Callable[[int], Optional[str]])
@@ -227,3 +233,68 @@ def test_is_required():
     assert get_field_default("val_12", gcannos["val_12"], MyGrandChildDict) is None
     assert get_field_default("val_9", gcannos["val_9"], MyGrandChildDict) is None
     assert get_field_default("val_13", gcannos["val_13"], MyGrandChildDict) == ...
+
+
+def test_enhanced_type_hints() -> None:
+    from dataclasses import dataclass
+    from typing import Annotated
+
+    from pydantic import BaseModel, Field
+
+    class MyTypedDict(TypedDict):
+        val_1: str
+        val_2: int = 42
+        val_3: str = "default"
+
+    hints = list(get_enhanced_type_hints(MyTypedDict))
+    assert len(hints) == 3
+    assert hints[0] == ("val_1", str, None, None)
+    assert hints[1] == ("val_2", int, 42, None)
+    assert hints[2] == ("val_3", str, "default", None)
+
+    @dataclass
+    class MyDataclass:
+        val_1: str
+        val_2: int = 42
+        val_3: str = "default"
+
+    hints = list(get_enhanced_type_hints(MyDataclass))
+    assert len(hints) == 3
+    assert hints[0] == ("val_1", str, None, None)
+    assert hints[1] == ("val_2", int, 42, None)
+    assert hints[2] == ("val_3", str, "default", None)
+
+    class MyPydanticModel(BaseModel):
+        val_1: str
+        val_2: int = 42
+        val_3: str = Field(default="default", description="A description")
+
+    hints = list(get_enhanced_type_hints(MyPydanticModel))
+    assert len(hints) == 3
+    assert hints[0] == ("val_1", str, None, None)
+    assert hints[1] == ("val_2", int, 42, None)
+    assert hints[2] == ("val_3", str, "default", "A description")
+
+    class MyPydanticModelWithAnnotated(BaseModel):
+        val_1: Annotated[str, Field(description="A description")]
+        val_2: Annotated[int, Field(default=42)]
+        val_3: Annotated[
+            str, Field(default="default", description="Another description")
+        ]
+
+    hints = list(get_enhanced_type_hints(MyPydanticModelWithAnnotated))
+    assert len(hints) == 3
+    assert hints[0] == ("val_1", str, None, "A description")
+    assert hints[1] == ("val_2", int, 42, None)
+    assert hints[2] == ("val_3", str, "default", "Another description")
+
+
+def test_is_not_empty() -> None:
+    assert _is_not_empty("foo")
+    assert _is_not_empty("")
+    assert _is_not_empty(1)
+    assert _is_not_empty(0)
+    assert not _is_not_empty(None)
+    assert not _is_not_empty([])
+    assert not _is_not_empty(())
+    assert not _is_not_empty({})

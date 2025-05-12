@@ -1,6 +1,6 @@
-# Interrupt
+# How to use the interrupt option
 
-This guide assumes knowledge of what double-texting is, which you can learn about in the [double-texting conceptual guide](../concepts/api.md#double-texting).
+This guide assumes knowledge of what double-texting is, which you can learn about in the [double-texting conceptual guide](../../concepts/double_texting.md).
 
 The guide covers the `interrupt` option for double texting, which interrupts the prior run of the graph and starts a new one with the double-text. This option does not delete the first run, but rather keeps it in the database but sets its status to `interrupted`. Below is a quick example of using the `interrupt` option.
 
@@ -83,7 +83,7 @@ Now, let's import our required packages and instantiate our client, assistant, a
 
 ## Create runs
 
-Now we can start our two runs and join the second on euntil it has completed:
+Now we can start our two runs and join the second one until it has completed:
 
 === "Python"
 
@@ -94,6 +94,7 @@ Now we can start our two runs and join the second on euntil it has completed:
         assistant_id,
         input={"messages": [{"role": "user", "content": "what's the weather in sf?"}]},
     )
+    # sleep a bit to get partial outputs from the first run
     await asyncio.sleep(2)
     run = await client.runs.create(
         thread["thread_id"],
@@ -114,6 +115,7 @@ Now we can start our two runs and join the second on euntil it has completed:
       assistantId,
       { input: { messages: [{ role: "human", content: "what's the weather in sf?" }] } }
     );
+    // sleep a bit to get partial outputs from the first run
     await new Promise(resolve => setTimeout(resolve, 2000)); 
 
     let run = await client.runs.create(

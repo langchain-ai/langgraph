@@ -4,7 +4,7 @@ on:
   workflow_call:
 
 env:
-  POETRY_VERSION: "1.7.1"
+  POETRY_VERSION: "2.1.2"
 
 jobs:
   build:
@@ -16,14 +16,12 @@ jobs:
           - "3.10"
           - "3.11"
           - "3.12"
-        core-version:
-          - ">=0.2.39,<0.3.0"
-          - "latest"
+          - "3.13"
 
     defaults:
       run:
         working-directory: libs/langgraph
-    name: "test #${{ matrix.python-version }} (langchain-core: ${{ matrix.core-version }})"
+    name: "test #${{ matrix.python-version }}"
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
@@ -32,19 +30,22 @@ jobs:
           python-version: ${{ matrix.python-version }}
           poetry-version: ${{ env.POETRY_VERSION }}
           cache-key: test-langgraph
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        if: ${{ !github.event.pull_request.head.repo.fork }}
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_RO_TOKEN }}
 
       - name: Install dependencies
         shell: bash
         run: |
           poetry install --with dev
-          if [ "${{ matrix.core-version }}" != "latest" ]; then
-            poetry run pip install "langchain-core${{ matrix.core-version }}"
-          fi
 
       - name: Run tests
         shell: bash
         run: |
-          make test
+          make test_parallel
 
       - name: Ensure the tests did not create any additional files
         shell: bash

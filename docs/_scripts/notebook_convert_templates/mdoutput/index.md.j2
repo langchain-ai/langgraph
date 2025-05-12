@@ -1,0 +1,50 @@
+{% extends 'markdown/index.md.j2' %}
+
+{% block input %}{# cell.metadata.language is an addition of our docs pipeline. #}
+```{%- if 'language' in cell.metadata -%}
+{{ cell.metadata.language }}
+{%- elif 'magics_language' in cell.metadata -%}
+{{ cell.metadata.magics_language }}
+{%- elif 'name' in nb.metadata.get('language_info', {}) -%}
+{{ nb.metadata.language_info.name }}
+{%- endif %}
+{{ cell.source }}
+```
+{% endblock input %}
+
+
+{%- block traceback_line -%}
+```output
+{{ line.rstrip() | strip_ansi }}
+```
+{%- endblock traceback_line -%}
+
+{%- block stream -%}
+```output
+{{ output.text.rstrip() | strip_ansi }}
+```
+{%- endblock stream -%}
+
+{%- block data_text scoped -%}
+```output
+{{ output.data['text/plain'].rstrip() | strip_ansi }}
+```
+{%- endblock data_text -%}
+
+{%- block data_html scoped -%}
+```html
+{{ output.data['text/html'] | safe }} 
+```
+{%- endblock data_html -%}
+
+{%- block data_jpg scoped -%}
+<p>
+<img src="data:image/jpg;base64,{{ output.data['image/jpeg'] }}" />
+</p>
+{%- endblock data_jpg -%}
+
+{%- block data_png scoped -%}
+<p>
+<img src="data:image/png;base64,{{ output.data['image/png'] }}" />
+</p>
+{%- endblock data_png -%}

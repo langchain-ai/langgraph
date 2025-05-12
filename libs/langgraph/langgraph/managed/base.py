@@ -1,34 +1,32 @@
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager, contextmanager
 from inspect import isclass
 from typing import (
     Any,
-    AsyncIterator,
     Generic,
-    Iterator,
     NamedTuple,
-    Sequence,
-    Type,
     TypeVar,
     Union,
 )
 
-from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self, TypeGuard
+
+from langgraph.types import LoopProtocol
 
 V = TypeVar("V")
 U = TypeVar("U")
 
 
 class ManagedValue(ABC, Generic[V]):
-    def __init__(self, config: RunnableConfig) -> None:
-        self.config = config
+    def __init__(self, loop: LoopProtocol) -> None:
+        self.loop = loop
 
     @classmethod
     @contextmanager
-    def enter(cls, config: RunnableConfig, **kwargs: Any) -> Iterator[Self]:
+    def enter(cls, loop: LoopProtocol, **kwargs: Any) -> Iterator[Self]:
         try:
-            value = cls(config, **kwargs)
+            value = cls(loop, **kwargs)
             yield value
         finally:
             # because managed value and Pregel have reference to each other
@@ -40,9 +38,9 @@ class ManagedValue(ABC, Generic[V]):
 
     @classmethod
     @asynccontextmanager
-    async def aenter(cls, config: RunnableConfig, **kwargs: Any) -> AsyncIterator[Self]:
+    async def aenter(cls, loop: LoopProtocol, **kwargs: Any) -> AsyncIterator[Self]:
         try:
-            value = cls(config, **kwargs)
+            value = cls(loop, **kwargs)
             yield value
         finally:
             # because managed value and Pregel have reference to each other
@@ -53,7 +51,7 @@ class ManagedValue(ABC, Generic[V]):
                 pass
 
     @abstractmethod
-    def __call__(self, step: int) -> V: ...
+    def __call__(self) -> V: ...
 
 
 class WritableManagedValue(Generic[V, U], ManagedValue[V], ABC):
@@ -65,11 +63,11 @@ class WritableManagedValue(Generic[V, U], ManagedValue[V], ABC):
 
 
 class ConfiguredManagedValue(NamedTuple):
-    cls: Type[ManagedValue]
+    cls: type[ManagedValue]
     kwargs: dict[str, Any]
 
 
-ManagedValueSpec = Union[Type[ManagedValue], ConfiguredManagedValue]
+ManagedValueSpec = Union[type[ManagedValue], ConfiguredManagedValue]
 
 
 def is_managed_value(value: Any) -> TypeGuard[ManagedValueSpec]:
@@ -78,7 +76,7 @@ def is_managed_value(value: Any) -> TypeGuard[ManagedValueSpec]:
     )
 
 
-def is_readonly_managed_value(value: Any) -> TypeGuard[Type[ManagedValue]]:
+def is_readonly_managed_value(value: Any) -> TypeGuard[type[ManagedValue]]:
     return (
         isclass(value)
         and issubclass(value, ManagedValue)
@@ -89,7 +87,7 @@ def is_readonly_managed_value(value: Any) -> TypeGuard[Type[ManagedValue]]:
     )
 
 
-def is_writable_managed_value(value: Any) -> TypeGuard[Type[WritableManagedValue]]:
+def is_writable_managed_value(value: Any) -> TypeGuard[type[WritableManagedValue]]:
     return (isclass(value) and issubclass(value, WritableManagedValue)) or (
         isinstance(value, ConfiguredManagedValue)
         and issubclass(value.cls, WritableManagedValue)

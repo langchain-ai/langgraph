@@ -9,18 +9,18 @@ repository = "https://www.github.com/langchain-ai/langgraph"
 packages = [{ include = "langgraph" }]
 
 [tool.poetry.dependencies]
-python = "^3.9.0,<4.0"
+python = ">=3.9"
 orjson = "^3.10.7"
 crc32c = "^2.7.post1"
 aiokafka = "^0.11.0"
-langgraph = "^0.2.19"
+langgraph = ">=0.2.19"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.6.2"
 codespell = "^2.2.0"
 pytest = "^7.2.1"
 pytest-mock = "^3.11.1"
-pytest-watcher = "^0.4.1"
+pytest-watcher = { version = ">=0.4.1", python = "<4.0" }
 mypy = "^1.10.0"
 langgraph = {path = "../langgraph", develop = true}
 langgraph-checkpoint-postgres = {path = "../checkpoint-postgres", develop = true}

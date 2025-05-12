@@ -1,19 +1,23 @@
 [tool.poetry]
 name = "langgraph-cli"
-version = "0.1.52"
+version = "0.2.10"
 description = "CLI for interacting with LangGraph API"
 authors = []
 license = "MIT"
 readme = "README.md"
 repository = "https://www.github.com/langchain-ai/langgraph"
-packages = [{include = "langgraph_cli"}]
+packages = [{ include = "langgraph_cli" }]
 
 [tool.poetry.scripts]
 langgraph = "langgraph_cli.cli:cli"
 
 [tool.poetry.dependencies]
-python = "^3.9.0,<4.0"
+python = ">=3.9"
 click = "^8.1.7"
+langgraph-api = { version = ">=0.1.20", optional = true, python = ">=3.11,<4.0" }
+langgraph-runtime-inmem = { version = ">=0.0.8", optional = true, python = ">=3.11,<4.0" }
+langgraph-sdk = { version = ">=0.1.0", optional = true, python = ">=3.11,<4.0" }
+python-dotenv = { version = ">=0.8.0", optional = true }
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.6.2"
@@ -23,6 +27,10 @@ pytest-asyncio = "^0.21.1"
 pytest-mock = "^3.11.1"
 pytest-watch = "^4.2.0"
 mypy = "^1.10.0"
+msgspec = "^0.19.0"
+
+[tool.poetry.extras]
+inmem = ["langgraph-api", "langgraph-runtime-inmem", "python-dotenv"]
 
 [tool.pytest.ini_options]
 # --strict-markers will raise errors on unknown marks.
@@ -52,4 +60,4 @@ lint.select = [
   # isort
   "I",
 ]
-lint.ignore = [ "E501", "B008" ]
+lint.ignore = ["E501", "B008"]

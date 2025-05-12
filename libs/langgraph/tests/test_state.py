@@ -1,15 +1,16 @@
 import inspect
+import operator
 import warnings
 from dataclasses import dataclass, field
+from typing import Annotated, Any, Optional
 from typing import Annotated as Annotated2
-from typing import Any, Optional
 
 import pytest
-from langchain_core.runnables import RunnableConfig
-from pydantic.v1 import BaseModel
-from typing_extensions import Annotated, NotRequired, Required, TypedDict
+from langchain_core.runnables import RunnableConfig, RunnableLambda
+from pydantic import BaseModel
+from typing_extensions import NotRequired, Required, TypedDict
 
-from langgraph.graph.state import StateGraph, _warn_invalid_state_schema
+from langgraph.graph.state import StateGraph, _get_node_name, _warn_invalid_state_schema
 from langgraph.managed.shared_value import SharedValue
 
 
@@ -61,6 +62,9 @@ def test_state_schema_with_type_hint():
     class OutputState(TypedDict):
         input_state: InputState
 
+    class FooState(InputState):
+        foo: str
+
     def complete_hint(state: InputState) -> OutputState:
         return {"input_state": state}
 
@@ -73,24 +77,56 @@ def test_state_schema_with_type_hint():
     def miss_all_hint(state, config):
         return {"input_state": state}
 
+    def pre_foo(_) -> FooState:
+        return {"foo": "bar"}
+
+    def pre_bar(_) -> FooState:
+        return {"foo": "bar"}
+
+    class Foo:
+        def __call__(self, state: FooState) -> OutputState:
+            assert state.pop("foo") == "bar"
+            return {"input_state": state}
+
+    class Bar:
+        def my_node(self, state: FooState) -> OutputState:
+            assert state.pop("foo") == "bar"
+            return {"input_state": state}
+
     graph = StateGraph(InputState, output=OutputState)
-    actions = [complete_hint, miss_first_hint, only_return_hint, miss_all_hint]
+    actions = [
+        complete_hint,
+        miss_first_hint,
+        only_return_hint,
+        miss_all_hint,
+        pre_foo,
+        Foo(),
+        pre_bar,
+        Bar().my_node,
+    ]
 
     for action in actions:
         graph.add_node(action)
 
-    graph.set_entry_point(actions[0].__name__)
+    def get_name(action) -> str:
+        return getattr(action, "__name__", action.__class__.__name__)
+
+    graph.set_entry_point(get_name(actions[0]))
     for i in range(len(actions) - 1):
-        graph.add_edge(actions[i].__name__, actions[i + 1].__name__)
-    graph.set_finish_point(actions[-1].__name__)
+        graph.add_edge(get_name(actions[i]), get_name(actions[i + 1]))
+    graph.set_finish_point(get_name(actions[-1]))
 
     graph = graph.compile()
 
     input_state = InputState(question="Hello World!")
     output_state = OutputState(input_state=input_state)
+    foo_state = FooState(foo="bar")
     for i, c in enumerate(graph.stream(input_state, stream_mode="updates")):
-        node_name = actions[i].__name__
-        assert c[node_name] == output_state
+        node_name = get_name(actions[i])
+        if node_name in {"pre_foo", "pre_bar"}:
+            assert c[node_name] == foo_state
+        else:
+            assert c[node_name] == output_state
 
 
 @pytest.mark.parametrize("total_", [True, False])
@@ -261,3 +297,106 @@ def test_raises_invalid_managed():
             match="Invalid managed channels detected in BadOutputState: some_output_channel. Managed channels are not permitted in Input/Output schema.",
         ):
             StateGraph(_state, input=_inp, output=_outp)
+
+
+def test__get_node_name() -> None:
+    # default runnable name
+    assert _get_node_name(RunnableLambda(func=lambda x: x)) == "RunnableLambda"
+    # custom runnable name
+    assert (
+        _get_node_name(RunnableLambda(name="my_runnable", func=lambda x: x))
+        == "my_runnable"
+    )
+
+    # lambda
+    assert _get_node_name(lambda x: x) == "<lambda>"
+
+    # regular function
+    def func(state):
+        return
+
+    assert _get_node_name(func) == "func"
+
+    class MyClass:
+        def __call__(self, state):
+            return
+
+        def class_method(self, state):
+            return
+
+    # callable class
+    assert _get_node_name(MyClass()) == "MyClass"
+
+    # class method
+    assert _get_node_name(MyClass().class_method) == "class_method"
+
+
+def test_input_schema_conditional_edge():
+    class OverallState(TypedDict):
+        foo: Annotated[int, operator.add]
+        bar: str
+
+    class PrivateState(TypedDict):
+        baz: str
+
+    builder = StateGraph(OverallState)
+
+    def node_1(state: OverallState):
+        return {"foo": 1, "baz": "bar"}
+
+    def node_2(state: PrivateState):
+        return {"foo": 1, "bar": state["baz"], "something_else": "meow"}
+
+    def node_3(state: OverallState):
+        return {"foo": 1}
+
+    def router(state: OverallState):
+        assert state == {"foo": 2, "bar": "bar"}
+        if state["foo"] == 2:
+            return "node_3"
+        else:
+            return "__end__"
+
+    builder.add_node(node_1)
+    builder.add_node(node_2)
+    builder.add_node(node_3)
+    builder.add_conditional_edges("node_2", router)
+    builder.add_edge("__start__", "node_1")
+    builder.add_edge("node_1", "node_2")
+    graph = builder.compile()
+    assert graph.invoke({"foo": 0}) == {"foo": 3, "bar": "bar"}
+
+
+def test_private_input_schema_conditional_edge():
+    class OverallState(TypedDict):
+        foo: Annotated[int, operator.add]
+        bar: str
+
+    class RouterState(TypedDict):
+        baz: str
+
+    class Node2State(TypedDict):
+        foo: Annotated[int, operator.add]
+        baz: str
+
+    builder = StateGraph(OverallState)
+
+    def node_1(state: OverallState):
+        return {"foo": 1, "baz": "meow"}
+
+    def node_2(state: Node2State):
+        return {"foo": 1, "bar": state["baz"]}
+
+    def router(state: RouterState):
+        assert state == {"baz": "meow"}
+        if state["baz"] == "meow":
+            return "node_2"
+        else:
+            return "__end__"
+
+    builder.add_node(node_1)
+    builder.add_node(node_2)
+    builder.add_conditional_edges("node_1", router)
+    builder.add_edge("__start__", "node_1")
+    graph = builder.compile()
+    assert graph.invoke({"foo": 0}) == {"foo": 2, "bar": "meow"}
