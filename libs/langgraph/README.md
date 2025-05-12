@@ -13,7 +13,7 @@
 [![Open Issues](https://img.shields.io/github/issues-raw/langchain-ai/langgraph)](https://github.com/langchain-ai/langgraph/issues)
 [![Docs](https://img.shields.io/badge/docs-latest-blue)](https://langchain-ai.github.io/langgraph/)
 
-Trusted by [companies](https://langchain-ai.github.io/langgraph/adopters/) shaping the future of agents, LangGraph is a powerful low-level orchestration framework for building, managing, and deploying long-running, stateful agents. 
+Trusted by companies shaping the future of agents – including Klarna, Replit, Elastic, and more – LangGraph is a powerful low-level orchestration framework for building, managing, and deploying long-running, stateful agents. 
 
 ## Get started
 
@@ -46,7 +46,7 @@ agent.invoke(
 )
 ```
 
-For more information, see the [Quickstart](https://langchain-ai.github.io/langgraph/agents/agents/). Or, to build a [complex, looping workflow](https://langchain-ai.github.io/langgraph/concepts/low_level/) with customizable architecture, long-term memory, and other complex task handling, [use the LangGraph framework](https://langchain-ai.github.io/langgraph/concepts/why-langgraph/).
+For more information, see the [Quickstart](https://langchain-ai.github.io/langgraph/agents/agents/). Or, to learn how to build a [looping agent workflow](https://langchain-ai.github.io/langgraph/concepts/low_level/) with a customizable architecture, long-term memory, and other complex task handling, see the [LangGraph basics tutorials](https://langchain-ai.github.io/langgraph/tutorials/get-started/1-build-basic-chatbot/).
 
 ## Core benefits
 
