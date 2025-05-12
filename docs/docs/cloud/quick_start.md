@@ -16,7 +16,7 @@ This quickstart uses the [pre-built Python ReAct agent template](https://github.
 
 ## 1. Create a repository on GitHub
 
-To deploy a LangGraph application to **LangGraph Cloud**, your application code must reside in a GitHub repository. Both public and private repositories are supported. For this quickstart, use the [pre-built Python ReAct agent template](https://github.com/langchain-ai/react-agent) for your application:
+To deploy a LangGraph application to **LangGraph Platform**, your application code must reside in a GitHub repository. Both public and private repositories are supported. For this quickstart, use the [pre-built Python ReAct agent template](https://github.com/langchain-ai/react-agent) for your application:
 
 1. Go to the [ReAct Agent](https://github.com/langchain-ai/react-agent) repository.
 1. Click the `Fork` button in the top right corner to fork the repository to your GitHub account.
