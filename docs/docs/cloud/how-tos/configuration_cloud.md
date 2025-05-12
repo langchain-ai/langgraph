@@ -1,11 +1,6 @@
-# How to create Assistants
+# Manage assistants
 
-!!! info "Prerequisites"
-
-    - [Assistants Overview](../../concepts/assistants.md)
-    - [Configuration](../../concepts/low_level.md#configuration)
-
-In this guide we will show how to create and configure an assistant.
+In this guide we will show how to create, configure, and manage an [assistant](../../concepts/assistants.md).
 
 First, as a brief refresher on the concept of configurations, consider the following simple `call_model` node and configuration schema. Observe that this node tries to read and use the `model_name` as defined by the `config` object's `configurable`.
 
@@ -51,7 +46,7 @@ First, as a brief refresher on the concept of configurations, consider the follo
 
 For more information on configurations, [see here](../../concepts/low_level.md#configuration).
 
-## Creating an Assistant
+## Create an assistant
 
 ### LangGraph SDK
 
@@ -123,7 +118,7 @@ To create a new assistant, select the "+ New assistant" button. This will open a
 
 To confirm, click "Create assistant". This will take you to [LangGraph Studio](../../concepts/langgraph_studio.md) where you can test the assistant. If you go back to the "Assistants" tab in the deployment, you will see the newly created assistant in the table.
 
-## Using an Assistant
+## Use an assistant
 
 ### LangGraph SDK
 
@@ -228,3 +223,105 @@ Output:
 ### LangGraph Platform UI
 
 Inside your deployment, select the "Assistants" tab. For the assistant you would like to use, click the "Studio" button. This will open LangGraph Studio with the selected assistant. When you submit an input (either in Graph or Chat mode), the selected assistant and its configuration will be used.
+
+## Create a new version for your assistant
+
+### LangGraph SDK
+
+To edit the assistant, use the `update` method. This will create a new version of the assistant with the provided edits. See the [Python](../reference/sdk/python_sdk_ref.md#langgraph_sdk.client.AssistantsClient.update) and [JS](../reference/sdk/js_ts_sdk_ref.md#update) SDK reference docs for more information.
+
+!!! note "Note"
+    You must pass in the ENTIRE config (and metadata if you are using it). The update endpoint creates new versions completely from scratch and does not rely on previously versions.
+
+For example, to update your assistant's system prompt:
+=== "Python"
+
+    ```python
+    openai_assistant_v2 = await client.assistants.update(
+        openai_assistant["assistant_id"],
+        config={
+            "configurable": {
+                "model_name": "openai",
+                "system_prompt": "You are an unhelpful assistant!",
+            }
+        },
+    )
+    ```
+
+=== "Javascript"
+
+    ```js
+    const openaiAssistantV2 = await client.assistants.update(
+        openai_assistant["assistant_id"],
+        {
+            config: {
+                configurable: {
+                    model_name: 'openai',
+                    system_prompt: 'You are an unhelpful assistant!',
+                },
+        },
+    });
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request PATCH \
+    --url <DEPOLYMENT_URL>/assistants/<ASSISTANT_ID> \
+    --header 'Content-Type: application/json' \
+    --data '{
+    "config": {"model_name": "openai", "system_prompt": "You are an unhelpful assistant!"}
+    }'
+    ```
+
+This will create a new version of the assistant with the updated parameters and set this as the active version of your assistant. If you now run your graph and pass in this assistant id, it will use this latest version.
+
+### LangGraph Platform UI
+
+You can also edit assistants from the LangGraph Platform UI.
+
+Inside your deployment, select the "Assistants" tab. This will load a table of all of the assistants in your deployment, across all graphs.
+
+To edit an existing assistant, select the "Edit" button for the specified assistant. This will open a form where you can edit the assistant's name, description, and configuration.
+
+Additionally, if using LangGraph Studio, you can edit the assistants and create new versions via the "Manage Assistants" button.
+
+## Use a previous assistant version
+
+### LangGraph SDK
+
+You can also change the active version of your assistant. To do so, use the `setLatest` method.
+
+In the example above, to rollback to the first version of the assistant:
+
+=== "Python"
+
+    ```python
+    await client.assistants.set_latest(openai_assistant['assistant_id'], 1)
+    ```
+
+=== "Javascript"
+
+    ```js
+    await client.assistants.setLatest(openaiAssistant['assistant_id'], 1);
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+    --url <DEPLOYMENT_URL>/assistants/<ASSISTANT_ID>/latest \
+    --header 'Content-Type: application/json' \
+    --data '{
+    "version": 1
+    }'
+    ```
+
+If you now run your graph and pass in this assistant id, it will use the first version of the assistant.
+
+### LangGraph Platform UI
+
+If using LangGraph Studio, to set the active version of your asssistant, click the "Manage Assistants" button and locate the assistant you would like to use. Select the assistant and the version, and then click the "Active" toggle. This will update the assistant to make the selected version active.
+
+!!! warning "Deleting Assistants"
+    Deleting as assistant will delete ALL of it's versions. There is currently no way to delete a single version, but by pointing your assistant to the correct version you can skip any versions that you don't wish to use.
