@@ -693,41 +693,45 @@ def create_react_agent(
             agent_paths.append("generate_structured_response")
             workflow.add_edge("agent", "generate_structured_response")
 
-    def post_model_hook_router(state: StateSchema) -> str | list[Send]:
-        """Route to the next node after post_model_hook.
+    if post_model_hook is not None:
 
-        Routes to one of:
-        * "tools": if there are pending tool calls without a corresponding message.
-        * "generate_structured_response": if no pending tool calls exist and response_format is specified.
-        * END: if no pending tool calls exist and no response_format is specified.
-        """
+        def post_model_hook_router(state: StateSchema) -> str | list[Send]:
+            """Route to the next node after post_model_hook.
 
-        messages = _get_state_value(state, "messages")
-        tool_messages = [m.tool_call_id for m in messages if isinstance(m, ToolMessage)]
-        last_ai_message = next(
-            m for m in reversed(messages) if isinstance(m, AIMessage)
+            Routes to one of:
+            * "tools": if there are pending tool calls without a corresponding message.
+            * "generate_structured_response": if no pending tool calls exist and response_format is specified.
+            * END: if no pending tool calls exist and no response_format is specified.
+            """
+
+            messages = _get_state_value(state, "messages")
+            tool_messages = [
+                m.tool_call_id for m in messages if isinstance(m, ToolMessage)
+            ]
+            last_ai_message = next(
+                m for m in reversed(messages) if isinstance(m, AIMessage)
+            )
+            pending_tool_calls = [
+                c for c in last_ai_message.tool_calls if c["id"] not in tool_messages
+            ]
+
+            if pending_tool_calls:
+                return [Send("tools", [tool_call]) for tool_call in pending_tool_calls]
+            elif response_format is not None:
+                return "generate_structured_response"
+            else:
+                return END
+
+        workflow.add_conditional_edges(
+            "post_model_hook",
+            post_model_hook_router,  # type: ignore[arg-type]
+            path_map=post_model_hook_paths,
         )
-        pending_tool_calls = [
-            c for c in last_ai_message.tool_calls if c["id"] not in tool_messages
-        ]
-
-        if pending_tool_calls:
-            return [Send("tools", [tool_call]) for tool_call in pending_tool_calls]
-        elif response_format is not None:
-            return "generate_structured_response"
-        else:
-            return END
 
     workflow.add_conditional_edges(
         "agent",
         should_continue,  # type: ignore[arg-type]
         path_map=agent_paths,
-    )
-
-    workflow.add_conditional_edges(
-        "post_model_hook",
-        post_model_hook_router,  # type: ignore[arg-type]
-        path_map=post_model_hook_paths,
     )
 
     def route_tool_responses(state: StateSchema) -> str:
