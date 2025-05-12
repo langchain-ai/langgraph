@@ -79,7 +79,7 @@ This example uses the same configuration schema as above, and creates an assista
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
-    let openAIAssistant = await client.assistants.create({
+    const openAIAssistant = await client.assistants.create({
         graphId: 'agent',
         name: "Open AI Assistant",
         config: { "configurable": { "model_name": "openai" } },
@@ -150,7 +150,7 @@ We have now created an assistant called "Open AI Assistant" that has `model_name
 
     ```js
     const thread = await client.threads.create();
-    let input = { "messages": [{ "role": "user", "content": "who made you?" }] };
+    const input = { "messages": [{ "role": "user", "content": "who made you?" }] };
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],

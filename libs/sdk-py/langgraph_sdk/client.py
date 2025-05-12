@@ -1042,7 +1042,7 @@ class ThreadsClient:
                         {
                             "values": u["values"],
                             "command": u.get("command"),
-                            "as_node": u["as_node"],
+                            " ": u["as_node"],
                         }
                         for u in s["updates"]
                     ]
