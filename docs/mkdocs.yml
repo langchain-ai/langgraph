@@ -209,14 +209,10 @@ nav:
       - Streaming:
         - Overview: cloud/concepts/streaming.md
         - cloud/how-tos/streaming.md
-      - Human-in-the-loop:
-        - cloud/how-tos/human_in_the_loop_breakpoint.md
-        - cloud/how-tos/human_in_the_loop_user_input.md
-        - cloud/how-tos/human_in_the_loop_edit_state.md
-        - cloud/how-tos/human_in_the_loop_time_travel.md
-        - cloud/how-tos/human_in_the_loop_review_tool_calls.md
-      - MCP:
-        - Overview: concepts/server-mcp.md
+      - Human-in-the-loop: cloud/how-tos/add-human-in-the-loop.md
+      - Breakpoints: cloud/how-tos/human_in_the_loop_breakpoint.md
+      - Time travel: cloud/how-tos/human_in_the_loop_time_travel.md
+      - MCP: concepts/server-mcp.md
       - Double-texting:
         - Overview: concepts/double_texting.md
         - cloud/how-tos/interrupt_concurrent.md
