@@ -38,7 +38,7 @@ See <a href="https://docs.smith.langchain.com/how_to_guides/tracing/sample_trace
 
 Type of authentication for the LangGraph Server deployment. Valid values: `langsmith`, `noop`.
 
-For deployments to LangGraph Cloud, this environment variable is set automatically. For local development or deployments where authentication is handled externally (e.g. self-hosted), set this environment variable to `noop`.
+For deployments to LangGraph Platform, this environment variable is set automatically. For local development or deployments where authentication is handled externally (e.g. self-hosted), set this environment variable to `noop`.
 
 ## `LANGSMITH_RUNS_ENDPOINTS`
 
@@ -118,7 +118,7 @@ Defaults to `''`.
 ## `REDIS_CLUSTER`
 
 !!! info "Only Allowed in Self-Hosted Deployments"
-    Redis Cluster mode is only available in Self-Hosted Deployment models, LangGraph Cloud SaaS will provision a redis instance for you by default.
+    Redis Cluster mode is only available in Self-Hosted Deployment models, LangGraph Platform SaaS will provision a redis instance for you by default.
 
 Set `REDIS_CLUSTER` to `True` to enable Redis Cluster mode. When enabled, the system will connect to Redis using cluster mode. This is useful when connecting to a Redis Cluster deployment.
 

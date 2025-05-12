@@ -538,7 +538,7 @@ ENV LANGSERVE_GRAPHS='{{"agent": "/deps/__outer_graphs/src/agent.py:graph"}}'
     assert additional_contexts == {}
 
 
-# node.js build used for LangGraph Cloud
+# node.js build used for LangGraph Platform
 def test_config_to_docker_nodejs():
     graphs = {"agent": "./graphs/agent.js:graph"}
     actual_docker_stdin, additional_contexts = config_to_docker(

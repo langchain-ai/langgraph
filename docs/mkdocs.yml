@@ -194,7 +194,6 @@ nav:
       - Assistants:
         - Overview: concepts/assistants.md
         - cloud/how-tos/configuration_cloud.md
-        - cloud/how-tos/assistant_versioning.md
       - Threads:
         - Overview: cloud/concepts/threads.md
         - cloud/how-tos/use_threads.md

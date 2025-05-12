@@ -33,7 +33,7 @@ There are three different plans for using it.
 | Publish/subscribe API for state                                  | --                                          | Coming Soon!                                          | Coming Soon!                                        |
 | Scheduling prioritization                                        | --                                          | Coming Soon!                                          | Coming Soon!                                        |
 
-Please see the [LangGraph Platform Pricing](https://www.langchain.com/langgraph-platform-pricing) for information on pricing.
+For pricing information, see [LangGraph Platform Pricing](https://www.langchain.com/langgraph-platform-pricing).
 
 ## Related
 
