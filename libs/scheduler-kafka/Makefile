@@ -19,7 +19,7 @@ test:
 	exit $$EXIT_CODE
 
 test_watch:
-	make start-services && poetry run ptw . -- $(TEST_PATH); \
+	make start-services && poetry run ptw . -- -x $(TEST_PATH); \
 	EXIT_CODE=$$?; \
 	make stop-services; \
 	exit $$EXIT_CODE

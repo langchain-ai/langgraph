@@ -6,10 +6,14 @@
     ],
     "dependencies": [
         "langchain_openai",
+        "starlette",
         "."
     ],
     "graphs": {
         "agent": "graphs/agent.py:graph"
     },
-    "env": ".env"
+    "env": ".env",
+    "http": {
+        "app": "../../examples/my_app.py:app" 
+    }
 }

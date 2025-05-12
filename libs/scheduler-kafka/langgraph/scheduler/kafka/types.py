@@ -24,8 +24,8 @@ class MessageToOrchestrator(TypedDict):
 
 
 class ExecutorTask(TypedDict):
-    id: str
-    path: tuple[str, ...]
+    id: Optional[str]
+    path: tuple[Union[str, int], ...]
 
 
 class MessageToExecutor(TypedDict):

@@ -1,4 +1,5 @@
-# Rollback
+# How to use the Rollback option
+
 
 This guide assumes knowledge of what double-texting is, which you can learn about in the [double-texting conceptual guide](../../concepts/double_texting.md).
 
@@ -95,7 +96,6 @@ Now let's run a thread with the multitask parameter set to "rollback":
         assistant_id,
         input={"messages": [{"role": "user", "content": "what's the weather in sf?"}]},
     )
-    await asyncio.sleep(2)
     run = await client.runs.create(
         thread["thread_id"],
         assistant_id,
@@ -115,7 +115,6 @@ Now let's run a thread with the multitask parameter set to "rollback":
       assistantId,
       { input: { messages: [{ role: "human", content: "what's the weather in sf?" }] } }
     );
-    await new Promise(resolve => setTimeout(resolve, 2000)); 
 
     let run = await client.runs.create(
       thread["thread_id"],
@@ -139,7 +138,7 @@ Now let's run a thread with the multitask parameter set to "rollback":
     --data "{
       \"assistant_id\": \"agent\",
       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what\'s the weather in sf?\"}]},
-    }" && sleep 2 && curl --request POST \
+    }" && curl --request POST \
     --url <DEPLOY<ENT_URL>>/threads/<THREAD_ID>/runs \
     --header 'Content-Type: application/json' \
     --data "{

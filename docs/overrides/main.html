@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block extrahead %}
+  <meta name="algolia-site-verification" content="165B7E7C89E49946" />
   <style>
     @import url("https://fonts.googleapis.com/css2?family=Public+Sans&display=swap");
     :root {
@@ -27,22 +28,11 @@
     }
 
     .md-footer-meta {
-      background-color: #EEEEEE;
+      background-color: #4d4d4d;
     }
 
     .md-typeset a {
       color: #1E88E5;
-    }
-
-    .md-sidebar {
-      display: none;
-    }
-
-    /* Show sidebar on mobile */
-    @media screen and (max-width: 1220px) {
-      .md-sidebar--primary {
-        display: block;
-      }
     }
 
     .md-typeset a:hover {
@@ -129,7 +119,7 @@
     }
 
     [data-md-color-scheme="slate"] .md-footer-meta {
-      background-color: #1E1E1E;
+      background-color: #4d4d4d;
     }
 
     [data-md-color-scheme="slate"] .md-typeset a {
@@ -164,6 +154,34 @@
     .jupyter-wrapper .jp-Notebook .jp-Cell .jp-OutputPrompt {
       display: none !important;
     }
+
+    .md-banner {
+      background-color: #CFC9FA;
+      color: #000000;
+    }
+
+    .md-banner a {
+      color: #000000;
+      text-decoration: underline;
+    }
+
+    .md-banner a:hover {
+      color: #000000;
+    }
+
+    .md-header__title {
+      visibility: hidden;
+    }
+
+    /* Dark mode banner links */
+    [data-md-color-scheme="slate"] .md-banner a {
+      color: #000000;
+    }
+
+    [data-md-color-scheme="slate"] .md-banner a:hover {
+      color: #000000;
+    }
+
   </style>
 {% endblock %}
 
@@ -189,4 +207,9 @@
   {% else %}
     <title>{{ config.site_name }}</title>
   {% endif %}
+{% endblock %}
+
+
+{% block announce %}
+<strong>We are growing and hiring for multiple roles for LangChain, LangGraph and LangSmith. <a href="https://www.langchain.com/careers" target="_blank" rel="noopener noreferrer"> Join our team!</a></strong>
 {% endblock %}

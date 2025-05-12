@@ -1,14 +1,11 @@
+import ast
 import importlib
-import inspect
 import logging
-import os
 import re
-from typing import List, Literal, Optional
+from functools import lru_cache
+from typing import List, Optional
+
 from typing_extensions import TypedDict
-
-import nbformat
-from nbconvert.preprocessors import Preprocessor
-
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -23,6 +20,12 @@ MANUAL_API_REFERENCES_LANGGRAPH = [
         ["langgraph.prebuilt"],
         "langgraph.prebuilt.chat_agent_executor",
         "create_react_agent",
+        "prebuilt",
+    ),
+    (
+        [],
+        "langgraph.prebuilt.chat_agent_executor",
+        "AgentState",
         "prebuilt",
     ),
     (["langgraph.prebuilt"], "langgraph.prebuilt.tool_node", "ToolNode", "prebuilt"),
@@ -42,22 +45,42 @@ MANUAL_API_REFERENCES_LANGGRAPH = [
     (["langgraph.graph"], "langgraph.graph.message", "add_messages", "graphs"),
     (["langgraph.graph"], "langgraph.graph.state", "StateGraph", "graphs"),
     (["langgraph.graph"], "langgraph.graph.state", "CompiledStateGraph", "graphs"),
-    ([], "langgraph.types", "StreamMode", "types"),
     (["langgraph.graph"], "langgraph.constants", "START", "constants"),
     (["langgraph.graph"], "langgraph.constants", "END", "constants"),
     (["langgraph.constants"], "langgraph.types", "Send", "types"),
     (["langgraph.constants"], "langgraph.types", "Interrupt", "types"),
-    ([], "langgraph.types", "RetryPolicy", "types"),
+    (["langgraph.constants"], "langgraph.types", "interrupt", "types"),
+    (["langgraph.constants"], "langgraph.types", "Command", "types"),
+    (["langgraph.config"], "langgraph.config", "get_stream_writer", "config"),
+    (["langgraph.config"], "langgraph.config", "get_store", "config"),
+    (["langgraph.func"], "langgraph.func", "entrypoint", "func"),
+    (["langgraph.func"], "langgraph.func", "task", "func"),
+    (["langgraph.types"], "langgraph.types", "RetryPolicy", "types"),
+    (["langgraph.types"], "langgraph.types", "StreamMode", "types"),
+    (["langgraph.types"], "langgraph.types", "StreamWriter", "types"),
     ([], "langgraph.checkpoint.base", "Checkpoint", "checkpoints"),
     ([], "langgraph.checkpoint.base", "CheckpointMetadata", "checkpoints"),
     ([], "langgraph.checkpoint.base", "BaseCheckpointSaver", "checkpoints"),
     ([], "langgraph.checkpoint.base", "SerializerProtocol", "checkpoints"),
     ([], "langgraph.checkpoint.serde.jsonplus", "JsonPlusSerializer", "checkpoints"),
     ([], "langgraph.checkpoint.memory", "MemorySaver", "checkpoints"),
+    ([], "langgraph.checkpoint.memory", "InMemorySaver", "checkpoints"),
     ([], "langgraph.checkpoint.sqlite.aio", "AsyncSqliteSaver", "checkpoints"),
     ([], "langgraph.checkpoint.sqlite", "SqliteSaver", "checkpoints"),
     ([], "langgraph.checkpoint.postgres.aio", "AsyncPostgresSaver", "checkpoints"),
     ([], "langgraph.checkpoint.postgres", "PostgresSaver", "checkpoints"),
+    # other prebuilts
+    (["langgraph_supervisor"], "langgraph_supervisor.supervisor", "create_supervisor", "supervisor"),
+    (["langgraph_supervisor"], "langgraph_supervisor.handoff", "create_handoff_tool", "supervisor"),
+    ([], "langgraph_supervisor.handoff", "create_forward_message_tool", "supervisor"),
+    (["langgraph_swarm"], "langgraph_swarm.swarm", "create_swarm", "swarm"),
+    (["langgraph_swarm"], "langgraph_swarm.swarm", "add_active_agent_router", "swarm"),
+    (["langgraph_swarm"], "langgraph_swarm.swarm", "SwarmState", "swarm"),
+    (["langgraph_swarm"], "langgraph_swarm.handoff", "create_handoff_tool", "swarm"),
+    ([], "langchain_mcp_adapters.client", "MultiServerMCPClient", "mcp"),
+    ([], "langchain_mcp_adapters.tools", "load_mcp_tools", "mcp"),
+    ([], "langchain_mcp_adapters.prompts", "load_mcp_prompt", "mcp"),
+    ([], "langchain_mcp_adapters.resources", "load_mcp_resources", "mcp"),
 ]
 
 WELL_KNOWN_LANGGRAPH_OBJECTS = {
@@ -67,180 +90,195 @@ WELL_KNOWN_LANGGRAPH_OBJECTS = {
 }
 
 
-def _make_regular_expression(pkg_prefix: str) -> re.Pattern:
-    if not pkg_prefix.isidentifier():
-        raise ValueError(f"Invalid package prefix: {pkg_prefix}")
-    return re.compile(
-        r"from\s+(" + pkg_prefix + "(?:_\w+)?(?:\.\w+)*?)\s+import\s+"
-        r"((?:\w+(?:,\s*)?)*"  # Match zero or more words separated by a comma+optional ws
-        r"(?:\s*\(.*?\))?)",  # Match optional parentheses block
-        re.DOTALL,  # Match newlines as well
-    )
-
-
-# Regular expression to match langchain import lines
-_IMPORT_LANGCHAIN_RE = _make_regular_expression("langchain")
-_IMPORT_LANGGRAPH_RE = _make_regular_expression("langgraph")
-
-
-def _get_full_module_name(module_path, class_name) -> Optional[str]:
-    """Get full module name using inspect"""
+@lru_cache(maxsize=10_000)
+def _get_full_module_name(module_path: str, class_name: str) -> Optional[str]:
+    """Get full module name using inspect, with LRU cache to memoize results."""
     try:
         module = importlib.import_module(module_path)
-        class_ = getattr(module, class_name)
-        module = inspect.getmodule(class_)
-        if module is None:
-            # For constants, inspect.getmodule() might return None
-            # In this case, we'll return the original module_path
+        symbol = getattr(module, class_name)
+        # First check the __module__ attribute on the symbol.
+        mod_name = getattr(symbol, "__module__", None)
+        # If __module__ is not set or comes from typing,
+        # assume the definition is in module_path.
+        if mod_name is None or mod_name.startswith("typing"):
             return module_path
-        return module.__name__
+        return mod_name
     except AttributeError as e:
-        logger.warning(f"Could not find module for {class_name}, {e}")
+        logger.warning(f"API Reference: Could not find module for {class_name}, {e}")
         return None
     except ImportError as e:
-        logger.warning(f"Failed to load for class {class_name}, {e}")
+        logger.warning(f"API Reference: Failed to load for class {class_name}, {e}")
         return None
-
-
-def _get_doc_title(data: str, file_name: str) -> str:
-    try:
-        return re.findall(r"^#\s*(.*)", data, re.MULTILINE)[0]
-    except IndexError:
-        pass
-    # Parse the rst-style titles
-    try:
-        return re.findall(r"^(.*)\n=+\n", data, re.MULTILINE)[0]
-    except IndexError:
-        return file_name
 
 
 class ImportInformation(TypedDict):
-    imported: str  # imported class name
-    source: str  # module path
-    docs: str  # URL to the documentation
-    title: str  # Title of the document
+    imported: str  # The name of the class that was imported.
+    source: str  # The full module path from which the class was imported.
+    docs: str  # The URL pointing to the class's documentation.
+    path: str  # The path of the file where the markdown content originated.
 
 
-def _get_imports(
-    code: str, doc_title: str, package_ecosystem: Literal["langchain", "langgraph"]
-) -> List[ImportInformation]:
-    """Get imports from the given code block.
+def get_imports(code: str, path: str) -> List[ImportInformation]:
+    """Retrieve all import references from the given code for specified ecosystems.
 
     Args:
-        code: Python code block from which to extract imports
-        doc_title: Title of the document
-        package_ecosystem: "langchain" or "langgraph". The two live in different
-            repositories and have separate documentation sites.
+        code: The source code from which to extract import references.
+        path: The path of the file where the markdown content originated.
 
     Returns:
-        List of import information for the given code block
+        A list of import information for each import found.
     """
-    imports = []
+    # Parse the code into an AST.
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return []
 
-    if package_ecosystem == "langchain":
-        pattern = _IMPORT_LANGCHAIN_RE
-    elif package_ecosystem == "langgraph":
-        pattern = _IMPORT_LANGGRAPH_RE
-    else:
-        raise ValueError(f"Invalid package ecosystem: {package_ecosystem}")
+    found_imports = []
 
-    for import_match in pattern.finditer(code):
-        module = import_match.group(1)
-        if "pydantic_v1" in module:
-            continue
-        imports_str = (
-            import_match.group(2).replace("(\n", "").replace("\n)", "")
-        )  # Handle newlines within parentheses
-        # remove any newline and spaces, then split by comma
-        imported_classes = [
-            imp.strip()
-            for imp in re.split(r",\s*", imports_str.replace("\n", ""))
-            if imp.strip()
-        ]
-        for class_name in imported_classes:
-            module_path = _get_full_module_name(module, class_name)
-            if not module_path:
+    # Walk through the AST and process ImportFrom nodes.
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            # node.module is the source module.
+            if node.module is None:
                 continue
-            if len(module_path.split(".")) < 2:
-                continue
-
-            if package_ecosystem == "langchain":
-                pkg = module_path.split(".")[0].replace("langchain_", "")
-                top_level_mod = module_path.split(".")[1]
-
-                url = (
-                    _LANGCHAIN_API_REFERENCE
-                    + pkg
-                    + "/"
-                    + top_level_mod
-                    + "/"
-                    + module_path
-                    + "."
-                    + class_name
-                    + ".html"
-                )
-            elif package_ecosystem == "langgraph":
-                if (module, class_name) not in WELL_KNOWN_LANGGRAPH_OBJECTS:
-                    # Likely not documented yet
+            for alias in node.names:
+                if not (
+                    node.module.startswith("langchain")
+                    or node.module.startswith("langgraph")
+                ):
                     continue
 
-                source_module, namespace = WELL_KNOWN_LANGGRAPH_OBJECTS[
-                    (module, class_name)
-                ]
-                url = (
-                    _LANGGRAPH_API_REFERENCE
-                    + namespace
-                    + "/#"
-                    + source_module
-                    + "."
-                    + class_name
+                found_imports.append(
+                    {
+                        "source": node.module,
+                        # alias.name is the original name even if an alias exists.
+                        "imported": alias.name,
+                    }
                 )
-            else:
-                raise ValueError(f"Invalid package ecosystem: {package_ecosystem}")
 
-            # Add the import information to our list
-            imports.append(
-                {
-                    "imported": class_name,
-                    "source": module,
-                    "docs": url,
-                    "title": doc_title,
-                }
+    imports: list[ImportInformation] = []
+
+    for found_import in found_imports:
+        module = found_import["source"]
+
+        if module.startswith("langchain_mcp_adapters"):
+            package_ecosystem = "langgraph"
+        elif module.startswith("langchain"):
+            # Handles things like `langchain` or `langchain_anthropic`
+            package_ecosystem = "langchain"
+        elif module.startswith("langgraph"):
+            package_ecosystem = "langgraph"
+        else:
+            continue
+
+        class_name = found_import["imported"]
+        module_path = _get_full_module_name(module, class_name)
+        if not module_path:
+            continue
+        if len(module_path.split(".")) < 2:
+            continue
+
+        if package_ecosystem == "langchain":
+            pkg = module_path.split(".")[0].replace("langchain_", "")
+            top_level_mod = module_path.split(".")[1]
+
+            url = (
+                _LANGCHAIN_API_REFERENCE
+                + pkg
+                + "/"
+                + top_level_mod
+                + "/"
+                + module_path
+                + "."
+                + class_name
+                + ".html"
             )
+        elif package_ecosystem == "langgraph":
+            if (module, class_name) not in WELL_KNOWN_LANGGRAPH_OBJECTS:
+                # Likely not documented yet
+                continue
+
+            source_module, namespace = WELL_KNOWN_LANGGRAPH_OBJECTS[
+                (module, class_name)
+            ]
+            url = (
+                _LANGGRAPH_API_REFERENCE
+                + namespace
+                + "/#"
+                + source_module
+                + "."
+                + class_name
+            )
+        else:
+            raise ValueError(f"Invalid package ecosystem: {package_ecosystem}")
+
+        # Add the import information to our list
+        imports.append(
+            {
+                "imported": class_name,
+                "source": module,
+                "docs": url,
+                "path": path,
+            }
+        )
 
     return imports
 
 
-class ImportPreprocessor(Preprocessor):
-    """A preprocessor to replace imports in each Python code cell with links to their
-    documentation and append the import info in a comment."""
+def update_markdown_with_imports(markdown: str, path: str) -> str:
+    """Update markdown to include API reference links for imports in Python code blocks.
 
-    def preprocess(self, nb, resources):
-        self.all_imports = []
-        file_name = os.path.basename(resources.get("metadata", {}).get("name", ""))
-        _DOC_TITLE = _get_doc_title(nb.cells[0].source, file_name)
+    This function scans the markdown content for Python code blocks, extracts any
+    imports, and appends links to their API documentation.
 
-        cells = []
-        for cell in nb.cells:
-            if cell.cell_type == "code":
-                cells.append(cell)
-                imports = _get_imports(
-                    cell.source, _DOC_TITLE, "langchain"
-                ) + _get_imports(cell.source, _DOC_TITLE, "langgraph")
-                if not imports:
-                    continue
+    Args:
+        markdown: The markdown content to process.
+        path: The path of the file where the markdown content originated.
 
-                cells.append(
-                    nbformat.v4.new_markdown_cell(
-                        source=f"""
-<div>
-<b>API Reference:</b>
-{' | '.join(f'<a href="{imp["docs"]}">{imp["imported"]}</a>' for imp in imports)}
-</div>
-                    """
-                    )
-                )
-            else:
-                cells.append(cell)
-        nb.cells = cells
-        return nb, resources
+    Returns:
+        Updated markdown with API reference links prepended to Python code blocks.
+
+    Example:
+        Given a markdown with a Python code block:
+
+        ```python
+        from langchain.nlp import TextGenerator
+        ```
+        This function will append an API reference link to the `TextGenerator` class
+        from the `langchain.nlp` module if it's recognized.
+    """
+    code_block_pattern = re.compile(
+        r"(?P<indent>[ \t]*)```(?P<language>python|py)\n(?P<code>.*?)\n(?P=indent)```",
+        re.DOTALL,
+    )
+
+    def replace_code_block(match: re.Match) -> str:
+        """Replace the matched code block with additional API reference links if imports are found.
+
+        Args:
+            match (re.Match): The regex match object containing the code block.
+
+        Returns:
+            str: The modified code block with API reference links prepended if applicable.
+        """
+        indent = match.group("indent")
+        code_block = match.group("code")
+        # Retrieve import information from the code block
+        imports = get_imports(code_block, "__unused__")
+
+        original_code_block = match.group(0)
+        # If no imports are found, return the original code block
+        if not imports:
+            return original_code_block
+
+        # Generate API reference links for each import
+        api_links = " | ".join(
+            f'<a href="{imp["docs"]}">{imp["imported"]}</a>' for imp in imports
+        )
+        # Return the code block with prepended API reference links
+        return f"{indent}<sup><i>API Reference: {api_links}</i></sup>\n\n{original_code_block}"
+
+    # Apply the replace_code_block function to all matches in the markdown
+    updated_markdown = code_block_pattern.sub(replace_code_block, markdown)
+    return updated_markdown

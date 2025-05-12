@@ -1,38 +1,22 @@
+---
+search:
+  boost: 2
+---
+
 # Cloud SaaS
 
-!!! info "Prerequisites" 
-    - [LangGraph Platform](./langgraph_platform.md) 
-    - [LangGraph Server](./langgraph_server.md)
+To deploy a [LangGraph Server](../concepts/langgraph_server.md), follow the how-to guide for [how to deploy to Cloud SaaS](../cloud/deployment/cloud.md).
 
 ## Overview
 
-LangGraph's Cloud SaaS is a managed service for deploying LangGraph APIs, regardless of its definition or dependencies. The service offers managed implementations of checkpointers and stores, allowing you to focus on building the right cognitive architecture for your use case. By handling scalable & secure infrastructure, LangGraph Cloud offers the fastest path to getting your LangGraph API deployed to production.
+The Cloud SaaS deployment option is a fully managed model for deployment where we manage the [control plane](./langgraph_control_plane.md) and [data plane](./langgraph_data_plane.md) in our cloud.
 
-## Deployment
-
-A **deployment** is an instance of a LangGraph API. A single deployment can have many [revisions](#revision). When a deployment is created, all the necessary infrastructure (e.g. database, containers, secrets store) are automatically provisioned. See the [architecture diagram](#architecture) below for more details.
-
-See the [how-to guide](../cloud/deployment/cloud.md#create-new-deployment) for creating a new deployment.
-
-## Revision
-
-A revision is an iteration of a [deployment](#deployment). When a new deployment is created, an initial revision is automatically created. To deploy new code changes or update environment variable configurations for a deployment, a new revision must be created. When a revision is created, a new container image is built automatically.
-
-See the [how-to guide](../cloud/deployment/cloud.md#create-new-revision) for creating a new revision.
-
-## Asynchronous Deployment
-
-Infrastructure for [deployments](#deployment) and [revisions](#revision) are provisioned and deployed asynchronously. They are not deployed immediately after submission. Currently, deployment can take up to several minutes.
+|                   | [Control plane](../concepts/langgraph_control_plane.md) | [Data plane](../concepts/langgraph_data_plane.md) |
+|-------------------|-------------------|------------|
+| **What is it?** | <ul><li>Control plane UI for creating deployments and revisions</li><li>Control plane APIs for creating deployments and revisions</li></ul> | <ul><li>Data plane "listener" for reconciling deployments with control plane state</li><li>LangGraph Servers</li><li>Postgres, Redis, etc</li></ul> |
+| **Where is it hosted?** | LangChain's cloud | LangChain's cloud |
+| **Who provisions and manages it?** | LangChain | LangChain |
 
 ## Architecture
 
-!!! warning "Subject to Change"
-The Cloud SaaS deployment architecture may change in the future.
-
-A high-level diagram of a Cloud SaaS deployment.
-
-![diagram](img/langgraph_cloud_architecture.png)
-
-## Related
-
-- [Deployment Options](./deployment_options.md)
+![Cloud SaaS](./img/self_hosted_control_plane_architecture.png)

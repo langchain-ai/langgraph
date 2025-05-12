@@ -1,15 +1,16 @@
-from contextlib import asynccontextmanager, contextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import (
+    AbstractAsyncContextManager,
+    AbstractContextManager,
+    asynccontextmanager,
+    contextmanager,
+)
 from inspect import signature
 from typing import (
     Any,
-    AsyncContextManager,
-    AsyncIterator,
     Callable,
-    ContextManager,
     Generic,
-    Iterator,
     Optional,
-    Type,
     Union,
 )
 
@@ -28,15 +29,15 @@ class Context(ManagedValue[V], Generic[V]):
     def of(
         ctx: Union[
             None,
-            Callable[..., ContextManager[V]],
-            Type[ContextManager[V]],
-            Callable[..., AsyncContextManager[V]],
-            Type[AsyncContextManager[V]],
+            Callable[..., AbstractContextManager[V]],
+            type[AbstractContextManager[V]],
+            Callable[..., AbstractAsyncContextManager[V]],
+            type[AbstractAsyncContextManager[V]],
         ] = None,
         actx: Optional[
             Union[
-                Callable[..., AsyncContextManager[V]],
-                Type[AsyncContextManager[V]],
+                Callable[..., AbstractAsyncContextManager[V]],
+                type[AbstractAsyncContextManager[V]],
             ]
         ] = None,
     ) -> ConfiguredManagedValue:
@@ -98,8 +99,10 @@ class Context(ManagedValue[V], Generic[V]):
         self,
         loop: LoopProtocol,
         *,
-        ctx: Union[None, Type[ContextManager[V]], Type[AsyncContextManager[V]]] = None,
-        actx: Optional[Type[AsyncContextManager[V]]] = None,
+        ctx: Union[
+            None, type[AbstractContextManager[V]], type[AbstractAsyncContextManager[V]]
+        ] = None,
+        actx: Optional[type[AbstractAsyncContextManager[V]]] = None,
     ) -> None:
         self.ctx = ctx
         self.actx = actx

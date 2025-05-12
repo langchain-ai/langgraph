@@ -49,7 +49,9 @@ def check_capabilities(runner) -> DockerCapabilities:
         raise click.UsageError("Docker not installed") from None
 
     try:
-        stdout, _ = runner.run(subp_exec("docker", "info", "-f", "json", collect=True))
+        stdout, _ = runner.run(
+            subp_exec("docker", "info", "-f", "{{json .}}", collect=True)
+        )
         info = json.loads(stdout)
     except (click.exceptions.Exit, json.JSONDecodeError):
         raise click.UsageError("Docker not installed or not running") from None
@@ -141,6 +143,10 @@ def compose_as_dict(
     debugger_base_url: Optional[str] = None,
     # postgres://user:password@host:port/database?option=value
     postgres_uri: Optional[str] = None,
+    # If you are running against an already-built image, you can pass it here
+    image: Optional[str] = None,
+    # Base image to use for the LangGraph API server
+    base_image: Optional[str] = None,
 ) -> dict:
     """Create a docker compose file as a dictionary in YML style."""
     if postgres_uri is None:
@@ -170,13 +176,14 @@ def compose_as_dict(
     # Add Postgres service before langgraph-api if it is needed
     if include_db:
         services["langgraph-postgres"] = {
-            "image": "postgres:16",
+            "image": "pgvector/pgvector:pg16",
             "ports": ['"5433:5432"'],
             "environment": {
                 "POSTGRES_DB": "postgres",
                 "POSTGRES_USER": "postgres",
                 "POSTGRES_PASSWORD": "postgres",
             },
+            "command": ["postgres", "-c", "shared_preload_libraries=vector"],
             "volumes": ["langgraph-data:/var/lib/postgresql/data"],
             "healthcheck": {
                 "test": "pg_isready -U postgres",
@@ -208,6 +215,8 @@ def compose_as_dict(
             "POSTGRES_URI": postgres_uri,
         },
     }
+    if image:
+        services["langgraph-api"]["image"] = image
 
     # If Postgres is included, add it to the dependencies of langgraph-api
     if include_db:
@@ -241,6 +250,8 @@ def compose(
     debugger_base_url: Optional[str] = None,
     # postgres://user:password@host:port/database?option=value
     postgres_uri: Optional[str] = None,
+    image: Optional[str] = None,
+    base_image: Optional[str] = None,
 ) -> str:
     """Create a docker compose file as a string."""
     compose_content = compose_as_dict(
@@ -249,6 +260,8 @@ def compose(
         debugger_port=debugger_port,
         debugger_base_url=debugger_base_url,
         postgres_uri=postgres_uri,
+        image=image,
+        base_image=base_image,
     )
     compose_str = dict_to_yaml(compose_content)
     return compose_str

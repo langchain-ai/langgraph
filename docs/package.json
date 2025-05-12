@@ -1,0 +1,20 @@
+{
+  "name": "docs",
+  "version": "1.0.0",
+  "license": "MIT",
+  "scripts": {
+    "build": "echo 'export OPENAI_API_KEY=\"sk-proj-1234567890\"' >> ~/.bashrc && echo 'export ANTHROPIC_API_KEY=\"sk-ant-api03-1234567890\"' >> ~/.bashrc && echo 'export PATH=$PATH:/vercel/.local/bin:$PATH' >> ~/.bashrc && source ~/.bashrc && make vercel-build-docs"
+  },
+  "dependencies": {
+    "@langchain/core": "^0.3.38",
+    "@langchain/openai": "^0.4.2",
+    "msgpack-lite": "^0.1.26",
+    "nock": "^14.0.1"
+  },
+  "devDependencies": {
+    "@tsconfig/recommended": "^1.0.8",
+    "@types/msgpack-lite": "^0.1.11",
+    "@types/nock": "^11.1.0",
+    "@types/node": "^22.13.1"
+  }
+}

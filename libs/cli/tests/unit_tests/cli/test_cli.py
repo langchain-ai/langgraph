@@ -1,14 +1,16 @@
 import json
 import pathlib
+import re
 import shutil
 import tempfile
+import textwrap
 from contextlib import contextmanager
 from pathlib import Path
 
 from click.testing import CliRunner
 
 from langgraph_cli.cli import cli, prepare_args_and_stdin
-from langgraph_cli.config import Config, validate_config
+from langgraph_cli.config import PIP_CLEANUP_LINES, Config, validate_config
 from langgraph_cli.docker import DEFAULT_POSTGRES_URI, DockerCapabilities, Version
 from langgraph_cli.util import clean_empty_lines
 
@@ -40,9 +42,9 @@ def temporary_config_folder(config_content: dict):
 
 def test_prepare_args_and_stdin() -> None:
     # this basically serves as an end-to-end test for using config and docker helpers
-    config_path = pathlib.Path("./langgraph.json")
+    config_path = pathlib.Path(__file__).parent / "langgraph.json"
     config = validate_config(
-        Config(dependencies=["."], graphs={"agent": "agent.py:graph"})
+        Config(dependencies=[".", "../../.."], graphs={"agent": "agent.py:graph"})
     )
     port = 8000
     debugger_port = 8001
@@ -61,7 +63,7 @@ def test_prepare_args_and_stdin() -> None:
 
     expected_args = [
         "--project-directory",
-        ".",
+        str(pathlib.Path(__file__).parent.absolute()),
         "-f",
         "custom-docker-compose.yml",
         "-f",
@@ -79,13 +81,17 @@ services:
             timeout: 1s
             retries: 5
     langgraph-postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         ports:
             - "5433:5432"
         environment:
             POSTGRES_DB: postgres
             POSTGRES_USER: postgres
             POSTGRES_PASSWORD: postgres
+        command:
+            - postgres
+            - -c
+            - shared_preload_libraries=vector
         volumes:
             - langgraph-data:/var/lib/postgresql/data
         healthcheck:
@@ -125,18 +131,134 @@ services:
         pull_policy: build
         build:
             context: .
+            additional_contexts:
+                - cli_1: {str(pathlib.Path(__file__).parent.parent.parent.parent.absolute())}
             dockerfile_inline: |
                 FROM langchain/langgraph-api:3.11
-                ADD . /deps/
+                # -- Adding local package . --
+                ADD . /deps/cli
+                # -- End of local package . --
+                # -- Adding local package ../../.. --
+                COPY --from=cli_1 . /deps/cli_1
+                # -- End of local package ../../.. --
+                # -- Installing all local dependencies --
                 RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
+                # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "agent.py:graph"}}'
-                WORKDIR /deps/
+{textwrap.indent(textwrap.dedent(PIP_CLEANUP_LINES), "                ")}
+                WORKDIR /deps/cli
         
         develop:
             watch:
                 - path: langgraph.json
                   action: rebuild
                 - path: .
+                  action: rebuild
+                - path: ../../..
+                  action: rebuild\
+"""
+    assert actual_args == expected_args
+    assert clean_empty_lines(actual_stdin) == expected_stdin
+
+
+def test_prepare_args_and_stdin_with_image() -> None:
+    # this basically serves as an end-to-end test for using config and docker helpers
+    config_path = pathlib.Path(__file__).parent / "langgraph.json"
+    config = validate_config(
+        Config(dependencies=[".", "../../.."], graphs={"agent": "agent.py:graph"})
+    )
+    port = 8000
+    debugger_port = 8001
+    debugger_graph_url = f"http://127.0.0.1:{port}"
+
+    actual_args, actual_stdin = prepare_args_and_stdin(
+        capabilities=DEFAULT_DOCKER_CAPABILITIES,
+        config_path=config_path,
+        config=config,
+        docker_compose=pathlib.Path("custom-docker-compose.yml"),
+        port=port,
+        debugger_port=debugger_port,
+        debugger_base_url=debugger_graph_url,
+        watch=True,
+        image="my-cool-image",
+    )
+
+    expected_args = [
+        "--project-directory",
+        str(pathlib.Path(__file__).parent.absolute()),
+        "-f",
+        "custom-docker-compose.yml",
+        "-f",
+        "-",
+    ]
+    expected_stdin = f"""volumes:
+    langgraph-data:
+        driver: local
+services:
+    langgraph-redis:
+        image: redis:6
+        healthcheck:
+            test: redis-cli ping
+            interval: 5s
+            timeout: 1s
+            retries: 5
+    langgraph-postgres:
+        image: pgvector/pgvector:pg16
+        ports:
+            - "5433:5432"
+        environment:
+            POSTGRES_DB: postgres
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+        command:
+            - postgres
+            - -c
+            - shared_preload_libraries=vector
+        volumes:
+            - langgraph-data:/var/lib/postgresql/data
+        healthcheck:
+            test: pg_isready -U postgres
+            start_period: 10s
+            timeout: 1s
+            retries: 5
+            interval: 60s
+            start_interval: 1s
+    langgraph-debugger:
+        image: langchain/langgraph-debugger
+        restart: on-failure
+        depends_on:
+            langgraph-postgres:
+                condition: service_healthy
+        ports:
+            - "{debugger_port}:3968"
+        environment:
+            VITE_STUDIO_LOCAL_GRAPH_URL: {debugger_graph_url}
+    langgraph-api:
+        ports:
+            - "8000:8000"
+        depends_on:
+            langgraph-redis:
+                condition: service_healthy
+            langgraph-postgres:
+                condition: service_healthy
+        environment:
+            REDIS_URI: redis://langgraph-redis:6379
+            POSTGRES_URI: {DEFAULT_POSTGRES_URI}
+        image: my-cool-image
+        healthcheck:
+            test: python /api/healthcheck.py
+            interval: 60s
+            start_interval: 1s
+            start_period: 10s
+        
+        
+        develop:
+            watch:
+                - path: langgraph.json
+                  action: rebuild
+                - path: .
+                  action: rebuild
+                - path: ../../..
                   action: rebuild\
 """
     assert actual_args == expected_args
@@ -161,8 +283,9 @@ def test_dockerfile_command_basic() -> None:
     """Test the 'dockerfile' command with basic configuration."""
     runner = CliRunner()
     config_content = {
-        "node_version": "20",  # Add any other necessary configuration fields
+        "python_version": "3.11",
         "graphs": {"agent": "agent.py:graph"},
+        "dependencies": ["."],
     }
 
     with temporary_config_folder(config_content) as temp_dir:
@@ -179,6 +302,79 @@ def test_dockerfile_command_basic() -> None:
 
         # Check if Dockerfile was created
         assert save_path.exists()
+
+
+def test_dockerfile_command_new_style_config() -> None:
+    """Test `dockerfile` command with a new style config.
+
+    This config format allows specifying agent data as a dictionary.
+    {
+        "graphs": {
+            "agent1": {
+                "path": ... # path to graph definition,
+                ... # other fields
+            }
+        }
+    }
+    """
+    runner = CliRunner()
+    config_content = {
+        "dependencies": ["./my_agent"],
+        "graphs": {
+            "agent": {
+                "path": "./my_agent/agent.py:graph",
+                "description": "This is a test agent",
+            }
+        },
+        "env": ".env",
+    }
+    with temporary_config_folder(config_content) as temp_dir:
+        save_path = temp_dir / "Dockerfile"
+        # Add agent.py file
+        agent_path = temp_dir / "my_agent" / "agent.py"
+        agent_path.parent.mkdir(parents=True, exist_ok=True)
+        agent_path.touch()
+
+        result = runner.invoke(
+            cli,
+            ["dockerfile", str(save_path), "--config", str(temp_dir / "config.json")],
+        )
+
+        # Assert command was successful
+        assert result.exit_code == 0, result.output
+        assert "✅ Created: Dockerfile" in result.output
+
+        # Check if Dockerfile was created
+        assert save_path.exists()
+
+
+def test_dockerfile_command_with_base_image() -> None:
+    """Test the 'dockerfile' command with a base image."""
+    runner = CliRunner()
+    config_content = {
+        "python_version": "3.11",
+        "graphs": {"agent": "agent.py:graph"},
+        "dependencies": ["."],
+        "base_image": "langchain/langgraph-server:0.2",
+    }
+    with temporary_config_folder(config_content) as temp_dir:
+        save_path = temp_dir / "Dockerfile"
+        agent_path = temp_dir / "agent.py"
+        agent_path.parent.mkdir(parents=True, exist_ok=True)
+        agent_path.touch()
+
+        result = runner.invoke(
+            cli,
+            ["dockerfile", str(save_path), "--config", str(temp_dir / "config.json")],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "✅ Created: Dockerfile" in result.output
+
+        assert save_path.exists()
+        with open(save_path) as f:
+            dockerfile = f.read()
+            assert re.match("FROM langchain/langgraph-server:0.2-py3.*", dockerfile)
 
 
 def test_dockerfile_command_with_docker_compose() -> None:

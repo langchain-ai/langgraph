@@ -1,0 +1,38 @@
+:root {
+  --md-admonition-icon--version-added: url('data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h4l3 3 3-3h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2m0 16h-4.2l-.8.8-2 2-2-2-.8-.8H5V4h14z"/><path d="M11 15h2v2h-2v-2m0-10h2v8h-2V5"/></svg>');
+  --md-admonition-icon--version-changed: url('data:image/svg+xml;charset=utf-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h4l3 3 3-3h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2m0 16h-4.2l-.8.8-2 2-2-2-.8-.8H5V4h14z"/><path d="M15 11h-2V9h-2v2H9v2h2v2h2v-2h2v-2Z"/></svg>');
+}
+
+.md-typeset .admonition.version-added,
+.md-typeset details.version-added {
+  border-color: rgb(0, 191, 165);
+}
+
+.md-typeset .version-added > .admonition-title,
+.md-typeset .version-added > summary {
+  background-color: rgba(0, 191, 165, 0.1);
+}
+
+.md-typeset .version-added > .admonition-title::before,
+.md-typeset .version-added > summary::before {
+  background-color: rgb(0, 191, 165);
+  -webkit-mask-image: var(--md-admonition-icon--version-added);
+          mask-image: var(--md-admonition-icon--version-added);
+}
+
+.md-typeset .admonition.version-changed,
+.md-typeset details.version-changed {
+  border-color: rgb(100, 221, 23);
+}
+
+.md-typeset .version-changed > .admonition-title,
+.md-typeset .version-changed > summary {
+  background-color: rgba(100, 221, 23, 0.1);
+}
+
+.md-typeset .version-changed > .admonition-title::before,
+.md-typeset .version-changed > summary::before {
+  background-color: rgb(100, 221, 23);
+  -webkit-mask-image: var(--md-admonition-icon--version-changed);
+          mask-image: var(--md-admonition-icon--version-changed);
+} 

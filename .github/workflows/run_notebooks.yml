@@ -9,7 +9,11 @@ on:
         type: string
         description: "JSON string of changed files"
   schedule:
-    - cron: '0 13 * * *'
+    - cron: "0 13 * * *"
+
+defaults:
+  run:
+    working-directory: docs
 
 jobs:
   build:
@@ -26,12 +30,12 @@ jobs:
         uses: "./.github/actions/poetry_setup"
         with:
           python-version: 3.11
-          poetry-version: 1.7.1
+          poetry-version: 2.1.2
           cache-key: test-langgraph-notebooks
 
       - name: Install dependencies
         run: |
-          poetry install --with test
+          poetry install --with test --no-root
           poetry run pip install jupyter
 
       - name: Start services
@@ -39,36 +43,36 @@ jobs:
 
       - name: Pre-download tiktoken files
         run: |
-          poetry run python docs/_scripts/download_tiktoken.py
+          poetry run python _scripts/download_tiktoken.py
 
       - name: Prepare notebooks
         run: |
           if [ "${{ matrix.lib-version }}" = "development" ]; then
-            poetry run python docs/_scripts/prepare_notebooks_for_ci.py --comment-install-cells
+            poetry run python _scripts/prepare_notebooks_for_ci.py --comment-install-cells
           else
-            poetry run python docs/_scripts/prepare_notebooks_for_ci.py
+            poetry run python _scripts/prepare_notebooks_for_ci.py
           fi
 
       - name: Run notebooks
         env:
           # these won't actually be used because of the VCR cassettes
           # but need to set them to avoid triggering getpass()
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
-          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
-          NOMIC_API_KEY: ${{ secrets.NOMIC_API_KEY }}
-          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
-          FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+          OPENAI_API_KEY: "very-secret-key"
+          ANTHROPIC_API_KEY: "very-secret-key"
+          TAVILY_API_KEY: "very-secret-key"
+          LANGSMITH_API_KEY: "very-secret-key"
+          NOMIC_API_KEY: "very-secret-key"
+          COHERE_API_KEY: "very-secret-key"
+          FIREWORKS_API_KEY: "very-secret-key"
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event_name }}" = "schedule" ]; then
             echo "Running all notebooks"
-            ./docs/_scripts/execute_notebooks.sh
+            ./_scripts/execute_notebooks.sh
           else
-            CHANGED_FILES=$(echo '${{ inputs.changed-files }}' | tr ' ' '\n' | grep '\.ipynb$' || true)
+            CHANGED_FILES=$(echo '${{ inputs.changed-files }}' | tr ' ' '\n' | sed 's|^docs/docs/|docs/|' | grep '\.ipynb$' || true)
             if [ -n "$CHANGED_FILES" ]; then
               echo "Running changed notebooks: $CHANGED_FILES"
-              ./docs/_scripts/execute_notebooks.sh $CHANGED_FILES
+              ./_scripts/execute_notebooks.sh $CHANGED_FILES
             else
               echo "No notebook files changed, skipping execution"
             fi

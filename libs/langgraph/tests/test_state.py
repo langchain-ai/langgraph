@@ -1,13 +1,14 @@
 import inspect
+import operator
 import warnings
 from dataclasses import dataclass, field
+from typing import Annotated, Any, Optional
 from typing import Annotated as Annotated2
-from typing import Any, Optional
 
 import pytest
 from langchain_core.runnables import RunnableConfig, RunnableLambda
-from pydantic.v1 import BaseModel
-from typing_extensions import Annotated, NotRequired, Required, TypedDict
+from pydantic import BaseModel
+from typing_extensions import NotRequired, Required, TypedDict
 
 from langgraph.graph.state import StateGraph, _get_node_name, _warn_invalid_state_schema
 from langgraph.managed.shared_value import SharedValue
@@ -79,8 +80,16 @@ def test_state_schema_with_type_hint():
     def pre_foo(_) -> FooState:
         return {"foo": "bar"}
 
+    def pre_bar(_) -> FooState:
+        return {"foo": "bar"}
+
     class Foo:
         def __call__(self, state: FooState) -> OutputState:
+            assert state.pop("foo") == "bar"
+            return {"input_state": state}
+
+    class Bar:
+        def my_node(self, state: FooState) -> OutputState:
             assert state.pop("foo") == "bar"
             return {"input_state": state}
 
@@ -92,6 +101,8 @@ def test_state_schema_with_type_hint():
         miss_all_hint,
         pre_foo,
         Foo(),
+        pre_bar,
+        Bar().my_node,
     ]
 
     for action in actions:
@@ -112,7 +123,7 @@ def test_state_schema_with_type_hint():
     foo_state = FooState(foo="bar")
     for i, c in enumerate(graph.stream(input_state, stream_mode="updates")):
         node_name = get_name(actions[i])
-        if node_name == get_name(pre_foo):
+        if node_name in {"pre_foo", "pre_bar"}:
             assert c[node_name] == foo_state
         else:
             assert c[node_name] == output_state
@@ -318,3 +329,74 @@ def test__get_node_name() -> None:
 
     # class method
     assert _get_node_name(MyClass().class_method) == "class_method"
+
+
+def test_input_schema_conditional_edge():
+    class OverallState(TypedDict):
+        foo: Annotated[int, operator.add]
+        bar: str
+
+    class PrivateState(TypedDict):
+        baz: str
+
+    builder = StateGraph(OverallState)
+
+    def node_1(state: OverallState):
+        return {"foo": 1, "baz": "bar"}
+
+    def node_2(state: PrivateState):
+        return {"foo": 1, "bar": state["baz"], "something_else": "meow"}
+
+    def node_3(state: OverallState):
+        return {"foo": 1}
+
+    def router(state: OverallState):
+        assert state == {"foo": 2, "bar": "bar"}
+        if state["foo"] == 2:
+            return "node_3"
+        else:
+            return "__end__"
+
+    builder.add_node(node_1)
+    builder.add_node(node_2)
+    builder.add_node(node_3)
+    builder.add_conditional_edges("node_2", router)
+    builder.add_edge("__start__", "node_1")
+    builder.add_edge("node_1", "node_2")
+    graph = builder.compile()
+    assert graph.invoke({"foo": 0}) == {"foo": 3, "bar": "bar"}
+
+
+def test_private_input_schema_conditional_edge():
+    class OverallState(TypedDict):
+        foo: Annotated[int, operator.add]
+        bar: str
+
+    class RouterState(TypedDict):
+        baz: str
+
+    class Node2State(TypedDict):
+        foo: Annotated[int, operator.add]
+        baz: str
+
+    builder = StateGraph(OverallState)
+
+    def node_1(state: OverallState):
+        return {"foo": 1, "baz": "meow"}
+
+    def node_2(state: Node2State):
+        return {"foo": 1, "bar": state["baz"]}
+
+    def router(state: RouterState):
+        assert state == {"baz": "meow"}
+        if state["baz"] == "meow":
+            return "node_2"
+        else:
+            return "__end__"
+
+    builder.add_node(node_1)
+    builder.add_node(node_2)
+    builder.add_conditional_edges("node_1", router)
+    builder.add_edge("__start__", "node_1")
+    graph = builder.compile()
+    assert graph.invoke({"foo": 0}) == {"foo": 2, "bar": "meow"}

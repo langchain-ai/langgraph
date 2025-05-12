@@ -2,7 +2,7 @@ import type { JSONSchema7 } from "json-schema";
 
 type Optional<T> = T | null | undefined;
 
-type RunStatus =
+export type RunStatus =
   | "pending"
   | "running"
   | "error"
@@ -16,7 +16,7 @@ type MultitaskStrategy = "reject" | "interrupt" | "rollback" | "enqueue";
 
 export type CancelAction = "interrupt" | "rollback";
 
-export interface Config {
+export type Config = {
   /**
    * Tags for this call and any sub-calls (eg. a Chain calling an LLM).
    * You can use these to filter calls.
@@ -32,19 +32,20 @@ export interface Config {
   /**
    * Runtime values for attributes previously made configurable on this Runnable.
    */
-  configurable: {
+  configurable?: {
     /**
      * ID of the thread
      */
-    thread_id?: string;
+    thread_id?: Optional<string>;
 
     /**
      * Timestamp of the state checkpoint
      */
-    checkpoint_id?: string;
+    checkpoint_id?: Optional<string>;
+
     [key: string]: unknown;
   };
-}
+};
 
 export interface GraphSchema {
   /**
@@ -56,25 +57,25 @@ export interface GraphSchema {
    * The schema for the input state.
    * Missing if unable to generate JSON schema from graph.
    */
-  input_schema?: JSONSchema7;
+  input_schema?: JSONSchema7 | null | undefined;
 
   /**
    * The schema for the output state.
    * Missing if unable to generate JSON schema from graph.
    */
-  output_schema?: JSONSchema7;
+  output_schema?: JSONSchema7 | null | undefined;
 
   /**
    * The schema for the graph state.
    * Missing if unable to generate JSON schema from graph.
    */
-  state_schema?: JSONSchema7;
+  state_schema?: JSONSchema7 | null | undefined;
 
   /**
    * The schema for the graph config.
    * Missing if unable to generate JSON schema from graph.
    */
-  config_schema?: JSONSchema7;
+  config_schema?: JSONSchema7 | null | undefined;
 }
 
 export type Subgraphs = Record<string, GraphSchema>;
@@ -109,6 +110,12 @@ export interface AssistantBase {
 
   /** The version of the assistant. */
   version: number;
+
+  /** The name of the assistant */
+  name: string;
+
+  /** The description of the assistant */
+  description?: string;
 }
 
 export interface AssistantVersion extends AssistantBase {}
@@ -116,9 +123,6 @@ export interface AssistantVersion extends AssistantBase {}
 export interface Assistant extends AssistantBase {
   /** The last time the assistant was updated. */
   updated_at: string;
-
-  /** The name of the assistant */
-  name: string;
 }
 
 export interface AssistantGraph {
@@ -135,6 +139,16 @@ export interface AssistantGraph {
     data?: string;
     conditional?: boolean;
   }>;
+}
+
+/**
+ * An interrupt thrown inside a thread.
+ */
+export interface Interrupt<TValue = unknown> {
+  value?: TValue;
+  when: "during" | (string & {});
+  resumable?: boolean;
+  ns?: string[];
 }
 
 export interface Thread<ValuesType = DefaultValues> {
@@ -155,6 +169,9 @@ export interface Thread<ValuesType = DefaultValues> {
 
   /** The current state of the thread. */
   values: ValuesType;
+
+  /** Interrupts which were thrown in this thread */
+  interrupts: Record<string, Array<Interrupt>>;
 }
 
 export interface Cron {
@@ -208,8 +225,9 @@ export interface ThreadState<ValuesType = DefaultValues> {
 export interface ThreadTask {
   id: string;
   name: string;
+  result?: unknown;
   error: Optional<string>;
-  interrupts: Array<{ value: unknown; when: "during" }>;
+  interrupts: Array<Interrupt>;
   checkpoint: Optional<Checkpoint>;
   state: Optional<ThreadState>;
 }
@@ -240,21 +258,16 @@ export interface Run {
   multitask_strategy: Optional<MultitaskStrategy>;
 }
 
-export interface Checkpoint {
+export type Checkpoint = {
   thread_id: string;
   checkpoint_ns: string;
   checkpoint_id: Optional<string>;
   checkpoint_map: Optional<Record<string, unknown>>;
-}
+};
 
 export interface ListNamespaceResponse {
   namespaces: string[][];
 }
-
-export interface SearchItemsResponse {
-  items: Item[];
-}
-
 export interface Item {
   namespace: string[];
   key: string;
@@ -262,3 +275,40 @@ export interface Item {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface SearchItem extends Item {
+  score?: number;
+}
+export interface SearchItemsResponse {
+  items: SearchItem[];
+}
+
+export interface CronCreateResponse {
+  cron_id: string;
+  assistant_id: string;
+  thread_id: string | undefined;
+  user_id: string;
+  payload: Record<string, unknown>;
+  schedule: string;
+  next_run_date: string;
+  end_time: string | undefined;
+  created_at: string;
+  updated_at: string;
+  metadata: Metadata;
+}
+
+export interface CronCreateForThreadResponse
+  extends Omit<CronCreateResponse, "thread_id"> {
+  thread_id: string;
+}
+
+export type AssistantSortBy =
+  | "assistant_id"
+  | "graph_id"
+  | "name"
+  | "created_at"
+  | "updated_at";
+
+export type ThreadSortBy = "thread_id" | "status" | "created_at" | "updated_at";
+
+export type SortOrder = "asc" | "desc";
