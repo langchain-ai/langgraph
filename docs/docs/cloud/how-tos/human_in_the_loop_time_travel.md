@@ -6,10 +6,11 @@ LangGraph provides [**time travel**](../../concepts/time-travel.md) functionalit
 
 To use time-travel in LangGraph:
 
-1. **Identify a checkpoint in an existing thread**: Use [LangGraph SDK](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/)'s [`client.threads.get_history`][langgraph_sdk.client.ThreadsClient.get_history] method to retrieve the execution history for a specific `thread_id` and locate the desired `checkpoint_id`.  
+1. **Run the graph** with initial inputs using [LangGraph SDK](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/)'s [`client.runs.wait`][langgraph_sdk.client.RunsClient.wait] or [`client.runs.stream`][langgraph_sdk.client.RunsClient.stream] APIs.
+2. **Identify a checkpoint in an existing thread**: Use [`client.threads.get_history`][langgraph_sdk.client.ThreadsClient.get_history] method to retrieve the execution history for a specific `thread_id` and locate the desired `checkpoint_id`.
    Alternatively, set a [breakpoint](./human_in_the_loop_breakpoint.md) before the node(s) where you want execution to pause. You can then find the most recent checkpoint recorded up to that breakpoint.
-2. **(Optional) modify the graph state**: Use the [`client.threads.update_state`][langgraph_sdk.client.ThreadsClient.update_state] method to modify the graph’s state at the checkpoint and resume execution from alternative state.
-3. **Resume execution from the checkpoint**: Use the [`client.runs.wait`][langgraph_sdk.client.RunsClient.wait] or [`client.runs.stream`][langgraph_sdk.client.RunsClient.stream] APIs with an input of `None` and the appropriate `thread_id` and `checkpoint_id`.
+3. **(Optional) modify the graph state**: Use the [`client.threads.update_state`][langgraph_sdk.client.ThreadsClient.update_state] method to modify the graph’s state at the checkpoint and resume execution from alternative state.
+4. **Resume execution from the checkpoint**: Use the [`client.runs.wait`][langgraph_sdk.client.RunsClient.wait] or [`client.runs.stream`][langgraph_sdk.client.RunsClient.stream] APIs with an input of `None` and the appropriate `thread_id` and `checkpoint_id`.
 
 ## Example
 
@@ -55,7 +56,7 @@ To use time-travel in LangGraph:
     graph = builder.compile()
     ```
 
-### Run the graph
+### 1. Run the graph
 
 === "Python"
 
@@ -122,7 +123,7 @@ To use time-travel in LangGraph:
     }"
     ```
 
-### 1. Identify a checkpoint
+### 2. Identify a checkpoint
 
 === "Python"
 
@@ -150,7 +151,7 @@ To use time-travel in LangGraph:
     --header 'Content-Type: application/json'
     ```
 
-### 2. (Optional) update the state
+### 3. Update the state (optional)
 
 `update_state` will create a new checkpoint. The new checkpoint will be associated with the same thread, but a new checkpoint ID.
 
@@ -192,7 +193,7 @@ To use time-travel in LangGraph:
     }"
     ```
 
-### 3. Resume execution from the checkpoint
+### 4. Resume execution from the checkpoint
 
 === "Python"
 
