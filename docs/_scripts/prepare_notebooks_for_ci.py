@@ -194,6 +194,11 @@ def remove_mermaid_from_notebook(notebook: nbformat.NotebookNode) -> nbformat.No
             continue
 
         cell.source = remove_mermaid(cell.source)
+
+        # skip the cell entirely if it contains PYPPETEER
+        if "PYPPETEER" in cell.source:
+            cell.source = ""
+
     return notebook
 
 
