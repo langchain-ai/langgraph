@@ -106,7 +106,7 @@ for chunk in agent.stream(
     print("\n")
 ```
 
-1. The [`interrupt` function][langgraph.types.interrupt] is used in conjunction with the [`Command`](../reference/types.md#langgraph.types.Command) object to resume the graph with a value provided by the human.
+1. The [`interrupt` function][langgraph.types.interrupt] is used in conjunction with the [`Command`][langgraph.types.Command] object to resume the graph with a value provided by the human.
 
 ## Using with Agent Inbox
 

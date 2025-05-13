@@ -410,10 +410,6 @@ validation:
   omitted_files: info 
   absolute_links: warn
   unrecognized_links: warn
-  # TODO: figure out how to enable 'warn' for this
-  # it's only an issue for tutorials/storm/storm.ipynb
-  # because it creates anchors in the generated report
-  # and those anchors are not available in the actual doc
   anchors: warn
   # this is needed to handle headers with anchors for nav
   not_found: info

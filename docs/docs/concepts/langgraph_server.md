@@ -24,7 +24,7 @@ Feature Differences:
 
 |       | Lite       | Enterprise |
 |-------|------------|------------|
-| [Cron Jobs](../clouds/concepts/cron-jobs.md) |❌|✅|
+| [Cron Jobs](../cloud/concepts/cron_jobs.md) |❌|✅|
 | [Custom Authentication](../concepts/auth.md) |❌|✅|
 | [Deployment options](../concepts/deployment_options.md) | Standalone container | Cloud Saas, Self-Hosted Data Plane, Self-Hosted Control Plane, Standalone container
 

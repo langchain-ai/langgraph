@@ -158,7 +158,7 @@ export default function HomePage() {
 }
 ```
 
-Under the hood, the `useStream()` hook will use the `streamMode: "messages-tuple"` to receive a stream of messages (i.e. individual LLM tokens) from any LangChain chat model invocations inside your graph nodes. Learn more about messages streaming in the [How to stream messages from your graph](./stream_messages.md) guide.
+Under the hood, the `useStream()` hook will use the `streamMode: "messages-tuple"` to receive a stream of messages (i.e. individual LLM tokens) from any LangChain chat model invocations inside your graph nodes. Learn more about messages streaming in the [streaming](../how-tos/streaming.md#messages) guide.
 
 ### Interrupts
 
@@ -476,7 +476,7 @@ The `useStream()` hook provides several callback options to help you respond to 
 - `onError`: Called when an error occurs.
 - `onFinish`: Called when the stream is finished.
 - `onUpdateEvent`: Called when an update event is received.
-- `onCustomEvent`: Called when a custom event is received. See [Custom events](../../how-tos/streaming.ipynb#custom) to learn how to stream custom events.
+- `onCustomEvent`: Called when a custom event is received. See [Custom events](../../how-tos/streaming.md#stream-custom-data) to learn how to stream custom events.
 - `onMetadataEvent`: Called when a metadata event is received, which contains the Run ID and Thread ID.
 
 ## Learn More
