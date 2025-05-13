@@ -10,6 +10,7 @@ document Store.
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import os
 import sys
@@ -22,6 +23,7 @@ from typing import (
     Literal,
     Optional,
     Sequence,
+    Type,
     Union,
     overload,
 )
@@ -162,7 +164,7 @@ def get_client(
     transport: Optional[httpx.AsyncBaseTransport] = None
     if url is None:
         if os.environ.get("__LANGGRAPH_DEFER_LOOPBACK_TRANSPORT") == "true":
-            transport = httpx.ASGITransport(app=None, root_path="/noauth")
+            transport = get_asgi_transport()(app=None, root_path="/noauth")
             _registered_transports.append(transport)
             url = "http://api"
         else:
@@ -170,7 +172,8 @@ def get_client(
                 from langgraph_api.server import app  # type: ignore
 
                 url = "http://api"
-                transport = httpx.ASGITransport(app, root_path="/noauth")
+
+                transport = get_asgi_transport()(app, root_path="/noauth")
             except Exception:
                 url = "http://localhost:8123"
 
@@ -5380,6 +5383,17 @@ _registered_transports: list[httpx.ASGITransport] = []
 def configure_loopback_transports(app: Any) -> None:
     for transport in _registered_transports:
         transport.app = app
+
+
+@functools.lru_cache(maxsize=1)
+def get_asgi_transport() -> Type[httpx.ASGITransport]:
+    try:
+        from langgraph_api import asgi_transport
+
+        return asgi_transport.ASGITransport
+    except ImportError:
+        # Older versions of the server
+        return httpx.ASGITransport
 
 
 TimeoutTypes = Union[
