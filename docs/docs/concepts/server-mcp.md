@@ -162,7 +162,6 @@ Use an MCP-compliant client to connect to the LangGraph server. The following ex
 
 === "Python"
 
-    There is currently **no official MCP client for Python**, but you can use the [`langchain-mcp-adapters`](https://github.com/langchain-ai/langchain-mcp-adapters) package to access a remote graph and use the agents as if they were tools.
 
     Install the adapter with:
 
