@@ -1505,12 +1505,11 @@ def test_post_model_hook_with_structured_output() -> None:
         {
             "tools": {
                 "messages": [
-                    ToolMessage(
+                    _AnyIdToolMessage(
                         content="The weather is sunny and 75°F.",
                         name="get_weather",
-                        id="beb546e1-a489-42c4-9dc3-5e9e538b4604",
                         tool_call_id="1",
-                    )
+                    ),
                 ]
             }
         },
