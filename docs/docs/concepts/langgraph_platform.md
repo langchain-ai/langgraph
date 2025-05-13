@@ -5,14 +5,13 @@ search:
 
 # LangGraph Platform
 
-**LangGraph Platform** is a commercial solution for deploying agentic applications to production, built on the open-source [LangGraph framework](../index.md).
+**LangGraph Platform** is a solution for deploying agentic applications to production, built on the open-source [LangGraph framework](../index.md).
 
 <div align="center"><iframe width="560" height="315" src="https://www.youtube.com/embed/pfAQxBS5z88?si=XGS6Chydn6lhSO1S" title="What is LangGraph Platform?" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>
 
 !!! tip "Get started with LangGraph Platform"
 
-    Check out the [LangGraph Platform quickstart](../cloud/quick_start.md) for instructions on how to set up and use LangGraph Platform to do a cloud deployment.
-
+    Check out the [LangGraph Platform quickstart](../tutorials/langgraph-platform/local-server.md) for instructions on how to use LangGraph Platform run a LangGraph application locally.
 
 ## Why use LangGraph Platform?
 
