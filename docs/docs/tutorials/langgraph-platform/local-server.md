@@ -29,7 +29,7 @@ Create a new app from the [`new-langgraph-project-python` template](https://gith
 === "Node server"
 
     ```shell
-    langgraph new path/to/your/app --template new-langgraph-project-python
+    langgraph new path/to/your/app --template new-langgraph-project-js
     ```
 
 !!! tip "Additional templates"
