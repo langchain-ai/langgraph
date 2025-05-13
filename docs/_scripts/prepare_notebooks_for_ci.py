@@ -5,6 +5,7 @@ import os
 import json
 import click
 import nbformat
+import re
 
 logger = logging.getLogger(__name__)
 NOTEBOOK_DIRS = ("docs/how-tos","docs/tutorials")
@@ -88,12 +89,10 @@ def has_blocklisted_command(code: str, metadata: dict) -> bool:
             return True
     return False
 
+MERMAID_PATTERN = re.compile(r'display\(Image\((\w+)\.get_graph\(\)\.draw_mermaid_png\(\)\)\)')
+
 def remove_mermaid(code: str) -> str:
-    return code.replace(
-        "display(Image(graph.get_graph().draw_mermaid_png()))",
-        # replace with a dummy statement
-        "print()"
-    )
+    return MERMAID_PATTERN.sub('print()', code)
 
 
 def add_vcr_to_notebook(
