@@ -14,7 +14,7 @@ To support this, LangGraph Studio, in combination with LangSmith, allows you to 
     - langgraph-api>=0.0.32
 
 - A thread traced in LangSmith.
-- A locally running agent. See [here](../../how-tos/local-studio.md) for setup instructions.
+- A locally running agent. See [here](../how-tos/studio/quick_start.md#local-development-server) for setup instructions.
   - Note that your local agent must be using the above specified `langgraph` and `langgraph-api` versions.
   - The nodes present in the remote trace must exist in at least one of the graphs in your local agent.
 

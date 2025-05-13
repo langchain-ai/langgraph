@@ -8,7 +8,7 @@ A project may fail to start if the configuration file is defined incorrectly, or
 
 When you select the `Interrupts` dropdown and select a node to interrupt the graph will pause execution before and after (unless the node goes straight to `END`) that node has run. This means that you will be able to both edit the state before the node is ran and the state after the node has ran. This is intended to allow developers more fine-grained control over the behavior of a node and make it easier to observe how the node is behaving. You will not be able to edit the state after the node has ran if the node is the final node in the graph.
 
-For more information on interrupts and human in the loop, see [here](./human_in_the_loop.md).
+For more information on interrupts and human in the loop, see [here](../../../concepts/human_in_the_loop.md).
 
 ## Why are extra edges showing up in my graph?
 

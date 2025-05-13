@@ -294,7 +294,7 @@ agent.invoke(
 )
 ```
 
-For more details, see [how to update state from tools](../how-tos/update-state-from-tools.ipynb).
+For more details, see [how to update state from tools](../how-tos/tool-calling.ipynb#update).
 
 ## Long-term memory
 
@@ -302,7 +302,7 @@ Use long-term memory to store user-specific or application-specific data across 
 
 To use long-term memory, you need to:
 
-1. [Configure a store](../how-tos/cross-thread-persistence.ipynb) to persist data across invocations.
+1. [Configure a store](../how-tos/persistence.ipynb#add-long-term-memory) to persist data across invocations.
 2. Use the [`get_store`][langgraph.config.get_store] function to access the store from within tools or prompts.
 
 ### Read { #read-long-term }
