@@ -42,4 +42,3 @@ Chat mode is a simpler UI for iterating on and testing chat-specific agents. It 
 ## Learn more
 
 - See this guide on how to [get started](../cloud/how-tos/studio/quick_start.md) with LangGraph Studio.
-- See [here](../cloud//how-tos/studio/faqs.md) for frequently asked questions.
