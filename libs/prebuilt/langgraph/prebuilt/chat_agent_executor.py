@@ -688,7 +688,6 @@ def create_react_agent(
         )
         if post_model_hook is not None:
             post_model_hook_paths.append("generate_structured_response")
-            workflow.add_edge("post_model_hook", "generate_structured_response")
         else:
             agent_paths.append("generate_structured_response")
             workflow.add_edge("agent", "generate_structured_response")

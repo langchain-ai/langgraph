@@ -1480,30 +1480,64 @@ def test_post_model_hook_with_structured_output() -> None:
         agent.stream({"messages": [HumanMessage("What's the weather?")], "flag": False})
     )
     assert "generate_structured_response" in events[-1]
-    # TODO: fix this
-    # assert events == [
-    #     {
-    #         "agent": {
-    #             "messages": [
-    #                 AIMessage(
-    #                     content="What's the weather?",
-    #                     id="2",
-    #                     tool_calls=[
-    #                         {
-    #                             "name": "get_weather",
-    #                             "args": {},
-    #                             "id": "1",
-    #                             "type": "tool_call",
-    #                         }
-    #                     ],
-    #                 )
-    #             ]
-    #         }
-    #     },
-    #     {"post_model_hook": {"flag": True}},
-    #     {
-    #         "generate_structured_response": {
-    #             "structured_response": WeatherResponse(temperature=75.0)
-    #         }
-    #     },
-    # ]
+    assert events == [
+        {
+            "agent": {
+                "messages": [
+                    AIMessage(
+                        content="What's the weather?",
+                        additional_kwargs={},
+                        response_metadata={},
+                        id="2",
+                        tool_calls=[
+                            {
+                                "name": "get_weather",
+                                "args": {},
+                                "id": "1",
+                                "type": "tool_call",
+                            }
+                        ],
+                    )
+                ]
+            }
+        },
+        {"post_model_hook": {"flag": True}},
+        {
+            "tools": {
+                "messages": [
+                    ToolMessage(
+                        content="The weather is sunny and 75°F.",
+                        name="get_weather",
+                        id="beb546e1-a489-42c4-9dc3-5e9e538b4604",
+                        tool_call_id="1",
+                    )
+                ]
+            }
+        },
+        {
+            "agent": {
+                "messages": [
+                    AIMessage(
+                        content="What's the weather?-What's the weather?-The weather is sunny and 75°F.",
+                        additional_kwargs={},
+                        response_metadata={},
+                        id="3",
+                        tool_calls=[
+                            {
+                                "name": "get_weather",
+                                "args": {},
+                                "id": "1",
+                                "type": "tool_call",
+                            }
+                        ],
+                    )
+                ]
+            }
+        },
+        {"post_model_hook": {"flag": True}},
+        {
+            "generate_structured_response": {
+                "structured_response": WeatherResponse(temperature=75.0)
+            }
+        },
+    ]
