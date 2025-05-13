@@ -15,7 +15,7 @@ Imagine a general-purpose writing agent built on a common graph architecture. Wh
 
 Assistants build on the LangGraph open source concept of [configuration](low_level.md#configuration).
 While configuration is available in the open source LangGraph library, assistants are only present in [LangGraph Platform](langgraph_platform.md).
-This is due to the fact that Assistants are tightly coupled to your deployed graph. Upon deployment, LangGraph Server will automatically create a default assistant for each graph using the graph's default configuration settings.
+This is due to the fact that assistants are tightly coupled to your deployed graph. Upon deployment, LangGraph Server will automatically create a default assistant for each graph using the graph's default configuration settings.
 
 In practice, an assistant is just an _instance_ of a graph with a specific configuration. Therefore, multiple assistants can reference the same graph but can contain different configurations (e.g. prompts, models, tools). The LangGraph Server API provides several endpoints for creating and managing assistants. See the [API reference](../cloud/reference/api/api_ref.html) and [this how-to](../cloud/how-tos/configuration_cloud.md) for more details on how to create assistants.
 

@@ -7,7 +7,7 @@ search:
 
 
 ## Overview
-LangGraph Platform is a commercial solution for deploying agentic applications in production.
+LangGraph Platform is a solution for deploying agentic applications in production.
 There are three different plans for using it.
 
 - **Developer**: All [LangSmith](https://smith.langchain.com/) users have access to this plan. You can sign up for this plan simply by creating a LangSmith account. This gives you access to the [Standalone Container (Lite)](./deployment_options.md) deployment option.

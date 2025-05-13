@@ -11,7 +11,6 @@ Before you begin, ensure you have the following:
 This quickstart uses the `react-agent` template and requires the following:
 
 - An API key for [Anthropic](https://console.anthropic.com/)
-- An API key for [OpenAI](https://openai.com/)
 - An API key [Tavily](https://app.tavily.com/)
 
 ## 1. Install the LangGraph CLI
@@ -68,7 +67,6 @@ You will find a `.env.example` in the root of your new LangGraph app. Create a `
 LANGSMITH_API_KEY=lsv2...
 TAVILY_API_KEY=tvly-...
 ANTHROPIC_API_KEY=sk-
-OPENAI_API_KEY=sk-...
 ```
 
 ## 5. Launch LangGraph Server 🚀 

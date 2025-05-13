@@ -1,4 +1,4 @@
-# How to add custom authentication
+# Add custom authentication
 
 !!! tip "Prerequisites"
 
