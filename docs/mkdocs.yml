@@ -277,9 +277,6 @@ nav:
     - Agentic RAG: tutorials/rag/langgraph_agentic_rag.ipynb
     - Agent Supervisor: tutorials/multi_agent/agent_supervisor.ipynb
     - SQL agent: tutorials/sql-agent.ipynb
-    - Run a graph asynchronously: how-tos/async.ipynb
-        # We want to push async higher (need to check the content inside it)
-        # and convert it into a concept rather than a how-to page.
     - Graph runs in LangSmith: how-tos/run-id-langsmith.ipynb
     - LangGraph Platform:
       - Authentication:
