@@ -25,6 +25,12 @@ Select the assistant to run and click the "Active" toggle at the top of the moda
 #### Streaming
 Click the dropdown next to "Submit" and click the toggle to enable/disable streaming.
 
+#### Breakpoints
+To run your graph with breakpoints, click the "Interrupt" button. Select a node and whether to pause before and/or after that node has executed. Click "Continue" in the thread log to resume execution.
+
+
+For more information on breakpoints see [here](../../concepts/breakpoints.md).
+
 ### Submit run
 
 To submit the run with the specified input and run settings, click the "Submit" button. This will add a [run](../concepts/runs.md) to the existing selected [thread](../concepts/threads.md). If no thread is currently selected, a new one will be created.
