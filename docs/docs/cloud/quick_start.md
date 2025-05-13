@@ -11,7 +11,7 @@ Before you begin, ensure you have the following:
 
 ## 1. Create a repository on GitHub
 
-To deploy a LangGraph application to **LangGraph Platform**, your application code must reside in a GitHub repository. Both public and private repositories are supported. For this quickstart, use the [`new-langgraph-project` template](https://github.com/langchain-ai/react-agent) for your application:
+To deploy an application to **LangGraph Platform**, your application code must reside in a GitHub repository. Both public and private repositories are supported. For this quickstart, use the [`new-langgraph-project` template](https://github.com/langchain-ai/react-agent) for your application:
 
 1. Go to the [`new-langgraph-project` repository](https://github.com/langchain-ai/new-langgraph-project).
 1. Click the `Fork` button in the top right corner to fork the repository to your GitHub account.
@@ -21,7 +21,7 @@ To deploy a LangGraph application to **LangGraph Platform**, your application co
 
 1. Log in to [LangSmith](https://smith.langchain.com/).
 1. In the left sidebar, select **LangGraph Platform**.
-1. Click the **+ New Deployment** button. A modal will open where you can fill in the required fields.
+1. Click the **+ New Deployment** button. A pane will open where you can fill in the required fields.
 1. If you are a first time user or adding a private repository that has not been previously connected, click the **Import from GitHub** button and follow the instructions to connect your GitHub account.
 1. Select your New LangGraph Project repository.
 1. Click **Submit** to deploy.
