@@ -23,29 +23,182 @@ Compatible models can be found in the [LangChain integrations directory](https:/
 
 You can configure an agent with a model name string:
 
-```python
-from langgraph.prebuilt import create_react_agent
+=== "OpenAI"
 
-agent = create_react_agent(
-    # highlight-next-line
-    model="anthropic:claude-3-7-sonnet-latest",
-    # other parameters
-)
-```
+    ```python
+    import os
+    from langgraph.prebuilt import create_react_agent
+
+    os.environ["OPENAI_API_KEY"] = "sk-..."
+
+    agent = create_react_agent(
+        # highlight-next-line
+        model="openai:gpt-4.1",
+        # other parameters
+    )
+    ```
+
+=== "Anthropic"
+
+    ```python
+    import os
+    from langgraph.prebuilt import create_react_agent
+
+    os.environ["ANTHROPIC_API_KEY"] = "sk-..."
+
+    agent = create_react_agent(
+        # highlight-next-line
+        model="anthropic:claude-3-7-sonnet-latest",
+        # other parameters
+    )
+    ```
+
+=== "Azure"
+
+    ```python
+    import os
+    from langgraph.prebuilt import create_react_agent
+
+    os.environ["AZURE_OPENAI_API_KEY"] = "..."
+    os.environ["AZURE_OPENAI_ENDPOINT"] = "..."
+    os.environ["OPENAI_API_VERSION"] = "2025-03-01-preview"
+
+    agent = create_react_agent(
+        # highlight-next-line
+        model="azure_openai:gpt-4.1",
+        # other parameters
+    )
+    ```
+
+=== "Google Gemini"
+
+    ```python
+    import os
+    from langgraph.prebuilt import create_react_agent
+
+    os.environ["GOOGLE_API_KEY"] = "..."
+
+    agent = create_react_agent(
+        # highlight-next-line
+        model="google_genai:gemini-2.0-flash",
+        # other parameters
+    )
+    ```
+
+=== "AWS Bedrock"
+
+    ```python
+    from langgraph.prebuilt import create_react_agent
+
+    # Follow the steps here to configure your credentials:
+    # https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started.html
+
+    agent = create_react_agent(
+        # highlight-next-line
+        model="bedrock_converse:anthropic.claude-3-5-sonnet-20240620-v1:0",
+        # other parameters
+    )
+    ```
+
 
 ## Using `init_chat_model`
 
 The [`init_chat_model`](https://python.langchain.com/docs/how_to/chat_models_universal_init/) utility simplifies model initialization with configurable parameters:
 
-```python
-from langchain.chat_models import init_chat_model
+=== "OpenAI"
 
-model = init_chat_model(
-    "anthropic:claude-3-7-sonnet-latest",
-    temperature=0,
-    max_tokens=2048
-)
-```
+    ```
+    pip install -U "langchain[openai]"
+    ```
+    ```python
+    import os
+    from langchain.chat_models import init_chat_model
+
+    os.environ["OPENAI_API_KEY"] = "sk-..."
+
+    model = init_chat_model(
+        "openai:gpt-4.1",
+        temperature=0,
+        # other parameters
+    )
+    ```
+
+=== "Anthropic"
+
+    ```
+    pip install -U "langchain[anthropic]"
+    ```
+    ```python
+    import os
+    from langchain.chat_models import init_chat_model
+
+    os.environ["ANTHROPIC_API_KEY"] = "sk-..."
+
+    model = init_chat_model(
+        "anthropic:claude-3-5-sonnet-latest",
+        temperature=0,
+        # other parameters
+    )
+    ```
+
+=== "Azure"
+
+    ```
+    pip install -U "langchain[openai]"
+    ```
+    ```python
+    import os
+    from langchain.chat_models import init_chat_model
+
+    os.environ["AZURE_OPENAI_API_KEY"] = "..."
+    os.environ["AZURE_OPENAI_ENDPOINT"] = "..."
+    os.environ["OPENAI_API_VERSION"] = "2025-03-01-preview"
+
+    model = init_chat_model(
+        "azure_openai:gpt-4.1",
+        azure_deployment=os.environ["AZURE_OPENAI_DEPLOYMENT_NAME"],
+        temperature=0,
+        # other parameters
+    )
+    ```
+
+=== "Google Gemini"
+
+    ```
+    pip install -U "langchain[google-genai]"
+    ```
+    ```python
+    import os
+    from langchain.chat_models import init_chat_model
+
+    os.environ["GOOGLE_API_KEY"] = "..."
+
+    model = init_chat_model(
+        "google_genai:gemini-2.0-flash",
+        temperature=0,
+        # other parameters
+    )
+    ```
+
+=== "AWS Bedrock"
+
+    ```
+    pip install -U "langchain[aws]"
+    ```
+    ```python
+    from langchain.chat_models import init_chat_model
+
+    # Follow the steps here to configure your credentials:
+    # https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started.html
+
+    model = init_chat_model(
+        "anthropic.claude-3-5-sonnet-20240620-v1:0",
+        model_provider="bedrock_converse",
+        temperature=0,
+        # other parameters
+    )
+    ```
+
 
 Refer to the [API reference](https://python.langchain.com/api_reference/langchain/chat_models/langchain.chat_models.base.init_chat_model.html) for advanced options.
 
