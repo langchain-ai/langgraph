@@ -18,7 +18,7 @@ pip install --upgrade "langgraph-cli[inmem]"
 
 ## 2. Create a LangGraph app 🌱 
 
-Create a new app from the [`new-langgraph-project` template](https://github.com/langchain-ai/new-langgraph-project) or [`new-langgraphjs-projec` template](https://github.com/langchain-ai/new-langgraphjs-project). This template demonstrates a simple chatbot that maintains chat memory, which allows for coherent conversations across multiple interactions.
+Create a new app from the [`new-langgraph-project` template](https://github.com/langchain-ai/new-langgraph-project) or [`new-langgraphjs-project` template](https://github.com/langchain-ai/new-langgraphjs-project). This template demonstrates a simple chatbot that maintains chat memory, which allows for coherent conversations across multiple interactions.
 
 === "Python server"
 
