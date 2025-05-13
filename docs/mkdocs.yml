@@ -178,6 +178,7 @@ nav:
           - Overview: concepts/langgraph_studio.md
           - Quickstart: cloud/how-tos/studio/quick_start.md
           - cloud/how-tos/invoke_studio.md
+          - cloud/how-tos/studio/manage_assistants.md
           - cloud/how-tos/threads_studio.md
           - cloud/how-tos/iterate_graph_studio.md
           - cloud/how-tos/clone_traces_studio.md

@@ -1,19 +1,42 @@
-# Manage assistants
+# Run application
 
-!!! info "Prerequisites"
+!!!info  "Prerequisites"
+    - [Running agents](../../agents/run_agents.md#running-agents)
 
-    - [Assistants Overview](../../concepts/assistants.md)
-
-LangGraph Studio lets you view, edit, and update your assistants, and allows you to run your graph using these assistant configurations.
+This guide shows how to submit a [run](../concepts/runs.md) to your application.
 
 ## Graph mode
 
-To view your assistants, click the "Manage Assistants" button in the bottom left corner.
+### Specify input
+First define the input to your graph with in the "Input" section on the left side of the page, below the graph interface.
 
-This opens a modal for you to view all the assistants for the selected graph. Specify the assistant and its version you would like to mark as "Active", and this assistant will be used when submitting runs.
+Studio will attempt to render a form for your input based on the graph's defined [state schema](../../concepts/low_level.md/#schema). To disable this, click the "View Raw" button, which will present you with a JSON editor.
 
-By default, the "Default configuration" option will be active. This option reflects the default configuration defined in your graph. Edits made to this configuration will be used to update the run-time configuration, but will not update or create a new assistant unless you click "Create new assistant".
+Click the up/down arrows at the top of the "Input" section to toggle through and use previously submitted inputs.
+
+### Run settings
+
+#### Assistant
+
+To specify the [assistant](../../concepts/assistants.md) that is used for the run click the settings button in the bottom left corner. If an assistant is currently selected the button will also list the assistant name. If no assistant is selected it will say "Manage Assistants".
+
+Select the assistant to run and click the "Active" toggle at the top of the modal to activate it. [See here](./studio/manage_assistants.md) for more information on managing assistants.
+
+#### Streaming
+Click the dropdown next to "Submit" and click the toggle to enable/disable streaming.
+
+### Submit run
+
+To submit the run with the specified input and run settings, click the "Submit" button. This will add a [run](../concepts/runs.md) to the existing selected [thread](../concepts/threads.md). If no thread is currently selected, a new one will be created.
+
+To cancel the ongoing run, click the "Cancel" button.
+
 
 ## Chat mode
+Specify the input to your chat application in the bottom of the conversation panel. Click the "Send message" button to submit the input as a Human message and have the response streamed back.
 
-Chat mode enables you to switch through the different assistants in your graph via the dropdown selector at the top of the page. To create, edit, or delete assistants, use Graph mode.
+To cancel the ongoing run, click the "Cancel" button. Click the "Show tool calls" toggle to hide/show tool calls in the conversation.
+
+## Learn more
+
+To run your application from a specific checkpoint in an existing thread, see [this guide](./threads_studio.md#edit-thread-history).

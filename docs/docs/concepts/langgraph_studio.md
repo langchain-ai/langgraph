@@ -20,8 +20,8 @@ LangGraph Studio is a specialized agent IDE that enables visualization, interact
 Key features of LangGraph Studio:
 
 - Visualize your graph architecture
-- Run and interact with your agent
-- [Manage assistants](../cloud/how-tos/invoke_studio.md)
+- [Run and interact with your agent](../cloud/how-tos/invoke_studio.md)
+- [Manage assistants](../cloud/how-tos/studio/manage_assistants.md.md)
 - [Manage threads](../cloud/how-tos/threads_studio.md)
 - [Iterate on prompts](../cloud/how-tos/iterate_graph_studio.md)
 - View and manage [long term memory](memory.md)
@@ -37,9 +37,9 @@ Graph mode exposes the full feature-set of Studio and is useful when you would l
 
 ### Chat mode
 
-Chat mode is a simpler UI for iterating on and testing chat-specific agents. It is useful for business users and those who want to test overall agent behavior.
+Chat mode is a simpler UI for iterating on and testing chat-specific agents. It is useful for business users and those who want to test overall agent behavior. Chat mode is only supported for graph's whose state includes or extends [`MessagesState`](https://langchain-ai.github.io/langgraph/how-tos/graph-api/#messagesstate).
 
-## Learn More
+## Learn more
 
 - See this guide on how to [get started](../cloud/how-tos/studio/quick_start.md) with LangGraph Studio.
 - See [here](../cloud//how-tos/studio/faqs.md) for frequently asked questions.
