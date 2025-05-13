@@ -33,8 +33,4 @@ LangGraph Platform makes it easy to get your agent running in production —  wh
 
 - **[LangGraph Studio](./langgraph_studio.md)**: Enables visualization, interaction, and debugging of agentic systems that implement the LangGraph Server API protocol. Studio also integrates with LangSmith to enable tracing, evaluation, and prompt engineering.
 
-By using LangGraph Platform, you gain access to a robust, scalable deployment solution that mitigates these challenges, saving you the effort of implementing and maintaining them manually. This allows you to focus more on building effective agent behavior and less on solving deployment infrastructure issues.
-
-## Deployment
-
-There are several ways to deploy on LangGraph Platform. For more information, see [Deployment options](./deployment_options.md).
+- **[Deployment](./deployment_options.md)**: There are four ways to deploy on LangGraph Platform: [Cloud Saas](../concepts/langgraph_cloud.md), [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md), [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md), and [Standalone Container](../concepts/langgraph_standalone_container.md).
