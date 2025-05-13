@@ -136,7 +136,7 @@ You can now test the API:
     ```
 
 
-## Next Steps
+## Next steps
 
 Congratulations! You have deployed an application using LangGraph Platform.
 
