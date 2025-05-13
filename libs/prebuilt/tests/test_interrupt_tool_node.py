@@ -16,14 +16,12 @@ def hello_tool(name: str) -> str:
 
 
 post_model_hook = InterruptToolNode(
-    interrupt_policy={
-        "hello_tool": HumanInterruptConfig(
-            allow_accept=True,
-            allow_edit=True,
-            allow_ignore=True,
-            allow_respond=True,
-        )
-    }
+    hello_tool=HumanInterruptConfig(
+        allow_accept=True,
+        allow_edit=True,
+        allow_ignore=True,
+        allow_respond=True,
+    )
 )
 
 default_model = FakeToolCallingModel(
@@ -111,6 +109,17 @@ def test_interrupt_resume_variants(
     assert tool_message.name == "hello_tool"
     assert tool_message.content == expected_content
 
+    if resume["type"] == "edit":
+        ai_msg = response["messages"][-1]
+        assert ai_msg.tool_calls == [
+            {
+                "name": "hello_tool",
+                "args": {"name": "lady gaga"},
+                "id": "some-random-id",
+                "type": "tool_call",
+            }
+        ]
+
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_resume_with_response(
@@ -180,5 +189,5 @@ def test_resume_with_type_not_allowed(request: pytest.FixtureRequest) -> None:
 
     assert (
         str(exc_info.value)
-        == "Unexpected human response: {'type': 'not-allowed'}. Expected one with `'type'` in ['accept', 'edit', 'response', 'ignore']."
+        == "Unexpected human response: {'type': 'not-allowed'}. Expected one with `'type'` in ['accept', 'edit', 'response', 'ignore'] based on hello_tool's interrupt configuration."
     )

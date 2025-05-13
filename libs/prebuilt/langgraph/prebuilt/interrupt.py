@@ -104,20 +104,17 @@ class InterruptToolNode(RunnableCallable):
     a tool call for said tool. The interrupt policy will be used to determine what sort of resume logic is allowed.
     Any of the following resume patterns are supported:
 
-    * ignore: the current tool call is ignored / skipped
-    * response: text response/feedback is fed back into the LLM
-    * edit: the args for the tool call are edited and then the tool call is executed
     * accept: the tool call is executed as planned
+    * edit: the args for the tool call are edited and then the tool call is executed
+    * response: text response/feedback is fed back into the LLM
+    * ignore: the current tool call is ignored / skipped
 
     Args:
-        interrupt_policy: a mapping of tool names to [`HumanInterruptConfig`][prebuilt.interrupt.HumanInterruptConfig] dictionaries
+        **interrupt_policy: a mapping of tool names to [`HumanInterruptConfig`][prebuilt.interrupt.HumanInterruptConfig] dictionaries
             specifying which interrupt patterns to enable for said tool.
-        name: The name of the InterruptToolNode in the graph. Defaults to "post_model_hook".
-        tags: Optional tags to associate with the node. Defaults to None.
 
         Example:
         ```python
-        from langchain_openai import ChatOpenAI
         from langgraph.prebuilt import create_react_agent
         from langgraph.checkpoint.memory import InMemorySaver
         from langgraph.prebuilt.interrupt import HumanInterruptConfig, InterruptToolNode
@@ -131,18 +128,16 @@ class InterruptToolNode(RunnableCallable):
 
 
         agent = create_react_agent(
-            ChatOpenAI(model="gpt-4o",),
+            "openai:gpt-4.1",
             tools=[book_hotel],
             prompt="You are a hotel booking assistant.",
             post_model_hook=InterruptToolNode(
-                interrupt_policy={
-                    "book_hotel": HumanInterruptConfig(
-                        allow_accept=True,
-                        allow_edit=True,
-                        allow_ignore=True,
-                        allow_respond=True,
-                    )
-                }
+                book_hotel=HumanInterruptConfig(
+                    allow_accept=True,
+                    allow_edit=True,
+                    allow_ignore=True,
+                    allow_respond=True,
+                )
             ),
             checkpointer=InMemorySaver(),
         )
@@ -158,14 +153,8 @@ class InterruptToolNode(RunnableCallable):
         ```
     """
 
-    def __init__(
-        self,
-        interrupt_policy: dict[str, HumanInterruptConfig],
-        *,
-        name: str = "post_model_hook",
-        tags: list[str] | None = None,
-    ):
-        super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
+    def __init__(self, **interrupt_policy: HumanInterruptConfig):
+        super().__init__(self._func, self._afunc)
         self.interrupt_policy = interrupt_policy
 
     def _interrupt(
@@ -193,7 +182,10 @@ class InterruptToolNode(RunnableCallable):
         try:
             response_type = response.get("type")
         except AttributeError:
-            response_type = "invalid"
+            raise TypeError(
+                f"Unexpected resume value: {response}."
+                f"Expected a dict with `'type'` key."
+            )
 
         if response_type == "accept" and interrupt_config["allow_accept"]:
             return tool_call
@@ -229,9 +221,10 @@ class InterruptToolNode(RunnableCallable):
             }.items()
             if is_allowed
         ]
+
         raise ValueError(
             f"Unexpected human response: {response}. "
-            f"Expected one with `'type'` in {allowed_types}."
+            f"Expected one with `'type'` in {allowed_types} based on {tool_name}'s interrupt configuration."
         )
 
     def _func(self, input: dict[str, Any]) -> Command:
@@ -252,7 +245,7 @@ class InterruptToolNode(RunnableCallable):
                     pending_tool_calls = True
                     tool_calls[idx] = interrupt_result
 
-        ai_msg.tool_calls = tool_calls
+        updated_ai_msg = ai_msg.copy(update={"tool_calls": tool_calls})
 
         if tool_messages and not pending_tool_calls:
             # TODO: we should go to pre_model_hook if that exists, how can we figure
@@ -260,7 +253,7 @@ class InterruptToolNode(RunnableCallable):
             return Command(goto="agent", update={"messages": tool_messages})
         # if there are pending tool calls, the conditional routing logic for
         # post_model_hook will direct to the tools node
-        return Command(update={"messages": [ai_msg, *tool_messages]})
+        return Command(update={"messages": [updated_ai_msg, *tool_messages]})
 
     async def _afunc(self, input: dict[str, Any]) -> Command:
         return self._func(input)
