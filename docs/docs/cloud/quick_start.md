@@ -14,6 +14,10 @@ This quickstart uses the [pre-built Python ReAct agent template](https://github.
 - An API key for [Anthropic](https://console.anthropic.com/)
 - An API key for [Tavily](https://app.tavily.com/)
 
+!!! note
+
+    If you want to use a scaffold application that doesn't require API keys, use the [New LangGraph Project](https://github.com/langchain-ai/new-langgraph-project) template instead.
+
 ## 1. Create a repository on GitHub
 
 To deploy a LangGraph application to **LangGraph Platform**, your application code must reside in a GitHub repository. Both public and private repositories are supported. For this quickstart, use the [pre-built Python ReAct agent template](https://github.com/langchain-ai/react-agent) for your application:

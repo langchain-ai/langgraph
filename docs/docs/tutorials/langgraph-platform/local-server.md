@@ -8,10 +8,14 @@ Before you begin, ensure you have the following:
 
 - An API key for [LangSmith](https://smith.langchain.com/settings) - free to sign up
 
-This quickstart uses the `react-agent` template and requires the following:
+This quickstart uses the [pre-built Python ReAct agent template](https://github.com/langchain-ai/react-agent), which requires the following:
 
 - An API key for [Anthropic](https://console.anthropic.com/)
-- An API key [Tavily](https://app.tavily.com/)
+- An API key for [Tavily](https://app.tavily.com/)
+
+!!! note
+
+    If you want to use a scaffold application that doesn't require API keys, use the [New LangGraph Project](https://github.com/langchain-ai/new-langgraph-project) template instead.
 
 ## 1. Install the LangGraph CLI
 
