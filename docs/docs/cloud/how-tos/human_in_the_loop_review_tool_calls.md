@@ -86,7 +86,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
     const thread = await client.threads.create();
     ```
 
-=== "CURL"
+=== "cURL"
 
     ```bash
     curl --request POST \
@@ -135,7 +135,7 @@ First, let's run the agent with an input that requires tool calls with approval:
     }
     ```
 
-=== "CURL"
+=== "cURL"
 
     ```bash
     curl --request POST \
@@ -194,7 +194,7 @@ To approve the tool call, we need to let `human_review_node` know what value to 
     }
     ```
 
-=== "CURL"
+=== "cURL"
 
     ```bash
     curl --request POST \
@@ -257,7 +257,7 @@ Let's now say we want to edit the tool call. E.g. change some of the parameters 
     }
     ```
 
-=== "CURL"
+=== "cURL"
 
     ```bash
     curl --request POST \
@@ -323,7 +323,7 @@ To do this, we will use `Command` with a different resume value of `{"action": "
     }
     ```
 
-=== "CURL"
+=== "cURL"
 
     ```bash
     curl --request POST \
@@ -395,7 +395,7 @@ For this example we will just add a single tool call representing the feedback (
     }
     ```
 
-=== "CURL"
+=== "cURL"
 
     ```bash
     curl --request POST \
@@ -462,7 +462,7 @@ To do this, we will use `Command` with a different resume value of `{"action": "
     }
     ```
 
-=== "CURL"
+=== "cURL"
 
     ```bash
     curl --request POST \
@@ -525,7 +525,7 @@ We can see that we now get to another interrupt - because it went back to the mo
     }
     ```
 
-=== "CURL"
+=== "cURL"
 
     ```bash
     curl --request POST \

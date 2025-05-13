@@ -1,0 +1,29 @@
+/*
+ * This file is used to override the navigation title for the LangGraph documentation.
+ * It is used to change the title of the first and second items in the navigation menu.
+ * The first item is the Guides page, and the second item is the Reference page.
+ */
+
+.md-nav--primary > .md-nav__list > .md-nav__item:nth-child(1) > .md-nav__link .md-ellipsis {
+  visibility: hidden !important;
+  position: relative;
+}
+
+.md-nav--primary > .md-nav__list > .md-nav__item:nth-child(1) > .md-nav__link .md-ellipsis::after {
+  content: "Home";
+  visibility: visible;
+  position: absolute;
+  left: 0;
+}
+
+.md-nav--primary > .md-nav__list > .md-nav__item:nth-child(2) > .md-nav__link .md-ellipsis {
+  visibility: hidden !important;
+  position: relative;
+}
+
+.md-nav--primary > .md-nav__list > .md-nav__item:nth-child(2) > .md-nav__link .md-ellipsis::after {
+  content: "Home";
+  visibility: visible;
+  position: absolute;
+  left: 0;
+}

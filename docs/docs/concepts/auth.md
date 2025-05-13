@@ -22,14 +22,14 @@ In LangGraph Platform, authentication is handled by your [`@auth.authenticate`](
 
 LangGraph Platform provides different security defaults:
 
-### LangGraph Cloud
+### LangGraph Platform
 
 - Uses LangSmith API keys by default
 - Requires valid API key in `x-api-key` header
 - Can be customized with your auth handler
 
 !!! note "Custom auth"
-    Custom auth **is supported** for all plans in LangGraph Cloud.
+    Custom auth **is supported** for all plans in LangGraph Platform.
 
 ### Self-Hosted
 
@@ -38,8 +38,8 @@ LangGraph Platform provides different security defaults:
 - You control all aspects of authentication and authorization
 
 !!! note "Custom auth"
-    Custom auth is supported for **Enterprise** self-hosted plans.
-    Self-hosted lite plans do not support custom auth natively.
+    Custom auth is supported for **Enterprise** self-hosted deployments.
+    Standalone Container (Lite) deployments do not support custom auth natively.
 
 ## System Architecture
 

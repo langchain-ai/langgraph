@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph"
-version = "0.4.2"
+version = "0.4.3"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 license = "MIT"
@@ -40,6 +40,7 @@ pyperf = "^2.7.0"
 py-spy = "^0.3.14"
 types-requests = "^2.32.0.20240914"
 pycryptodome = "^3.21.0"
+langgraph-cli = {extras = ["inmem"], version = "^0.2.8"}
 
 [tool.ruff]
 lint.select = [ "E", "F", "I", "TID251", "UP" ]

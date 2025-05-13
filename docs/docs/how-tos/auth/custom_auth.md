@@ -1,19 +1,19 @@
-# How to add custom authentication
+# Add custom authentication
 
 !!! tip "Prerequisites"
 
     This guide assumes familiarity with the following concepts:
 
       *  [**Authentication & Access Control**](../../concepts/auth.md)
-      *  [**LangGraph Platform**](../../concepts/index.md#langgraph-platform)
+      *  [**LangGraph Platform**](../../concepts/langgraph_platform.md)
     
     For a more guided walkthrough, see [**setting up custom authentication**](../../tutorials/auth/getting_started.md) tutorial.
 
 ???+ note "Support by deployment type"
 
-    Custom auth is supported for all deployments in the **managed LangGraph Cloud**, as well as **Enterprise** self-hosted plans. It is not supported for **Lite** self-hosted plans.
+    Custom auth is supported for all deployments in the **managed LangGraph Platform**, as well as **Enterprise** self-hosted plans. It is not supported for **Lite** self-hosted plans.
 
-This guide shows how to add custom authentication to your LangGraph Platform application. This guide applies to both LangGraph Cloud, BYOC, and self-hosted deployments. It does not apply to isolated usage of the LangGraph open source library in your own custom server.
+This guide shows how to add custom authentication to your LangGraph Platform application. This guide applies to both LangGraph Platform and self-hosted deployments. It does not apply to isolated usage of the LangGraph open source library in your own custom server.
 
 ## 1. Implement authentication
 

@@ -5,33 +5,33 @@ search:
 
 # Deployment Options
 
-!!! info "Prerequisites"
-
-    - [LangGraph Platform](./langgraph_platform.md)
-    - [LangGraph Server](./langgraph_server.md)
-    - [LangGraph Platform Plans](./plans.md)
-
-## Overview
-
 There are 4 main options for deploying with the LangGraph Platform:
 
-1. **<a href="#cloud-saas">Cloud SaaS<sup>(Beta)</sup></a>**: Available for **Plus** and **Enterprise** plans.
+1. [Cloud SaaS](#cloud-saas)
 
-1. **<a href="#self-hosted-data-plane">Self-Hosted Data Plane<sup>(Beta)</sup></a>**: Available for the **Enterprise** plan.
+1. [Self-Hosted Data Plane<sup>(Beta)</sup>](#self-hosted-data-plane)
 
-1. **<a href="#self-hosted-control-plane">Self-Hosted Control Plane<sup>(Beta)</sup></a>**: Available for the **Enterprise** plan.
+1. [Self-Hosted Control Plane<sup>(Beta)</sup>](#self-hosted-control-plane)
 
-1. **[Standalone Container](#standalone-container)**: Available for all plans.
+1. [Standalone Container](#standalone-container)
 
-Please see the [LangGraph Platform Plans](./plans.md) for more information on the different plans.
 
-The guide below will explain the differences between the deployment options.
+A quick comparison:
+
+|                      | **Cloud SaaS** | **Self-Hosted Data Plane** | **Self-Hosted Control Plane** | **Standalone Container** |
+|----------------------|----------------|----------------------------|-------------------------------|--------------------------|
+| **[Control plane UI/API](../concepts/langgraph_control_plane.md)** | Yes | Yes | Yes | No |
+| **CI/CD** | Managed internally by platform | Managed externally by you | Managed externally by you | Managed externally by you |
+| **Data/compute residency** | LangChain’s cloud | Your cloud | Your cloud | Your cloud |
+| **LangSmith compatibility** | Trace to LangSmith SaaS | Trace to LangSmith SaaS | Trace to Self-Hosted LangSmith | Optional tracing |
+| **[Server version compatibility](../concepts/langgraph_server.md#server-versions)** | Enterprise | Enterprise | Enterprise | Lite, Enterprise |
+| **[Pricing](https://www.langchain.com/pricing-langgraph-platform)** | Plus | Enterprise | Enterprise | Developer |
 
 ## Cloud SaaS
 
 The [Cloud SaaS](./langgraph_cloud.md) deployment option is a fully managed model for deployment where we manage the [control plane](./langgraph_control_plane.md) and [data plane](./langgraph_data_plane.md) in our cloud. This option provides a simple way to deploy and manage your LangGraph Servers.
 
-Connect your GitHub repositories to the platform and deploy your LangGraph Servers from the [Control Plane UI](./langgraph_control_plane.md#control-plane-ui). The build process (i.e. CI/CD) is managed internally by the platform.
+Connect your GitHub repositories to the platform and deploy your LangGraph Servers from the [control plane UI](./langgraph_control_plane.md#control-plane-ui). The build process (i.e. CI/CD) is managed internally by the platform.
 
 For more information, please see:
 
@@ -40,9 +40,12 @@ For more information, please see:
 
 ## Self-Hosted Data Plane
 
+!!! important "Beta"
+    The Self-Hosted Data Plane deployment option is currently in beta stage.
+
 The [Self-Hosted Data Plane](./langgraph_self_hosted_data_plane.md) deployment option is a "hybrid" model for deployment where we manage the [control plane](./langgraph_control_plane.md) in our cloud and you manage the [data plane](./langgraph_data_plane.md) in your cloud. This option provides a way to securely manage your data plane infrastructure, while offloading control plane management to us.
 
-Build a Docker image using the [LangGraph CLI](./langgraph_cli.md) and deploy your LangGraph Server from the [Control Plane UI](./langgraph_control_plane.md#control-plane-ui).
+Build a Docker image using the [LangGraph CLI](./langgraph_cli.md) and deploy your LangGraph Server from the [control plane UI](./langgraph_control_plane.md#control-plane-ui).
 
 Supported Compute Platforms: [Kubernetes](https://kubernetes.io/), [Amazon ECS](https://aws.amazon.com/ecs/) (coming soon!)
 
@@ -53,9 +56,12 @@ For more information, please see:
 
 ## Self-Hosted Control Plane
 
+!!! important "Beta"
+    The Self-Hosted Control Plane deployment option is currently in beta stage.
+
 The [Self-Hosted Control Plane](./langgraph_self_hosted_control_plane.md) deployment option is a fully self-hosted model for deployment where you manage the [control plane](./langgraph_control_plane.md) and [data plane](./langgraph_data_plane.md) in your cloud. This option give you full control and responsibility of the control plane and data plane infrastructure.
 
-Build a Docker image using the [LangGraph CLI](./langgraph_cli.md) and deploy your LangGraph Server from the [Control Plane UI](./langgraph_control_plane.md#control-plane-ui).
+Build a Docker image using the [LangGraph CLI](./langgraph_cli.md) and deploy your LangGraph Server from the [control plane UI](./langgraph_control_plane.md#control-plane-ui).
 
 Supported Compute Platforms: [Kubernetes](https://kubernetes.io/)
 
@@ -66,13 +72,13 @@ For more information, please see:
 
 ## Standalone Container
 
-The [Standalone Container](./langgraph_standalone_container.md) deployment option is the least restrictive model for deployment. Deploy standalone instances of a LangGraph Server in your cloud.
+The [Standalone Container](./langgraph_standalone_container.md) deployment option is the least restrictive model for deployment. Deploy standalone instances of a LangGraph Server in your cloud, using any of the [available](./plans.md) license options.
 
 Build a Docker image using the [LangGraph CLI](./langgraph_cli.md) and deploy your LangGraph Server using the container deployment tooling of your choice. Images can be deployed to any compute platform.
 
 For more information, please see:
 
-* [Sandalone Container Conceptual Guide](./langgraph_standalone_container.md)
+* [Standalone Container Conceptual Guide](./langgraph_standalone_container.md)
 * [How to deploy a Standalone Container](../cloud/deployment/standalone_container.md)
 
 ## Related
@@ -81,4 +87,3 @@ For more information, please see:
 
 * [LangGraph Platform plans](./plans.md)
 * [LangGraph Platform pricing](https://www.langchain.com/langgraph-platform-pricing)
-* [Deployment how-to guides](../how-tos/index.md#deployment)

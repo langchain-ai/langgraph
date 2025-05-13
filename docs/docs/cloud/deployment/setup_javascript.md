@@ -1,10 +1,10 @@
-# How to Set Up a LangGraph.js Application for Deployment
+# How to Set Up a LangGraph.js Application
 
-A [LangGraph.js](https://langchain-ai.github.io/langgraphjs/) application must be configured with a [LangGraph API configuration file](../reference/cli.md#configuration-file) in order to be deployed to LangGraph Cloud (or to be self-hosted). This how-to guide discusses the basic steps to setup a LangGraph.js application for deployment using `package.json` to specify project dependencies.
+A [LangGraph.js](https://langchain-ai.github.io/langgraphjs/) application must be configured with a [LangGraph configuration file](../reference/cli.md#configuration-file) in order to be deployed to LangGraph Platform (or to be self-hosted). This how-to guide discusses the basic steps to setup a LangGraph.js application for deployment using `package.json` to specify project dependencies.
 
 This walkthrough is based on [this repository](https://github.com/langchain-ai/langgraphjs-studio-starter), which you can play around with to learn more about how to setup your LangGraph application for deployment.
 
-The final repo structure will look something like this:
+The final repository structure will look something like this:
 
 ```bash
 my-app/
@@ -23,7 +23,7 @@ After each step, an example file directory is provided to demonstrate how code c
 
 ## Specify Dependencies
 
-Dependencies can be specified in a `package.json`. If none of these files is created, then dependencies can be specified later in the [LangGraph API configuration file](#create-langgraph-api-config).
+Dependencies can be specified in a `package.json`. If none of these files is created, then dependencies can be specified later in the [LangGraph configuration file](#create-langgraph-api-config).
 
 Example `package.json` file:
 
@@ -78,7 +78,7 @@ my-app/
 
 ## Define Graphs
 
-Implement your graphs! Graphs can be defined in a single file or multiple files. Make note of the variable names of each compiled graph to be included in the LangGraph application. The variable names will be used later when creating the [LangGraph API configuration file](../reference/cli.md#configuration-file).
+Implement your graphs! Graphs can be defined in a single file or multiple files. Make note of the variable names of each compiled graph to be included in the LangGraph application. The variable names will be used later when creating the [LangGraph configuration file](../reference/cli.md#configuration-file).
 
 Here is an example `agent.ts`:
 
@@ -157,7 +157,7 @@ export const graph = workflow.compile();
 
 !!! info "Assign `CompiledGraph` to Variable"
 
-    The build process for LangGraph Cloud requires that the `CompiledGraph` object be assigned to a variable at the top-level of a JavaScript module (alternatively, you can provide [a function that creates a graph](./graph_rebuild.md)).
+    The build process for LangGraph Platform requires that the `CompiledGraph` object be assigned to a variable at the top-level of a JavaScript module (alternatively, you can provide [a function that creates a graph](./graph_rebuild.md)).
 
 Example file directory:
 
@@ -176,7 +176,7 @@ my-app/
 
 ## Create LangGraph API Config
 
-Create a [LangGraph API configuration file](../reference/cli.md#configuration-file) called `langgraph.json`. See the [LangGraph CLI reference](../reference/cli.md#configuration-file) for detailed explanations of each key in the JSON object of the configuration file.
+Create a [LangGraph configuration file](../reference/cli.md#configuration-file) called `langgraph.json`. See the [LangGraph configuration file reference](../reference/cli.md#configuration-file) for detailed explanations of each key in the JSON object of the configuration file.
 
 Example `langgraph.json` file:
 
@@ -196,8 +196,8 @@ Note that the variable name of the `CompiledGraph` appears at the end of the val
 
 !!! info "Configuration Location"
 
-    The LangGraph API configuration file must be placed in a directory that is at the same level or higher than the TypeScript files that contain compiled graphs and associated dependencies.
+    The LangGraph configuration file must be placed in a directory that is at the same level or higher than the TypeScript files that contain compiled graphs and associated dependencies.
 
 ## Next
 
-After you setup your project and place it in a github repo, it's time to [deploy your app](./cloud.md).
+After you setup your project and place it in a GitHub repository, it's time to [deploy your app](./cloud.md).

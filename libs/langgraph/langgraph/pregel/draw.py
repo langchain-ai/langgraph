@@ -31,9 +31,10 @@ def draw_graph(
     input_channels: Union[str, Sequence[str]],
     interrupt_after_nodes: Union[All, Sequence[str]],
     interrupt_before_nodes: Union[All, Sequence[str]],
-    trigger_to_nodes: Optional[Mapping[str, Sequence[str]]],
+    trigger_to_nodes: Mapping[str, Sequence[str]],
     checkpointer: Checkpointer,
     subgraphs: dict[str, Graph],
+    limit: int = 250,
 ) -> Graph:
     """Get the graph for this Pregel instance.
 
@@ -78,6 +79,7 @@ def draw_graph(
                 PregelTaskWrites((), INPUT, input_writes, []),
             ],
             get_next_version,
+            trigger_to_nodes,
         )
         # prepare first tasks
         tasks = prepare_next_tasks(
@@ -97,7 +99,9 @@ def draw_graph(
         )
         start_tasks = tasks
         # run the pregel loop
-        while tasks:
+        for step in range(step, limit):
+            if not tasks:
+                break
             conditionals: dict[tuple[str, str, Any], Optional[str]] = {}
             # run task writers
             for task in tasks.values():
@@ -141,7 +145,7 @@ def draw_graph(
                     trigger_to_sources[trigger].add((src, cond, label))
             # apply writes
             _, updated_channels = apply_writes(
-                checkpoint, channels, tasks.values(), get_next_version
+                checkpoint, channels, tasks.values(), get_next_version, trigger_to_nodes
             )
             # prepare next tasks
             tasks = prepare_next_tasks(
@@ -161,9 +165,19 @@ def draw_graph(
             )
             # collect edges
             for task in tasks.values():
+                added = False
                 for trigger in task.triggers:
                     for src, cond, label in sorted(trigger_to_sources[trigger]):
                         edges.add((src, task.name, cond, label))
+                        # if the edge is from this step, skip adding the implicit edges
+                        if (trigger, cond, label) in step_sources.get(src, set()):
+                            added = True
+                        else:
+                            sources[src].discard((trigger, cond, label))
+                # if no edges from this step, add implicit edges from all previous tasks
+                if not added:
+                    for src in step_sources:
+                        edges.add((src, task.name, True, None))
         # assemble the graph
         graph = Graph()
         # add nodes

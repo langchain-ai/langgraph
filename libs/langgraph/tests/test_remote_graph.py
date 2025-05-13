@@ -1,19 +1,30 @@
+import re
+import sys
+from typing import Annotated, Union
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from langchain_core.messages import AnyMessage, BaseMessage
 from langchain_core.runnables import RunnableConfig
-from langchain_core.runnables.graph import (
-    Edge as DrawableEdge,
-)
-from langchain_core.runnables.graph import (
-    Node as DrawableNode,
-)
+from langchain_core.runnables.graph import Edge as DrawableEdge
+from langchain_core.runnables.graph import Node as DrawableNode
 from langgraph_sdk.schema import StreamPart
+from typing_extensions import TypedDict
 
 from langgraph.errors import GraphInterrupt
+from langgraph.graph import StateGraph, add_messages
+from langgraph.pregel import Pregel
 from langgraph.pregel.remote import RemoteGraph
 from langgraph.pregel.types import StateSnapshot
 from langgraph.types import Interrupt
+from tests.example_app.example_graph import app
+
+pytestmark = pytest.mark.anyio
+
+NEEDS_CONTEXTVARS = pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 
 
 def test_with_config():
@@ -422,6 +433,21 @@ def test_stream():
         StreamPart(event="values", data={"chunk": "data3"}),
         StreamPart(event="updates", data={"chunk": "data4"}),
         StreamPart(
+            event="messages",
+            data=[
+                {
+                    "content": [{"text": "Hello", "type": "text", "index": 0}],
+                    "type": "AIMessageChunk",
+                },
+                {
+                    "langgraph_step": 1,
+                    "langgraph_node": "call_llm",
+                    "langgraph_triggers": ["branch:to:call_llm"],
+                    "langgraph_path": ["__pregel_pull", "call_llm"],
+                },
+            ],
+        ),
+        StreamPart(
             event="updates",
             data={
                 "__interrupt__": [
@@ -476,6 +502,30 @@ def test_stream():
         {"chunk": "data1"},
         {"chunk": "data2"},
         {"chunk": "data3"},
+    ]
+
+    # stream_mode messages
+    stream_parts = []
+    for stream_part in remote_pregel.stream(
+        {"input": "data"},
+        config={"configurable": {"thread_id": "thread_1"}},
+        stream_mode="messages",
+    ):
+        stream_parts.append(stream_part)
+
+    assert stream_parts == [
+        (
+            {
+                "content": [{"text": "Hello", "type": "text", "index": 0}],
+                "type": "AIMessageChunk",
+            },
+            {
+                "langgraph_step": 1,
+                "langgraph_node": "call_llm",
+                "langgraph_triggers": ["branch:to:call_llm"],
+                "langgraph_path": ["__pregel_pull", "call_llm"],
+            },
+        ),
     ]
 
     mock_sync_client.runs.stream.return_value = [
@@ -556,6 +606,21 @@ async def test_astream():
         StreamPart(event="values", data={"chunk": "data3"}),
         StreamPart(event="updates", data={"chunk": "data4"}),
         StreamPart(
+            event="messages",
+            data=[
+                {
+                    "content": [{"text": "Hello", "type": "text", "index": 0}],
+                    "type": "AIMessageChunk",
+                },
+                {
+                    "langgraph_step": 1,
+                    "langgraph_node": "call_llm",
+                    "langgraph_triggers": ["branch:to:call_llm"],
+                    "langgraph_path": ["__pregel_pull", "call_llm"],
+                },
+            ],
+        ),
+        StreamPart(
             event="updates",
             data={
                 "__interrupt__": [
@@ -611,6 +676,30 @@ async def test_astream():
         {"chunk": "data1"},
         {"chunk": "data2"},
         {"chunk": "data3"},
+    ]
+
+    # stream_mode messages
+    stream_parts = []
+    async for stream_part in remote_pregel.astream(
+        {"input": "data"},
+        config={"configurable": {"thread_id": "thread_1"}},
+        stream_mode="messages",
+    ):
+        stream_parts.append(stream_part)
+
+    assert stream_parts == [
+        (
+            {
+                "content": [{"text": "Hello", "type": "text", "index": 0}],
+                "type": "AIMessageChunk",
+            },
+            {
+                "langgraph_step": 1,
+                "langgraph_node": "call_llm",
+                "langgraph_triggers": ["branch:to:call_llm"],
+                "langgraph_path": ["__pregel_pull", "call_llm"],
+            },
+        ),
     ]
 
     async_iter = MagicMock()
@@ -774,7 +863,7 @@ async def test_ainvoke():
     assert result == {"messages": [{"type": "human", "content": "world"}]}
 
 
-@pytest.mark.skip("Unskip this test to manually test the LangGraph Cloud integration")
+@pytest.mark.skip("Unskip this test to manually test the LangGraph Platform integration")
 @pytest.mark.anyio
 async def test_langgraph_cloud_integration():
     from langgraph_sdk.client import get_client, get_sync_client
@@ -963,3 +1052,131 @@ def test_sanitize_config():
     assert sanitized["metadata"]["level1"]["level2"]["level3"]["dict"] == {
         "a": {"b": {"c": "d"}}
     }
+
+
+"""Test RemoteGraph against an actual server."""
+
+
+@pytest.fixture
+def remote_graph() -> RemoteGraph:
+    return RemoteGraph("app", url="http://localhost:2024")
+
+
+@pytest.fixture
+def nested_remote_graph(remote_graph: RemoteGraph) -> Pregel:
+    class State(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages]
+
+    return (
+        StateGraph(State)
+        .add_node("nested", remote_graph)
+        .add_edge("__start__", "nested")
+        .compile(name="nested_remote_graph")
+    )
+
+
+@pytest.fixture
+async def nested_graph() -> Pregel:
+    class State(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages]
+
+    return (
+        StateGraph(State)
+        .add_node("nested", app)
+        .add_edge("__start__", "nested")
+        .compile(name="nested_graph")
+    )
+
+
+def get_message_dict(msg: Union[BaseMessage, dict]):
+    # just get the core stuff from within the message
+    if isinstance(msg, dict):
+        return {
+            "content": msg.get("content"),
+            "type": msg.get("type"),
+            "name": msg.get("name"),
+            "tool_calls": msg.get("tool_calls"),
+            "invalid_tool_calls": msg.get("invalid_tool_calls"),
+        }
+    return {
+        "content": msg.content,
+        "type": msg.type,
+        "name": msg.name,
+        "tool_calls": getattr(msg, "tool_calls", None),
+        "invalid_tool_calls": getattr(msg, "invalid_tool_calls", None),
+    }
+
+
+@NEEDS_CONTEXTVARS
+async def test_remote_graph_basic_invoke(remote_graph: RemoteGraph) -> None:
+    # Basic smoke test of the remote graph
+    response = await remote_graph.ainvoke(
+        {"messages": [{"role": "user", "content": "hello"}]}
+    )
+    assert response == {
+        "content": "answer",
+        "additional_kwargs": {},
+        "response_metadata": {},
+        "type": "ai",
+        "name": None,
+        "id": "ai3",
+        "example": False,
+        "tool_calls": [],
+        "invalid_tool_calls": [],
+        "usage_metadata": None,
+    }
+
+
+class monotonic_uid:
+    def __init__(self):
+        self._uid = 0
+
+    def __call__(self, match=None):
+        val = self._uid
+        self._uid += 1
+        hexval = f"{val:032x}"
+        uuid_str = f"{hexval[:8]}-{hexval[8:12]}-{hexval[12:16]}-{hexval[16:20]}-{hexval[20:32]}"
+        return uuid_str
+
+
+uid_pattern = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+
+
+@NEEDS_CONTEXTVARS
+async def test_remote_graph_stream_messages_tuple(
+    nested_graph: Pregel, nested_remote_graph: Pregel
+) -> None:
+    events = []
+    namespaces = []
+    uid_generator = monotonic_uid()
+    async for ns, messages in nested_remote_graph.astream(
+        {"messages": [{"role": "user", "content": "hello"}]},
+        stream_mode="messages",
+        subgraphs=True,
+    ):
+        events.extend(messages)
+        namespaces.append(
+            tuple(uid_pattern.sub(uid_generator, ns_part) for ns_part in ns)
+        )
+    inmem_events = []
+    inmem_namespaces = []
+    uid_generator = monotonic_uid()
+    async for ns, messages in nested_graph.astream(
+        {"messages": [{"role": "user", "content": "hello"}]},
+        stream_mode="messages",
+        subgraphs=True,
+    ):
+        inmem_events.extend(messages)
+        inmem_namespaces.append(
+            tuple(uid_pattern.sub(uid_generator, ns_part) for ns_part in ns)
+        )
+    assert len(events) == len(inmem_events)
+    assert len(namespaces) == len(inmem_namespaces)
+
+    coerced_events = [get_message_dict(e) for e in events]
+    coerced_inmem_events = [get_message_dict(e) for e in inmem_events]
+    assert coerced_events == coerced_inmem_events
+    # TODO: Fix the namespace matching in the next api release.
+    # assert namespaces == inmem_namespaces

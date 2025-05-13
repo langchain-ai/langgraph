@@ -18,6 +18,10 @@ A background run can execute for longer than 1 hour, but a client must reconnect
 
 Defaults to `3600`.
 
+## `BG_JOB_SHUTDOWN_GRACE_PERIOD_SECS`
+
+Specifies, in seconds, how long the server will wait for background jobs to finish after the queue receives a shutdown signal. After this period, the server will force termination. Defaults to `3600` seconds. Set this to ensure jobs have enough time to complete cleanly during shutdown. Added in `langgraph-api==0.2.16`.
+
 ## `DD_API_KEY`
 
 Specify `DD_API_KEY` (your [Datadog API Key](https://docs.datadoghq.com/account_management/api-app-keys/)) to automatically enable Datadog tracing for the deployment. Specify other [`DD_*` environment variables](https://ddtrace.readthedocs.io/en/stable/configuration.html) to configure the tracing instrumentation.
@@ -34,15 +38,15 @@ See <a href="https://docs.smith.langchain.com/how_to_guides/tracing/sample_trace
 
 Type of authentication for the LangGraph Server deployment. Valid values: `langsmith`, `noop`.
 
-For deployments to LangGraph Cloud, this environment variable is set automatically. For local development or deployments where authentication is handled externally (e.g. self-hosted), set this environment variable to `noop`.
+For deployments to LangGraph Platform, this environment variable is set automatically. For local development or deployments where authentication is handled externally (e.g. self-hosted), set this environment variable to `noop`.
 
 ## `LANGSMITH_RUNS_ENDPOINTS`
 
-For [Bring Your Own Cloud (BYOC)](../../concepts/bring_your_own_cloud.md) deployments with [self-hosted LangSmith](https://docs.smith.langchain.com/self_hosting) only.
+For deployments with [self-hosted LangSmith](https://docs.smith.langchain.com/self_hosting) only.
 
-Set this environment variable to have a BYOC deployment send traces to a self-hosted LangSmith instance. The value of `LANGSMITH_RUNS_ENDPOINTS` is a JSON string: `{"<SELF_HOSTED_LANGSMITH_HOSTNAME>":"<LANGSMITH_API_KEY>"}`.
+Set this environment variable to have a deployment send traces to a self-hosted LangSmith instance. The value of `LANGSMITH_RUNS_ENDPOINTS` is a JSON string: `{"<SELF_HOSTED_LANGSMITH_HOSTNAME>":"<LANGSMITH_API_KEY>"}`.
 
-`SELF_HOSTED_LANGSMITH_HOSTNAME` is the hostname of the self-hosted LangSmith instance. It must be accessible to the BYOC deployment. `LANGSMITH_API_KEY` is a LangSmith API generated from the self-hosted LangSmith instance.
+`SELF_HOSTED_LANGSMITH_HOSTNAME` is the hostname of the self-hosted LangSmith instance. It must be accessible to the deployment. `LANGSMITH_API_KEY` is a LangSmith API generated from the self-hosted LangSmith instance.
 
 ## `LANGSMITH_TRACING`
 
@@ -114,7 +118,7 @@ Defaults to `''`.
 ## `REDIS_CLUSTER`
 
 !!! info "Only Allowed in Self-Hosted Deployments"
-    Redis Cluster mode is only available in Self-Hosted Deployment models, LangGraph Cloud SaaS will provision a redis instance for you by default.
+    Redis Cluster mode is only available in Self-Hosted Deployment models, LangGraph Platform SaaS will provision a redis instance for you by default.
 
 Set `REDIS_CLUSTER` to `True` to enable Redis Cluster mode. When enabled, the system will connect to Redis using cluster mode. This is useful when connecting to a Redis Cluster deployment.
 

@@ -1,17 +1,17 @@
-# How to Deploy to Cloud SaaS (Beta)
+# How to Deploy to Cloud SaaS
 
 Before deploying, review the [conceptual guide for the Cloud SaaS](../../concepts/langgraph_cloud.md) deployment option.
 
 ## Prerequisites
 
-1. LangGraph Cloud applications are deployed from GitHub repositories. Configure and upload a LangGraph Cloud application to a GitHub repository in order to deploy it to LangGraph Cloud.
-1. [Verify that the LangGraph API runs locally](test_locally.md). If the API does not run successfully (i.e. `langgraph dev`), deploying to LangGraph Cloud will fail as well.
+1. LangGraph Platform applications are deployed from GitHub repositories. Configure and upload a LangGraph Platform application to a GitHub repository in order to deploy it to LangGraph Platform.
+1. [Verify that the LangGraph API runs locally](../../tutorials/langgraph-platform/local-server.md). If the API does not run successfully (i.e. `langgraph dev`), deploying to LangGraph Platform will fail as well.
 
 ## Create New Deployment
 
 Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>...
 
-1. In the left-hand navigation panel, select `LangGraph Platform`. The `LangGraph Platform` view contains a list of existing LangGraph Cloud deployments.
+1. In the left-hand navigation panel, select `LangGraph Platform`. The `LangGraph Platform` view contains a list of existing LangGraph Platform deployments.
 1. In the top-right corner, select `+ New Deployment` to create a new deployment.
 1. In the `Create New Deployment` panel, fill out the required fields.
     1. `Deployment details`
@@ -38,7 +38,7 @@ When [creating a new deployment](#create-new-deployment), a new revision is crea
 
 Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>...
 
-1. In the left-hand navigation panel, select `LangGraph Platform`. The `LangGraph Platform` view contains a list of existing LangGraph Cloud deployments.
+1. In the left-hand navigation panel, select `LangGraph Platform`. The `LangGraph Platform` view contains a list of existing LangGraph Platform deployments.
 1. Select an existing deployment to create a new revision for.
 1. In the `Deployment` view, in the top-right corner, select `+ New Revision`.
 1. In the `New Revision` modal, fill out the required fields.
@@ -79,7 +79,7 @@ Starting from the `LangGraph Platform` view...
 
 Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>...
 
-1. In the left-hand navigation panel, select `LangGraph Platform`. The `LangGraph Platform` view contains a list of existing LangGraph Cloud deployments.
+1. In the left-hand navigation panel, select `LangGraph Platform`. The `LangGraph Platform` view contains a list of existing LangGraph Platform deployments.
 1. Select the menu icon (three dots) on the right-hand side of the row for the desired deployment and select `Delete`.
 1. A `Confirmation` modal will appear. Select `Delete`.
 

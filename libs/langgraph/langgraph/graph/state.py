@@ -26,12 +26,20 @@ from pydantic import BaseModel
 from typing_extensions import Self
 
 from langgraph._api.deprecation import LangGraphDeprecationWarning
+from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
-from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitForNames
+from langgraph.channels.dynamic_barrier_value import (
+    DynamicBarrierValue,
+    DynamicBarrierValueAfterFinish,
+    WaitForNames,
+)
 from langgraph.channels.ephemeral_value import EphemeralValue
-from langgraph.channels.last_value import LastValue
-from langgraph.channels.named_barrier_value import NamedBarrierValue
+from langgraph.channels.last_value import LastValue, LastValueAfterFinish
+from langgraph.channels.named_barrier_value import (
+    NamedBarrierValue,
+    NamedBarrierValueAfterFinish,
+)
 from langgraph.checkpoint.base import Checkpoint
 from langgraph.constants import (
     EMPTY_SEQ,
@@ -72,7 +80,7 @@ from langgraph.pregel.write import (
     ChannelWriteTupleEntry,
 )
 from langgraph.store.base import BaseStore
-from langgraph.types import All, Checkpointer, Command, RetryPolicy
+from langgraph.types import All, CachePolicy, Checkpointer, Command, RetryPolicy
 from langgraph.utils.fields import get_field_default, get_update_as_tuples
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.runnable import RunnableLike, coerce_to_runnable
@@ -106,7 +114,9 @@ class StateNodeSpec(NamedTuple):
     metadata: Optional[dict[str, Any]]
     input: type[Any]
     retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]]
+    cache_policy: Optional[CachePolicy]
     ends: Optional[Union[tuple[str, ...], dict[str, str]]] = EMPTY_SEQ
+    defer: bool = False
 
 
 class StateGraph(Graph):
@@ -247,9 +257,11 @@ class StateGraph(Graph):
         self,
         node: RunnableLike,
         *,
+        defer: bool = False,
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[type[Any]] = None,
         retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
+        cache_policy: Optional[CachePolicy] = None,
         destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
     ) -> Self:
         """Add a new node to the state graph.
@@ -263,9 +275,11 @@ class StateGraph(Graph):
         node: str,
         action: RunnableLike,
         *,
+        defer: bool = False,
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[type[Any]] = None,
         retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
+        cache_policy: Optional[CachePolicy] = None,
         destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
     ) -> Self:
         """Add a new node to the state graph."""
@@ -276,9 +290,11 @@ class StateGraph(Graph):
         node: Union[str, RunnableLike],
         action: Optional[RunnableLike] = None,
         *,
+        defer: bool = False,
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[type[Any]] = None,
         retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
+        cache_policy: Optional[CachePolicy] = None,
         destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
     ) -> Self:
         """Add a new node to the state graph.
@@ -292,6 +308,7 @@ class StateGraph(Graph):
             input: The input schema for the node. (default: the graph's input schema)
             retry: The policy for retrying the node. (default: None)
                 If a sequence is provided, the first matching policy will be applied.
+            cache_policy: The cache policy for the node. (default: None)
             destinations: Destinations that indicate where a node can route to.
                 This is useful for edgeless graphs with nodes that return `Command` objects.
                 If a dict is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
@@ -420,7 +437,9 @@ class StateGraph(Graph):
             metadata,
             input=input or self.schema,
             retry_policy=retry,
+            cache_policy=cache_policy,
             ends=ends,
+            defer=defer,
         )
         return self
 
@@ -559,6 +578,7 @@ class StateGraph(Graph):
         self,
         checkpointer: Checkpointer = None,
         *,
+        cache: Optional[BaseCache] = None,
         store: Optional[BaseStore] = None,
         interrupt_before: Optional[Union[All, list[str]]] = None,
         interrupt_after: Optional[Union[All, list[str]]] = None,
@@ -643,6 +663,7 @@ class StateGraph(Graph):
             auto_validate=False,
             debug=debug,
             store=store,
+            cache=cache,
             name=name or "LangGraph",
         )
 
@@ -784,7 +805,11 @@ class CompiledStateGraph(CompiledGraph):
                 self.schema_to_mapper[input_schema] = mapper
 
             branch_channel = CHANNEL_BRANCH_TO.format(key)
-            self.channels[branch_channel] = EphemeralValue(Any, guard=False)
+            self.channels[branch_channel] = (
+                LastValueAfterFinish(Any)
+                if node.defer
+                else EphemeralValue(Any, guard=False)
+            )
             self.nodes[key] = PregelNode(
                 triggers=[branch_channel],
                 # read state keys and managed values
@@ -795,6 +820,7 @@ class CompiledStateGraph(CompiledGraph):
                 writers=[ChannelWrite(write_entries)],
                 metadata=node.metadata,
                 retry_policy=node.retry_policy,
+                cache_policy=node.cache_policy,
                 bound=node.runnable,
             )
         else:
@@ -812,7 +838,12 @@ class CompiledStateGraph(CompiledGraph):
         elif end != END:
             channel_name = f"join:{'+'.join(starts)}:{end}"
             # register channel
-            self.channels[channel_name] = NamedBarrierValue(str, set(starts))
+            if self.builder.nodes[end].defer:
+                self.channels[channel_name] = NamedBarrierValueAfterFinish(
+                    str, set(starts)
+                )
+            else:
+                self.channels[channel_name] = NamedBarrierValue(str, set(starts))
             # subscribe to channel
             self.nodes[end].triggers.append(channel_name)
             # publish to channel
@@ -889,7 +920,10 @@ class CompiledStateGraph(CompiledGraph):
                 else [node for node in self.builder.nodes if node != branch.then]
             )
             channel_name = f"branch:{start}:{name}::then"
-            self.channels[channel_name] = DynamicBarrierValue(str)
+            if self.builder.nodes[branch.then].defer:
+                self.channels[channel_name] = DynamicBarrierValueAfterFinish(str)
+            else:
+                self.channels[channel_name] = DynamicBarrierValue(str)
             self.nodes[branch.then].triggers.append(channel_name)
             for end in ends:
                 if end != END:

@@ -145,6 +145,8 @@ def compose_as_dict(
     postgres_uri: Optional[str] = None,
     # If you are running against an already-built image, you can pass it here
     image: Optional[str] = None,
+    # Base image to use for the LangGraph API server
+    base_image: Optional[str] = None,
 ) -> dict:
     """Create a docker compose file as a dictionary in YML style."""
     if postgres_uri is None:
@@ -249,6 +251,7 @@ def compose(
     # postgres://user:password@host:port/database?option=value
     postgres_uri: Optional[str] = None,
     image: Optional[str] = None,
+    base_image: Optional[str] = None,
 ) -> str:
     """Create a docker compose file as a string."""
     compose_content = compose_as_dict(
@@ -258,6 +261,7 @@ def compose(
         debugger_base_url=debugger_base_url,
         postgres_uri=postgres_uri,
         image=image,
+        base_image=base_image,
     )
     compose_str = dict_to_yaml(compose_content)
     return compose_str

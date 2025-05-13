@@ -1,6 +1,6 @@
 # Configurable Headers
 
-LangGraph allows runtime configuration to modify agent behavior and permissions dynamically. When using the [LangGraph Platform](../quick_start.md), you can pass this configuration in the request body (`config`) or specific request headers. This enables adjustments based on user identity or other request data (see the [configuration how-to](../../how-tos/configuration.ipynb) for more details on how to access within your graph).
+LangGraph allows runtime configuration to modify agent behavior and permissions dynamically. When using the [LangGraph Platform](../quick_start.md), you can pass this configuration in the request body (`config`) or specific request headers. This enables adjustments based on user identity or other request data.
 
 For privacy, control which headers are passed to the runtime configuration via the `http.configurable_headers` section in your `langgraph.json` file.
 
@@ -64,8 +64,6 @@ async def generate_agent(config):
   "graphs": {"agent": "my_grph.py:generate_agent"}
 }
 ```
-
-For more examples on how to use runtime configuration, check out the [configuration how-to](../../how-tos/configuration.ipynb).
 
 ### Opt-out of configurable headers
 

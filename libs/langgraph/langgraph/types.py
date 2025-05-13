@@ -22,6 +22,7 @@ from typing_extensions import Self
 from xxhash import xxh3_128_hexdigest
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
+from langgraph.utils.cache import default_cache_key
 from langgraph.utils.fields import get_update_as_tuples
 
 if TYPE_CHECKING:
@@ -122,13 +123,19 @@ class RetryPolicy(NamedTuple):
     """List of exception classes that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
 
 
-class CachePolicy(NamedTuple):
-    """Configuration for caching nodes.
+KeyFuncT = TypeVar("KeyFuncT", bound=Callable[..., Union[str, bytes]])
 
-    !!! version-added "Added in version 0.2.24."
-    """
 
-    pass
+@dataclasses.dataclass(**_DC_KWARGS)
+class CachePolicy(Generic[KeyFuncT]):
+    """Configuration for caching nodes."""
+
+    key_func: KeyFuncT = default_cache_key  # type: ignore[assignment]
+    """Function to generate a cache key from the node's input.
+    Defaults to hashing the input with pickle."""
+
+    ttl: Optional[int] = None
+    """Time to live for the cache entry in seconds. If None, the entry never expires."""
 
 
 @dataclasses.dataclass(**_DC_KWARGS)
@@ -174,6 +181,17 @@ else:
     _T_DC_KWARGS = {"frozen": True}
 
 
+class CacheKey(NamedTuple):
+    """Cache key for a task."""
+
+    ns: tuple[str, ...]
+    """Namespace for the cache entry."""
+    key: str
+    """Key for the cache entry."""
+    ttl: Optional[int]
+    """Time to live for the cache entry in seconds."""
+
+
 @dataclasses.dataclass(**_T_DC_KWARGS)
 class PregelExecutableTask:
     name: str
@@ -182,8 +200,8 @@ class PregelExecutableTask:
     writes: deque[tuple[str, Any]]
     config: RunnableConfig
     triggers: Sequence[str]
-    retry_policy: Optional[Sequence[RetryPolicy]]
-    cache_policy: Optional[CachePolicy]
+    retry_policy: Sequence[RetryPolicy]
+    cache_key: Optional[CacheKey]
     id: str
     path: tuple[Union[str, int, tuple], ...]
     scheduled: bool = False
@@ -314,7 +332,7 @@ class Command(Generic[N], ToolOutputMixin):
     graph: Optional[str] = None
     update: Optional[Any] = None
     resume: Optional[Union[dict[str, Any], Any]] = None
-    goto: Union[Send, Sequence[Union[Send, str]], str] = ()
+    goto: Union[Send, Sequence[Union[Send, N]], N] = ()
 
     def __repr__(self) -> str:
         # get all non-None values
