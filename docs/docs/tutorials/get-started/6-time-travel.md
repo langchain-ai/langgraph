@@ -105,7 +105,7 @@ Tool Calls:
 ================================= Tool Message =================================
 Name: tavily_search_results_json
 
-[{"url": "https://blockchain.news/news/langchain-new-features-upcoming-events-update", "content": "LangChain, a leading platform in the AI development space, has released its latest updates, showcasing new use cases and enhancements across its ecosystem. According to the LangChain Blog, the updates cover advancements in LangGraph Cloud, LangSmith's self-improving evaluators, and revamped documentation for LangGraph."}, {"url": "https://blog.langchain.dev/langgraph-platform-announce/", "content": "With these learnings under our belt, we decided to couple some of our latest offerings under LangGraph Platform. LangGraph Platform today includes LangGraph Server, LangGraph Studio, plus the CLI and SDK. ... we added features in LangGraph Server to deliver on a few key value areas. Below, we'll focus on these aspects of LangGraph Platform."}]
+[{"url": "https://blockchain.news/news/langchain-new-features-upcoming-events-update", "content": "LangChain, a leading platform in the AI development space, has released its latest updates, showcasing new use cases and enhancements across its ecosystem. According to the LangChain Blog, the updates cover advancements in LangGraph Platform, LangSmith's self-improving evaluators, and revamped documentation for LangGraph."}, {"url": "https://blog.langchain.dev/langgraph-platform-announce/", "content": "With these learnings under our belt, we decided to couple some of our latest offerings under LangGraph Platform. LangGraph Platform today includes LangGraph Server, LangGraph Studio, plus the CLI and SDK. ... we added features in LangGraph Server to deliver on a few key value areas. Below, we'll focus on these aspects of LangGraph Platform."}]
 ================================== Ai Message ==================================
 
 Thank you for your patience. I've found some recent information about LangGraph for you. Let me summarize the key points:
@@ -114,9 +114,9 @@ Thank you for your patience. I've found some recent information about LangGraph 
 
 2. Recent updates and features of LangGraph include:
 
-   a. LangGraph Cloud: This seems to be a cloud-based version of LangGraph, though specific details weren't provided in the search results.
+   a. LangGraph Platform: This seems to be a cloud-based version of LangGraph, though specific details weren't provided in the search results.
 ...
-3. Keep an eye on LangGraph Cloud developments, as cloud-based solutions often provide an easier starting point for learners.
+3. Keep an eye on LangGraph Platform developments, as cloud-based solutions often provide an easier starting point for learners.
 4. Consider how LangGraph fits into the broader LangChain ecosystem, especially its interaction with tools like LangSmith.
 
 Is there any specific aspect of LangGraph you'd like to know more about? I'd be happy to do a more focused search on particular features or use cases.
@@ -284,5 +284,5 @@ The graph resumed execution from the `action` node. You can tell this is the cas
 Take your LangGraph journey further by exploring deployment and advanced features:
 
 - **[LangGraph Server quickstart](../../tutorials/langgraph-platform/local-server.md)**: Launch a LangGraph server locally and interact with it using the REST API and LangGraph Studio Web UI.
-- **[LangGraph Cloud quickstart](../../cloud/quick_start.md)**: Deploy your LangGraph app using LangGraph Cloud.
+- **[LangGraph Platform quickstart](../../cloud/quick_start.md)**: Deploy your LangGraph app using LangGraph Platform.
 - **[LangGraph Platform concepts](../../concepts/langgraph_platform.md)**: Understand the foundational concepts of the LangGraph Platform.

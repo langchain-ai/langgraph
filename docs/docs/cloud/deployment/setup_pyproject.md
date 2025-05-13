@@ -1,6 +1,6 @@
 # How to Set Up a LangGraph Application with pyproject.toml
 
-A LangGraph application must be configured with a [LangGraph configuration file](../reference/cli.md#configuration-file) in order to be deployed to LangGraph Cloud (or to be self-hosted). This how-to guide discusses the basic steps to setup a LangGraph application for deployment using `pyproject.toml` to define your package's dependencies.
+A LangGraph application must be configured with a [LangGraph configuration file](../reference/cli.md#configuration-file) in order to be deployed to LangGraph Platform (or to be self-hosted). This how-to guide discusses the basic steps to setup a LangGraph application for deployment using `pyproject.toml` to define your package's dependencies.
 
 This walkthrough is based on [this repository](https://github.com/langchain-ai/langgraph-example-pyproject), which you can play around with to learn more about how to setup your LangGraph application for deployment.
 
@@ -59,7 +59,7 @@ Example `pyproject.toml` file:
 [tool.poetry]
 name = "my-agent"
 version = "0.0.1"
-description = "An excellent agent build for LangGraph cloud."
+description = "An excellent agent build for LangGraph Platform."
 authors = ["Polly the parrot <1223+polly@users.noreply.github.com>"]
 license = "MIT"
 readme = "README.md"
@@ -138,7 +138,7 @@ graph = workflow.compile()
 ```
 
 !!! warning "Assign `CompiledGraph` to Variable"
-    The build process for LangGraph Cloud requires that the `CompiledGraph` object be assigned to a variable at the top-level of a Python module.
+    The build process for LangGraph Platform requires that the `CompiledGraph` object be assigned to a variable at the top-level of a Python module.
 
 Example file directory:
 

@@ -13,7 +13,7 @@ You can use a prebuilt chat UI for interacting with any LangGraph agent through 
 
 ## Run agent in UI
 
-First, set up LangGraph API server [locally](./deployment.md#launch-langgraph-server-locally) or deploy your agent on [LangGraph Cloud](https://langchain-ai.github.io/langgraph/cloud/quick_start/).
+First, set up LangGraph API server [locally](./deployment.md#launch-langgraph-server-locally) or deploy your agent on [LangGraph Platform](https://langchain-ai.github.io/langgraph/cloud/quick_start/).
 
 Then, navigate to [Agent Chat UI](https://agentchat.vercel.app), or clone the repository and [run the dev server locally](https://github.com/langchain-ai/agent-chat-ui?tab=readme-ov-file#setup):
 
