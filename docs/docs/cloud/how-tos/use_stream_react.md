@@ -476,7 +476,7 @@ The `useStream()` hook provides several callback options to help you respond to 
 - `onError`: Called when an error occurs.
 - `onFinish`: Called when the stream is finished.
 - `onUpdateEvent`: Called when an update event is received.
-- `onCustomEvent`: Called when a custom event is received. See [Custom events](../../how-tos/streaming.md#stream-custom-data) to learn how to stream custom events.
+- `onCustomEvent`: Called when a custom event is received. See the [streaming](../../how-tos/streaming.md#stream-custom-data) guide to learn how to stream custom events.
 - `onMetadataEvent`: Called when a metadata event is received, which contains the Run ID and Thread ID.
 
 ## Learn More
