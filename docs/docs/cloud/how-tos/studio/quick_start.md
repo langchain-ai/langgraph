@@ -47,7 +47,7 @@ If successful, you will see the following logs:
 Once running, you will automatically be directed to LangGraph Studio. 
 
 
-If your server is already running, to access Studio, either:
+For an already running server, access Studio by either:
 
  1. Directly navigate to the following URL: `https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024`. 
  2. Within LangSmith, navigate to the LangGraph Platform Deployments tab, click the "LangGraph Studio" button, enter `http://127.0.0.1:2024` and click "Connect".

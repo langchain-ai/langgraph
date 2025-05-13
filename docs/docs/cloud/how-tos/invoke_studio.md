@@ -1,4 +1,4 @@
-# How to manage Assistants
+# Manage assistants
 
 !!! info "Prerequisites"
 

@@ -1,4 +1,4 @@
-# How to manage Threads
+# Manage threads
 
 !!! info "Prerequisites"
 
