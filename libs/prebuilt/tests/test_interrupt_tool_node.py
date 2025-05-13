@@ -2,11 +2,10 @@ import pytest
 from langchain_core.messages import ToolMessage
 from langchain_core.runnables import RunnableConfig
 
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.prebuilt import create_react_agent
 from langgraph.prebuilt.interrupt import HumanInterruptConfig, InterruptToolNode
 from langgraph.types import Command
-from tests.conftest import ALL_CHECKPOINTERS_SYNC
 from tests.model import FakeToolCallingModel
 
 
@@ -37,14 +36,14 @@ default_model = FakeToolCallingModel(
 )
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_interrupt_surfaced(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    request: pytest.FixtureRequest,
+    sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
     agent = create_react_agent(
         default_model,
         [hello_tool],
-        checkpointer=request.getfixturevalue("checkpointer_" + checkpointer_name),
+        checkpointer=sync_checkpointer,
         post_model_hook=post_model_hook,
     )
     config: RunnableConfig = {"configurable": {"thread_id": "1"}}
@@ -70,7 +69,6 @@ def test_interrupt_surfaced(
     assert tool_message.name == "hello_tool"
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 @pytest.mark.parametrize(
     "resume, expected_content",
     [
@@ -90,14 +88,14 @@ def test_interrupt_surfaced(
 )
 def test_interrupt_resume_variants(
     request: pytest.FixtureRequest,
-    checkpointer_name: str,
+    sync_checkpointer: BaseCheckpointSaver,
     resume: dict,
     expected_content: str,
 ) -> None:
     agent = create_react_agent(
         default_model,
         [hello_tool],
-        checkpointer=request.getfixturevalue("checkpointer_" + checkpointer_name),
+        checkpointer=sync_checkpointer,
         post_model_hook=post_model_hook,
     )
 
@@ -121,9 +119,9 @@ def test_interrupt_resume_variants(
         ]
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_resume_with_response(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    request: pytest.FixtureRequest,
+    sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
     model = FakeToolCallingModel(
         tool_calls=[
@@ -147,7 +145,7 @@ def test_resume_with_response(
     agent = create_react_agent(
         model,
         [hello_tool],
-        checkpointer=request.getfixturevalue("checkpointer_" + checkpointer_name),
+        checkpointer=sync_checkpointer,
         post_model_hook=post_model_hook,
     )
 
@@ -174,11 +172,11 @@ def test_resume_with_response(
     assert tool_message.content == "Hello, bruno mars!"
 
 
-def test_resume_with_type_not_allowed(request: pytest.FixtureRequest) -> None:
+def test_resume_with_type_not_allowed(sync_checkpointer: BaseCheckpointSaver) -> None:
     agent = create_react_agent(
         default_model,
         [hello_tool],
-        checkpointer=InMemorySaver(),
+        checkpointer=sync_checkpointer,
         post_model_hook=post_model_hook,
     )
     config: RunnableConfig = {"configurable": {"thread_id": "1"}}
