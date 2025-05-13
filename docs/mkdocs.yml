@@ -185,8 +185,8 @@ nav:
           - cloud/how-tos/studio/faqs.md
         - LangGraph SDK: concepts/sdk.md
       - Data management:
-        - cloud/deployment/semantic_search.md
-        - how-tos/ttl/configure_ttl.md
+        - Add semantic search: cloud/deployment/semantic_search.md
+        - Add TTLs how-tos/ttl/configure_ttl.md
       - Authentication & access control:
         - Overview: concepts/auth.md
         - how-tos/auth/custom_auth.md

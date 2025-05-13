@@ -1,4 +1,4 @@
-# How to use threads
+# Use threads
 
 !!! info "Prerequisites"
 
