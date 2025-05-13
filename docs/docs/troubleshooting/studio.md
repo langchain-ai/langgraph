@@ -1,10 +1,10 @@
-# Troubleshooting LangGraph Studio
+# LangGraph Studio Troubleshooting
 
-## :fontawesome-brands-safari:{ .safari } Safari connection error with local dev server
+## :fontawesome-brands-safari:{ .safari } Safari Connection Issues
 
-Safari blocks plain‑HTTP traffic on localhost. If you start Studio with a vanilla `langgraph dev`, the page may report a "Failed to load assistants" error and the browser DevTools will show network errors.
+Safari blocks plain-HTTP traffic on localhost. When running Studio with `langgraph dev`, you may see "Failed to load assistants" errors.
 
-#### Quick fix — run Studio through a secure Cloudflare tunnel
+### Solution 1: Use Cloudflare Tunnel
 
 === "Python"
 
@@ -20,42 +20,29 @@ Safari blocks plain‑HTTP traffic on localhost. If you start Studio with a van
     npx @langchain/langgraph-cli dev
     ```
 
-The command prints a URL like:
+The command outputs a URL in this format:
 
 ```shell
 https://smith.langchain.com/studio/?baseUrl=https://hamilton-praise-heart-costumes.trycloudflare.com
 ```
 
-where
+Use this URL in Safari to load Studio. Here, the `baseUrl` parameter specifies your agent server endpoint.
 
-```shell
-?baseUrl=https://hamilton-praise-heart-costumes.trycloudflare.com
-```
+### Solution 2: Use Chromium Browser
 
-indicates the endpoint where your agent server is exposed. Open that URL in Safari and Studio should load immediately.
+Chrome and other Chromium browsers allow HTTP on localhost. Use `langgraph dev` without additional configuration.
 
-#### Alternative — use a Chromium‑based browser
+## :fontawesome-brands-brave:{ .brave } Brave Connection Issues
 
-Chrome and other Chromium‑based browsers allow HTTP on localhost, so a plain `langgraph dev` should work without extra steps.
+Brave blocks plain-HTTP traffic on localhost when Brave Shields are enabled. When running Studio with `langgraph dev`, you may see "Failed to load assistants" errors.
 
-#### If it’s still not loading
+### Solution 1: Disable Brave Shields
 
-1. Make sure the `baseUrl` query parameter in the studio URL points to the **tunnel URL** NOT to localhost.
-2. Confirm your CLI version with `langgraph --version`.
-
-No other configuration, certificates, or CORS tweaks are required.
-
-## :fontawesome-brands-brave:{ .brave } Brave connection error with local dev server
-
-By default, Brave blocks plain‑HTTP traffic on localhost if Brave Shields are enabled. If you start Studio with a vanilla `langgraph dev`, the page may report a "Failed to load assistants" error and the browser DevTools will show network errors.
-
-#### Quick fix — disable Brave Shields for LangSmith
-
-Click the Brave icon next to the URL bar and turn off the Brave Shields in the popover.
+Disable Brave Shields for LangSmith using the Brave icon in the URL bar.
 
 ![Brave Shields](./img/brave-shields.png)
 
-#### Alternative — run Studio through a secure Cloudflare tunnel
+### Solution 2: Use Cloudflare Tunnel
 
 === "Python"
 
@@ -71,16 +58,43 @@ Click the Brave icon next to the URL bar and turn off the Brave Shields in the p
     npx @langchain/langgraph-cli dev
     ```
 
-The command prints a URL like:
+The command outputs a URL in this format:
 
 ```shell
 https://smith.langchain.com/studio/?baseUrl=https://hamilton-praise-heart-costumes.trycloudflare.com
 ```
 
-where
+Use this URL in Brave to load Studio. Here, the `baseUrl` parameter specifies your agent server endpoint.
 
-```shell
-?baseUrl=https://hamilton-praise-heart-costumes.trycloudflare.com
+## Graph Edge Issues
+
+Undefined conditional edges may show unexpected connections in your graph. This is
+because without proper definition, LangGraph Studio assumes the conditional edge could access all other nodes. To address this, explicitly define the routing paths using one of these methods:
+
+### Solution 1: Path Map
+
+Define a mapping between router outputs and target nodes:
+
+=== "Python"
+
+    ```python
+    graph.add_conditional_edges("node_a", routing_function, {True: "node_b", False: "node_c"})
+    ```
+
+=== "Javascript"
+
+    ```ts
+    graph.addConditionalEdges("node_a", routingFunction, { true: "node_b", false: "node_c" });
+    ```
+
+### Solution 2: Router Type Definition (Python)
+
+Specify possible routing destinations using Python's `Literal` type:
+
+```python
+def routing_function(state: GraphState) -> Literal["node_b","node_c"]:
+    if state['some_condition'] == True:
+        return "node_b"
+    else:
+        return "node_c"
 ```
-
-indicates the endpoint where your agent server is exposed. Open that URL in Brave and Studio should load immediately.
