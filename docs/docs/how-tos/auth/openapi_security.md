@@ -11,9 +11,9 @@ This guide applies to all LangGraph Platform deployments (Cloud and self-hosted)
 
 The default security scheme varies by deployment type:
 
-=== "LangGraph Cloud"
+=== "LangGraph Platform"
 
-By default, LangGraph Cloud requires a LangSmith API key in the `x-api-key` header:
+By default, LangGraph Platform requires a LangSmith API key in the `x-api-key` header:
 
 ```yaml
 components:

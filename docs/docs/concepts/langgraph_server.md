@@ -58,11 +58,11 @@ LangGraph Server leverages a database for [persistence](persistence.md) and a ta
 
 Currently, only [Postgres](https://www.postgresql.org/) is supported as a database for LangGraph Server and [Redis](https://redis.io/) as the task queue.
 
-If you're deploying using [LangGraph Cloud](./langgraph_cloud.md), these components are managed for you. If you're deploying LangGraph Server on your own infrastructure, you'll need to set up and manage these components yourself.
+If you're deploying using [LangGraph Platform](./langgraph_cloud.md), these components are managed for you. If you're deploying LangGraph Server on your own infrastructure, you'll need to set up and manage these components yourself.
 
 Please review the [deployment options](./deployment_options.md) guide for more information on how these components are set up and managed.
 
 ## Learn more
 
 * LangGraph [Application Structure](./application_structure.md) guide explains how to structure your LangGraph application for deployment.
-* The [LangGraph Cloud API Reference](../cloud/reference/api/api_ref.html) provides detailed information on the API endpoints and data models.
+* The [LangGraph Platform API Reference](../cloud/reference/api/api_ref.html) provides detailed information on the API endpoints and data models.

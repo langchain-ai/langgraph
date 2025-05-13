@@ -22,15 +22,15 @@ The graph is resumed using a [`Command`](../reference/types.md#langgraph.types.C
 from langgraph.types import interrupt, Command
 
 def human_node(state: State):
-   # highlight-next-line
-   value = interrupt( # (1)!
-      {
-         "text_to_revise": state["some_text"] # (2)!
-      }
-   )
-   return {
-      "some_text": value # (3)!
-   }
+    # highlight-next-line
+    value = interrupt( # (1)!
+        {
+            "text_to_revise": state["some_text"] # (2)!
+        }
+    )
+    return {
+        "some_text": value # (3)!
+    }
 
 
 graph = graph_builder.compile(checkpointer=checkpointer) # (4)!
@@ -62,67 +62,67 @@ print(graph.invoke(Command(resume="Edited text"), config=config)) # (7)!
 
 ??? example "Extended example: using `interrupt`"
 
-      ```python
-      from typing import TypedDict
-      import uuid
+    ```python
+    from typing import TypedDict
+    import uuid
 
-      from langgraph.checkpoint.memory import InMemorySaver
-      from langgraph.constants import START
-      from langgraph.graph import StateGraph
-      # highlight-next-line
-      from langgraph.types import interrupt, Command
+    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.constants import START
+    from langgraph.graph import StateGraph
+    # highlight-next-line
+    from langgraph.types import interrupt, Command
 
-      class State(TypedDict):
-         some_text: str
+    class State(TypedDict):
+        some_text: str
 
-      def human_node(state: State):
-         # highlight-next-line
-         value = interrupt( # (1)!
+    def human_node(state: State):
+        # highlight-next-line
+        value = interrupt( # (1)!
             {
-               "text_to_revise": state["some_text"] # (2)!
+                "text_to_revise": state["some_text"] # (2)!
             }
-         )
-         return {
+        )
+        return {
             "some_text": value # (3)!
-         }
+        }
 
 
-      # Build the graph
-      graph_builder = StateGraph(State)
-      graph_builder.add_node("human_node", human_node)
-      graph_builder.add_edge(START, "human_node")
+    # Build the graph
+    graph_builder = StateGraph(State)
+    graph_builder.add_node("human_node", human_node)
+    graph_builder.add_edge(START, "human_node")
 
-      checkpointer = InMemorySaver() # (4)!
+    checkpointer = InMemorySaver() # (4)!
 
-      graph = graph_builder.compile(checkpointer=checkpointer)
+    graph = graph_builder.compile(checkpointer=checkpointer)
 
-      # Pass a thread ID to the graph to run it.
-      config = {"configurable": {"thread_id": uuid.uuid4()}}
+    # Pass a thread ID to the graph to run it.
+    config = {"configurable": {"thread_id": uuid.uuid4()}}
 
-      # Run the graph until the interrupt is hit.
-      result = graph.invoke({"some_text": "original text"}, config=config) # (5)!
+    # Run the graph until the interrupt is hit.
+    result = graph.invoke({"some_text": "original text"}, config=config) # (5)!
 
-      print(result['__interrupt__']) # (6)!
-      # > [
-      # >    Interrupt(
-      # >       value={'text_to_revise': 'original text'}, 
-      # >       resumable=True,
-      # >       ns=['human_node:6ce9e64f-edef-fe5d-f7dc-511fa9526960']
-      # >    )
-      # > ] 
+    print(result['__interrupt__']) # (6)!
+    # > [
+    # >    Interrupt(
+    # >       value={'text_to_revise': 'original text'}, 
+    # >       resumable=True,
+    # >       ns=['human_node:6ce9e64f-edef-fe5d-f7dc-511fa9526960']
+    # >    )
+    # > ] 
 
-      # highlight-next-line
-      print(graph.invoke(Command(resume="Edited text"), config=config)) # (7)!
-      # > {'some_text': 'Edited text'}
-      ```
+    # highlight-next-line
+    print(graph.invoke(Command(resume="Edited text"), config=config)) # (7)!
+    # > {'some_text': 'Edited text'}
+    ```
 
-      1. `interrupt(...)` pauses execution at `human_node`, surfacing the given payload to a human.
-      2. Any JSON serializable value can be passed to the `interrupt` function. Here, a dict containing the text to revise.
-      3. Once resumed, the return value of `interrupt(...)` is the human-provided input, which is used to update the state.
-      4. A checkpointer is required to persist graph state. In production, this should be durable (e.g., backed by a database).
-      5. The graph is invoked with some initial state.
-      6. When the graph hits the interrupt, it returns an `Interrupt` object with the payload and metadata.
-      7. The graph is resumed with a `Command(resume=...)`, injecting the human's input and continuing execution.
+    1. `interrupt(...)` pauses execution at `human_node`, surfacing the given payload to a human.
+    2. Any JSON serializable value can be passed to the `interrupt` function. Here, a dict containing the text to revise.
+    3. Once resumed, the return value of `interrupt(...)` is the human-provided input, which is used to update the state.
+    4. A checkpointer is required to persist graph state. In production, this should be durable (e.g., backed by a database).
+    5. The graph is invoked with some initial state.
+    6. When the graph hits the interrupt, it returns an `Interrupt` object with the payload and metadata.
+    7. The graph is resumed with a `Command(resume=...)`, injecting the human's input and continuing execution.
 
 
 
@@ -657,120 +657,120 @@ def node_in_parent_graph(state: State):
 
 ??? example "Extended example: parent and subgraph execution flow"
 
-      Say we have a parent graph with 3 nodes:
+    Say we have a parent graph with 3 nodes:
 
-      **Parent Graph**: `node_1` → `node_2` (subgraph call) → `node_3`
+    **Parent Graph**: `node_1` → `node_2` (subgraph call) → `node_3`
 
-      And the subgraph has 3 nodes, where the second node contains an `interrupt`:
+    And the subgraph has 3 nodes, where the second node contains an `interrupt`:
 
-      **Subgraph**: `sub_node_1` → `sub_node_2` (`interrupt`) → `sub_node_3`
+    **Subgraph**: `sub_node_1` → `sub_node_2` (`interrupt`) → `sub_node_3`
 
-      When resuming the graph, the execution will proceed as follows:
+    When resuming the graph, the execution will proceed as follows:
 
-      1. **Skip `node_1`** in the parent graph (already executed, graph state was saved in snapshot).
-      2. **Re-execute `node_2`** in the parent graph from the start.
-      3. **Skip `sub_node_1`** in the subgraph (already executed, graph state was saved in snapshot).
-      4. **Re-execute `sub_node_2`** in the subgraph from the beginning.
-      5. Continue with `sub_node_3` and subsequent nodes.
+    1. **Skip `node_1`** in the parent graph (already executed, graph state was saved in snapshot).
+    2. **Re-execute `node_2`** in the parent graph from the start.
+    3. **Skip `sub_node_1`** in the subgraph (already executed, graph state was saved in snapshot).
+    4. **Re-execute `sub_node_2`** in the subgraph from the beginning.
+    5. Continue with `sub_node_3` and subsequent nodes.
 
-      Here is abbreviated example code that you can use to understand how subgraphs work with interrupts.
-      It counts the number of times each node is entered and prints the count.
+    Here is abbreviated example code that you can use to understand how subgraphs work with interrupts.
+    It counts the number of times each node is entered and prints the count.
 
-      ```python
-      import uuid
-      from typing import TypedDict
+    ```python
+    import uuid
+    from typing import TypedDict
 
-      from langgraph.graph import StateGraph
-      from langgraph.constants import START
-      from langgraph.types import interrupt, Command
-      from langgraph.checkpoint.memory import MemorySaver
-
-
-      class State(TypedDict):
-         """The graph state."""
-         state_counter: int
+    from langgraph.graph import StateGraph
+    from langgraph.constants import START
+    from langgraph.types import interrupt, Command
+    from langgraph.checkpoint.memory import MemorySaver
 
 
-      counter_node_in_subgraph = 0
-
-      def node_in_subgraph(state: State):
-         """A node in the sub-graph."""
-         global counter_node_in_subgraph
-         counter_node_in_subgraph += 1  # This code will **NOT** run again!
-         print(f"Entered `node_in_subgraph` a total of {counter_node_in_subgraph} times")
-
-      counter_human_node = 0
-
-      def human_node(state: State):
-         global counter_human_node
-         counter_human_node += 1 # This code will run again!
-         print(f"Entered human_node in sub-graph a total of {counter_human_node} times")
-         answer = interrupt("what is your name?")
-         print(f"Got an answer of {answer}")
+    class State(TypedDict):
+        """The graph state."""
+        state_counter: int
 
 
-      checkpointer = MemorySaver()
+    counter_node_in_subgraph = 0
 
-      subgraph_builder = StateGraph(State)
-      subgraph_builder.add_node("some_node", node_in_subgraph)
-      subgraph_builder.add_node("human_node", human_node)
-      subgraph_builder.add_edge(START, "some_node")
-      subgraph_builder.add_edge("some_node", "human_node")
-      subgraph = subgraph_builder.compile(checkpointer=checkpointer)
+    def node_in_subgraph(state: State):
+        """A node in the sub-graph."""
+        global counter_node_in_subgraph
+        counter_node_in_subgraph += 1  # This code will **NOT** run again!
+        print(f"Entered `node_in_subgraph` a total of {counter_node_in_subgraph} times")
 
+    counter_human_node = 0
 
-      counter_parent_node = 0
-
-      def parent_node(state: State):
-         """This parent node will invoke the subgraph."""
-         global counter_parent_node
-
-         counter_parent_node += 1 # This code will run again on resuming!
-         print(f"Entered `parent_node` a total of {counter_parent_node} times")
-  
-         # Please note that we're intentionally incrementing the state counter
-         # in the graph state as well to demonstrate that the subgraph update
-         # of the same key will not conflict with the parent graph (until
-         subgraph_state = subgraph.invoke(state)
-         return subgraph_state
+    def human_node(state: State):
+        global counter_human_node
+        counter_human_node += 1 # This code will run again!
+        print(f"Entered human_node in sub-graph a total of {counter_human_node} times")
+        answer = interrupt("what is your name?")
+        print(f"Got an answer of {answer}")
 
 
-      builder = StateGraph(State)
-      builder.add_node("parent_node", parent_node)
-      builder.add_edge(START, "parent_node")
+    checkpointer = MemorySaver()
 
-      # A checkpointer must be enabled for interrupts to work!
-      checkpointer = MemorySaver()
-      graph = builder.compile(checkpointer=checkpointer)
+    subgraph_builder = StateGraph(State)
+    subgraph_builder.add_node("some_node", node_in_subgraph)
+    subgraph_builder.add_node("human_node", human_node)
+    subgraph_builder.add_edge(START, "some_node")
+    subgraph_builder.add_edge("some_node", "human_node")
+    subgraph = subgraph_builder.compile(checkpointer=checkpointer)
 
-      config = {
-         "configurable": {
-            "thread_id": uuid.uuid4(),
-         }
-      }
 
-      for chunk in graph.stream({"state_counter": 1}, config):
-         print(chunk)
+    counter_parent_node = 0
 
-      print('--- Resuming ---')
+    def parent_node(state: State):
+        """This parent node will invoke the subgraph."""
+        global counter_parent_node
 
-      for chunk in graph.stream(Command(resume="35"), config):
-         print(chunk)
-      ```
+        counter_parent_node += 1 # This code will run again on resuming!
+        print(f"Entered `parent_node` a total of {counter_parent_node} times")
 
-      This will print out
+        # Please note that we're intentionally incrementing the state counter
+        # in the graph state as well to demonstrate that the subgraph update
+        # of the same key will not conflict with the parent graph (until
+        subgraph_state = subgraph.invoke(state)
+        return subgraph_state
 
-      ```pycon
-      Entered `parent_node` a total of 1 times
-      Entered `node_in_subgraph` a total of 1 times
-      Entered human_node in sub-graph a total of 1 times
-      {'__interrupt__': (Interrupt(value='what is your name?', resumable=True, ns=['parent_node:4c3a0248-21f0-1287-eacf-3002bc304db4', 'human_node:2fe86d52-6f70-2a3f-6b2f-b1eededd6348'], when='during'),)}
-      --- Resuming ---
-      Entered `parent_node` a total of 2 times
-      Entered human_node in sub-graph a total of 2 times
-      Got an answer of 35
-      {'parent_node': {'state_counter': 1}}
-      ```
+
+    builder = StateGraph(State)
+    builder.add_node("parent_node", parent_node)
+    builder.add_edge(START, "parent_node")
+
+    # A checkpointer must be enabled for interrupts to work!
+    checkpointer = MemorySaver()
+    graph = builder.compile(checkpointer=checkpointer)
+
+    config = {
+        "configurable": {
+          "thread_id": uuid.uuid4(),
+        }
+    }
+
+    for chunk in graph.stream({"state_counter": 1}, config):
+        print(chunk)
+
+    print('--- Resuming ---')
+
+    for chunk in graph.stream(Command(resume="35"), config):
+        print(chunk)
+    ```
+
+    This will print out
+
+    ```pycon
+    Entered `parent_node` a total of 1 times
+    Entered `node_in_subgraph` a total of 1 times
+    Entered human_node in sub-graph a total of 1 times
+    {'__interrupt__': (Interrupt(value='what is your name?', resumable=True, ns=['parent_node:4c3a0248-21f0-1287-eacf-3002bc304db4', 'human_node:2fe86d52-6f70-2a3f-6b2f-b1eededd6348'], when='during'),)}
+    --- Resuming ---
+    Entered `parent_node` a total of 2 times
+    Entered human_node in sub-graph a total of 2 times
+    Got an answer of 35
+    {'parent_node': {'state_counter': 1}}
+    ```
 
 
 

@@ -1,24 +1,86 @@
-# How to add static breakpoints
+# Breakpoints
 
-!!! tip "Prerequisites"
+[Breakpoints](../../concepts/breakpoints.md) pause graph execution at defined points and let you step through each stage. They use LangGraph's [**persistence layer**](../../concepts/persistence.md), which saves the graph state after each step.
 
-    This guide assumes familiarity with the following concepts:
+With breakpoints, you can inspect the graph's state and node inputs at any point. Execution pauses **indefinitely** until you resume, as the checkpointer preserves the state.
 
-    * [Breakpoints](../../concepts/breakpoints.md)
-    * [LangGraph Glossary](../../concepts/low_level.md)
-    
+## Set breakpoints
 
-Human-in-the-loop (HIL) interactions are crucial for [agentic systems](../../concepts/agentic_concepts.md#human-in-the-loop). [Breakpoints](../../concepts/breakpoints.md) are a common HIL interaction pattern, allowing the graph to stop at specific steps and seek human approval before proceeding (e.g., for sensitive actions).
+=== "Compile time"
 
-Breakpoints are built on top of LangGraph [checkpoints](../../concepts/persistence.md#checkpoints), which save the graph's state after each node execution. Checkpoints are saved in [threads](../../concepts/persistence.md#threads) that preserve graph state and can be accessed after a graph has finished execution. This allows for graph execution to pause at specific points, await human approval, and then resume execution from the last checkpoint.
+    ```python
+    # highlight-next-line
+    graph = graph_builder.compile( # (1)!
+        # highlight-next-line
+        interrupt_before=["node_a"], # (2)!
+        # highlight-next-line
+        interrupt_after=["node_b", "node_c"], # (3)!
+    )
+    ```
 
-## Setup
+    1. The breakpoints are set during `compile` time.
+    2. `interrupt_before` specifies the nodes where execution should pause before the node is executed.
+    3. `interrupt_after` specifies the nodes where execution should pause after the node is executed.
 
-### Code for your graph
+=== "Run time"
 
-In this how-to we use a simple ReAct style hosted graph (you can see the full code for defining it [here](../../how-tos/human_in_the_loop/breakpoints.ipynb)). The important thing is that there are two nodes (one named `agent` that calls the LLM, and one named `action` that calls the tool), and a routing function from `agent` that determines whether to call `action` next or just end the graph run (the `action` node always calls the `agent` node after execution).
+    === "Python"
 
-### SDK Initialization
+        ```python
+        # highlight-next-line
+        await client.runs.wait( # (1)!
+            thread_id,
+            assistant_id,
+            inputs=inputs,
+            # highlight-next-line
+            interrupt_before=["node_a"], # (2)!
+            # highlight-next-line
+            interrupt_after=["node_b", "node_c"] # (3)!
+        )
+        ```
+
+        1. `client.runs.wait` is called with the `interrupt_before` and `interrupt_after` parameters. This is a run-time configuration and can be changed for every invocation.
+        2. `interrupt_before` specifies the nodes where execution should pause before the node is executed.
+        3. `interrupt_after` specifies the nodes where execution should pause after the node is executed.
+
+    === "JavaScript"
+
+        ```js
+        // highlight-next-line
+        await client.runs.wait( // (1)!
+          threadID,
+          assistantID,
+          {
+            input: input,
+            // highlight-next-line
+            interruptBefore: ["node_a"], // (2)!
+            // highlight-next-line
+            interruptAfter: ["node_b", "node_c"] // (3)!
+          }
+        )
+        ```
+
+        1. `client.runs.wait` is called with the `interruptBefore` and `interruptAfter` parameters. This is a run-time configuration and can be changed for every invocation.
+        2. `interruptBefore` specifies the nodes where execution should pause before the node is executed.
+        3. `interruptAfter` specifies the nodes where execution should pause after the node is executed.
+
+    === "cURL"
+
+        ```bash
+        curl --request POST \
+        --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/wait \
+        --header 'Content-Type: application/json' \
+        --data "{
+          \"assistant_id\": \"agent\",
+          \"interrupt_before\": [\"node_a\"],
+          \"interrupt_after\": [\"node_b\", \"node_c\"],
+          \"input\": <INPUT>
+        }"
+        ```
+
+!!! tip
+
+    This example shows how to add **static** breakpoints. See [this guide](../../how-tos/human_in_the_loop/breakpoints.ipynb) for more options for how to add breakpoints.
 
 
 === "Python"
@@ -26,130 +88,97 @@ In this how-to we use a simple ReAct style hosted graph (you can see the full co
     ```python
     from langgraph_sdk import get_client
     client = get_client(url=<DEPLOYMENT_URL>)
+
     # Using the graph deployed with the name "agent"
     assistant_id = "agent"
+
+    # create a thread
     thread = await client.threads.create()
+    thread_id = thread["thread_id"]
+
+    # Run the graph until the breakpoint
+    result = await client.runs.wait(
+        thread_id,
+        assistant_id,
+        input=inputs   # (1)!
+    )
+
+    # Resume the graph
+    await client.runs.wait(
+        thread_id,
+        assistant_id,
+        input=None   # (2)!
+    )
     ```
 
-=== "Javascript"
+    1. The graph is run until the first breakpoint is hit.
+    2. The graph is resumed by passing in `None` for the input. This will run the graph until the next breakpoint is hit.
+
+=== "JavaScript"
 
     ```js
     import { Client } from "@langchain/langgraph-sdk";
-
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+
     // Using the graph deployed with the name "agent"
-    const assistantId = "agent";
+    const assistantID = "agent";
+
+    // create a thread
     const thread = await client.threads.create();
-    ```
+    const threadID = thread["thread_id"];
 
-=== "CURL"
-
-    ```bash
-    curl --request POST \
-      --url <DEPLOYMENT_URL>/threads \
-      --header 'Content-Type: application/json' \
-      --data '{}'
-    ```
-
-## Adding a breakpoint
-
-We now want to add a breakpoint in our graph run, which we will do before a tool is called.
-We can do this by adding `interrupt_before=["action"]`, which tells us to interrupt before calling the action node.
-We can do this either when compiling the graph or when kicking off a run.
-Here we will do it when kicking of a run, if you would like to to do it at compile time you need to edit the python file where your graph is defined and add the `interrupt_before` parameter when you call `.compile`.
-
-First let's access our hosted LangGraph instance through the SDK:
-
-And, now let's compile it with a breakpoint before the tool node:
-
-=== "Python"
-
-    ```python
-    input = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
-    async for chunk in client.runs.stream(
-        thread["thread_id"],
-        assistant_id,
-        input=input,
-        stream_mode="updates",
-        interrupt_before=["action"],
-    ):
-        print(f"Receiving new event of type: {chunk.event}...")
-        print(chunk.data)
-        print("\n\n")
-    ```
-=== "Javascript"
-
-    ```js
-    const input = { messages: [{ role: "human", content: "what's the weather in sf" }] };
-
-    const streamResponse = client.runs.stream(
-      thread["thread_id"],
-      assistantId,
-      {
-        input: input,
-        streamMode: "updates",
-        interruptBefore: ["action"]
-      }
+    // Run the graph until the breakpoint
+    const result = await client.runs.wait(
+      threadID,
+      assistantID,
+      { input: input }   // (1)!
     );
 
-    for await (const chunk of streamResponse) {
-      console.log(`Receiving new event of type: ${chunk.event}...`);
-      console.log(chunk.data);
-      console.log("\n\n");
-    }
+    // Resume the graph
+    await client.runs.wait(
+      threadID,
+      assistantID,
+      { input: null }   // (2)!
+    );
     ```
-    
-=== "CURL"
+
+    1. The graph is run until the first breakpoint is hit.
+    2. The graph is resumed by passing in `null` for the input. This will run the graph until the next breakpoint is hit.
+
+=== "cURL"
+
+    Create a thread:
 
     ```bash
     curl --request POST \
-     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
-     --header 'Content-Type: application/json' \
-     --data "{
-       \"assistant_id\": \"agent\",
-       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what's the weather in sf\"}]},
-       \"interrupt_before\": [\"action\"],
-       \"stream_mode\": [
-         \"messages\"
-       ]
-     }" | \
-     sed 's/\r$//' | \
-     awk '
-     /^event:/ {
-         if (data_content != "") {
-             print data_content "\n"
-         }
-         sub(/^event: /, "Receiving event of type: ", $0)
-         printf "%s...\n", $0
-         data_content = ""
-     }
-     /^data:/ {
-         sub(/^data: /, "", $0)
-         data_content = $0
-     }
-     END {
-         if (data_content != "") {
-             print data_content "\n"
-         }
-     }
-     '
+    --url <DEPLOYMENT_URL>/threads \
+    --header 'Content-Type: application/json' \
+    --data '{}'
     ```
 
-Output:
+    Run the graph until the breakpoint:
 
-    Receiving new event of type: metadata...
-    {'run_id': '3b77ef83-687a-4840-8858-0371f91a92c3'}
-    
-    
-    
-    Receiving new event of type: data...
-    {'agent': {'messages': [{'content': [{'id': 'toolu_01HwZqM1ptX6E15A5LAmyZTB', 'input': {'query': 'weather in san francisco'}, 'name': 'tavily_search_results_json', 'type': 'tool_use'}], 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'ai', 'name': None, 'id': 'run-e5d17791-4d37-4ad2-815f-a0c4cba62585', 'example': False, 'tool_calls': [{'name': 'tavily_search_results_json', 'args': {'query': 'weather in san francisco'}, 'id': 'toolu_01HwZqM1ptX6E15A5LAmyZTB'}], 'invalid_tool_calls': []}]}}
-    
-    
-    
-    Receiving new event of type: end...
-    None
-    
-    
-    
+    ```bash
+    curl --request POST \
+    --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/wait \
+    --header 'Content-Type: application/json' \
+    --data "{
+      \"assistant_id\": \"agent\",
+      \"input\": <INPUT>
+    }"
+    ```
 
+    Resume the graph:
+
+    ```bash
+    curl --request POST \
+    --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/wait \
+    --header 'Content-Type: application/json' \
+    --data "{
+      \"assistant_id\": \"agent\"
+    }"
+    ```
+
+## Learn more
+
+- [**LangGraph breakpoints guide**](../../how-tos/human_in_the_loop/breakpoints.ipynb): learn more about adding breakpoints in LangGraph.

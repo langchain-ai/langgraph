@@ -67,6 +67,8 @@ REDIRECT_MAP = {
     "cloud/concepts/api.md": "concepts/langgraph_server.md",
     "cloud/concepts/cloud.md": "concepts/langgraph_cloud.md",
     "cloud/faq/studio.md": "concepts/langgraph_studio.md#studio-faqs",
+    "cloud/how-tos/human_in_the_loop_edit_state.md": "cloud/how-tos/add-human-in-the-loop.md",
+    "cloud/how-tos/human_in_the_loop_user_input.md": "cloud/how-tos/add-human-in-the-loop.md",
     # cloud streaming redirects
     "cloud/how-tos/stream_values.md": "cloud/how-tos/streaming.md#stream-graph-state",
     "cloud/how-tos/stream_updates.md": "cloud/how-tos/streaming.md#stream-graph-state",
@@ -94,7 +96,9 @@ REDIRECT_MAP = {
     "tutorials/introduction.ipynb": "concepts/why-langgraph.md",
     # deployment redirects
     "how-tos/deploy-self-hosted.md": "cloud/deployment/self_hosted_data_plane.md",
-    "concepts/self_hosted.md": "concepts/langgraph_self_hosted_data_plane.md"
+    "concepts/self_hosted.md": "concepts/langgraph_self_hosted_data_plane.md",
+    # assistant redirects
+    "cloud/how-tos/assistant_versioning.md": "cloud/how-tos/configuration_cloud.md"
 
 }
 
