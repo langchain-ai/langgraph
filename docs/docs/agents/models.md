@@ -116,7 +116,11 @@ The [`init_chat_model`](https://python.langchain.com/docs/how_to/chat_models_uni
 
     os.environ["OPENAI_API_KEY"] = "sk-..."
 
-    model = init_chat_model("openai:gpt-4.1")
+    model = init_chat_model(
+        "openai:gpt-4.1",
+        temperature=0,
+        # other parameters
+    )
     ```
 
 === "Anthropic"
@@ -130,7 +134,11 @@ The [`init_chat_model`](https://python.langchain.com/docs/how_to/chat_models_uni
 
     os.environ["ANTHROPIC_API_KEY"] = "sk-..."
 
-    model = init_chat_model("anthropic:claude-3-5-sonnet-latest")
+    model = init_chat_model(
+        "anthropic:claude-3-5-sonnet-latest",
+        temperature=0,
+        # other parameters
+    )
     ```
 
 === "Azure"
@@ -149,6 +157,8 @@ The [`init_chat_model`](https://python.langchain.com/docs/how_to/chat_models_uni
     model = init_chat_model(
         "azure_openai:gpt-4.1",
         azure_deployment=os.environ["AZURE_OPENAI_DEPLOYMENT_NAME"],
+        temperature=0,
+        # other parameters
     )
     ```
 
@@ -163,7 +173,11 @@ The [`init_chat_model`](https://python.langchain.com/docs/how_to/chat_models_uni
 
     os.environ["GOOGLE_API_KEY"] = "..."
 
-    model = init_chat_model("google_genai:gemini-2.0-flash")
+    model = init_chat_model(
+        "google_genai:gemini-2.0-flash",
+        temperature=0,
+        # other parameters
+    )
     ```
 
 === "AWS Bedrock"
@@ -180,6 +194,8 @@ The [`init_chat_model`](https://python.langchain.com/docs/how_to/chat_models_uni
     model = init_chat_model(
         "anthropic.claude-3-5-sonnet-20240620-v1:0",
         model_provider="bedrock_converse",
+        temperature=0,
+        # other parameters
     )
     ```
 
