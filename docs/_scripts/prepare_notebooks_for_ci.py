@@ -5,6 +5,7 @@ import os
 import json
 import click
 import nbformat
+import re
 
 logger = logging.getLogger(__name__)
 NOTEBOOK_DIRS = ("docs/how-tos","docs/tutorials")
@@ -88,12 +89,10 @@ def has_blocklisted_command(code: str, metadata: dict) -> bool:
             return True
     return False
 
+MERMAID_PATTERN = re.compile(r'display\(Image\((\w+)\.get_graph\(\)\.draw_mermaid_png\(\)\)\)')
+
 def remove_mermaid(code: str) -> str:
-    return code.replace(
-        "display(Image(graph.get_graph().draw_mermaid_png()))",
-        # replace with a dummy statement
-        "print()"
-    )
+    return MERMAID_PATTERN.sub('print()', code)
 
 
 def add_vcr_to_notebook(
@@ -108,6 +107,8 @@ def add_vcr_to_notebook(
             continue
 
         lines = cell.source.splitlines()
+        # remove the special tag for hidden cells
+        lines = [line for line in lines if not line.strip().startswith("# hide-cell")]
         # skip if empty cell
         if not lines:
             continue
@@ -195,6 +196,11 @@ def remove_mermaid_from_notebook(notebook: nbformat.NotebookNode) -> nbformat.No
             continue
 
         cell.source = remove_mermaid(cell.source)
+
+        # skip the cell entirely if it contains PYPPETEER
+        if "PYPPETEER" in cell.source:
+            cell.source = ""
+
     return notebook
 
 
