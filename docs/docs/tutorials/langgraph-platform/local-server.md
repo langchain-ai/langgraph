@@ -8,15 +8,6 @@ Before you begin, ensure you have the following:
 
 - An API key for [LangSmith](https://smith.langchain.com/settings) - free to sign up
 
-This quickstart uses the [pre-built Python ReAct agent template](https://github.com/langchain-ai/react-agent), which requires the following:
-
-- An API key for [Anthropic](https://console.anthropic.com/)
-- An API key for [Tavily](https://app.tavily.com/)
-
-!!! note
-
-    If you want to use a scaffold application that doesn't require API keys, use the [New LangGraph Project](https://github.com/langchain-ai/new-langgraph-project) template instead.
-
 ## 1. Install the LangGraph CLI
 
 ```bash
@@ -27,18 +18,18 @@ pip install --upgrade "langgraph-cli[inmem]"
 
 ## 2. Create a LangGraph app 🌱 
 
-Create a new app from the `react-agent` template. This template is a simple agent that can be flexibly extended to many tools.
+Create a new app from the [`new-langgraph-project` template](https://github.com/langchain-ai/new-langgraph-project) or [`new-langgraphjs-project` template](https://github.com/langchain-ai/new-langgraphjs-project). This template demonstrates a simple chatbot that maintains chat memory, which allows for coherent conversations across multiple interactions.
 
-=== "Python Server"
+=== "Python server"
 
     ```shell
-    langgraph new path/to/your/app --template react-agent-python 
+    langgraph new path/to/your/app --template new-langgraph-project 
     ```
 
-=== "Node Server"
+=== "Node server"
 
     ```shell
-    langgraph new path/to/your/app --template react-agent-js
+    langgraph new path/to/your/app --template new-langgraphjs-project 
     ```
 
 !!! tip "Additional templates"
@@ -69,21 +60,18 @@ You will find a `.env.example` in the root of your new LangGraph app. Create a `
 
 ```bash
 LANGSMITH_API_KEY=lsv2...
-TAVILY_API_KEY=tvly-...
-ANTHROPIC_API_KEY=sk-
 ```
 
 ## 5. Launch LangGraph Server 🚀 
 
 Start the LangGraph API server locally:
 
-=== "Python Server"
+=== "Python server"
 
     ```shell
     langgraph dev
     ```
-
-=== "Node Server"
+=== "Node server"
 
     ```shell
     npx @langchain/langgraph-cli dev
@@ -187,7 +175,7 @@ For a LangGraph Server running on a custom host/port, update the baseURL paramet
             print(chunk.data)
             print("\n\n")
         ```
-
+        
 === "Javascript SDK"
 
     1. Install the LangGraph JS SDK:
@@ -244,7 +232,7 @@ For a LangGraph Server running on a custom host/port, update the baseURL paramet
         }" 
     ```
 
-## Next Steps
+## Next steps
 
 Now that you have a LangGraph app running locally, take your journey further by exploring deployment and advanced features:
 
