@@ -7,13 +7,13 @@ LangGraph Studio supports connecting to two types of graphs:
 - Graphs deployed on [LangGraph Platform](../../../cloud/quick_start.md)
 - Graphs running locally via the [LangGraph Server](../../../tutorials/langgraph-platform/local-server.md).
 
-## Deployed Application
+## Deployed application
 
 For applications that are deployed on LangGraph Platform, you can access Studio as part of that deployment. To do so, navigate to the deployment in LangGraph Platform within the LangSmith UI and click the "LangGraph Studio" button.
 
 This will load the Studio UI connected to your live deployment, allowing you to create, read, and update the [threads](../../concepts/threads.md), [assistants](../../../concepts/assistants.md), and [memory](../../../concepts//memory.md) in that deployment.
 
-## Local Development Server
+## Local development server
 
 To test your locally running application using LangGraph Studio, ensure your application is set up following [this guide](https://langchain-ai.github.io/langgraph/cloud/deployment/setup/).
 
@@ -47,7 +47,7 @@ If successful, you will see the following logs:
 Once running, you will automatically be directed to LangGraph Studio. 
 
 
-If your server is already running, to access Studio, either:
+For an already running server, access Studio by either:
 
  1. Directly navigate to the following URL: `https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024`. 
  2. Within LangSmith, navigate to the LangGraph Platform Deployments tab, click the "LangGraph Studio" button, enter `http://127.0.0.1:2024` and click "Connect".
@@ -93,10 +93,11 @@ Then attach your preferred debugger:
 
 ## Next steps
 
-See the following how-tos for more information on how to use Studio:
+See the following guides for more information on how to use Studio:
 
-- [How to manage Assistants](../invoke_studio.md)
-- [How to manage Threads](../threads_studio.md)
-- [How to create datasets](../datasets_studio.md)
-- [How to prompt engineer](../iterate_graph_studio.md)
-- [How to locally debug remote traces](../clone_traces_studio.md)
+- [Run application](../invoke_studio.md)
+- [Manage assistants](./manage_assistants.md)
+- [Manage threads](../threads_studio.md)
+- [Iterate on prompts](../iterate_graph_studio.md)
+- [Debug LangSmith traces](../clone_traces_studio.md)
+- [Add node to dataset](../datasets_studio.md)

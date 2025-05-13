@@ -1,17 +1,12 @@
-# Adding nodes as dataset examples in Studio
+# Add node to dataset
 
-In LangGraph Studio you can create dataset examples from the thread history in the right-hand pane. This can be especially useful when you want to evaluate intermediate steps of the agent.
+This guide shows how to add examples to [LangSmith datasets](https://docs.smith.langchain.com/evaluation/how_to_guides#dataset-management) from nodes in the thread log. This is useful to evaluate indivudal steps of the agent.
 
-1. Click on the `Add to Dataset` button to enter the dataset mode.
-1. Select nodes which you want to add to dataset.
-1. Select the target dataset to create the example in.
-
-You can edit the example payload before sending it to the dataset, which is useful if you need to make changes to conform the example to the dataset schema.
-
-Finally, you can customise the target dataset by clicking on the `Settings` button.
+1. Select a thread.
+2. Click on the `Add to Dataset` button.
+3. Select nodes whose input/output you want to add to a dataset.
+4. For each selected node, select the target dataset to create the example in. By default a dataset for the specific assistant and node will be selected. If this dataset does not yet exist, it will be created.
+5. Edit the example's input/output as needed before adding it to the dataset.
+6. Select "Add to dataset" at the bottom of the page to add all selected nodes to their respective datasets.
 
 See [Evaluating intermediate steps](https://docs.smith.langchain.com/evaluation/how_to_guides/langgraph#evaluating-intermediate-steps) for more details on how to evaluate intermediate steps.
-
-<video controls allowfullscreen="true" poster="../img/studio_datasets.jpg">
-    <source src="https://langgraph-docs-assets.pages.dev/studio_datasets.mp4" type="video/mp4">
-</video>

@@ -1,4 +1,4 @@
-# How to manage Threads
+# Manage threads
 
 !!! info "Prerequisites"
 
@@ -6,7 +6,7 @@
 
 Studio allows you to view threads from the server and edit their state.
 
-## View Threads
+## View threads
 
 ### Graph mode
 
@@ -19,11 +19,15 @@ Studio allows you to view threads from the server and edit their state.
 1. View all threads in the right-hand pane of the page.
 2. Click the plus button to create a new thread.
 
-## Edit Thread State
+## Edit thread history
 
 ### Graph mode
 
-To edit the state of the thread, select "edit node state" next to the desired node. This enables you to edit the node's output and create a new fork of the thread history. For more information about time travel, [see here](../../concepts/time-travel.md).
+To edit the state of the thread, select "edit node state" next to the desired node. Edit the node's output as desired and click "fork" to confirm. This will create a new forked run from the checkpoint of the selected node.
+
+If you instead want to re-run the thread from a given checkpoint without editing the state, click the "Re-run from here". This will again create a new forked run from the selected checkpoint. This is useful for re-running with changes that are not specific to the state, such as the selected assistant.
+
+ For more information about time travel, [see here](../../concepts/time-travel.md).
 
 ### Chat mode
 

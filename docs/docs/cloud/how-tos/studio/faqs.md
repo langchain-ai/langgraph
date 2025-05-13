@@ -48,3 +48,6 @@ def routing_function(state: GraphState) -> Literal["node_b","node_c"]:
 ## Why is my graph taking so long to startup?
 
 The LangGraph Studio interacts with a local LangGraph API server. To stay aligned with ongoing updates, the LangGraph API requires regular rebuilding. As a result, you may occasionally experience slight delays when starting up your project.
+
+## Can I use Studio without using LangSmith?
+By default, LangGraph Studio is accessed from the LangSmith UI, within the LangGraph Platform Deployments tab. For local development, if you do not wish to have data traced to Langsmith, simply set `LANGSMITH_TRACING=false` in your application's `.env` file. With tracing disabled, no data will leave your local server.
