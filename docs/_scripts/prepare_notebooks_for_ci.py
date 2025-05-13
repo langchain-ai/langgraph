@@ -107,6 +107,8 @@ def add_vcr_to_notebook(
             continue
 
         lines = cell.source.splitlines()
+        # remove the special tag for hidden cells
+        lines = [line for line in lines if not line.strip().startswith("# hide-cell")]
         # skip if empty cell
         if not lines:
             continue
