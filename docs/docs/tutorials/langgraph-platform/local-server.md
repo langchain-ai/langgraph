@@ -18,11 +18,19 @@ pip install --upgrade "langgraph-cli[inmem]"
 
 ## 2. Create a LangGraph app 🌱 
 
-Create a new app from the [`new-langgraph-project` template](https://github.com/langchain-ai/new-langgraph-project). This template demonstrates a simple chatbot that maintains chat memory, which allows for coherent conversations across multiple interactions.
+Create a new app from the [`new-langgraph-project` template](https://github.com/langchain-ai/new-langgraph-project) or [`new-langgraphjs-projec` template](https://github.com/langchain-ai/new-langgraphjs-project). This template demonstrates a simple chatbot that maintains chat memory, which allows for coherent conversations across multiple interactions.
 
-```shell
-langgraph new path/to/your/app --template new-langgraph-project 
-```
+=== "Python server"
+
+    ```shell
+    langgraph new path/to/your/app --template new-langgraph-project 
+    ```
+
+=== "Node server"
+
+    ```shell
+    langgraph new path/to/your/app --template new-langgraphjs-project 
+    ```
 
 !!! tip "Additional templates"
 
@@ -32,10 +40,19 @@ langgraph new path/to/your/app --template new-langgraph-project
 
 In the root of your new LangGraph app, install the dependencies in `edit` mode so your local changes are used by the server:
 
-```shell
-cd path/to/your/app
-pip install -e .
-```
+=== "Python server"
+
+    ```shell
+    cd path/to/your/app
+    pip install -e .
+    ```
+
+=== "Node server"
+
+    ```shell
+    cd path/to/your/app
+    yarn install
+    ```
 
 ## 4. Create a `.env` file
 
@@ -49,9 +66,16 @@ LANGSMITH_API_KEY=lsv2...
 
 Start the LangGraph API server locally:
 
-```shell
-langgraph dev
-```
+=== "Python server"
+
+    ```shell
+    langgraph dev
+    ```
+=== "Node server"
+
+    ```shell
+    npx @langchain/langgraph-cli dev
+    ```
 
 Sample output:
 
@@ -150,6 +174,42 @@ For a LangGraph Server running on a custom host/port, update the baseURL paramet
             print(f"Receiving new event of type: {chunk.event}...")
             print(chunk.data)
             print("\n\n")
+        ```
+        
+=== "Javascript SDK"
+
+    1. Install the LangGraph JS SDK:
+
+        ```shell
+        npm install @langchain/langgraph-sdk
+        ```
+
+    1. Send a message to the assistant (threadless run):
+
+        ```js
+        const { Client } = await import("@langchain/langgraph-sdk");
+
+        // only set the apiUrl if you changed the default port when calling langgraph dev
+        const client = new Client({ apiUrl: "http://localhost:2024"});
+
+        const streamResponse = client.runs.stream(
+            null, // Threadless run
+            "agent", // Assistant ID
+            {
+                input: {
+                    "messages": [
+                        { "role": "user", "content": "What is LangGraph?"}
+                    ]
+                },
+                streamMode: "messages-tuple",
+            }
+        );
+
+        for await (const chunk of streamResponse) {
+            console.log(`Receiving new event of type: ${chunk.event}...`);
+            console.log(JSON.stringify(chunk.data));
+            console.log("\n\n");
+        }
         ```
 
 === "Rest API"

@@ -115,6 +115,41 @@ You can now test the API:
             print("\n\n")
         ```
 
+=== "JavaScript SDK"
+
+    1. Install the LangGraph JS SDK
+
+        ```shell
+        npm install @langchain/langgraph-sdk
+        ```
+
+    1. Send a message to the assistant (threadless run):
+
+        ```js
+        const { Client } = await import("@langchain/langgraph-sdk");
+
+        const client = new Client({ apiUrl: "your-deployment-url", apiKey: "your-langsmith-api-key" });
+
+        const streamResponse = client.runs.stream(
+            null, // Threadless run
+            "agent", // Assistant ID
+            {
+                input: {
+                    "messages": [
+                        { "role": "user", "content": "What is LangGraph?"}
+                    ]
+                },
+                streamMode: "messages",
+            }
+        );
+
+        for await (const chunk of streamResponse) {
+            console.log(`Receiving new event of type: ${chunk.event}...`);
+            console.log(JSON.stringify(chunk.data));
+            console.log("\n\n");
+        }
+        ```
+
 === "Rest API"
 
     ```bash
