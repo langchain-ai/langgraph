@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Literal,
@@ -440,6 +441,9 @@ def create_react_agent(
         model = init_chat_model(model)
 
     tool_calling_enabled = len(tool_classes) > 0
+
+    if TYPE_CHECKING:
+        assert not isinstance(model, str)
 
     if _should_bind_tools(model, tool_classes) and tool_calling_enabled:
         model = cast(BaseChatModel, model).bind_tools(tool_classes)
