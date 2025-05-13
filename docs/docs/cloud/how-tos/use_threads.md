@@ -12,7 +12,7 @@ To run your graph and the state persisted, you must first create a thread.
 
 ### Empty thread
 
-To create a new thread, use the [LangGraph SDK](../../concepts/sdk.md) `create` method. See the [Python](../reference/sdk/python_sdk_ref.md#langgraph_sdk.client.ThreadsClient.create) and [JS](../reference/sdk/js_ts_sdk_ref.md#create_3) SDK reference docs for more information.
+To create a new thread, use the [LangGraph SDK](../../concepts/sdk.md) `create` method. See the [Python](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/#langgraph_sdk.client.ThreadsClient.create) and [JS](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#create_3) SDK reference docs for more information.
 
 === "Python"
 
@@ -58,7 +58,7 @@ Output:
 
 ### Copy thread
 
-Alternatively, if you already have a thread in your application whose state you wish to copy, you can use the `copy` method. This will create an independent thread whose history is identical to the original thread at the time of the operation. See the [Python](../reference/sdk/python_sdk_ref.md#langgraph_sdk.client.ThreadsClient.copy) and [JS](../reference/sdk/js_ts_sdk_ref.md#copy) SDK reference docs for more information.
+Alternatively, if you already have a thread in your application whose state you wish to copy, you can use the `copy` method. This will create an independent thread whose history is identical to the original thread at the time of the operation. See the [Python](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/#langgraph_sdk.client.ThreadsClient.copy) and [JS](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#copy) SDK reference docs for more information.
 
 === "Python"
 
@@ -237,11 +237,11 @@ Output:
 
 ### LangGraph SDK
 
-To list threads, use the [LangGraph SDK](../../concepts/sdk.md) `search` method. This will list the threads in the application that match the provided filters. See the [Python](../reference/sdk/python_sdk_ref.md#langgraph_sdk.client.ThreadsClient.search) and [JS](../reference/sdk/js_ts_sdk_ref.md#search_2) SDK reference docs for more information.
+To list threads, use the [LangGraph SDK](../../concepts/sdk.md) `search` method. This will list the threads in the application that match the provided filters. See the [Python](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/#langgraph_sdk.client.ThreadsClient.search) and [JS](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#search_2) SDK reference docs for more information.
 
 #### Filter by thread status
 
-Use the `status` field to filter threads based on their status. Supported values are `idle`, `busy`, `interrupted`, and `error`. See [here](../reference/sdk/python_sdk_ref.md/?h=thread+status#langgraph_sdk.auth.types.ThreadStatus) for information on each status. For example, to view `idle` threads:
+Use the `status` field to filter threads based on their status. Supported values are `idle`, `busy`, `interrupted`, and `error`. See [here](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/?h=thread+status#langgraph_sdk.auth.types.ThreadStatus) for information on each status. For example, to view `idle` threads:
 
 === "Python"
 
@@ -480,7 +480,7 @@ Optionally, to view the state of a thread at a given checkpoint, simply pass in 
 
 #### Inspect Full Thread History
 
-To view a thread's history, use the `get_history` method. This returns a list of every state the thread experienced. For more information see the [Python](../reference/sdk/python_sdk_ref.md/#langgraph_sdk.client.ThreadsClient.get_history) and [JS](../reference/sdk/js_ts_sdk_ref.md/#gethistory) reference docs.
+To view a thread's history, use the `get_history` method. This returns a list of every state the thread experienced. For more information see the [Python](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/?h=thread+status#langgraph_sdk.client.ThreadsClient.get_history) and [JS](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#gethistory) reference docs.
 
 ### LangGraph Platform UI
 
