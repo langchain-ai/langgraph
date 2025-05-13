@@ -438,12 +438,9 @@ def create_react_agent(
                 "Please install langchain (`pip install langchain`) to use '<provider>:<model>' string syntax for `model` parameter."
             )
 
-        model = init_chat_model(model)
+        model = cast(BaseChatModel, init_chat_model(model))
 
     tool_calling_enabled = len(tool_classes) > 0
-
-    if TYPE_CHECKING:
-        assert not isinstance(model, str)
 
     if _should_bind_tools(model, tool_classes) and tool_calling_enabled:
         model = cast(BaseChatModel, model).bind_tools(tool_classes)
