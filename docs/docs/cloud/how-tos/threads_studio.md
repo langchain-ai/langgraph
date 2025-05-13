@@ -12,7 +12,7 @@ Studio allows you to view threads from the server and edit their state.
 
 1. In the top of the right-hand pane, select the dropdown menu to view existing threads.
 1. Select the desired thread, and the thread history will populate in the right-hand side of the page.
-1. To create a new thread, select `+ New Thread`.
+1. To create a new thread, click `+ New Thread` and [submit a run](../how-tos/invoke_studio.md#graph-mode).
 
 To view more granular information in the thread, drag the slider at the top of the page to the right. To view less information, drag the slider to the left. Additionally, collapse or expand individual turns, nodes, and keys of the state.
 
@@ -21,7 +21,8 @@ Switch between `Pretty` and `JSON` mode for different rendering formats.
 ### Chat mode
 
 1. View all threads in the right-hand pane of the page.
-2. Click the plus button to create a new thread.
+2. Select the desired thread and the thread history will populate in the center panel.
+3. To create a new thread, click the plus button and [submit a run](../how-tos/invoke_studio.md#chat-mode).
 
 ## Edit thread history
 
