@@ -181,20 +181,16 @@ for chunk in graph.stream(
       from langgraph.graph import START, StateGraph
       from typing import TypedDict
 
-
       # Define subgraph
       class SubgraphState(TypedDict):
           foo: str  # note that this key is shared with the parent graph state
           bar: str
 
-
       def subgraph_node_1(state: SubgraphState):
           return {"bar": "bar"}
 
-
       def subgraph_node_2(state: SubgraphState):
           return {"foo": state["foo"] + state["bar"]}
-
 
       subgraph_builder = StateGraph(SubgraphState)
       subgraph_builder.add_node(subgraph_node_1)
@@ -203,15 +199,12 @@ for chunk in graph.stream(
       subgraph_builder.add_edge("subgraph_node_1", "subgraph_node_2")
       subgraph = subgraph_builder.compile()
 
-
       # Define parent graph
       class ParentState(TypedDict):
           foo: str
 
-
       def node_1(state: ParentState):
           return {"foo": "hi! " + state["foo"]}
-
 
       builder = StateGraph(ParentState)
       builder.add_node("node_1", node_1)
