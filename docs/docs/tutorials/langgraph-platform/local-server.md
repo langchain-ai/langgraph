@@ -21,7 +21,7 @@ Before you begin, ensure you have the following:
 === "Node server"
 
     ```shell
-    yarn add @langchain/langgraph-cli
+    npx @langchain/langgraph-cl
     ```
 
 ## 2. Create a LangGraph app 🌱
