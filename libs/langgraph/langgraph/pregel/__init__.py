@@ -2278,7 +2278,7 @@ class Pregel(PregelProtocol):
         Args:
             input: The input to the graph.
             config: The configuration to use for the run.
-            stream_mode: The mode to stream output, defaults to self.stream_mode.
+            stream_mode: The mode to stream output, defaults to `self.stream_mode`.
                 Options are:
 
                 - `"values"`: Emit all values in the state after each step, including interrupts.
@@ -2287,13 +2287,21 @@ class Pregel(PregelProtocol):
                     If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
                 - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
                 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
+                    Will be emitted as 2-tuples `(LLM token, metadata)`.
                 - `"debug"`: Emit debug events with as much information as possible for each step.
+
+                You can pass a list as the `stream_mode` parameter to stream multiple modes at once.
+                The streamed outputs will be tuples of `(mode, data)`.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             checkpoint_during: Whether to checkpoint intermediate steps, defaults to True. If False, only the final checkpoint is saved.
             debug: Whether to print debug information during execution, defaults to False.
-            subgraphs: Whether to stream subgraphs, defaults to False.
+            subgraphs: Whether to stream events from inside subgraphs, defaults to False.
+                If True, the events will be emitted as tuples `(namespace, data)`,
+                or `(namespace, mode, data)` if `stream_mode` is a list,
+                where `namespace` is a tuple with the path to the node where a subgraph is invoked,
+                e.g. `("parent_node:<task_id>", "child_node:<task_id>")`.
 
         Yields:
             The output of each step in the graph. The output shape depends on the stream_mode.
@@ -2386,12 +2394,63 @@ class Pregel(PregelProtocol):
             for event in graph.stream({"question": "What is the capital of France?"}, stream_mode="messages"):
                 print(event)
 
+            # Events are emitted as 2-tuples (LLM token, metadata).
             # (AIMessageChunk(content='The', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], 'langgraph_path': ('__pregel_pull', 'a'), 'langgraph_checkpoint_ns': '...', 'checkpoint_ns': '...', 'ls_provider': 'openai', 'ls_model_name': 'gpt-4o-mini', 'ls_model_type': 'chat', 'ls_temperature': 0.7})
             # (AIMessageChunk(content=' capital', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], ...})
             # (AIMessageChunk(content=' of', additional_kwargs={}, response_metadata={}, id='...'), {...})
             # (AIMessageChunk(content=' France', additional_kwargs={}, response_metadata={}, id='...'), {...})
             # (AIMessageChunk(content=' is', additional_kwargs={}, response_metadata={}, id='...'), {...})
             # (AIMessageChunk(content=' Paris', additional_kwargs={}, response_metadata={}, id='...'), {...})
+            ```
+
+        Example: Using subgraphs=True:
+            ```python
+            from langgraph.graph import START, StateGraph
+            from typing import TypedDict
+
+            # Define subgraph
+            class SubgraphState(TypedDict):
+                foo: str  # note that this key is shared with the parent graph state
+                bar: str
+
+            def subgraph_node_1(state: SubgraphState):
+                return {"bar": "bar"}
+
+            def subgraph_node_2(state: SubgraphState):
+                return {"foo": state["foo"] + state["bar"]}
+
+            subgraph_builder = StateGraph(SubgraphState)
+            subgraph_builder.add_node(subgraph_node_1)
+            subgraph_builder.add_node(subgraph_node_2)
+            subgraph_builder.add_edge(START, "subgraph_node_1")
+            subgraph_builder.add_edge("subgraph_node_1", "subgraph_node_2")
+            subgraph = subgraph_builder.compile()
+
+            # Define parent graph
+            class ParentState(TypedDict):
+                foo: str
+
+            def node_1(state: ParentState):
+                return {"foo": "hi! " + state["foo"]}
+
+            builder = StateGraph(ParentState)
+            builder.add_node("node_1", node_1)
+            builder.add_node("node_2", subgraph)
+            builder.add_edge(START, "node_1")
+            builder.add_edge("node_1", "node_2")
+            graph = builder.compile()
+
+            for event in graph.stream(
+                {"foo": "foo"},
+                stream_mode="updates",
+                subgraphs=True,
+            ):
+                print(event)
+
+            # ((), {'node_1': {'foo': 'hi! foo'}})
+            # (('node_2:dfddc4ba-c3c5-6887-5012-a243b5b377c2',), {'subgraph_node_1': {'bar': 'bar'}})
+            # (('node_2:dfddc4ba-c3c5-6887-5012-a243b5b377c2',), {'subgraph_node_2': {'foo': 'hi! foobar'}})
+            # ((), {'node_2': {'foo': 'hi! foobar'}})
             ```
         """
 
@@ -2570,7 +2629,7 @@ class Pregel(PregelProtocol):
         Args:
             input: The input to the graph.
             config: The configuration to use for the run.
-            stream_mode: The mode to stream output, defaults to self.stream_mode.
+            stream_mode: The mode to stream output, defaults to `self.stream_mode`.
                 Options are:
 
                 - `"values"`: Emit all values in the state after each step, including interrupts.
@@ -2579,13 +2638,21 @@ class Pregel(PregelProtocol):
                     If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
                 - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
                 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
+                    Will be emitted as 2-tuples `(LLM token, metadata)`.
                 - `"debug"`: Emit debug events with as much information as possible for each step.
+
+                You can pass a list as the `stream_mode` parameter to stream multiple modes at once.
+                The streamed outputs will be tuples of `(mode, data)`.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             checkpoint_during: Whether to checkpoint intermediate steps, defaults to True. If False, only the final checkpoint is saved.
             debug: Whether to print debug information during execution, defaults to False.
-            subgraphs: Whether to stream subgraphs, defaults to False.
+            subgraphs: Whether to stream events from inside subgraphs, defaults to False.
+                If True, the events will be emitted as tuples `(namespace, data)`,
+                or `(namespace, mode, data)` if `stream_mode` is a list,
+                where `namespace` is a tuple with the path to the node where a subgraph is invoked,
+                e.g. `("parent_node:<task_id>", "child_node:<task_id>")`.
 
         Yields:
             The output of each step in the graph. The output shape depends on the stream_mode.
@@ -2678,12 +2745,63 @@ class Pregel(PregelProtocol):
             async for event in graph.astream({"question": "What is the capital of France?"}, stream_mode="messages"):
                 print(event)
 
+            # Events are emitted as 2-tuples (LLM token, metadata).
             # (AIMessageChunk(content='The', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], 'langgraph_path': ('__pregel_pull', 'a'), 'langgraph_checkpoint_ns': '...', 'checkpoint_ns': '...', 'ls_provider': 'openai', 'ls_model_name': 'gpt-4o-mini', 'ls_model_type': 'chat', 'ls_temperature': 0.7})
             # (AIMessageChunk(content=' capital', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], ...})
             # (AIMessageChunk(content=' of', additional_kwargs={}, response_metadata={}, id='...'), {...})
             # (AIMessageChunk(content=' France', additional_kwargs={}, response_metadata={}, id='...'), {...})
             # (AIMessageChunk(content=' is', additional_kwargs={}, response_metadata={}, id='...'), {...})
             # (AIMessageChunk(content=' Paris', additional_kwargs={}, response_metadata={}, id='...'), {...})
+            ```
+
+        Example: Using subgraphs=True:
+            ```python
+            from langgraph.graph import START, StateGraph
+            from typing import TypedDict
+
+            # Define subgraph
+            class SubgraphState(TypedDict):
+                foo: str  # note that this key is shared with the parent graph state
+                bar: str
+
+            async def subgraph_node_1(state: SubgraphState):
+                return {"bar": "bar"}
+
+            async def subgraph_node_2(state: SubgraphState):
+                return {"foo": state["foo"] + state["bar"]}
+
+            subgraph_builder = StateGraph(SubgraphState)
+            subgraph_builder.add_node(subgraph_node_1)
+            subgraph_builder.add_node(subgraph_node_2)
+            subgraph_builder.add_edge(START, "subgraph_node_1")
+            subgraph_builder.add_edge("subgraph_node_1", "subgraph_node_2")
+            subgraph = subgraph_builder.compile()
+
+            # Define parent graph
+            class ParentState(TypedDict):
+                foo: str
+
+            async def node_1(state: ParentState):
+                return {"foo": "hi! " + state["foo"]}
+
+            builder = StateGraph(ParentState)
+            builder.add_node("node_1", node_1)
+            builder.add_node("node_2", subgraph)
+            builder.add_edge(START, "node_1")
+            builder.add_edge("node_1", "node_2")
+            graph = builder.compile()
+
+            async for event in graph.astream(
+                {"foo": "foo"},
+                stream_mode="updates",
+                subgraphs=True,
+            ):
+                print(event)
+
+            # ((), {'node_1': {'foo': 'hi! foo'}})
+            # (('node_2:dfddc4ba-c3c5-6887-5012-a243b5b377c2',), {'subgraph_node_1': {'bar': 'bar'}})
+            # (('node_2:dfddc4ba-c3c5-6887-5012-a243b5b377c2',), {'subgraph_node_2': {'foo': 'hi! foobar'}})
+            # ((), {'node_2': {'foo': 'hi! foobar'}})
             ```
         """
 
