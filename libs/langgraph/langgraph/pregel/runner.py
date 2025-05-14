@@ -539,7 +539,7 @@ def _call(
     # schedule PUSH tasks, collect futures
     scratchpad: PregelScratchpad = task().config[CONF][CONFIG_KEY_SCRATCHPAD]  # type: ignore[union-attr]
     # schedule the next task, if the callback returns one
-    if next_task := schedule_task(  # type: ignore[misc]
+    if next_task := schedule_task(
         task(),  # type: ignore[arg-type]
         scratchpad.call_counter(),
         Call(func, input, retry=retry, cache_policy=cache_policy, callbacks=callbacks),
@@ -677,7 +677,7 @@ async def _acall_impl(
         # schedule PUSH tasks, collect futures
         scratchpad: PregelScratchpad = task().config[CONF][CONFIG_KEY_SCRATCHPAD]  # type: ignore[union-attr]
         # schedule the next task, if the callback returns one
-        if next_task := await schedule_task(  # type: ignore[misc]
+        if next_task := await schedule_task(
             task(),  # type: ignore[arg-type]
             scratchpad.call_counter(),
             Call(

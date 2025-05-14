@@ -1079,7 +1079,9 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
                 matched.append(task)
         return matched
 
-    def accept_push(self, task, write_idx, call=None):
+    def accept_push(
+        self, task: PregelExecutableTask, write_idx: int, call: Optional[Call] = None
+    ) -> Optional[PregelExecutableTask]:
         if pushed := super().accept_push(task, write_idx, call):
             self.match_cached_writes()
         return pushed
