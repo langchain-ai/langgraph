@@ -229,9 +229,10 @@ def draw_graph(
                 first, last = graph.extend(subgraph, prefix=name)
                 for idx, edge in enumerate(graph.edges):
                     if edge.source == name:
-                        graph.edges[idx] = edge.copy(source=cast(Node, last).id)
-                    elif edge.target == name:
-                        graph.edges[idx] = edge.copy(target=cast(Node, first).id)
+                        edge = edge.copy(source=cast(Node, last).id)
+                    if edge.target == name:
+                        edge = edge.copy(target=cast(Node, first).id)
+                    graph.edges[idx] = edge
 
         return graph
 

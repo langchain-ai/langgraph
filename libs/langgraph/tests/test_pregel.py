@@ -8727,3 +8727,30 @@ def test_get_graph_loop(snapshot: SnapshotAssertion) -> None:
     app = workflow.compile()
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+
+
+def test_get_graph_self_loop(snapshot: SnapshotAssertion) -> None:
+    import random
+
+    subgraph_builder = StateGraph(MessagesState)
+    subgraph_builder.add_node("agent", lambda x: x)
+    subgraph_builder.add_edge(START, "agent")
+    subgraph = subgraph_builder.compile()
+
+    def worker_node(state: MessagesState) -> Command[Literal["worker_node", "__end__"]]:
+        subgraph_result = subgraph.invoke(state)
+
+        if random.choice([True, False]):
+            next_node_name = "worker_node"
+        else:
+            next_node_name = END
+
+        return Command(update=subgraph_result, goto=next_node_name)
+
+    self_loop_builder = StateGraph(MessagesState)
+    self_loop_builder.add_node("worker_node", worker_node)
+    self_loop_builder.add_edge(START, "worker_node")
+    self_loop_graph = self_loop_builder.compile()
+
+    assert json.dumps(self_loop_graph.get_graph().to_json(), indent=2) == snapshot
+    assert self_loop_graph.get_graph().draw_mermaid(with_styles=False) == snapshot
