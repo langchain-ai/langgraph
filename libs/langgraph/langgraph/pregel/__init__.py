@@ -2292,6 +2292,8 @@ class Pregel(PregelProtocol):
 
                 You can pass a list as the `stream_mode` parameter to stream multiple modes at once.
                 The streamed outputs will be tuples of `(mode, data)`.
+
+                See [LangGraph streaming guide](https://langchain-ai.github.io/langgraph/how-tos/streaming/) for more details.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
@@ -2303,155 +2305,10 @@ class Pregel(PregelProtocol):
                 where `namespace` is a tuple with the path to the node where a subgraph is invoked,
                 e.g. `("parent_node:<task_id>", "child_node:<task_id>")`.
 
+                See [LangGraph streaming guide](https://langchain-ai.github.io/langgraph/how-tos/streaming/) for more details.
+
         Yields:
             The output of each step in the graph. The output shape depends on the stream_mode.
-
-        Example: Using stream_mode="values":
-            ```python
-            import operator
-            from typing_extensions import Annotated, TypedDict
-            from langgraph.graph import StateGraph, START
-
-            class State(TypedDict):
-                alist: Annotated[list, operator.add]
-                another_list: Annotated[list, operator.add]
-
-            builder = StateGraph(State)
-            builder.add_node("a", lambda _state: {"another_list": ["hi"]})
-            builder.add_node("b", lambda _state: {"alist": ["there"]})
-            builder.add_edge("a", "b")
-            builder.add_edge(START, "a")
-            graph = builder.compile()
-
-            for event in graph.stream({"alist": ['Ex for stream_mode="values"']}, stream_mode="values"):
-                print(event)
-
-            # {'alist': ['Ex for stream_mode="values"'], 'another_list': []}
-            # {'alist': ['Ex for stream_mode="values"'], 'another_list': ['hi']}
-            # {'alist': ['Ex for stream_mode="values"', 'there'], 'another_list': ['hi']}
-            ```
-
-        Example: Using stream_mode="updates":
-            ```python
-            for event in graph.stream({"alist": ['Ex for stream_mode="updates"']}, stream_mode="updates"):
-                print(event)
-
-            # {'a': {'another_list': ['hi']}}
-            # {'b': {'alist': ['there']}}
-            ```
-
-        Example: Using stream_mode="debug":
-            ```python
-            for event in graph.stream({"alist": ['Ex for stream_mode="debug"']}, stream_mode="debug"):
-                print(event)
-
-            # {'type': 'task', 'timestamp': '2024-06-23T...+00:00', 'step': 1, 'payload': {'id': '...', 'name': 'a', 'input': {'alist': ['Ex for stream_mode="debug"'], 'another_list': []}, 'triggers': ['start:a']}}
-            # {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 1, 'payload': {'id': '...', 'name': 'a', 'result': [('another_list', ['hi'])]}}
-            # {'type': 'task', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'input': {'alist': ['Ex for stream_mode="debug"'], 'another_list': ['hi']}, 'triggers': ['a']}}
-            # {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
-            ```
-
-        Example: Using stream_mode="custom":
-            ```python
-            from langgraph.types import StreamWriter
-
-            def node_a(state: State, writer: StreamWriter):
-                writer({"custom_data": "foo"})
-                return {"alist": ["hi"]}
-
-            builder = StateGraph(State)
-            builder.add_node("a", node_a)
-            builder.add_edge(START, "a")
-            graph = builder.compile()
-
-            for event in graph.stream({"alist": ['Ex for stream_mode="custom"']}, stream_mode="custom"):
-                print(event)
-
-            # {'custom_data': 'foo'}
-            ```
-
-        Example: Using stream_mode="messages":
-            ```python
-            from typing_extensions import Annotated, TypedDict
-            from langgraph.graph import StateGraph, START
-            from langchain_openai import ChatOpenAI
-
-            llm = ChatOpenAI(model="gpt-4o-mini")
-
-            class State(TypedDict):
-                question: str
-                answer: str
-
-            def node_a(state: State):
-                response = llm.invoke(state["question"])
-                return {"answer": response.content}
-
-            builder = StateGraph(State)
-            builder.add_node("a", node_a)
-            builder.add_edge(START, "a")
-            graph = builder.compile()
-
-            for event in graph.stream({"question": "What is the capital of France?"}, stream_mode="messages"):
-                print(event)
-
-            # Events are emitted as 2-tuples (LLM token, metadata).
-            # (AIMessageChunk(content='The', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], 'langgraph_path': ('__pregel_pull', 'a'), 'langgraph_checkpoint_ns': '...', 'checkpoint_ns': '...', 'ls_provider': 'openai', 'ls_model_name': 'gpt-4o-mini', 'ls_model_type': 'chat', 'ls_temperature': 0.7})
-            # (AIMessageChunk(content=' capital', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], ...})
-            # (AIMessageChunk(content=' of', additional_kwargs={}, response_metadata={}, id='...'), {...})
-            # (AIMessageChunk(content=' France', additional_kwargs={}, response_metadata={}, id='...'), {...})
-            # (AIMessageChunk(content=' is', additional_kwargs={}, response_metadata={}, id='...'), {...})
-            # (AIMessageChunk(content=' Paris', additional_kwargs={}, response_metadata={}, id='...'), {...})
-            ```
-
-        Example: Using subgraphs=True:
-            ```python
-            from langgraph.graph import START, StateGraph
-            from typing import TypedDict
-
-            # Define subgraph
-            class SubgraphState(TypedDict):
-                foo: str  # note that this key is shared with the parent graph state
-                bar: str
-
-            def subgraph_node_1(state: SubgraphState):
-                return {"bar": "bar"}
-
-            def subgraph_node_2(state: SubgraphState):
-                return {"foo": state["foo"] + state["bar"]}
-
-            subgraph_builder = StateGraph(SubgraphState)
-            subgraph_builder.add_node(subgraph_node_1)
-            subgraph_builder.add_node(subgraph_node_2)
-            subgraph_builder.add_edge(START, "subgraph_node_1")
-            subgraph_builder.add_edge("subgraph_node_1", "subgraph_node_2")
-            subgraph = subgraph_builder.compile()
-
-            # Define parent graph
-            class ParentState(TypedDict):
-                foo: str
-
-            def node_1(state: ParentState):
-                return {"foo": "hi! " + state["foo"]}
-
-            builder = StateGraph(ParentState)
-            builder.add_node("node_1", node_1)
-            builder.add_node("node_2", subgraph)
-            builder.add_edge(START, "node_1")
-            builder.add_edge("node_1", "node_2")
-            graph = builder.compile()
-
-            for event in graph.stream(
-                {"foo": "foo"},
-                stream_mode="updates",
-                subgraphs=True,
-            ):
-                print(event)
-
-            # ((), {'node_1': {'foo': 'hi! foo'}})
-            # (('node_2:dfddc4ba-c3c5-6887-5012-a243b5b377c2',), {'subgraph_node_1': {'bar': 'bar'}})
-            # (('node_2:dfddc4ba-c3c5-6887-5012-a243b5b377c2',), {'subgraph_node_2': {'foo': 'hi! foobar'}})
-            # ((), {'node_2': {'foo': 'hi! foobar'}})
-            ```
         """
 
         stream = SyncQueue()
@@ -2643,6 +2500,8 @@ class Pregel(PregelProtocol):
 
                 You can pass a list as the `stream_mode` parameter to stream multiple modes at once.
                 The streamed outputs will be tuples of `(mode, data)`.
+
+                See [LangGraph streaming guide](https://langchain-ai.github.io/langgraph/how-tos/streaming/) for more details.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
@@ -2654,155 +2513,10 @@ class Pregel(PregelProtocol):
                 where `namespace` is a tuple with the path to the node where a subgraph is invoked,
                 e.g. `("parent_node:<task_id>", "child_node:<task_id>")`.
 
+                See [LangGraph streaming guide](https://langchain-ai.github.io/langgraph/how-tos/streaming/) for more details.
+
         Yields:
             The output of each step in the graph. The output shape depends on the stream_mode.
-
-        Example: Using stream_mode="values":
-            ```python
-            import operator
-            from typing_extensions import Annotated, TypedDict
-            from langgraph.graph import StateGraph, START
-
-            class State(TypedDict):
-                alist: Annotated[list, operator.add]
-                another_list: Annotated[list, operator.add]
-
-            builder = StateGraph(State)
-            builder.add_node("a", lambda _state: {"another_list": ["hi"]})
-            builder.add_node("b", lambda _state: {"alist": ["there"]})
-            builder.add_edge("a", "b")
-            builder.add_edge(START, "a")
-            graph = builder.compile()
-
-            async for event in graph.astream({"alist": ['Ex for stream_mode="values"']}, stream_mode="values"):
-                print(event)
-
-            # {'alist': ['Ex for stream_mode="values"'], 'another_list': []}
-            # {'alist': ['Ex for stream_mode="values"'], 'another_list': ['hi']}
-            # {'alist': ['Ex for stream_mode="values"', 'there'], 'another_list': ['hi']}
-            ```
-
-        Example: Using stream_mode="updates":
-            ```python
-            async for event in graph.astream({"alist": ['Ex for stream_mode="updates"']}, stream_mode="updates"):
-                print(event)
-
-            # {'a': {'another_list': ['hi']}}
-            # {'b': {'alist': ['there']}}
-            ```
-
-        Example: Using stream_mode="debug":
-            ```python
-            async for event in graph.astream({"alist": ['Ex for stream_mode="debug"']}, stream_mode="debug"):
-                print(event)
-
-            # {'type': 'task', 'timestamp': '2024-06-23T...+00:00', 'step': 1, 'payload': {'id': '...', 'name': 'a', 'input': {'alist': ['Ex for stream_mode="debug"'], 'another_list': []}, 'triggers': ['start:a']}}
-            # {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 1, 'payload': {'id': '...', 'name': 'a', 'result': [('another_list', ['hi'])]}}
-            # {'type': 'task', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'input': {'alist': ['Ex for stream_mode="debug"'], 'another_list': ['hi']}, 'triggers': ['a']}}
-            # {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
-            ```
-
-        Example: Using stream_mode="custom":
-            ```python
-            from langgraph.types import StreamWriter
-
-            async def node_a(state: State, writer: StreamWriter):
-                writer({"custom_data": "foo"})
-                return {"alist": ["hi"]}
-
-            builder = StateGraph(State)
-            builder.add_node("a", node_a)
-            builder.add_edge(START, "a")
-            graph = builder.compile()
-
-            async for event in graph.astream({"alist": ['Ex for stream_mode="custom"']}, stream_mode="custom"):
-                print(event)
-
-            # {'custom_data': 'foo'}
-            ```
-
-        Example: Using stream_mode="messages":
-            ```python
-            from typing_extensions import Annotated, TypedDict
-            from langgraph.graph import StateGraph, START
-            from langchain_openai import ChatOpenAI
-
-            llm = ChatOpenAI(model="gpt-4o-mini")
-
-            class State(TypedDict):
-                question: str
-                answer: str
-
-            async def node_a(state: State):
-                response = await llm.ainvoke(state["question"])
-                return {"answer": response.content}
-
-            builder = StateGraph(State)
-            builder.add_node("a", node_a)
-            builder.add_edge(START, "a")
-            graph = builder.compile()
-
-            async for event in graph.astream({"question": "What is the capital of France?"}, stream_mode="messages"):
-                print(event)
-
-            # Events are emitted as 2-tuples (LLM token, metadata).
-            # (AIMessageChunk(content='The', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], 'langgraph_path': ('__pregel_pull', 'a'), 'langgraph_checkpoint_ns': '...', 'checkpoint_ns': '...', 'ls_provider': 'openai', 'ls_model_name': 'gpt-4o-mini', 'ls_model_type': 'chat', 'ls_temperature': 0.7})
-            # (AIMessageChunk(content=' capital', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], ...})
-            # (AIMessageChunk(content=' of', additional_kwargs={}, response_metadata={}, id='...'), {...})
-            # (AIMessageChunk(content=' France', additional_kwargs={}, response_metadata={}, id='...'), {...})
-            # (AIMessageChunk(content=' is', additional_kwargs={}, response_metadata={}, id='...'), {...})
-            # (AIMessageChunk(content=' Paris', additional_kwargs={}, response_metadata={}, id='...'), {...})
-            ```
-
-        Example: Using subgraphs=True:
-            ```python
-            from langgraph.graph import START, StateGraph
-            from typing import TypedDict
-
-            # Define subgraph
-            class SubgraphState(TypedDict):
-                foo: str  # note that this key is shared with the parent graph state
-                bar: str
-
-            async def subgraph_node_1(state: SubgraphState):
-                return {"bar": "bar"}
-
-            async def subgraph_node_2(state: SubgraphState):
-                return {"foo": state["foo"] + state["bar"]}
-
-            subgraph_builder = StateGraph(SubgraphState)
-            subgraph_builder.add_node(subgraph_node_1)
-            subgraph_builder.add_node(subgraph_node_2)
-            subgraph_builder.add_edge(START, "subgraph_node_1")
-            subgraph_builder.add_edge("subgraph_node_1", "subgraph_node_2")
-            subgraph = subgraph_builder.compile()
-
-            # Define parent graph
-            class ParentState(TypedDict):
-                foo: str
-
-            async def node_1(state: ParentState):
-                return {"foo": "hi! " + state["foo"]}
-
-            builder = StateGraph(ParentState)
-            builder.add_node("node_1", node_1)
-            builder.add_node("node_2", subgraph)
-            builder.add_edge(START, "node_1")
-            builder.add_edge("node_1", "node_2")
-            graph = builder.compile()
-
-            async for event in graph.astream(
-                {"foo": "foo"},
-                stream_mode="updates",
-                subgraphs=True,
-            ):
-                print(event)
-
-            # ((), {'node_1': {'foo': 'hi! foo'}})
-            # (('node_2:dfddc4ba-c3c5-6887-5012-a243b5b377c2',), {'subgraph_node_1': {'bar': 'bar'}})
-            # (('node_2:dfddc4ba-c3c5-6887-5012-a243b5b377c2',), {'subgraph_node_2': {'foo': 'hi! foobar'}})
-            # ((), {'node_2': {'foo': 'hi! foobar'}})
-            ```
         """
 
         stream = AsyncQueue()
