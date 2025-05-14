@@ -396,6 +396,68 @@
   
   '''
 # ---
+# name: test_get_graph_self_loop
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnablePassthrough"
+          ],
+          "name": "__start__"
+        }
+      },
+      {
+        "id": "worker_node",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "runnable",
+            "RunnableCallable"
+          ],
+          "name": "worker_node"
+        }
+      },
+      {
+        "id": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "worker_node"
+      },
+      {
+        "source": "worker_node",
+        "target": "__end__",
+        "conditional": true
+      },
+      {
+        "source": "worker_node",
+        "target": "worker_node",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_get_graph_self_loop.1
+  '''
+  graph TD;
+  	__start__ --> worker_node;
+  	worker_node -.-> __end__;
+  	worker_node -.-> worker_node;
+  
+  '''
+# ---
 # name: test_in_one_fan_out_state_graph_defer_node[memory-False]
   '''
   graph TD;
