@@ -10,20 +10,28 @@ Before you begin, ensure you have the following:
 
 ## 1. Install the LangGraph CLI
 
-```bash
-# Python >= 3.11 is required.
+=== "Python server"
 
-pip install --upgrade "langgraph-cli[inmem]"
-```
+    ```shell
+    # Python >= 3.11 is required.
 
-## 2. Create a LangGraph app 🌱 
+    pip install --upgrade "langgraph-cli[inmem]"
+    ```
 
-Create a new app from the [`new-langgraph-project-python` template](https://github.com/langchain-ai/new-langgraph-project) or [`new-langgraph-project-js` template](https://github.com/langchain-ai/new-langgraphjs-project). This template demonstrates a simple chatbot that maintains chat memory, which allows for coherent conversations across multiple interactions.
+=== "Node server"
+
+    ```shell
+    yarn add @langchain/langgraph-cli
+    ```
+
+## 2. Create a LangGraph app 🌱
+
+Create a new app from the [`new-langgraph-project-python` template](https://github.com/langchain-ai/new-langgraph-project) or [`new-langgraph-project-js` template](https://github.com/langchain-ai/new-langgraphjs-project). This template demonstrates a simple test application strictly for the purposes of getting started.
 
 === "Python server"
 
     ```shell
-    langgraph new path/to/your/app --template new-langgraph-project-python 
+    langgraph new path/to/your/app --template new-langgraph-project-python
     ```
 
 === "Node server"
@@ -62,7 +70,7 @@ You will find a `.env.example` in the root of your new LangGraph app. Create a `
 LANGSMITH_API_KEY=lsv2...
 ```
 
-## 5. Launch LangGraph Server 🚀 
+## 5. Launch LangGraph Server 🚀
 
 Start the LangGraph API server locally:
 
@@ -71,6 +79,7 @@ Start the LangGraph API server locally:
     ```shell
     langgraph dev
     ```
+
 === "Node server"
 
     ```shell
@@ -81,11 +90,11 @@ Sample output:
 
 ```
 >    Ready!
-> 
+>
 >    - API: [http://localhost:2024](http://localhost:2024/)
->     
+>
 >    - Docs: http://localhost:2024/docs
->     
+>
 >    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
 ```
 
@@ -102,9 +111,9 @@ The `langgraph dev` command starts LangGraph Server in an in-memory mode. This m
 For a LangGraph Server running on a custom host/port, update the baseURL parameter.
 
 ??? info "Safari compatibility"
-    
+
     Use the `--tunnel` flag with your command to create a secure tunnel, as Safari has limitations when connecting to localhost servers:
-    
+
     ```shell
     langgraph dev --tunnel
     ```
@@ -175,7 +184,8 @@ For a LangGraph Server running on a custom host/port, update the baseURL paramet
             print(chunk.data)
             print("\n\n")
         ```
-        
+
+
 === "Javascript SDK"
 
     1. Install the LangGraph JS SDK:
@@ -229,7 +239,7 @@ For a LangGraph Server running on a custom host/port, update the baseURL paramet
                 ]
             },
             \"stream_mode\": \"messages-tuple\"
-        }" 
+        }"
     ```
 
 ## Next steps
@@ -238,6 +248,6 @@ Now that you have a LangGraph app running locally, take your journey further by 
 
 - [Deployment quickstart](../../cloud/quick_start.md): Deploy your LangGraph app using LangGraph Platform.
 - [LangGraph Platform overview](../../concepts/langgraph_platform.md): Learn about foundational LangGraph Platform concepts.
-- [LangGraph Server API Reference](../../cloud/reference/api/api_ref.html): Explore the LangGraph Server API documentation.  
+- [LangGraph Server API Reference](../../cloud/reference/api/api_ref.html): Explore the LangGraph Server API documentation.
 - [Python SDK Reference](../../cloud/reference/sdk/python_sdk_ref.md): Explore the Python SDK API Reference.
 - [JS/TS SDK Reference](../../cloud/reference/sdk/js_ts_sdk_ref.md): Explore the JS/TS SDK API Reference.
