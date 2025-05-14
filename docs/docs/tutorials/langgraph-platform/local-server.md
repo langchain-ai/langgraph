@@ -8,23 +8,7 @@ Before you begin, ensure you have the following:
 
 - An API key for [LangSmith](https://smith.langchain.com/settings) - free to sign up
 
-## 1. Install the LangGraph CLI
-
-=== "Python server"
-
-    ```shell
-    # Python >= 3.11 is required.
-
-    pip install --upgrade "langgraph-cli[inmem]"
-    ```
-
-=== "Node server"
-
-    ```shell
-    npx @langchain/langgraph-cl
-    ```
-
-## 2. Create a LangGraph app 🌱
+## 1. Create a LangGraph app 🌱
 
 Create a new app from the [`new-langgraph-project-python` template](https://github.com/langchain-ai/new-langgraph-project) or [`new-langgraph-project-js` template](https://github.com/langchain-ai/new-langgraphjs-project). This template demonstrates a single-node application you can extend with your own logic.
 
@@ -44,25 +28,25 @@ Create a new app from the [`new-langgraph-project-python` template](https://gith
 
     If you use `langgraph new` without specifying a template, you will be presented with an interactive menu that will allow you to choose from a list of available templates.
 
-## 3. Install dependencies
-
-In the root of your new LangGraph app, install the dependencies in `edit` mode so your local changes are used by the server:
+## 2. Install dependencies and LangGraph CLI
 
 === "Python server"
 
     ```shell
+    # Python >= 3.11 is required.
     cd path/to/your/app
-    pip install -e .
+    pip install -e . "langgraph-cli[inmem]"
     ```
 
 === "Node server"
 
     ```shell
     cd path/to/your/app
+    npx @langchain/langgraph-cli
     yarn install
     ```
 
-## 4. Create a `.env` file
+## 3. Create a `.env` file
 
 You will find a `.env.example` in the root of your new LangGraph app. Create a `.env` file in the root of your new LangGraph app and copy the contents of the `.env.example` file into it, filling in the necessary API keys:
 
@@ -70,7 +54,7 @@ You will find a `.env.example` in the root of your new LangGraph app. Create a `
 LANGSMITH_API_KEY=lsv2...
 ```
 
-## 5. Launch LangGraph Server 🚀
+## 4. Launch LangGraph Server 🚀
 
 Start the LangGraph API server locally:
 
@@ -100,7 +84,7 @@ Sample output:
 
 The `langgraph dev` command starts LangGraph Server in an in-memory mode. This mode is suitable for development and testing purposes. For production use, deploy LangGraph Server with access to a persistent storage backend. For more information, see [Deployment options](../../concepts/deployment_options.md).
 
-## 6. Test your application in LangGraph Studio
+## 5. Test your application in LangGraph Studio
 
 [LangGraph Studio](../../concepts/langgraph_studio.md) is a specialized UI that you can connect to LangGraph API server to visualize, interact with, and debug your application locally. Test your graph in LangGraph Studio by visiting the URL provided in the output of the `langgraph dev` command:
 
@@ -118,7 +102,7 @@ For a LangGraph Server running on a custom host/port, update the baseURL paramet
     langgraph dev --tunnel
     ```
 
-## 7. Test the API
+## 6. Test the API
 
 === "Python SDK (async)"
 
