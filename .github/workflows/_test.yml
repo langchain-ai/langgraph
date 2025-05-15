@@ -49,7 +49,16 @@ jobs:
         shell: bash
         working-directory: ${{ inputs.working-directory }}
         run: |
-          make test
+          make 
+
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "latest"
+          
+      - name: Run unit tests with minimum dependency versions
+        run: uv run --all-extras --resolution lowest-direct pytest
+        working-directory: ${{ inputs.working-directory }}
 
       - name: Ensure the tests did not create any additional files
         shell: bash
