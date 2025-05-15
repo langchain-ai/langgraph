@@ -4,7 +4,8 @@ requires-python = ">=3.9"
 resolution-markers = [
     "python_full_version >= '3.12.4' and python_full_version < '4.0'",
     "python_full_version >= '3.11' and python_full_version < '3.12.4'",
-    "python_full_version < '3.11' or python_full_version >= '4.0'",
+    "python_full_version >= '4.0'",
+    "python_full_version < '3.11'",
 ]
 
 [[package]]
@@ -21,8 +22,8 @@ name = "anyio"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "idna", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "sniffio", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "idna", marker = "python_full_version >= '3.11'" },
+    { name = "sniffio", marker = "python_full_version >= '3.11'" },
     { name = "typing-extensions", marker = "python_full_version >= '3.11' and python_full_version < '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/95/7d/4c1bd541d4dffa1b52bd83fb8527089e097a106fc90b467a7313b105f840/anyio-4.9.0.tar.gz", hash = "sha256:673c0c244e15788651a4ff38710fea9675823028a6f08a5eda409e0c9840a028", size = 190949 }
@@ -35,7 +36,7 @@ name = "blockbuster"
 version = "1.5.24"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "forbiddenfruit", marker = "python_full_version >= '3.11' and python_full_version < '4.0' and implementation_name == 'cpython'" },
+    { name = "forbiddenfruit", marker = "python_full_version >= '3.11' and implementation_name == 'cpython'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/35/c8/1e456a043179f2aef10bcaafea79f6d06c0ac45cc994767a54f680509f3b/blockbuster-1.5.24.tar.gz", hash = "sha256:97645775761a5d425666ec0bc99629b65c7eccdc2f770d2439850682567af4ec", size = 51245 }
 wheels = [
@@ -56,7 +57,7 @@ name = "cffi"
 version = "1.17.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "pycparser", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/fc/97/c783634659c2920c3fc70419e3af40972dbaf758daa229a7d6ea6135c90d/cffi-1.17.1.tar.gz", hash = "sha256:1c39c6016c32bc48dd54561950ebd6836e1670f2ae46128f67cf49e789c52824", size = 516621 }
 wheels = [
@@ -238,7 +239,7 @@ name = "cryptography"
 version = "44.0.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "python_full_version >= '3.11' and python_full_version < '4.0' and platform_python_implementation != 'PyPy'" },
+    { name = "cffi", marker = "python_full_version >= '3.11' and platform_python_implementation != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/53/d6/1411ab4d6108ab167d06254c5be517681f1e331f90edf1379895bcb87020/cryptography-44.0.3.tar.gz", hash = "sha256:fe19d8bc5536a91a24a8133328880a41831b6c5df54599a8417b62fe015d3053", size = 711096 }
 wheels = [
@@ -315,8 +316,8 @@ name = "httpcore"
 version = "1.0.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "certifi", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "h11", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "certifi", marker = "python_full_version >= '3.11'" },
+    { name = "h11", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/06/94/82699a10bca87a5556c9c59b5963f2d039dbd239f25bc2a63907a05a14cb/httpcore-1.0.9.tar.gz", hash = "sha256:6e34463af53fd2ab5d807f399a9b45ea31c3dfa2276f15a2c3f00afff6e176e8", size = 85484 }
 wheels = [
@@ -328,10 +329,10 @@ name = "httpx"
 version = "0.28.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "anyio", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "certifi", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "httpcore", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "idna", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "anyio", marker = "python_full_version >= '3.11'" },
+    { name = "certifi", marker = "python_full_version >= '3.11'" },
+    { name = "httpcore", marker = "python_full_version >= '3.11'" },
+    { name = "idna", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b1/df/48c586a5fe32a0f01324ee087459e112ebb7224f646c0b5023f5e79e9956/httpx-0.28.1.tar.gz", hash = "sha256:75e98c5f16b0f35b567856f597f06ff2270a374470a5c2392242528e3e3e42fc", size = 141406 }
 wheels = [
@@ -460,25 +461,25 @@ name = "langgraph-api"
 version = "0.2.19"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cloudpickle", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "cryptography", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "httpx", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "jsonschema-rs", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "cloudpickle", marker = "python_full_version >= '3.11'" },
+    { name = "cryptography", marker = "python_full_version >= '3.11'" },
+    { name = "httpx", marker = "python_full_version >= '3.11'" },
+    { name = "jsonschema-rs", marker = "python_full_version >= '3.11'" },
     { name = "langchain-core", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
     { name = "langgraph", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
     { name = "langgraph-checkpoint", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "langgraph-runtime-inmem", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "langgraph-runtime-inmem", marker = "python_full_version >= '3.11'" },
     { name = "langgraph-sdk", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "langsmith", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "orjson", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "pyjwt", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "sse-starlette", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "starlette", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "structlog", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "tenacity", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "truststore", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "uvicorn", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "watchfiles", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "langsmith", marker = "python_full_version >= '3.11'" },
+    { name = "orjson", marker = "python_full_version >= '3.11'" },
+    { name = "pyjwt", marker = "python_full_version >= '3.11'" },
+    { name = "sse-starlette", marker = "python_full_version >= '3.11'" },
+    { name = "starlette", marker = "python_full_version >= '3.11'" },
+    { name = "structlog", marker = "python_full_version >= '3.11'" },
+    { name = "tenacity", marker = "python_full_version >= '3.11'" },
+    { name = "truststore", marker = "python_full_version >= '3.11'" },
+    { name = "uvicorn", marker = "python_full_version >= '3.11'" },
+    { name = "watchfiles", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0b/a3/6fde4e96fa4d9d437689cf6b8e684a5ef02f4fccf192c401a20f7387c9bc/langgraph_api-0.2.19.tar.gz", hash = "sha256:5ceabd04082ff6e0c8f4cdb8c7eed44ec8c22381728526619315fe4011266188", size = 169841 }
 wheels = [
@@ -504,13 +505,13 @@ version = "0.2.10"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
-    { name = "langgraph-sdk", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "langgraph-sdk", marker = "python_full_version >= '3.11'" },
 ]
 
 [package.optional-dependencies]
 inmem = [
-    { name = "langgraph-api", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "langgraph-runtime-inmem", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "langgraph-api", marker = "python_full_version >= '3.11'" },
+    { name = "langgraph-runtime-inmem", marker = "python_full_version >= '3.11'" },
     { name = "python-dotenv" },
 ]
 
@@ -528,24 +529,24 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "click", specifier = ">=8.1.7,<9" },
-    { name = "langgraph-api", marker = "python_full_version >= '3.11' and python_full_version < '4.0' and extra == 'inmem'", specifier = ">=0.1.20" },
-    { name = "langgraph-runtime-inmem", marker = "python_full_version >= '3.11' and python_full_version < '4.0' and extra == 'inmem'", specifier = ">=0.0.8" },
-    { name = "langgraph-sdk", marker = "python_full_version >= '3.11' and python_full_version < '4.0'", specifier = ">=0.1.0" },
+    { name = "click", specifier = ">=8.1.7" },
+    { name = "langgraph-api", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.1.20" },
+    { name = "langgraph-runtime-inmem", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.0.8" },
+    { name = "langgraph-sdk", marker = "python_full_version >= '3.11'", specifier = ">=0.1.0" },
     { name = "python-dotenv", marker = "extra == 'inmem'", specifier = ">=0.8.0" },
 ]
 provides-extras = ["inmem"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "codespell", specifier = ">=2.2.0,<3" },
-    { name = "msgspec", specifier = ">=0.19.0,<0.20" },
-    { name = "mypy", specifier = ">=1.10.0,<2" },
-    { name = "pytest", specifier = ">=7.2.1,<8" },
-    { name = "pytest-asyncio", specifier = ">=0.21.1,<0.22" },
-    { name = "pytest-mock", specifier = ">=3.11.1,<4" },
-    { name = "pytest-watch", specifier = ">=4.2.0,<5" },
-    { name = "ruff", specifier = ">=0.6.2,<0.7" },
+    { name = "codespell" },
+    { name = "msgspec" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-mock" },
+    { name = "pytest-watch" },
+    { name = "ruff" },
 ]
 
 [[package]]
@@ -566,12 +567,12 @@ name = "langgraph-runtime-inmem"
 version = "0.0.10"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "blockbuster", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "blockbuster", marker = "python_full_version >= '3.11'" },
     { name = "langgraph", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
     { name = "langgraph-checkpoint", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "sse-starlette", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "starlette", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "structlog", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "sse-starlette", marker = "python_full_version >= '3.11'" },
+    { name = "starlette", marker = "python_full_version >= '3.11'" },
+    { name = "structlog", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/da/2f/3d9d99c13dcc0e32b1ceac1ed9d6ac701a759729c24fb9561bfe37a21533/langgraph_runtime_inmem-0.0.10.tar.gz", hash = "sha256:3e5afbce3d6de276d918a556f20597005b988e12e65b574cfc194f4edad6d171", size = 23544 }
 wheels = [
@@ -583,8 +584,8 @@ name = "langgraph-sdk"
 version = "0.1.66"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "httpx", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "orjson", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "httpx", marker = "python_full_version >= '3.11'" },
+    { name = "orjson", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/97/7a/5fede018d8b9100db14211cfdb94aefd0e5f2e9ae738072f3d4cc443465b/langgraph_sdk-0.1.66.tar.gz", hash = "sha256:81474ad4555a06004cc7a2f4ab477135d5eaf7db11fbcf2a69257fb2d717582e", size = 44049 }
 wheels = [
@@ -596,13 +597,13 @@ name = "langsmith"
 version = "0.3.42"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "httpx", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "orjson", marker = "python_full_version >= '3.11' and python_full_version < '4.0' and platform_python_implementation != 'PyPy'" },
-    { name = "packaging", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "pydantic", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "requests", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "requests-toolbelt", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "zstandard", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "httpx", marker = "python_full_version >= '3.11'" },
+    { name = "orjson", marker = "python_full_version >= '3.11' and platform_python_implementation != 'PyPy'" },
+    { name = "packaging", marker = "python_full_version >= '3.11'" },
+    { name = "pydantic", marker = "python_full_version >= '3.11'" },
+    { name = "requests", marker = "python_full_version >= '3.11'" },
+    { name = "requests-toolbelt", marker = "python_full_version >= '3.11'" },
+    { name = "zstandard", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/3a/44/fe171c0b0fb0377b191aebf0b7779e0c7b2a53693c6a01ddad737212495d/langsmith-0.3.42.tar.gz", hash = "sha256:2b5cbc450ab808b992362aac6943bb1d285579aa68a3a8be901d30a393458f25", size = 345619 }
 wheels = [
@@ -864,10 +865,10 @@ name = "pydantic"
 version = "2.11.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "annotated-types", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "pydantic-core", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "typing-extensions", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "typing-inspection", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "annotated-types", marker = "python_full_version >= '3.11'" },
+    { name = "pydantic-core", marker = "python_full_version >= '3.11'" },
+    { name = "typing-extensions", marker = "python_full_version >= '3.11'" },
+    { name = "typing-inspection", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/77/ab/5250d56ad03884ab5efd07f734203943c8a8ab40d551e208af81d0257bf2/pydantic-2.11.4.tar.gz", hash = "sha256:32738d19d63a226a52eed76645a98ee07c1f410ee41d93b4afbfa85ed8111c2d", size = 786540 }
 wheels = [
@@ -879,7 +880,7 @@ name = "pydantic-core"
 version = "2.33.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "typing-extensions", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ad/88/5f2260bdfae97aabf98f1778d43f69574390ad787afb646292a638c923d4/pydantic_core-2.33.2.tar.gz", hash = "sha256:7cb8bc3605c29176e1b105350d2e6474142d7c1bd1d9327c4a9bdb46bf827acc", size = 435195 }
 wheels = [
@@ -1112,10 +1113,10 @@ name = "requests"
 version = "2.32.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "certifi", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "charset-normalizer", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "idna", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "urllib3", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "certifi", marker = "python_full_version >= '3.11'" },
+    { name = "charset-normalizer", marker = "python_full_version >= '3.11'" },
+    { name = "idna", marker = "python_full_version >= '3.11'" },
+    { name = "urllib3", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/63/70/2bf7780ad2d390a8d301ad0b550f1581eadbd9a20f896afe06353c2a2913/requests-2.32.3.tar.gz", hash = "sha256:55365417734eb18255590a9ff9eb97e9e1da868d4ccd6402399eaf68af20a760", size = 131218 }
 wheels = [
@@ -1127,7 +1128,7 @@ name = "requests-toolbelt"
 version = "1.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "requests", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "requests", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f3/61/d7545dafb7ac2230c70d38d31cbfe4cc64f7144dc41f6e4e4b78ecd9f5bb/requests-toolbelt-1.0.0.tar.gz", hash = "sha256:7681a0a3d047012b5bdc0ee37d7f8f07ebe76ab08caeccfc3921ce23c88d5bc6", size = 206888 }
 wheels = [
@@ -1173,9 +1174,9 @@ name = "sse-starlette"
 version = "2.1.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "anyio", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "starlette", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "uvicorn", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "anyio", marker = "python_full_version >= '3.11'" },
+    { name = "starlette", marker = "python_full_version >= '3.11'" },
+    { name = "uvicorn", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/72/fc/56ab9f116b2133521f532fce8d03194cf04dcac25f583cf3d839be4c0496/sse_starlette-2.1.3.tar.gz", hash = "sha256:9cd27eb35319e1414e3d2558ee7414487f9529ce3b3cf9b21434fd110e017169", size = 19678 }
 wheels = [
@@ -1187,7 +1188,7 @@ name = "starlette"
 version = "0.46.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "anyio", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "anyio", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ce/20/08dfcd9c983f6a6f4a1000d934b9e6d626cff8d2eeb77a89a68eef20a2b7/starlette-0.46.2.tar.gz", hash = "sha256:7f7361f34eed179294600af672f565727419830b54b7b084efe44bb82d2fccd5", size = 2580846 }
 wheels = [
@@ -1274,7 +1275,7 @@ name = "typing-inspection"
 version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "typing-extensions", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/82/5c/e6082df02e215b846b4b8c0b887a64d7d08ffaba30605502639d44c06b82/typing_inspection-0.4.0.tar.gz", hash = "sha256:9765c87de36671694a67904bf2c96e395be9c6439bb6c87b5142569dcdd65122", size = 76222 }
 wheels = [
@@ -1295,8 +1296,8 @@ name = "uvicorn"
 version = "0.34.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "click", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
-    { name = "h11", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "click", marker = "python_full_version >= '3.11'" },
+    { name = "h11", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a6/ae/9bbb19b9e1c450cf9ecaef06463e40234d98d95bf572fab11b4f19ae5ded/uvicorn-0.34.2.tar.gz", hash = "sha256:0e929828f6186353a80b58ea719861d2629d766293b6d19baf086ba31d4f3328", size = 76815 }
 wheels = [
@@ -1345,7 +1346,7 @@ name = "watchfiles"
 version = "1.0.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "anyio", marker = "python_full_version >= '3.11' and python_full_version < '4.0'" },
+    { name = "anyio", marker = "python_full_version >= '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/03/e2/8ed598c42057de7aa5d97c472254af4906ff0a59a66699d426fc9ef795d7/watchfiles-1.0.5.tar.gz", hash = "sha256:b7529b5dcc114679d43827d8c35a07c493ad6f083633d573d81c660abc5979e9", size = 94537 }
 wheels = [
@@ -1519,7 +1520,7 @@ name = "zstandard"
 version = "0.23.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "python_full_version >= '3.11' and python_full_version < '4.0' and platform_python_implementation == 'PyPy'" },
+    { name = "cffi", marker = "python_full_version >= '3.11' and platform_python_implementation == 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ed/f6/2ac0287b442160a89d726b17a9184a4c615bb5237db763791a7fd16d9df1/zstandard-0.23.0.tar.gz", hash = "sha256:b2d8c62d08e7255f68f7a740bae85b3c9b8e5466baa9cbf7f57f1cde0ac6bc09", size = 681701 }
 wheels = [

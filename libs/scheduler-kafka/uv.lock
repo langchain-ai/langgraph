@@ -335,7 +335,7 @@ name = "exceptiongroup"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.12.4'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0b/9f/a65090624ecf468cdca03533906e7c69ed7588582240cfe7cc9e770b50eb/exceptiongroup-1.3.0.tar.gz", hash = "sha256:b241f5885f560bc56a59ee63ca4c6a8bfa46ae4ad651af316d4e81817bb9fd88", size = 29749 }
 wheels = [
@@ -447,7 +447,7 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "0.4.3"
+version = "0.4.5"
 source = { editable = "../langgraph" }
 dependencies = [
     { name = "langchain-core" },
@@ -498,29 +498,29 @@ dev = [
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.0.25"
+version = "2.0.26"
 source = { editable = "../checkpoint" }
 dependencies = [
-    { name = "langchain-core", marker = "python_full_version < '4.0'" },
+    { name = "langchain-core" },
     { name = "ormsgpack" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "langchain-core", marker = "python_full_version < '4.0'", specifier = ">=0.2.38" },
-    { name = "ormsgpack", specifier = ">=1.8.0,<2" },
+    { name = "langchain-core", specifier = ">=0.2.38" },
+    { name = "ormsgpack", specifier = ">=1.8.0" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "codespell", specifier = ">=2.2.0,<3" },
-    { name = "dataclasses-json", marker = "python_full_version < '4.0'", specifier = ">=0.6.7" },
-    { name = "mypy", specifier = ">=1.10.0,<2" },
-    { name = "pytest", specifier = ">=7.2.1,<8" },
-    { name = "pytest-asyncio", specifier = ">=0.21.1,<0.22" },
-    { name = "pytest-mock", specifier = ">=3.11.1,<4" },
-    { name = "pytest-watcher", marker = "python_full_version < '4.0'", specifier = ">=0.4.1" },
-    { name = "ruff", specifier = ">=0.6.2,<0.7" },
+    { name = "codespell" },
+    { name = "dataclasses-json" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-mock" },
+    { name = "pytest-watcher" },
+    { name = "ruff" },
 ]
 
 [[package]]
@@ -538,22 +538,22 @@ dependencies = [
 requires-dist = [
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "orjson", specifier = ">=3.10.1" },
-    { name = "psycopg", specifier = ">=3.2.0,<4" },
-    { name = "psycopg-pool", specifier = ">=3.2.0,<4" },
+    { name = "psycopg", specifier = ">=3.2.0" },
+    { name = "psycopg-pool", specifier = ">=3.2.0" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "anyio", specifier = ">=4.4.0,<5" },
-    { name = "codespell", specifier = ">=2.2.0,<3" },
+    { name = "anyio" },
+    { name = "codespell" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
-    { name = "mypy", specifier = ">=1.10.0,<2" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.0.0" },
-    { name = "pytest", specifier = ">=7.2.1,<8" },
-    { name = "pytest-asyncio", specifier = ">=0.21.1,<0.22" },
-    { name = "pytest-mock", specifier = ">=3.11.1,<4" },
-    { name = "pytest-watcher", marker = "python_full_version < '4.0'", specifier = ">=0.4.3" },
-    { name = "ruff", specifier = ">=0.6.2,<0.7" },
+    { name = "mypy" },
+    { name = "psycopg", extras = ["binary"] },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-mock" },
+    { name = "pytest-watcher" },
+    { name = "ruff" },
 ]
 
 [[package]]
@@ -561,29 +561,29 @@ name = "langgraph-prebuilt"
 version = "0.1.8"
 source = { editable = "../prebuilt" }
 dependencies = [
-    { name = "langchain-core", marker = "python_full_version < '4.0'" },
+    { name = "langchain-core" },
     { name = "langgraph-checkpoint" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "langchain-core", marker = "python_full_version < '4.0'", specifier = ">=0.3.22" },
+    { name = "langchain-core", specifier = ">=0.3.22" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "codespell", specifier = ">=2.2.0,<3" },
+    { name = "codespell" },
     { name = "langgraph", editable = "../langgraph" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-checkpoint-postgres", editable = "../checkpoint-postgres" },
     { name = "langgraph-checkpoint-sqlite", editable = "../checkpoint-sqlite" },
-    { name = "mypy", specifier = ">=1.10.0,<2" },
-    { name = "pytest", specifier = ">=7.2.1,<8" },
-    { name = "pytest-asyncio", specifier = ">=0.21.1,<0.22" },
-    { name = "pytest-mock", specifier = ">=3.11.1,<4" },
-    { name = "pytest-watcher", marker = "python_full_version < '4.0'", specifier = ">=0.4.1" },
-    { name = "ruff", specifier = ">=0.6.2,<0.7" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-mock" },
+    { name = "pytest-watcher" },
+    { name = "ruff" },
 ]
 
 [[package]]
@@ -613,24 +613,24 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aiokafka", specifier = ">=0.11.0,<0.12" },
+    { name = "aiokafka", specifier = ">=0.11.0" },
     { name = "crc32c", specifier = "~=2.7.post1" },
     { name = "langgraph", editable = "../langgraph" },
-    { name = "orjson", specifier = ">=3.10.7,<4" },
+    { name = "orjson", specifier = ">=3.10.7" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "codespell", specifier = ">=2.2.0,<3" },
-    { name = "kafka-python-ng", specifier = ">=2.2.2,<3" },
+    { name = "codespell" },
+    { name = "kafka-python-ng" },
     { name = "langgraph", editable = "../langgraph" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-checkpoint-postgres", editable = "../checkpoint-postgres" },
-    { name = "mypy", specifier = ">=1.10.0,<2" },
-    { name = "pytest", specifier = ">=7.2.1,<8" },
-    { name = "pytest-mock", specifier = ">=3.11.1,<4" },
-    { name = "pytest-watcher", marker = "python_full_version < '4.0'", specifier = ">=0.4.1" },
-    { name = "ruff", specifier = ">=0.6.2,<0.7" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-mock" },
+    { name = "pytest-watcher", marker = "python_full_version < '4.0'" },
+    { name = "ruff" },
 ]
 
 [[package]]
@@ -646,6 +646,17 @@ dependencies = [
 requires-dist = [
     { name = "httpx", specifier = ">=0.25.2" },
     { name = "orjson", specifier = ">=3.10.1" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "codespell" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-mock" },
+    { name = "pytest-watch" },
+    { name = "ruff" },
 ]
 
 [[package]]
