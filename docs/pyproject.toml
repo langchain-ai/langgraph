@@ -13,7 +13,6 @@ aiohappyeyeballs = "2.4.3"
 hub = "^3.0.1"
 xxhash = "^3.5.0"
 black = "^25.1.0"
-langchain-mcp-adapters = "^0.0.11"
 
 [tool.poetry.group.docs.dependencies]
 langgraph = { path = "../libs/langgraph/", develop = true }
