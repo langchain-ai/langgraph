@@ -125,7 +125,7 @@ def draw_graph(
                                     edges.add((task.name, t[0], True, t[2]))
                             writes = [t for t in writes if t[0] != END]
                             conditionals.update(
-                                {(task.name, *t[:2]): t[2] for t in writes}
+                                {(task.name, t[0], t[1] or None): t[2] for t in writes}
                             )
                             task.config[CONF][CONFIG_KEY_SEND]([t[:2] for t in writes])
             # collect sources
