@@ -49,9 +49,6 @@ include = ["langgraph"]
 [tool.pytest.ini_options]
 addopts = "--strict-markers --strict-config --durations=5 -vv"
 
-[tool.uv]
-default-groups = ['dev']
-
 [tool.ruff]
 lint.select = [
   "E",  # pycodestyle
