@@ -31,7 +31,7 @@ install-vercel-deps:
 	curl -sL "https://astral.sh/uv/install.sh" | bash -s
 	export PATH="${HOME}/.cargo/bin:${PATH}"
 	uv venv --python 3.11
-	uv sync --group docs test
+	uv sync --all-groups
 
 tests:
 	# Run unit tests
