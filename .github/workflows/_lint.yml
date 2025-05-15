@@ -8,9 +8,6 @@ on:
         type: string
         description: "From which folder this pipeline executes"
 
-env:
-  POETRY_VERSION: "2.1.2"
-
   # This env var allows us to get inline annotations when ruff has complaints.
   RUFF_OUTPUT_FORMAT: github
 
@@ -36,7 +33,7 @@ jobs:
         uses: Ana06/get-changed-files@v2.3.0
         with:
           filter: "${{ inputs.working-directory }}/**"
-      - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
+      - name: Set up Python ${{ matrix.python-version }}
         if: steps.changed-files.outputs.all
         uses: astral-sh/setup-uv@v6
         with:

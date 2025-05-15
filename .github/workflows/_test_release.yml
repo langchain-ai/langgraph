@@ -9,7 +9,6 @@ on:
         description: "From which folder this pipeline executes"
 
 env:
-  POETRY_VERSION: "2.1.2"
   PYTHON_VERSION: "3.10"
 
 jobs:
@@ -24,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
+      - name: Set up Python $${ env.PYTHON_VERSION }}
         uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}

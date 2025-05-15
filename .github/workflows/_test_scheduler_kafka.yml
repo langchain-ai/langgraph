@@ -3,9 +3,6 @@ name: test
 on:
   workflow_call:
 
-env:
-  POETRY_VERSION: "2.1.2"
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -21,7 +18,7 @@ jobs:
     name: "test #${{ matrix.python-version }}"
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
+      - name: Set up Python ${{ matrix.python-version }}
         uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}

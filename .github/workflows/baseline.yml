@@ -7,9 +7,6 @@ on:
     paths:
       - "libs/**"
 
-env:
-  POETRY_VERSION: "2.1.2"
-
 jobs:
   benchmark:
     runs-on: ubuntu-latest
@@ -19,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: SHA=$(git rev-parse HEAD) && echo "SHA=$SHA" >> $GITHUB_ENV
-      - name: Set up Python 3.11 + Poetry ${{ env.POETRY_VERSION }}
+      - name: Set up Python 3.11
         uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.11"

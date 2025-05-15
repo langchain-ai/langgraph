@@ -9,9 +9,6 @@ on:
       - main
   workflow_dispatch:
 
-env:
-  POETRY_VERSION: "2.1.2"
-
 permissions:
   contents: read
   pages: write
@@ -57,7 +54,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
+      - name: Set up Python
         uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"

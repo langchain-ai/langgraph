@@ -5,9 +5,6 @@ on:
     paths:
       - "libs/**"
 
-env:
-  POETRY_VERSION: "2.1.2"
-
 jobs:
   benchmark:
     runs-on: ubuntu-latest
@@ -21,7 +18,7 @@ jobs:
         uses: Ana06/get-changed-files@v2.3.0
         with:
           format: json
-      - name: Set up Python 3.11 + Poetry ${{ env.POETRY_VERSION }}
+      - name: Set up Python 3.11
         uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.11"

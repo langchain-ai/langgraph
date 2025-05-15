@@ -10,7 +10,6 @@ on:
 
 env:
   PYTHON_VERSION: "3.11"
-  POETRY_VERSION: "2.1.2"
 
 jobs:
   build:
@@ -26,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
+      - name: Set up Python
         uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -163,7 +162,7 @@ jobs:
       # - The package is published, and it breaks on the missing dependency when
       #   used in the real world.
 
-      - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
+      - name: Set up Python
         uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -253,7 +252,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
+      - name: Set up Python
         uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -294,7 +293,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
+      - name: Set up Python
         uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
