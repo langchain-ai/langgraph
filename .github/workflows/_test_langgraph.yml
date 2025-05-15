@@ -36,12 +36,11 @@ jobs:
 
       - name: Install dependencies
         shell: bash
-        run: uv sync
+        run: uv sync --frozen --group dev
 
       - name: Run tests
         shell: bash
-        run: |
-          make test_parallel
+        run: make test_parallel
 
       - name: Ensure the tests did not create any additional files
         shell: bash

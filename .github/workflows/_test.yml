@@ -39,13 +39,12 @@ jobs:
       - name: Install dependencies
         shell: bash
         working-directory: ${{ inputs.working-directory }}
-        run: uv sync --group dev
+        run: uv sync --frozen--group dev
 
       - name: Run tests
         shell: bash
         working-directory: ${{ inputs.working-directory }}
-        run: |
-          make test
+        run: make test
 
       - name: Ensure the tests did not create any additional files
         shell: bash
