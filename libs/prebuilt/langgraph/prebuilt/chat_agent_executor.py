@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import inspect
 from typing import (
     Any,
@@ -327,6 +325,9 @@ def create_react_agent(
         post_model_hook: An optional node to add after the `agent` node (i.e., the node that calls the LLM).
             Useful for implementing human-in-the-loop, guardrails, validation, or other post-processing.
             Post-model hook must be a callable or a runnable that takes in current graph state and returns a state update.
+
+            !!! Note
+                Only available in v2 of `create_react_agent`.
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `remaining_steps` keys.
             Defaults to `AgentState` that defines those two keys.
@@ -623,7 +624,7 @@ def create_react_agent(
         )
 
     # Define the function that determines whether to continue or not
-    def should_continue(state: StateSchema) -> str | list[Send]:
+    def should_continue(state: StateSchema) -> Union[str, list[Send]]:
         messages = _get_state_value(state, "messages")
         last_message = messages[-1]
         # If there is no function call, then we finish
@@ -675,7 +676,6 @@ def create_react_agent(
     # Add a post model hook node if post_model_hook is provided
     if post_model_hook is not None:
         workflow.add_node("post_model_hook", post_model_hook)
-        workflow.add_edge("agent", "post_model_hook")
         agent_paths.append("post_model_hook")
 
     # Add a structured output node if response_format is provided
@@ -690,11 +690,10 @@ def create_react_agent(
             post_model_hook_paths.append("generate_structured_response")
         else:
             agent_paths.append("generate_structured_response")
-            workflow.add_edge("agent", "generate_structured_response")
 
     if post_model_hook is not None:
 
-        def post_model_hook_router(state: StateSchema) -> str | list[Send]:
+        def post_model_hook_router(state: StateSchema) -> Union[str, list[Send]]:
             """Route to the next node after post_model_hook.
 
             Routes to one of:

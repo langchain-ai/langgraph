@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from copy import deepcopy
 from typing import Any, Literal, Optional, Union, cast
 
@@ -161,7 +159,7 @@ class InterruptToolNode(RunnableCallable):
         self,
         tool_call: ToolCall,
         interrupt_config: HumanInterruptConfig,
-    ) -> ToolCall | ToolMessage:
+    ) -> Union[ToolCall, ToolMessage]:
         """Interrupt before a tool call and ask for human input."""
         call_id = tool_call["id"]
         tool_name = tool_call["name"]
