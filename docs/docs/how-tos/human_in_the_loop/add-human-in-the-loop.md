@@ -15,7 +15,7 @@ hide:
 
 The [`interrupt` function][langgraph.types.interrupt] in LangGraph enables human-in-the-loop workflows by pausing the graph at a specific node, presenting information to a human, and resuming the graph with their input. It's useful for tasks like approvals, edits, or gathering additional context.
 
-The graph is resumed using a [`Command`](../reference/types.md#langgraph.types.Command) object that provides the human's response.
+The graph is resumed using a [`Command`][langgraph.types.Command] object that provides the human's response.
 
 ```python
 # highlight-next-line
@@ -530,7 +530,7 @@ def human_node(state: State):
 
 When the `interrupt` function is used within a graph, execution pauses at that point and awaits user input.
 
-To resume execution, use the [`Command`](../reference/types.md#langgraph.types.Command) primitive, which can be supplied via the `invoke`, `ainvoke`, `stream`, or `astream` methods.
+To resume execution, use the [`Command`][langgraph.types.Command] primitive, which can be supplied via the `invoke`, `ainvoke`, `stream`, or `astream` methods.
 
 **Providing a response to the `interrupt`:**
 To continue execution, pass the user's input using `Command(resume=value)`. The graph resumes execution from the beginning of the node where `interrupt(...)` was initially called. This time, the `interrupt` function will return the value provided in `Command(resume=value)` rather than pausing again.
@@ -642,7 +642,7 @@ Place code with side effects, such as API calls, **after** the `interrupt` to av
 
 ### Subgraphs called as functions
 
-When invoking a subgraph [as a function](low_level.md#as-a-function), the **parent graph** will resume execution from the **beginning of the node** where the subgraph was invoked (and where an `interrupt` was triggered). Similarly, the **subgraph**, will resume from the **beginning of the node** where the `interrupt()` function was called.
+When invoking a subgraph [as a function](../../how-tos/subgraph.ipynb#different-state-schemas), the **parent graph** will resume execution from the **beginning of the node** where the subgraph was invoked (and where an `interrupt` was triggered). Similarly, the **subgraph**, will resume from the **beginning of the node** where the `interrupt()` function was called.
 
 For example,
 

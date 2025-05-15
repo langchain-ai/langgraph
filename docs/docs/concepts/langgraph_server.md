@@ -7,7 +7,7 @@ search:
 
 **LangGraph Server** offers an API for creating and managing agent-based applications. It is built on the concept of [assistants](assistants.md), which are agents configured for specific tasks, and includes built-in [persistence](persistence.md#memory-store) and a **task queue**. This versatile API supports a wide range of agentic application use cases, from background processing to real-time interactions.
 
-Use LangGraph Serverto create and manage [assistants](assistants.md), [threads](../cloud/concepts/threads.md), [runs](../cloud/concepts/runs.md), [cron jobs](../cloud/concepts/cron_jobs.md), [webhooks](../cloud/concepts/webhooks.md), and more.
+Use LangGraph Server to create and manage [assistants](assistants.md), [threads](../cloud/concepts/threads.md), [runs](../cloud/concepts/runs.md), [cron jobs](../cloud/concepts/cron_jobs.md), [webhooks](../cloud/concepts/webhooks.md), and more.
 
 !!! tip "API reference"
   
@@ -24,7 +24,7 @@ Feature Differences:
 
 |       | Lite       | Enterprise |
 |-------|------------|------------|
-| [Cron Jobs](../clouds/concepts/cron-jobs.md) |❌|✅|
+| [Cron Jobs](../cloud/concepts/cron_jobs.md) |❌|✅|
 | [Custom Authentication](../concepts/auth.md) |❌|✅|
 | [Deployment options](../concepts/deployment_options.md) | Standalone container | Cloud Saas, Self-Hosted Data Plane, Self-Hosted Control Plane, Standalone container
 

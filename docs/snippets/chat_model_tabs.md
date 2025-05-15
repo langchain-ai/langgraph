@@ -45,7 +45,6 @@
     )
     ```
 
-
 === "Google Gemini"
 
     ```
@@ -66,7 +65,6 @@
     pip install -U "langchain[aws]"
     ```
     ```python
-    import os
     from langchain.chat_models import init_chat_model
 
     # Follow the steps here to configure your credentials:

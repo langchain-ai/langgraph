@@ -8,7 +8,7 @@ Please see [the overview of LangGraph human-in-the-loop](../../concepts/human_in
 
 The [`interrupt` function][langgraph.types.interrupt] in LangGraph enables human-in-the-loop workflows by pausing the graph at a specific node, presenting information to a human, and resuming the graph with their input. It's useful for tasks like approvals, edits, or gathering additional context.
 
-The graph is resumed using a [`Command`](../reference/types.md#langgraph.types.Command) object that provides the human's response.
+The graph is resumed using a [`Command`][langgraph.types.Command] object that provides the human's response.
 
 **Graph node with `interrupt`:**
 

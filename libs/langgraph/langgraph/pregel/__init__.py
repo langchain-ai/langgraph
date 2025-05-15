@@ -2486,7 +2486,6 @@ class Pregel(PregelProtocol):
                         CONFIG_KEY_RUNNER_SUBMIT, weakref.WeakMethod(loop.submit)
                     ),
                     put_writes=weakref.WeakMethod(loop.put_writes),
-                    schedule_task=weakref.WeakMethod(loop.accept_push),
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
                 )
                 # enable subgraph streaming
@@ -2529,7 +2528,7 @@ class Pregel(PregelProtocol):
                         [t for t in loop.tasks.values() if not t.writes],
                         timeout=self.step_timeout,
                         get_waiter=get_waiter,
-                        match_cached_writes=loop.match_cached_writes,
+                        schedule_task=loop.accept_push,
                     ):
                         # emit output
                         yield from output()
@@ -2799,7 +2798,6 @@ class Pregel(PregelProtocol):
                         CONFIG_KEY_RUNNER_SUBMIT, weakref.WeakMethod(loop.submit)
                     ),
                     put_writes=weakref.WeakMethod(loop.put_writes),
-                    schedule_task=weakref.WeakMethod(loop.accept_push),
                     use_astream=do_stream,
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
                 )
@@ -2833,7 +2831,7 @@ class Pregel(PregelProtocol):
                         [t for t in loop.tasks.values() if not t.writes],
                         timeout=self.step_timeout,
                         get_waiter=get_waiter,
-                        match_cached_writes=loop.amatch_cached_writes,
+                        schedule_task=loop.aaccept_push,
                     ):
                         # emit output
                         for o in output():

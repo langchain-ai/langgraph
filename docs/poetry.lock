@@ -3475,7 +3475,7 @@ requests = ">=2,<3"
 
 [[package]]
 name = "langchain-mcp-adapters"
-version = "0.0.9"
+version = "0.0.11"
 description = "Make Anthropic Model Context Protocol (MCP) tools compatible with LangChain and LangGraph agents."
 optional = false
 python-versions = ">=3.10"
@@ -3485,13 +3485,13 @@ develop = false
 
 [package.dependencies]
 langchain-core = ">=0.3.36,<0.4"
-mcp = ">=1.4.1,<1.7"
+mcp = ">=1.7"
 
 [package.source]
 type = "git"
 url = "https://github.com/langchain-ai/langchain-mcp-adapters"
 reference = "HEAD"
-resolved_reference = "85eb1dcb4c5c86008feca287d9195e67861ad2d7"
+resolved_reference = "6ff44821881dc7f6208f7b38c50a14127be9a269"
 
 [[package]]
 name = "langchain-mistralai"
@@ -3597,7 +3597,7 @@ langchain-core = ">=0.3.51,<1.0.0"
 
 [[package]]
 name = "langgraph"
-version = "0.4.0"
+version = "0.4.5"
 description = "Building stateful, multi-actor applications with LLMs"
 optional = false
 python-versions = ">=3.9"
@@ -3607,9 +3607,10 @@ develop = true
 
 [package.dependencies]
 langchain-core = {version = ">=0.1", markers = "python_version < \"4.0\""}
-langgraph-checkpoint = "^2.0.10"
+langgraph-checkpoint = "^2.0.26"
 langgraph-prebuilt = {version = ">=0.1.8", markers = "python_version < \"4.0\""}
 langgraph-sdk = {version = ">=0.1.42", markers = "python_version < \"4.0\""}
+pydantic = ">=2.7.4"
 xxhash = "^3.5.0"
 
 [package.source]
@@ -3618,7 +3619,7 @@ url = "../libs/langgraph"
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.0.25"
+version = "2.0.26"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 optional = false
 python-versions = ">=3.9"
@@ -3673,7 +3674,7 @@ url = "../libs/checkpoint-postgres"
 
 [[package]]
 name = "langgraph-checkpoint-sqlite"
-version = "2.0.6"
+version = "2.0.7"
 description = "Library with a SQLite implementation of LangGraph checkpoint saver."
 optional = false
 python-versions = ">=3.9"
@@ -3709,7 +3710,7 @@ url = "../libs/prebuilt"
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.1.63"
+version = "0.1.69"
 description = "SDK for interacting with LangGraph API"
 optional = false
 python-versions = ">=3.9"
@@ -4077,14 +4078,14 @@ traitlets = "*"
 
 [[package]]
 name = "mcp"
-version = "1.6.0"
+version = "1.8.1"
 description = "Model Context Protocol SDK"
 optional = false
 python-versions = ">=3.10"
 groups = ["docs"]
 files = [
-    {file = "mcp-1.6.0-py3-none-any.whl", hash = "sha256:7bd24c6ea042dbec44c754f100984d186620d8b841ec30f1b19eda9b93a634d0"},
-    {file = "mcp-1.6.0.tar.gz", hash = "sha256:d9324876de2c5637369f43161cd71eebfd803df5a95e46225cab8d280e366723"},
+    {file = "mcp-1.8.1-py3-none-any.whl", hash = "sha256:948e03783859fa35abe05b9b6c0a1d5519be452fc079dc8d7f682549591c1770"},
+    {file = "mcp-1.8.1.tar.gz", hash = "sha256:ec0646271d93749f784d2316fb5fe6102fb0d1be788ec70a9e2517e8f2722c0e"},
 ]
 
 [package.dependencies]
@@ -4093,9 +4094,10 @@ httpx = ">=0.27"
 httpx-sse = ">=0.4"
 pydantic = ">=2.7.2,<3.0.0"
 pydantic-settings = ">=2.5.2"
+python-multipart = ">=0.0.9"
 sse-starlette = ">=1.6.1"
 starlette = ">=0.27"
-uvicorn = ">=0.23.1"
+uvicorn = {version = ">=0.23.1", markers = "sys_platform != \"emscripten\""}
 
 [package.extras]
 cli = ["python-dotenv (>=1.0.0)", "typer (>=0.12.4)"]
@@ -6713,6 +6715,18 @@ files = [
 dev = ["backports.zoneinfo ; python_version < \"3.9\"", "black", "build", "freezegun", "mdx_truly_sane_lists", "mike", "mkdocs", "mkdocs-awesome-pages-plugin", "mkdocs-gen-files", "mkdocs-literate-nav", "mkdocs-material (>=8.5)", "mkdocstrings[python]", "msgspec ; implementation_name != \"pypy\"", "mypy", "orjson ; implementation_name != \"pypy\"", "pylint", "pytest", "tzdata", "validate-pyproject[all]"]
 
 [[package]]
+name = "python-multipart"
+version = "0.0.20"
+description = "A streaming multipart parser for Python"
+optional = false
+python-versions = ">=3.8"
+groups = ["docs"]
+files = [
+    {file = "python_multipart-0.0.20-py3-none-any.whl", hash = "sha256:8a62d3a8335e06589fe01f2a3e178cdcc632f3fbe0d492ad9ee0ec35aab1f104"},
+    {file = "python_multipart-0.0.20.tar.gz", hash = "sha256:8dd0cab45b8e23064ae09147625994d090fa46f5b0d1e13af944c331a7fa9d13"},
+]
+
+[[package]]
 name = "pytz"
 version = "2025.2"
 description = "World timezone definitions, modern and historical"
@@ -8303,6 +8317,7 @@ files = [
     {file = "uvicorn-0.34.2-py3-none-any.whl", hash = "sha256:deb49af569084536d269fe0a6d67e3754f104cf03aba7c11c40f01aadf33c403"},
     {file = "uvicorn-0.34.2.tar.gz", hash = "sha256:0e929828f6186353a80b58ea719861d2629d766293b6d19baf086ba31d4f3328"},
 ]
+markers = {docs = "sys_platform != \"emscripten\""}
 
 [package.dependencies]
 click = ">=7.0"

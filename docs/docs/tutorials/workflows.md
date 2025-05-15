@@ -122,8 +122,8 @@ As noted in the Anthropic blog on `Building Effective Agents`:
 
         # Simple check - does the joke contain "?" or "!"
         if "?" in state["joke"] or "!" in state["joke"]:
-            return "Fail"
-        return "Pass"
+            return "Pass"
+        return "Fail"
 
 
     def improve_joke(state: State):
