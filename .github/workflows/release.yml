@@ -58,8 +58,8 @@ jobs:
         shell: bash
         working-directory: ${{ inputs.working-directory }}
         run: |
-          PKG_NAME="$(poetry version | cut -d ' ' -f 1)"
-          VERSION="$(poetry version --short)"
+          PKG_NAME=$(grep -m 1 "^name = " pyproject.toml | cut -d '"' -f 2)
+          VERSION=$(grep -m 1 "^version = " pyproject.toml | cut -d '"' -f 2)
           SHORT_PKG_NAME="$(echo "$PKG_NAME" | sed -e 's/langgraph//g' -e 's/-//g')"
           if [ -z $SHORT_PKG_NAME ]; then
             TAG="$VERSION"

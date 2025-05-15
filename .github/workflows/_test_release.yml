@@ -56,8 +56,8 @@ jobs:
         shell: bash
         working-directory: ${{ inputs.working-directory }}
         run: |
-          echo pkg-name="$(poetry version | cut -d ' ' -f 1)" >> $GITHUB_OUTPUT
-          echo version="$(poetry version --short)" >> $GITHUB_OUTPUT
+          echo pkg-name=$(grep -m 1 "^name = " pyproject.toml | cut -d '"' -f 2)
+          echo version=$(grep -m 1 "^version = " pyproject.toml | cut -d '"' -f 2)
 
   publish:
     needs:
