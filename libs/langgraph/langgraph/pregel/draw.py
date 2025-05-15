@@ -133,8 +133,8 @@ def draw_graph(
                 task.name: {
                     (
                         w[0],
-                        (task.name, *w) in conditionals,
-                        conditionals.get((task.name, *w)),
+                        (task.name, w[0], w[1] or None) in conditionals,
+                        conditionals.get((task.name, w[0], w[1] or None)),
                     )
                     for w in task.writes
                 }
