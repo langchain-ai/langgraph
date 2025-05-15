@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph"
-version = "0.4.3"
+version = "0.4.5"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 requires-python = ">=3.9"
@@ -13,7 +13,7 @@ license = "MIT"
 license-files = ['LICENSE']
 dependencies = [
     "langchain-core>=0.1",
-    "langgraph-checkpoint>=2.0.10",
+    "langgraph-checkpoint>=2.0.26",
     "langgraph-sdk>=0.1.42",
     "langgraph-prebuilt>=0.1.8",
     "xxhash>=3.5.0",

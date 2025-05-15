@@ -1079,6 +1079,13 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
                 matched.append(task)
         return matched
 
+    def accept_push(
+        self, task: PregelExecutableTask, write_idx: int, call: Optional[Call] = None
+    ) -> Optional[PregelExecutableTask]:
+        if pushed := super().accept_push(task, write_idx, call):
+            self.match_cached_writes()
+        return pushed
+
     def put_writes(self, task_id: str, writes: WritesT) -> None:
         """Put writes for a task, to be read by the next tick."""
         super().put_writes(task_id, writes)
@@ -1267,6 +1274,13 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
                 task.writes.extend(values)
                 matched.append(task)
         return matched
+
+    async def aaccept_push(
+        self, task: PregelExecutableTask, write_idx: int, call: Optional[Call] = None
+    ) -> Optional[PregelExecutableTask]:
+        if pushed := super().accept_push(task, write_idx, call):
+            await self.amatch_cached_writes()
+        return pushed
 
     def put_writes(self, task_id: str, writes: WritesT) -> None:
         """Put writes for a task, to be read by the next tick."""

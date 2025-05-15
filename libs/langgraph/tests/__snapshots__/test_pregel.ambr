@@ -396,6 +396,61 @@
   
   '''
 # ---
+# name: test_get_graph_root_channel
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnablePassthrough"
+          ],
+          "name": "__start__"
+        }
+      },
+      {
+        "id": "child",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "graph",
+            "state",
+            "CompiledStateGraph"
+          ],
+          "name": "child"
+        }
+      },
+      {
+        "id": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "child"
+      },
+      {
+        "source": "child",
+        "target": "__end__"
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_get_graph_root_channel.1
+  '''
+  graph TD;
+  	__start__ --> child;
+  	child --> __end__;
+  
+  '''
+# ---
 # name: test_get_graph_self_loop
   '''
   {

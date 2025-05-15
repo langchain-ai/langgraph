@@ -108,7 +108,12 @@ def draw_graph(
                 for w in task.writers:
                     # apply regular writes
                     if isinstance(w, ChannelWrite):
-                        w.invoke(None, task.config)
+                        empty_input = (
+                            cast(BaseChannel, specs["__root__"]).ValueType()
+                            if "__root__" in specs
+                            else None
+                        )
+                        w.invoke(empty_input, task.config)
                     # apply conditional writes declared for static analysis, only once
                     if w not in static_seen:
                         static_seen.add(w)
@@ -120,7 +125,7 @@ def draw_graph(
                                     edges.add((task.name, t[0], True, t[2]))
                             writes = [t for t in writes if t[0] != END]
                             conditionals.update(
-                                {(task.name, *t[:2]): t[2] for t in writes}
+                                {(task.name, t[0], t[1] or None): t[2] for t in writes}
                             )
                             task.config[CONF][CONFIG_KEY_SEND]([t[:2] for t in writes])
             # collect sources
@@ -128,8 +133,8 @@ def draw_graph(
                 task.name: {
                     (
                         w[0],
-                        (task.name, *w) in conditionals,
-                        conditionals.get((task.name, *w)),
+                        (task.name, w[0], w[1] or None) in conditionals,
+                        conditionals.get((task.name, w[0], w[1] or None)),
                     )
                     for w in task.writes
                 }
