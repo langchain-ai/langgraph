@@ -3,7 +3,7 @@ import sqlite3
 import threading
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import closing, contextmanager
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from langchain_core.runnables import RunnableConfig
 
@@ -262,7 +262,12 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                 return CheckpointTuple(
                     config,
                     self.serde.loads_typed((type, checkpoint)),
-                    self.jsonplus_serde.loads(metadata) if metadata is not None else {},
+                    cast(
+                        CheckpointMetadata,
+                        self.jsonplus_serde.loads(metadata)
+                        if metadata is not None
+                        else {},
+                    ),
                     (
                         {
                             "configurable": {
@@ -350,7 +355,12 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                         }
                     },
                     self.serde.loads_typed((type, checkpoint)),
-                    self.jsonplus_serde.loads(metadata) if metadata is not None else {},
+                    cast(
+                        CheckpointMetadata,
+                        self.jsonplus_serde.loads(metadata)
+                        if metadata is not None
+                        else {},
+                    ),
                     (
                         {
                             "configurable": {

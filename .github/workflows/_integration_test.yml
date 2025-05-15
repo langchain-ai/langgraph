@@ -27,6 +27,7 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
+          enable-cache: true
           cache-suffix: "integration-test-cli"
       - name: Setup env
         if: steps.changed-files.outputs.all
