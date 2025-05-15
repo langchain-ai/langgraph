@@ -20,8 +20,7 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      # python: ${{ steps.filter.outputs.python }}
-      python: true
+      python: ${{ steps.filter.outputs.python }}
       sdk-js: ${{ steps.filter.outputs.sdk-js }}
     steps:
       - uses: actions/checkout@v4
