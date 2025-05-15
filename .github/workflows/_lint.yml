@@ -43,11 +43,6 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
           cache-suffix: lint-${{ inputs.working-directory }}
-      - name: Check Poetry File
-        if: steps.changed-files.outputs.all
-        shell: bash
-        working-directory: ${{ inputs.working-directory }}
-        run: poetry check
 
       - name: Install dependencies
         if: steps.changed-files.outputs.all
