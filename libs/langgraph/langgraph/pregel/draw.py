@@ -108,7 +108,11 @@ def draw_graph(
                 for w in task.writers:
                     # apply regular writes
                     if isinstance(w, ChannelWrite):
-                        empty_input = "" if "__root__" in specs else None
+                        empty_input = (
+                            specs["__root__"].ValueType()
+                            if "__root__" in specs
+                            else None
+                        )
                         w.invoke(empty_input, task.config)
                     # apply conditional writes declared for static analysis, only once
                     if w not in static_seen:
