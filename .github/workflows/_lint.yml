@@ -45,7 +45,7 @@ jobs:
       - name: Install dependencies
         if: steps.changed-files.outputs.all
         working-directory: ${{ inputs.working-directory }}
-        run: uv sync --group dev
+        run: uv sync --frozen --group dev
 
       - name: Get .mypy_cache to speed up mypy
         if: steps.changed-files.outputs.all
