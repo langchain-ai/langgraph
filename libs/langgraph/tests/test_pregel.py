@@ -8757,12 +8757,12 @@ def test_get_graph_self_loop(snapshot: SnapshotAssertion) -> None:
 
 
 def test_get_graph_root_channel(snapshot: SnapshotAssertion) -> None:
-    child_builder = StateGraph(str)
+    child_builder = StateGraph(list)
     child_builder.add_node("child_node", lambda x: x)
     child_builder.add_edge(START, "child_node")
     child_graph = child_builder.compile()
 
-    graph_builder = StateGraph(str)
+    graph_builder = StateGraph(list)
     graph_builder.add_node("child", child_graph)
     graph_builder.add_edge(START, "child")
     graph = graph_builder.compile()
