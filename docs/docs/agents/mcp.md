@@ -29,7 +29,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.prebuilt import create_react_agent
 
 # highlight-next-line
-async with MultiServerMCPClient(
+client = MultiServerMCPClient(
     {
         "math": {
             "command": "python",
@@ -39,22 +39,24 @@ async with MultiServerMCPClient(
         },
         "weather": {
             # Ensure your start your weather server on port 8000
-            "url": "http://localhost:8000/sse",
-            "transport": "sse",
+            "url": "http://localhost:8000/mcp",
+            "transport": "streamable_http",
         }
     }
-) as client:
-    agent = create_react_agent(
-        "anthropic:claude-3-7-sonnet-latest",
-        # highlight-next-line
-        client.get_tools()
-    )
-    math_response = await agent.ainvoke(
-        {"messages": [{"role": "user", "content": "what's (3 + 5) x 12?"}]}
-    )
-    weather_response = await agent.ainvoke(
-        {"messages": [{"role": "user", "content": "what is the weather in nyc?"}]}
-    )
+)
+# highlight-next-line
+tools = await client.get_tools()
+agent = create_react_agent(
+    "anthropic:claude-3-7-sonnet-latest",
+    # highlight-next-line
+    tools
+)
+math_response = await agent.ainvoke(
+    {"messages": [{"role": "user", "content": "what's (3 + 5) x 12?"}]}
+)
+weather_response = await agent.ainvoke(
+    {"messages": [{"role": "user", "content": "what is the weather in nyc?"}]}
+)
 ```
 
 ## Custom MCP servers
@@ -87,7 +89,7 @@ if __name__ == "__main__":
     mcp.run(transport="stdio")
 ```
 
-```python title="Example Weather Server (SSE transport)"
+```python title="Example Weather Server (Streamable HTTP transport)"
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("Weather")
@@ -98,7 +100,7 @@ async def get_weather(location: str) -> str:
     return "It's always sunny in New York"
 
 if __name__ == "__main__":
-    mcp.run(transport="sse")
+    mcp.run(transport="streamable-http")
 ```
 
 ## Additional resources
