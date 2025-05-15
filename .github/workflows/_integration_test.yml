@@ -27,11 +27,10 @@ jobs:
           filter: "libs/cli/**"
       - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
         if: steps.changed-files.outputs.all
-        uses: "./.github/actions/poetry_setup"
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
-          poetry-version: ${{ env.POETRY_VERSION }}
-          cache-key: integration-test-cli
+          cache-suffix: "integration-test-cli"
       - name: Setup env
         if: steps.changed-files.outputs.all
         working-directory: libs/cli/examples

@@ -126,25 +126,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
-        uses: "./.github/actions/poetry_setup"
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.11"
-          poetry-version: ${{ env.POETRY_VERSION }}
-          cache-key: schema-check-cli
+          enable-cache: true
+          cache-suffix: "schema-check-cli"
       - name: Install CLI dependencies
         run: |
           cd libs/cli
-          poetry install
+          uv sync
       - name: Generate schema and check for changes
         run: |
           cd libs/cli
           # Create a temporary copy of the current schema
           cp schemas/schema.json schemas/schema.current.json
           # Generate new schema
-          poetry run python generate_schema.py
+          uv run python generate_schema.py
           # Compare the new schema with the original
           if ! diff -q schemas/schema.json schemas/schema.current.json > /dev/null; then
-            echo "Error: Langgraph.json configuration schema has changed. Please run 'poetry run python generate_schema.py' in the libs/cli directory and commit the changes."
+            echo "Error: Langgraph.json configuration schema has changed. Please run 'uv run python generate_schema.py' in the libs/cli directory and commit the changes."
             diff schemas/schema.json schemas/schema.current.json
             exit 1
           fi

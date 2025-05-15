@@ -22,13 +22,13 @@ jobs:
         with:
           format: json
       - name: Set up Python 3.11 + Poetry ${{ env.POETRY_VERSION }}
-        uses: "./.github/actions/poetry_setup"
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.11"
-          poetry-version: ${{ env.POETRY_VERSION }}
-          cache-key: bench
+          enable-cache: true
+          cache-suffix: "bench"
       - name: Install dependencies
-        run: poetry install --with dev
+        run: uv sync --group dev
       - name: Download baseline
         uses: actions/cache/restore@v4
         with:
@@ -53,7 +53,7 @@ jobs:
             echo 'OUTPUT<<EOF'
             mv out/benchmark-baseline.json out/main.json
             mv out/benchmark.json out/changes.json
-            poetry run pyperf compare_to out/main.json out/changes.json --table --group-by-speed
+            uv run pyperf compare_to out/main.json out/changes.json --table --group-by-speed
             echo EOF
           } >> "$GITHUB_OUTPUT"
       - name: Annotation

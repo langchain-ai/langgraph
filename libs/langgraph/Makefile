@@ -11,10 +11,7 @@ all: help
 
 OUTPUT ?= out/benchmark.json
 
-.uv: ## Check that uv is installed
-	@uv --version || echo 'Please install uv: https://docs.astral.sh/uv/getting-started/installation/'
-
-install: .uv  ## Install dependencies
+install:  ## Install dependencies
 	uv sync --frozen --all-extras --all-packages --group dev
 
 benchmark: .uv
@@ -22,19 +19,19 @@ benchmark: .uv
 	rm -f $(OUTPUT)
 	uv run python -m bench -o $(OUTPUT) --rigorous
 
-benchmark-fast: .uv
+benchmark-fast:
 	mkdir -p out
 	rm -f $(OUTPUT)
 	uv run python -m bench -o $(OUTPUT) --fast
 
 GRAPH ?= bench/fanout_to_subgraph.py
 
-profile: .uv
+profile:
 	mkdir -p out
 	sudo uv run py-spy record -g -o out/profile.svg -- python $(GRAPH)
 
 # Run unit tests and generate a coverage report.
-coverage: .uv
+coverage:
 	uv run pytest --cov \
 		--cov-config=.coveragerc \
 		--cov-report xml \
@@ -46,7 +43,7 @@ start-postgres:
 stop-postgres:
 	docker compose -f tests/compose-postgres.yml down -v
 
-start-dev-server: .uv
+start-dev-server:
 	uv run langgraph dev --config tests/example_app/langgraph.json --no-browser &
 	@echo "Dev server started."
 	@echo "Dev server PID: $$!" > .devserver.pid
@@ -61,7 +58,7 @@ stop-dev-server:
 
 TEST ?= .
 
-test: .uv
+test:
 	make start-postgres &&\
 	make start-dev-server &&\
 	uv run pytest $(TEST); \
@@ -70,7 +67,7 @@ test: .uv
 	make stop-dev-server; \
 	exit $$EXIT_CODE
 
-test_parallel: .uv
+test_parallel:
 	make start-postgres &&\
 	make start-dev-server &&\
 	uv run pytest -n auto --dist worksteal $(TEST); \
@@ -79,7 +76,7 @@ test_parallel: .uv
 	make stop-dev-server; \
 	exit $$EXIT_CODE
 
-integration_tests: .uv
+integration_tests:
 	uv run pytest integration_tests
 
 WORKERS ?= auto
@@ -115,21 +112,21 @@ lint_package: PYTHON_FILES=langgraph
 lint_tests: PYTHON_FILES=tests
 lint_tests: MYPY_CACHE=.mypy_cache_test
 
-lint lint_diff lint_package lint_tests: .uv
+lint lint_diff lint_package lint_tests:
 	uv run ruff check .
 	[ "$(PYTHON_FILES)" = "" ] || uv run ruff format $(PYTHON_FILES) --diff
 	[ "$(PYTHON_FILES)" = "" ] || uv run ruff check --select I $(PYTHON_FILES)
 	[ "$(PYTHON_FILES)" = "" ] || mkdir -p $(MYPY_CACHE)
 	[ "$(PYTHON_FILES)" = "" ] || uv run mypy langgraph --cache-dir $(MYPY_CACHE)
 
-format format_diff: .uv
+format format_diff:
 	uv run ruff format $(PYTHON_FILES)
 	uv run ruff check --select I --fix $(PYTHON_FILES)
 
-spell_check: .uv
+spell_check:
 	uv run codespell --toml pyproject.toml
 
-spell_fix: .uv
+spell_fix:
 	uv run codespell --toml pyproject.toml -w
 
 

@@ -27,11 +27,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
-        uses: "./.github/actions/poetry_setup"
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          poetry-version: ${{ env.POETRY_VERSION }}
-          cache-key: release
+          enable-cache: true
+          cache-suffix: "release"
 
       # We want to keep this build stage *separate* from the release stage,
       # so that there's no sharing of permissions between them.
@@ -45,7 +45,7 @@ jobs:
       # > from the publish job.
       # https://github.com/pypa/gh-action-pypi-publish#non-goals
       - name: Build project for distribution
-        run: poetry build
+        run: uv build
         working-directory: ${{ inputs.working-directory }}
 
       - name: Upload build
@@ -164,10 +164,10 @@ jobs:
       #   used in the real world.
 
       - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
-        uses: "./.github/actions/poetry_setup"
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          poetry-version: ${{ env.POETRY_VERSION }}
+          enable-cache: true
 
       - name: Import published package
         shell: bash
@@ -185,18 +185,18 @@ jobs:
         # - attempt install again after 5 seconds if it fails because there is
         #   sometimes a delay in availability on test pypi
         run: |
-          poetry run pip install \
+          uv run pip install \
             --extra-index-url https://test.pypi.org/simple/ \
             "$PKG_NAME==$VERSION" || \
           ( \
             sleep 5 && \
-            poetry run pip install \
+            uv run pip install \
               --extra-index-url https://test.pypi.org/simple/ \
               "$PKG_NAME==$VERSION" \
           )
 
           if [[ "$PKG_NAME" == *prebuilt* ]]; then
-            poetry run pip install langgraph
+            uv run pip install langgraph
           fi
 
           if [[ "$PKG_NAME" == *checkpoint* || "$PKG_NAME" == *prebuilt* ]]; then
@@ -209,10 +209,10 @@ jobs:
             IMPORT_NAME="$(echo "$PKG_NAME" | sed s/-/_/g)"
           fi
 
-          poetry run python -c "import $IMPORT_NAME; print(dir($IMPORT_NAME))"
+          uv run python -c "import $IMPORT_NAME; print(dir($IMPORT_NAME))"
 
       - name: Import test dependencies
-        run: poetry install --with dev
+        run: uv sync --group dev
         working-directory: ${{ inputs.working-directory }}
 
       # Overwrite the local version of the package with the test PyPI version.
@@ -223,7 +223,7 @@ jobs:
           PKG_NAME: ${{ needs.build.outputs.pkg-name }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          poetry run pip install \
+          uv run pip install \
             --extra-index-url https://test.pypi.org/simple/ \
             "$PKG_NAME==$VERSION"
 
@@ -254,11 +254,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
-        uses: "./.github/actions/poetry_setup"
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          poetry-version: ${{ env.POETRY_VERSION }}
-          cache-key: release
+          enable-cache: true
+          cache-suffix: release
 
       - uses: actions/download-artifact@v4
         with:
@@ -295,11 +295,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
-        uses: "./.github/actions/poetry_setup"
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          poetry-version: ${{ env.POETRY_VERSION }}
-          cache-key: release
+          enable-cache: true
+          cache-suffix: release
 
       - uses: actions/download-artifact@v4
         with:

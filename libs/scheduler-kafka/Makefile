@@ -13,13 +13,13 @@ stop-services:
 TEST_PATH ?= .
 
 test:
-	make start-services && poetry run pytest $(TEST_PATH); \
+	make start-services && uv run pytest $(TEST_PATH); \
 	EXIT_CODE=$$?; \
 	make stop-services; \
 	exit $$EXIT_CODE
 
 test_watch:
-	make start-services && poetry run ptw . -- -x $(TEST_PATH); \
+	make start-services && uv run ptw . -- -x $(TEST_PATH); \
 	EXIT_CODE=$$?; \
 	make stop-services; \
 	exit $$EXIT_CODE
@@ -38,11 +38,11 @@ lint_tests: PYTHON_FILES=tests
 lint_tests: MYPY_CACHE=.mypy_cache_test
 
 lint lint_diff lint_package lint_tests:
-	poetry run ruff check .
-	[ "$(PYTHON_FILES)" = "" ] || poetry run ruff format $(PYTHON_FILES) --diff
-	[ "$(PYTHON_FILES)" = "" ] || poetry run ruff check --select I $(PYTHON_FILES)
-	[ "$(PYTHON_FILES)" = "" ] || mkdir -p $(MYPY_CACHE) || poetry run mypy $(PYTHON_FILES) --cache-dir $(MYPY_CACHE)
+	uv run ruff check .
+	[ "$(PYTHON_FILES)" = "" ] || uv run ruff format $(PYTHON_FILES) --diff
+	[ "$(PYTHON_FILES)" = "" ] || uv run ruff check --select I $(PYTHON_FILES)
+	[ "$(PYTHON_FILES)" = "" ] || mkdir -p $(MYPY_CACHE) || uv run mypy $(PYTHON_FILES) --cache-dir $(MYPY_CACHE)
 
 format format_diff:
-	poetry run ruff format $(PYTHON_FILES)
-	poetry run ruff check --select I --fix $(PYTHON_FILES)
+	uv run ruff format $(PYTHON_FILES)
+	uv run ruff check --select I --fix $(PYTHON_FILES)
