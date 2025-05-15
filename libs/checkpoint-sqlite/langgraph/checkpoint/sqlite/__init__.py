@@ -1,8 +1,9 @@
 import random
 import sqlite3
 import threading
+from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import closing, contextmanager
-from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple
+from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
 
@@ -283,7 +284,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         self,
         config: Optional[RunnableConfig],
         *,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[CheckpointTuple]:
@@ -428,7 +429,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
     def put_writes(
         self,
         config: RunnableConfig,
-        writes: Sequence[Tuple[str, Any]],
+        writes: Sequence[tuple[str, Any]],
         task_id: str,
         task_path: str = "",
     ) -> None:
@@ -496,7 +497,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         self,
         config: Optional[RunnableConfig],
         *,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> AsyncIterator[CheckpointTuple]:
