@@ -109,7 +109,7 @@ def draw_graph(
                     # apply regular writes
                     if isinstance(w, ChannelWrite):
                         empty_input = (
-                            specs["__root__"].ValueType()
+                            cast(BaseChannel, specs["__root__"]).ValueType()
                             if "__root__" in specs
                             else None
                         )
