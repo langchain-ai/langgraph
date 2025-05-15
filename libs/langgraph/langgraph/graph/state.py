@@ -1114,7 +1114,7 @@ def _get_root(input: Any) -> Optional[Sequence[tuple[str, Any]]]:
             else:
                 updates.append(("__root__", i))
         return updates
-    elif input is not None:
+    else:
         return [("__root__", input)]
 
 

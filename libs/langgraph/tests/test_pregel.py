@@ -8754,3 +8754,18 @@ def test_get_graph_self_loop(snapshot: SnapshotAssertion) -> None:
 
     assert json.dumps(self_loop_graph.get_graph().to_json(), indent=2) == snapshot
     assert self_loop_graph.get_graph().draw_mermaid(with_styles=False) == snapshot
+
+
+def test_get_graph_root_channel(snapshot: SnapshotAssertion) -> None:
+    child_builder = StateGraph(str)
+    child_builder.add_node("child_node", lambda x: x)
+    child_builder.add_edge(START, "child_node")
+    child_graph = child_builder.compile()
+
+    graph_builder = StateGraph(str)
+    graph_builder.add_node("child", child_graph)
+    graph_builder.add_edge(START, "child")
+    graph = graph_builder.compile()
+
+    assert json.dumps(graph.get_graph().to_json(), indent=2) == snapshot
+    assert graph.get_graph().draw_mermaid(with_styles=False) == snapshot
