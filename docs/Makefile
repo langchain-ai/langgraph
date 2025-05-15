@@ -28,7 +28,8 @@ llms-text:
 	uv run python -m _scripts.generate_llms_text docs/llms-full.txt
 
 install-vercel-deps:
-	uv python install 3.11
+	curl -sL "https://astral.sh/uv/install.sh" | bash -s
+	export PATH="${HOME}/.cargo/bin:${PATH}"
 	uv venv --python 3.11
 	uv sync --group docs test
 
