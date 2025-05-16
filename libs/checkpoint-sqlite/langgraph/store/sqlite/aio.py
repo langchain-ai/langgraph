@@ -1016,26 +1016,3 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
             await cur.execute(query, params)
             rows = await cur.fetchall()
             results[idx] = [_decode_ns_text(row[0]) for row in rows]
-
-    def put(
-        self,
-        namespace: tuple[str, ...],
-        key: str,
-        value: dict[str, Any],
-        index: Union[bool, list[str], None] = None,
-    ) -> None:
-        """Sync operation - not supported in AsyncSqliteStore.
-
-        Use SqliteStore for synchronous operations.
-        """
-        try:
-            if asyncio.get_running_loop() is self.loop:
-                raise asyncio.InvalidStateError(
-                    "Synchronous calls to AsyncSqliteStore are only allowed from a "
-                    "different thread. From the main thread, use the async interface."
-                )
-        except RuntimeError:
-            pass
-        # We need to handle this method specially
-        # Using a dummy implementation for type checking purposes
-        raise NotImplementedError("Use async methods instead")

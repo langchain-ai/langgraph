@@ -4,6 +4,7 @@ import asyncio
 import os
 import tempfile
 import time
+from collections.abc import Generator
 
 import pytest
 
@@ -12,7 +13,7 @@ from langgraph.store.sqlite.aio import AsyncSqliteStore
 
 
 @pytest.fixture
-def temp_db_file():
+def temp_db_file() -> Generator[str, None, None]:
     """Create a temporary database file for testing."""
     fd, path = tempfile.mkstemp()
     os.close(fd)
@@ -20,7 +21,7 @@ def temp_db_file():
     os.unlink(path)
 
 
-def test_ttl_basic(temp_db_file):
+def test_ttl_basic(temp_db_file: str) -> None:
     """Test basic TTL functionality with synchronous API."""
     ttl_seconds = 1
     ttl_minutes = ttl_seconds / 60
@@ -44,7 +45,7 @@ def test_ttl_basic(temp_db_file):
         assert item is None
 
 
-def test_ttl_refresh(temp_db_file):
+def test_ttl_refresh(temp_db_file: str) -> None:
     """Test TTL refresh on read."""
     ttl_seconds = 1
     ttl_minutes = ttl_seconds / 60
@@ -86,7 +87,7 @@ def test_ttl_refresh(temp_db_file):
         assert item is None
 
 
-def test_ttl_sweeper(temp_db_file):
+def test_ttl_sweeper(temp_db_file: str) -> None:
     """Test TTL sweeper thread."""
     ttl_seconds = 2
     ttl_minutes = ttl_seconds / 60
@@ -118,7 +119,7 @@ def test_ttl_sweeper(temp_db_file):
         store.stop_ttl_sweeper()
 
 
-def test_ttl_custom_value(temp_db_file):
+def test_ttl_custom_value(temp_db_file: str) -> None:
     """Test TTL with custom value per item."""
     with SqliteStore.from_conn_string(temp_db_file) as store:
         store.setup()
@@ -146,7 +147,7 @@ def test_ttl_custom_value(temp_db_file):
         assert item2 is None
 
 
-def test_ttl_override_default(temp_db_file):
+def test_ttl_override_default(temp_db_file: str) -> None:
     """Test overriding default TTL at the item level."""
     with SqliteStore.from_conn_string(
         temp_db_file,
@@ -188,7 +189,7 @@ def test_ttl_override_default(temp_db_file):
         assert item3 is not None  # No TTL item should still be there
 
 
-def test_search_with_ttl(temp_db_file):
+def test_search_with_ttl(temp_db_file: str) -> None:
     """Test TTL with search operations."""
     ttl_seconds = 2
     ttl_minutes = ttl_seconds / 60
@@ -217,7 +218,7 @@ def test_search_with_ttl(temp_db_file):
 
 
 @pytest.mark.asyncio
-async def test_async_ttl_basic(temp_db_file):
+async def test_async_ttl_basic(temp_db_file: str) -> None:
     """Test basic TTL functionality with asynchronous API."""
     ttl_seconds = 2
     ttl_minutes = ttl_seconds / 60
@@ -247,7 +248,7 @@ async def test_async_ttl_basic(temp_db_file):
 
 
 @pytest.mark.asyncio
-async def test_async_ttl_refresh(temp_db_file):
+async def test_async_ttl_refresh(temp_db_file: str) -> None:
     """Test TTL refresh on read with async API."""
     ttl_seconds = 2
     ttl_minutes = ttl_seconds / 60
@@ -287,7 +288,7 @@ async def test_async_ttl_refresh(temp_db_file):
 
 
 @pytest.mark.asyncio
-async def test_async_ttl_sweeper(temp_db_file):
+async def test_async_ttl_sweeper(temp_db_file: str) -> None:
     """Test TTL sweeper thread with async API."""
     ttl_seconds = 2
     ttl_minutes = ttl_seconds / 60
@@ -320,7 +321,7 @@ async def test_async_ttl_sweeper(temp_db_file):
 
 
 @pytest.mark.asyncio
-async def test_async_search_with_ttl(temp_db_file):
+async def test_async_search_with_ttl(temp_db_file: str) -> None:
     """Test TTL with search operations using async API."""
     ttl_seconds = 2
     ttl_minutes = ttl_seconds / 60
