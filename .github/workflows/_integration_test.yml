@@ -29,6 +29,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
           cache-suffix: "cli-integration-test"
+          ignore-nothing-to-cache: true
       - name: Setup env
         if: steps.changed-files.outputs.all
         working-directory: libs/cli/examples
