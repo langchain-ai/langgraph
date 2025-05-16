@@ -42,6 +42,12 @@ jobs:
         shell: bash
         run: make test_parallel
 
+      - name: Run unit tests with minimum dependency versions
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          uv sync --frozen --all-extras --resolution lowest-direct --force-reinstall
+          make test_parallel
+
       - name: Ensure the tests did not create any additional files
         shell: bash
         run: |
