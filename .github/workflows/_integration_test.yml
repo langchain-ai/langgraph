@@ -28,7 +28,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
-          cache-suffix: "cli-integration-test
+          cache-suffix: "cli-integration-test"
       - name: Setup env
         if: steps.changed-files.outputs.all
         working-directory: libs/cli/examples
@@ -42,7 +42,7 @@ jobs:
         run: |
           # The build-arg isn't used; just testing that we accept other args
           langgraph build -t langgraph-test-a  --base-image "langchain/langgraph-trial"
-          cp .env.example .env
+          cp .env.example .envg
           timeout 60 python ../../../.github/scripts/run_langgraph_cli_test.py -c langgraph.json -t langgraph-test-a
       - name: Build and test service B
         if: steps.changed-files.outputs.all
