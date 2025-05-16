@@ -1,9 +1,9 @@
 """Test SQLite store Time-To-Live (TTL) functionality."""
+
 import asyncio
 import os
 import tempfile
 import time
-from datetime import datetime, timedelta
 
 import pytest
 
@@ -22,7 +22,7 @@ def temp_db_file():
 
 def test_ttl_basic(temp_db_file):
     """Test basic TTL functionality with synchronous API."""
-    ttl_seconds = 2
+    ttl_seconds = 1
     ttl_minutes = ttl_seconds / 60
 
     with SqliteStore.from_conn_string(
@@ -46,7 +46,7 @@ def test_ttl_basic(temp_db_file):
 
 def test_ttl_refresh(temp_db_file):
     """Test TTL refresh on read."""
-    ttl_seconds = 2
+    ttl_seconds = 1
     ttl_minutes = ttl_seconds / 60
 
     with SqliteStore.from_conn_string(
@@ -59,13 +59,16 @@ def test_ttl_refresh(temp_db_file):
 
         # Sleep almost to expiration
         time.sleep(ttl_seconds - 0.5)
+        swept = store.sweep_ttl()
+        assert swept == 0
 
         # Get the item and refresh TTL
         item = store.get(("test",), "item1", refresh_ttl=True)
         assert item is not None
 
-        # Sleep again - without refresh, would have expired by now
         time.sleep(ttl_seconds - 0.5)
+        swept = store.sweep_ttl()
+        assert swept == 0
 
         # Get the item, should still be there
         item = store.get(("test",), "item1")
@@ -73,10 +76,10 @@ def test_ttl_refresh(temp_db_file):
         assert item.value["value"] == "test"
 
         # Sleep again but don't refresh this time
-        time.sleep(ttl_seconds + 0.5)
+        time.sleep(ttl_seconds + 0.75)
 
-        # Manual sweep
-        store.sweep_ttl()
+        swept = store.sweep_ttl()
+        assert swept == 1
 
         # Item should be gone now
         item = store.get(("test",), "item1")
@@ -121,13 +124,13 @@ def test_ttl_custom_value(temp_db_file):
         store.setup()
 
         # Store items with different TTLs
-        store.put(("test",), "item1", {"value": "short"}, ttl=1/60)  # 1 second
-        store.put(("test",), "item2", {"value": "long"}, ttl=5/60)   # 5 seconds
+        store.put(("test",), "item1", {"value": "short"}, ttl=1 / 60)  # 1 second
+        store.put(("test",), "item2", {"value": "long"}, ttl=5 / 60)  # 5 seconds
 
         # Item with short TTL
         time.sleep(1.5)  # Wait for short TTL
         store.sweep_ttl()
-        
+
         # Short TTL item should be gone, long TTL item should remain
         item1 = store.get(("test",), "item1")
         item2 = store.get(("test",), "item2")
@@ -137,7 +140,7 @@ def test_ttl_custom_value(temp_db_file):
         # Wait for the second item's TTL
         time.sleep(4)
         store.sweep_ttl()
-        
+
         # Now both should be gone
         item2 = store.get(("test",), "item2")
         assert item2 is None
@@ -146,40 +149,41 @@ def test_ttl_custom_value(temp_db_file):
 def test_ttl_override_default(temp_db_file):
     """Test overriding default TTL at the item level."""
     with SqliteStore.from_conn_string(
-        temp_db_file, ttl={"default_ttl": 5/60}  # 5 seconds default
+        temp_db_file,
+        ttl={"default_ttl": 5 / 60},  # 5 seconds default
     ) as store:
         store.setup()
 
         # Store an item with shorter than default TTL
-        store.put(("test",), "item1", {"value": "override"}, ttl=1/60)  # 1 second
-        
+        store.put(("test",), "item1", {"value": "override"}, ttl=1 / 60)  # 1 second
+
         # Store an item with default TTL
         store.put(("test",), "item2", {"value": "default"})  # Uses default 5 seconds
-        
+
         # Store an item with no TTL
         store.put(("test",), "item3", {"value": "permanent"}, ttl=None)
 
         # Wait for the override TTL to expire
         time.sleep(1.5)
         store.sweep_ttl()
-        
+
         # Check results
         item1 = store.get(("test",), "item1")
         item2 = store.get(("test",), "item2")
         item3 = store.get(("test",), "item3")
-        
+
         assert item1 is None  # Should be expired
         assert item2 is not None  # Default TTL, should still be there
         assert item3 is not None  # No TTL, should still be there
-        
+
         # Wait for default TTL to expire
         time.sleep(4)
         store.sweep_ttl()
-        
+
         # Check results again
         item2 = store.get(("test",), "item2")
         item3 = store.get(("test",), "item3")
-        
+
         assert item2 is None  # Default TTL item should be gone
         assert item3 is not None  # No TTL item should still be there
 
@@ -295,7 +299,7 @@ async def test_async_ttl_sweeper(temp_db_file):
         await store.setup()
 
         # Start the TTL sweeper
-        future = await store.start_ttl_sweeper()
+        await store.start_ttl_sweeper()
 
         # Store an item with TTL
         await store.aput(("test",), "item1", {"value": "test"})

@@ -1,14 +1,13 @@
 import concurrent.futures
+import datetime
 import logging
 import math
 import sqlite3
 import threading
-import time
 from collections import defaultdict
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
-from datetime import datetime, timedelta
-from typing import Any, Callable, Literal, Optional, Union, cast
+from typing import Any, Callable, Literal, Optional, Union, cast, NamedTuple
 
 import orjson
 
@@ -182,6 +181,12 @@ def _group_ops(ops: Iterable[Op]) -> tuple[dict[type, list[tuple[int, Op]]], int
         tot += 1
     return grouped_ops, tot
 
+class PreparedGetQuery(NamedTuple):
+    query: str                    # Main query to execute
+    params: tuple                 # Parameters for the main query
+    namespace: tuple[str, ...]    # Namespace info
+    items: list                   # List of items this query is for
+    kind: Literal["get", "refresh"]
 
 class SqliteStore(BaseStore):
     """SQLite-backed store with optional vector search capabilities.
@@ -393,40 +398,52 @@ class SqliteStore(BaseStore):
 
     def _get_batch_GET_ops_queries(
         self, get_ops: Sequence[tuple[int, GetOp]]
-    ) -> list[tuple[str, tuple, tuple[str, ...], list]]:
+    ) -> list[PreparedGetQuery]:
+        """
+        Build queries to fetch (and optionally refresh the TTL of) multiple keys per namespace.
+
+        Returns a list of PreparedGetQuery objects, which may include:
+        - Queries with kind='refresh' for TTL refresh operations
+        - Queries with kind='get' for data retrieval operations
+        """
         namespace_groups = defaultdict(list)
         refresh_ttls = defaultdict(list)
         for idx, op in get_ops:
             namespace_groups[op.namespace].append((idx, op.key))
-            refresh_ttls[op.namespace].append(getattr(op, 'refresh_ttl', False))
+            refresh_ttls[op.namespace].append(getattr(op, "refresh_ttl", False))
+
         results = []
         for namespace, items in namespace_groups.items():
             _, keys = zip(*items)
             this_refresh_ttls = refresh_ttls[namespace]
             refresh_ttl_any = any(this_refresh_ttls)
 
-            if refresh_ttl_any and self.ttl_config and self.ttl_config.get("refresh_on_read", False):
-                # Include TTL refresh in the query
-                query = f"""
+            # Always add the main query to get the data
+            select_query = f"""
+                SELECT key, value, created_at, updated_at, expires_at, ttl_minutes
+                FROM store
+                WHERE prefix = ? AND key IN ({','.join(['?'] * len(keys))})
+            """
+            select_params = (_namespace_to_text(namespace), *keys)
+            results.append(PreparedGetQuery(select_query, select_params, namespace, items, "get"))
+            
+            # Add a TTL refresh query if needed
+            if (
+                refresh_ttl_any
+                and self.ttl_config
+                and self.ttl_config.get("refresh_on_read", False)
+            ):
+                placeholders = ','.join(['?'] * len(keys))
+                update_query = f"""
                     UPDATE store
                     SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
-                    WHERE prefix = ? AND key IN ({','.join(['?'] * len(keys))})
-                    AND ttl_minutes IS NOT NULL;
-
-                    SELECT key, value, created_at, updated_at, expires_at, ttl_minutes
-                    FROM store
-                    WHERE prefix = ? AND key IN ({','.join(['?'] * len(keys))})
+                    WHERE prefix = ? 
+                    AND key IN ({placeholders})
+                    AND ttl_minutes IS NOT NULL
                 """
-                params = (_namespace_to_text(namespace), *keys, _namespace_to_text(namespace), *keys)
-            else:
-                query = f"""
-                    SELECT key, value, created_at, updated_at, expires_at, ttl_minutes
-                    FROM store
-                    WHERE prefix = ? AND key IN ({','.join(['?'] * len(keys))})
-                """
-                params = (_namespace_to_text(namespace), *keys)
-
-            results.append((query, params, namespace, items))
+                update_params = (_namespace_to_text(namespace), *keys)
+                results.append(PreparedGetQuery(update_query, update_params, namespace, items, "refresh"))
+                
         return results
 
     def _prepare_batch_PUT_queries(
@@ -470,46 +487,24 @@ class SqliteStore(BaseStore):
             insertion_params = []
             vector_values = []
             embedding_request_params = []
-            now = datetime.now()
+            now = datetime.datetime.now(datetime.timezone.utc)
 
             # First handle main store insertions
             for op in inserts:
-                # Handle TTL expiration
-                if op.ttl is not None:
-                    expires_at = now + timedelta(minutes=op.ttl)
-                    ttl_minutes = op.ttl
-                    values.append("(?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?)")
-                    insertion_params.extend(
-                        [
-                            _namespace_to_text(op.namespace),
-                            op.key,
-                            orjson.dumps(cast(dict, op.value)),
-                            expires_at.isoformat(),
-                            ttl_minutes,
-                        ]
-                    )
-                elif self.ttl_config and self.ttl_config.get("default_ttl") is not None:
-                    default_ttl = float(self.ttl_config.get("default_ttl", 0))
-                    expires_at = now + timedelta(minutes=default_ttl)
-                    values.append("(?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?)")
-                    insertion_params.extend(
-                        [
-                            _namespace_to_text(op.namespace),
-                            op.key,
-                            orjson.dumps(cast(dict, op.value)),
-                            expires_at.isoformat(),
-                            default_ttl,
-                        ]
-                    )
+                if op.ttl is None:
+                    expires_at = None
                 else:
-                    values.append("(?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, NULL)")
-                    insertion_params.extend(
-                        [
-                            _namespace_to_text(op.namespace),
-                            op.key,
-                            orjson.dumps(cast(dict, op.value)),
-                        ]
-                    )
+                    expires_at = now + datetime.timedelta(minutes=op.ttl)
+                values.append("(?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?)")
+                insertion_params.extend(
+                    [
+                        _namespace_to_text(op.namespace),
+                        op.key,
+                        orjson.dumps(cast(dict, op.value)),
+                        expires_at,
+                        op.ttl,
+                    ]
+                )
 
             # Then handle embeddings if configured
             if self.index_config:
@@ -557,6 +552,12 @@ class SqliteStore(BaseStore):
         list[tuple[str, list[Union[None, str, list[float]]]]],  # queries, params
         list[tuple[int, str]],  # idx, query_text pairs to embed
     ]:
+        """
+        Build per-SearchOp SQL queries (with optional TTL refresh) plus embedding requests.
+        Returns:
+        - queries: list of (SQL, param_list)
+        - embedding_requests: list of (original_index_in_search_ops, text_query)
+        """
         queries = []
         embedding_requests = []
 
@@ -638,28 +639,11 @@ class SqliteStore(BaseStore):
                     else:
                         prefix_filter_str = ""
 
-                # Handle TTL refresh if requested
-                refresh_ttl = getattr(op, 'refresh_ttl', False) and self.ttl_config and self.ttl_config.get("refresh_on_read", False)
-
-                if refresh_ttl:
-                    # First update expires_at for matching items
-                    ttl_update = f"""
-                    UPDATE store
-                    SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
-                    WHERE prefix LIKE ? AND ttl_minutes IS NOT NULL
-                    AND EXISTS (
-                        SELECT 1 FROM store_vectors sv
-                        WHERE store.prefix = sv.prefix AND store.key = sv.key
-                        {filter_str}
-                    );
-                    """
-                    cur.execute(ttl_update, (f"{_namespace_to_text(op.namespace_prefix)}%",) if op.namespace_prefix else ())
-
                 # We use a CTE to compute scores, with a SQLite-compatible approach for distinct results
                 base_query = f"""
                     WITH scored AS (
                         SELECT s.prefix, s.key, s.value, s.created_at, s.updated_at, s.expires_at, s.ttl_minutes,
-                               {score_expr} AS score
+                            {score_expr} AS score
                         FROM store s
                         JOIN store_vectors sv ON s.prefix = sv.prefix AND s.key = sv.key
                         {prefix_filter_str}
@@ -668,7 +652,7 @@ class SqliteStore(BaseStore):
                     ),
                     ranked AS (
                         SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, score,
-                               ROW_NUMBER() OVER (PARTITION BY prefix, key ORDER BY score DESC) as rn
+                            ROW_NUMBER() OVER (PARTITION BY prefix, key ORDER BY score DESC) as rn
                         FROM scored
                     )
                     SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, score
@@ -689,22 +673,8 @@ class SqliteStore(BaseStore):
 
             # Regular search branch (no vector search)
             else:
-                # Handle TTL refresh if requested
-                refresh_ttl = getattr(op, 'refresh_ttl', False) and self.ttl_config and self.ttl_config.get("refresh_on_read", False)
-
-                if refresh_ttl:
-                    # First update expires_at for matching items
-                    filter_str = "" if not filter_conditions else " AND " + " AND ".join(filter_conditions)
-                    ttl_update = f"""
-                    UPDATE store
-                    SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
-                    WHERE prefix LIKE ? {filter_str} AND ttl_minutes IS NOT NULL;
-                    """
-                    ttl_params = [f"{_namespace_to_text(op.namespace_prefix)}%", *filter_params]
-                    cur.execute(ttl_update, ttl_params)
-
                 base_query = """
-                    SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes
+                    SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, NULL as score
                     FROM store
                     WHERE prefix LIKE ?
                 """
@@ -722,7 +692,26 @@ class SqliteStore(BaseStore):
                 logger.debug(f"Search query: {base_query}")
                 logger.debug(f"Search params: {params}")
 
-            queries.append((base_query, params))
+            # Handle TTL refresh if requested
+            if op.refresh_ttl and self.ttl_config and self.ttl_config.get("refresh_on_read", False):
+                final_sql = f"""
+                    WITH search_results AS (
+                        {base_query}
+                    ),
+                    updated AS (
+                        UPDATE store
+                        SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
+                        WHERE (prefix, key) IN (SELECT prefix, key FROM search_results)
+                        AND ttl_minutes IS NOT NULL
+                    )
+                    SELECT * FROM search_results
+                """
+                final_params = params[:]  # copy params
+            else:
+                final_sql = base_query
+                final_params = params
+
+            queries.append((final_sql, final_params))
 
         return queries, embedding_requests
 
@@ -1031,28 +1020,55 @@ class SqliteStore(BaseStore):
         results: list[Result],
         cur: sqlite3.Cursor,
     ) -> None:
-        for query, params, namespace, items in self._get_batch_GET_ops_queries(get_ops):
-            cur.execute(query, params)
-            rows = cur.fetchall()
-            key_to_row = {
-                row[0]: {
-                    "key": row[0],
-                    "value": row[1],
-                    "created_at": row[2],
-                    "updated_at": row[3],
-                    "expires_at": row[4] if len(row) > 4 else None,
-                    "ttl_minutes": row[5] if len(row) > 5 else None,
-                }
-                for row in rows
-            }
-            for idx, key in items:
-                row = key_to_row.get(key)
-                if row:
-                    results[idx] = _row_to_item(
-                        namespace, row, loader=self._deserializer
-                    )
-                else:
-                    results[idx] = None
+        # Group all queries by namespace to execute all operations for each namespace together
+        namespace_queries = defaultdict(list)
+        for prepared_query in self._get_batch_GET_ops_queries(get_ops):
+            namespace_queries[prepared_query.namespace].append(prepared_query)
+            
+        # Process each namespace's operations
+        for namespace, queries in namespace_queries.items():
+            # Execute TTL refresh queries first
+            for query in queries:
+                if query.kind == "refresh":
+                    try:
+                        cur.execute(query.query, query.params)
+                    except Exception as e:
+                        raise ValueError(
+                            f"Error executing TTL refresh: \n{query.query}\n{query.params}\n{e}"
+                        ) from e
+            
+            # Then execute GET queries and process results
+            for query in queries:
+                if query.kind == "get":
+                    try:
+                        cur.execute(query.query, query.params)
+                    except Exception as e:
+                        raise ValueError(
+                            f"Error executing GET query: \n{query.query}\n{query.params}\n{e}"
+                        ) from e
+                        
+                    rows = cur.fetchall()
+                    key_to_row = {
+                        row[0]: {
+                            "key": row[0],
+                            "value": row[1],
+                            "created_at": row[2],
+                            "updated_at": row[3],
+                            "expires_at": row[4] if len(row) > 4 else None,
+                            "ttl_minutes": row[5] if len(row) > 5 else None,
+                        }
+                        for row in rows
+                    }
+                    
+                    # Process results for this query
+                    for idx, key in query.items:
+                        row = key_to_row.get(key)
+                        if row:
+                            results[idx] = _row_to_item(
+                                namespace, row, loader=self._deserializer
+                            )
+                        else:
+                            results[idx] = None
 
     def _batch_put_ops(
         self,

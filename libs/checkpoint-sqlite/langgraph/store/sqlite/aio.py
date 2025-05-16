@@ -1,8 +1,10 @@
 import asyncio
-from types import TracebackType
+import datetime
 import logging
+from collections import defaultdict
 from collections.abc import AsyncIterator, Iterable, Sequence
 from contextlib import asynccontextmanager
+from types import TracebackType
 from typing import Any, Callable, Optional, Union, cast
 
 import aiosqlite
@@ -24,6 +26,7 @@ from langgraph.store.sqlite.base import (
     _PLACEHOLDER,
     MIGRATIONS,
     VECTOR_MIGRATIONS,
+    PreparedGetQuery,
     SqliteIndexConfig,
     _decode_ns_text,
     _dot_product,
@@ -33,7 +36,6 @@ from langgraph.store.sqlite.base import (
     _row_to_item,
     _row_to_search_item,
 )
-import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +126,6 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
         self.ttl_config = ttl
         self._ttl_sweeper_task: Optional[asyncio.Task[None]] = None
         self._ttl_stop_event = asyncio.Event()
-
 
     @classmethod
     @asynccontextmanager
@@ -244,31 +245,52 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
 
     def _get_batch_GET_ops_queries(
         self, get_ops: Sequence[tuple[int, GetOp]]
-    ) -> list[tuple[str, tuple, tuple[str, ...], list]]:
-        """Generate batch GET operation queries.
-
-        Args:
-            get_ops: Sequence of GET operations.
-
-        Returns:
-            List of query information tuples.
+    ) -> list[PreparedGetQuery]:
         """
-        namespace_groups: dict[tuple[str, ...], list[tuple[int, str]]] = {}
+        Build queries to fetch (and optionally refresh the TTL of) multiple keys per namespace.
+
+        Returns a list of PreparedGetQuery objects, which may include:
+        - Queries with kind='refresh' for TTL refresh operations
+        - Queries with kind='get' for data retrieval operations
+        """
+        namespace_groups = defaultdict(list)
+        refresh_ttls = defaultdict(list)
         for idx, op in get_ops:
-            if op.namespace not in namespace_groups:
-                namespace_groups[op.namespace] = []
             namespace_groups[op.namespace].append((idx, op.key))
+            refresh_ttls[op.namespace].append(getattr(op, "refresh_ttl", False))
+
         results = []
         for namespace, items in namespace_groups.items():
             _, keys = zip(*items)
-            keys_to_query = ",".join(["?" for _ in keys])
-            query = f"""
-                SELECT key, value, created_at, updated_at
+            this_refresh_ttls = refresh_ttls[namespace]
+            refresh_ttl_any = any(this_refresh_ttls)
+
+            # Always add the main query to get the data
+            select_query = f"""
+                SELECT key, value, created_at, updated_at, expires_at, ttl_minutes
                 FROM store
-                WHERE prefix = ? AND key IN ({keys_to_query})
+                WHERE prefix = ? AND key IN ({','.join(['?'] * len(keys))})
             """
-            params = (_namespace_to_text(namespace), *keys)
-            results.append((query, params, namespace, items))
+            select_params = (_namespace_to_text(namespace), *keys)
+            results.append(PreparedGetQuery(select_query, select_params, namespace, items, "get"))
+            
+            # Add a TTL refresh query if needed
+            if (
+                refresh_ttl_any
+                and self.ttl_config
+                and self.ttl_config.get("refresh_on_read", False)
+            ):
+                placeholders = ','.join(['?'] * len(keys))
+                update_query = f"""
+                    UPDATE store
+                    SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
+                    WHERE prefix = ? 
+                    AND key IN ({placeholders})
+                    AND ttl_minutes IS NOT NULL
+                """
+                update_params = (_namespace_to_text(namespace), *keys)
+                results.append(PreparedGetQuery(update_query, update_params, namespace, items, "refresh"))
+                
         return results
 
     def _prepare_batch_PUT_queries(
@@ -277,34 +299,24 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
         list[tuple[str, Sequence]],
         Optional[tuple[str, Sequence[tuple[str, str, str, str]]]],
     ]:
-        """Generate batch PUT operation queries.
-
-        Args:
-            put_ops: Sequence of PUT operations.
-
-        Returns:
-            Tuple of regular queries and optional embedding request.
-        """
         # Last-write wins
-        dedupped_ops = {}
+        dedupped_ops: dict[tuple[tuple[str, ...], str], PutOp] = {}
         for _, op in put_ops:
             dedupped_ops[(op.namespace, op.key)] = op
 
-        inserts = []
-        deletes = []
+        inserts: list[PutOp] = []
+        deletes: list[PutOp] = []
         for op in dedupped_ops.values():
             if op.value is None:
                 deletes.append(op)
             else:
                 inserts.append(op)
 
-        queries = []
+        queries: list[tuple[str, Sequence]] = []
 
         if deletes:
-            namespace_groups: dict[tuple[str, ...], list[str]] = {}
+            namespace_groups: dict[tuple[str, ...], list[str]] = defaultdict(list)
             for op in deletes:
-                if op.namespace not in namespace_groups:
-                    namespace_groups[op.namespace] = []
                 namespace_groups[op.namespace].append(op.key)
             for namespace, keys in namespace_groups.items():
                 placeholders = ",".join(["?" for _ in keys])
@@ -314,27 +326,30 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
                 params = (_namespace_to_text(namespace), *keys)
                 queries.append((query, params))
 
-        embedding_request = None
+        embedding_request: Optional[tuple[str, Sequence[tuple[str, str, str, str]]]] = (
+            None
+        )
         if inserts:
             values = []
             insertion_params = []
             vector_values = []
             embedding_request_params = []
+            now = datetime.datetime.now(datetime.timezone.utc)
 
             # First handle main store insertions
-            now = datetime.datetime.now(datetime.timezone.utc)
             for op in inserts:
                 if op.ttl is None:
                     expires_at = None
                 else:
                     expires_at = now + datetime.timedelta(minutes=op.ttl)
-                values.append("(?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)")
+                values.append("(?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?)")
                 insertion_params.extend(
                     [
                         _namespace_to_text(op.namespace),
                         op.key,
                         orjson.dumps(cast(dict, op.value)),
                         expires_at,
+                        op.ttl,
                     ]
                 )
 
@@ -363,10 +378,10 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
 
             values_str = ",".join(values)
             query = f"""
-                INSERT OR REPLACE INTO store (prefix, key, value, created_at, updated_at, expires_at)
+                INSERT OR REPLACE INTO store (prefix, key, value, created_at, updated_at, expires_at, ttl_minutes)
                 VALUES {values_str}
             """
-            queries.append((query, tuple(insertion_params)))  # type: ignore[arg-type]
+            queries.append((query, insertion_params))
 
             if vector_values:
                 values_str = ",".join(vector_values)
@@ -384,13 +399,11 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
         list[tuple[str, list[Union[None, str, list[float]]]]],  # queries, params
         list[tuple[int, str]],  # idx, query_text pairs to embed
     ]:
-        """Generate batch SEARCH operation queries.
-
-        Args:
-            search_ops: Sequence of SEARCH operations.
-
+        """
+        Build per-SearchOp SQL queries (with optional TTL refresh) plus embedding requests.
         Returns:
-            Tuple of search queries and embedding requests.
+        - queries: list of (SQL, param_list)
+        - embedding_requests: list of (original_index_in_search_ops, text_query)
         """
         queries = []
         embedding_requests = []
@@ -409,17 +422,54 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
                             filter_conditions.append(condition)
                             filter_params.extend(filter_params_)
                     else:
-                        filter_conditions.append(
-                            "json_extract(value, '$." + key + "') = ?"
-                        )
-                        filter_params.append(value if isinstance(value, str) else orjson.dumps(value))
+                        # SQLite json_extract returns unquoted string values
+                        if isinstance(value, str):
+                            filter_conditions.append(
+                                "json_extract(value, '$."
+                                + key
+                                + "') = '"
+                                + value.replace("'", "''")
+                                + "'"
+                            )
+                        elif value is None:
+                            filter_conditions.append(
+                                "json_extract(value, '$." + key + "') IS NULL"
+                            )
+                        elif isinstance(value, bool):
+                            # SQLite JSON stores booleans as integers
+                            filter_conditions.append(
+                                "json_extract(value, '$."
+                                + key
+                                + "') = "
+                                + ("1" if value else "0")
+                            )
+                        elif isinstance(value, (int, float)):
+                            filter_conditions.append(
+                                "json_extract(value, '$." + key + "') = " + str(value)
+                            )
+                        else:
+                            # For complex objects, use param binding with JSON serialization
+                            filter_conditions.append(
+                                "json_extract(value, '$." + key + "') = ?"
+                            )
+                            filter_params.append(orjson.dumps(value))
 
             # Vector search branch
             if op.query and self.index_config:
                 embedding_requests.append((idx, op.query))
 
-                # In SQLite we'll use a simpler vector search approach
-                # with dot product between query embedding and stored embeddings
+                # Choose the similarity function and score expression based on distance type
+                distance_type = self.index_config.get("distance_type", "cosine")
+
+                if distance_type == "cosine":
+                    score_expr = "cosine_similarity(sv.embedding, ?)"
+                elif distance_type == "l2":
+                    score_expr = "-1 * l2_distance(sv.embedding, ?)"
+                elif distance_type == "inner_product":
+                    score_expr = "dot_product(sv.embedding, ?)"
+                else:
+                    # Default to cosine similarity
+                    score_expr = "cosine_similarity(sv.embedding, ?)"
 
                 filter_str = (
                     ""
@@ -428,30 +478,33 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
                 )
                 if op.namespace_prefix:
                     prefix_filter_str = f"WHERE s.prefix LIKE ? {filter_str} "
-                    ns_args = (f"{_namespace_to_text(op.namespace_prefix)}%",)
+                    ns_args: Sequence = (f"{_namespace_to_text(op.namespace_prefix)}%",)
                 else:
-                    # Use a completely different variable name to avoid redefinition
-                    empty_args: tuple[str, ...] = ()
+                    ns_args = ()
                     if filter_str:
                         prefix_filter_str = f"WHERE {filter_str[5:]} "
                     else:
                         prefix_filter_str = ""
-                    ns_args = cast(tuple[str], empty_args)
 
-                # Use a CTE to compute scores
+                # We use a CTE to compute scores, with a SQLite-compatible approach for distinct results
                 base_query = f"""
                     WITH scored AS (
-                        SELECT s.prefix, s.key, s.value, s.created_at, s.updated_at, 
-                               dot_product(sv.embedding, ?) AS score
+                        SELECT s.prefix, s.key, s.value, s.created_at, s.updated_at, s.expires_at, s.ttl_minutes,
+                            {score_expr} AS score
                         FROM store s
                         JOIN store_vectors sv ON s.prefix = sv.prefix AND s.key = sv.key
                         {prefix_filter_str}
                         ORDER BY score DESC 
                         LIMIT ?
+                    ),
+                    ranked AS (
+                        SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, score,
+                            ROW_NUMBER() OVER (PARTITION BY prefix, key ORDER BY score DESC) as rn
+                        FROM scored
                     )
-                    SELECT prefix, key, value, created_at, updated_at, score
-                    FROM scored
-                    GROUP BY prefix, key  -- SQLite equivalent of DISTINCT ON
+                    SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, score
+                    FROM ranked
+                    WHERE rn = 1
                     ORDER BY score DESC
                     LIMIT ?
                     OFFSET ?
@@ -468,7 +521,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
             # Regular search branch (no vector search)
             else:
                 base_query = """
-                    SELECT prefix, key, value, created_at, updated_at
+                    SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, NULL as score
                     FROM store
                     WHERE prefix LIKE ?
                 """
@@ -482,7 +535,31 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
                 base_query += " LIMIT ? OFFSET ?"
                 params.extend([op.limit, op.offset])
 
-            queries.append((base_query, params))
+                # Debug the query
+                logger.debug(f"Search query: {base_query}")
+                logger.debug(f"Search params: {params}")
+
+            # Handle TTL refresh if requested
+            if op.refresh_ttl and self.ttl_config and self.ttl_config.get("refresh_on_read", False):
+                final_sql = f"""
+                    WITH search_results AS (
+                        {base_query}
+                    ),
+                    updated AS (
+                        UPDATE store
+                        SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
+                        WHERE (prefix, key) IN (SELECT prefix, key FROM search_results)
+                        AND ttl_minutes IS NOT NULL
+                    )
+                    SELECT * FROM search_results
+                """
+                final_params = params[:]  # copy params
+            else:
+                final_sql = base_query
+                final_params = params
+
+            queries.append((final_sql, final_params))
+
         return queries, embedding_requests
 
     def _get_batch_list_namespaces_queries(
@@ -567,7 +644,9 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
             Tuple of SQL condition and parameters.
         """
         if op == "$eq":
-            return f"json_extract(value, '$.{key}') = ?", [value if isinstance(value, str) else orjson.dumps(value)]
+            return f"json_extract(value, '$.{key}') = ?", [
+                value if isinstance(value, str) else orjson.dumps(value)
+            ]
         elif op == "$gt":
             return f"json_extract(value, '$.{key}') > ?", [str(value)]
         elif op == "$gte":
@@ -577,7 +656,9 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
         elif op == "$lte":
             return f"json_extract(value, '$.{key}') <= ?", [str(value)]
         elif op == "$ne":
-            return f"json_extract(value, '$.{key}') != ?", [value if isinstance(value, str) else orjson.dumps(value)]
+            return f"json_extract(value, '$.{key}') != ?", [
+                value if isinstance(value, str) else orjson.dumps(value)
+            ]
         else:
             raise ValueError(f"Unsupported operator: {op}")
 
@@ -749,26 +830,55 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
             results: List to store results in.
             cur: Database cursor.
         """
-        for query, params, namespace, items in self._get_batch_GET_ops_queries(get_ops):
-            await cur.execute(query, params)
-            rows = await cur.fetchall()
-            key_to_row = {
-                row[0]: {
-                    "key": row[0],
-                    "value": row[1],
-                    "created_at": row[2],
-                    "updated_at": row[3],
-                }
-                for row in rows
-            }
-            for idx, key in items:
-                row = key_to_row.get(key)
-                if row:
-                    results[idx] = _row_to_item(
-                        namespace, row, loader=self._deserializer
-                    )
-                else:
-                    results[idx] = None
+        # Group all queries by namespace to execute all operations for each namespace together
+        namespace_queries = defaultdict(list)
+        for prepared_query in self._get_batch_GET_ops_queries(get_ops):
+            namespace_queries[prepared_query.namespace].append(prepared_query)
+            
+        # Process each namespace's operations
+        for namespace, queries in namespace_queries.items():
+            # Execute TTL refresh queries first
+            for query in queries:
+                if query.kind == "refresh":
+                    try:
+                        await cur.execute(query.query, query.params)
+                    except Exception as e:
+                        raise ValueError(
+                            f"Error executing TTL refresh: \n{query.query}\n{query.params}\n{e}"
+                        ) from e
+            
+            # Then execute GET queries and process results
+            for query in queries:
+                if query.kind == "get":
+                    try:
+                        await cur.execute(query.query, query.params)
+                    except Exception as e:
+                        raise ValueError(
+                            f"Error executing GET query: \n{query.query}\n{query.params}\n{e}"
+                        ) from e
+                        
+                    rows = await cur.fetchall()
+                    key_to_row = {
+                        row[0]: {
+                            "key": row[0],
+                            "value": row[1],
+                            "created_at": row[2],
+                            "updated_at": row[3],
+                            "expires_at": row[4] if len(row) > 4 else None,
+                            "ttl_minutes": row[5] if len(row) > 5 else None,
+                        }
+                        for row in rows
+                    }
+                    
+                    # Process results for this query
+                    for idx, key in query.items:
+                        row = key_to_row.get(key)
+                        if row:
+                            results[idx] = _row_to_item(
+                                namespace, row, loader=self._deserializer
+                            )
+                        else:
+                            results[idx] = None
 
     async def _batch_put_ops(
         self,
