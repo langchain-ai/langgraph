@@ -10,10 +10,10 @@ Core types:
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from datetime import datetime
 from typing import (
     Any,
-    Iterable,
     Literal,
     NamedTuple,
     Optional,

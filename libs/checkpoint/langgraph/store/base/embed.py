@@ -9,7 +9,8 @@ asynchronous operations.
 import asyncio
 import functools
 import json
-from typing import Any, Awaitable, Callable, Optional, Sequence, Union
+from collections.abc import Awaitable, Sequence
+from typing import Any, Callable, Optional, Union
 
 from langchain_core.embeddings import Embeddings
 

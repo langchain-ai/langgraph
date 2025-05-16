@@ -1,4 +1,5 @@
-from typing import Annotated, Literal, Sequence, TypedDict
+from collections.abc import Sequence
+from typing import Annotated, Literal, TypedDict
 
 from langchain_anthropic import ChatAnthropic
 from langchain_community.tools.tavily_search import TavilySearchResults
