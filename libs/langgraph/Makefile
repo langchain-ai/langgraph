@@ -14,7 +14,7 @@ OUTPUT ?= out/benchmark.json
 install:  ## Install dependencies
 	uv sync --frozen --all-extras --all-packages --group dev
 
-benchmark: .uv
+benchmark:
 	mkdir -p out
 	rm -f $(OUTPUT)
 	uv run python -m bench -o $(OUTPUT) --rigorous
