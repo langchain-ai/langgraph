@@ -42,7 +42,7 @@ jobs:
         run: |
           # The build-arg isn't used; just testing that we accept other args
           langgraph build -t langgraph-test-a  --base-image "langchain/langgraph-trial"
-          cp .env.example .envg
+          cp .env.example .env
           timeout 60 python ../../../.github/scripts/run_langgraph_cli_test.py -c langgraph.json -t langgraph-test-a
       - name: Build and test service B
         if: steps.changed-files.outputs.all
