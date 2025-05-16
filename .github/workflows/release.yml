@@ -257,7 +257,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
-          cache-suffix: release
+          cache-suffix: "release"
 
       - uses: actions/download-artifact@v4
         with:
@@ -298,7 +298,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
-          cache-suffix: release
+          cache-suffix: "release"
 
       - uses: actions/download-artifact@v4
         with:
