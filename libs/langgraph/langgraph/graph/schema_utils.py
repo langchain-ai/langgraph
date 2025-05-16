@@ -67,7 +67,7 @@ class SchemaCoercionMapper:
         if issubclass(schema, BaseModel):
             self._fields = {
                 n: self.type_hints.get(n, f.annotation)
-                for n, f in schema.model_fields.items()  # type: ignore[attr-defined]
+                for n, f in schema.model_fields.items()
             }
             self._construct: Callable[..., Any] = schema.model_construct
             unhandled_attrs = ("validators", "field_validators", "root_validators")
