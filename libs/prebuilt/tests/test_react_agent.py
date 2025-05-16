@@ -1399,3 +1399,144 @@ def test_pre_model_hook() -> None:
             AIMessage(content="Hello!", id="1"),
         ]
     }
+
+
+def test_post_model_hook() -> None:
+    class FlagState(AgentState):
+        flag: bool
+
+    model = FakeToolCallingModel(tool_calls=[])
+
+    def post_model_hook(state: FlagState) -> dict[str, bool]:
+        return {"flag": True}
+
+    pmh_agent = create_react_agent(
+        model, [], post_model_hook=post_model_hook, state_schema=FlagState
+    )
+
+    assert "post_model_hook" in pmh_agent.nodes
+
+    result = pmh_agent.invoke({"messages": [HumanMessage("hi?")], "flag": False})
+    assert result["flag"] is True
+
+    events = list(pmh_agent.stream({"messages": [HumanMessage("hi?")], "flag": False}))
+    assert events == [
+        {
+            "agent": {
+                "messages": [
+                    AIMessage(
+                        content="hi?",
+                        additional_kwargs={},
+                        response_metadata={},
+                        id="1",
+                    )
+                ]
+            }
+        },
+        {"post_model_hook": {"flag": True}},
+    ]
+
+
+def test_post_model_hook_with_structured_output() -> None:
+    class WeatherResponse(BaseModel):
+        temperature: float = Field(description="The temperature in fahrenheit")
+
+    tool_calls = [[{"args": {}, "id": "1", "name": "get_weather"}]]
+
+    def get_weather():
+        """Get the weather"""
+        return "The weather is sunny and 75°F."
+
+    expected_structured_response = WeatherResponse(temperature=75)
+    model = FakeToolCallingModel(
+        tool_calls=tool_calls, structured_response=expected_structured_response
+    )
+
+    class State(AgentState):
+        flag: bool
+        structured_response: WeatherResponse
+
+    def post_model_hook(state: State) -> Union[dict[str, bool], Command]:
+        return {"flag": True}
+
+    agent = create_react_agent(
+        model,
+        [get_weather],
+        response_format=WeatherResponse,
+        post_model_hook=post_model_hook,
+        state_schema=State,
+    )
+
+    assert "post_model_hook" in agent.nodes
+    assert "generate_structured_response" in agent.nodes
+
+    response = agent.invoke(
+        {"messages": [HumanMessage("What's the weather?")], "flag": False}
+    )
+    assert response["flag"] is True
+    assert response["structured_response"] == expected_structured_response
+
+    events = list(
+        agent.stream({"messages": [HumanMessage("What's the weather?")], "flag": False})
+    )
+    assert "generate_structured_response" in events[-1]
+    assert events == [
+        {
+            "agent": {
+                "messages": [
+                    AIMessage(
+                        content="What's the weather?",
+                        additional_kwargs={},
+                        response_metadata={},
+                        id="2",
+                        tool_calls=[
+                            {
+                                "name": "get_weather",
+                                "args": {},
+                                "id": "1",
+                                "type": "tool_call",
+                            }
+                        ],
+                    )
+                ]
+            }
+        },
+        {"post_model_hook": {"flag": True}},
+        {
+            "tools": {
+                "messages": [
+                    _AnyIdToolMessage(
+                        content="The weather is sunny and 75°F.",
+                        name="get_weather",
+                        tool_call_id="1",
+                    ),
+                ]
+            }
+        },
+        {
+            "agent": {
+                "messages": [
+                    AIMessage(
+                        content="What's the weather?-What's the weather?-The weather is sunny and 75°F.",
+                        additional_kwargs={},
+                        response_metadata={},
+                        id="3",
+                        tool_calls=[
+                            {
+                                "name": "get_weather",
+                                "args": {},
+                                "id": "1",
+                                "type": "tool_call",
+                            }
+                        ],
+                    )
+                ]
+            }
+        },
+        {"post_model_hook": {"flag": True}},
+        {
+            "generate_structured_response": {
+                "structured_response": WeatherResponse(temperature=75.0)
+            }
+        },
+    ]
