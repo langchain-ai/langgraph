@@ -1,6 +1,7 @@
 import asyncio
 import os
-from typing import Annotated, Sequence, TypedDict
+from collections.abc import Sequence
+from typing import Annotated, TypedDict
 
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage

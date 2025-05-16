@@ -2,7 +2,8 @@ import asyncio
 import logging
 import random
 import time
-from typing import Awaitable, Callable, Optional
+from collections.abc import Awaitable
+from typing import Callable, Optional
 
 from typing_extensions import ParamSpec
 

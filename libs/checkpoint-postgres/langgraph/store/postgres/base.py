@@ -333,7 +333,7 @@ class BasePostgresStore(Generic[C]):
             # First handle main store insertions
             for op in inserts:
                 if op.ttl is not None:
-                    expires_at_str = f"NOW() + INTERVAL '{op.ttl*60} seconds'"
+                    expires_at_str = f"NOW() + INTERVAL '{op.ttl * 60} seconds'"
                     ttl_minutes = op.ttl
                 else:
                     expires_at_str = "NULL"

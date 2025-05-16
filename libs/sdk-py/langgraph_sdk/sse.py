@@ -1,6 +1,7 @@
 """Adapted from httpx_sse to split lines on \n, \r, \r\n per the SSE spec."""
 
-from typing import AsyncIterator, Iterator, Optional, Union
+from collections.abc import AsyncIterator, Iterator
+from typing import Optional, Union
 
 import httpx
 import orjson

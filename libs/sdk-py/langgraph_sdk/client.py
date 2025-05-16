@@ -14,16 +14,11 @@ import functools
 import logging
 import os
 import sys
+from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import (
     Any,
-    AsyncIterator,
-    Dict,
-    Iterator,
-    List,
     Literal,
     Optional,
-    Sequence,
-    Type,
     Union,
     overload,
 )
@@ -700,7 +695,7 @@ class AssistantsClient:
             )
             ```
         """  # noqa: E501
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "graph_id": graph_id,
         }
         if config:
@@ -759,7 +754,7 @@ class AssistantsClient:
             ```
 
         """  # noqa: E501
-        payload: Dict[str, Any] = {}
+        payload: dict[str, Any] = {}
         if graph_id:
             payload["graph_id"] = graph_id
         if config:
@@ -841,7 +836,7 @@ class AssistantsClient:
             )
             ```
         """
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
         }
@@ -890,7 +885,7 @@ class AssistantsClient:
             ```
         """  # noqa: E501
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
         }
@@ -929,7 +924,7 @@ class AssistantsClient:
 
         """  # noqa: E501
 
-        payload: Dict[str, Any] = {"version": version}
+        payload: dict[str, Any] = {"version": version}
 
         return await self.http.post(
             f"/assistants/{assistant_id}/latest", json=payload, headers=headers
@@ -1028,7 +1023,7 @@ class ThreadsClient:
             )
             ```
         """  # noqa: E501
-        payload: Dict[str, Any] = {}
+        payload: dict[str, Any] = {}
         if thread_id:
             payload["thread_id"] = thread_id
         if metadata or graph_id:
@@ -1151,7 +1146,7 @@ class ThreadsClient:
             ```
 
         """  # noqa: E501
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
         }
@@ -1372,7 +1367,7 @@ class ThreadsClient:
             }
             ```
         """  # noqa: E501
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "values": values,
         }
         if checkpoint_id:
@@ -1419,7 +1414,7 @@ class ThreadsClient:
             ```
 
         """  # noqa: E501
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "limit": limit,
         }
         if before:
@@ -2024,7 +2019,7 @@ class RunsClient:
         offset: int = 0,
         status: Optional[RunStatus] = None,
         headers: Optional[dict[str, str]] = None,
-    ) -> List[Run]:
+    ) -> list[Run]:
         """List runs.
 
         Args:
@@ -2035,7 +2030,7 @@ class RunsClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            List[Run]: The runs for the thread.
+            list[Run]: The runs for the thread.
 
         ???+ example "Example Usage"
 
@@ -2674,7 +2669,7 @@ class StoreClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            List[Item]: A list of items matching the search criteria.
+            list[Item]: A list of items matching the search criteria.
 
         ???+ example "Example Usage"
 
@@ -2726,8 +2721,8 @@ class StoreClient:
 
     async def list_namespaces(
         self,
-        prefix: Optional[List[str]] = None,
-        suffix: Optional[List[str]] = None,
+        prefix: Optional[list[str]] = None,
+        suffix: Optional[list[str]] = None,
         max_depth: Optional[int] = None,
         limit: int = 100,
         offset: int = 0,
@@ -2744,7 +2739,7 @@ class StoreClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            List[List[str]]: A list of namespaces matching the criteria.
+            list[list[str]]: A list of namespaces matching the criteria.
 
         ???+ example "Example Usage"
 
@@ -3333,7 +3328,7 @@ class SyncAssistantsClient:
             )
             ```
         """  # noqa: E501
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "graph_id": graph_id,
         }
         if config:
@@ -3391,7 +3386,7 @@ class SyncAssistantsClient:
             )
             ```
         """  # noqa: E501
-        payload: Dict[str, Any] = {}
+        payload: dict[str, Any] = {}
         if graph_id:
             payload["graph_id"] = graph_id
         if config:
@@ -3469,7 +3464,7 @@ class SyncAssistantsClient:
             )
             ```
         """
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
         }
@@ -3515,7 +3510,7 @@ class SyncAssistantsClient:
 
         """  # noqa: E501
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
         }
@@ -3554,7 +3549,7 @@ class SyncAssistantsClient:
 
         """  # noqa: E501
 
-        payload: Dict[str, Any] = {"version": version}
+        payload: dict[str, Any] = {"version": version}
 
         return self.http.post(
             f"/assistants/{assistant_id}/latest", json=payload, headers=headers
@@ -3655,7 +3650,7 @@ class SyncThreadsClient:
             ```
             )
         """  # noqa: E501
-        payload: Dict[str, Any] = {}
+        payload: dict[str, Any] = {}
         if thread_id:
             payload["thread_id"] = thread_id
         if metadata or graph_id:
@@ -3775,7 +3770,7 @@ class SyncThreadsClient:
             )
             ```
         """  # noqa: E501
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
         }
@@ -3987,7 +3982,7 @@ class SyncThreadsClient:
             ```
 
         """  # noqa: E501
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "values": values,
         }
         if checkpoint_id:
@@ -4036,7 +4031,7 @@ class SyncThreadsClient:
             ```
 
         """  # noqa: E501
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "limit": limit,
         }
         if before:
@@ -4630,7 +4625,7 @@ class SyncRunsClient:
         limit: int = 10,
         offset: int = 0,
         headers: Optional[dict[str, str]] = None,
-    ) -> List[Run]:
+    ) -> list[Run]:
         """List runs.
 
         Args:
@@ -4640,7 +4635,7 @@ class SyncRunsClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            List[Run]: The runs for the thread.
+            list[Run]: The runs for the thread.
 
         ???+ example "Example Usage"
 
@@ -5269,7 +5264,7 @@ class SyncStoreClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            List[Item]: A list of items matching the search criteria.
+            list[Item]: A list of items matching the search criteria.
 
         ???+ example "Example Usage"
 
@@ -5317,8 +5312,8 @@ class SyncStoreClient:
 
     def list_namespaces(
         self,
-        prefix: Optional[List[str]] = None,
-        suffix: Optional[List[str]] = None,
+        prefix: Optional[list[str]] = None,
+        suffix: Optional[list[str]] = None,
         max_depth: Optional[int] = None,
         limit: int = 100,
         offset: int = 0,
@@ -5335,7 +5330,7 @@ class SyncStoreClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            List[List[str]]: A list of namespaces matching the criteria.
+            list[list[str]]: A list of namespaces matching the criteria.
 
         ???+ example "Example Usage"
 
@@ -5386,7 +5381,7 @@ def configure_loopback_transports(app: Any) -> None:
 
 
 @functools.lru_cache(maxsize=1)
-def get_asgi_transport() -> Type[httpx.ASGITransport]:
+def get_asgi_transport() -> type[httpx.ASGITransport]:
     try:
         from langgraph_api import asgi_transport
 
