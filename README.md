@@ -77,7 +77,7 @@ While LangGraph can be used standalone, it also integrates seamlessly with any L
 - [Examples](https://langchain-ai.github.io/langgraph/tutorials/): Guided examples on getting started with LangGraph.
 - [LangChain Academy](https://academy.langchain.com/courses/intro-to-langgraph): Learn the basics of LangGraph in our free, structured course.
 - [Templates](https://langchain-ai.github.io/langgraph/concepts/template_applications/): Pre-built reference apps for common agentic workflows (e.g. ReAct agent, memory, retrieval etc.) that can be cloned and adapted.
-- [Case studies](https://www.langchain.com/built-with-langgraph): Hear how industry leaders use LangGraph to ship AI applications in production.
+- [Case studies](https://www.langchain.com/built-with-langgraph): Hear how industry leaders use LangGraph to ship AI applications at scale.
 
 ## Acknowledgements
 
