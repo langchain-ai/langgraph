@@ -47,9 +47,10 @@ jobs:
         run: make test
           
       - name: Run unit tests with minimum dependency versions
-        run: uv sync --all-extras --resolution lowest-direct pytest
         working-directory: ${{ inputs.working-directory }}
-        run: make test
+        run: |
+          uv sync --frozen --all-extras --resolution lowest-direct pytest
+          make test
 
       - name: Ensure the tests did not create any additional files
         shell: bash
