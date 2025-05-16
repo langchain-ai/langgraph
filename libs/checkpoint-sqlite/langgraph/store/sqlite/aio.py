@@ -1,4 +1,5 @@
 import asyncio
+from types import TracebackType
 import logging
 from collections.abc import AsyncIterator, Iterable, Sequence
 from contextlib import asynccontextmanager
@@ -14,6 +15,7 @@ from langgraph.store.base import (
     PutOp,
     Result,
     SearchOp,
+    TTLConfig,
     get_text_at_path,
     tokenize_path,
 )
@@ -31,6 +33,7 @@ from langgraph.store.sqlite.base import (
     _row_to_item,
     _row_to_search_item,
 )
+import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +90,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
 
     MIGRATIONS = MIGRATIONS
     VECTOR_MIGRATIONS = VECTOR_MIGRATIONS
+    supports_ttl = True
 
     def __init__(
         self,
@@ -96,6 +100,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
             Callable[[Union[bytes, str, orjson.Fragment]], dict[str, Any]]
         ] = None,
         index: Optional[SqliteIndexConfig] = None,
+        ttl: Optional[TTLConfig] = None,
     ):
         """Initialize the async SQLite store.
 
@@ -103,6 +108,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
             conn: The SQLite database connection.
             deserializer: Optional custom deserializer function for values.
             index: Optional vector search configuration.
+            ttl: Optional time-to-live configuration.
         """
         super().__init__()
         self._deserializer = deserializer
@@ -115,6 +121,10 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
             self.embeddings, self.index_config = _ensure_index_config(self.index_config)
         else:
             self.embeddings = None
+        self.ttl_config = ttl
+        self._ttl_sweeper_task: Optional[asyncio.Task[None]] = None
+        self._ttl_stop_event = asyncio.Event()
+
 
     @classmethod
     @asynccontextmanager
@@ -123,18 +133,20 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
         conn_string: str,
         *,
         index: Optional[SqliteIndexConfig] = None,
+        ttl: Optional[TTLConfig] = None,
     ) -> AsyncIterator["AsyncSqliteStore"]:
         """Create a new AsyncSqliteStore instance from a connection string.
 
         Args:
             conn_string: The SQLite connection string.
             index: Optional vector search configuration.
+            ttl: Optional time-to-live configuration.
 
         Returns:
             An AsyncSqliteStore instance wrapped in an async context manager.
         """
         async with aiosqlite.connect(conn_string, isolation_level=None) as conn:
-            yield cls(conn, index=index)
+            yield cls(conn, index=index, ttl=ttl)
 
     async def setup(self) -> None:
         """Set up the store database.
@@ -310,13 +322,19 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
             embedding_request_params = []
 
             # First handle main store insertions
+            now = datetime.datetime.now(datetime.timezone.utc)
             for op in inserts:
-                values.append("(?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
+                if op.ttl is None:
+                    expires_at = None
+                else:
+                    expires_at = now + datetime.timedelta(minutes=op.ttl)
+                values.append("(?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)")
                 insertion_params.extend(
                     [
                         _namespace_to_text(op.namespace),
                         op.key,
                         orjson.dumps(cast(dict, op.value)),
+                        expires_at,
                     ]
                 )
 
@@ -345,7 +363,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
 
             values_str = ",".join(values)
             query = f"""
-                INSERT OR REPLACE INTO store (prefix, key, value, created_at, updated_at)
+                INSERT OR REPLACE INTO store (prefix, key, value, created_at, updated_at, expires_at)
                 VALUES {values_str}
             """
             queries.append((query, tuple(insertion_params)))  # type: ignore[arg-type]
@@ -394,7 +412,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
                         filter_conditions.append(
                             "json_extract(value, '$." + key + "') = ?"
                         )
-                        filter_params.append(orjson.dumps(value))
+                        filter_params.append(value if isinstance(value, str) else orjson.dumps(value))
 
             # Vector search branch
             if op.query and self.index_config:
@@ -465,7 +483,6 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
                 params.extend([op.limit, op.offset])
 
             queries.append((base_query, params))
-
         return queries, embedding_requests
 
     def _get_batch_list_namespaces_queries(
@@ -550,7 +567,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
             Tuple of SQL condition and parameters.
         """
         if op == "$eq":
-            return f"json_extract(value, '$.{key}') = ?", [orjson.dumps(value)]
+            return f"json_extract(value, '$.{key}') = ?", [value if isinstance(value, str) else orjson.dumps(value)]
         elif op == "$gt":
             return f"json_extract(value, '$.{key}') > ?", [str(value)]
         elif op == "$gte":
@@ -560,9 +577,122 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
         elif op == "$lte":
             return f"json_extract(value, '$.{key}') <= ?", [str(value)]
         elif op == "$ne":
-            return f"json_extract(value, '$.{key}') != ?", [orjson.dumps(value)]
+            return f"json_extract(value, '$.{key}') != ?", [value if isinstance(value, str) else orjson.dumps(value)]
         else:
             raise ValueError(f"Unsupported operator: {op}")
+
+    async def sweep_ttl(self) -> int:
+        """Delete expired store items based on TTL.
+
+        Returns:
+            int: The number of deleted items.
+        """
+        async with self._cursor() as cur:
+            await cur.execute(
+                """
+                DELETE FROM store
+                WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP
+                """
+            )
+            deleted_count = cur.rowcount
+            return deleted_count
+
+    async def start_ttl_sweeper(
+        self, sweep_interval_minutes: Optional[int] = None
+    ) -> asyncio.Task[None]:
+        """Periodically delete expired store items based on TTL.
+
+        Returns:
+            Task that can be awaited or cancelled.
+        """
+        if not self.ttl_config:
+            return asyncio.create_task(asyncio.sleep(0))
+
+        if self._ttl_sweeper_task is not None and not self._ttl_sweeper_task.done():
+            return self._ttl_sweeper_task
+
+        self._ttl_stop_event.clear()
+
+        interval = float(
+            sweep_interval_minutes or self.ttl_config.get("sweep_interval_minutes") or 5
+        )
+        logger.info(f"Starting store TTL sweeper with interval {interval} minutes")
+
+        async def _sweep_loop() -> None:
+            while not self._ttl_stop_event.is_set():
+                try:
+                    try:
+                        await asyncio.wait_for(
+                            self._ttl_stop_event.wait(),
+                            timeout=interval * 60,
+                        )
+                        break
+                    except asyncio.TimeoutError:
+                        pass
+
+                    expired_items = await self.sweep_ttl()
+                    if expired_items > 0:
+                        logger.info(f"Store swept {expired_items} expired items")
+                except asyncio.CancelledError:
+                    break
+                except Exception as exc:
+                    logger.exception("Store TTL sweep iteration failed", exc_info=exc)
+
+        task = asyncio.create_task(_sweep_loop())
+        task.set_name("ttl_sweeper")
+        self._ttl_sweeper_task = task
+        return task
+
+    async def stop_ttl_sweeper(self, timeout: Optional[float] = None) -> bool:
+        """Stop the TTL sweeper task if it's running.
+
+        Args:
+            timeout: Maximum time to wait for the task to stop, in seconds.
+                If None, wait indefinitely.
+
+        Returns:
+            bool: True if the task was successfully stopped or wasn't running,
+                False if the timeout was reached before the task stopped.
+        """
+        if self._ttl_sweeper_task is None or self._ttl_sweeper_task.done():
+            return True
+
+        logger.info("Stopping TTL sweeper task")
+        self._ttl_stop_event.set()
+
+        if timeout is not None:
+            try:
+                await asyncio.wait_for(self._ttl_sweeper_task, timeout=timeout)
+                success = True
+            except asyncio.TimeoutError:
+                success = False
+        else:
+            await self._ttl_sweeper_task
+            success = True
+
+        if success:
+            self._ttl_sweeper_task = None
+            logger.info("TTL sweeper task stopped")
+        else:
+            logger.warning("Timed out waiting for TTL sweeper task to stop")
+
+        return success
+
+    async def __aenter__(self) -> "AsyncSqliteStore":
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional["TracebackType"],
+    ) -> None:
+        # Ensure the TTL sweeper task is stopped when exiting the context
+        if hasattr(self, "_ttl_sweeper_task") and self._ttl_sweeper_task is not None:
+            # Set the event to signal the task to stop
+            self._ttl_stop_event.set()
+            # We don't wait for the task to complete here to avoid blocking
+            # The task will clean up itself gracefully
 
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:
         """Execute a batch of operations asynchronously.

@@ -4,11 +4,13 @@
 # TESTING AND COVERAGE
 ######################
 
+TEST ?= .
+
 test:
-	poetry run pytest tests
+	poetry run pytest $(TEST)
 
 test_watch:
-	poetry run ptw .
+	poetry run ptw $(TEST)
 
 ######################
 # LINTING AND FORMATTING

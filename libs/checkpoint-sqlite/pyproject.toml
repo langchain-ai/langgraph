@@ -10,7 +10,7 @@ packages = [{ include = "langgraph" }]
 
 [tool.poetry.dependencies]
 python = ">=3.9"
-langgraph-checkpoint = "^2.0.15"
+langgraph-checkpoint = "^2.0.21"
 aiosqlite = ">=0.20,<0.22"
 
 [tool.poetry.group.dev.dependencies]

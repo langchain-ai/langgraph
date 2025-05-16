@@ -1,10 +1,13 @@
+import concurrent.futures
 import logging
 import math
 import sqlite3
 import threading
+import time
 from collections import defaultdict
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 from typing import Any, Callable, Literal, Optional, Union, cast
 
 import orjson
@@ -20,6 +23,7 @@ from langgraph.store.base import (
     Result,
     SearchItem,
     SearchOp,
+    TTLConfig,
     ensure_embeddings,
     get_text_at_path,
     tokenize_path,
@@ -48,6 +52,21 @@ CREATE TABLE IF NOT EXISTS store (
     """
 -- For faster lookups by prefix
 CREATE INDEX IF NOT EXISTS store_prefix_idx ON store (prefix);
+""",
+    """
+-- Add expires_at column to store table
+ALTER TABLE store
+ADD COLUMN expires_at TIMESTAMP;
+""",
+    """
+-- Add ttl_minutes column to store table
+ALTER TABLE store
+ADD COLUMN ttl_minutes REAL;
+""",
+    """
+-- Add index for efficient TTL sweeping
+CREATE INDEX IF NOT EXISTS idx_store_expires_at ON store (expires_at)
+WHERE expires_at IS NOT NULL;
 """,
 ]
 
@@ -229,6 +248,7 @@ class SqliteStore(BaseStore):
 
     MIGRATIONS = MIGRATIONS
     VECTOR_MIGRATIONS = VECTOR_MIGRATIONS
+    supports_ttl = True
 
     def __init__(
         self,
@@ -238,6 +258,7 @@ class SqliteStore(BaseStore):
             Callable[[Union[bytes, str, orjson.Fragment]], dict[str, Any]]
         ] = None,
         index: Optional[SqliteIndexConfig] = None,
+        ttl: Optional[TTLConfig] = None,
     ):
         super().__init__()
         self._deserializer = deserializer
@@ -249,6 +270,9 @@ class SqliteStore(BaseStore):
             self.embeddings, self.index_config = _ensure_index_config(self.index_config)
         else:
             self.embeddings = None
+        self.ttl_config = ttl
+        self._ttl_sweeper_thread: Optional[threading.Thread] = None
+        self._ttl_stop_event = threading.Event()
 
     @classmethod
     @contextmanager
@@ -257,12 +281,14 @@ class SqliteStore(BaseStore):
         conn_string: str,
         *,
         index: Optional[SqliteIndexConfig] = None,
+        ttl: Optional[TTLConfig] = None,
     ) -> Iterator["SqliteStore"]:
         """Create a new SqliteStore instance from a connection string.
 
         Args:
             conn_string (str): The SQLite connection string.
             index (Optional[SqliteIndexConfig]): The index configuration for the store.
+            ttl (Optional[TTLConfig]): The time-to-live configuration for the store.
 
         Returns:
             SqliteStore: A new SqliteStore instance.
@@ -273,7 +299,7 @@ class SqliteStore(BaseStore):
             isolation_level=None,  # autocommit mode
         )
         try:
-            yield cls(conn, index=index)
+            yield cls(conn, index=index, ttl=ttl)
         finally:
             conn.close()
 
@@ -369,18 +395,37 @@ class SqliteStore(BaseStore):
         self, get_ops: Sequence[tuple[int, GetOp]]
     ) -> list[tuple[str, tuple, tuple[str, ...], list]]:
         namespace_groups = defaultdict(list)
+        refresh_ttls = defaultdict(list)
         for idx, op in get_ops:
             namespace_groups[op.namespace].append((idx, op.key))
+            refresh_ttls[op.namespace].append(getattr(op, 'refresh_ttl', False))
         results = []
         for namespace, items in namespace_groups.items():
             _, keys = zip(*items)
-            keys_to_query = ",".join(["?" for _ in keys])
-            query = f"""
-                SELECT key, value, created_at, updated_at
-                FROM store
-                WHERE prefix = ? AND key IN ({keys_to_query})
-            """
-            params = (_namespace_to_text(namespace), *keys)
+            this_refresh_ttls = refresh_ttls[namespace]
+            refresh_ttl_any = any(this_refresh_ttls)
+
+            if refresh_ttl_any and self.ttl_config and self.ttl_config.get("refresh_on_read", False):
+                # Include TTL refresh in the query
+                query = f"""
+                    UPDATE store
+                    SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
+                    WHERE prefix = ? AND key IN ({','.join(['?'] * len(keys))})
+                    AND ttl_minutes IS NOT NULL;
+
+                    SELECT key, value, created_at, updated_at, expires_at, ttl_minutes
+                    FROM store
+                    WHERE prefix = ? AND key IN ({','.join(['?'] * len(keys))})
+                """
+                params = (_namespace_to_text(namespace), *keys, _namespace_to_text(namespace), *keys)
+            else:
+                query = f"""
+                    SELECT key, value, created_at, updated_at, expires_at, ttl_minutes
+                    FROM store
+                    WHERE prefix = ? AND key IN ({','.join(['?'] * len(keys))})
+                """
+                params = (_namespace_to_text(namespace), *keys)
+
             results.append((query, params, namespace, items))
         return results
 
@@ -425,17 +470,46 @@ class SqliteStore(BaseStore):
             insertion_params = []
             vector_values = []
             embedding_request_params = []
+            now = datetime.now()
 
             # First handle main store insertions
             for op in inserts:
-                values.append("(?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
-                insertion_params.extend(
-                    [
-                        _namespace_to_text(op.namespace),
-                        op.key,
-                        orjson.dumps(cast(dict, op.value)),
-                    ]
-                )
+                # Handle TTL expiration
+                if op.ttl is not None:
+                    expires_at = now + timedelta(minutes=op.ttl)
+                    ttl_minutes = op.ttl
+                    values.append("(?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?)")
+                    insertion_params.extend(
+                        [
+                            _namespace_to_text(op.namespace),
+                            op.key,
+                            orjson.dumps(cast(dict, op.value)),
+                            expires_at.isoformat(),
+                            ttl_minutes,
+                        ]
+                    )
+                elif self.ttl_config and self.ttl_config.get("default_ttl") is not None:
+                    default_ttl = float(self.ttl_config.get("default_ttl", 0))
+                    expires_at = now + timedelta(minutes=default_ttl)
+                    values.append("(?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?)")
+                    insertion_params.extend(
+                        [
+                            _namespace_to_text(op.namespace),
+                            op.key,
+                            orjson.dumps(cast(dict, op.value)),
+                            expires_at.isoformat(),
+                            default_ttl,
+                        ]
+                    )
+                else:
+                    values.append("(?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, NULL)")
+                    insertion_params.extend(
+                        [
+                            _namespace_to_text(op.namespace),
+                            op.key,
+                            orjson.dumps(cast(dict, op.value)),
+                        ]
+                    )
 
             # Then handle embeddings if configured
             if self.index_config:
@@ -462,7 +536,7 @@ class SqliteStore(BaseStore):
 
             values_str = ",".join(values)
             query = f"""
-                INSERT OR REPLACE INTO store (prefix, key, value, created_at, updated_at)
+                INSERT OR REPLACE INTO store (prefix, key, value, created_at, updated_at, expires_at, ttl_minutes)
                 VALUES {values_str}
             """
             queries.append((query, insertion_params))
@@ -564,10 +638,27 @@ class SqliteStore(BaseStore):
                     else:
                         prefix_filter_str = ""
 
+                # Handle TTL refresh if requested
+                refresh_ttl = getattr(op, 'refresh_ttl', False) and self.ttl_config and self.ttl_config.get("refresh_on_read", False)
+
+                if refresh_ttl:
+                    # First update expires_at for matching items
+                    ttl_update = f"""
+                    UPDATE store
+                    SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
+                    WHERE prefix LIKE ? AND ttl_minutes IS NOT NULL
+                    AND EXISTS (
+                        SELECT 1 FROM store_vectors sv
+                        WHERE store.prefix = sv.prefix AND store.key = sv.key
+                        {filter_str}
+                    );
+                    """
+                    cur.execute(ttl_update, (f"{_namespace_to_text(op.namespace_prefix)}%",) if op.namespace_prefix else ())
+
                 # We use a CTE to compute scores, with a SQLite-compatible approach for distinct results
                 base_query = f"""
                     WITH scored AS (
-                        SELECT s.prefix, s.key, s.value, s.created_at, s.updated_at, 
+                        SELECT s.prefix, s.key, s.value, s.created_at, s.updated_at, s.expires_at, s.ttl_minutes,
                                {score_expr} AS score
                         FROM store s
                         JOIN store_vectors sv ON s.prefix = sv.prefix AND s.key = sv.key
@@ -576,11 +667,11 @@ class SqliteStore(BaseStore):
                         LIMIT ?
                     ),
                     ranked AS (
-                        SELECT prefix, key, value, created_at, updated_at, score,
+                        SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, score,
                                ROW_NUMBER() OVER (PARTITION BY prefix, key ORDER BY score DESC) as rn
                         FROM scored
                     )
-                    SELECT prefix, key, value, created_at, updated_at, score
+                    SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, score
                     FROM ranked
                     WHERE rn = 1
                     ORDER BY score DESC
@@ -598,8 +689,22 @@ class SqliteStore(BaseStore):
 
             # Regular search branch (no vector search)
             else:
+                # Handle TTL refresh if requested
+                refresh_ttl = getattr(op, 'refresh_ttl', False) and self.ttl_config and self.ttl_config.get("refresh_on_read", False)
+
+                if refresh_ttl:
+                    # First update expires_at for matching items
+                    filter_str = "" if not filter_conditions else " AND " + " AND ".join(filter_conditions)
+                    ttl_update = f"""
+                    UPDATE store
+                    SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
+                    WHERE prefix LIKE ? {filter_str} AND ttl_minutes IS NOT NULL;
+                    """
+                    ttl_params = [f"{_namespace_to_text(op.namespace_prefix)}%", *filter_params]
+                    cur.execute(ttl_update, ttl_params)
+
                 base_query = """
-                    SELECT prefix, key, value, created_at, updated_at
+                    SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes
                     FROM store
                     WHERE prefix LIKE ?
                 """
@@ -772,6 +877,113 @@ class SqliteStore(BaseStore):
         else:
             raise ValueError(f"Unsupported operator: {op}")
 
+    def sweep_ttl(self) -> int:
+        """Delete expired store items based on TTL.
+
+        Returns:
+            int: The number of deleted items.
+        """
+        with self._cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM store
+                WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP
+                """
+            )
+            deleted_count = cur.rowcount
+            return deleted_count
+
+    def start_ttl_sweeper(
+        self, sweep_interval_minutes: Optional[int] = None
+    ) -> concurrent.futures.Future[None]:
+        """Periodically delete expired store items based on TTL.
+
+        Returns:
+            Future that can be waited on or cancelled.
+        """
+        if not self.ttl_config:
+            future: concurrent.futures.Future[None] = concurrent.futures.Future()
+            future.set_result(None)
+            return future
+
+        if self._ttl_sweeper_thread and self._ttl_sweeper_thread.is_alive():
+            logger.info("TTL sweeper thread is already running")
+            # Return a future that can be used to cancel the existing thread
+            future = concurrent.futures.Future()
+            future.add_done_callback(
+                lambda f: self._ttl_stop_event.set() if f.cancelled() else None
+            )
+            return future
+
+        self._ttl_stop_event.clear()
+
+        interval = float(
+            sweep_interval_minutes or self.ttl_config.get("sweep_interval_minutes") or 5
+        )
+        logger.info(f"Starting store TTL sweeper with interval {interval} minutes")
+
+        future = concurrent.futures.Future()
+
+        def _sweep_loop() -> None:
+            try:
+                while not self._ttl_stop_event.is_set():
+                    if self._ttl_stop_event.wait(interval * 60):
+                        break
+
+                    try:
+                        expired_items = self.sweep_ttl()
+                        if expired_items > 0:
+                            logger.info(f"Store swept {expired_items} expired items")
+                    except Exception as exc:
+                        logger.exception(
+                            "Store TTL sweep iteration failed", exc_info=exc
+                        )
+                future.set_result(None)
+            except Exception as exc:
+                future.set_exception(exc)
+
+        thread = threading.Thread(target=_sweep_loop, daemon=True, name="ttl-sweeper")
+        self._ttl_sweeper_thread = thread
+        thread.start()
+
+        future.add_done_callback(
+            lambda f: self._ttl_stop_event.set() if f.cancelled() else None
+        )
+        return future
+
+    def stop_ttl_sweeper(self, timeout: Optional[float] = None) -> bool:
+        """Stop the TTL sweeper thread if it's running.
+
+        Args:
+            timeout: Maximum time to wait for the thread to stop, in seconds.
+                If None, wait indefinitely.
+
+        Returns:
+            bool: True if the thread was successfully stopped or wasn't running,
+                False if the timeout was reached before the thread stopped.
+        """
+        if not self._ttl_sweeper_thread or not self._ttl_sweeper_thread.is_alive():
+            return True
+
+        logger.info("Stopping TTL sweeper thread")
+        self._ttl_stop_event.set()
+
+        self._ttl_sweeper_thread.join(timeout)
+        success = not self._ttl_sweeper_thread.is_alive()
+
+        if success:
+            self._ttl_sweeper_thread = None
+            logger.info("TTL sweeper thread stopped")
+        else:
+            logger.warning("Timed out waiting for TTL sweeper thread to stop")
+
+        return success
+
+    def __del__(self) -> None:
+        """Ensure the TTL sweeper thread is stopped when the object is garbage collected."""
+        if hasattr(self, "_ttl_stop_event") and hasattr(self, "_ttl_sweeper_thread"):
+            self.stop_ttl_sweeper(timeout=0.1)
+
     def batch(self, ops: Iterable[Op]) -> list[Result]:
         """Execute a batch of operations.
 
@@ -828,6 +1040,8 @@ class SqliteStore(BaseStore):
                     "value": row[1],
                     "created_at": row[2],
                     "updated_at": row[3],
+                    "expires_at": row[4] if len(row) > 4 else None,
+                    "ttl_minutes": row[5] if len(row) > 5 else None,
                 }
                 for row in rows
             }
@@ -931,7 +1145,9 @@ class SqliteStore(BaseStore):
                             "value": row[2],
                             "created_at": row[3],
                             "updated_at": row[4],
-                            "score": row[5],
+                            "expires_at": row[5] if len(row) > 5 else None,
+                            "ttl_minutes": row[6] if len(row) > 6 else None,
+                            "score": row[7] if len(row) > 7 else None,
                         },
                         loader=self._deserializer,
                     )
@@ -946,6 +1162,8 @@ class SqliteStore(BaseStore):
                             "value": row[2],
                             "created_at": row[3],
                             "updated_at": row[4],
+                            "expires_at": row[5] if len(row) > 5 else None,
+                            "ttl_minutes": row[6] if len(row) > 6 else None,
                         },
                         loader=self._deserializer,
                     )
