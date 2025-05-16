@@ -1,3 +1,4 @@
+import { describe, test, expect } from "vitest";
 import { Readable } from "node:stream";
 import { IterableReadableStream } from "../utils/stream.js";
 import { BytesLineDecoder, SSEDecoder } from "../utils/sse.js";
