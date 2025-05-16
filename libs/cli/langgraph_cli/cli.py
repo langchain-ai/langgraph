@@ -4,7 +4,8 @@ import os
 import pathlib
 import shutil
 import sys
-from typing import Callable, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Callable, Optional
 
 import click
 import click.exceptions
@@ -741,7 +742,7 @@ def prepare_args_and_stdin(
     image: Optional[str] = None,
     # Like "langchain/langgraphjs-api" or "langchain/langgraph-api
     base_image: Optional[str] = None,
-) -> Tuple[List[str], str]:
+) -> tuple[list[str], str]:
     assert config_path.exists(), f"Config file not found: {config_path}"
     # prepare args
     stdin = langgraph_cli.docker.compose(
@@ -787,7 +788,7 @@ def prepare(
     postgres_uri: Optional[str] = None,
     image: Optional[str] = None,
     base_image: Optional[str] = None,
-) -> Tuple[List[str], str]:
+) -> tuple[list[str], str]:
     """Prepare the arguments and stdin for running the LangGraph API server."""
     config_json = langgraph_cli.config.validate_config_file(config_path)
     # pull latest images

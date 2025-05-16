@@ -9,7 +9,6 @@ on:
         description: "From which folder this pipeline executes"
 
 env:
-  POETRY_VERSION: "2.1.2"
   PYTHON_VERSION: "3.10"
 
 jobs:
@@ -24,12 +23,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
-        uses: "./.github/actions/poetry_setup"
+      - name: Set up Python $${ env.PYTHON_VERSION }}
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          poetry-version: ${{ env.POETRY_VERSION }}
-          cache-key: release
+          enable-cache: true
+          cache-suffix: "release"
 
       # We want to keep this build stage *separate* from the release stage,
       # so that there's no sharing of permissions between them.
@@ -43,7 +42,7 @@ jobs:
       # > from the publish job.
       # https://github.com/pypa/gh-action-pypi-publish#non-goals
       - name: Build project for distribution
-        run: poetry build
+        run: uv build
         working-directory: ${{ inputs.working-directory }}
 
       - name: Upload build
@@ -57,8 +56,8 @@ jobs:
         shell: bash
         working-directory: ${{ inputs.working-directory }}
         run: |
-          echo pkg-name="$(poetry version | cut -d ' ' -f 1)" >> $GITHUB_OUTPUT
-          echo version="$(poetry version --short)" >> $GITHUB_OUTPUT
+          echo pkg-name=$(grep -m 1 "^name = " pyproject.toml | cut -d '"' -f 2)
+          echo version=$(grep -m 1 "^version = " pyproject.toml | cut -d '"' -f 2)
 
   publish:
     needs:
