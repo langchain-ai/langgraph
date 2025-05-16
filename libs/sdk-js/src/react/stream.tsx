@@ -874,7 +874,7 @@ export function useStream<
 
         checkpoint,
         streamMode,
-        streamSubgraphs: submitOptions?.streamSubgraphs ?? false,
+        streamSubgraphs: submitOptions?.streamSubgraphs,
       }) as AsyncGenerator<EventStreamEvent>;
 
       let streamError: StreamError | undefined;
