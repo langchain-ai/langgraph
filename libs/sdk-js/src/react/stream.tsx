@@ -613,6 +613,12 @@ interface SubmitOptions<
   optimisticValues?:
     | Partial<StateType>
     | ((prev: StateType) => Partial<StateType>);
+  /**
+   * Whether or not to stream the nodes of any subgraphs called
+   * by the assistant.
+   * @default false
+   */
+  streamSubgraphs?: boolean;
 }
 
 export function useStream<
@@ -868,6 +874,7 @@ export function useStream<
 
         checkpoint,
         streamMode,
+        streamSubgraphs: submitOptions?.streamSubgraphs,
       }) as AsyncGenerator<EventStreamEvent>;
 
       let streamError: StreamError | undefined;
