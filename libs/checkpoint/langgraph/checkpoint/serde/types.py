@@ -1,8 +1,8 @@
+from collections.abc import Sequence
 from typing import (
     Any,
     Optional,
     Protocol,
-    Sequence,
     TypeVar,
     runtime_checkable,
 )

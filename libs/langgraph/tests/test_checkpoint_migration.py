@@ -1582,9 +1582,9 @@ def test_migrate_checkpoints(source: str, target: str) -> None:
                     migrated["versions_seen"][c][v].split(".")[0]
                 )
         # check that the migrated checkpoint matches the target checkpoint
-        assert (
-            migrated == target_checkpoint.checkpoint
-        ), f"Checkpoint mismatch at index {idx}"
+        assert migrated == target_checkpoint.checkpoint, (
+            f"Checkpoint mismatch at index {idx}"
+        )
 
 
 @NEEDS_CONTEXTVARS

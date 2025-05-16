@@ -7,7 +7,7 @@ import threading
 from collections import defaultdict
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
-from typing import Any, Callable, Literal, Optional, Union, cast, NamedTuple
+from typing import Any, Callable, Literal, NamedTuple, Optional, Union, cast
 
 import orjson
 
@@ -181,12 +181,14 @@ def _group_ops(ops: Iterable[Op]) -> tuple[dict[type, list[tuple[int, Op]]], int
         tot += 1
     return grouped_ops, tot
 
+
 class PreparedGetQuery(NamedTuple):
-    query: str                    # Main query to execute
-    params: tuple                 # Parameters for the main query
-    namespace: tuple[str, ...]    # Namespace info
-    items: list                   # List of items this query is for
+    query: str  # Main query to execute
+    params: tuple  # Parameters for the main query
+    namespace: tuple[str, ...]  # Namespace info
+    items: list  # List of items this query is for
     kind: Literal["get", "refresh"]
+
 
 class SqliteStore(BaseStore):
     """SQLite-backed store with optional vector search capabilities.
@@ -422,18 +424,20 @@ class SqliteStore(BaseStore):
             select_query = f"""
                 SELECT key, value, created_at, updated_at, expires_at, ttl_minutes
                 FROM store
-                WHERE prefix = ? AND key IN ({','.join(['?'] * len(keys))})
+                WHERE prefix = ? AND key IN ({",".join(["?"] * len(keys))})
             """
             select_params = (_namespace_to_text(namespace), *keys)
-            results.append(PreparedGetQuery(select_query, select_params, namespace, items, "get"))
-            
+            results.append(
+                PreparedGetQuery(select_query, select_params, namespace, items, "get")
+            )
+
             # Add a TTL refresh query if needed
             if (
                 refresh_ttl_any
                 and self.ttl_config
                 and self.ttl_config.get("refresh_on_read", False)
             ):
-                placeholders = ','.join(['?'] * len(keys))
+                placeholders = ",".join(["?"] * len(keys))
                 update_query = f"""
                     UPDATE store
                     SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
@@ -442,8 +446,12 @@ class SqliteStore(BaseStore):
                     AND ttl_minutes IS NOT NULL
                 """
                 update_params = (_namespace_to_text(namespace), *keys)
-                results.append(PreparedGetQuery(update_query, update_params, namespace, items, "refresh"))
-                
+                results.append(
+                    PreparedGetQuery(
+                        update_query, update_params, namespace, items, "refresh"
+                    )
+                )
+
         return results
 
     def _prepare_batch_PUT_queries(
@@ -693,7 +701,11 @@ class SqliteStore(BaseStore):
                 logger.debug(f"Search params: {params}")
 
             # Handle TTL refresh if requested
-            if op.refresh_ttl and self.ttl_config and self.ttl_config.get("refresh_on_read", False):
+            if (
+                op.refresh_ttl
+                and self.ttl_config
+                and self.ttl_config.get("refresh_on_read", False)
+            ):
                 final_sql = f"""
                     WITH search_results AS (
                         {base_query}
@@ -1024,7 +1036,7 @@ class SqliteStore(BaseStore):
         namespace_queries = defaultdict(list)
         for prepared_query in self._get_batch_GET_ops_queries(get_ops):
             namespace_queries[prepared_query.namespace].append(prepared_query)
-            
+
         # Process each namespace's operations
         for namespace, queries in namespace_queries.items():
             # Execute TTL refresh queries first
@@ -1036,7 +1048,7 @@ class SqliteStore(BaseStore):
                         raise ValueError(
                             f"Error executing TTL refresh: \n{query.query}\n{query.params}\n{e}"
                         ) from e
-            
+
             # Then execute GET queries and process results
             for query in queries:
                 if query.kind == "get":
@@ -1046,7 +1058,7 @@ class SqliteStore(BaseStore):
                         raise ValueError(
                             f"Error executing GET query: \n{query.query}\n{query.params}\n{e}"
                         ) from e
-                        
+
                     rows = cur.fetchall()
                     key_to_row = {
                         row[0]: {
@@ -1059,7 +1071,7 @@ class SqliteStore(BaseStore):
                         }
                         for row in rows
                     }
-                    
+
                     # Process results for this query
                     for idx, key in query.items:
                         row = key_to_row.get(key)

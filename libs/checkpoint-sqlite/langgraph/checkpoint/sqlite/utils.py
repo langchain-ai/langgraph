@@ -1,6 +1,6 @@
 import json
 from collections.abc import Sequence
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
 
@@ -8,8 +8,8 @@ from langgraph.checkpoint.base import get_checkpoint_id
 
 
 def _metadata_predicate(
-    metadata_filter: Dict[str, Any],
-) -> Tuple[Sequence[str], Sequence[Any]]:
+    metadata_filter: dict[str, Any],
+) -> tuple[Sequence[str], Sequence[Any]]:
     """Return WHERE clause predicates for (a)search() given metadata filter.
 
     This method returns a tuple of a string and a tuple of values. The string
@@ -18,7 +18,7 @@ def _metadata_predicate(
     for each of the corresponding parameters.
     """
 
-    def _where_value(query_value: Any) -> Tuple[str, Any]:
+    def _where_value(query_value: Any) -> tuple[str, Any]:
         """Return tuple of operator and value for WHERE clause predicate."""
         if query_value is None:
             return ("IS ?", None)
@@ -53,9 +53,9 @@ def _metadata_predicate(
 
 def search_where(
     config: Optional[RunnableConfig],
-    filter: Optional[Dict[str, Any]],
+    filter: Optional[dict[str, Any]],
     before: Optional[RunnableConfig] = None,
-) -> Tuple[str, Sequence[Any]]:
+) -> tuple[str, Sequence[Any]]:
     """Return WHERE clause predicates for (a)search() given metadata filter
     and `before` config.
 

@@ -1,17 +1,21 @@
-[tool.poetry]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
 name = "langgraph-examples"
 version = "0.1.0"
 description = ""
-authors = []
 readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "langgraph-cli",
+    "langgraph-sdk",
+]
+
+[tool.uv.sources]
+langgraph-cli = { path = "../cli", editable = true }
+langgraph-sdk = { path = "../sdk_py", editable = true }
+
+[tool.hatch.build]
 packages = []
-package-mode = false
-
-[tool.poetry.dependencies]
-python = ">=3.9"
-langgraph-cli = {path = "../../cli", develop = true}
-langgraph-sdk = {path = "../../sdk-py", develop = true}
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"

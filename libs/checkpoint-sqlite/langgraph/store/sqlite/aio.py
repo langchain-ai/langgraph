@@ -269,18 +269,20 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
             select_query = f"""
                 SELECT key, value, created_at, updated_at, expires_at, ttl_minutes
                 FROM store
-                WHERE prefix = ? AND key IN ({','.join(['?'] * len(keys))})
+                WHERE prefix = ? AND key IN ({",".join(["?"] * len(keys))})
             """
             select_params = (_namespace_to_text(namespace), *keys)
-            results.append(PreparedGetQuery(select_query, select_params, namespace, items, "get"))
-            
+            results.append(
+                PreparedGetQuery(select_query, select_params, namespace, items, "get")
+            )
+
             # Add a TTL refresh query if needed
             if (
                 refresh_ttl_any
                 and self.ttl_config
                 and self.ttl_config.get("refresh_on_read", False)
             ):
-                placeholders = ','.join(['?'] * len(keys))
+                placeholders = ",".join(["?"] * len(keys))
                 update_query = f"""
                     UPDATE store
                     SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
@@ -289,8 +291,12 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
                     AND ttl_minutes IS NOT NULL
                 """
                 update_params = (_namespace_to_text(namespace), *keys)
-                results.append(PreparedGetQuery(update_query, update_params, namespace, items, "refresh"))
-                
+                results.append(
+                    PreparedGetQuery(
+                        update_query, update_params, namespace, items, "refresh"
+                    )
+                )
+
         return results
 
     def _prepare_batch_PUT_queries(
@@ -540,7 +546,11 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
                 logger.debug(f"Search params: {params}")
 
             # Handle TTL refresh if requested
-            if op.refresh_ttl and self.ttl_config and self.ttl_config.get("refresh_on_read", False):
+            if (
+                op.refresh_ttl
+                and self.ttl_config
+                and self.ttl_config.get("refresh_on_read", False)
+            ):
                 final_sql = f"""
                     WITH search_results AS (
                         {base_query}
@@ -834,7 +844,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
         namespace_queries = defaultdict(list)
         for prepared_query in self._get_batch_GET_ops_queries(get_ops):
             namespace_queries[prepared_query.namespace].append(prepared_query)
-            
+
         # Process each namespace's operations
         for namespace, queries in namespace_queries.items():
             # Execute TTL refresh queries first
@@ -846,7 +856,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
                         raise ValueError(
                             f"Error executing TTL refresh: \n{query.query}\n{query.params}\n{e}"
                         ) from e
-            
+
             # Then execute GET queries and process results
             for query in queries:
                 if query.kind == "get":
@@ -856,7 +866,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
                         raise ValueError(
                             f"Error executing GET query: \n{query.query}\n{query.params}\n{e}"
                         ) from e
-                        
+
                     rows = await cur.fetchall()
                     key_to_row = {
                         row[0]: {
@@ -869,7 +879,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
                         }
                         for row in rows
                     }
-                    
+
                     # Process results for this query
                     for idx, key in query.items:
                         row = key_to_row.get(key)

@@ -1,42 +1,48 @@
-[tool.poetry]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
 name = "langgraph-checkpoint-sqlite"
 version = "2.0.7"
 description = "Library with a SQLite implementation of LangGraph checkpoint saver."
 authors = []
-license = "MIT"
+requires-python = ">=3.9"
 readme = "README.md"
-repository = "https://www.github.com/langchain-ai/langgraph"
-packages = [{ include = "langgraph" }]
+license = "MIT"
+license-files = ['LICENSE']
+dependencies = [
+    "langgraph-checkpoint>=2.0.21",
+    "aiosqlite>=0.20",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.9"
-langgraph-checkpoint = "^2.0.21"
-aiosqlite = ">=0.20,<0.22"
+[project.urls]
+Repository = "https://www.github.com/langchain-ai/langgraph"
 
-[tool.poetry.group.dev.dependencies]
-ruff = "^0.6.2"
-codespell = "^2.2.0"
-pytest = "^7.2.1"
-pytest-asyncio = "^0.21.1"
-pytest-mock = "^3.11.1"
-pytest-watcher = { version = ">=0.4.1", python = "<4.0" }
-mypy = "^1.10.0"
-langgraph-checkpoint = {path = "../checkpoint", develop = true}
+[dependency-groups]
+dev = [
+  "ruff",
+  "codespell",
+  "pytest",
+  "pytest-asyncio",
+  "pytest-mock",
+  "pytest-watcher",
+  "mypy",
+  "langgraph-checkpoint",
+]
+
+[tool.uv]
+default-groups = ['dev']
+
+[tool.uv.sources]
+langgraph-checkpoint = { path = "../checkpoint", editable = true }
+
+[tool.hatch.build.targets.wheel]
+include = ["langgraph"]
 
 [tool.pytest.ini_options]
-# --strict-markers will raise errors on unknown marks.
-# https://docs.pytest.org/en/7.1.x/how-to/mark.html#raising-errors-on-unknown-marks
-#
-# https://docs.pytest.org/en/7.1.x/reference/reference.html
-# --strict-config       any warnings encountered while parsing the `pytest`
-#                       section of the configuration file raise errors.
 addopts = "--strict-markers --strict-config --durations=5 -vv"
 asyncio_mode = "auto"
-
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
 lint.select = [
