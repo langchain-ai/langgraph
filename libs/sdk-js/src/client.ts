@@ -921,7 +921,6 @@ export class RunsClient<
       }),
     );
 
-    payload?.onResponse?.(response);
     const runMetadata = getRunMetadataFromResponse(response);
     if (runMetadata) payload?.onRunCreated?.(runMetadata);
 
@@ -973,7 +972,6 @@ export class RunsClient<
       withResponse: true,
     });
 
-    payload?.onResponse?.(response);
     const runMetadata = getRunMetadataFromResponse(response);
     if (runMetadata) payload?.onRunCreated?.(runMetadata);
 
@@ -1056,7 +1054,6 @@ export class RunsClient<
       withResponse: true,
     });
 
-    payload?.onResponse?.(response);
     const runMetadata = getRunMetadataFromResponse(response);
     if (runMetadata) payload?.onRunCreated?.(runMetadata);
 
