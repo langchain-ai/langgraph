@@ -3,9 +3,6 @@ name: test
 on:
   workflow_call:
 
-env:
-  POETRY_VERSION: "1.7.1"
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -21,12 +18,12 @@ jobs:
     name: "test #${{ matrix.python-version }}"
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
-        uses: "./.github/actions/poetry_setup"
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
-          poetry-version: ${{ env.POETRY_VERSION }}
-          cache-key: test-scheduler-kafka
+          enable-cache: true
+          cache-suffix: "test-scheduler-kafka"
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         if: ${{ !github.event.pull_request.head.repo.fork }}
@@ -36,13 +33,11 @@ jobs:
 
       - name: Install dependencies
         shell: bash
-        run: |
-          poetry install --with dev
+        run: uv sync --frozen --group dev
 
       - name: Run tests
         shell: bash
-        run: |
-          make test
+        run: make test
 
       - name: Ensure the tests did not create any additional files
         shell: bash

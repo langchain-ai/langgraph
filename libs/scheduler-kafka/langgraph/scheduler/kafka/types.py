@@ -1,6 +1,7 @@
 import asyncio
 import concurrent.futures
-from typing import Any, NamedTuple, Optional, Protocol, Sequence, TypedDict, Union
+from collections.abc import Sequence
+from typing import Any, NamedTuple, Optional, Protocol, TypedDict, Union
 
 from langchain_core.runnables import RunnableConfig
 

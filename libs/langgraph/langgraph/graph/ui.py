@@ -1,4 +1,4 @@
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Optional, Union, cast
 from uuid import uuid4
 
 from langchain_core.messages import AnyMessage
@@ -55,6 +55,7 @@ def push_ui_message(
     metadata: Optional[dict[str, Any]] = None,
     message: Optional[AnyMessage] = None,
     state_key: str = "ui",
+    merge: bool = False,
 ) -> UIMessage:
     """Push a new UI message to update the UI state.
 
@@ -100,10 +101,10 @@ def push_ui_message(
         "name": name,
         "props": props,
         "metadata": {
-            **(config.get("metadata") or {}),
+            "merge": merge,
+            "run_id": config.get("run_id", None),
             "tags": config.get("tags", None),
             "name": config.get("run_name", None),
-            "run_id": config.get("run_id", None),
             **(metadata or {}),
             **({"message_id": message_id} if message_id else {}),
         },
@@ -192,6 +193,12 @@ def ui_message_reducer(
                 ids_to_remove.add(msg_id)
             else:
                 ids_to_remove.discard(msg_id)
+
+                if cast(UIMessage, msg).get("metadata", {}).get("merge", False):
+                    prev_msg = merged[existing_idx]
+                    msg = msg.copy()
+                    msg["props"] = {**prev_msg["props"], **msg["props"]}
+
                 merged[existing_idx] = msg
         else:
             if msg.get("type") == "remove-ui":

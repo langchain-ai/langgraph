@@ -333,7 +333,7 @@ class BasePostgresStore(Generic[C]):
             # First handle main store insertions
             for op in inserts:
                 if op.ttl is not None:
-                    expires_at_str = f"NOW() + INTERVAL '{op.ttl*60} seconds'"
+                    expires_at_str = f"NOW() + INTERVAL '{op.ttl * 60} seconds'"
                     ttl_minutes = op.ttl
                 else:
                     expires_at_str = "NULL"
@@ -755,12 +755,12 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         """Create a new PostgresStore instance from a connection string.
 
         Args:
-            conn_string (str): The Postgres connection info string.
-            pipeline (bool): whether to use Pipeline
-            pool_config (Optional[PoolArgs]): Configuration for the connection pool.
+            conn_string: The Postgres connection info string.
+            pipeline: whether to use Pipeline
+            pool_config: Configuration for the connection pool.
                 If provided, will create a connection pool and use it instead of a single connection.
                 This overrides the `pipeline` argument.
-            index (Optional[PostgresIndexConfig]): The index configuration for the store.
+            index: The index configuration for the store.
 
         Returns:
             PostgresStore: A new PostgresStore instance.
@@ -905,7 +905,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         """Create a database cursor as a context manager.
 
         Args:
-            pipeline (bool): whether to use pipeline for the DB operations inside the context manager.
+            pipeline: whether to use pipeline for the DB operations inside the context manager.
                 Will be applied regardless of whether the PostgresStore instance was initialized with a pipeline.
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
@@ -1320,7 +1320,7 @@ def _ensure_index_config(
     index_config = index_config.copy()
     tokenized: list[tuple[str, Union[Literal["$"], list[str]]]] = []
     tot = 0
-    text_fields = index_config.get("text_fields") or ["$"]
+    text_fields = index_config.get("fields") or ["$"]
     if isinstance(text_fields, str):
         text_fields = [text_fields]
     if not isinstance(text_fields, list):

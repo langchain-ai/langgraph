@@ -29,6 +29,17 @@
               ],
               "description": "Optional. Path to a pip config file (e.g., \"/etc/pip.conf\" or \"pip.ini\") for controlling\npackage installation (custom indices, credentials, etc.).\n\nOnly relevant if Python dependencies are installed via pip. If omitted, default pip settings are used.\n"
             },
+            "_INTERNAL_docker_tag": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Internal use only.\n"
+            },
             "auth": {
               "anyOf": [
                 {
@@ -39,6 +50,17 @@
                 }
               ],
               "description": "Optional. Custom authentication config, including the path to your Python auth logic and\nthe OpenAPI security definitions it uses.\n"
+            },
+            "base_image": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Base image to use for the LangGraph API server.\n\nDefaults to langchain/langgraph-api or langchain/langgraphjs-api.\n"
             },
             "checkpointer": {
               "anyOf": [
@@ -145,6 +167,17 @@
               ],
               "description": "Optional. Node.js version as a major version (e.g. '20'), if your deployment needs Node.\nMust be >= 20 if provided.\n"
             },
+            "_INTERNAL_docker_tag": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Internal use only.\n"
+            },
             "auth": {
               "anyOf": [
                 {
@@ -155,6 +188,17 @@
                 }
               ],
               "description": "Optional. Custom authentication config, including the path to your Python auth logic and\nthe OpenAPI security definitions it uses.\n"
+            },
+            "base_image": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Base image to use for the LangGraph API server.\n\nDefaults to langchain/langgraph-api or langchain/langgraphjs-api.\n"
             },
             "checkpointer": {
               "anyOf": [
@@ -377,6 +421,17 @@
           "type": "string",
           "description": "Optional. Import path to a custom Starlette/FastAPI application to mount.\n"
         },
+        "configurable_headers": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConfigurableHeaderConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional. Defines how headers are treated for a run's configuration.\n\nYou can include or exclude headers as configurable values to condition your\nagent's behavior or permissions on a request's headers."
+        },
         "cors": {
           "anyOf": [
             {
@@ -410,6 +465,45 @@
         }
       },
       "required": []
+    },
+    "ConfigurableHeaderConfig": {
+      "title": "ConfigurableHeaderConfig",
+      "description": "Customize which headers to include as configurable values in your runs.\n\nBy default, omits x-api-key, x-tenant-id, and x-service-key.\n\nExclusions (if provided) take precedence.\n\nEach value can be a raw string with an optional wildcard.",
+      "type": "object",
+      "properties": {
+        "excludes": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Headers to exclude. Applied before the 'includes' checks.\n"
+        },
+        "includes": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Headers to include (if not also matches against an 'exludes' pattern.\n"
+        }
+      },
+      "required": [
+        "excludes",
+        "includes"
+      ]
     },
     "CorsConfig": {
       "title": "CorsConfig",

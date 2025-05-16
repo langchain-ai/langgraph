@@ -10,7 +10,6 @@
         - CachePolicy
         - Interrupt
         - PregelTask
-        - PregelExecutableTask
         - StateSnapshot
         - Send
         - Command

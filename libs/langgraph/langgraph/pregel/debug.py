@@ -1,15 +1,12 @@
 from collections import defaultdict
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pprint import pformat
 from typing import (
     Any,
-    Iterable,
-    Iterator,
     Literal,
-    Mapping,
     Optional,
-    Sequence,
     Union,
 )
 from uuid import UUID

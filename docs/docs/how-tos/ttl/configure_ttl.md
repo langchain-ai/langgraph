@@ -2,7 +2,7 @@
 
 !!! tip "Prerequisites"
 
-    This guide assumes familiarity with the [LangGraph Platform](../../concepts/index.md#langgraph-platform), [Persistence](../../concepts/persistence.md), and [Cross-thread persistence](../../concepts/store.md) concepts.
+    This guide assumes familiarity with the [LangGraph Platform](../../concepts/langgraph_platform.md), [Persistence](../../concepts/persistence.md), and [Cross-thread persistence](../../concepts/persistence.md#memory-store) concepts.
 
 ???+ note "LangGraph platform only"
     

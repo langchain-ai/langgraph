@@ -134,7 +134,20 @@ export type SubgraphDebugStreamEvent = AsSubgraph<DebugStreamEvent>;
 /**
  * Stream event with events occurring during execution.
  */
-export type EventsStreamEvent = { event: "events"; data: unknown };
+export type EventsStreamEvent = {
+  event: "events";
+  data: {
+    event:
+      | `on_${"chat_model" | "llm" | "chain" | "tool" | "retriever" | "prompt"}_${"start" | "stream" | "end"}`
+      | (string & {});
+    name: string;
+    tags: string[];
+    run_id: string;
+    metadata: Record<string, unknown>;
+    parent_ids: string[];
+    data: unknown;
+  };
+};
 
 /** @internal */
 export type SubgraphEventsStreamEvent = AsSubgraph<EventsStreamEvent>;

@@ -17,11 +17,6 @@ from langgraph.types import Command, Interrupt, PregelTask, StateSnapshot, inter
 from langgraph.utils.config import patch_configurable
 from tests.any_int import AnyInt
 from tests.any_str import AnyDict, AnyObject, AnyStr
-from tests.conftest import (
-    REGULAR_CHECKPOINTERS_ASYNC,
-    REGULAR_CHECKPOINTERS_SYNC,
-    awith_checkpointer,
-)
 
 pytestmark = pytest.mark.anyio
 
@@ -63,6 +58,7 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                 }
             },
             tasks=(),
+            interrupts=(),
         ),
         StateSnapshot(
             values={
@@ -113,6 +109,15 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                     else {"answer": "doc1,doc2,doc3,doc4"},
                 ),
             ),
+            interrupts=()
+            if exc_task_results
+            else (
+                Interrupt(
+                    value="",
+                    resumable=True,
+                    ns=[AnyStr("qa:")],
+                ),
+            ),
         ),
         StateSnapshot(
             values={
@@ -156,6 +161,7 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                     result=None if exc_task_results else {"docs": ["doc1", "doc2"]},
                 ),
             ),
+            interrupts=(),
         ),
         StateSnapshot(
             values={"query": "query: what is weather in sf", "docs": []},
@@ -206,6 +212,7 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                     else {"docs": ["doc3", "doc4"]},
                 ),
             ),
+            interrupts=(),
         ),
         StateSnapshot(
             values={"query": "what is weather in sf", "docs": []},
@@ -245,6 +252,7 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                     else {"query": "query: what is weather in sf"},
                 ),
             ),
+            interrupts=(),
         ),
         StateSnapshot(
             values={"docs": []},
@@ -276,6 +284,7 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                     result={"query": "what is weather in sf"},
                 ),
             ),
+            interrupts=(),
         ),
     ]
 
@@ -1573,22 +1582,17 @@ def test_migrate_checkpoints(source: str, target: str) -> None:
                     migrated["versions_seen"][c][v].split(".")[0]
                 )
         # check that the migrated checkpoint matches the target checkpoint
-        assert (
-            migrated == target_checkpoint.checkpoint
-        ), "Checkpoint mismatch at index {}".format(idx)
+        assert migrated == target_checkpoint.checkpoint, (
+            f"Checkpoint mismatch at index {idx}"
+        )
 
 
 @NEEDS_CONTEXTVARS
-@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_SYNC)
 def test_latest_checkpoint_state_graph(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
-        f"checkpointer_{checkpointer_name}"
-    )
-
     builder = make_state_graph()
-    app = builder.compile(checkpointer=checkpointer)
+    app = builder.compile(checkpointer=sync_checkpointer)
     config = {"configurable": {"thread_id": "1"}}
 
     assert [*app.stream({"query": "what is weather in sf"}, config)] == [
@@ -1624,61 +1628,55 @@ def test_latest_checkpoint_state_graph(
 
 
 @NEEDS_CONTEXTVARS
-@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
-async def test_latest_checkpoint_state_graph_async(checkpointer_name: str) -> None:
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        builder = make_state_graph()
-        app = builder.compile(checkpointer=checkpointer)
-        config = {"configurable": {"thread_id": "1"}}
+async def test_latest_checkpoint_state_graph_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    builder = make_state_graph()
+    app = builder.compile(checkpointer=async_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
 
-        assert [
-            c async for c in app.astream({"query": "what is weather in sf"}, config)
-        ] == [
-            {"rewrite_query": {"query": "query: what is weather in sf"}},
-            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-            {"retriever_two": {"docs": ["doc3", "doc4"]}},
-            {"retriever_one": {"docs": ["doc1", "doc2"]}},
-            {
-                "__interrupt__": (
-                    Interrupt(
-                        value="",
-                        resumable=True,
-                        ns=[AnyStr("qa:")],
-                    ),
-                )
-            },
-        ]
+    assert [
+        c async for c in app.astream({"query": "what is weather in sf"}, config)
+    ] == [
+        {"rewrite_query": {"query": "query: what is weather in sf"}},
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="",
+                    resumable=True,
+                    ns=[AnyStr("qa:")],
+                ),
+            )
+        },
+    ]
 
-        assert [c async for c in app.astream(Command(resume=""), config)] == [
-            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-        ]
+    assert [c async for c in app.astream(Command(resume=""), config)] == [
+        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+    ]
 
-        # check history with current checkpoints matches expected history
-        history = [c async for c in app.aget_state_history(config)]
-        expected_history = get_expected_history()
-        assert len(history) == len(expected_history)
-        assert history[0] == expected_history[0]
-        assert history[1] == expected_history[1]
-        assert history[2] == expected_history[2]
-        assert history[3] == expected_history[3]
-        assert history[4] == expected_history[4]
-        assert history[5] == expected_history[5]
+    # check history with current checkpoints matches expected history
+    history = [c async for c in app.aget_state_history(config)]
+    expected_history = get_expected_history()
+    assert len(history) == len(expected_history)
+    assert history[0] == expected_history[0]
+    assert history[1] == expected_history[1]
+    assert history[2] == expected_history[2]
+    assert history[3] == expected_history[3]
+    assert history[4] == expected_history[4]
+    assert history[5] == expected_history[5]
 
 
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpoint_version", ["3", "2-start:*", "2-quadratic"])
-@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_SYNC)
 def test_saved_checkpoint_state_graph(
-    request: pytest.FixtureRequest,
-    checkpointer_name: str,
+    sync_checkpointer: BaseCheckpointSaver,
     checkpoint_version: str,
 ) -> None:
-    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
-        f"checkpointer_{checkpointer_name}"
-    )
-
     builder = make_state_graph()
-    app = builder.compile(checkpointer=checkpointer)
+    app = builder.compile(checkpointer=sync_checkpointer)
 
     thread1 = "1"
     config = {"configurable": {"thread_id": thread1, "checkpoint_ns": ""}}
@@ -1690,8 +1688,8 @@ def test_saved_checkpoint_state_graph(
         for write in checkpoint.pending_writes:
             grouped_writes[write[0]].append(write[1:])
         for tid, group in grouped_writes.items():
-            checkpointer.put_writes(checkpoint.config, group, tid)
-        checkpointer.put(
+            sync_checkpointer.put_writes(checkpoint.config, group, tid)
+        sync_checkpointer.put(
             patch_configurable(config, {"checkpoint_id": parent_id}),
             checkpoint.checkpoint,
             checkpoint.metadata,
@@ -1731,6 +1729,7 @@ def test_saved_checkpoint_state_graph(
             created_at=AnyStr(),
             parent_config=latest_state.parent_config,
             tasks=latest_state.tasks,
+            interrupts=latest_state.interrupts,
         )
         == history[0]
     )
@@ -1738,70 +1737,65 @@ def test_saved_checkpoint_state_graph(
 
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpoint_version", ["3", "2-start:*", "2-quadratic"])
-@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_saved_checkpoint_state_graph_async(
-    checkpointer_name: str,
+    async_checkpointer: BaseCheckpointSaver,
     checkpoint_version: str,
 ) -> None:
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        builder = make_state_graph()
-        app = builder.compile(checkpointer=checkpointer)
+    builder = make_state_graph()
+    app = builder.compile(checkpointer=async_checkpointer)
 
-        thread1 = "1"
-        config = {"configurable": {"thread_id": thread1, "checkpoint_ns": ""}}
+    thread1 = "1"
+    config = {"configurable": {"thread_id": thread1, "checkpoint_ns": ""}}
 
-        # save checkpoints
-        parent_id: Optional[str] = None
-        for checkpoint in reversed(SAVED_CHECKPOINTS[checkpoint_version]):
-            grouped_writes = defaultdict(list)
-            for write in checkpoint.pending_writes:
-                grouped_writes[write[0]].append(write[1:])
-            for tid, group in grouped_writes.items():
-                await checkpointer.aput_writes(checkpoint.config, group, tid)
-            await checkpointer.aput(
-                patch_configurable(config, {"checkpoint_id": parent_id}),
-                checkpoint.checkpoint,
-                checkpoint.metadata,
-                checkpoint.checkpoint["channel_versions"],
-            )
-            parent_id = checkpoint.checkpoint["id"]
-
-        # load history
-        history = [c async for c in app.aget_state_history(config)]
-        # check history with saved checkpoints matches expected history
-        exc_task_results: int = 0
-        if checkpoint_version == "2-start:*":
-            exc_task_results = 1
-        elif checkpoint_version == "2-quadratic":
-            exc_task_results = 2
-        expected_history = get_expected_history(exc_task_results=exc_task_results)
-        assert len(history) == len(expected_history)
-        assert history[0] == expected_history[0]
-        assert history[1] == expected_history[1]
-        assert history[2] == expected_history[2]
-        assert history[3] == expected_history[3]
-        assert history[4] == expected_history[4]
-        assert history[5] == expected_history[5]
-
-        # resume from 2nd to latest checkpoint
-        assert [
-            c async for c in app.astream(Command(resume=""), history[1].config)
-        ] == [
-            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-        ]
-        # new checkpoint should match the latest checkpoint in history
-        latest_state = await app.aget_state(config)
-        assert (
-            StateSnapshot(
-                values=latest_state.values,
-                next=latest_state.next,
-                config=patch_configurable(
-                    latest_state.config, {"checkpoint_id": AnyStr()}
-                ),
-                metadata=AnyDict(latest_state.metadata),
-                created_at=AnyStr(),
-                parent_config=latest_state.parent_config,
-                tasks=latest_state.tasks,
-            )
-            == history[0]
+    # save checkpoints
+    parent_id: Optional[str] = None
+    for checkpoint in reversed(SAVED_CHECKPOINTS[checkpoint_version]):
+        grouped_writes = defaultdict(list)
+        for write in checkpoint.pending_writes:
+            grouped_writes[write[0]].append(write[1:])
+        for tid, group in grouped_writes.items():
+            await async_checkpointer.aput_writes(checkpoint.config, group, tid)
+        await async_checkpointer.aput(
+            patch_configurable(config, {"checkpoint_id": parent_id}),
+            checkpoint.checkpoint,
+            checkpoint.metadata,
+            checkpoint.checkpoint["channel_versions"],
         )
+        parent_id = checkpoint.checkpoint["id"]
+
+    # load history
+    history = [c async for c in app.aget_state_history(config)]
+    # check history with saved checkpoints matches expected history
+    exc_task_results: int = 0
+    if checkpoint_version == "2-start:*":
+        exc_task_results = 1
+    elif checkpoint_version == "2-quadratic":
+        exc_task_results = 2
+    expected_history = get_expected_history(exc_task_results=exc_task_results)
+    assert len(history) == len(expected_history)
+    assert history[0] == expected_history[0]
+    assert history[1] == expected_history[1]
+    assert history[2] == expected_history[2]
+    assert history[3] == expected_history[3]
+    assert history[4] == expected_history[4]
+    assert history[5] == expected_history[5]
+
+    # resume from 2nd to latest checkpoint
+    assert [c async for c in app.astream(Command(resume=""), history[1].config)] == [
+        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+    ]
+    # new checkpoint should match the latest checkpoint in history
+    latest_state = await app.aget_state(config)
+    assert (
+        StateSnapshot(
+            values=latest_state.values,
+            next=latest_state.next,
+            config=patch_configurable(latest_state.config, {"checkpoint_id": AnyStr()}),
+            metadata=AnyDict(latest_state.metadata),
+            created_at=AnyStr(),
+            parent_config=latest_state.parent_config,
+            tasks=latest_state.tasks,
+            interrupts=latest_state.interrupts,
+        )
+        == history[0]
+    )

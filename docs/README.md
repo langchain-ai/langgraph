@@ -3,7 +3,7 @@
 To setup requirements for building docs you can run:
 
 ```bash
-poetry install --with test
+uv sync --group test
 ```
 
 ## Serving documentation locally

@@ -1,5 +1,6 @@
 import re
-from typing import Any, Sequence, Union
+from collections.abc import Sequence
+from typing import Any, Union
 
 from typing_extensions import Self
 

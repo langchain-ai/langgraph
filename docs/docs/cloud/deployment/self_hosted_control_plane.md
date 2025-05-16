@@ -2,29 +2,26 @@
 
 Before deploying, review the [conceptual guide for the Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md) deployment option.
 
+!!! important "Beta"
+    The Self-Hosted Control Plane deployment option is currently in beta stage.
+
 ## Prerequisites
 
 1. You are using Kubernetes.
 1. You have self-hosted LangSmith deployed.
-1. Use the [LangGraph CLI](../../concepts/langgraph_cli.md) to [test your application locally](./test_locally.md).
+1. Use the [LangGraph CLI](../../concepts/langgraph_cli.md) to [test your application locally](../../tutorials/langgraph-platform/local-server.md).
 1. Use the [LangGraph CLI](../../concepts/langgraph_cli.md) to build a Docker image (i.e. `langgraph build`) and push it to a registry your Kubernetes cluster has access to.
 1. `KEDA` is installed on your cluster.
 
          helm repo add kedacore https://kedacore.github.io/charts 
          helm install keda kedacore/keda --namespace keda --create-namespace
-
-1. Ingress Configuration (recommended)
-    1. Install `Ingress Nginx` to serve as a reverse proxy for your deployment.
-
-            helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-            helm repo update
-            helm install ingress-nginx ingress-nginx/ingress-nginx
-
-    1. Provision a root domain that will suffix all domains for your workloads (e.g. `us.langgraph.app`).
-    1. Provision wildcard certificates to terminate TLS for your deployments.
-    1. Note: If this step is skipped, you will need to provision domains/certs for each of your deployments.
-
+1. Ingress Configuration
+    1. You must set up an ingress for your LangSmith instance. All agents will be deployed as Kubernetes services behind this ingress.
+    1. You can use this guide to [set up an ingress](https://docs.smith.langchain.com/self_hosting/configuration/ingress) for your instance.
 1. You have slack space in your cluster for multiple deployments. `Cluster-Autoscaler` is recommended to automatically provision new nodes.
+1. A valid Dynamic PV provisioner or PVs available on your cluster. You can verify this by running:
+
+        kubectl get storageclass
 
 ## Setup
 
@@ -44,13 +41,12 @@ Before deploying, review the [conceptual guide for the Self-Hosted Control Plane
           pullPolicy: IfNotPresent
           tag: "aa9dff4"
 
-1. In your `values.yaml` file, enable the `langgraphPlatform` option.
-
+1. In your `values.yaml` file, enable the `langgraphPlatform` option. Note that you must also have a valid ingress setup:
         config:
           langgraphPlatform:
             enabled: true
             langgraphPlatformLicenseKey: "YOUR_LANGGRAPH_PLATFORM_LICENSE_KEY"
-            rootDomain: "YOUR_ROOT_DOMAIN"
+1. In your `values.yaml` file, configure the `hostBackendImage` and `operatorImage` options (if you need to mirror images)
 
 1. You can also configure base templates for your agents by overriding the base templates [here](https://github.com/langchain-ai/helm/blob/main/charts/langsmith/values.yaml#L898).
-1. You create a deployment from the [Control Plane UI](../../concepts/langgraph_control_plane.md#control-plane-ui).
+1. You create a deployment from the [control plane UI](../../concepts/langgraph_control_plane.md#control-plane-ui).

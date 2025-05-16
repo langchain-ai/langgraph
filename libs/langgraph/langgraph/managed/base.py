@@ -1,14 +1,11 @@
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager, contextmanager
 from inspect import isclass
 from typing import (
     Any,
-    AsyncIterator,
     Generic,
-    Iterator,
     NamedTuple,
-    Sequence,
-    Type,
     TypeVar,
     Union,
 )
@@ -66,11 +63,11 @@ class WritableManagedValue(Generic[V, U], ManagedValue[V], ABC):
 
 
 class ConfiguredManagedValue(NamedTuple):
-    cls: Type[ManagedValue]
+    cls: type[ManagedValue]
     kwargs: dict[str, Any]
 
 
-ManagedValueSpec = Union[Type[ManagedValue], ConfiguredManagedValue]
+ManagedValueSpec = Union[type[ManagedValue], ConfiguredManagedValue]
 
 
 def is_managed_value(value: Any) -> TypeGuard[ManagedValueSpec]:
@@ -79,7 +76,7 @@ def is_managed_value(value: Any) -> TypeGuard[ManagedValueSpec]:
     )
 
 
-def is_readonly_managed_value(value: Any) -> TypeGuard[Type[ManagedValue]]:
+def is_readonly_managed_value(value: Any) -> TypeGuard[type[ManagedValue]]:
     return (
         isclass(value)
         and issubclass(value, ManagedValue)
@@ -90,7 +87,7 @@ def is_readonly_managed_value(value: Any) -> TypeGuard[Type[ManagedValue]]:
     )
 
 
-def is_writable_managed_value(value: Any) -> TypeGuard[Type[WritableManagedValue]]:
+def is_writable_managed_value(value: Any) -> TypeGuard[type[WritableManagedValue]]:
     return (isclass(value) and issubclass(value, WritableManagedValue)) or (
         isinstance(value, ConfiguredManagedValue)
         and issubclass(value.cls, WritableManagedValue)

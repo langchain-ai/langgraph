@@ -1,61 +1,68 @@
+import functools
 import logging
 import weakref
+from dataclasses import is_dataclass
 from inspect import isclass
 from typing import (
+    Annotated,
     Any,
     Callable,
     Optional,
-    Type,
     Union,
     get_args,
     get_origin,
     get_type_hints,
 )
 
-from pydantic import BaseModel
-from pydantic.v1 import BaseModel as BaseModelV1
-from typing_extensions import Annotated
+from pydantic import BaseModel, ConfigDict, TypeAdapter
+from typing_extensions import is_typeddict
+
+__all__ = ["SchemaCoercionMapper"]
 
 logger = logging.getLogger(__name__)
 
 
-_cache: weakref.WeakKeyDictionary[Type[Any], dict[int, "SchemaCoercionMapper"]] = (
+_cache: weakref.WeakKeyDictionary[type[Any], dict[int, "SchemaCoercionMapper"]] = (
     weakref.WeakKeyDictionary()
 )
 
 
 class SchemaCoercionMapper:
+    """Lightweight coercion of *dict* → *BaseModel* instances."""
+
     def __new__(
         cls,
-        schema: Type[Any],
+        schema: type[Any],
         type_hints: Optional[dict[str, Any]] = None,
+        *,
         max_depth: int = 12,
     ) -> "SchemaCoercionMapper":
-        if schema not in _cache:
-            _cache[schema] = {}
-        if max_depth in _cache[schema]:
-            return _cache[schema][max_depth]
-
+        by_depth = _cache.setdefault(schema, {})
+        if max_depth in by_depth:
+            return by_depth[max_depth]
         inst = super().__new__(cls)
-        _cache[schema][max_depth] = inst
+        by_depth[max_depth] = inst
         return inst
 
     def __init__(
         self,
-        schema: Type[Any],
+        schema: type[BaseModel],
         type_hints: Optional[dict[str, Any]] = None,
+        *,
         max_depth: int = 12,
-    ):
-        if hasattr(self, "_inited"):
+    ) -> None:
+        if hasattr(self, "_initialised"):
             return
-        self._inited = True
+        self._initialised = True
+
         self.schema = schema
+        self.max_depth = max_depth
+
         self.type_hints = (
             type_hints
             if type_hints is not None
             else get_type_hints(schema, localns={schema.__name__: schema})
         )
-        self.max_depth = max_depth
 
         if issubclass(schema, BaseModel):
             self._fields = {
@@ -63,64 +70,69 @@ class SchemaCoercionMapper:
                 for n, f in schema.model_fields.items()
             }
             self._construct: Callable[..., Any] = schema.model_construct
-
-        elif issubclass(schema, BaseModelV1):
-            self._fields = {
-                n: self.type_hints.get(n, f.annotation)
-                for n, f in schema.__fields__.items()
-            }
-            self._construct = schema.construct
+            unhandled_attrs = ("validators", "field_validators", "root_validators")
+            if (decorators := getattr(schema, "__pydantic_decorators__", None)) and any(
+                getattr(decorators, attr, None) for attr in unhandled_attrs
+            ):
+                self.coerce = lambda v, _: schema.model_validate(v)
+            else:
+                self.coerce = self._coerce
         else:
-            raise TypeError("Schema is neither valid Pydantic v1 nor v2 model.")
-        self._field_coercers: Optional[dict[str, Callable[[Any, Any], Any]]] = None
+            raise TypeError("Schema must be a Pydantic V2 model.")
+
+        self._field_coercers: Optional[dict[str, Callable[[Any, int], Any]]] = None
 
     def __call__(self, input_data: Any, depth: Optional[int] = None) -> Any:
         return self.coerce(input_data, depth)
 
-    def coerce(self, input_data: Any, depth: Optional[int] = None) -> Any:
+    def _coerce(self, input_data: Any, depth: Optional[int] = None) -> Any:
         if depth is None:
             depth = self.max_depth
         if not isinstance(input_data, dict) or depth <= 0:
             return input_data
-        processed = {}
+
         if self._field_coercers is None:
             self._field_coercers = {
                 n: self._build_coercer(t, depth - 1) for n, t in self._fields.items()
             }
+
+        processed: dict[str, Any] = {}
         for k, v in input_data.items():
             fn = self._field_coercers.get(k)
             processed[k] = fn(v, depth - 1) if fn else v
         return self._construct(**processed)
 
     def _build_coercer(
-        self, field_type: Any, depth: int, throw: bool = False
+        self, field_type: Any, depth: int, *, throw: bool = False
     ) -> Callable[[Any, Any], Any]:
         if depth == 0:
             return self._passthrough
+
         origin = get_origin(field_type)
+
+        if (field_type in _IDENTITY_TYPES) or (origin in _IDENTITY_TYPES):
+            return self._passthrough
 
         if origin is Annotated:
             real_type, *_ = get_args(field_type)
             sub = self._build_coercer(real_type, depth - 1)
             return lambda v, d: sub(v, d)
-        if isclass(field_type):
-            is_class_ = True
-            try:
-                is_base_model = issubclass(field_type, BaseModel)
-            except TypeError:
-                is_class_ = False
-                is_base_model = False
 
-            if is_base_model:
+        if isclass(field_type):
+            # This is needed bcs. of issubclass issues on older versions of python
+            try:
+                is_bm_subclass = issubclass(field_type, BaseModel)
+            except TypeError:
+                # python < 3.11 issue.
+                is_bm_subclass = False
+            if is_bm_subclass:
                 mapper = SchemaCoercionMapper(field_type, max_depth=depth - 1)
                 return lambda v, d: mapper.coerce(v, d) if isinstance(v, dict) else v
-            if is_class_ and issubclass(field_type, BaseModelV1):
-                mapper = SchemaCoercionMapper(field_type, max_depth=depth - 1)
-                return lambda v, d: mapper.coerce(v, d) if isinstance(v, dict) else v
-        if origin is list or field_type is list:
+
+        if origin is list:
             args = get_args(field_type)
             if len(args) != 1:
-                return lambda v, d: v
+                return self._passthrough
             sub = self._build_coercer(args[0], depth - 1)
 
             def list_coercer(v: Any, d: Any) -> Any:
@@ -129,15 +141,21 @@ class SchemaCoercionMapper:
                 return [sub(x, d - 1) for x in v]
 
             return list_coercer
+
         if origin is set or field_type is set:
             args = get_args(field_type)
-            if len(args) != 1:
-                return lambda v, d: v
-            sub = self._build_coercer(args[0], depth - 1)
+            if len(args) > 1:
+                return self._passthrough
+            elif len(args) == 1:
+                sub = self._build_coercer(args[0], depth - 1)
+            else:
+                sub = None  # type: ignore
 
             def set_coercer(v: Any, d: Any) -> Any:
                 if not isinstance(v, (list, tuple, set)):
                     return v
+                if sub is None:
+                    return set(v)
                 return {sub(x, d - 1) for x in v}
 
             return set_coercer
@@ -148,7 +166,7 @@ class SchemaCoercionMapper:
                 def dict_coercer(v: Any, d: Any) -> Any:
                     if not isinstance(v, dict):
                         if throw:
-                            raise TypeError("Expected dict, got %s" % type(v))
+                            raise TypeError(f"Expected dict, got {type(v)}")
                     return v
 
                 return dict_coercer
@@ -158,27 +176,26 @@ class SchemaCoercionMapper:
             def dict_coercer(v: Any, d: Any) -> Any:
                 if not isinstance(v, dict):
                     if throw:
-                        raise TypeError("Expected dict, got %s" % type(v))
+                        raise TypeError(f"Expected dict, got {type(v)}")
                     return v
                 return {k_sub(k, d - 1): v_sub(val, d - 1) for k, val in v.items()}
 
             return dict_coercer
 
         if origin is tuple:
-            targs = get_args(field_type)
-            if not targs:
-                return lambda v, d: v
-            subs = [self._build_coercer(a, depth - 1) for a in targs]
+            elem_types = get_args(field_type)
+            if not elem_types:
+                return self._passthrough
+            subs = [self._build_coercer(t, depth - 1) for t in elem_types]
+            return lambda v, d: (
+                tuple(
+                    subs[i](v[i] if i < len(v) else None, d - 1)
+                    for i in range(len(subs))
+                )
+                if isinstance(v, (list, tuple))
+                else v
+            )
 
-            def tuple_coercer(v: Any, d: Any) -> Any:
-                if not isinstance(v, (list, tuple)):
-                    return v
-                out = []
-                for i, sp in enumerate(subs):
-                    out.append(sp(v[i] if i < len(v) else None, d - 1))
-                return tuple(out)
-
-            return tuple_coercer
         if origin is Union:
             uargs = get_args(field_type)
             subs, none_in_union = [], False
@@ -204,7 +221,48 @@ class SchemaCoercionMapper:
                 return v
 
             return union_coercer
-        return self._passthrough
 
-    def _passthrough(self, v: Any, d: Any) -> Any:
+        adapter_fn = _get_adapter(field_type)
+        return lambda v, _d: adapter_fn(v)
+
+    @staticmethod
+    def _passthrough(v: Any, _d: Any) -> Any:  # noqa: D401
         return v
+
+
+_adapter_cache: dict[Any, Callable[[Any], Any]] = {}
+
+
+_IDENTITY_TYPES: tuple[type[Any], ...] = (
+    int,
+    float,
+    str,
+    bool,
+    bytes,
+    bytearray,
+    complex,
+    memoryview,
+    type(None),
+)
+
+
+@functools.lru_cache(maxsize=2048)
+def _adapter_for(tp: Any) -> Callable[[Any], Any]:  # noqa: D401
+    try:
+        config = (
+            None
+            if (issubclass(tp, BaseModel) or is_dataclass(tp) or is_typeddict(tp))
+            else ConfigDict(arbitrary_types_allowed=True)
+        )
+    except TypeError:
+        config = None
+    return TypeAdapter(tp, config=config).validate_python
+
+
+def _get_adapter(tp: Any) -> Callable[[Any], Any]:
+    try:
+        return _adapter_cache[tp]
+    except KeyError:
+        fn = _adapter_for(tp)
+        _adapter_cache[tp] = fn
+        return fn

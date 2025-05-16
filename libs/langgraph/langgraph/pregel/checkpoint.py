@@ -1,5 +1,6 @@
+from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import Mapping, Optional
+from typing import Optional
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint

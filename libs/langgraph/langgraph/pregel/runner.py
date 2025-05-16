@@ -3,18 +3,13 @@ import concurrent.futures
 import threading
 import time
 import weakref
+from collections.abc import AsyncIterator, Awaitable, Iterable, Iterator, Sequence
 from functools import partial
 from typing import (
     Any,
-    AsyncIterator,
-    Awaitable,
     Callable,
     Generic,
-    Iterable,
-    Iterator,
     Optional,
-    Sequence,
-    Type,
     TypeVar,
     Union,
     cast,
@@ -38,8 +33,13 @@ from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.pregel.algo import Call
 from langgraph.pregel.executor import Submit
 from langgraph.pregel.retry import arun_with_retry, run_with_retry
-from langgraph.types import PregelExecutableTask, PregelScratchpad, RetryPolicy
-from langgraph.utils.future import chain_future
+from langgraph.types import (
+    CachePolicy,
+    PregelExecutableTask,
+    PregelScratchpad,
+    RetryPolicy,
+)
+from langgraph.utils.future import chain_future, run_coroutine_threadsafe
 
 F = TypeVar("F", concurrent.futures.Future, asyncio.Future)
 E = TypeVar("E", threading.Event, asyncio.Event)
@@ -72,7 +72,7 @@ class FuturesDict(Generic[F, E], dict[F, Optional[PregelExecutableTask]]):
         callback: weakref.ref[
             Callable[[PregelExecutableTask, Optional[BaseException]], None]
         ],
-        future_type: Type[F],
+        future_type: type[F],
         # used for generic typing, newer py supports FutureDict[...](...)
     ) -> None:
         super().__init__()
@@ -119,12 +119,6 @@ class PregelRunner:
         *,
         submit: weakref.ref[Submit],
         put_writes: weakref.ref[Callable[[str, Sequence[tuple[str, Any]]], None]],
-        schedule_task: weakref.ref[
-            Callable[
-                [PregelExecutableTask, int, Optional[Call]],
-                Optional[PregelExecutableTask],
-            ]
-        ],
         use_astream: bool = False,
         node_finished: Optional[Callable[[str], None]] = None,
     ) -> None:
@@ -132,7 +126,6 @@ class PregelRunner:
         self.put_writes = put_writes
         self.use_astream = use_astream
         self.node_finished = node_finished
-        self.schedule_task = schedule_task
 
     def tick(
         self,
@@ -140,8 +133,12 @@ class PregelRunner:
         *,
         reraise: bool = True,
         timeout: Optional[float] = None,
-        retry_policy: Optional[RetryPolicy] = None,
+        retry_policy: Optional[Sequence[RetryPolicy]] = None,
         get_waiter: Optional[Callable[[], concurrent.futures.Future[None]]] = None,
+        schedule_task: Callable[
+            [PregelExecutableTask, int, Optional[Call]],
+            Optional[PregelExecutableTask],
+        ],
     ) -> Iterator[None]:
         tasks = tuple(tasks)
         futures = FuturesDict(
@@ -152,7 +149,9 @@ class PregelRunner:
         # give control back to the caller
         yield
         # fast path if single task with no timeout and no waiter
-        if len(tasks) == 1 and timeout is None and get_waiter is None:
+        if len(tasks) == 0:
+            return
+        elif len(tasks) == 1 and timeout is None and get_waiter is None:
             t = tasks[0]
             try:
                 run_with_retry(
@@ -164,7 +163,7 @@ class PregelRunner:
                             weakref.ref(t),
                             retry=retry_policy,
                             futures=weakref.ref(futures),
-                            schedule_task=self.schedule_task,
+                            schedule_task=schedule_task,
                             submit=self.submit,
                             reraise=reraise,
                         ),
@@ -196,25 +195,24 @@ class PregelRunner:
             futures[get_waiter()] = None
         # schedule tasks
         for t in tasks:
-            if not t.writes:
-                fut = self.submit()(  # type: ignore[misc]
-                    run_with_retry,
-                    t,
-                    retry_policy,
-                    configurable={
-                        CONFIG_KEY_CALL: partial(
-                            _call,
-                            weakref.ref(t),
-                            retry=retry_policy,
-                            futures=weakref.ref(futures),
-                            schedule_task=self.schedule_task,
-                            submit=self.submit,
-                            reraise=reraise,
-                        ),
-                    },
-                    __reraise_on_exit__=reraise,
-                )
-                futures[fut] = t
+            fut = self.submit()(  # type: ignore[misc]
+                run_with_retry,
+                t,
+                retry_policy,
+                configurable={
+                    CONFIG_KEY_CALL: partial(
+                        _call,
+                        weakref.ref(t),
+                        retry=retry_policy,
+                        futures=weakref.ref(futures),
+                        schedule_task=schedule_task,
+                        submit=self.submit,
+                        reraise=reraise,
+                    ),
+                },
+                __reraise_on_exit__=reraise,
+            )
+            futures[fut] = t
         # execute tasks, and wait for one to fail or all to finish.
         # each task is independent from all other concurrent tasks
         # yield updates/debug output as each task finishes
@@ -269,8 +267,12 @@ class PregelRunner:
         *,
         reraise: bool = True,
         timeout: Optional[float] = None,
-        retry_policy: Optional[RetryPolicy] = None,
+        retry_policy: Optional[Sequence[RetryPolicy]] = None,
         get_waiter: Optional[Callable[[], asyncio.Future[None]]] = None,
+        schedule_task: Callable[
+            [PregelExecutableTask, int, Optional[Call]],
+            Awaitable[Optional[PregelExecutableTask]],
+        ],
     ) -> AsyncIterator[None]:
         loop = asyncio.get_event_loop()
         tasks = tuple(tasks)
@@ -282,7 +284,9 @@ class PregelRunner:
         # give control back to the caller
         yield
         # fast path if single task with no waiter and no timeout
-        if len(tasks) == 1 and get_waiter is None and timeout is None:
+        if len(tasks) == 0:
+            return
+        elif len(tasks) == 1 and get_waiter is None and timeout is None:
             t = tasks[0]
             try:
                 await arun_with_retry(
@@ -296,7 +300,7 @@ class PregelRunner:
                             stream=self.use_astream,
                             retry=retry_policy,
                             futures=weakref.ref(futures),
-                            schedule_task=self.schedule_task,
+                            schedule_task=schedule_task,
                             submit=self.submit,
                             reraise=reraise,
                             loop=loop,
@@ -329,33 +333,32 @@ class PregelRunner:
             futures[get_waiter()] = None
         # schedule tasks
         for t in tasks:
-            if not t.writes:
-                fut = cast(
-                    asyncio.Future,
-                    self.submit()(  # type: ignore[misc]
-                        arun_with_retry,
-                        t,
-                        retry_policy,
-                        stream=self.use_astream,
-                        configurable={
-                            CONFIG_KEY_CALL: partial(
-                                _acall,
-                                weakref.ref(t),
-                                retry=retry_policy,
-                                stream=self.use_astream,
-                                futures=weakref.ref(futures),
-                                schedule_task=self.schedule_task,
-                                submit=self.submit,
-                                reraise=reraise,
-                                loop=loop,
-                            ),
-                        },
-                        __name__=t.name,
-                        __cancel_on_exit__=True,
-                        __reraise_on_exit__=reraise,
-                    ),
-                )
-                futures[fut] = t
+            fut = cast(
+                asyncio.Future,
+                self.submit()(  # type: ignore[misc]
+                    arun_with_retry,
+                    t,
+                    retry_policy,
+                    stream=self.use_astream,
+                    configurable={
+                        CONFIG_KEY_CALL: partial(
+                            _acall,
+                            weakref.ref(t),
+                            retry=retry_policy,
+                            stream=self.use_astream,
+                            futures=weakref.ref(futures),
+                            schedule_task=schedule_task,
+                            submit=self.submit,
+                            reraise=reraise,
+                            loop=loop,
+                        ),
+                    },
+                    __name__=t.name,
+                    __cancel_on_exit__=True,
+                    __reraise_on_exit__=reraise,
+                ),
+            )
+            futures[fut] = t
         # execute tasks, and wait for one to fail or all to finish.
         # each task is independent from all other concurrent tasks
         # yield updates/debug output as each task finishes
@@ -475,7 +478,7 @@ def _exception(
 def _panic_or_proceed(
     futs: Union[set[concurrent.futures.Future], set[asyncio.Future]],
     *,
-    timeout_exc_cls: Type[Exception] = TimeoutError,
+    timeout_exc_cls: type[Exception] = TimeoutError,
     panic: bool = True,
 ) -> None:
     """Cancel remaining tasks if any failed, re-raise exception if panic is True."""
@@ -519,13 +522,12 @@ def _call(
     func: Callable[[Any], Union[Awaitable[Any], Any]],
     input: Any,
     *,
-    retry: Optional[RetryPolicy] = None,
+    retry: Optional[Sequence[RetryPolicy]] = None,
+    cache_policy: Optional[CachePolicy] = None,
     callbacks: Callbacks = None,
     futures: weakref.ref[FuturesDict],
-    schedule_task: weakref.ref[
-        Callable[
-            [PregelExecutableTask, int, Optional[Call]], Optional[PregelExecutableTask]
-        ]
+    schedule_task: Callable[
+        [PregelExecutableTask, int, Optional[Call]], Optional[PregelExecutableTask]
     ],
     submit: weakref.ref[Submit],
     reraise: bool,
@@ -537,10 +539,10 @@ def _call(
     # schedule PUSH tasks, collect futures
     scratchpad: PregelScratchpad = task().config[CONF][CONFIG_KEY_SCRATCHPAD]  # type: ignore[union-attr]
     # schedule the next task, if the callback returns one
-    if next_task := schedule_task()(  # type: ignore[misc]
+    if next_task := schedule_task(
         task(),  # type: ignore[arg-type]
         scratchpad.call_counter(),
-        Call(func, input, retry=retry, callbacks=callbacks),
+        Call(func, input, retry=retry, cache_policy=cache_policy, callbacks=callbacks),
     ):
         if fut := next(
             (
@@ -600,105 +602,145 @@ def _acall(
     func: Callable[[Any], Union[Awaitable[Any], Any]],
     input: Any,
     *,
-    retry: Optional[RetryPolicy] = None,
+    retry: Optional[Sequence[RetryPolicy]] = None,
+    cache_policy: Optional[CachePolicy] = None,
     callbacks: Callbacks = None,
     # injected dependencies
     futures: weakref.ref[FuturesDict],
-    schedule_task: weakref.ref[
-        Callable[
-            [PregelExecutableTask, int, Optional[Call]], Optional[PregelExecutableTask]
-        ]
+    schedule_task: Callable[
+        [PregelExecutableTask, int, Optional[Call]],
+        Awaitable[Optional[PregelExecutableTask]],
     ],
     submit: weakref.ref[Submit],
     loop: asyncio.AbstractEventLoop,
     reraise: bool = False,
     stream: bool = False,
 ) -> Union[asyncio.Future[Any], concurrent.futures.Future[Any]]:
-    fut: Optional[asyncio.Future] = None
-    # schedule PUSH tasks, collect futures
-    scratchpad: PregelScratchpad = task().config[CONF][CONFIG_KEY_SCRATCHPAD]  # type: ignore[union-attr]
-    # schedule the next task, if the callback returns one
-    if next_task := schedule_task()(  # type: ignore[misc]
-        task(),  # type: ignore[arg-type]
-        scratchpad.call_counter(),
-        Call(func, input, retry=retry, callbacks=callbacks),
-    ):
-        if fut := next(
-            (
-                f
-                for f, t in futures().items()  # type: ignore[union-attr]
-                if t is not None and t == next_task.id
-            ),
-            None,
-        ):
-            # if the parent task was retried,
-            # the next task might already be running
-
-            pass
-        elif next_task.writes:
-            # if it already ran, return the result
-            fut = asyncio.Future(loop=loop)
-            ret = next((v for c, v in next_task.writes if c == RETURN), MISSING)
-            if ret is not MISSING:
-                fut.set_result(ret)
-            elif exc := next((v for c, v in next_task.writes if c == ERROR), None):
-                fut.set_exception(
-                    exc if isinstance(exc, BaseException) else Exception(exc)
-                )
-            else:
-                fut.set_result(None)
-            futures()[fut] = next_task  # type: ignore[index]
-        else:
-            # schedule the next task
-            fut = cast(
-                asyncio.Future,
-                submit()(  # type: ignore[misc]
-                    arun_with_retry,
-                    next_task,
-                    retry,
-                    stream=stream,
-                    configurable={
-                        CONFIG_KEY_CALL: partial(
-                            _acall,
-                            weakref.ref(next_task),
-                            stream=stream,
-                            futures=futures,
-                            schedule_task=schedule_task,
-                            submit=submit,
-                            loop=loop,
-                            reraise=reraise,
-                        ),
-                    },
-                    __name__=task().name,  # type: ignore[union-attr]
-                    __cancel_on_exit__=True,
-                    __reraise_on_exit__=reraise,
-                    # starting a new task in the next tick ensures
-                    # updates from this tick are committed/streamed first
-                    __next_tick__=True,
-                ),
-            )
-            futures()[fut] = next_task  # type: ignore[index]
-
-    fut = cast(Union[asyncio.Future, concurrent.futures.Future], fut)
     # return a chained future to ensure commit() callback is called
     # before the returned future is resolved, to ensure stream order etc
     try:
         in_async = asyncio.current_task() is not None
     except RuntimeError:
         in_async = False
-    # if in async context return an async future
-    # otherwise return a chained sync future
+    # if in async context return an async future, otherwise return a sync future
     if in_async:
-        if isinstance(fut, asyncio.Task):
-            sfut: Union[asyncio.Future[Any], concurrent.futures.Future[Any]] = (
-                asyncio.Future(loop=loop)
-            )
-            loop.call_soon_threadsafe(chain_future, fut, sfut)
-            return sfut
-        else:
-            # already wrapped in a future
-            return fut
+        fut: Union[asyncio.Future[Any], concurrent.futures.Future[Any]] = (
+            asyncio.Future(loop=loop)
+        )
     else:
-        sfut = concurrent.futures.Future()
-        loop.call_soon_threadsafe(chain_future, fut, sfut)
-        return sfut
+        fut = concurrent.futures.Future()
+    # schedule the next task
+    run_coroutine_threadsafe(
+        _acall_impl(
+            fut,
+            task,
+            func,
+            input,
+            retry=retry,
+            cache_policy=cache_policy,
+            callbacks=callbacks,
+            futures=futures,
+            schedule_task=schedule_task,
+            submit=submit,
+            loop=loop,
+            reraise=reraise,
+            stream=stream,
+        ),
+        loop,
+        lazy=False,
+    )
+    return fut
+
+
+async def _acall_impl(
+    destination: Union[asyncio.Future[Any], concurrent.futures.Future[Any]],
+    task: weakref.ref[PregelExecutableTask],
+    func: Callable[[Any], Union[Awaitable[Any], Any]],
+    input: Any,
+    *,
+    retry: Optional[Sequence[RetryPolicy]] = None,
+    cache_policy: Optional[CachePolicy] = None,
+    callbacks: Callbacks = None,
+    # injected dependencies
+    futures: weakref.ref[FuturesDict[asyncio.Future, asyncio.Event]],
+    schedule_task: Callable[
+        [PregelExecutableTask, int, Optional[Call]],
+        Awaitable[Optional[PregelExecutableTask]],
+    ],
+    submit: weakref.ref[Submit],
+    loop: asyncio.AbstractEventLoop,
+    reraise: bool = False,
+    stream: bool = False,
+) -> None:
+    try:
+        fut: Optional[asyncio.Future] = None
+        # schedule PUSH tasks, collect futures
+        scratchpad: PregelScratchpad = task().config[CONF][CONFIG_KEY_SCRATCHPAD]  # type: ignore[union-attr]
+        # schedule the next task, if the callback returns one
+        if next_task := await schedule_task(
+            task(),  # type: ignore[arg-type]
+            scratchpad.call_counter(),
+            Call(
+                func, input, retry=retry, cache_policy=cache_policy, callbacks=callbacks
+            ),
+        ):
+            if fut := next(
+                (
+                    f
+                    for f, t in futures().items()  # type: ignore[union-attr]
+                    if t is not None and t == next_task.id
+                ),
+                None,
+            ):
+                # if the parent task was retried,
+                # the next task might already be running
+                pass
+            elif next_task.writes:
+                # if it already ran, return the result
+                fut = asyncio.Future(loop=loop)
+                ret = next((v for c, v in next_task.writes if c == RETURN), MISSING)
+                if ret is not MISSING:
+                    fut.set_result(ret)
+                elif exc := next((v for c, v in next_task.writes if c == ERROR), None):
+                    fut.set_exception(
+                        exc if isinstance(exc, BaseException) else Exception(exc)
+                    )
+                else:
+                    fut.set_result(None)
+                futures()[fut] = next_task  # type: ignore[index]
+            else:
+                # schedule the next task
+                fut = cast(
+                    asyncio.Future,
+                    submit()(  # type: ignore[misc]
+                        arun_with_retry,
+                        next_task,
+                        retry,
+                        stream=stream,
+                        configurable={
+                            CONFIG_KEY_CALL: partial(
+                                _acall,
+                                weakref.ref(next_task),
+                                stream=stream,
+                                futures=futures,
+                                schedule_task=schedule_task,
+                                submit=submit,
+                                loop=loop,
+                                reraise=reraise,
+                            ),
+                        },
+                        __name__=task().name,  # type: ignore[union-attr]
+                        __cancel_on_exit__=True,
+                        __reraise_on_exit__=reraise,
+                        # starting a new task in the next tick ensures
+                        # updates from this tick are committed/streamed first
+                        __next_tick__=True,
+                    ),
+                )
+                futures()[fut] = next_task  # type: ignore[index]
+        if fut is not None:
+            chain_future(fut, destination)
+        else:
+            destination.set_exception(RuntimeError("Task not scheduled"))
+    except Exception as exc:
+        destination.set_exception(exc)

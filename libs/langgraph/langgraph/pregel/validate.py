@@ -1,4 +1,5 @@
-from typing import Any, Mapping, Optional, Sequence, Union
+from collections.abc import Mapping, Sequence
+from typing import Any, Optional, Union
 
 from langgraph.channels.base import BaseChannel
 from langgraph.constants import RESERVED

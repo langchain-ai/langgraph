@@ -17,6 +17,7 @@ from langgraph_cli.config import (
     AuthConfig,
     CheckpointerConfig,
     Config,
+    ConfigurableHeaderConfig,
     CorsConfig,
     HttpConfig,
     IndexConfig,
@@ -112,6 +113,7 @@ def add_descriptions_to_schema(schema, cls):
                 ThreadTTLConfig,
                 CheckpointerConfig,
                 TTLConfig,
+                ConfigurableHeaderConfig,
             ]:
                 if potential_cls.__name__ == def_name:
                     add_descriptions_to_schema(def_schema, potential_cls)

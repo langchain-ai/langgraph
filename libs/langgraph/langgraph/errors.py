@@ -1,5 +1,6 @@
+from collections.abc import Sequence
 from enum import Enum
-from typing import Any, Sequence
+from typing import Any
 
 from langgraph.checkpoint.base import EmptyChannelError  # noqa: F401
 from langgraph.types import Command, Interrupt
