@@ -22,6 +22,7 @@ describe.each([["global"], ["mocked"]])(
               },
             }),
           text: () => Promise.resolve(""),
+          headers: new Headers({}),
         }),
       );
       overriddenFetch = vi.fn(() =>
@@ -34,6 +35,7 @@ describe.each([["global"], ["mocked"]])(
               },
             }),
           text: () => Promise.resolve(""),
+          headers: new Headers({}),
         }),
       );
       expectedFetchMock =
