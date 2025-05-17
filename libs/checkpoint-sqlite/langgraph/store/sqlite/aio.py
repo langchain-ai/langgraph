@@ -9,6 +9,7 @@ from typing import Any, Callable, Optional, Union, cast
 
 import aiosqlite
 import orjson
+import sqlite_vec  # type: ignore[import-untyped]
 
 from langgraph.store.base import (
     GetOp,
@@ -29,7 +30,6 @@ from langgraph.store.sqlite.base import (
     PreparedGetQuery,
     SqliteIndexConfig,
     _decode_ns_text,
-    _dot_product,
     _ensure_index_config,
     _group_ops,
     _namespace_to_text,
@@ -188,6 +188,9 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
             # Apply vector migrations if index config is provided
             if self.index_config:
                 # Create vector migrations table if it doesn't exist
+                await self.conn.enable_load_extension(True)
+                await self.conn.load_extension(sqlite_vec.loadable_path())
+                await self.conn.enable_load_extension(False)
                 await self.conn.execute(
                     """
                     CREATE TABLE IF NOT EXISTS vector_migrations (
@@ -468,14 +471,16 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
                 distance_type = self.index_config.get("distance_type", "cosine")
 
                 if distance_type == "cosine":
-                    score_expr = "cosine_similarity(sv.embedding, ?)"
+                    score_expr = "1.0 - vec_distance_cosine(sv.embedding, ?)"
                 elif distance_type == "l2":
-                    score_expr = "-1 * l2_distance(sv.embedding, ?)"
+                    score_expr = "vec_distance_L2(sv.embedding, ?)"
                 elif distance_type == "inner_product":
-                    score_expr = "dot_product(sv.embedding, ?)"
+                    # For inner product, we want higher values to be better, so negate the result
+                    # since inner product similarity is higher when vectors are more similar
+                    score_expr = "-1 * vec_distance_L1(sv.embedding, ?)"
                 else:
                     # Default to cosine similarity
-                    score_expr = "cosine_similarity(sv.embedding, ?)"
+                    score_expr = "1.0 - vec_distance_cosine(sv.embedding, ?)"
 
                 filter_str = (
                     ""
@@ -500,21 +505,21 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
                         FROM store s
                         JOIN store_vectors sv ON s.prefix = sv.prefix AND s.key = sv.key
                         {prefix_filter_str}
-                        ORDER BY score DESC 
+                            ORDER BY score DESC 
                         LIMIT ?
                     ),
                     ranked AS (
                         SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, score,
-                            ROW_NUMBER() OVER (PARTITION BY prefix, key ORDER BY score DESC) as rn
+                                ROW_NUMBER() OVER (PARTITION BY prefix, key ORDER BY score DESC) as rn
                         FROM scored
                     )
                     SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, score
                     FROM ranked
                     WHERE rn = 1
-                    ORDER BY score DESC
+                        ORDER BY score DESC
                     LIMIT ?
                     OFFSET ?
-                """
+                    """
                 params = [
                     _PLACEHOLDER,  # Vector placeholder
                     *ns_args,
@@ -523,7 +528,6 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
                     op.limit,
                     op.offset,
                 ]
-
             # Regular search branch (no vector search)
             else:
                 base_query = """
@@ -921,7 +925,9 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
             # Convert vectors to SQLite-friendly format
             vector_params = []
             for (ns, k, pathname, _), vector in zip(txt_params, vectors):
-                vector_params.extend([ns, k, pathname, orjson.dumps(vector)])
+                vector_params.extend(
+                    [ns, k, pathname, sqlite_vec.serialize_float32(vector)]
+                )
 
             queries.append((query, vector_params))
 
@@ -945,11 +951,6 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
 
         # Setup dot_product function if it doesn't exist
         if embedding_requests and self.embeddings:
-            # Register the dot_product function with SQLite connection
-            await self.conn.create_function(
-                "dot_product", 2, _dot_product, deterministic=True
-            )
-
             # Generate embeddings for search queries
             vectors = await self.embeddings.aembed_documents(
                 [query for _, query in embedding_requests]
@@ -960,7 +961,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
                 _params_list: list = queries[idx][1]
                 for i, param in enumerate(_params_list):
                     if param is _PLACEHOLDER:
-                        _params_list[i] = orjson.dumps(embedding)
+                        _params_list[i] = sqlite_vec.serialize_float32(embedding)
 
         for (idx, _), (query, params) in zip(search_ops, queries):
             await cur.execute(query, params)
@@ -975,7 +976,9 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
                             "value": row[2],
                             "created_at": row[3],
                             "updated_at": row[4],
-                            "score": row[5],
+                            "expires_at": row[5] if len(row) > 5 else None,
+                            "ttl_minutes": row[6] if len(row) > 6 else None,
+                            "score": row[7] if len(row) > 7 else None,
                         },
                         loader=self._deserializer,
                     )
@@ -990,6 +993,8 @@ class AsyncSqliteStore(AsyncBatchedBaseStore):
                             "value": row[2],
                             "created_at": row[3],
                             "updated_at": row[4],
+                            "expires_at": row[5] if len(row) > 5 else None,
+                            "ttl_minutes": row[6] if len(row) > 6 else None,
                         },
                         loader=self._deserializer,
                     )

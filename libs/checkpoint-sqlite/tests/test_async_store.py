@@ -2,7 +2,7 @@
 import asyncio
 import os
 import tempfile
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator, Generator, Iterable
 from contextlib import asynccontextmanager
 from typing import Optional, Union, cast
 
@@ -48,7 +48,9 @@ def fake_embeddings() -> CharacterEmbeddings:
 
 @asynccontextmanager
 async def create_vector_store(
-    fake_embeddings: CharacterEmbeddings, text_fields: Optional[list[str]] = None
+    fake_embeddings: CharacterEmbeddings,
+    conn_string: str = ":memory:",
+    text_fields: Optional[list[str]] = None,
 ) -> AsyncIterator[AsyncSqliteStore]:
     """Create an AsyncSqliteStore with vector search capabilities."""
     index_config: SqliteIndexConfig = {
@@ -58,10 +60,23 @@ async def create_vector_store(
     }
 
     async with AsyncSqliteStore.from_conn_string(
-        ":memory:", index=index_config
+        conn_string, index=index_config
     ) as store:
         await store.setup()
         yield store
+
+
+@pytest.fixture(scope="function", params=["memory", "file"])
+def conn_string(request: pytest.FixtureRequest) -> Generator[str, None, None]:
+    if request.param == "memory":
+        yield ":memory:"
+    else:
+        temp_file = tempfile.NamedTemporaryFile(delete=False)
+        temp_file.close()
+        try:
+            yield temp_file.name
+        finally:
+            os.unlink(temp_file.name)
 
 
 async def test_no_running_loop(store: AsyncSqliteStore) -> None:
@@ -287,9 +302,10 @@ async def test_vector_store_initialization(
 
 async def test_vector_insert_with_auto_embedding(
     fake_embeddings: CharacterEmbeddings,
+    conn_string: str,
 ) -> None:
     """Test inserting items that get auto-embedded."""
-    async with create_vector_store(fake_embeddings) as store:
+    async with create_vector_store(fake_embeddings, conn_string=conn_string) as store:
         docs = [
             ("doc1", {"text": "short text"}),
             ("doc2", {"text": "longer text document"}),
@@ -312,15 +328,17 @@ async def test_vector_insert_with_auto_embedding(
 
 async def test_vector_update_with_embedding(
     fake_embeddings: CharacterEmbeddings,
+    conn_string: str,
 ) -> None:
     """Test that updating items properly updates their embeddings."""
-    async with create_vector_store(fake_embeddings) as store:
+    async with create_vector_store(fake_embeddings, conn_string=conn_string) as store:
         await store.aput(("test",), "doc1", {"text": "zany zebra Xerxes"})
         await store.aput(("test",), "doc2", {"text": "something about dogs"})
         await store.aput(("test",), "doc3", {"text": "text about birds"})
 
         results_initial = await store.asearch(("test",), query="Zany Xerxes")
         assert len(results_initial) > 0
+        assert results_initial[0].score is not None
         assert results_initial[0].key == "doc1"
         initial_score = results_initial[0].score
 
@@ -353,9 +371,12 @@ async def test_vector_update_with_embedding(
         assert not any(r.key == "doc4" for r in results_new)
 
 
-async def test_vector_search_with_filters(fake_embeddings: CharacterEmbeddings) -> None:
+async def test_vector_search_with_filters(
+    fake_embeddings: CharacterEmbeddings,
+    conn_string: str,
+) -> None:
     """Test combining vector search with filters."""
-    async with create_vector_store(fake_embeddings) as store:
+    async with create_vector_store(fake_embeddings, conn_string=conn_string) as store:
         docs = [
             ("doc1", {"text": "red apple", "color": "red", "score": 4.5}),
             ("doc2", {"text": "red car", "color": "red", "score": 3.0}),

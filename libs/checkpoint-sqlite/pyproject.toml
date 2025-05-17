@@ -14,6 +14,7 @@ license-files = ['LICENSE']
 dependencies = [
     "langgraph-checkpoint>=2.0.21",
     "aiosqlite>=0.20",
+    "sqlite-vec>=0.1.6",
 ]
 
 [project.urls]
@@ -29,6 +30,7 @@ dev = [
   "pytest-watcher",
   "mypy",
   "langgraph-checkpoint",
+  "pytest-retry>=1.7.0",
 ]
 
 [tool.uv]

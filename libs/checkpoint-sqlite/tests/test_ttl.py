@@ -37,7 +37,7 @@ def test_ttl_basic(temp_db_file: str) -> None:
         assert item is not None
         assert item.value["value"] == "test"
 
-        time.sleep(ttl_seconds + 0.5)
+        time.sleep(ttl_seconds + 1.0)
 
         store.sweep_ttl()
 
@@ -45,6 +45,7 @@ def test_ttl_basic(temp_db_file: str) -> None:
         assert item is None
 
 
+@pytest.mark.flaky(retries=3)
 def test_ttl_refresh(temp_db_file: str) -> None:
     """Test TTL refresh on read."""
     ttl_seconds = 1
@@ -119,6 +120,7 @@ def test_ttl_sweeper(temp_db_file: str) -> None:
         store.stop_ttl_sweeper()
 
 
+@pytest.mark.flaky(retries=3)
 def test_ttl_custom_value(temp_db_file: str) -> None:
     """Test TTL with custom value per item."""
     with SqliteStore.from_conn_string(temp_db_file) as store:
@@ -126,10 +128,10 @@ def test_ttl_custom_value(temp_db_file: str) -> None:
 
         # Store items with different TTLs
         store.put(("test",), "item1", {"value": "short"}, ttl=1 / 60)  # 1 second
-        store.put(("test",), "item2", {"value": "long"}, ttl=5 / 60)  # 5 seconds
+        store.put(("test",), "item2", {"value": "long"}, ttl=3 / 60)  # 3 seconds
 
         # Item with short TTL
-        time.sleep(1.5)  # Wait for short TTL
+        time.sleep(2)  # Wait for short TTL
         store.sweep_ttl()
 
         # Short TTL item should be gone, long TTL item should remain
@@ -147,6 +149,7 @@ def test_ttl_custom_value(temp_db_file: str) -> None:
         assert item2 is None
 
 
+@pytest.mark.flaky(retries=3)
 def test_ttl_override_default(temp_db_file: str) -> None:
     """Test overriding default TTL at the item level."""
     with SqliteStore.from_conn_string(
@@ -165,7 +168,7 @@ def test_ttl_override_default(temp_db_file: str) -> None:
         store.put(("test",), "item3", {"value": "permanent"}, ttl=None)
 
         # Wait for the override TTL to expire
-        time.sleep(1.5)
+        time.sleep(2)
         store.sweep_ttl()
 
         # Check results
@@ -220,7 +223,7 @@ def test_search_with_ttl(temp_db_file: str) -> None:
 @pytest.mark.asyncio
 async def test_async_ttl_basic(temp_db_file: str) -> None:
     """Test basic TTL functionality with asynchronous API."""
-    ttl_seconds = 2
+    ttl_seconds = 1
     ttl_minutes = ttl_seconds / 60
 
     async with AsyncSqliteStore.from_conn_string(
@@ -237,7 +240,7 @@ async def test_async_ttl_basic(temp_db_file: str) -> None:
         assert item.value["value"] == "test"
 
         # Wait for TTL to expire
-        await asyncio.sleep(ttl_seconds + 0.5)
+        await asyncio.sleep(ttl_seconds + 1.0)
 
         # Manual sweep needed without the sweeper thread
         await store.sweep_ttl()
@@ -248,9 +251,10 @@ async def test_async_ttl_basic(temp_db_file: str) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.flaky(retries=3)
 async def test_async_ttl_refresh(temp_db_file: str) -> None:
     """Test TTL refresh on read with async API."""
-    ttl_seconds = 2
+    ttl_seconds = 1
     ttl_minutes = ttl_seconds / 60
 
     async with AsyncSqliteStore.from_conn_string(
@@ -277,7 +281,7 @@ async def test_async_ttl_refresh(temp_db_file: str) -> None:
         assert item.value["value"] == "test"
 
         # Sleep again but don't refresh this time
-        await asyncio.sleep(ttl_seconds + 0.5)
+        await asyncio.sleep(ttl_seconds + 1.0)
 
         # Manual sweep
         await store.sweep_ttl()

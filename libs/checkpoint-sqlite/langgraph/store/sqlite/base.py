@@ -1,7 +1,6 @@
 import concurrent.futures
 import datetime
 import logging
-import math
 import sqlite3
 import threading
 from collections import defaultdict
@@ -10,6 +9,7 @@ from contextlib import contextmanager
 from typing import Any, Callable, Literal, NamedTuple, Optional, Union, cast
 
 import orjson
+import sqlite_vec  # type: ignore[import-untyped]
 
 from langgraph.store.base import (
     BaseStore,
@@ -369,6 +369,9 @@ class SqliteStore(BaseStore):
             # Apply vector migrations if index config is provided
             if self.index_config:
                 # Create vector migrations table if it doesn't exist
+                self.conn.enable_load_extension(True)
+                sqlite_vec.load(self.conn)
+                self.conn.enable_load_extension(False)
                 self.conn.executescript(
                     """
                     CREATE TABLE IF NOT EXISTS vector_migrations (
@@ -623,14 +626,16 @@ class SqliteStore(BaseStore):
                 distance_type = self.index_config.get("distance_type", "cosine")
 
                 if distance_type == "cosine":
-                    score_expr = "cosine_similarity(sv.embedding, ?)"
+                    score_expr = "1.0 - vec_distance_cosine(sv.embedding, ?)"
                 elif distance_type == "l2":
-                    score_expr = "-1 * l2_distance(sv.embedding, ?)"
+                    score_expr = "vec_distance_L2(sv.embedding, ?)"
                 elif distance_type == "inner_product":
-                    score_expr = "dot_product(sv.embedding, ?)"
+                    # For inner product, we want higher values to be better, so negate the result
+                    # since inner product similarity is higher when vectors are more similar
+                    score_expr = "-1 * vec_distance_L1(sv.embedding, ?)"
                 else:
                     # Default to cosine similarity
-                    score_expr = "cosine_similarity(sv.embedding, ?)"
+                    score_expr = "1.0 - vec_distance_cosine(sv.embedding, ?)"
 
                 filter_str = (
                     ""
@@ -655,21 +660,21 @@ class SqliteStore(BaseStore):
                         FROM store s
                         JOIN store_vectors sv ON s.prefix = sv.prefix AND s.key = sv.key
                         {prefix_filter_str}
-                        ORDER BY score DESC 
+                            ORDER BY score DESC 
                         LIMIT ?
                     ),
                     ranked AS (
                         SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, score,
-                            ROW_NUMBER() OVER (PARTITION BY prefix, key ORDER BY score DESC) as rn
+                                ROW_NUMBER() OVER (PARTITION BY prefix, key ORDER BY score DESC) as rn
                         FROM scored
                     )
                     SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, score
                     FROM ranked
                     WHERE rn = 1
-                    ORDER BY score DESC
+                        ORDER BY score DESC
                     LIMIT ?
                     OFFSET ?
-                """
+                    """
                 params = [
                     _PLACEHOLDER,  # Vector placeholder
                     *ns_args,
@@ -678,7 +683,6 @@ class SqliteStore(BaseStore):
                     op.limit,
                     op.offset,
                 ]
-
             # Regular search branch (no vector search)
             else:
                 base_query = """
@@ -1106,7 +1110,9 @@ class SqliteStore(BaseStore):
             # Convert vectors to SQLite-friendly format
             vector_params = []
             for (ns, k, pathname, _), vector in zip(txt_params, vectors):
-                vector_params.extend([ns, k, pathname, orjson.dumps(vector)])
+                vector_params.extend(
+                    [ns, k, pathname, sqlite_vec.serialize_float32(vector)]
+                )
 
             queries.append((query, vector_params))
 
@@ -1123,31 +1129,6 @@ class SqliteStore(BaseStore):
 
         # Setup similarity functions if they don't exist
         if embedding_requests and self.embeddings:
-            # Register the dot_product function if not registered already
-            self.conn.create_function(
-                "dot_product", 2, _dot_product, deterministic=True
-            )
-
-            # Register the cosine_similarity function if not registered already
-            self.conn.create_function(
-                "cosine_similarity", 2, _cosine_similarity, deterministic=True
-            )
-
-            # Register the l2_distance function if not registered already
-            self.conn.create_function(
-                "l2_distance", 2, _l2_distance, deterministic=True
-            )
-
-            # Register the neg_l2_distance function if not registered already
-            self.conn.create_function(
-                "neg_l2_distance", 2, _neg_l2_distance, deterministic=True
-            )
-
-            # Register the vector_magnitude function if not registered already
-            self.conn.create_function(
-                "vector_magnitude", 1, _vector_magnitude, deterministic=True
-            )
-
             # Generate embeddings for search queries
             embeddings = self.embeddings.embed_documents(
                 [query for _, query in embedding_requests]
@@ -1158,7 +1139,7 @@ class SqliteStore(BaseStore):
                 _params_list: list = queries[idx][1]
                 for i, param in enumerate(_params_list):
                     if param is _PLACEHOLDER:
-                        _params_list[i] = orjson.dumps(embedding)
+                        _params_list[i] = sqlite_vec.serialize_float32(embedding)
 
         for (idx, _), (query, params) in zip(search_ops, queries):
             cur.execute(query, params)
@@ -1248,61 +1229,6 @@ def _ensure_index_config(
         index_config.get("embed"),
     )
     return embeddings, index_config
-
-
-def _dot_product(vec1_json: str, vec2_json: str) -> float:
-    """SQLite function to compute dot product between two vectors stored as JSON strings."""
-    vec1 = orjson.loads(vec1_json)
-    vec2 = orjson.loads(vec2_json)
-
-    if len(vec1) != len(vec2):
-        raise ValueError(f"Vector dimensions don't match: {len(vec1)} vs {len(vec2)}")
-
-    return sum(v1 * v2 for v1, v2 in zip(vec1, vec2))
-
-
-def _vector_magnitude(vec_json: str) -> float:
-    """SQLite function to compute the magnitude of a vector stored as JSON string."""
-    vec = orjson.loads(vec_json)
-    return sum(v**2 for v in vec) ** 0.5
-
-
-def _cosine_similarity(vec1_json: str, vec2_json: str) -> float:
-    """Compute cosine similarity between two vectors stored as JSON strings.
-
-    Returns the cosine similarity in the full range [-1, 1], where 1 is identical,
-    -1 is completely opposite, and 0 indicates orthogonality.
-    """
-    vec1 = orjson.loads(vec1_json)
-    vec2 = orjson.loads(vec2_json)
-
-    if len(vec1) != len(vec2):
-        raise ValueError(f"Vector dimensions don't match: {len(vec1)} vs {len(vec2)}")
-
-    magnitude1 = math.sqrt(sum(v * v for v in vec1))
-    magnitude2 = math.sqrt(sum(v * v for v in vec2))
-
-    if magnitude1 < 1e-10 or magnitude2 < 1e-10:
-        return 0.0
-    dot_product = sum(v1 * v2 for v1, v2 in zip(vec1, vec2))
-    result = dot_product / (magnitude1 * magnitude2)
-    return result
-
-
-def _l2_distance(vec1_json: str, vec2_json: str) -> float:
-    """SQLite function to compute L2 distance between two vectors stored as JSON strings."""
-    vec1 = orjson.loads(vec1_json)
-    vec2 = orjson.loads(vec2_json)
-
-    if len(vec1) != len(vec2):
-        raise ValueError(f"Vector dimensions don't match: {len(vec1)} vs {len(vec2)}")
-
-    return sum((v1 - v2) ** 2 for v1, v2 in zip(vec1, vec2)) ** 0.5
-
-
-def _neg_l2_distance(vec1_json: str, vec2_json: str) -> float:
-    """Returns negative L2 distance for ranking purposes."""
-    return -_l2_distance(vec1_json, vec2_json)
 
 
 _PLACEHOLDER = object()
