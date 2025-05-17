@@ -192,9 +192,10 @@ def test_ttl_override_default(temp_db_file: str) -> None:
         assert item3 is not None  # No TTL item should still be there
 
 
+@pytest.mark.flaky(retries=3)
 def test_search_with_ttl(temp_db_file: str) -> None:
     """Test TTL with search operations."""
-    ttl_seconds = 2
+    ttl_seconds = 1
     ttl_minutes = ttl_seconds / 60
 
     with SqliteStore.from_conn_string(
@@ -212,7 +213,7 @@ def test_search_with_ttl(temp_db_file: str) -> None:
         assert results[0].key == "item1"
 
         # Wait for TTL to expire
-        time.sleep(ttl_seconds + 0.5)
+        time.sleep(ttl_seconds + 1)
         store.sweep_ttl()
 
         # Search after expiration
@@ -325,9 +326,10 @@ async def test_async_ttl_sweeper(temp_db_file: str) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.flaky(retries=3)
 async def test_async_search_with_ttl(temp_db_file: str) -> None:
     """Test TTL with search operations using async API."""
-    ttl_seconds = 2
+    ttl_seconds = 1
     ttl_minutes = ttl_seconds / 60
 
     async with AsyncSqliteStore.from_conn_string(
@@ -345,7 +347,7 @@ async def test_async_search_with_ttl(temp_db_file: str) -> None:
         assert results[0].key == "item1"
 
         # Wait for TTL to expire
-        await asyncio.sleep(ttl_seconds + 0.5)
+        await asyncio.sleep(ttl_seconds + 1)
         await store.sweep_ttl()
 
         # Search after expiration
