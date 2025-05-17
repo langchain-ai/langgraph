@@ -4,7 +4,7 @@ import re
 import tempfile
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
-from typing import Any, Optional, Union, cast
+from typing import Any, Literal, Optional, Union, cast
 
 import pytest
 from langchain_core.embeddings import Embeddings
@@ -111,6 +111,7 @@ def create_vector_store(
     fake_embeddings: CharacterEmbeddings,
     text_fields: Optional[list[str]] = None,
     distance_type: str = "cosine",
+    conn_type: Literal["memory", "file"] = "memory",
 ) -> Generator[SqliteStore, None, None]:
     """Create a SqliteStore with vector search enabled."""
     index_config: SqliteIndexConfig = {
@@ -119,10 +120,20 @@ def create_vector_store(
         "text_fields": text_fields,
         "distance_type": distance_type,  # This is for API consistency but SQLite only supports cosine
     }
+    if conn_type == "memory":
+        conn_str = ":memory:"
+    else:
+        temp_file = tempfile.NamedTemporaryFile(delete=False)
+        temp_file.close()
+        conn_str = temp_file.name
 
-    with SqliteStore.from_conn_string(":memory:", index=index_config) as store:
-        store.setup()
-        yield store
+    try:
+        with SqliteStore.from_conn_string(conn_str, index=index_config) as store:
+            store.setup()
+            yield store
+    finally:
+        if conn_type == "file":
+            os.unlink(conn_str)
 
 
 def test_batch_order(store: SqliteStore) -> None:
@@ -466,12 +477,16 @@ def test_vector_store_initialization(fake_embeddings: CharacterEmbeddings) -> No
 
 
 @pytest.mark.parametrize("distance_type", VECTOR_TYPES)
+@pytest.mark.parametrize("conn_type", ["memory", "file"])
 def test_vector_insert_with_auto_embedding(
     fake_embeddings: CharacterEmbeddings,
     distance_type: str,
+    conn_type: Literal["memory", "file"],
 ) -> None:
     """Test inserting items that get auto-embedded."""
-    with create_vector_store(fake_embeddings, distance_type=distance_type) as store:
+    with create_vector_store(
+        fake_embeddings, distance_type=distance_type, conn_type=conn_type
+    ) as store:
         docs = [
             ("doc1", {"text": "short text"}),
             ("doc2", {"text": "longer text document"}),
@@ -493,12 +508,16 @@ def test_vector_insert_with_auto_embedding(
 
 
 @pytest.mark.parametrize("distance_type", VECTOR_TYPES)
+@pytest.mark.parametrize("conn_type", ["memory", "file"])
 def test_vector_update_with_embedding(
     fake_embeddings: CharacterEmbeddings,
     distance_type: str,
+    conn_type: Literal["memory", "file"],
 ) -> None:
     """Test that updating items properly updates their embeddings."""
-    with create_vector_store(fake_embeddings, distance_type=distance_type) as store:
+    with create_vector_store(
+        fake_embeddings, distance_type=distance_type, conn_type=conn_type
+    ) as store:
         store.put(("test",), "doc1", {"text": "zany zebra Xerxes"})
         store.put(("test",), "doc2", {"text": "something about dogs"})
         store.put(("test",), "doc3", {"text": "text about birds"})
@@ -768,15 +787,18 @@ def _cosine_similarity(X: list[float], Y: list[list[float]]) -> list[float]:
 
 
 @pytest.mark.parametrize("query", ["aaa", "bbb", "ccc", "abcd", "poisson"])
+@pytest.mark.parametrize("conn_type", ["memory", "file"])
 def test_scores(
     fake_embeddings: CharacterEmbeddings,
     query: str,
+    conn_type: Literal["memory", "file"],
 ) -> None:
     """Test operation-level field configuration for vector search."""
     with create_vector_store(
         fake_embeddings,
         text_fields=["key0"],
         distance_type="cosine",
+        conn_type=conn_type,
     ) as store:
         doc = {
             "key0": "aaa",

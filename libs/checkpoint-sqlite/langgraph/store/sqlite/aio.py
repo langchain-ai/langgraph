@@ -34,7 +34,7 @@ from langgraph.store.sqlite.base import (
 logger = logging.getLogger(__name__)
 
 
-class AsyncSqliteStore(BaseSqliteStore, AsyncBatchedBaseStore):
+class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
     """Asynchronous SQLite-backed store with optional vector search.
 
     This class provides an asynchronous interface for storing and retrieving data

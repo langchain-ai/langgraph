@@ -190,13 +190,14 @@ class PreparedGetQuery(NamedTuple):
     kind: Literal["get", "refresh"]
 
 
-class BaseSqliteStore(BaseStore):
+class BaseSqliteStore:
     """Shared base class for SQLite stores."""
 
     MIGRATIONS = MIGRATIONS
     VECTOR_MIGRATIONS = VECTOR_MIGRATIONS
     supports_ttl = True
     index_config: Optional[SqliteIndexConfig] = None
+    ttl_config: Optional[TTLConfig] = None
 
     def _get_batch_GET_ops_queries(
         self, get_ops: Sequence[tuple[int, GetOp]]
@@ -680,7 +681,7 @@ class BaseSqliteStore(BaseStore):
             raise ValueError(f"Unsupported operator: {op}")
 
 
-class SqliteStore(BaseSqliteStore):
+class SqliteStore(BaseSqliteStore, BaseStore):
     """SQLite-backed store with optional vector search capabilities.
 
     Examples:
