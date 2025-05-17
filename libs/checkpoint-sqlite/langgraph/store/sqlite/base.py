@@ -732,7 +732,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
             store.put(("docs",), "doc3", {"text": "Other guide"}, index=False)  # don't index
 
             # Search by similarity
-            results = store.search(("docs",), "programming guides", limit=2)
+            results = store.search(("docs",), query="programming guides", limit=2)
         ```
 
     Note:
