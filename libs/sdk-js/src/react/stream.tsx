@@ -808,10 +808,13 @@ export function useStream<
     abortRef.current = null;
   }, []);
 
-  const join = async (metadata: {
-    runId: string;
-    threadId?: string | undefined | null;
-  }) => {
+  const join = async (
+    metadata: {
+      runId: string;
+      threadId?: string | undefined | null;
+    },
+    lastEventId: (string & {}) | "-1",
+  ) => {
     try {
       setIsLoading(true);
       setStreamError(undefined);
@@ -819,8 +822,11 @@ export function useStream<
       submittingRef.current = true;
       abortRef.current = new AbortController();
 
+      const rejoinKey = `lg:rejoin:${metadata.threadId ?? "temporary"}`;
+
       const run = client.runs.joinStream(metadata.threadId, metadata.runId, {
         signal: abortRef.current.signal,
+        lastEventId,
       }) as AsyncGenerator<EventStreamEvent>;
 
       let streamError: StreamError | undefined;
@@ -875,6 +881,8 @@ export function useStream<
         }
       }
 
+      window.localStorage.removeItem(rejoinKey);
+
       // TODO: stream created checkpoints to avoid an unnecessary network request
       if (metadata.threadId) {
         const result = await history.mutate(metadata.threadId);
@@ -910,12 +918,17 @@ export function useStream<
   joinRef.current = join;
 
   const joinKey = useMemo(() => {
-    if (joinOnMount) return undefined;
-    return { runId: localStorage.get(`lg:rejoin:${threadId}`), threadId };
-  }, [joinOnMount, threadId]);
+    if (!joinOnMount || isLoading) return undefined;
+    if (typeof window === "undefined") return undefined;
+    const runId = window.localStorage.getItem(`lg:rejoin:${threadId}`);
+
+    if (!runId) return undefined;
+
+    return { runId, threadId };
+  }, [joinOnMount, isLoading, threadId]);
 
   useEffect(() => {
-    if (joinKey) joinRef.current?.(joinKey);
+    if (joinKey) joinRef.current?.(joinKey, "-1");
   }, [joinKey]);
 
   const submit = async (
@@ -982,7 +995,9 @@ export function useStream<
         metadata: submitOptions?.metadata,
         multitaskStrategy: submitOptions?.multitaskStrategy,
         onCompletion: submitOptions?.onCompletion,
-        onDisconnect: submitOptions?.onDisconnect ?? "cancel",
+        onDisconnect:
+          submitOptions?.onDisconnect ??
+          (options.joinOnMount ? "continue" : "cancel"),
 
         signal: abortRef.current.signal,
 
