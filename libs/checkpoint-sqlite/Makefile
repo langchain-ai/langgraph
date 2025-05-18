@@ -4,11 +4,13 @@
 # TESTING AND COVERAGE
 ######################
 
+TEST ?= .
+
 test:
-	uv run pytest tests
+	uv run pytest $(TEST)
 
 test_watch:
-	uv run ptw .
+	uv run ptw $(TEST)
 
 ######################
 # LINTING AND FORMATTING
