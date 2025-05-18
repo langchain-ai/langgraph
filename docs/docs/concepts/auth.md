@@ -22,14 +22,14 @@ In LangGraph Platform, authentication is handled by your [`@auth.authenticate`](
 
 LangGraph Platform provides different security defaults:
 
-### LangGraph Cloud
+### LangGraph Platform
 
 - Uses LangSmith API keys by default
 - Requires valid API key in `x-api-key` header
 - Can be customized with your auth handler
 
 !!! note "Custom auth"
-    Custom auth **is supported** for all plans in LangGraph Cloud.
+    Custom auth **is supported** for all plans in LangGraph Platform.
 
 ### Self-Hosted
 

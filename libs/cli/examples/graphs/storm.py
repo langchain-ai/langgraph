@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import Annotated, List, Optional
+from typing import Annotated, Optional
 
 from langchain_community.retrievers import WikipediaRetriever
 from langchain_community.tools.tavily_search import TavilySearchResults
@@ -51,7 +51,7 @@ class Subsection(BaseModel):
 class Section(BaseModel):
     section_title: str = Field(..., title="Title of the section")
     description: str = Field(..., title="Content of the section")
-    subsections: Optional[List[Subsection]] = Field(
+    subsections: Optional[list[Subsection]] = Field(
         default=None,
         title="Titles and descriptions for each subsection of the Wikipedia page.",
     )
@@ -67,7 +67,7 @@ class Section(BaseModel):
 
 class Outline(BaseModel):
     page_title: str = Field(..., title="Title of the Wikipedia page")
-    sections: List[Section] = Field(
+    sections: list[Section] = Field(
         default_factory=list,
         title="Titles and descriptions for each section of the Wikipedia page.",
     )
@@ -93,7 +93,7 @@ Topic of interest: {topic}
 
 
 class RelatedSubjects(BaseModel):
-    topics: List[str] = Field(
+    topics: list[str] = Field(
         description="Comprehensive list of related subjects as background research.",
     )
 
@@ -123,7 +123,7 @@ class Editor(BaseModel):
 
 
 class Perspectives(BaseModel):
-    editors: List[Editor] = Field(
+    editors: list[Editor] = Field(
         description="Comprehensive list of editors with their roles and affiliations.",
         # Add a pydantic validation/restriction to be at most M editors
     )
@@ -200,7 +200,7 @@ def update_editor(editor, new_editor):
 
 
 class InterviewState(TypedDict):
-    messages: Annotated[List[AnyMessage], add_messages]
+    messages: Annotated[list[AnyMessage], add_messages]
     references: Annotated[Optional[dict], update_references]
     editor: Annotated[Optional[Editor], update_editor]
 
@@ -255,7 +255,7 @@ async def generate_question(state: InterviewState):
 
 
 class Queries(BaseModel):
-    queries: List[str] = Field(
+    queries: list[str] = Field(
         description="Comprehensive list of search engine queries to answer the user's questions.",
     )
 
@@ -278,7 +278,7 @@ class AnswerWithCitations(BaseModel):
     answer: str = Field(
         description="Comprehensive answer to the user's question with citations.",
     )
-    cited_urls: List[str] = Field(
+    cited_urls: list[str] = Field(
         description="List of urls cited in the answer.",
     )
 
@@ -437,11 +437,11 @@ class SubSection(BaseModel):
 class WikiSection(BaseModel):
     section_title: str = Field(..., title="Title of the section")
     content: str = Field(..., title="Full content of the section")
-    subsections: Optional[List[Subsection]] = Field(
+    subsections: Optional[list[Subsection]] = Field(
         default=None,
         title="Titles and descriptions for each subsection of the Wikipedia page.",
     )
-    citations: List[str] = Field(default_factory=list)
+    citations: list[str] = Field(default_factory=list)
 
     @property
     def as_str(self) -> str:
@@ -506,10 +506,10 @@ writer = writer_prompt | long_context_llm | StrOutputParser()
 class ResearchState(TypedDict):
     topic: str
     outline: Outline
-    editors: List[Editor]
-    interview_results: List[InterviewState]
+    editors: list[Editor]
+    interview_results: list[InterviewState]
     # The final sections output
-    sections: List[WikiSection]
+    sections: list[WikiSection]
     article: str
 
 

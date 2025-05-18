@@ -2,7 +2,7 @@ import asyncio
 import random
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
-from typing import Any, Callable, Optional, TypeVar
+from typing import Any, Callable, Optional, TypeVar, cast
 
 import aiosqlite
 from langchain_core.runnables import RunnableConfig
@@ -374,7 +374,12 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                 return CheckpointTuple(
                     config,
                     self.serde.loads_typed((type, checkpoint)),
-                    self.jsonplus_serde.loads(metadata) if metadata is not None else {},
+                    cast(
+                        CheckpointMetadata,
+                        self.jsonplus_serde.loads(metadata)
+                        if metadata is not None
+                        else {},
+                    ),
                     (
                         {
                             "configurable": {
@@ -449,7 +454,12 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                         }
                     },
                     self.serde.loads_typed((type, checkpoint)),
-                    self.jsonplus_serde.loads(metadata) if metadata is not None else {},
+                    cast(
+                        CheckpointMetadata,
+                        self.jsonplus_serde.loads(metadata)
+                        if metadata is not None
+                        else {},
+                    ),
                     (
                         {
                             "configurable": {

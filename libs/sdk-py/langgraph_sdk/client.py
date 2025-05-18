@@ -10,18 +10,15 @@ document Store.
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import os
 import sys
+from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import (
     Any,
-    AsyncIterator,
-    Dict,
-    Iterator,
-    List,
     Literal,
     Optional,
-    Sequence,
     Union,
     overload,
 )
@@ -162,7 +159,7 @@ def get_client(
     transport: Optional[httpx.AsyncBaseTransport] = None
     if url is None:
         if os.environ.get("__LANGGRAPH_DEFER_LOOPBACK_TRANSPORT") == "true":
-            transport = httpx.ASGITransport(app=None, root_path="/noauth")
+            transport = get_asgi_transport()(app=None, root_path="/noauth")
             _registered_transports.append(transport)
             url = "http://api"
         else:
@@ -170,7 +167,8 @@ def get_client(
                 from langgraph_api.server import app  # type: ignore
 
                 url = "http://api"
-                transport = httpx.ASGITransport(app, root_path="/noauth")
+
+                transport = get_asgi_transport()(app, root_path="/noauth")
             except Exception:
                 url = "http://localhost:8123"
 
@@ -697,7 +695,7 @@ class AssistantsClient:
             )
             ```
         """  # noqa: E501
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "graph_id": graph_id,
         }
         if config:
@@ -756,7 +754,7 @@ class AssistantsClient:
             ```
 
         """  # noqa: E501
-        payload: Dict[str, Any] = {}
+        payload: dict[str, Any] = {}
         if graph_id:
             payload["graph_id"] = graph_id
         if config:
@@ -838,7 +836,7 @@ class AssistantsClient:
             )
             ```
         """
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
         }
@@ -887,7 +885,7 @@ class AssistantsClient:
             ```
         """  # noqa: E501
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
         }
@@ -926,7 +924,7 @@ class AssistantsClient:
 
         """  # noqa: E501
 
-        payload: Dict[str, Any] = {"version": version}
+        payload: dict[str, Any] = {"version": version}
 
         return await self.http.post(
             f"/assistants/{assistant_id}/latest", json=payload, headers=headers
@@ -1025,7 +1023,7 @@ class ThreadsClient:
             )
             ```
         """  # noqa: E501
-        payload: Dict[str, Any] = {}
+        payload: dict[str, Any] = {}
         if thread_id:
             payload["thread_id"] = thread_id
         if metadata or graph_id:
@@ -1148,7 +1146,7 @@ class ThreadsClient:
             ```
 
         """  # noqa: E501
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
         }
@@ -1369,7 +1367,7 @@ class ThreadsClient:
             }
             ```
         """  # noqa: E501
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "values": values,
         }
         if checkpoint_id:
@@ -1416,7 +1414,7 @@ class ThreadsClient:
             ```
 
         """  # noqa: E501
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "limit": limit,
         }
         if before:
@@ -2021,7 +2019,7 @@ class RunsClient:
         offset: int = 0,
         status: Optional[RunStatus] = None,
         headers: Optional[dict[str, str]] = None,
-    ) -> List[Run]:
+    ) -> list[Run]:
         """List runs.
 
         Args:
@@ -2032,7 +2030,7 @@ class RunsClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            List[Run]: The runs for the thread.
+            list[Run]: The runs for the thread.
 
         ???+ example "Example Usage"
 
@@ -2671,7 +2669,7 @@ class StoreClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            List[Item]: A list of items matching the search criteria.
+            list[Item]: A list of items matching the search criteria.
 
         ???+ example "Example Usage"
 
@@ -2723,8 +2721,8 @@ class StoreClient:
 
     async def list_namespaces(
         self,
-        prefix: Optional[List[str]] = None,
-        suffix: Optional[List[str]] = None,
+        prefix: Optional[list[str]] = None,
+        suffix: Optional[list[str]] = None,
         max_depth: Optional[int] = None,
         limit: int = 100,
         offset: int = 0,
@@ -2741,7 +2739,7 @@ class StoreClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            List[List[str]]: A list of namespaces matching the criteria.
+            list[list[str]]: A list of namespaces matching the criteria.
 
         ???+ example "Example Usage"
 
@@ -3330,7 +3328,7 @@ class SyncAssistantsClient:
             )
             ```
         """  # noqa: E501
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "graph_id": graph_id,
         }
         if config:
@@ -3388,7 +3386,7 @@ class SyncAssistantsClient:
             )
             ```
         """  # noqa: E501
-        payload: Dict[str, Any] = {}
+        payload: dict[str, Any] = {}
         if graph_id:
             payload["graph_id"] = graph_id
         if config:
@@ -3466,7 +3464,7 @@ class SyncAssistantsClient:
             )
             ```
         """
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
         }
@@ -3512,7 +3510,7 @@ class SyncAssistantsClient:
 
         """  # noqa: E501
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
         }
@@ -3551,7 +3549,7 @@ class SyncAssistantsClient:
 
         """  # noqa: E501
 
-        payload: Dict[str, Any] = {"version": version}
+        payload: dict[str, Any] = {"version": version}
 
         return self.http.post(
             f"/assistants/{assistant_id}/latest", json=payload, headers=headers
@@ -3652,7 +3650,7 @@ class SyncThreadsClient:
             ```
             )
         """  # noqa: E501
-        payload: Dict[str, Any] = {}
+        payload: dict[str, Any] = {}
         if thread_id:
             payload["thread_id"] = thread_id
         if metadata or graph_id:
@@ -3772,7 +3770,7 @@ class SyncThreadsClient:
             )
             ```
         """  # noqa: E501
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
         }
@@ -3984,7 +3982,7 @@ class SyncThreadsClient:
             ```
 
         """  # noqa: E501
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "values": values,
         }
         if checkpoint_id:
@@ -4033,7 +4031,7 @@ class SyncThreadsClient:
             ```
 
         """  # noqa: E501
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "limit": limit,
         }
         if before:
@@ -4627,7 +4625,7 @@ class SyncRunsClient:
         limit: int = 10,
         offset: int = 0,
         headers: Optional[dict[str, str]] = None,
-    ) -> List[Run]:
+    ) -> list[Run]:
         """List runs.
 
         Args:
@@ -4637,7 +4635,7 @@ class SyncRunsClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            List[Run]: The runs for the thread.
+            list[Run]: The runs for the thread.
 
         ???+ example "Example Usage"
 
@@ -5266,7 +5264,7 @@ class SyncStoreClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            List[Item]: A list of items matching the search criteria.
+            list[Item]: A list of items matching the search criteria.
 
         ???+ example "Example Usage"
 
@@ -5314,8 +5312,8 @@ class SyncStoreClient:
 
     def list_namespaces(
         self,
-        prefix: Optional[List[str]] = None,
-        suffix: Optional[List[str]] = None,
+        prefix: Optional[list[str]] = None,
+        suffix: Optional[list[str]] = None,
         max_depth: Optional[int] = None,
         limit: int = 100,
         offset: int = 0,
@@ -5332,7 +5330,7 @@ class SyncStoreClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            List[List[str]]: A list of namespaces matching the criteria.
+            list[list[str]]: A list of namespaces matching the criteria.
 
         ???+ example "Example Usage"
 
@@ -5380,6 +5378,17 @@ _registered_transports: list[httpx.ASGITransport] = []
 def configure_loopback_transports(app: Any) -> None:
     for transport in _registered_transports:
         transport.app = app
+
+
+@functools.lru_cache(maxsize=1)
+def get_asgi_transport() -> type[httpx.ASGITransport]:
+    try:
+        from langgraph_api import asgi_transport
+
+        return asgi_transport.ASGITransport
+    except ImportError:
+        # Older versions of the server
+        return httpx.ASGITransport
 
 
 TimeoutTypes = Union[

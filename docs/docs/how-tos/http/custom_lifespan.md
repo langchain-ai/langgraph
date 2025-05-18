@@ -75,7 +75,7 @@ You should see your startup message printed when the server starts, and your cle
 
 ## Deploying
 
-You can deploy your app as-is to LangGraph Cloud or to your self-hosted platform.
+You can deploy your app as-is to LangGraph Platform or to your self-hosted platform.
 
 ## Next steps
 

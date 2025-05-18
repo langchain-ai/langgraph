@@ -863,7 +863,9 @@ async def test_ainvoke():
     assert result == {"messages": [{"type": "human", "content": "world"}]}
 
 
-@pytest.mark.skip("Unskip this test to manually test the LangGraph Cloud integration")
+@pytest.mark.skip(
+    "Unskip this test to manually test the LangGraph Platform integration"
+)
 @pytest.mark.anyio
 async def test_langgraph_cloud_integration():
     from langgraph_sdk.client import get_client, get_sync_client

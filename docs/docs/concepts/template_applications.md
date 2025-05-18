@@ -97,4 +97,4 @@ After configuring the app properly and adding your API keys, you can start the a
 See the following guides for more information on how to deploy your app:
 
 - **[Launch Local LangGraph Server](../tutorials/langgraph-platform/local-server.md)**: This quick start guide shows how to start a LangGraph Server locally for the **ReAct Agent** template. The steps are similar for other templates.
-- **[Deploy to LangGraph Cloud](../cloud/quick_start.md)**: Deploy your LangGraph app using LangGraph Cloud.
+- **[Deploy to LangGraph Platform](../cloud/quick_start.md)**: Deploy your LangGraph app using LangGraph Platform.

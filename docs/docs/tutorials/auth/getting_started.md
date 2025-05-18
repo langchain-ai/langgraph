@@ -15,7 +15,7 @@ This guide assumes basic familiarity with the following concepts:
 
 !!! note
 
-    Custom auth is only available for LangGraph Cloud SaaS deployments or Enterprise Self-Hosted deployments.
+    Custom auth is only available for LangGraph Platform SaaS deployments or Enterprise Self-Hosted deployments.
 
 ## 1. Create your app
 
@@ -42,7 +42,7 @@ The server will start and open the studio in your browser:
 > - 📚 API Docs: http://127.0.0.1:2024/docs
 > 
 > This in-memory server is designed for development and testing.
-> For production use, please use LangGraph Cloud.
+> For production use, please use LangGraph Platform.
 ```
 
 If you were to self-host this on the public internet, anyone could access it!

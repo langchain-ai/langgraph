@@ -221,9 +221,10 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
                 runner = PregelRunner(
                     submit=weakref.ref(submit),
                     put_writes=weakref.ref(put_writes),
-                    schedule_task=weakref.WeakMethod(self._schedule_task),
                 )
-                async for _ in runner.atick([task], reraise=False):
+                async for _ in runner.atick(
+                    [task], reraise=False, schedule_task=self._schedule_task
+                ):
                     pass
             else:
                 # task was not found
@@ -438,9 +439,10 @@ class KafkaExecutor(AbstractContextManager):
                 runner = PregelRunner(
                     submit=weakref.ref(submit),
                     put_writes=weakref.ref(put_writes),
-                    schedule_task=weakref.WeakMethod(self._schedule_task),
                 )
-                for _ in runner.tick([task], reraise=False):
+                for _ in runner.tick(
+                    [task], reraise=False, schedule_task=self._schedule_task
+                ):
                     pass
             else:
                 # task was not found

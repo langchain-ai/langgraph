@@ -46,7 +46,7 @@ While a router allows an LLM to make a single decision, more complex agent archi
 
 This architecture allows for more complex and flexible agent behaviors, going beyond simple routing to enable dynamic problem-solving with multiple steps. Unlike the original [paper](https://arxiv.org/abs/2210.03629), today's agents rely on LLMs' [tool calling](#tool-calling) capabilities and operate on a list of [messages](./low_level.md#why-use-messages).
 
-In LangGraph, you can use the prebuilt [agent](../agent/overview.md) to get started with tool-calling agents.
+In LangGraph, you can use the prebuilt [agent](../agents/agents.md#2-create-an-agent) to get started with tool-calling agents.
 
 ### Tool calling
 
@@ -75,7 +75,7 @@ Effective [memory management](../how-tos/memory.ipynb) enhances an agent's abili
 
 ### Planning
 
-In a tool-calling [agent](../agent/overview.md), an LLM is called repeatedly in a while-loop. At each step the agent decides which tools to call, and what the inputs to those tools should be. Those tools are then executed, and the outputs are fed back into the LLM as observations. The while-loop terminates when the agent decides it has enough information to solve the user request and it is not worth calling any more tools.
+In a tool-calling [agent](../agents/overview.md#what-is-an-agent), an LLM is called repeatedly in a while-loop. At each step the agent decides which tools to call, and what the inputs to those tools should be. Those tools are then executed, and the outputs are fed back into the LLM as observations. The while-loop terminates when the agent decides it has enough information to solve the user request and it is not worth calling any more tools.
 
 ## Custom agent architectures
 

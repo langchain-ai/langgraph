@@ -71,7 +71,7 @@ Basic usage example:
 | [`values`](#stream-graph-state)  | Streams the full value of the state after each step of the graph.                                                                                                                   |
 | [`updates`](#stream-graph-state) | Streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g., multiple nodes are run), those updates are streamed separately. |
 | [`custom`](#stream-custom-data)  | Streams custom data from inside your graph nodes.                                                                                                                                   |
-| [`messages`](#messages)          | Streams LLM tokens and metadata for the graph node where the LLM is invoked.                                                                                                        |
+| [`messages`](#messages)          | Streams 2-tuples (LLM token, metadata) from any graph nodes where an LLM is invoked.                                                                                                        |
 | [`debug`](#debug)                | Streams as much information as possible throughout the execution of the graph.                                                                                                      |
 
 ### Stream multiple modes
@@ -161,6 +161,8 @@ graph = (
 
 To include outputs from [subgraphs](../concepts/subgraphs.md) in the streamed outputs, you can set `subgraphs=True` in the `.stream()` method of the parent graph. This will stream outputs from both the parent graph and any subgraphs.
 
+The outputs will be streamed as tuples `(namespace, data)`, where `namespace` is a tuple with the path to the node where a subgraph is invoked, e.g. `("parent_node:<task_id>", "child_node:<task_id>")`.
+
 ```python
 for chunk in graph.stream(
     {"foo": "foo"},
@@ -179,20 +181,16 @@ for chunk in graph.stream(
       from langgraph.graph import START, StateGraph
       from typing import TypedDict
 
-
       # Define subgraph
       class SubgraphState(TypedDict):
           foo: str  # note that this key is shared with the parent graph state
           bar: str
 
-
       def subgraph_node_1(state: SubgraphState):
           return {"bar": "bar"}
 
-
       def subgraph_node_2(state: SubgraphState):
           return {"foo": state["foo"] + state["bar"]}
-
 
       subgraph_builder = StateGraph(SubgraphState)
       subgraph_builder.add_node(subgraph_node_1)
@@ -201,15 +199,12 @@ for chunk in graph.stream(
       subgraph_builder.add_edge("subgraph_node_1", "subgraph_node_2")
       subgraph = subgraph_builder.compile()
 
-
       # Define parent graph
       class ParentState(TypedDict):
           foo: str
 
-
       def node_1(state: ParentState):
           return {"foo": "hi! " + state["foo"]}
-
 
       builder = StateGraph(ParentState)
       builder.add_node("node_1", node_1)
@@ -228,6 +223,13 @@ for chunk in graph.stream(
       ```
       
       1. Set `subgraphs=True` to stream outputs from subgraphs.
+
+      ```
+      ((), {'node_1': {'foo': 'hi! foo'}})
+      (('node_2:dfddc4ba-c3c5-6887-5012-a243b5b377c2',), {'subgraph_node_1': {'bar': 'bar'}})
+      (('node_2:dfddc4ba-c3c5-6887-5012-a243b5b377c2',), {'subgraph_node_2': {'foo': 'hi! foobar'}})
+      ((), {'node_2': {'foo': 'hi! foobar'}})
+      ```
 
       **Note** that we are receiving not just the node updates, but we also the namespaces which tell us what graph (or subgraph) we are streaming from.
 

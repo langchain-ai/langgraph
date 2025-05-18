@@ -1,8 +1,8 @@
 import asyncio
 import operator
+from collections.abc import Sequence
 from typing import (
     Annotated,
-    Sequence,
     TypedDict,
     Union,
 )

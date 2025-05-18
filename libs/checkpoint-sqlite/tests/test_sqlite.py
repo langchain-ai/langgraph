@@ -60,7 +60,7 @@ class TestSqliteSaver:
 
     def test_combined_metadata(self) -> None:
         with SqliteSaver.from_conn_string(":memory:") as saver:
-            config = {
+            config: RunnableConfig = {
                 "configurable": {
                     "thread_id": "thread-2",
                     "checkpoint_ns": "",
@@ -70,7 +70,7 @@ class TestSqliteSaver:
             }
             saver.put(config, self.chkpnt_2, self.metadata_2, {})
             checkpoint = saver.get_tuple(config)
-            assert checkpoint.metadata == {
+            assert checkpoint is not None and checkpoint.metadata == {
                 **self.metadata_2,
                 "thread_id": "thread-2",
                 "run_id": "my_run_id",

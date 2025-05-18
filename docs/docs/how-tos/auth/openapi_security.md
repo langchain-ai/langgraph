@@ -1,4 +1,4 @@
-# How to document API authentication in OpenAPI
+# Document API authentication in OpenAPI
 
 This guide shows how to customize the OpenAPI security schema for your LangGraph Platform API documentation. A well-documented security schema helps API consumers understand how to authenticate with your API and even enables automatic client generation. See the [Authentication & Access Control conceptual guide](../../concepts/auth.md) for more details about LangGraph's authentication system.
 
@@ -11,9 +11,9 @@ This guide applies to all LangGraph Platform deployments (Cloud and self-hosted)
 
 The default security scheme varies by deployment type:
 
-=== "LangGraph Cloud"
+=== "LangGraph Platform"
 
-By default, LangGraph Cloud requires a LangSmith API key in the `x-api-key` header:
+By default, LangGraph Platform requires a LangSmith API key in the `x-api-key` header:
 
 ```yaml
 components:

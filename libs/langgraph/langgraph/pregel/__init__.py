@@ -2278,7 +2278,7 @@ class Pregel(PregelProtocol):
         Args:
             input: The input to the graph.
             config: The configuration to use for the run.
-            stream_mode: The mode to stream output, defaults to self.stream_mode.
+            stream_mode: The mode to stream output, defaults to `self.stream_mode`.
                 Options are:
 
                 - `"values"`: Emit all values in the state after each step, including interrupts.
@@ -2287,112 +2287,28 @@ class Pregel(PregelProtocol):
                     If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
                 - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
                 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
+                    Will be emitted as 2-tuples `(LLM token, metadata)`.
                 - `"debug"`: Emit debug events with as much information as possible for each step.
+
+                You can pass a list as the `stream_mode` parameter to stream multiple modes at once.
+                The streamed outputs will be tuples of `(mode, data)`.
+
+                See [LangGraph streaming guide](https://langchain-ai.github.io/langgraph/how-tos/streaming/) for more details.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             checkpoint_during: Whether to checkpoint intermediate steps, defaults to True. If False, only the final checkpoint is saved.
             debug: Whether to print debug information during execution, defaults to False.
-            subgraphs: Whether to stream subgraphs, defaults to False.
+            subgraphs: Whether to stream events from inside subgraphs, defaults to False.
+                If True, the events will be emitted as tuples `(namespace, data)`,
+                or `(namespace, mode, data)` if `stream_mode` is a list,
+                where `namespace` is a tuple with the path to the node where a subgraph is invoked,
+                e.g. `("parent_node:<task_id>", "child_node:<task_id>")`.
+
+                See [LangGraph streaming guide](https://langchain-ai.github.io/langgraph/how-tos/streaming/) for more details.
 
         Yields:
             The output of each step in the graph. The output shape depends on the stream_mode.
-
-        Example: Using stream_mode="values":
-            ```python
-            import operator
-            from typing_extensions import Annotated, TypedDict
-            from langgraph.graph import StateGraph, START
-
-            class State(TypedDict):
-                alist: Annotated[list, operator.add]
-                another_list: Annotated[list, operator.add]
-
-            builder = StateGraph(State)
-            builder.add_node("a", lambda _state: {"another_list": ["hi"]})
-            builder.add_node("b", lambda _state: {"alist": ["there"]})
-            builder.add_edge("a", "b")
-            builder.add_edge(START, "a")
-            graph = builder.compile()
-
-            for event in graph.stream({"alist": ['Ex for stream_mode="values"']}, stream_mode="values"):
-                print(event)
-
-            # {'alist': ['Ex for stream_mode="values"'], 'another_list': []}
-            # {'alist': ['Ex for stream_mode="values"'], 'another_list': ['hi']}
-            # {'alist': ['Ex for stream_mode="values"', 'there'], 'another_list': ['hi']}
-            ```
-
-        Example: Using stream_mode="updates":
-            ```python
-            for event in graph.stream({"alist": ['Ex for stream_mode="updates"']}, stream_mode="updates"):
-                print(event)
-
-            # {'a': {'another_list': ['hi']}}
-            # {'b': {'alist': ['there']}}
-            ```
-
-        Example: Using stream_mode="debug":
-            ```python
-            for event in graph.stream({"alist": ['Ex for stream_mode="debug"']}, stream_mode="debug"):
-                print(event)
-
-            # {'type': 'task', 'timestamp': '2024-06-23T...+00:00', 'step': 1, 'payload': {'id': '...', 'name': 'a', 'input': {'alist': ['Ex for stream_mode="debug"'], 'another_list': []}, 'triggers': ['start:a']}}
-            # {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 1, 'payload': {'id': '...', 'name': 'a', 'result': [('another_list', ['hi'])]}}
-            # {'type': 'task', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'input': {'alist': ['Ex for stream_mode="debug"'], 'another_list': ['hi']}, 'triggers': ['a']}}
-            # {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
-            ```
-
-        Example: Using stream_mode="custom":
-            ```python
-            from langgraph.types import StreamWriter
-
-            def node_a(state: State, writer: StreamWriter):
-                writer({"custom_data": "foo"})
-                return {"alist": ["hi"]}
-
-            builder = StateGraph(State)
-            builder.add_node("a", node_a)
-            builder.add_edge(START, "a")
-            graph = builder.compile()
-
-            for event in graph.stream({"alist": ['Ex for stream_mode="custom"']}, stream_mode="custom"):
-                print(event)
-
-            # {'custom_data': 'foo'}
-            ```
-
-        Example: Using stream_mode="messages":
-            ```python
-            from typing_extensions import Annotated, TypedDict
-            from langgraph.graph import StateGraph, START
-            from langchain_openai import ChatOpenAI
-
-            llm = ChatOpenAI(model="gpt-4o-mini")
-
-            class State(TypedDict):
-                question: str
-                answer: str
-
-            def node_a(state: State):
-                response = llm.invoke(state["question"])
-                return {"answer": response.content}
-
-            builder = StateGraph(State)
-            builder.add_node("a", node_a)
-            builder.add_edge(START, "a")
-            graph = builder.compile()
-
-            for event in graph.stream({"question": "What is the capital of France?"}, stream_mode="messages"):
-                print(event)
-
-            # (AIMessageChunk(content='The', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], 'langgraph_path': ('__pregel_pull', 'a'), 'langgraph_checkpoint_ns': '...', 'checkpoint_ns': '...', 'ls_provider': 'openai', 'ls_model_name': 'gpt-4o-mini', 'ls_model_type': 'chat', 'ls_temperature': 0.7})
-            # (AIMessageChunk(content=' capital', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], ...})
-            # (AIMessageChunk(content=' of', additional_kwargs={}, response_metadata={}, id='...'), {...})
-            # (AIMessageChunk(content=' France', additional_kwargs={}, response_metadata={}, id='...'), {...})
-            # (AIMessageChunk(content=' is', additional_kwargs={}, response_metadata={}, id='...'), {...})
-            # (AIMessageChunk(content=' Paris', additional_kwargs={}, response_metadata={}, id='...'), {...})
-            ```
         """
 
         stream = SyncQueue()
@@ -2486,7 +2402,6 @@ class Pregel(PregelProtocol):
                         CONFIG_KEY_RUNNER_SUBMIT, weakref.WeakMethod(loop.submit)
                     ),
                     put_writes=weakref.WeakMethod(loop.put_writes),
-                    schedule_task=weakref.WeakMethod(loop.accept_push),
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
                 )
                 # enable subgraph streaming
@@ -2529,7 +2444,7 @@ class Pregel(PregelProtocol):
                         [t for t in loop.tasks.values() if not t.writes],
                         timeout=self.step_timeout,
                         get_waiter=get_waiter,
-                        match_cached_writes=loop.match_cached_writes,
+                        schedule_task=loop.accept_push,
                     ):
                         # emit output
                         yield from output()
@@ -2570,7 +2485,7 @@ class Pregel(PregelProtocol):
         Args:
             input: The input to the graph.
             config: The configuration to use for the run.
-            stream_mode: The mode to stream output, defaults to self.stream_mode.
+            stream_mode: The mode to stream output, defaults to `self.stream_mode`.
                 Options are:
 
                 - `"values"`: Emit all values in the state after each step, including interrupts.
@@ -2579,112 +2494,28 @@ class Pregel(PregelProtocol):
                     If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
                 - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
                 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
+                    Will be emitted as 2-tuples `(LLM token, metadata)`.
                 - `"debug"`: Emit debug events with as much information as possible for each step.
+
+                You can pass a list as the `stream_mode` parameter to stream multiple modes at once.
+                The streamed outputs will be tuples of `(mode, data)`.
+
+                See [LangGraph streaming guide](https://langchain-ai.github.io/langgraph/how-tos/streaming/) for more details.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             checkpoint_during: Whether to checkpoint intermediate steps, defaults to True. If False, only the final checkpoint is saved.
             debug: Whether to print debug information during execution, defaults to False.
-            subgraphs: Whether to stream subgraphs, defaults to False.
+            subgraphs: Whether to stream events from inside subgraphs, defaults to False.
+                If True, the events will be emitted as tuples `(namespace, data)`,
+                or `(namespace, mode, data)` if `stream_mode` is a list,
+                where `namespace` is a tuple with the path to the node where a subgraph is invoked,
+                e.g. `("parent_node:<task_id>", "child_node:<task_id>")`.
+
+                See [LangGraph streaming guide](https://langchain-ai.github.io/langgraph/how-tos/streaming/) for more details.
 
         Yields:
             The output of each step in the graph. The output shape depends on the stream_mode.
-
-        Example: Using stream_mode="values":
-            ```python
-            import operator
-            from typing_extensions import Annotated, TypedDict
-            from langgraph.graph import StateGraph, START
-
-            class State(TypedDict):
-                alist: Annotated[list, operator.add]
-                another_list: Annotated[list, operator.add]
-
-            builder = StateGraph(State)
-            builder.add_node("a", lambda _state: {"another_list": ["hi"]})
-            builder.add_node("b", lambda _state: {"alist": ["there"]})
-            builder.add_edge("a", "b")
-            builder.add_edge(START, "a")
-            graph = builder.compile()
-
-            async for event in graph.astream({"alist": ['Ex for stream_mode="values"']}, stream_mode="values"):
-                print(event)
-
-            # {'alist': ['Ex for stream_mode="values"'], 'another_list': []}
-            # {'alist': ['Ex for stream_mode="values"'], 'another_list': ['hi']}
-            # {'alist': ['Ex for stream_mode="values"', 'there'], 'another_list': ['hi']}
-            ```
-
-        Example: Using stream_mode="updates":
-            ```python
-            async for event in graph.astream({"alist": ['Ex for stream_mode="updates"']}, stream_mode="updates"):
-                print(event)
-
-            # {'a': {'another_list': ['hi']}}
-            # {'b': {'alist': ['there']}}
-            ```
-
-        Example: Using stream_mode="debug":
-            ```python
-            async for event in graph.astream({"alist": ['Ex for stream_mode="debug"']}, stream_mode="debug"):
-                print(event)
-
-            # {'type': 'task', 'timestamp': '2024-06-23T...+00:00', 'step': 1, 'payload': {'id': '...', 'name': 'a', 'input': {'alist': ['Ex for stream_mode="debug"'], 'another_list': []}, 'triggers': ['start:a']}}
-            # {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 1, 'payload': {'id': '...', 'name': 'a', 'result': [('another_list', ['hi'])]}}
-            # {'type': 'task', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'input': {'alist': ['Ex for stream_mode="debug"'], 'another_list': ['hi']}, 'triggers': ['a']}}
-            # {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
-            ```
-
-        Example: Using stream_mode="custom":
-            ```python
-            from langgraph.types import StreamWriter
-
-            async def node_a(state: State, writer: StreamWriter):
-                writer({"custom_data": "foo"})
-                return {"alist": ["hi"]}
-
-            builder = StateGraph(State)
-            builder.add_node("a", node_a)
-            builder.add_edge(START, "a")
-            graph = builder.compile()
-
-            async for event in graph.astream({"alist": ['Ex for stream_mode="custom"']}, stream_mode="custom"):
-                print(event)
-
-            # {'custom_data': 'foo'}
-            ```
-
-        Example: Using stream_mode="messages":
-            ```python
-            from typing_extensions import Annotated, TypedDict
-            from langgraph.graph import StateGraph, START
-            from langchain_openai import ChatOpenAI
-
-            llm = ChatOpenAI(model="gpt-4o-mini")
-
-            class State(TypedDict):
-                question: str
-                answer: str
-
-            async def node_a(state: State):
-                response = await llm.ainvoke(state["question"])
-                return {"answer": response.content}
-
-            builder = StateGraph(State)
-            builder.add_node("a", node_a)
-            builder.add_edge(START, "a")
-            graph = builder.compile()
-
-            async for event in graph.astream({"question": "What is the capital of France?"}, stream_mode="messages"):
-                print(event)
-
-            # (AIMessageChunk(content='The', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], 'langgraph_path': ('__pregel_pull', 'a'), 'langgraph_checkpoint_ns': '...', 'checkpoint_ns': '...', 'ls_provider': 'openai', 'ls_model_name': 'gpt-4o-mini', 'ls_model_type': 'chat', 'ls_temperature': 0.7})
-            # (AIMessageChunk(content=' capital', additional_kwargs={}, response_metadata={}, id='...'), {'langgraph_step': 1, 'langgraph_node': 'a', 'langgraph_triggers': ['start:a'], ...})
-            # (AIMessageChunk(content=' of', additional_kwargs={}, response_metadata={}, id='...'), {...})
-            # (AIMessageChunk(content=' France', additional_kwargs={}, response_metadata={}, id='...'), {...})
-            # (AIMessageChunk(content=' is', additional_kwargs={}, response_metadata={}, id='...'), {...})
-            # (AIMessageChunk(content=' Paris', additional_kwargs={}, response_metadata={}, id='...'), {...})
-            ```
         """
 
         stream = AsyncQueue()
@@ -2799,7 +2630,6 @@ class Pregel(PregelProtocol):
                         CONFIG_KEY_RUNNER_SUBMIT, weakref.WeakMethod(loop.submit)
                     ),
                     put_writes=weakref.WeakMethod(loop.put_writes),
-                    schedule_task=weakref.WeakMethod(loop.accept_push),
                     use_astream=do_stream,
                     node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
                 )
@@ -2833,7 +2663,7 @@ class Pregel(PregelProtocol):
                         [t for t in loop.tasks.values() if not t.writes],
                         timeout=self.step_timeout,
                         get_waiter=get_waiter,
-                        match_cached_writes=loop.amatch_cached_writes,
+                        schedule_task=loop.aaccept_push,
                     ):
                         # emit output
                         for o in output():

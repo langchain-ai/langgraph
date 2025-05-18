@@ -1,9 +1,6 @@
 {
   "openapi": "3.1.0",
-  "info": {
-    "title": "LangGraph Platform",
-    "version": "0.1.0"
-  },
+  "info": { "title": "LangGraph Platform", "version": "0.1.0" },
   "tags": [
     {
       "name": "Assistants",
@@ -40,9 +37,7 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AssistantCreate"
-              }
+              "schema": { "$ref": "#/components/schemas/AssistantCreate" }
             }
           },
           "required": true
@@ -52,9 +47,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Assistant"
-                }
+                "schema": { "$ref": "#/components/schemas/Assistant" }
               }
             }
           },
@@ -62,9 +55,7 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -72,9 +63,7 @@
             "description": "Conflict",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -82,9 +71,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -113,9 +100,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/Assistant"
-                  },
+                  "items": { "$ref": "#/components/schemas/Assistant" },
                   "type": "array",
                   "title": "Response Search Assistants Assistants Search Post"
                 }
@@ -126,9 +111,7 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -136,9 +119,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -170,9 +151,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Assistant"
-                }
+                "schema": { "$ref": "#/components/schemas/Assistant" }
               }
             }
           },
@@ -180,9 +159,7 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -210,19 +187,13 @@
         "responses": {
           "200": {
             "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+            "content": { "application/json": { "schema": {} } }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -230,9 +201,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -260,9 +229,7 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AssistantPatch"
-              }
+              "schema": { "$ref": "#/components/schemas/AssistantPatch" }
             }
           },
           "required": true
@@ -272,9 +239,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Assistant"
-                }
+                "schema": { "$ref": "#/components/schemas/Assistant" }
               }
             }
           },
@@ -282,9 +247,7 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -292,9 +255,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -333,14 +294,7 @@
             "description": "Include graph representation of subgraphs. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included.",
             "required": false,
             "schema": {
-              "oneOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "integer"
-                }
-              ],
+              "oneOf": [{ "type": "boolean" }, { "type": "integer" }],
               "title": "Xray",
               "default": false,
               "description": "Include graph representation of subgraphs. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included."
@@ -356,9 +310,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": {
-                    "items": {
-                      "type": "object"
-                    },
+                    "items": { "type": "object" },
                     "type": "array"
                   },
                   "type": "object",
@@ -371,9 +323,7 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -381,9 +331,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -425,9 +373,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Subgraphs"
-                }
+                "schema": { "$ref": "#/components/schemas/Subgraphs" }
               }
             }
           },
@@ -435,9 +381,7 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -445,9 +389,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -475,10 +417,7 @@
           {
             "description": "Namespace of the subgraph to filter by.",
             "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Namespace"
-            },
+            "schema": { "type": "string", "title": "Namespace" },
             "name": "namespace",
             "in": "path"
           },
@@ -499,9 +438,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Subgraphs"
-                }
+                "schema": { "$ref": "#/components/schemas/Subgraphs" }
               }
             }
           },
@@ -509,9 +446,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -543,9 +478,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GraphSchema"
-                }
+                "schema": { "$ref": "#/components/schemas/GraphSchema" }
               }
             }
           },
@@ -553,9 +486,7 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -563,9 +494,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -598,9 +527,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/Assistant"
-                  },
+                  "items": { "$ref": "#/components/schemas/Assistant" },
                   "type": "array",
                   "title": "Response Search Assistants Assistants Search Post"
                 }
@@ -611,9 +538,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -656,9 +581,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Assistant"
-                }
+                "schema": { "$ref": "#/components/schemas/Assistant" }
               }
             }
           },
@@ -666,9 +589,7 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -676,9 +597,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -694,9 +613,7 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ThreadCreate"
-              }
+              "schema": { "$ref": "#/components/schemas/ThreadCreate" }
             }
           },
           "required": true
@@ -706,9 +623,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Thread"
-                }
+                "schema": { "$ref": "#/components/schemas/Thread" }
               }
             }
           },
@@ -716,9 +631,7 @@
             "description": "Conflict",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -726,9 +639,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -757,9 +668,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/Thread"
-                  },
+                  "items": { "$ref": "#/components/schemas/Thread" },
                   "type": "array",
                   "title": "Response Search Threads Threads Search Post"
                 }
@@ -770,59 +679,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/threads/state/bulk": {
-      "post": {
-        "tags": ["Threads"],
-        "summary": "Bulk Update Thread State",
-        "description": "Create a new thread from a batch of state updates.",
-        "operationId": "bulk_update_thread_state_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ThreadStateBulkUpdate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Thread"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -847,6 +704,17 @@
             },
             "name": "thread_id",
             "in": "path"
+          },
+          {
+            "description": "Whether to include subgraphs in the response.",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "title": "Subgraphs",
+              "description": "Whether to include subgraphs in the response."
+            },
+            "name": "subgraphs",
+            "in": "query"
           }
         ],
         "responses": {
@@ -854,9 +722,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ThreadState"
-                }
+                "schema": { "$ref": "#/components/schemas/ThreadState" }
               }
             }
           },
@@ -864,9 +730,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -894,9 +758,7 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ThreadStateUpdate"
-              }
+              "schema": { "$ref": "#/components/schemas/ThreadStateUpdate" }
             }
           },
           "required": true
@@ -916,9 +778,70 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/threads/{thread_id}/state/{checkpoint_id}": {
+      "get": {
+        "tags": ["Threads"],
+        "summary": "Get Thread State At Checkpoint",
+        "description": "Get state for a thread at a specific checkpoint.",
+        "operationId": "get_thread_state_at_checkpoint_threads__thread_id__state__checkpoint_id__get",
+        "parameters": [
+          {
+            "description": "The ID of the thread.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id",
+              "description": "The ID of the thread."
+            },
+            "name": "thread_id",
+            "in": "path"
+          },
+          {
+            "description": "The ID of the checkpoint.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Checkpoint Id",
+              "description": "The ID of the checkpoint."
+            },
+            "name": "checkpoint_id",
+            "in": "path"
+          },
+          {
+            "description": "Whether to include subgraphs in the response.",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "title": "Subgraphs",
+              "description": "Whether to include subgraphs in the response."
+            },
+            "name": "subgraphs",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ThreadState" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -931,6 +854,30 @@
         "summary": "Get Thread State At Checkpoint",
         "description": "Get state for a thread at a specific checkpoint.",
         "operationId": "post_thread_state_at_checkpoint_threads__thread_id__state__checkpoint_id__get",
+        "parameters": [
+          {
+            "description": "The ID of the thread.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id",
+              "description": "The ID of the thread."
+            },
+            "name": "thread_id",
+            "in": "path"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "title": "Subgraphs",
+              "description": "If true, includes subgraph states."
+            },
+            "name": "subgraphs",
+            "in": "query"
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -946,9 +893,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ThreadState"
-                }
+                "schema": { "$ref": "#/components/schemas/ThreadState" }
               }
             }
           },
@@ -956,9 +901,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -986,20 +929,13 @@
           },
           {
             "required": false,
-            "schema": {
-              "type": "integer",
-              "title": "Limit",
-              "default": 10
-            },
+            "schema": { "type": "integer", "title": "Limit", "default": 10 },
             "name": "limit",
             "in": "query"
           },
           {
             "required": false,
-            "schema": {
-              "type": "string",
-              "title": "Before"
-            },
+            "schema": { "type": "string", "title": "Before" },
             "name": "before",
             "in": "query"
           }
@@ -1023,9 +959,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -1053,9 +987,7 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ThreadStateSearch"
-              }
+              "schema": { "$ref": "#/components/schemas/ThreadStateSearch" }
             }
           },
           "required": true
@@ -1079,9 +1011,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -1113,9 +1043,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Thread"
-                }
+                "schema": { "$ref": "#/components/schemas/Thread" }
               }
             }
           },
@@ -1123,9 +1051,7 @@
             "description": "Conflict",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -1133,9 +1059,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -1167,9 +1091,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Thread"
-                }
+                "schema": { "$ref": "#/components/schemas/Thread" }
               }
             }
           },
@@ -1177,9 +1099,7 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -1187,9 +1107,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -1217,19 +1135,13 @@
         "responses": {
           "200": {
             "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+            "content": { "application/json": { "schema": {} } }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -1237,9 +1149,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -1267,9 +1177,7 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ThreadPatch"
-              }
+              "schema": { "$ref": "#/components/schemas/ThreadPatch" }
             }
           },
           "required": true
@@ -1279,9 +1187,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Thread"
-                }
+                "schema": { "$ref": "#/components/schemas/Thread" }
               }
             }
           },
@@ -1289,9 +1195,7 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -1299,9 +1203,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -1329,21 +1231,13 @@
           },
           {
             "required": false,
-            "schema": {
-              "type": "integer",
-              "title": "Limit",
-              "default": 10
-            },
+            "schema": { "type": "integer", "title": "Limit", "default": 10 },
             "name": "limit",
             "in": "query"
           },
           {
             "required": false,
-            "schema": {
-              "type": "integer",
-              "title": "Offset",
-              "default": 0
-            },
+            "schema": { "type": "integer", "title": "Offset", "default": 0 },
             "name": "offset",
             "in": "query"
           },
@@ -1363,9 +1257,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/Run"
-                  },
+                  "items": { "$ref": "#/components/schemas/Run" },
                   "type": "array"
                 }
               }
@@ -1375,9 +1267,7 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -1385,9 +1275,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -1415,9 +1303,7 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RunCreateStateful"
-              }
+              "schema": { "$ref": "#/components/schemas/RunCreateStateful" }
             }
           },
           "required": true
@@ -1427,9 +1313,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Run"
-                }
+                "schema": { "$ref": "#/components/schemas/Run" }
               }
             }
           },
@@ -1437,9 +1321,7 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -1447,9 +1329,7 @@
             "description": "Conflict",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -1457,9 +1337,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -1489,9 +1367,7 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CronCreate"
-              }
+              "schema": { "$ref": "#/components/schemas/CronCreate" }
             }
           },
           "required": true
@@ -1501,9 +1377,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Cron"
-                }
+                "schema": { "$ref": "#/components/schemas/Cron" }
               }
             }
           },
@@ -1511,9 +1385,7 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -1521,9 +1393,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -1553,9 +1423,7 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RunCreateStateful"
-              }
+              "schema": { "$ref": "#/components/schemas/RunCreateStateful" }
             }
           },
           "required": true
@@ -1576,9 +1444,7 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -1586,9 +1452,7 @@
             "description": "Conflict",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -1596,9 +1460,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -1628,9 +1490,7 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RunCreateStateful"
-              }
+              "schema": { "$ref": "#/components/schemas/RunCreateStateful" }
             }
           },
           "required": true
@@ -1638,19 +1498,13 @@
         "responses": {
           "200": {
             "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+            "content": { "application/json": { "schema": {} } }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -1658,9 +1512,7 @@
             "description": "Conflict",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -1668,9 +1520,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -1714,9 +1564,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Run"
-                }
+                "schema": { "$ref": "#/components/schemas/Run" }
               }
             }
           },
@@ -1724,9 +1572,7 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -1734,9 +1580,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -1776,19 +1620,13 @@
         "responses": {
           "200": {
             "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+            "content": { "application/json": { "schema": {} } }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -1796,9 +1634,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -1851,19 +1687,13 @@
         "responses": {
           "200": {
             "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+            "content": { "application/json": { "schema": {} } }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -1871,9 +1701,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -1928,9 +1756,7 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -1938,9 +1764,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -2003,19 +1827,13 @@
         "responses": {
           "200": {
             "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+            "content": { "application/json": { "schema": {} } }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -2023,9 +1841,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -2041,9 +1857,7 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CronCreate"
-              }
+              "schema": { "$ref": "#/components/schemas/CronCreate" }
             }
           },
           "required": true
@@ -2053,9 +1867,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Cron"
-                }
+                "schema": { "$ref": "#/components/schemas/Cron" }
               }
             }
           },
@@ -2063,9 +1875,7 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -2073,9 +1883,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -2091,9 +1899,7 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CronSearch"
-              }
+              "schema": { "$ref": "#/components/schemas/CronSearch" }
             }
           },
           "required": true
@@ -2104,9 +1910,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/Cron"
-                  },
+                  "items": { "$ref": "#/components/schemas/Cron" },
                   "type": "array",
                   "title": "Response Search Crons Search Post"
                 }
@@ -2117,9 +1921,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -2158,9 +1960,7 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -2168,9 +1968,7 @@
             "description": "Conflict",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -2178,9 +1976,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -2210,24 +2006,18 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RunsCancel"
-              }
+              "schema": { "$ref": "#/components/schemas/RunsCancel" }
             }
           },
           "required": true
         },
         "responses": {
-          "204": {
-            "description": "Success - Runs cancelled"
-          },
+          "204": { "description": "Success - Runs cancelled" },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -2235,9 +2025,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -2263,19 +2051,13 @@
         "responses": {
           "200": {
             "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+            "content": { "application/json": { "schema": {} } }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -2283,9 +2065,7 @@
             "description": "Conflict",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -2293,9 +2073,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -2321,19 +2099,13 @@
         "responses": {
           "200": {
             "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+            "content": { "application/json": { "schema": {} } }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -2341,9 +2113,7 @@
             "description": "Conflict",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -2351,9 +2121,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -2369,9 +2137,7 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RunBatchCreate"
-              }
+              "schema": { "$ref": "#/components/schemas/RunBatchCreate" }
             }
           },
           "required": true
@@ -2379,19 +2145,13 @@
         "responses": {
           "200": {
             "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+            "content": { "application/json": { "schema": {} } }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -2399,9 +2159,7 @@
             "description": "Conflict",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -2409,9 +2167,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -2439,19 +2195,13 @@
         "responses": {
           "200": {
             "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+            "content": { "application/json": { "schema": {} } }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -2459,9 +2209,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -2477,23 +2225,17 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/StorePutRequest"
-              }
+              "schema": { "$ref": "#/components/schemas/StorePutRequest" }
             }
           }
         },
         "responses": {
-          "204": {
-            "description": "Success"
-          },
+          "204": { "description": "Success" },
           "422": {
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -2514,16 +2256,12 @@
           }
         },
         "responses": {
-          "204": {
-            "description": "Success"
-          },
+          "204": { "description": "Success" },
           "422": {
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -2538,20 +2276,13 @@
             "name": "key",
             "in": "query",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
+            "schema": { "type": "string" }
           },
           {
             "name": "namespace",
             "in": "query",
             "required": false,
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
+            "schema": { "type": "array", "items": { "type": "string" } }
           }
         ],
         "responses": {
@@ -2559,9 +2290,7 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Item"
-                }
+                "schema": { "$ref": "#/components/schemas/Item" }
               }
             }
           },
@@ -2569,9 +2298,7 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           },
@@ -2579,9 +2306,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -2618,9 +2343,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -2657,9 +2380,7 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
               }
             }
           }
@@ -2729,9 +2450,7 @@
           "400": {
             "description": "Bad request: invalid JSON or message format, or unacceptable Accept header."
           },
-          "405": {
-            "description": "HTTP method not allowed."
-          },
+          "405": { "description": "HTTP method not allowed." },
           "500": {
             "description": "Internal server error or unexpected failure."
           }
@@ -2742,9 +2461,7 @@
         "operationId": "delete_mcp",
         "summary": "Terminate Session",
         "description": "Implemented according to the Streamable HTTP Transport specification.\nTerminate an MCP session. The server implementation is stateless, so this is a no-op.\n\n",
-        "responses": {
-          "404": {}
-        },
+        "responses": { "404": {} },
         "tags": ["MCP"]
       }
     }
@@ -2767,9 +2484,7 @@
           "config": {
             "properties": {
               "tags": {
-                "items": {
-                  "type": "string"
-                },
+                "items": { "type": "string" },
                 "type": "array",
                 "title": "Tags"
               },
@@ -2777,10 +2492,7 @@
                 "type": "integer",
                 "title": "Recursion Limit"
               },
-              "configurable": {
-                "type": "object",
-                "title": "Configurable"
-              }
+              "configurable": { "type": "object", "title": "Configurable" }
             },
             "type": "object",
             "title": "Config",
@@ -2923,20 +2635,12 @@
       "Config": {
         "properties": {
           "tags": {
-            "items": {
-              "type": "string"
-            },
+            "items": { "type": "string" },
             "type": "array",
             "title": "Tags"
           },
-          "recursion_limit": {
-            "type": "integer",
-            "title": "Recursion Limit"
-          },
-          "configurable": {
-            "type": "object",
-            "title": "Configurable"
-          }
+          "recursion_limit": { "type": "integer", "title": "Recursion Limit" },
+          "configurable": { "type": "object", "title": "Configurable" }
         },
         "type": "object",
         "title": "Config"
@@ -3011,24 +2715,14 @@
                 "format": "uuid",
                 "title": "Assistant Id"
               },
-              {
-                "type": "string",
-                "title": "Graph Id"
-              }
+              { "type": "string", "title": "Graph Id" }
             ],
             "description": "The assistant ID or graph name to run. If using graph name, will default to the assistant automatically created from that graph by the server."
           },
           "input": {
             "anyOf": [
-              {
-                "items": {
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              {
-                "type": "object"
-              }
+              { "items": { "type": "object" }, "type": "array" },
+              { "type": "object" }
             ],
             "title": "Input",
             "description": "The input to the graph."
@@ -3041,9 +2735,7 @@
           "config": {
             "properties": {
               "tags": {
-                "items": {
-                  "type": "string"
-                },
+                "items": { "type": "string" },
                 "type": "array",
                 "title": "Tags"
               },
@@ -3051,10 +2743,7 @@
                 "type": "integer",
                 "title": "Recursion Limit"
               },
-              "configurable": {
-                "type": "object",
-                "title": "Configurable"
-              }
+              "configurable": { "type": "object", "title": "Configurable" }
             },
             "type": "object",
             "title": "Config",
@@ -3070,32 +2759,16 @@
           },
           "interrupt_before": {
             "anyOf": [
-              {
-                "type": "string",
-                "enum": ["*"]
-              },
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              }
+              { "type": "string", "enum": ["*"] },
+              { "items": { "type": "string" }, "type": "array" }
             ],
             "title": "Interrupt Before",
             "description": "Nodes to interrupt immediately before they get executed."
           },
           "interrupt_after": {
             "anyOf": [
-              {
-                "type": "string",
-                "enum": ["*"]
-              },
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              }
+              { "type": "string", "enum": ["*"] },
+              { "items": { "type": "string" }, "type": "array" }
             ],
             "title": "Interrupt After",
             "description": "Nodes to interrupt immediately after they get executed."
@@ -3265,10 +2938,7 @@
             "title": "Metadata",
             "description": "The run metadata."
           },
-          "kwargs": {
-            "type": "object",
-            "title": "Kwargs"
-          },
+          "kwargs": { "type": "object", "title": "Kwargs" },
           "multitask_strategy": {
             "type": "string",
             "enum": ["reject", "rollback", "interrupt", "enqueue"],
@@ -3325,27 +2995,14 @@
           },
           "goto": {
             "anyOf": [
-              {
-                "$ref": "#/components/schemas/Send"
-              },
+              { "$ref": "#/components/schemas/Send" },
               {
                 "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/Send"
-                }
+                "items": { "$ref": "#/components/schemas/Send" }
               },
-              {
-                "type": "string"
-              },
-              {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              {
-                "type": "null"
-              }
+              { "type": "string" },
+              { "type": "array", "items": { "type": "string" } },
+              { "type": "null" }
             ],
             "title": "Goto",
             "description": "Name of the node(s) to navigate to next or node(s) to be executed with a provided input."
@@ -3361,10 +3018,7 @@
                 "format": "uuid",
                 "title": "Assistant Id"
               },
-              {
-                "type": "string",
-                "title": "Graph Id"
-              }
+              { "type": "string", "title": "Graph Id" }
             ],
             "description": "The assistant ID or graph name to run. If using graph name, will default to first assistant created from that graph."
           },
@@ -3376,36 +3030,20 @@
           },
           "input": {
             "anyOf": [
-              {
-                "type": "object"
-              },
-              {
-                "type": "array"
-              },
-              {
-                "type": "string"
-              },
-              {
-                "type": "number"
-              },
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
+              { "type": "object" },
+              { "type": "array" },
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" },
+              { "type": "null" }
             ],
             "title": "Input",
             "description": "The input to the graph."
           },
           "command": {
             "anyOf": [
-              {
-                "$ref": "#/components/schemas/Command"
-              },
-              {
-                "type": "null"
-              }
+              { "$ref": "#/components/schemas/Command" },
+              { "type": "null" }
             ],
             "title": "Input",
             "description": "The input to the graph."
@@ -3418,9 +3056,7 @@
           "config": {
             "properties": {
               "tags": {
-                "items": {
-                  "type": "string"
-                },
+                "items": { "type": "string" },
                 "type": "array",
                 "title": "Tags"
               },
@@ -3428,10 +3064,7 @@
                 "type": "integer",
                 "title": "Recursion Limit"
               },
-              "configurable": {
-                "type": "object",
-                "title": "Configurable"
-              }
+              "configurable": { "type": "object", "title": "Configurable" }
             },
             "type": "object",
             "title": "Config",
@@ -3447,32 +3080,16 @@
           },
           "interrupt_before": {
             "anyOf": [
-              {
-                "type": "string",
-                "enum": ["*"]
-              },
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              }
+              { "type": "string", "enum": ["*"] },
+              { "items": { "type": "string" }, "type": "array" }
             ],
             "title": "Interrupt Before",
             "description": "Nodes to interrupt immediately before they get executed."
           },
           "interrupt_after": {
             "anyOf": [
-              {
-                "type": "string",
-                "enum": ["*"]
-              },
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              }
+              { "type": "string", "enum": ["*"] },
+              { "items": { "type": "string" }, "type": "array" }
             ],
             "title": "Interrupt After",
             "description": "Nodes to interrupt immediately after they get executed."
@@ -3525,9 +3142,7 @@
             "default": "cancel"
           },
           "feedback_keys": {
-            "items": {
-              "type": "string"
-            },
+            "items": { "type": "string" },
             "type": "array",
             "title": "Feedback Keys",
             "description": "Feedback keys to assign to run."
@@ -3565,9 +3180,7 @@
       },
       "RunBatchCreate": {
         "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/RunCreateStateless"
-        },
+        "items": { "$ref": "#/components/schemas/RunCreateStateless" },
         "minItems": 1,
         "title": "RunBatchCreate",
         "description": "Payload for creating a batch of runs."
@@ -3581,45 +3194,26 @@
                 "format": "uuid",
                 "title": "Assistant Id"
               },
-              {
-                "type": "string",
-                "title": "Graph Id"
-              }
+              { "type": "string", "title": "Graph Id" }
             ],
             "description": "The assistant ID or graph name to run. If using graph name, will default to first assistant created from that graph."
           },
           "input": {
             "anyOf": [
-              {
-                "type": "object"
-              },
-              {
-                "type": "array"
-              },
-              {
-                "type": "string"
-              },
-              {
-                "type": "number"
-              },
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
+              { "type": "object" },
+              { "type": "array" },
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" },
+              { "type": "null" }
             ],
             "title": "Input",
             "description": "The input to the graph."
           },
           "command": {
             "anyOf": [
-              {
-                "$ref": "#/components/schemas/Command"
-              },
-              {
-                "type": "null"
-              }
+              { "$ref": "#/components/schemas/Command" },
+              { "type": "null" }
             ],
             "title": "Input",
             "description": "The input to the graph."
@@ -3632,9 +3226,7 @@
           "config": {
             "properties": {
               "tags": {
-                "items": {
-                  "type": "string"
-                },
+                "items": { "type": "string" },
                 "type": "array",
                 "title": "Tags"
               },
@@ -3642,10 +3234,7 @@
                 "type": "integer",
                 "title": "Recursion Limit"
               },
-              "configurable": {
-                "type": "object",
-                "title": "Configurable"
-              }
+              "configurable": { "type": "object", "title": "Configurable" }
             },
             "type": "object",
             "title": "Config",
@@ -3661,32 +3250,16 @@
           },
           "interrupt_before": {
             "anyOf": [
-              {
-                "type": "string",
-                "enum": ["*"]
-              },
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              }
+              { "type": "string", "enum": ["*"] },
+              { "items": { "type": "string" }, "type": "array" }
             ],
             "title": "Interrupt Before",
             "description": "Nodes to interrupt immediately before they get executed."
           },
           "interrupt_after": {
             "anyOf": [
-              {
-                "type": "string",
-                "enum": ["*"]
-              },
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              }
+              { "type": "string", "enum": ["*"] },
+              { "items": { "type": "string" }, "type": "array" }
             ],
             "title": "Interrupt After",
             "description": "Nodes to interrupt immediately after they get executed."
@@ -3726,9 +3299,7 @@
             "default": ["values"]
           },
           "feedback_keys": {
-            "items": {
-              "type": "string"
-            },
+            "items": { "type": "string" },
             "type": "array",
             "title": "Feedback Keys",
             "description": "Feedback keys to assign to run."
@@ -4035,22 +3606,13 @@
         "properties": {
           "values": {
             "anyOf": [
-              {
-                "items": {
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              {
-                "type": "object"
-              }
+              { "items": { "type": "object" }, "type": "array" },
+              { "type": "object" }
             ],
             "title": "Values"
           },
           "next": {
-            "items": {
-              "type": "string"
-            },
+            "items": { "type": "string" },
             "type": "array",
             "title": "Next"
           },
@@ -4058,29 +3620,15 @@
             "items": {
               "type": "object",
               "properties": {
-                "id": {
-                  "type": "string",
-                  "title": "Task Id"
-                },
-                "name": {
-                  "type": "string",
-                  "title": "Node Name"
-                },
-                "error": {
-                  "type": "string",
-                  "title": "Error"
-                },
-                "interrupts": {
-                  "type": "array",
-                  "items": {}
-                },
+                "id": { "type": "string", "title": "Task Id" },
+                "name": { "type": "string", "title": "Node Name" },
+                "error": { "type": "string", "title": "Error" },
+                "interrupts": { "type": "array", "items": {} },
                 "checkpoint": {
                   "$ref": "#/components/schemas/CheckpointConfig",
                   "title": "Checkpoint"
                 },
-                "state": {
-                  "$ref": "#/components/schemas/ThreadState"
-                }
+                "state": { "$ref": "#/components/schemas/ThreadState" }
               },
               "required": ["id", "name"]
             },
@@ -4091,14 +3639,8 @@
             "$ref": "#/components/schemas/CheckpointConfig",
             "title": "Checkpoint"
           },
-          "metadata": {
-            "type": "object",
-            "title": "Metadata"
-          },
-          "created_at": {
-            "type": "string",
-            "title": "Created At"
-          },
+          "metadata": { "type": "object", "title": "Metadata" },
+          "created_at": { "type": "string", "title": "Created At" },
           "parent_checkpoint": {
             "type": "object",
             "title": "Parent Checkpoint"
@@ -4141,18 +3683,9 @@
         "properties": {
           "values": {
             "anyOf": [
-              {
-                "items": {
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              {
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
+              { "items": { "type": "object" }, "type": "array" },
+              { "type": "object" },
+              { "type": "null" }
             ],
             "title": "Values",
             "description": "The values to update the state with."
@@ -4176,28 +3709,15 @@
         "properties": {
           "values": {
             "anyOf": [
-              {
-                "type": "array",
-                "items": {
-                  "type": "object"
-                }
-              },
-              {
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
+              { "type": "array", "items": { "type": "object" } },
+              { "type": "object" },
+              { "type": "null" }
             ]
           },
           "command": {
             "anyOf": [
-              {
-                "$ref": "#/components/schemas/Command"
-              },
-              {
-                "type": "null"
-              }
+              { "$ref": "#/components/schemas/Command" },
+              { "type": "null" }
             ],
             "description": "The command associated with the update."
           },
@@ -4211,10 +3731,7 @@
       },
       "ThreadStateUpdateResponse": {
         "properties": {
-          "checkpoint": {
-            "type": "object",
-            "title": "Checkpoint"
-          }
+          "checkpoint": { "type": "object", "title": "Checkpoint" }
         },
         "type": "object",
         "title": "ThreadStateUpdateResponse",
@@ -4249,9 +3766,7 @@
         "properties": {
           "namespace": {
             "type": "array",
-            "items": {
-              "type": "string"
-            },
+            "items": { "type": "string" },
             "title": "Namespace",
             "description": "A list of strings representing the namespace path."
           },
@@ -4275,9 +3790,7 @@
         "properties": {
           "namespace": {
             "type": "array",
-            "items": {
-              "type": "string"
-            },
+            "items": { "type": "string" },
             "title": "Namespace",
             "description": "A list of strings representing the namespace path."
           },
@@ -4295,9 +3808,7 @@
         "properties": {
           "namespace_prefix": {
             "type": ["array", "null"],
-            "items": {
-              "type": "string"
-            },
+            "items": { "type": "string" },
             "title": "Namespace Prefix",
             "description": "List of strings representing the namespace prefix."
           },
@@ -4328,17 +3839,13 @@
         "properties": {
           "prefix": {
             "type": "array",
-            "items": {
-              "type": "string"
-            },
+            "items": { "type": "string" },
             "title": "Prefix",
             "description": "Optional list of strings representing the prefix to filter namespaces."
           },
           "suffix": {
             "type": "array",
-            "items": {
-              "type": "string"
-            },
+            "items": { "type": "string" },
             "title": "Suffix",
             "description": "Optional list of strings representing the suffix to filter namespaces."
           },
@@ -4367,9 +3874,7 @@
         "properties": {
           "namespace": {
             "type": "array",
-            "items": {
-              "type": "string"
-            },
+            "items": { "type": "string" },
             "description": "The namespace of the item. A namespace is analogous to a document's directory."
           },
           "key": {
@@ -4412,21 +3917,14 @@
           },
           "run_ids": {
             "type": "array",
-            "items": {
-              "type": "string",
-              "format": "uuid"
-            },
+            "items": { "type": "string", "format": "uuid" },
             "title": "Run Ids",
             "description": "List of run IDs to cancel."
           }
         },
         "oneOf": [
-          {
-            "required": ["status"]
-          },
-          {
-            "required": ["thread_id", "run_ids"]
-          }
+          { "required": ["status"] },
+          { "required": ["thread_id", "run_ids"] }
         ]
       },
       "SearchItemsResponse": {
@@ -4435,20 +3933,13 @@
         "properties": {
           "items": {
             "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Item"
-            }
+            "items": { "$ref": "#/components/schemas/Item" }
           }
         }
       },
       "ListNamespaceResponse": {
         "type": "array",
-        "items": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
+        "items": { "type": "array", "items": { "type": "string" } }
       },
       "ErrorResponse": {
         "type": "string",
@@ -4461,9 +3952,7 @@
         "description": "Successful retrieval of an item.",
         "content": {
           "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/Item"
-            }
+            "schema": { "$ref": "#/components/schemas/Item" }
           }
         }
       },
@@ -4479,9 +3968,7 @@
         "description": "Successful search operation.",
         "content": {
           "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/SearchItemsResponse"
-            }
+            "schema": { "$ref": "#/components/schemas/SearchItemsResponse" }
           }
         }
       },
@@ -4489,9 +3976,7 @@
         "description": "Successful retrieval of namespaces.",
         "content": {
           "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ListNamespaceResponse"
-            }
+            "schema": { "$ref": "#/components/schemas/ListNamespaceResponse" }
           }
         }
       },
@@ -4499,9 +3984,7 @@
         "description": "An error occurred.",
         "content": {
           "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ErrorResponse"
-            }
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
           }
         }
       }

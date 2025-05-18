@@ -20,11 +20,11 @@ from ipaddress import (
 )
 from typing import Any, Callable, Optional, Union, cast
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import ormsgpack
 from langchain_core.load.load import Reviver
 from langchain_core.load.serializable import Serializable
-from zoneinfo import ZoneInfo
 
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.types import SendProtocol
