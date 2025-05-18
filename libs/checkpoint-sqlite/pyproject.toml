@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-checkpoint-sqlite"
-version = "2.0.7"
+version = "2.0.8"
 description = "Library with a SQLite implementation of LangGraph checkpoint saver."
 authors = []
 requires-python = ">=3.9"
