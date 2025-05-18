@@ -180,7 +180,7 @@ Below are a few different examples to give you a sense of the Pregel API.
 
     def reducer(current, update):
         if current:
-            return current + " | " + "update"
+            return current + " | " + update
         else:
             return update
 

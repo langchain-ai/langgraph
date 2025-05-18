@@ -412,7 +412,7 @@ class Pregel(PregelProtocol):
 
         def reducer(current, update):
             if current:
-                return current + " | " + "update"
+                return current + " | " + update
             else:
                 return update
 
