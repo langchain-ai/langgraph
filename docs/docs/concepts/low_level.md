@@ -261,7 +261,7 @@ For example:
 ```py
 import time
 from typing_extensions import TypedDict
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import StateGraph, END
 from langgraph.cache.memory import InMemoryCache
 from langgraph.types import CachePolicy
 
@@ -276,13 +276,13 @@ builder = StateGraph(State)
 
 def expensive_node(state: State) -> dict[str, int]:
     # expensive computation
-    time.sleep(1)
+    time.sleep(2)
     return {"result": state["x"] * 2}
 
 
-builder.add_node("double", expensive_node, cache_policy=CachePolicy(ttl=100))
-builder.add_edge(START, "double")
-builder.add_edge("double", END)
+builder.add_node("expensive_node", expensive_node, cache_policy=CachePolicy(ttl=3))
+builder.set_entry_point("expensive_node")
+builder.add_edge("expensive_node", END)
 
 graph = builder.compile(cache=InMemoryCache())
 
