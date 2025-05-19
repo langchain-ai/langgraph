@@ -229,7 +229,6 @@ class InterruptToolNode(RunnableCallable):
         ai_msg = input["messages"][-1]
         tool_calls: list[ToolCall] = deepcopy(ai_msg.tool_calls) or []
         tool_messages: list[ToolMessage] = []
-        pending_tool_calls: bool = False
 
         for idx, tool_call in enumerate(tool_calls):
             if interrupt_config := self.interrupt_policy.get(tool_call["name"]):
@@ -240,18 +239,13 @@ class InterruptToolNode(RunnableCallable):
                 if isinstance(interrupt_result, ToolMessage):
                     tool_messages.append(interrupt_result)
                 else:
-                    pending_tool_calls = True
                     tool_calls[idx] = interrupt_result
 
         updated_ai_msg = ai_msg.copy(update={"tool_calls": tool_calls})
 
-        if tool_messages and not pending_tool_calls:
-            # TODO: we should go to pre_model_hook if that exists, how can we figure
-            # that out from here?
-            return Command(goto="agent", update={"messages": tool_messages})
-        # if there are pending tool calls, the conditional routing logic for
-        # post_model_hook will direct to the tools node
-        return Command(update={"messages": [updated_ai_msg, *tool_messages]})
+        # conditional routing logic for post_model_hook will direct to the tools node
+        # or agent node depending on if there are pending tool calls
+        return {"messages": [updated_ai_msg, *tool_messages]}
 
     async def _afunc(self, input: dict[str, Any]) -> Command:
         return self._func(input)

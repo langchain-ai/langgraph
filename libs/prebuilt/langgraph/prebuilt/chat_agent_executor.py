@@ -715,6 +715,8 @@ def create_react_agent(
 
             if pending_tool_calls:
                 return [Send("tools", [tool_call]) for tool_call in pending_tool_calls]
+            elif isinstance(messages[-1], ToolMessage):
+                return entrypoint
             elif response_format is not None:
                 return "generate_structured_response"
             else:
