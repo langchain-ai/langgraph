@@ -247,6 +247,35 @@ from langgraph.graph import END
 graph.add_edge("node_a", END)
 ```
 
+### Node Caching
+
+LangGraph supports caching of tasks/nodes based on the input to the node. In order to use this feature, you should:
+
+* Specify a cache when compiling a graph (or specifying an entrypoint)
+* Specify a cache policy for nodes. Each cache policy supports:
+    * `key_func` used to generate a cache key based on the input to a node, which defaults to a `hash` of the input with pickle.
+    * `ttl`, the time to live for the cache in seconds. If not specified, the cache will never expire.
+
+For example:
+
+```py
+from langgraph.cache.memory import InMemoryCache
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import CachePolicy
+
+builder = StateGraph(dict)
+
+
+def node(state: dict):
+    return state
+
+
+builder.add_node("my_node", node, cache_policy=CachePolicy(ttl=120))
+builder.add_edge(START, "my_node")
+builder.add_edge("my_node", END)
+graph = builder.compile(cache=InMemoryCache())
+```
+
 ## Edges
 
 Edges define how the logic is routed and how the graph decides to stop. This is a big part of how your agents work and how different nodes communicate with each other. There are a few key types of edges:
