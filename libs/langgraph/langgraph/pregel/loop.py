@@ -1083,7 +1083,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         self, task: PregelExecutableTask, write_idx: int, call: Optional[Call] = None
     ) -> Optional[PregelExecutableTask]:
         if pushed := super().accept_push(task, write_idx, call):
-            self.match_cached_writes()
+            for task in self.match_cached_writes():
+                self.output_writes(task.id, task.writes, cached=True)
         return pushed
 
     def put_writes(self, task_id: str, writes: WritesT) -> None:
@@ -1279,7 +1280,8 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         self, task: PregelExecutableTask, write_idx: int, call: Optional[Call] = None
     ) -> Optional[PregelExecutableTask]:
         if pushed := super().accept_push(task, write_idx, call):
-            await self.amatch_cached_writes()
+            for task in await self.amatch_cached_writes():
+                self.output_writes(task.id, task.writes, cached=True)
         return pushed
 
     def put_writes(self, task_id: str, writes: WritesT) -> None:
