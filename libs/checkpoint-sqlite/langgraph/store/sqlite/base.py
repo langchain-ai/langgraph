@@ -530,63 +530,95 @@ class BaseSqliteStore:
         return queries, embedding_requests
 
     def _get_batch_list_namespaces_queries(
-        self, list_ops: Sequence[tuple[int, ListNamespacesOp]]
+        self,
+        list_ops: Sequence[tuple[int, ListNamespacesOp]],
     ) -> list[tuple[str, Sequence]]:
         queries: list[tuple[str, Sequence]] = []
-        for _, op in list_ops:
-            # In SQLite, we need to use a different approach for namespace segmentation
-            # since there's no direct equivalent to PostgreSQL's string aggregation
-            if op.max_depth is not None:
-                # SQLite doesn't have a built-in function for string splitting/joining with depth limit
-                # We'll use a more basic approach
-                query = """
-                    WITH RECURSIVE split_prefix(prefix, remainder, depth) AS (
-                        SELECT '', prefix || '.', 0 FROM (SELECT DISTINCT prefix FROM store) 
-                        UNION ALL
-                        SELECT 
-                            CASE WHEN instr(remainder, '.') > 0 
-                                THEN prefix || CASE WHEN prefix = '' THEN '' ELSE '.' END || substr(remainder, 1, instr(remainder, '.') - 1)
-                                ELSE prefix || CASE WHEN prefix = '' THEN '' ELSE '.' END || remainder
-                            END,
-                            CASE WHEN instr(remainder, '.') > 0 
-                                THEN substr(remainder, instr(remainder, '.') + 1)
-                                ELSE ''
-                            END,
-                            depth + 1
-                        FROM split_prefix
-                        WHERE remainder != '' AND depth < ?
-                    )
-                    SELECT DISTINCT prefix FROM split_prefix WHERE depth > 0
-                """
-                params: list[Any] = [op.max_depth]
-            else:
-                # If no max_depth is specified, we can just use a simpler query
-                query = "SELECT DISTINCT prefix FROM store"
-                params = []
 
-            conditions = []
+        for _, op in list_ops:
+            where_clauses: list[str] = []
+            params: list[Any] = []
+
             if op.match_conditions:
-                for condition in op.match_conditions:
-                    if condition.match_type == "prefix":
-                        conditions.append("prefix LIKE ?")
+                for cond in op.match_conditions:
+                    if cond.match_type == "prefix":
+                        where_clauses.append("prefix LIKE ?")
                         params.append(
-                            f"{_namespace_to_text(condition.path, handle_wildcards=True)}%"
+                            f"{_namespace_to_text(cond.path, handle_wildcards=True)}%"
                         )
-                    elif condition.match_type == "suffix":
-                        conditions.append("prefix LIKE ?")
+                    elif cond.match_type == "suffix":
+                        where_clauses.append("prefix LIKE ?")
                         params.append(
-                            f"%{_namespace_to_text(condition.path, handle_wildcards=True)}"
+                            f"%{_namespace_to_text(cond.path, handle_wildcards=True)}"
                         )
                     else:
                         logger.warning(
-                            f"Unknown match_type in list_namespaces: {condition.match_type}"
+                            "Unknown match_type in list_namespaces: %s", cond.match_type
                         )
 
-            if conditions:
-                query += " WHERE " + " AND ".join(conditions)
+            where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
-            query += " ORDER BY prefix LIMIT ? OFFSET ?"
-            params.extend([op.limit, op.offset])
+            if op.max_depth is not None:
+                query = f"""
+                    WITH RECURSIVE split(original, truncated, remainder, depth) AS (
+                        SELECT
+                            prefix          AS original,
+                            ''              AS truncated,
+                            prefix          AS remainder,
+                            0               AS depth
+                        FROM (SELECT DISTINCT prefix FROM store {where_sql})
+
+                        UNION ALL
+
+                        SELECT
+                            original,
+                            CASE
+                                WHEN depth = 0
+                                    THEN substr(remainder,
+                                                1,
+                                                CASE
+                                                    WHEN instr(remainder, '.') > 0
+                                                        THEN instr(remainder, '.') - 1
+                                                    ELSE length(remainder)
+                                                END)
+                                ELSE
+                                    truncated || '.' ||
+                                    substr(remainder,
+                                        1,
+                                        CASE
+                                            WHEN instr(remainder, '.') > 0
+                                                THEN instr(remainder, '.') - 1
+                                            ELSE length(remainder)
+                                        END)
+                            END                              AS truncated,
+                            CASE
+                                WHEN instr(remainder, '.') > 0
+                                    THEN substr(remainder, instr(remainder, '.') + 1)
+                                ELSE ''
+                            END                              AS remainder,
+                            depth + 1                       AS depth
+                        FROM split
+                        WHERE remainder <> ''
+                            AND depth < ?
+                    )
+                    SELECT DISTINCT truncated AS prefix
+                    FROM split
+                    WHERE depth = ? OR remainder = ''
+                    ORDER BY prefix
+                    LIMIT ? OFFSET ?
+                """
+                params.extend([op.max_depth, op.max_depth, op.limit, op.offset])
+
+            else:
+                query = f"""
+                    SELECT DISTINCT prefix
+                    FROM store
+                    {where_sql}
+                    ORDER BY prefix
+                    LIMIT ? OFFSET ?
+                """
+                params.extend([op.limit, op.offset])
+
             queries.append((query, tuple(params)))
 
         return queries
@@ -827,342 +859,6 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                 )
 
         return results
-
-    def _prepare_batch_PUT_queries(
-        self, put_ops: Sequence[tuple[int, PutOp]]
-    ) -> tuple[
-        list[tuple[str, Sequence]],
-        Optional[tuple[str, Sequence[tuple[str, str, str, str]]]],
-    ]:
-        # Last-write wins
-        dedupped_ops: dict[tuple[tuple[str, ...], str], PutOp] = {}
-        for _, op in put_ops:
-            dedupped_ops[(op.namespace, op.key)] = op
-
-        inserts: list[PutOp] = []
-        deletes: list[PutOp] = []
-        for op in dedupped_ops.values():
-            if op.value is None:
-                deletes.append(op)
-            else:
-                inserts.append(op)
-
-        queries: list[tuple[str, Sequence]] = []
-
-        if deletes:
-            namespace_groups: dict[tuple[str, ...], list[str]] = defaultdict(list)
-            for op in deletes:
-                namespace_groups[op.namespace].append(op.key)
-            for namespace, keys in namespace_groups.items():
-                placeholders = ",".join(["?" for _ in keys])
-                query = (
-                    f"DELETE FROM store WHERE prefix = ? AND key IN ({placeholders})"
-                )
-                params = (_namespace_to_text(namespace), *keys)
-                queries.append((query, params))
-
-        embedding_request: Optional[tuple[str, Sequence[tuple[str, str, str, str]]]] = (
-            None
-        )
-        if inserts:
-            values = []
-            insertion_params = []
-            vector_values = []
-            embedding_request_params = []
-            now = datetime.datetime.now(datetime.timezone.utc)
-
-            # First handle main store insertions
-            for op in inserts:
-                if op.ttl is None:
-                    expires_at = None
-                else:
-                    expires_at = now + datetime.timedelta(minutes=op.ttl)
-                values.append("(?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?)")
-                insertion_params.extend(
-                    [
-                        _namespace_to_text(op.namespace),
-                        op.key,
-                        orjson.dumps(cast(dict, op.value)),
-                        expires_at,
-                        op.ttl,
-                    ]
-                )
-
-            # Then handle embeddings if configured
-            if self.index_config:
-                for op in inserts:
-                    if op.index is False:
-                        continue
-                    value = op.value
-                    ns = _namespace_to_text(op.namespace)
-                    k = op.key
-
-                    if op.index is None:
-                        paths = self.index_config["__tokenized_fields"]
-                    else:
-                        paths = [(ix, tokenize_path(ix)) for ix in op.index]
-
-                    for path, tokenized_path in paths:
-                        texts = get_text_at_path(value, tokenized_path)
-                        for i, text in enumerate(texts):
-                            pathname = f"{path}.{i}" if len(texts) > 1 else path
-                            vector_values.append(
-                                "(?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
-                            )
-                            embedding_request_params.append((ns, k, pathname, text))
-
-            values_str = ",".join(values)
-            query = f"""
-                INSERT OR REPLACE INTO store (prefix, key, value, created_at, updated_at, expires_at, ttl_minutes)
-                VALUES {values_str}
-            """
-            queries.append((query, insertion_params))
-
-            if vector_values:
-                values_str = ",".join(vector_values)
-                query = f"""
-                    INSERT OR REPLACE INTO store_vectors (prefix, key, field_name, embedding, created_at, updated_at)
-                    VALUES {values_str}
-                """
-                embedding_request = (query, embedding_request_params)
-
-        return queries, embedding_request
-
-    def _prepare_batch_search_queries(
-        self, search_ops: Sequence[tuple[int, SearchOp]]
-    ) -> tuple[
-        list[tuple[str, list[Union[None, str, list[float]]]]],  # queries, params
-        list[tuple[int, str]],  # idx, query_text pairs to embed
-    ]:
-        """
-        Build per-SearchOp SQL queries (with optional TTL refresh) plus embedding requests.
-        Returns:
-        - queries: list of (SQL, param_list)
-        - embedding_requests: list of (original_index_in_search_ops, text_query)
-        """
-        queries = []
-        embedding_requests = []
-
-        for idx, (_, op) in enumerate(search_ops):
-            # Build filter conditions first
-            filter_params = []
-            filter_conditions = []
-            if op.filter:
-                for key, value in op.filter.items():
-                    if isinstance(value, dict):
-                        for op_name, val in value.items():
-                            condition, filter_params_ = self._get_filter_condition(
-                                key, op_name, val
-                            )
-                            filter_conditions.append(condition)
-                            filter_params.extend(filter_params_)
-                    else:
-                        # SQLite json_extract returns unquoted string values
-                        if isinstance(value, str):
-                            filter_conditions.append(
-                                "json_extract(value, '$."
-                                + key
-                                + "') = '"
-                                + value.replace("'", "''")
-                                + "'"
-                            )
-                        elif value is None:
-                            filter_conditions.append(
-                                "json_extract(value, '$." + key + "') IS NULL"
-                            )
-                        elif isinstance(value, bool):
-                            # SQLite JSON stores booleans as integers
-                            filter_conditions.append(
-                                "json_extract(value, '$."
-                                + key
-                                + "') = "
-                                + ("1" if value else "0")
-                            )
-                        elif isinstance(value, (int, float)):
-                            filter_conditions.append(
-                                "json_extract(value, '$." + key + "') = " + str(value)
-                            )
-                        else:
-                            # For complex objects, use param binding with JSON serialization
-                            filter_conditions.append(
-                                "json_extract(value, '$." + key + "') = ?"
-                            )
-                            filter_params.append(orjson.dumps(value))
-
-            # Vector search branch
-            if op.query and self.index_config:
-                embedding_requests.append((idx, op.query))
-
-                # Choose the similarity function and score expression based on distance type
-                distance_type = self.index_config.get("distance_type", "cosine")
-
-                if distance_type == "cosine":
-                    score_expr = "1.0 - vec_distance_cosine(sv.embedding, ?)"
-                elif distance_type == "l2":
-                    score_expr = "vec_distance_L2(sv.embedding, ?)"
-                elif distance_type == "inner_product":
-                    # For inner product, we want higher values to be better, so negate the result
-                    # since inner product similarity is higher when vectors are more similar
-                    score_expr = "-1 * vec_distance_L1(sv.embedding, ?)"
-                else:
-                    # Default to cosine similarity
-                    score_expr = "1.0 - vec_distance_cosine(sv.embedding, ?)"
-
-                filter_str = (
-                    ""
-                    if not filter_conditions
-                    else " AND " + " AND ".join(filter_conditions)
-                )
-                if op.namespace_prefix:
-                    prefix_filter_str = f"WHERE s.prefix LIKE ? {filter_str} "
-                    ns_args: Sequence = (f"{_namespace_to_text(op.namespace_prefix)}%",)
-                else:
-                    ns_args = ()
-                    if filter_str:
-                        prefix_filter_str = f"WHERE {filter_str[5:]} "
-                    else:
-                        prefix_filter_str = ""
-
-                # We use a CTE to compute scores, with a SQLite-compatible approach for distinct results
-                base_query = f"""
-                    WITH scored AS (
-                        SELECT s.prefix, s.key, s.value, s.created_at, s.updated_at, s.expires_at, s.ttl_minutes,
-                            {score_expr} AS score
-                        FROM store s
-                        JOIN store_vectors sv ON s.prefix = sv.prefix AND s.key = sv.key
-                        {prefix_filter_str}
-                            ORDER BY score DESC 
-                        LIMIT ?
-                    ),
-                    ranked AS (
-                        SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, score,
-                                ROW_NUMBER() OVER (PARTITION BY prefix, key ORDER BY score DESC) as rn
-                        FROM scored
-                    )
-                    SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, score
-                    FROM ranked
-                    WHERE rn = 1
-                        ORDER BY score DESC
-                    LIMIT ?
-                    OFFSET ?
-                    """
-                params = [
-                    _PLACEHOLDER,  # Vector placeholder
-                    *ns_args,
-                    *filter_params,
-                    op.limit * 2,  # Expanded limit for better results
-                    op.limit,
-                    op.offset,
-                ]
-            # Regular search branch (no vector search)
-            else:
-                base_query = """
-                    SELECT prefix, key, value, created_at, updated_at, expires_at, ttl_minutes, NULL as score
-                    FROM store
-                    WHERE prefix LIKE ?
-                """
-                params = [f"{_namespace_to_text(op.namespace_prefix)}%"]
-
-                if filter_conditions:
-                    params.extend(filter_params)
-                    base_query += " AND " + " AND ".join(filter_conditions)
-
-                base_query += " ORDER BY updated_at DESC"
-                base_query += " LIMIT ? OFFSET ?"
-                params.extend([op.limit, op.offset])
-
-                # Debug the query
-                logger.debug(f"Search query: {base_query}")
-                logger.debug(f"Search params: {params}")
-
-            # Handle TTL refresh if requested
-            if (
-                op.refresh_ttl
-                and self.ttl_config
-                and self.ttl_config.get("refresh_on_read", False)
-            ):
-                final_sql = f"""
-                    WITH search_results AS (
-                        {base_query}
-                    ),
-                    updated AS (
-                        UPDATE store
-                        SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
-                        WHERE (prefix, key) IN (SELECT prefix, key FROM search_results)
-                        AND ttl_minutes IS NOT NULL
-                    )
-                    SELECT * FROM search_results
-                """
-                final_params = params[:]  # copy params
-            else:
-                final_sql = base_query
-                final_params = params
-
-            queries.append((final_sql, final_params))
-
-        return queries, embedding_requests
-
-    def _get_batch_list_namespaces_queries(
-        self, list_ops: Sequence[tuple[int, ListNamespacesOp]]
-    ) -> list[tuple[str, Sequence]]:
-        queries: list[tuple[str, Sequence]] = []
-        for _, op in list_ops:
-            # In SQLite, we need to use a different approach for namespace segmentation
-            # since there's no direct equivalent to PostgreSQL's string aggregation
-            if op.max_depth is not None:
-                # SQLite doesn't have a built-in function for string splitting/joining with depth limit
-                # We'll use a more basic approach
-                query = """
-                    WITH RECURSIVE split_prefix(prefix, remainder, depth) AS (
-                        SELECT '', prefix || '.', 0 FROM (SELECT DISTINCT prefix FROM store) 
-                        UNION ALL
-                        SELECT 
-                            CASE WHEN instr(remainder, '.') > 0 
-                                THEN prefix || CASE WHEN prefix = '' THEN '' ELSE '.' END || substr(remainder, 1, instr(remainder, '.') - 1)
-                                ELSE prefix || CASE WHEN prefix = '' THEN '' ELSE '.' END || remainder
-                            END,
-                            CASE WHEN instr(remainder, '.') > 0 
-                                THEN substr(remainder, instr(remainder, '.') + 1)
-                                ELSE ''
-                            END,
-                            depth + 1
-                        FROM split_prefix
-                        WHERE remainder != '' AND depth < ?
-                    )
-                    SELECT DISTINCT prefix FROM split_prefix WHERE depth > 0
-                """
-                params: list[Any] = [op.max_depth]
-            else:
-                # If no max_depth is specified, we can just use a simpler query
-                query = "SELECT DISTINCT prefix FROM store"
-                params = []
-
-            conditions = []
-            if op.match_conditions:
-                for condition in op.match_conditions:
-                    if condition.match_type == "prefix":
-                        conditions.append("prefix LIKE ?")
-                        params.append(
-                            f"{_namespace_to_text(condition.path, handle_wildcards=True)}%"
-                        )
-                    elif condition.match_type == "suffix":
-                        conditions.append("prefix LIKE ?")
-                        params.append(
-                            f"%{_namespace_to_text(condition.path, handle_wildcards=True)}"
-                        )
-                    else:
-                        logger.warning(
-                            f"Unknown match_type in list_namespaces: {condition.match_type}"
-                        )
-
-            if conditions:
-                query += " WHERE " + " AND ".join(conditions)
-
-            query += " ORDER BY prefix LIMIT ? OFFSET ?"
-            params.extend([op.limit, op.offset])
-            queries.append((query, tuple(params)))
-
-        return queries
 
     def _get_filter_condition(self, key: str, op: str, value: Any) -> tuple[str, list]:
         """Helper to generate filter conditions."""
