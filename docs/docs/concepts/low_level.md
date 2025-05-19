@@ -282,12 +282,14 @@ def expensive_node(state: State) -> dict[str, int]:
 
 builder.add_node("expensive_node", expensive_node, cache_policy=CachePolicy(ttl=3))
 builder.set_entry_point("expensive_node")
-builder.add_finish_point("expensive_node")
+builder.set_finish_point("expensive_node")
 
 graph = builder.compile(cache=InMemoryCache())
 
-result1 = graph.invoke({"x": 5})  # (1)!
-result2 = graph.invoke({"x": 5})  # (2)!
+print(graph.invoke({"x": 5}, stream_mode='updates'))  # (1)!
+[{'expensive_node': {'result': 10}}]
+print(graph.invoke({"x": 5}, stream_mode='updates'))  # (2)!
+[{'expensive_node': {'result': 10}, '__metadata__': {'cached': True}}]
 ```
 
 1. First run takes the full second to run (due to mocked expensive computation).
