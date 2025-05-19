@@ -4,7 +4,7 @@ Sometimes you don't want to run your graph based on user interaction, but rather
 
 ## Setup
 
-First, let's setup our SDK client, assistant, and thread:
+First, let's set up our SDK client, assistant, and thread:
 
 === "Python"
 

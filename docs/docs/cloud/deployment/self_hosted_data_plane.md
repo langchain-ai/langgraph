@@ -18,7 +18,7 @@ Before deploying, review the [conceptual guide for the Self-Hosted Data Plane](.
         helm repo add kedacore https://kedacore.github.io/charts 
         helm install keda kedacore/keda --namespace keda --create-namespace
 
-1. A valid `Ingress` controller is install on your cluster.
+1. A valid `Ingress` controller is installed on your cluster.
 1. You have slack space in your cluster for multiple deployments. `Cluster-Autoscaler` is recommended to automatically provision new nodes.
 
 ### Setup

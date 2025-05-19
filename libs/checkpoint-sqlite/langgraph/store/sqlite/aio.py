@@ -511,12 +511,10 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
 
         # Setup dot_product function if it doesn't exist
         if embedding_requests and self.embeddings:
-            # Generate embeddings for search queries
             vectors = await self.embeddings.aembed_documents(
                 [query for _, query in embedding_requests]
             )
 
-            # Replace placeholders with actual embeddings
             for (idx, _), embedding in zip(embedding_requests, vectors):
                 _params_list: list = queries[idx][1]
                 for i, param in enumerate(_params_list):
@@ -527,7 +525,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
             await cur.execute(query, params)
             rows = await cur.fetchall()
 
-            if "score" in query:  # Vector search query
+            if "score" in query:
                 items = [
                     _row_to_search_item(
                         _decode_ns_text(row[0]),

@@ -488,4 +488,4 @@ You can also view threads in a deployment via the LangGraph Platform UI.
 
 Inside your deployment, select the "Threads" tab. This will load a table of all of the threads in your deployment.
 
-Select a thread to inspect its current state. To view it's full history and for further debugging, open the thread in [LangGraph Studio](../../concepts//langgraph_studio.md).
+Select a thread to inspect its current state. To view its full history and for further debugging, open the thread in [LangGraph Studio](../../concepts//langgraph_studio.md).

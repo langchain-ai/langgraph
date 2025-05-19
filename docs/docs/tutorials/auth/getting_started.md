@@ -181,6 +181,6 @@ Congratulations! You've built a chatbot that only lets "authenticated" users acc
 
 Now that you can control who accesses your bot, you might want to:
 
-1. Continue the tutorial by going to [Make cnversations private](resource_auth.md) to learn about resource authorization.
+1. Continue the tutorial by going to [Make conversations private](resource_auth.md) to learn about resource authorization.
 2. Read more about [authentication concepts](../../concepts/auth.md).
 3. Check out the [API reference](../../cloud/reference/sdk/python_sdk_ref.md) for more authentication details.

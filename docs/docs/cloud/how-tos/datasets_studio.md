@@ -1,6 +1,6 @@
 # Add node to dataset
 
-This guide shows how to add examples to [LangSmith datasets](https://docs.smith.langchain.com/evaluation/how_to_guides#dataset-management) from nodes in the thread log. This is useful to evaluate indivudal steps of the agent.
+This guide shows how to add examples to [LangSmith datasets](https://docs.smith.langchain.com/evaluation/how_to_guides#dataset-management) from nodes in the thread log. This is useful to evaluate individual steps of the agent.
 
 1. Select a thread.
 2. Click on the `Add to Dataset` button.
