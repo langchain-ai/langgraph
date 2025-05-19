@@ -410,11 +410,12 @@ class BaseSqliteStore:
                                 "json_extract(value, '$." + key + "') = " + str(value)
                             )
                         else:
-                            # For complex objects, use param binding with JSON serialization
+                            # Complex objects (list, dict, …) – compare JSON text
                             filter_conditions.append(
                                 "json_extract(value, '$." + key + "') = ?"
                             )
-                            filter_params.append(orjson.dumps(value))
+                            # orjson.dumps returns bytes → decode to str so SQLite sees TEXT
+                            filter_params.append(orjson.dumps(value).decode())
 
             # Vector search branch
             if op.query and self.index_config:

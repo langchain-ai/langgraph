@@ -657,3 +657,63 @@ async def test_list_namespaces(
         # Clean up
         for namespace in test_namespaces:
             await store.adelete(namespace, "dummy")
+
+
+async def test_search_items(
+    fake_embeddings: CharacterEmbeddings,
+) -> None:
+    """Test search_items functionality by calling store methods directly."""
+    base = "test_search_items"
+    test_namespaces = [
+        (base, "documents", "user1"),
+        (base, "documents", "user2"),
+        (base, "reports", "department1"),
+        (base, "reports", "department2"),
+    ]
+    test_items = [
+        {"title": "Doc 1", "author": "John Doe", "tags": ["important"]},
+        {"title": "Doc 2", "author": "Jane Smith", "tags": ["draft"]},
+        {"title": "Report A", "author": "John Doe", "tags": ["final"]},
+        {"title": "Report B", "author": "Alice Johnson", "tags": ["draft"]},
+    ]
+
+    async with create_vector_store(
+        fake_embeddings, text_fields=["key0", "key1", "key3"]
+    ) as store:
+        # Insert test data
+        for ns, item in zip(test_namespaces, test_items):
+            key = f"item_{ns[-1]}"
+            await store.aput(ns, key, item)
+
+        # 1. Search documents
+        docs = await store.asearch((base, "documents"))
+        assert len(docs) == 2
+        assert all(item.namespace[1] == "documents" for item in docs)
+
+        # 2. Search reports
+        reports = await store.asearch((base, "reports"))
+        assert len(reports) == 2
+        assert all(item.namespace[1] == "reports" for item in reports)
+
+        # 3. Pagination
+        first_page = await store.asearch((base,), limit=2, offset=0)
+        second_page = await store.asearch((base,), limit=2, offset=2)
+        assert len(first_page) == 2
+        assert len(second_page) == 2
+        keys_page1 = {item.key for item in first_page}
+        keys_page2 = {item.key for item in second_page}
+        assert keys_page1.isdisjoint(keys_page2)
+        all_items = await store.asearch((base,))
+        assert len(all_items) == 4
+
+        john_items = await store.asearch((base,), filter={"author": "John Doe"})
+        assert len(john_items) == 2
+        assert all(item.value["author"] == "John Doe" for item in john_items)
+
+        draft_items = await store.asearch((base,), filter={"tags": ["draft"]})
+        assert len(draft_items) == 2
+        assert all("draft" in item.value["tags"] for item in draft_items)
+
+        for ns in test_namespaces:
+            key = f"item_{ns[-1]}"
+            await store.adelete(ns, key)
