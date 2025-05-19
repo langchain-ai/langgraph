@@ -247,6 +247,7 @@ def create_react_agent(
         Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
     ] = None,
     pre_model_hook: Optional[RunnableLike] = None,
+    post_model_hook: Optional[RunnableLike] = None,
     state_schema: Optional[StateSchemaType] = None,
     config_schema: Optional[Type[Any]] = None,
     checkpointer: Optional[Checkpointer] = None,
@@ -321,6 +322,12 @@ def create_react_agent(
                     ...
                 }
                 ```
+        post_model_hook: An optional node to add after the `agent` node (i.e., the node that calls the LLM).
+            Useful for implementing human-in-the-loop, guardrails, validation, or other post-processing.
+            Post-model hook must be a callable or a runnable that takes in current graph state and returns a state update.
+
+            !!! Note
+                Only available with `version="v2"`.
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `remaining_steps` keys.
             Defaults to `AgentState` that defines those two keys.
@@ -591,6 +598,10 @@ def create_react_agent(
 
         workflow.set_entry_point(entrypoint)
 
+        if post_model_hook is not None:
+            workflow.add_node("post_model_hook", post_model_hook)
+            workflow.add_edge("agent", "post_model_hook")
+
         if response_format is not None:
             workflow.add_node(
                 "generate_structured_response",
@@ -598,7 +609,10 @@ def create_react_agent(
                     generate_structured_response, agenerate_structured_response
                 ),
             )
-            workflow.add_edge("agent", "generate_structured_response")
+            if post_model_hook is not None:
+                workflow.add_edge("post_model_hook", "generate_structured_response")
+            else:
+                workflow.add_edge("agent", "generate_structured_response")
 
         return workflow.compile(
             checkpointer=checkpointer,
@@ -610,17 +624,24 @@ def create_react_agent(
         )
 
     # Define the function that determines whether to continue or not
-    def should_continue(state: StateSchema) -> Union[str, list]:
+    def should_continue(state: StateSchema) -> Union[str, list[Send]]:
         messages = _get_state_value(state, "messages")
         last_message = messages[-1]
         # If there is no function call, then we finish
         if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
-            return END if response_format is None else "generate_structured_response"
+            if post_model_hook is not None:
+                return "post_model_hook"
+            elif response_format is not None:
+                return "generate_structured_response"
+            else:
+                return END
         # Otherwise if there is, we continue
         else:
             if version == "v1":
                 return "tools"
             elif version == "v2":
+                if post_model_hook is not None:
+                    return "post_model_hook"
                 tool_calls = [
                     tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
                     for call in last_message.tool_calls
@@ -649,6 +670,14 @@ def create_react_agent(
     # This means that this node is the first one called
     workflow.set_entry_point(entrypoint)
 
+    agent_paths = ["tools", END]
+    post_model_hook_paths = [entrypoint, "tools", END]
+
+    # Add a post model hook node if post_model_hook is provided
+    if post_model_hook is not None:
+        workflow.add_node("post_model_hook", post_model_hook)
+        agent_paths.append("post_model_hook")
+
     # Add a structured output node if response_format is provided
     if response_format is not None:
         workflow.add_node(
@@ -657,19 +686,52 @@ def create_react_agent(
                 generate_structured_response, agenerate_structured_response
             ),
         )
-        workflow.add_edge("generate_structured_response", END)
-        should_continue_destinations = ["tools", "generate_structured_response"]
-    else:
-        should_continue_destinations = ["tools", END]
+        if post_model_hook is not None:
+            post_model_hook_paths.append("generate_structured_response")
+        else:
+            agent_paths.append("generate_structured_response")
 
-    # We now add a conditional edge
+    if post_model_hook is not None:
+
+        def post_model_hook_router(state: StateSchema) -> Union[str, list[Send]]:
+            """Route to the next node after post_model_hook.
+
+            Routes to one of:
+            * "tools": if there are pending tool calls without a corresponding message.
+            * "generate_structured_response": if no pending tool calls exist and response_format is specified.
+            * END: if no pending tool calls exist and no response_format is specified.
+            """
+
+            messages = _get_state_value(state, "messages")
+            tool_messages = [
+                m.tool_call_id for m in messages if isinstance(m, ToolMessage)
+            ]
+            last_ai_message = next(
+                m for m in reversed(messages) if isinstance(m, AIMessage)
+            )
+            pending_tool_calls = [
+                c for c in last_ai_message.tool_calls if c["id"] not in tool_messages
+            ]
+
+            if pending_tool_calls:
+                return [Send("tools", [tool_call]) for tool_call in pending_tool_calls]
+            elif isinstance(messages[-1], ToolMessage):
+                return entrypoint
+            elif response_format is not None:
+                return "generate_structured_response"
+            else:
+                return END
+
+        workflow.add_conditional_edges(
+            "post_model_hook",
+            post_model_hook_router,  # type: ignore[arg-type]
+            path_map=post_model_hook_paths,
+        )
+
     workflow.add_conditional_edges(
-        # First, we define the start node. We use `agent`.
-        # This means these are the edges taken after the `agent` node is called.
         "agent",
-        # Next, we pass in the function that will determine which node is called next.
-        should_continue,
-        path_map=should_continue_destinations,
+        should_continue,  # type: ignore[arg-type]
+        path_map=agent_paths,
     )
 
     def route_tool_responses(state: StateSchema) -> str:
