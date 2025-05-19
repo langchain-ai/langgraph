@@ -9,31 +9,21 @@ Before you begin, ensure you have the following:
 - A [GitHub account](https://github.com/)
 - A [LangSmith account](https://smith.langchain.com/) – free to sign up
 
-This quickstart uses the [pre-built Python ReAct agent template](https://github.com/langchain-ai/react-agent), which requires the following:
-
-- An API key for [Anthropic](https://console.anthropic.com/)
-- An API key for [Tavily](https://app.tavily.com/)
-
 ## 1. Create a repository on GitHub
 
-To deploy a LangGraph application to **LangGraph Platform**, your application code must reside in a GitHub repository. Both public and private repositories are supported. For this quickstart, use the [pre-built Python ReAct agent template](https://github.com/langchain-ai/react-agent) for your application:
+To deploy an application to **LangGraph Platform**, your application code must reside in a GitHub repository. Both public and private repositories are supported. For this quickstart, use the [`new-langgraph-project` template](https://github.com/langchain-ai/react-agent) for your application:
 
-1. Go to the [ReAct Agent](https://github.com/langchain-ai/react-agent) repository.
+1. Go to the [`new-langgraph-project` repository](https://github.com/langchain-ai/new-langgraph-project) or [`new-langgraphjs-project` template](https://github.com/langchain-ai/new-langgraphjs-project).
 1. Click the `Fork` button in the top right corner to fork the repository to your GitHub account.
 1. Click **Create fork**. 
 
 ## 2. Deploy to LangGraph Platform
 
 1. Log in to [LangSmith](https://smith.langchain.com/).
-1. In the left sidebar, select **LangGraph Platform**.
-1. Click the **+ New Deployment** button. A modal will open where you can fill in the required fields.
+1. In the left sidebar, select **Deployments**.
+1. Click the **+ New Deployment** button. A pane will open where you can fill in the required fields.
 1. If you are a first time user or adding a private repository that has not been previously connected, click the **Import from GitHub** button and follow the instructions to connect your GitHub account.
-1. Select your ReAct Agent repository.
-1. In the **Environment Variables** section, set the following secrets:
-    
-    - **ANTHROPIC_API_KEY**: Get an API key from [Anthropic](https://console.anthropic.com/).
-    - **TAVILY_API_KEY**: Get an API key on the [Tavily website](https://app.tavily.com/).
-
+1. Select your New LangGraph Project repository.
 1. Click **Submit** to deploy.
 
     This may take about 15 minutes to complete. You can check the status in the **Deployment details** view.
@@ -48,7 +38,7 @@ Once your application is deployed:
     LangGraph Studio will open to display your graph.
 
     <figure markdown="1">
-    [![image](deployment/img/09_langgraph_studio.png){: style="max-height:400px"}](deployment/img/09_langgraph_studio.png)
+    [![image](deployment/img/langgraph_studio.png){: style="max-height:400px"}](deployment/img/langgraph_studio.png)
     <figcaption>
         Sample graph run in LangGraph Studio.
     </figcaption>
@@ -125,7 +115,7 @@ You can now test the API:
             print("\n\n")
         ```
 
-=== "Javascript SDK"
+=== "JavaScript SDK"
 
     1. Install the LangGraph JS SDK
 
@@ -181,7 +171,7 @@ You can now test the API:
     ```
 
 
-## Next Steps
+## Next steps
 
 Congratulations! You have deployed an application using LangGraph Platform.
 

@@ -178,15 +178,15 @@ nav:
           - Overview: concepts/langgraph_studio.md
           - Quickstart: cloud/how-tos/studio/quick_start.md
           - cloud/how-tos/invoke_studio.md
+          - cloud/how-tos/studio/manage_assistants.md
           - cloud/how-tos/threads_studio.md
-          - cloud/how-tos/datasets_studio.md
           - cloud/how-tos/iterate_graph_studio.md
           - cloud/how-tos/clone_traces_studio.md
-          - cloud/how-tos/studio/faqs.md
+          - cloud/how-tos/datasets_studio.md
         - LangGraph SDK: concepts/sdk.md
       - Data management:
         - Add semantic search: cloud/deployment/semantic_search.md
-        - Add TTLs how-tos/ttl/configure_ttl.md
+        - Add TTLs: how-tos/ttl/configure_ttl.md
       - Authentication & access control:
         - Overview: concepts/auth.md
         - how-tos/auth/custom_auth.md
@@ -277,9 +277,6 @@ nav:
     - Agentic RAG: tutorials/rag/langgraph_agentic_rag.ipynb
     - Agent Supervisor: tutorials/multi_agent/agent_supervisor.ipynb
     - SQL agent: tutorials/sql-agent.ipynb
-    - Run a graph asynchronously: how-tos/async.ipynb
-        # We want to push async higher (need to check the content inside it)
-        # and convert it into a concept rather than a how-to page.
     - Graph runs in LangSmith: how-tos/run-id-langsmith.ipynb
     - LangGraph Platform:
       - Authentication:
@@ -410,10 +407,6 @@ validation:
   omitted_files: info 
   absolute_links: warn
   unrecognized_links: warn
-  # TODO: figure out how to enable 'warn' for this
-  # it's only an issue for tutorials/storm/storm.ipynb
-  # because it creates anchors in the generated report
-  # and those anchors are not available in the actual doc
   anchors: warn
   # this is needed to handle headers with anchors for nav
   not_found: info
