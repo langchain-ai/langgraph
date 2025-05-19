@@ -249,7 +249,7 @@ graph.add_edge("node_a", END)
 
 ### Node Caching
 
-LangGraph supports caching of tasks/nodes based on the input to the node. In order to use this feature, you should:
+LangGraph supports caching of tasks/nodes based on the input to the node. To use caching:
 
 * Specify a cache when compiling a graph (or specifying an entrypoint)
 * Specify a cache policy for nodes. Each cache policy supports:
