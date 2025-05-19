@@ -153,7 +153,7 @@ Each category serves a distinct purpose and requires a specific approach to writ
 
 Here are some other guidelines you should think about when writing and organizing documentation.
 
-We generally do not merge new tutorials from outside contributors without an actue need.
+We generally do not merge new tutorials from outside contributors without an actual need.
 We welcome updates as well as new integration docs, how-tos, and references.
 
 ### Avoid duplication
