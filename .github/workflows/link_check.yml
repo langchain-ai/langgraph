@@ -11,9 +11,6 @@ on:
     - cron: "0 5 * * *"
   workflow_dispatch:
 
-env:
-  POETRY_VERSION: "2.1.2"
-
 jobs:
   markdown-link-check:
     runs-on: ubuntu-latest

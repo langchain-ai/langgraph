@@ -6,7 +6,7 @@ Bundled in to avoid install issues with uuid6 package
 import random
 import time
 import uuid
-from typing import Optional, Tuple
+from typing import Optional
 
 _last_v6_timestamp = None
 
@@ -21,7 +21,7 @@ class UUID(uuid.UUID):
         hex: Optional[str] = None,
         bytes: Optional[bytes] = None,
         bytes_le: Optional[bytes] = None,
-        fields: Optional[Tuple[int, int, int, int, int, int]] = None,
+        fields: Optional[tuple[int, int, int, int, int, int]] = None,
         int: Optional[int] = None,
         version: Optional[int] = None,
         *,

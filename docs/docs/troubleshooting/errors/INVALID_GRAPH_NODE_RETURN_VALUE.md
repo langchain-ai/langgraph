@@ -8,7 +8,7 @@ class State(TypedDict):
     some_key: str
 
 def bad_node(state: State):
-    # Should return an dict with a value for "some_key", not a list
+    # Should return a dict with a value for "some_key", not a list
     return ["whoops"]
 
 builder = StateGraph(State)
@@ -29,7 +29,7 @@ InvalidUpdateError: Expected dict, got ['whoops']
 For troubleshooting, visit: https://python.langchain.com/docs/troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE
 ```
 
-Nodes in your graph must return an dict containing one or more keys defined in your state.
+Nodes in your graph must return a dict containing one or more keys defined in your state.
 
 ## Troubleshooting
 

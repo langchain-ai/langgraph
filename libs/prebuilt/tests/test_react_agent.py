@@ -883,9 +883,9 @@ def test_tool_node_inject_store() -> None:
         for result in (node_result, graph_result):
             result["messages"][-1]
             tool_message = result["messages"][-1]
-            assert (
-                tool_message.content == "Some val: 1, store val: bar"
-            ), f"Failed for tool={tool_name}"
+            assert tool_message.content == "Some val: 1, store val: bar", (
+                f"Failed for tool={tool_name}"
+            )
 
     tool_call = {
         "name": "tool3",
@@ -899,9 +899,9 @@ def test_tool_node_inject_store() -> None:
     for result in (node_result, graph_result):
         result["messages"][-1]
         tool_message = result["messages"][-1]
-        assert (
-            tool_message.content == "Some val: 1, store val: bar, state val: baz"
-        ), f"Failed for tool={tool_name}"
+        assert tool_message.content == "Some val: 1, store val: bar, state val: baz", (
+            f"Failed for tool={tool_name}"
+        )
 
     # test injected store without passing store to compiled graph
     failing_graph = builder.compile()

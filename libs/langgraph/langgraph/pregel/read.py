@@ -249,12 +249,12 @@ class PregelNode(Runnable):
         )
 
     def join(self, channels: Sequence[str]) -> PregelNode:
-        assert isinstance(channels, list) or isinstance(
-            channels, tuple
-        ), "channels must be a list or tuple"
-        assert isinstance(
-            self.channels, dict
-        ), "all channels must be named when using .join()"
+        assert isinstance(channels, list) or isinstance(channels, tuple), (
+            "channels must be a list or tuple"
+        )
+        assert isinstance(self.channels, dict), (
+            "all channels must be named when using .join()"
+        )
         return self.copy(
             update=dict(
                 channels={

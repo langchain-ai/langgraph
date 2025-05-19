@@ -56,22 +56,27 @@ cloudpickle>=3.0.0
 Example `pyproject.toml` file:
 
 ```toml
-[tool.poetry]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
 name = "my-agent"
 version = "0.0.1"
 description = "An excellent agent build for LangGraph Platform."
-authors = ["Polly the parrot <1223+polly@users.noreply.github.com>"]
-license = "MIT"
+authors = [
+    {name = "Polly the parrot", email = "1223+polly@users.noreply.github.com"}
+]
+license = {text = "MIT"}
 readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "langgraph>=0.2.0",
+    "langchain-fireworks>=0.1.3"
+]
 
-[tool.poetry.dependencies]
-python = ">=3.9"
-langgraph = "^0.2.0"
-langchain-fireworks = "^0.1.3"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.hatch.build.targets.wheel]
+packages = ["my_agent"]
 ```
 
 Example file directory:

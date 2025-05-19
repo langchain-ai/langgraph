@@ -25,7 +25,7 @@ T = TypeVar("T")
 
 
 class Submit(Protocol[P, T]):
-    def __call__(
+    def __call__(  # type: ignore[valid-type]
         self,
         fn: Callable[P, T],
         *args: P.args,
