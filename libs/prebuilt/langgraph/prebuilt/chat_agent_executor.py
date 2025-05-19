@@ -327,7 +327,7 @@ def create_react_agent(
             Post-model hook must be a callable or a runnable that takes in current graph state and returns a state update.
 
             !!! Note
-                Only available in v2 of `create_react_agent`.
+                Only available with `version="v2"`.
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `remaining_steps` keys.
             Defaults to `AgentState` that defines those two keys.
