@@ -247,6 +247,54 @@ from langgraph.graph import END
 graph.add_edge("node_a", END)
 ```
 
+### Node Caching
+
+LangGraph supports caching of tasks/nodes based on the input to the node. To use caching:
+
+* Specify a cache when compiling a graph (or specifying an entrypoint)
+* Specify a cache policy for nodes. Each cache policy supports:
+    * `key_func` used to generate a cache key based on the input to a node, which defaults to a `hash` of the input with pickle.
+    * `ttl`, the time to live for the cache in seconds. If not specified, the cache will never expire.
+
+For example:
+
+```py
+import time
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph
+from langgraph.cache.memory import InMemoryCache
+from langgraph.types import CachePolicy
+
+
+class State(TypedDict):
+    x: int
+    result: int
+
+
+builder = StateGraph(State)
+
+
+def expensive_node(state: State) -> dict[str, int]:
+    # expensive computation
+    time.sleep(2)
+    return {"result": state["x"] * 2}
+
+
+builder.add_node("expensive_node", expensive_node, cache_policy=CachePolicy(ttl=3))
+builder.set_entry_point("expensive_node")
+builder.set_finish_point("expensive_node")
+
+graph = builder.compile(cache=InMemoryCache())
+
+print(graph.invoke({"x": 5}, stream_mode='updates'))  # (1)!
+[{'expensive_node': {'result': 10}}]
+print(graph.invoke({"x": 5}, stream_mode='updates'))  # (2)!
+[{'expensive_node': {'result': 10}, '__metadata__': {'cached': True}}]
+```
+
+1. First run takes the full second to run (due to mocked expensive computation).
+2. Second run utilizes cache and returns quickly.
+
 ## Edges
 
 Edges define how the logic is routed and how the graph decides to stop. This is a big part of how your agents work and how different nodes communicate with each other. There are a few key types of edges:

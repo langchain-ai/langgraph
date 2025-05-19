@@ -255,6 +255,7 @@ nav:
       - Pregel: reference/pregel.md
       - Checkpointing: reference/checkpoints.md
       - Storage: reference/store.md
+      - Caching: reference/cache.md
       - Types: reference/types.md
       - Config: reference/config.md
       - Errors: reference/errors.md
