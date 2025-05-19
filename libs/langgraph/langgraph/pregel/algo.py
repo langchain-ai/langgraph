@@ -64,7 +64,6 @@ from langgraph.constants import (
     TASKS,
     Send,
 )
-from langgraph.errors import InvalidUpdateError
 from langgraph.managed.base import ManagedValueMapping
 from langgraph.pregel.call import get_runnable_for_task, identifier
 from langgraph.pregel.io import read_channels
@@ -210,22 +209,6 @@ def local_read(
     if managed_keys:
         values.update({k: managed[k]() for k in managed_keys})
     return values
-
-
-def local_write(
-    commit: Callable[[Sequence[tuple[str, Any]]], None],
-    process_keys: Iterable[str],
-    writes: Sequence[tuple[str, Any]],
-) -> None:
-    """Function injected under CONFIG_KEY_SEND in task config, to write to channels.
-    Validates writes and forwards them to `commit` function."""
-    for chan, value in writes:
-        if chan in (PUSH, TASKS) and value is not None:
-            if not isinstance(value, Send):
-                raise InvalidUpdateError(f"Expected Send, got {value}")
-            if value.node not in process_keys:
-                raise InvalidUpdateError(f"Invalid node name {value.node} in packet")
-    commit(writes)
 
 
 def increment(current: Optional[int], channel: BaseChannel) -> int:
@@ -626,11 +609,7 @@ def prepare_single_task(
                     configurable={
                         CONFIG_KEY_TASK_ID: task_id,
                         # deque.extend is thread-safe
-                        CONFIG_KEY_SEND: partial(
-                            local_write,
-                            writes.extend,
-                            processes.keys(),
-                        ),
+                        CONFIG_KEY_SEND: writes.extend,
                         CONFIG_KEY_READ: partial(
                             local_read,
                             channels,
@@ -750,11 +729,7 @@ def prepare_single_task(
                     configurable={
                         CONFIG_KEY_TASK_ID: task_id,
                         # deque.extend is thread-safe
-                        CONFIG_KEY_SEND: partial(
-                            local_write,
-                            writes.extend,
-                            processes.keys(),
-                        ),
+                        CONFIG_KEY_SEND: writes.extend,
                         CONFIG_KEY_READ: partial(
                             local_read,
                             channels,
@@ -888,11 +863,7 @@ def prepare_single_task(
                             configurable={
                                 CONFIG_KEY_TASK_ID: task_id,
                                 # deque.extend is thread-safe
-                                CONFIG_KEY_SEND: partial(
-                                    local_write,
-                                    writes.extend,
-                                    tuple(processes.keys()),
-                                ),
+                                CONFIG_KEY_SEND: writes.extend,
                                 CONFIG_KEY_READ: partial(
                                     local_read,
                                     channels,
