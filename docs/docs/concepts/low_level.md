@@ -259,22 +259,39 @@ LangGraph supports caching of tasks/nodes based on the input to the node. In ord
 For example:
 
 ```py
-from langgraph.cache.memory import InMemoryCache
+import time
+from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
+from langgraph.cache.memory import InMemoryCache
 from langgraph.types import CachePolicy
 
-builder = StateGraph(dict)
+
+class State(TypedDict):
+    x: int
+    result: int
 
 
-def node(state: dict):
-    return state
+builder = StateGraph(State)
 
 
-builder.add_node("my_node", node, cache_policy=CachePolicy(ttl=120))
-builder.add_edge(START, "my_node")
-builder.add_edge("my_node", END)
+def expensive_node(state: State) -> dict[str, int]:
+    # expensive computation
+    time.sleep(1)
+    return {"result": state["x"] * 2}
+
+
+builder.add_node("double", expensive_node, cache_policy=CachePolicy(ttl=100))
+builder.add_edge(START, "double")
+builder.add_edge("double", END)
+
 graph = builder.compile(cache=InMemoryCache())
+
+result1 = graph.invoke({"x": 5})  # (1)!
+result2 = graph.invoke({"x": 5})  # (2)!
 ```
+
+1. First run takes the full second to run (due to mocked expensive computation).
+2. Second run utilizes cache and returns quickly.
 
 ## Edges
 
