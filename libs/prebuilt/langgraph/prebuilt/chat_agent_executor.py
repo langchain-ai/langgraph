@@ -671,7 +671,7 @@ def create_react_agent(
     workflow.set_entry_point(entrypoint)
 
     agent_paths = ["tools", END]
-    post_model_hook_paths = ["tools", END]
+    post_model_hook_paths = [entrypoint, "tools", END]
 
     # Add a post model hook node if post_model_hook is provided
     if post_model_hook is not None:
