@@ -579,5 +579,6 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
         queries = self._get_batch_list_namespaces_queries(list_ops)
         for (query, params), (idx, _) in zip(queries, list_ops):
             await cur.execute(query, params)
+
             rows = await cur.fetchall()
             results[idx] = [_decode_ns_text(row[0]) for row in rows]
