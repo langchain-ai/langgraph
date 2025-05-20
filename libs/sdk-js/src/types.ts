@@ -157,6 +157,12 @@ export interface RunsStreamPayload<
   streamSubgraphs?: TSubgraphs;
 
   /**
+   * Whether the stream is considered resumable.
+   * If true, the stream can be resumed and replayed in its entirety even after disconnection.
+   */
+  streamResumable?: boolean;
+
+  /**
    * Pass one or more feedbackKeys if you want to request short-lived signed URLs
    * for submitting feedback to LangSmith with this key for this run.
    */
@@ -173,6 +179,12 @@ export interface RunsCreatePayload extends RunsInvokePayload {
    * Stream output from subgraphs. By default, streams only the top graph.
    */
   streamSubgraphs?: boolean;
+
+  /**
+   * Whether the stream is considered resumable.
+   * If true, the stream can be resumed and replayed in its entirety even after disconnection.
+   */
+  streamResumable?: boolean;
 }
 
 export interface CronsCreatePayload extends RunsCreatePayload {
