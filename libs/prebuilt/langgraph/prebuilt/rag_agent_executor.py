@@ -7,10 +7,10 @@ from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from typing_extensions import TypedDict
 
-from langgraph.graph import END, StateGraph, CompiledGraph
+from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.managed import IsLastStep, RemainingSteps
-from langgraph.store.base import Checkpointer
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
 # Placeholder for VectorStoreRetriever if it's a custom or specific class
 # from langgraph.prebuilt import VectorStoreRetriever # Assuming this path, adjust if different
@@ -45,9 +45,9 @@ def create_rag_agent(
         "Use the retrieved documents to answer the question. "
         "If the documents are not relevant or insufficient, you can try to rephrase the question or search externally."
     ),
-    checkpointer: Optional[Checkpointer] = None,
+    checkpointer: Optional[BaseCheckpointSaver] = None,
     debug: bool = False,
-) -> CompiledGraph:
+) -> StateGraph:
     """Creates a RAG agent graph.
 
     Args:
