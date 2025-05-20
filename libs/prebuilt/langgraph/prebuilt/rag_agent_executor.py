@@ -2,7 +2,7 @@ from typing import Any, Callable, Optional, Sequence, Union, Annotated
 
 from langchain_core.documents import Document
 from langchain_core.language_models import LanguageModelLike
-from langchain_core.messages import BaseMessage, AIMessage
+from langchain_core.messages import BaseMessage, AIMessage, HumanMessage
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from typing_extensions import TypedDict
@@ -83,25 +83,50 @@ def create_rag_agent(
     # 1. Define Node Functions
     def retrieve_documents_node(state: RagState) -> dict:
         print("---RETRIEVING DOCUMENTS---")
-        question = state["question"]
+        
+        question_to_process = state.get("question")
+        
+        if not question_to_process:
+            # If 'question' is not in state, try to derive it from the last HumanMessage
+            messages = state.get("messages", [])
+            if not messages:
+                raise ValueError(
+                    "Cannot retrieve documents: 'messages' is empty or not found in state, and 'question' is not set."
+                )
+
+            human_message_content = None
+            for msg in reversed(messages):
+                if isinstance(msg, HumanMessage): 
+                    human_message_content = msg.content
+                    break
+            
+            if not human_message_content:
+                raise ValueError(
+                    "Cannot retrieve documents: No HumanMessage found in 'messages' to derive a question."
+                )
+            question_to_process = human_message_content
+        
+        # Set original_question if it's not already set.
         if state.get("original_question") is None:
-            original_question = question
+            original_question_to_set = question_to_process
         else:
-            original_question = state["original_question"]
+            original_question_to_set = state["original_question"]
 
         try:
-            retrieved_docs = _retriever.invoke(question) # type: ignore
+            # Use question_to_process for the retrieval
+            retrieved_docs = _retriever.invoke(question_to_process)  # type: ignore
         except Exception as e:
             print(f"Error invoking retriever: {e}")
             retrieved_docs = []
 
         return {
             "documents": retrieved_docs,
-            "original_question": original_question,
+            "question": question_to_process,  # Ensure the question used is in the output state
+            "original_question": original_question_to_set, # Ensure this is also updated
             "iterations": state.get("iterations", 0) + 1,
-            "current_phase_iterations": 0,
-            "attempted_external_search": False,
-            "document_assessment": None,
+            "current_phase_iterations": 0,  # Reverted to original logic
+            "attempted_external_search": False,  # Added back
+            "document_assessment": None,  # Added back
         }
 
     def grade_retrieved_documents_node(state: RagState) -> dict:
