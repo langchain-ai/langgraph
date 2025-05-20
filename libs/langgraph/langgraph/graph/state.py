@@ -304,6 +304,7 @@ class StateGraph(Graph):
                 If a string is provided, it will be used as the node name, and action will be used as the function or runnable.
             action: The action associated with the node. (default: None)
                 Will be used as the node function or runnable if `node` is a string (node name).
+            defer: Whether to defer the execution of the node until the run is about to end.
             metadata: The metadata associated with the node. (default: None)
             input: The input schema for the node. (default: the graph's input schema)
             retry: The policy for retrying the node. (default: None)
