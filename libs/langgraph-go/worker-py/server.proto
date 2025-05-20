@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package langgraph;
+
+message Config {
+  string checkpoint_ns = 1;
+}
+
+message PregelExecutableTask{
+    string task_id = 1;
+    string name = 2;
+    repeated string input= 3;
+    Config config = 4;
+    repeated string path = 5;
+}
+
+message Event {
+  message Write {
+    string name = 1;
+    bytes value = 2;
+  }
+
+  message Error {
+    string name = 1;
+    bytes value = 2;
+  }
+
+  oneof event_oneof {
+     Write write = 1;
+     Error error = 2;
+  }
+}
+
+message Empty {
+}
+
+message ListGraphsResponse {
+    message Graph {
+        message Node {
+            string name = 1;
+            repeated string input = 2;
+        }
+        repeated Node nodes = 1;
+        repeated string channel_names = 2;
+    }
+    repeated Graph graphs = 1;
+}
+
+service Worker {
+   // Call stream on a task
+   rpc StreamNode(PregelExecutableTask) returns (stream Event) {}
+
+   // Invoke a reducer
+   rpc InvokeReducer(PregelExecutableTask) returns (stream Event) {}
+
+   // List available graphs 
+   rpc ListGraphs(Empty) returns (ListGraphsResponse) {}
+}
