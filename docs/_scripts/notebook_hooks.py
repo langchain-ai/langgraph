@@ -53,6 +53,7 @@ REDIRECT_MAP = {
     "how-tos/persistence_redis.ipynb": "how-tos/persistence.ipynb#use-in-production",
     "how-tos/subgraph-persistence.ipynb": "how-tos/persistence.ipynb#use-with-subgraphs",
     "how-tos/cross-thread-persistence.ipynb": "how-tos/persistence.ipynb#add-long-term-memory",
+    "cloud/how-tos/copy_threads": "cloud/how-tos/use_threads",
     # tool calling how-tos
     "how-tos/tool-calling-errors.ipynb": "how-tos/tool-calling.ipynb#handle-errors",
     "how-tos/pass-config-to-tools.ipynb": "how-tos/tool-calling.ipynb#access-config",
