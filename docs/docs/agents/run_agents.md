@@ -10,7 +10,7 @@ hide:
 # Running agents
 
 
-Agents support both synchronous and asynchronous execution using either `.invoke()` / `await .invoke()` for full responses, or `.stream()` / `.astream()` for **incremental** [streaming](streaming.md) output. This section explains how to provide input, interpret output, enable streaming, and control execution limits.
+Agents support both synchronous and asynchronous execution using either `.invoke()` / `await .ainvoke()` for full responses, or `.stream()` / `.astream()` for **incremental** [streaming](streaming.md) output. This section explains how to provide input, interpret output, enable streaming, and control execution limits.
 
 
 ## Basic usage
@@ -18,7 +18,7 @@ Agents support both synchronous and asynchronous execution using either `.invoke
 Agents can be executed in two primary modes:
 
 - **Synchronous** using `.invoke()` or `.stream()`
-- **Asynchronous** using `await .invoke()` or `async for` with `.astream()`
+- **Asynchronous** using `await .ainvoke()` or `async for` with `.astream()`
 
 === "Sync invocation"
     ```python

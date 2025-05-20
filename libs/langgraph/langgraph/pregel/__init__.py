@@ -85,7 +85,6 @@ from langgraph.pregel.algo import (
     PregelTaskWrites,
     apply_writes,
     local_read,
-    local_write,
     prepare_next_tasks,
 )
 from langgraph.pregel.call import identifier
@@ -1684,11 +1683,7 @@ class Pregel(PregelProtocol):
                         run_name=self.name + "UpdateState",
                         configurable={
                             # deque.extend is thread-safe
-                            CONFIG_KEY_SEND: partial(
-                                local_write,
-                                writes.extend,
-                                self.nodes.keys(),
-                            ),
+                            CONFIG_KEY_SEND: writes.extend,
                             CONFIG_KEY_READ: partial(
                                 local_read,
                                 channels,
@@ -2111,11 +2106,7 @@ class Pregel(PregelProtocol):
                         run_name=self.name + "UpdateState",
                         configurable={
                             # deque.extend is thread-safe
-                            CONFIG_KEY_SEND: partial(
-                                local_write,
-                                writes.extend,
-                                self.nodes.keys(),
-                            ),
+                            CONFIG_KEY_SEND: writes.extend,
                             CONFIG_KEY_READ: partial(
                                 local_read,
                                 channels,

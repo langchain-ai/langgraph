@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-checkpoint-sqlite"
-version = "2.0.7"
+version = "2.0.10"
 description = "Library with a SQLite implementation of LangGraph checkpoint saver."
 authors = []
 requires-python = ">=3.9"
@@ -12,8 +12,9 @@ readme = "README.md"
 license = "MIT"
 license-files = ['LICENSE']
 dependencies = [
-    "langgraph-checkpoint>=2.0.15",
+    "langgraph-checkpoint>=2.0.21",
     "aiosqlite>=0.20",
+    "sqlite-vec>=0.1.6",
 ]
 
 [project.urls]
@@ -29,6 +30,7 @@ dev = [
   "pytest-watcher",
   "mypy",
   "langgraph-checkpoint",
+  "pytest-retry>=1.7.0",
 ]
 
 [tool.uv]

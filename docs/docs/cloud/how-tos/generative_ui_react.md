@@ -335,7 +335,7 @@ const { thread, submit } = useStream({
 });
 ```
 
-Then you can pushing updates to the UI component by calling `ui.push()` / `push_ui_message()` with the same ID as the UI message you wish to update.
+Then you can push updates to the UI component by calling `ui.push()` / `push_ui_message()` with the same ID as the UI message you wish to update.
 
 === "Python"
 
