@@ -4,7 +4,6 @@ from uuid import UUID
 import pytest
 from langchain_core import __version__ as core_version
 from packaging import version
-from pytest_mock import MockerFixture
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.store.base import BaseStore
@@ -43,7 +42,7 @@ def anyio_backend():
 
 
 @pytest.fixture()
-def deterministic_uuids(mocker: MockerFixture) -> MockerFixture:
+def deterministic_uuids(mocker: "MockerFixture") -> "MockerFixture":
     side_effect = (
         UUID(f"00000000-0000-4000-8000-{i:012}", version=4) for i in range(10000)
     )
