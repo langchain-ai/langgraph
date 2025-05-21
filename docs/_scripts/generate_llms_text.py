@@ -82,13 +82,15 @@ SafeLoader.add_multi_constructor(
 )
 
 
-
 class NavItem(TypedDict):
     title: str
     url: str
     hierarchy: tuple[str, ...]
 
-def _flatten_nav(nav: list[dict[str, str | list] | str], path: tuple[str, ...] = ()) -> list[NavItem]:
+
+def _flatten_nav(
+    nav: list[dict[str, str | list] | str], path: tuple[str, ...] = ()
+) -> list[NavItem]:
     flat: List[NavItem] = []
     for item in nav:
         if isinstance(item, dict):
@@ -112,6 +114,7 @@ def _flatten_nav(nav: list[dict[str, str | list] | str], path: tuple[str, ...] =
             raise TypeError(f"Unexpected item type {type(item)} in nav")
     return flat
 
+
 def generate_nav_links_text(output_file: str, *, replace_links: bool = False) -> None:
     """Generate a text file containing navigation structure and links from mkdocs.yaml."""
     # Get path to mkdocs.yaml relative to this script
@@ -125,31 +128,40 @@ def generate_nav_links_text(output_file: str, *, replace_links: bool = False) ->
     # Extract nav section
     nav = config.get("nav", [])
     flattened = _flatten_nav(nav)
-    
+
     with open(output_file, "w") as f:
         current_section = None
         for item in flattened:
             # Get the top-level section (first item in hierarchy)
             section = item["hierarchy"][0]
-            
+
+            if section not in {
+                "Guides", "Examples", "Resources"
+            }:
+                continue
+
             # If we're starting a new section, add a heading
             if section != current_section:
                 f.write(f"\n# {section}\n\n")
                 current_section = section
-            
+
             # Add the item as a bullet point with title and link
             # Include full hierarchy path in title, separated by " > "
             hierarchy_path = " > ".join(item["hierarchy"][1:])
-            title = f"{item['title']} ({hierarchy_path})" if hierarchy_path else item['title']
-            
+            title = (
+                f"{item['title']} ({hierarchy_path})"
+                if hierarchy_path
+                else item["title"]
+            )
+
             # Process URL based on replace_links flag
-            url = item['url']
+            url = item["url"]
             if replace_links:
                 # Remove .md extension and ensure single trailing slash
-                url = url.replace('.md', '')
-                url = url.rstrip('/') + '/'
+                url = url.replace(".md", "")
+                url = url.rstrip("/") + "/"
                 url = f"https://langchain-ai.github.io/langgraph/{url}"
-            
+
             f.write(f"- [{title}]({url})\n")
 
 
