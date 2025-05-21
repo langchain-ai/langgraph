@@ -1,3 +1,5 @@
 langgraph
 pydantic
 requests
+python-dotenv
+PySide6
