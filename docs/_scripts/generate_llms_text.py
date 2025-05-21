@@ -170,8 +170,6 @@ async def process_nav_items(nav_items: list[NavItem]) -> list[NavItem]:
     model = init_chat_model("gpt-4o-mini", temperature=0.0, rate_limiter=rate_limiter)
     model = model.with_structured_output(PageInfo)
 
-    new_nav_items = []
-
     async def process_single_item(item: NavItem) -> NavItem:
         path = item["url"]
         file_path = os.path.join(SOURCE_DIR, path)
@@ -180,7 +178,6 @@ async def process_nav_items(nav_items: list[NavItem]) -> list[NavItem]:
         if path.endswith(".ipynb"):
             content = await convert_ipynb_to_md(file_path)
         else:
-            return item
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
@@ -213,7 +210,7 @@ async def process_nav_items(nav_items: list[NavItem]) -> list[NavItem]:
         }
 
     # Process items in parallel
-    tasks = [process_single_item(item) for item in nav_items[:40]]
+    tasks = [process_single_item(item) for item in nav_items]
     new_nav_items = await asyncio.gather(*tasks)
     return new_nav_items
 
