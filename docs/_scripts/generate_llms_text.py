@@ -6,10 +6,12 @@ import os
 from typing import TypedDict, List
 import pydantic
 from pydantic import BaseModel, Field
+from langchain_core.rate_limiters import InMemoryRateLimiter
+
+
 
 import yaml
 from langchain.chat_models import init_chat_model
-from langchain_core.language_models import BaseChatModel
 from mkdocs.structure.files import File
 from mkdocs.structure.pages import Page
 from yaml import SafeLoader
@@ -130,7 +132,6 @@ def _flatten_nav(
     return flat
 
 
-from pydantic import BaseModel
 
 
 class PageInfo(BaseModel):
@@ -145,23 +146,25 @@ async def process_nav_items(
    nav_items: list[NavItem]
 ) -> list[NavItem]:
     """Open the contents of each nav item and come up with a better title and description."""
+    rate_limiter = InMemoryRateLimiter(requests_per_second=10)
     model = init_chat_model(
         "gpt-4o-mini",
         temperature=0.0,
+        rate_limiter=rate_limiter
     )
     model = model.with_structured_output(PageInfo)
 
     new_nav_items = []
-    for item in nav_items[:5]:
+
+    async def process_single_item(item: NavItem) -> NavItem:
         path = item["url"]
         # If it's an ipython notebook, convert it to markdown
         if path.endswith(".ipynb"):
-            continue
+            return item
+            
         # Load the content for the page from the local directory
         with open(os.path.join(SOURCE_DIR, path), "r") as f:
             content = f.read()
-
-        # model = model.with_structured_output(PageInfo)
 
         # Generate a better title and description
         response = await model.ainvoke(
@@ -181,23 +184,24 @@ async def process_nav_items(
                 },
             ]
         )
-        # Update the item with the new title and description
-        new_nav_items.append(
-            {
-                "title": response.title,
-                "url": item["url"],
-                "hierarchy": item["hierarchy"],
-                "description": response.description,
-            }
-        )
+        
+        return {
+            "title": response.title,
+            "url": item["url"],
+            "hierarchy": item["hierarchy"],
+            "description": response.description,
+        }
 
+    # Process items in parallel
+    tasks = [process_single_item(item) for item in nav_items[:5]]
+    new_nav_items = await asyncio.gather(*tasks)
     return new_nav_items
 
 
 async def generate_nav_links_text(
     output_file: str, *, replace_links: bool = False
 ) -> None:
-    """Generate a text file containing navigation structure and links from mkdocs.yaml."""
+    """Generate llms.txt from mkdocs.yaml."""
     # Get path to mkdocs.yaml relative to this script
     script_dir = os.path.dirname(os.path.abspath(__file__))
     mkdocs_path = os.path.join(os.path.dirname(script_dir), "mkdocs.yml")
