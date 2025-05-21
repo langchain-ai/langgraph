@@ -1,4 +1,5 @@
 version = 1
+revision = 1
 requires-python = ">=3.9"
 resolution-markers = [
     "python_full_version >= '3.12.4'",
@@ -480,6 +481,7 @@ dev = [
     { name = "pytest-mock" },
     { name = "pytest-watcher" },
     { name = "ruff" },
+    { name = "syrupy" },
 ]
 
 [package.metadata]
@@ -501,6 +503,7 @@ dev = [
     { name = "pytest-mock" },
     { name = "pytest-watcher" },
     { name = "ruff" },
+    { name = "syrupy" },
 ]
 
 [[package]]
@@ -1082,6 +1085,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/f2/48/dbb2cc4e5bad88c89c7bb296e2d0a8df58aab9edc75853728c361eefc24f/sqlite_vec-0.1.6-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:7b0519d9cd96164cd2e08e8eed225197f9cd2f0be82cb04567692a0a4be02da3", size = 103704 },
     { url = "https://files.pythonhosted.org/packages/80/76/97f33b1a2446f6ae55e59b33869bed4eafaf59b7f4c662c8d9491b6a714a/sqlite_vec-0.1.6-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux1_x86_64.whl", hash = "sha256:823b0493add80d7fe82ab0fe25df7c0703f4752941aee1c7b2b02cec9656cb24", size = 151556 },
     { url = "https://files.pythonhosted.org/packages/6a/98/e8bc58b178266eae2fcf4c9c7a8303a8d41164d781b32d71097924a6bebe/sqlite_vec-0.1.6-py3-none-win_amd64.whl", hash = "sha256:c65bcfd90fa2f41f9000052bcb8bb75d38240b2dae49225389eca6c3136d3f0c", size = 281540 },
+]
+
+[[package]]
+name = "syrupy"
+version = "4.9.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8c/f8/022d8704a3314f3e96dbd6bbd16ebe119ce30e35f41aabfa92345652fceb/syrupy-4.9.1.tar.gz", hash = "sha256:b7d0fcadad80a7d2f6c4c71917918e8ebe2483e8c703dfc8d49cdbb01081f9a4", size = 52492 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ec/9d/aef9ec5fd5a4ee2f6a96032c4eda5888c5c7cec65cef6b28c4fc37671d88/syrupy-4.9.1-py3-none-any.whl", hash = "sha256:b94cc12ed0e5e75b448255430af642516842a2374a46936dd2650cfb6dd20eda", size = 52214 },
 ]
 
 [[package]]
