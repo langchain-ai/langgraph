@@ -71,7 +71,7 @@ REDIRECT_MAP = {
     "cloud/faq/studio.md": "concepts/langgraph_studio.md#studio-faqs",
     "cloud/how-tos/human_in_the_loop_edit_state.md": "cloud/how-tos/add-human-in-the-loop.md",
     "cloud/how-tos/human_in_the_loop_user_input.md": "cloud/how-tos/add-human-in-the-loop.md",
-    "concepts/platform_architecture.md": "/oncepts/langgraph_cloud#architecture",
+    "concepts/platform_architecture.md": "concepts/langgraph_cloud#architecture",
     # cloud streaming redirects
     "cloud/how-tos/stream_values.md": "cloud/how-tos/streaming.md#stream-graph-state",
     "cloud/how-tos/stream_updates.md": "cloud/how-tos/streaming.md#stream-graph-state",
