@@ -584,6 +584,7 @@ dev = [
     { name = "pytest-mock" },
     { name = "pytest-watcher" },
     { name = "ruff" },
+    { name = "syrupy" },
 ]
 
 [[package]]
