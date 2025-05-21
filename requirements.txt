@@ -1,0 +1,3 @@
+langgraph
+pydantic
+requests

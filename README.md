@@ -31,22 +31,33 @@ The system's codebase is organized into the following key Python files:
     -   Conditional logic for routing the workflow based on the output of the `data_retriever` node (specifically, the `can_answer` flag).
 
 ## 3. Setup and Installation
--   **Prerequisites**:
-    -   Python 3.8+ (or a version compatible with the LangGraph and Pydantic libraries).
--   **Installation Steps**:
-    1.  Clone the repository (if applicable).
-    2.  Install the necessary Python packages:
-        ```bash
-        pip install langgraph pydantic
-        ```
-    3.  For actual BigQuery integration (once placeholders are replaced with real database interactions), you will need the Google Cloud BigQuery client library:
-        ```bash
-        pip install google-cloud-bigquery
-        ```
-    4.  To use the LLM Connection Tester utility, you will also need the `requests` library:
-        ```bash
-        pip install requests
-        ```
+
+### Prerequisites
+-   Python 3.8+ (or a version compatible with LangGraph and other dependencies).
+-   `pip` (Python package installer).
+-   `git` (for cloning the repository).
+
+### Installation
+1.  **Clone the repository** (if you haven't already):
+    ```bash
+    git clone <repository_url> 
+    cd <repository_directory>
+    ```
+    (Replace `<repository_url>` and `<repository_directory>` with the actual URL and directory name if applicable. If you're working from an existing checkout, you can skip this step.)
+
+2.  **Create and activate a virtual environment** (recommended):
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+    ```
+
+3.  **Install the required packages** using `requirements.txt`:
+    ```bash
+    pip install -r requirements.txt
+    ```
+    This file includes `langgraph`, `pydantic`, and `requests` which are necessary for running the main agentic system and the LLM Connection Tester utility.
+
+*Note on BigQuery*: For actual BigQuery integration (which is currently placeholder-based), you will also need the `google-cloud-bigquery` library. This can be installed via `pip install google-cloud-bigquery` when you're ready to implement that functionality. This package is not included in `requirements.txt` by default to keep the initial setup lightweight for users who only want to explore the placeholder logic.
 
 ## 4. How the System Works (LangGraph Flow)
 The LangGraph workflow orchestrates the interaction between the agents in a defined, stateful sequence:
@@ -93,11 +104,7 @@ The main goal of this utility is to ensure that your Python environment can succ
 ### Prerequisites
 - Python 3.x
 - `tkinter` (usually included with standard Python installations).
-- `requests` library: If you don't have it installed, run:
-  ```bash
-  pip install requests
-  ```
-  (Note: This is also added to the main "Setup and Installation" section for clarity).
+- `requests` library (installed via `requirements.txt`).
 
 ### How to Use
 1.  **Run the script**:
