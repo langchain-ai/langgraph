@@ -1,10 +1,15 @@
 """Experimental script to generate consolidated llms text from the docs."""
 
+import asyncio
 import glob
 import os
 from typing import TypedDict, List
+import pydantic
+from pydantic import BaseModel, Field
 
 import yaml
+from langchain.chat_models import init_chat_model
+from langchain_core.language_models import BaseChatModel
 from mkdocs.structure.files import File
 from mkdocs.structure.pages import Page
 from yaml import SafeLoader
@@ -16,7 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCE_DIR = os.path.abspath(os.path.join(os.path.dirname(HERE), "docs"))
 
 
-def generate_full_llms_text(output_file: str) -> str:
+async def generate_full_llms_text(output_file: str) -> str:
     """Generate a consolidated text file from markdown/notebook files for LLM training.
 
     Args:
@@ -86,6 +91,7 @@ class NavItem(TypedDict):
     title: str
     url: str
     hierarchy: tuple[str, ...]
+    description: str
 
 
 def _flatten_nav(
@@ -98,7 +104,14 @@ def _flatten_nav(
                 new_path = path + (title,)
                 if isinstance(node, str):
                     # Leaf page
-                    flat.append({"title": title, "url": node, "hierarchy": new_path})
+                    flat.append(
+                        {
+                            "title": title,
+                            "url": node,
+                            "hierarchy": new_path,
+                            "description": "",
+                        }
+                    )
                 elif isinstance(node, list):
                     # Dive in, carrying along the updated path
                     flat.extend(_flatten_nav(node, new_path))
@@ -109,13 +122,81 @@ def _flatten_nav(
         elif isinstance(item, str):
             # Bare string entry → use itself as title, and as URL
             new_path = path + (item,)
-            flat.append({"title": item, "url": item, "hierarchy": new_path})
+            flat.append(
+                {"title": item, "url": item, "hierarchy": new_path, "description": ""}
+            )
         else:
             raise TypeError(f"Unexpected item type {type(item)} in nav")
     return flat
 
 
-def generate_nav_links_text(output_file: str, *, replace_links: bool = False) -> None:
+from pydantic import BaseModel
+
+
+class PageInfo(BaseModel):
+    title: str = Field(description="The title of the page")
+    description: str = Field(
+        description="A short description of the page no longer than 3 sentences "
+                    "explaining the kind of content that can be found in the page."
+    )
+
+
+async def process_nav_items(
+   nav_items: list[NavItem]
+) -> list[NavItem]:
+    """Open the contents of each nav item and come up with a better title and description."""
+    model = init_chat_model(
+        "gpt-4o-mini",
+        temperature=0.0,
+    )
+    model = model.with_structured_output(PageInfo)
+
+    new_nav_items = []
+    for item in nav_items[:5]:
+        path = item["url"]
+        # If it's an ipython notebook, convert it to markdown
+        if path.endswith(".ipynb"):
+            continue
+        # Load the content for the page from the local directory
+        with open(os.path.join(SOURCE_DIR, path), "r") as f:
+            content = f.read()
+
+        # model = model.with_structured_output(PageInfo)
+
+        # Generate a better title and description
+        response = await model.ainvoke(
+            [
+                {
+                    "role": "system",
+                    "content": "You are a technical documentation writer. "
+                    "You are given a markdown page of documentation. "
+                    "Please come up with an appropriate title and "
+                    "description for the page. The description should "
+                    "be a short summary of the page content that is "
+                    "no longer than 3 sentences.",
+                },
+                {
+                    "role": "user",
+                    "content": "The markdown page is as follows:\n\n" + content,
+                },
+            ]
+        )
+        # Update the item with the new title and description
+        new_nav_items.append(
+            {
+                "title": response.title,
+                "url": item["url"],
+                "hierarchy": item["hierarchy"],
+                "description": response.description,
+            }
+        )
+
+    return new_nav_items
+
+
+async def generate_nav_links_text(
+    output_file: str, *, replace_links: bool = False
+) -> None:
     """Generate a text file containing navigation structure and links from mkdocs.yaml."""
     # Get path to mkdocs.yaml relative to this script
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -129,15 +210,15 @@ def generate_nav_links_text(output_file: str, *, replace_links: bool = False) ->
     nav = config.get("nav", [])
     flattened = _flatten_nav(nav)
 
+    processed_nav = await process_nav_items(flattened)
+
     with open(output_file, "w") as f:
         current_section = None
-        for item in flattened:
+        for item in processed_nav:
             # Get the top-level section (first item in hierarchy)
             section = item["hierarchy"][0]
 
-            if section not in {
-                "Guides", "Examples", "Resources"
-            }:
+            if section not in {"Guides", "Examples", "Resources"}:
                 continue
 
             # If we're starting a new section, add a heading
@@ -145,15 +226,7 @@ def generate_nav_links_text(output_file: str, *, replace_links: bool = False) ->
                 f.write(f"\n# {section}\n\n")
                 current_section = section
 
-            # Add the item as a bullet point with title and link
-            # Include full hierarchy path in title, separated by " > "
-            hierarchy_path = " > ".join(item["hierarchy"][1:])
-            title = (
-                f"{item['title']} ({hierarchy_path})"
-                if hierarchy_path
-                else item["title"]
-            )
-
+            title = item['title']
             # Process URL based on replace_links flag
             url = item["url"]
             if replace_links:
@@ -163,7 +236,7 @@ def generate_nav_links_text(output_file: str, *, replace_links: bool = False) ->
                 url = url.rstrip("/") + "/"
                 url = f"https://langchain-ai.github.io/langgraph/{url}"
 
-            f.write(f"- [{title}]({url})\n")
+            f.write(f"- [{title}]({url}): {item['description']}\n")
 
 
 if __name__ == "__main__":
@@ -188,6 +261,10 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     if args.link_only:
-        generate_nav_links_text(args.output_file, replace_links=args.replace_links)
+        coro = generate_nav_links_text(
+            args.output_file, replace_links=args.replace_links
+        )
     else:
-        generate_full_llms_text(args.output_file)
+        coro = generate_full_llms_text(args.output_file)
+
+    asyncio.run(coro)
