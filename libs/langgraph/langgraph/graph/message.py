@@ -317,7 +317,7 @@ def push_message(
         raise ValueError("Message ID is required")
 
     if isinstance(config["callbacks"], BaseCallbackManager):
-        manager = cast(BaseCallbackManager, config["callbacks"])
+        manager = config["callbacks"]
         handlers = manager.handlers
     elif isinstance(config["callbacks"], list) and all(
         isinstance(x, BaseCallbackHandler) for x in config["callbacks"]
