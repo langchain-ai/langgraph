@@ -32,7 +32,6 @@ async def convert_ipynb_to_md(file_path: str) -> Optional[str]:
         Processed markdown content if successful, None otherwise
     """
     rel_path = os.path.relpath(file_path, SOURCE_DIR)
-    print(file_path)
 
     # Create File and Page objects to match mkdocs structure
     file_obj = File(
@@ -209,6 +208,11 @@ async def process_nav_items(nav_items: list[NavItem]) -> list[NavItem]:
             "description": response.description,
         }
 
+    # Remove any items that start with http:// or https:// looking only for
+    # local file at this stages.
+    nav_items = [
+        item for item in nav_items if not item["url"].startswith(("http://", "https://"))
+    ]
     # Process items in parallel
     tasks = [process_single_item(item) for item in nav_items]
     new_nav_items = await asyncio.gather(*tasks)
