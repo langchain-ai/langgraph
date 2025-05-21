@@ -2,7 +2,7 @@
 
 import glob
 import os
-from typing import TypedDict, List, Tuple, Union, Dict
+from typing import TypedDict, List
 
 import yaml
 from mkdocs.structure.files import File
@@ -16,7 +16,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCE_DIR = os.path.abspath(os.path.join(os.path.dirname(HERE), "docs"))
 
 
-def _make_llms_text(output_file: str) -> str:
+def generate_full_llms_text(output_file: str) -> str:
     """Generate a consolidated text file from markdown/notebook files for LLM training.
 
     Args:
@@ -112,8 +112,8 @@ def _flatten_nav(nav: list[dict[str, str | list] | str], path: tuple[str, ...] =
             raise TypeError(f"Unexpected item type {type(item)} in nav")
     return flat
 
-def parse_mkdocs_yaml(output_file: str, *, replace_links: bool = False) -> None:
-    """Parse the mkdocs.yaml file to extract navigation structure."""
+def generate_nav_links_text(output_file: str, *, replace_links: bool = False) -> None:
+    """Generate a text file containing navigation structure and links from mkdocs.yaml."""
     # Get path to mkdocs.yaml relative to this script
     script_dir = os.path.dirname(os.path.abspath(__file__))
     mkdocs_path = os.path.join(os.path.dirname(script_dir), "mkdocs.yml")
@@ -141,8 +141,16 @@ def parse_mkdocs_yaml(output_file: str, *, replace_links: bool = False) -> None:
             # Include full hierarchy path in title, separated by " > "
             hierarchy_path = " > ".join(item["hierarchy"][1:])
             title = f"{item['title']} ({hierarchy_path})" if hierarchy_path else item['title']
-            f.write(f"- [{title}]({item['url']})\n")
-    
+            
+            # Process URL based on replace_links flag
+            url = item['url']
+            if replace_links:
+                # Remove .md extension and ensure single trailing slash
+                url = url.replace('.md', '')
+                url = url.rstrip('/') + '/'
+                url = f"https://langchain-ai.github.io/langgraph/{url}"
+            
+            f.write(f"- [{title}]({url})\n")
 
 
 if __name__ == "__main__":
@@ -159,9 +167,14 @@ if __name__ == "__main__":
         action="store_true",
         help="Only include link references in the output",
     )
+    parser.add_argument(
+        "--replace-links",
+        action="store_true",
+        help="Replace markdown links with full URLs in the output",
+    )
 
     args = parser.parse_args()
     if args.link_only:
-        parse_mkdocs_yaml(args.output_file)
+        generate_nav_links_text(args.output_file, replace_links=args.replace_links)
     else:
-        _make_llms_text(args.output_file)
+        generate_full_llms_text(args.output_file)
