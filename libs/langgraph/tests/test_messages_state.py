@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 from langgraph.graph import add_messages
-from langgraph.graph.message import REMOVE_ALL_MESSAGES, MessagesState
+from langgraph.graph.message import REMOVE_ALL_MESSAGES, MessagesState, push_message
 from langgraph.graph.state import END, START, StateGraph
 from tests.messages import _AnyIdHumanMessage
 
@@ -332,3 +332,38 @@ def test_remove_all_messages():
     assert result == [
         _AnyIdHumanMessage(content="Updated hi there"),
     ]
+
+
+def test_push_messages_in_graph():
+    class MessagesState(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages]
+
+    def chat(_: MessagesState) -> MessagesState:
+        with pytest.raises(ValueError, match="Message ID is required"):
+            push_message(AIMessage(content="No ID"))
+
+        return {
+            "messages": [
+                push_message(AIMessage(content="First", id="1")),
+                push_message(HumanMessage(content="Second", id="2")),
+                push_message(AIMessage(content="Third", id="3")),
+            ]
+        }
+
+    builder = StateGraph(MessagesState)
+    builder.add_node(chat)
+    builder.add_edge(START, "chat")
+
+    graph = builder.compile()
+
+    messages, values = [], None
+    for event, chunk in graph.stream(
+        {"messages": []}, stream_mode=["messages", "values"]
+    ):
+        if event == "values":
+            values = chunk
+        elif event == "messages":
+            message, _ = chunk
+            messages.append(message)
+
+    assert values["messages"] == messages
