@@ -1,0 +1,54 @@
+[project]
+name = "test_studio"
+version = "0.1.0"
+description = "Test Studio"
+requires-python = ">=3.11"
+dependencies = [
+    "langchain>=0.3.9",
+    "langchain-core>=0.3.59",
+    "langchain-openai",
+    # Use local langgraph build
+    "langgraph @ file:///Users/rlm/Desktop/Code/langgraph/libs/langgraph",
+    "langgraph-prebuilt @ file:///Users/rlm/Desktop/Code/langgraph/libs/prebuilt",
+    "langsmith[pytest]>=0.3.4",
+]
+
+[project.optional-dependencies]
+dev = ["mypy>=1.11.1", "ruff>=0.6.1"]
+
+[build-system]
+requires = ["setuptools>=73.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["agent"]
+
+[tool.setuptools.package-dir]
+"agent" = "src/graph"
+
+[tool.setuptools.package-data]
+"*" = ["py.typed"]
+
+[tool.ruff]
+lint.select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # isort
+    "D",    # pydocstyle
+    "D401", # First line should be in imperative mood
+    "T201",
+    "UP",
+]
+lint.ignore = [
+    "UP006",
+    "UP007",
+    "UP035",
+    "D417",
+    "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D", "UP"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
