@@ -2,9 +2,12 @@
 
 import glob
 import os
+from typing import TypedDict, List, Tuple, Union, Dict
 
+import yaml
 from mkdocs.structure.files import File
 from mkdocs.structure.pages import Page
+from yaml import SafeLoader
 
 from _scripts.notebook_hooks import _on_page_markdown_with_config
 
@@ -69,6 +72,79 @@ def _make_llms_text(output_file: str) -> str:
         f.write("\n\n".join(all_content))
 
 
+def no_op_constructor(*args):
+    """No-op"""
+
+
+SafeLoader.add_multi_constructor(
+    "tag:yaml.org,2002:python/name",
+    no_op_constructor,
+)
+
+
+
+class NavItem(TypedDict):
+    title: str
+    url: str
+    hierarchy: tuple[str, ...]
+
+def _flatten_nav(nav: list[dict[str, str | list] | str], path: tuple[str, ...] = ()) -> list[NavItem]:
+    flat: List[NavItem] = []
+    for item in nav:
+        if isinstance(item, dict):
+            for title, node in item.items():
+                new_path = path + (title,)
+                if isinstance(node, str):
+                    # Leaf page
+                    flat.append({"title": title, "url": node, "hierarchy": new_path})
+                elif isinstance(node, list):
+                    # Dive in, carrying along the updated path
+                    flat.extend(_flatten_nav(node, new_path))
+                else:
+                    raise TypeError(
+                        f"Unexpected node type {type(node)} under {title!r}"
+                    )
+        elif isinstance(item, str):
+            # Bare string entry → use itself as title, and as URL
+            new_path = path + (item,)
+            flat.append({"title": item, "url": item, "hierarchy": new_path})
+        else:
+            raise TypeError(f"Unexpected item type {type(item)} in nav")
+    return flat
+
+def parse_mkdocs_yaml(output_file: str, *, replace_links: bool = False) -> None:
+    """Parse the mkdocs.yaml file to extract navigation structure."""
+    # Get path to mkdocs.yaml relative to this script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    mkdocs_path = os.path.join(os.path.dirname(script_dir), "mkdocs.yml")
+
+    # Load and parse yaml
+    with open(mkdocs_path, "r") as f:
+        config = yaml.safe_load(f)
+
+    # Extract nav section
+    nav = config.get("nav", [])
+    flattened = _flatten_nav(nav)
+    
+    with open(output_file, "w") as f:
+        current_section = None
+        for item in flattened:
+            # Get the top-level section (first item in hierarchy)
+            section = item["hierarchy"][0]
+            
+            # If we're starting a new section, add a heading
+            if section != current_section:
+                f.write(f"\n# {section}\n\n")
+                current_section = section
+            
+            # Add the item as a bullet point with title and link
+            # Include full hierarchy path in title, separated by " > "
+            hierarchy_path = " > ".join(item["hierarchy"][1:])
+            title = f"{item['title']} ({hierarchy_path})" if hierarchy_path else item['title']
+            f.write(f"- [{title}]({item['url']})\n")
+    
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -78,6 +154,14 @@ if __name__ == "__main__":
         )
     )
     parser.add_argument("output_file", help="Path to output the consolidated text file")
+    parser.add_argument(
+        "--link-only",
+        action="store_true",
+        help="Only include link references in the output",
+    )
 
     args = parser.parse_args()
-    _make_llms_text(args.output_file)
+    if args.link_only:
+        parse_mkdocs_yaml(args.output_file)
+    else:
+        _make_llms_text(args.output_file)
