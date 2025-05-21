@@ -129,9 +129,6 @@ workflow.add_edge("action", "agent")
 graph = workflow.compile()
 ```
 
-!!! warning "Assign `CompiledGraph` to Variable"
-    The build process for LangGraph Platform requires that the `CompiledGraph` object be assigned to a variable at the top-level of a Python module (alternatively, you can provide [a function that creates a graph](./graph_rebuild.md)).
-
 Example file directory:
 
 ```bash
