@@ -509,9 +509,14 @@ class PregelLoop(LoopProtocol):
                     **read_channels(self.channels, self.stream_keys)
                 )
             # produce values output
-            self._emit(
-                "values", map_output_values, self.output_keys, writes, self.channels
-            )
+            if not updated_channels.isdisjoint(
+                (self.output_keys,)
+                if isinstance(self.output_keys, str)
+                else self.output_keys
+            ):
+                self._emit(
+                    "values", map_output_values, self.output_keys, writes, self.channels
+                )
             # clear pending writes
             self.checkpoint_pending_writes.clear()
             # "not skip_done_tasks" only applies to first tick after resuming
