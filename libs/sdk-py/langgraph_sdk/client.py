@@ -13,6 +13,7 @@ import asyncio
 import functools
 import logging
 import os
+import re
 import sys
 from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import (
@@ -118,17 +119,18 @@ def _orjson_default(obj: Any) -> Any:
         raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 
+# Compiled regex pattern for extracting run metadata from Content-Location header
+_RUN_METADATA_PATTERN = re.compile(
+    r"(\/threads\/(?P<thread_id>.+))?\/runs\/(?P<run_id>.+)"
+)
+
+
 def _get_run_metadata_from_response(
     response: httpx.Response,
 ) -> Optional[RunCreateMetadata]:
     """Extract run metadata from the response headers."""
-    import re
-
     if (content_location := response.headers.get("Content-Location")) and (
-        match := re.search(
-            r"(\/threads\/(?P<thread_id>.+))?\/runs\/(?P<run_id>.+)",
-            content_location,
-        )
+        match := _RUN_METADATA_PATTERN.search(content_location)
     ):
         return RunCreateMetadata(
             run_id=match.group("run_id"),
@@ -5565,7 +5567,9 @@ def get_asgi_transport() -> type[httpx.ASGITransport]:
 
 
 TimeoutTypes = Union[
-    Optional[float],
+    None,
+    float,
+    tuple[Optional[float], Optional[float]],
     tuple[Optional[float], Optional[float], Optional[float], Optional[float]],
     httpx.Timeout,
 ]
