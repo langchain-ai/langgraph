@@ -158,7 +158,8 @@ def generate_nav_links_text(output_file: str, *, replace_links: bool = False) ->
             url = item["url"]
             if replace_links:
                 # Remove .md extension and ensure single trailing slash
-                url = url.replace(".md", "")
+                url = url.removesuffix(".md")
+                url = url.removesuffix(".ipynb")
                 url = url.rstrip("/") + "/"
                 url = f"https://langchain-ai.github.io/langgraph/{url}"
 
