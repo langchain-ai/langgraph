@@ -1,84 +1,109 @@
-<picture class="github-only">
-  <source media="(prefers-color-scheme: light)" srcset="https://langchain-ai.github.io/langgraph/static/wordmark_dark.svg">
-  <source media="(prefers-color-scheme: dark)" srcset="https://langchain-ai.github.io/langgraph/static/wordmark_light.svg">
-  <img alt="LangGraph Logo" src="https://langchain-ai.github.io/langgraph/static/wordmark_dark.svg" width="80%">
-</picture>
+# Agentic System for User Input Processing and BigQuery Interaction
 
-<div>
-<br>
-</div>
+## 1. Project Overview
+This system is designed to take user input, convert it into specific questions, query a BigQuery database (simulated for now), and then generate a comprehensive answer based on the findings. The entire workflow is orchestrated using LangGraph, allowing for a modular, stateful, and observable agentic design.
 
-[![Version](https://img.shields.io/pypi/v/langgraph.svg)](https://pypi.org/project/langgraph/)
-[![Downloads](https://static.pepy.tech/badge/langgraph/month)](https://pepy.tech/project/langgraph)
-[![Open Issues](https://img.shields.io/github/issues-raw/langchain-ai/langgraph)](https://github.com/langchain-ai/langgraph/issues)
-[![Docs](https://img.shields.io/badge/docs-latest-blue)](https://langchain-ai.github.io/langgraph/)
-[![GitMCP](https://img.shields.io/endpoint?url=https://gitmcp.io/badge/langchain-ai/langgraph)](https://gitmcp.io/langchain-ai/langgraph)
+## 2. Architecture
+The system employs a multi-agent setup where each agent has a distinct role in the process:
 
-Trusted by companies shaping the future of agents – including Klarna, Replit, Elastic, and more – LangGraph is a low-level orchestration framework for building, managing, and deploying long-running, stateful agents.
+-   **Agent 1 (Question Generator - `generate_questions_agent`)**:
+    -   **Role**: Processes the initial raw user input and breaks it down into one or more clear, answerable questions.
+    -   **Current state**: Placeholder. It currently returns a static, predefined list of questions, irrespective of the actual user input.
+-   **Agent 2 (Data Retriever - `retrieve_data_agent`)**:
+    -   **Role**: Takes the generated questions, interacts with the BigQuery tools to find relevant data, and determines if the questions can be adequately answered based on the retrieved information.
+    -   **Current state**: Uses placeholder BigQuery tools (`bigquery_tools.py`) that simulate API calls without actually connecting to a database. It performs simple keyword matching (based on question content and simulated table/column names) to decide if a question is answerable and what "data" to return.
+-   **Agent 3 (Answer Generator - `generate_answer_agent`)**:
+    -   **Role**: Synthesizes the data retrieved by the Data Retriever and formulates a final, human-readable answer to the user's original query.
+    -   **Current state**: Placeholder. It returns a static answer if data is provided and the `can_answer` flag is true.
+-   **`cannot_answer_agent`**:
+    -   **Role**: Specifically handles scenarios where the Data Retriever (`retrieve_data_agent`) determines that it cannot find sufficient information to answer the questions. It provides a predefined message indicating this inability.
 
-## Get started
+The system's codebase is organized into the following key Python files:
 
-Install LangGraph:
+-   `states.py`: Defines Pydantic models (`UserInputState`, `QuestionState`, `DataState`, `AnswerState`) that represent the structure of data as it flows through the system. These models ensure type safety and provide clear data contracts between agents.
+-   `agents.py`: Contains the Python functions that implement the logic for each of the agents described above. This is where the core processing for each step resides.
+-   `bigquery_tools.py`: Provides placeholder functions that simulate interactions with Google BigQuery (e.g., `execute_sql_query`, `get_table_schema`, `list_tables`). These tools mimic the expected interface of actual BigQuery operations.
+-   `graph.py`: Defines the LangGraph workflow. This file includes:
+    -   The overall state definition (`State` TypedDict) that the graph operates on.
+    -   Instantiation of the `StateGraph`.
+    -   Registration of each agent function as a node within the graph.
+    -   Definition of edges that connect these nodes, dictating the sequence of operations.
+    -   Conditional logic for routing the workflow based on the output of the `data_retriever` node (specifically, the `can_answer` flag).
 
-```
-pip install -U langgraph
-```
+## 3. Setup and Installation
+-   **Prerequisites**:
+    -   Python 3.8+ (or a version compatible with the LangGraph and Pydantic libraries).
+-   **Installation Steps**:
+    1.  Clone the repository (if applicable).
+    2.  Install the necessary Python packages:
+        ```bash
+        pip install langgraph pydantic
+        ```
+    3.  For actual BigQuery integration (once placeholders are replaced with real database interactions), you will need the Google Cloud BigQuery client library:
+        ```bash
+        pip install google-cloud-bigquery
+        ```
 
-Then, create an agent [using prebuilt components](https://langchain-ai.github.io/langgraph/agents/agents/):
+## 4. How the System Works (LangGraph Flow)
+The LangGraph workflow orchestrates the interaction between the agents in a defined, stateful sequence:
 
-```python
-# pip install -qU "langchain[anthropic]" to call the model
+1.  **Initial State**: The process begins with a `UserInputState`, which contains the raw input string from the user. This input is part of the overall `State` dictionary that the graph manages.
+2.  **Question Generation**: The `question_generator` node is the entry point. It processes the `user_input` from the state and populates the `questions` field in the graph's state with a list of questions.
+3.  **Data Retrieval**: The flow then moves to the `data_retriever` node. This agent uses the list of `questions` and interacts with the (currently simulated) BigQuery tools. It populates the `retrieved_data` field and sets the `can_answer` boolean flag in the state.
+4.  **Conditional Routing**: Based on the value of the `can_answer` flag set by `data_retriever`:
+    -   If `can_answer` is `True`, the graph transitions to the `answer_generator` node.
+    -   If `can_answer` is `False`, the graph transitions to the `cannot_answer_node`.
+5.  **Answer Generation / Handling Inability to Answer**:
+    -   If the `answer_generator` node is called, it uses the `retrieved_data` to formulate the final `answer`.
+    -   If the `cannot_answer_node` is called, it provides a predefined `answer` indicating that the query could not be satisfied with the available data.
+6.  **Final State**: The graph execution concludes, and the final state (which includes the `answer` from either `answer_generator` or `cannot_answer_node`) is available.
 
-from langgraph.prebuilt import create_react_agent
+## 5. Running the System
+To run the system with its current placeholder logic and observe its behavior:
 
-def get_weather(city: str) -> str:
-    """Get weather for a given city."""
-    return f"It's always sunny in {city}!"
+1.  Navigate to the directory containing the Python files (`states.py`, `agents.py`, `bigquery_tools.py`, `graph.py`).
+2.  Execute the `graph.py` script directly from your terminal:
+    ```bash
+    python graph.py
+    ```
+This command will trigger the test execution block defined within the `if __name__ == "__main__":` section of `graph.py`. This block initializes the graph with a sample user input.
 
-agent = create_react_agent(
-    model="anthropic:claude-3-7-sonnet-latest",
-    tools=[get_weather],
-    prompt="You are a helpful assistant"
-)
+**Expected Output**:
+When you run the script, you will see console output demonstrating:
+-   The initial sample user input provided to the system.
+-   Logs from the placeholder BigQuery tools as they are "called" (e.g., "Simulating SQL query execution...", "Simulating schema retrieval...").
+-   Intermediate outputs from each agent node as it processes the data. This is made visible by the `app.stream()` logging in `graph.py`, showing the state changes at each step.
+-   The final answer generated by the system, which will come from either the `answer_generator` (if `can_answer` was true) or the `cannot_answer_node` (if `can_answer` was false).
 
-# Run the agent
-agent.invoke(
-    {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
-)
-```
+## 6. Development and Future Enhancements
 
-For more information, see the [Quickstart](https://langchain-ai.github.io/langgraph/agents/agents/). Or, to learn how to build an [agent workflow](https://langchain-ai.github.io/langgraph/concepts/low_level/) with a customizable architecture, long-term memory, and other complex task handling, see the [LangGraph basics tutorials](https://langchain-ai.github.io/langgraph/tutorials/get-started/1-build-basic-chatbot/).
+-   **Placeholder Components**: It is crucial to understand that the current system relies heavily on placeholders for core functionality:
+    -   **LLM Logic**: The agent functions within `agents.py` (specifically `generate_questions_agent` and `generate_answer_agent`) do not yet contain calls to Large Language Models (LLMs). Their current logic is hardcoded to return static values for simulation purposes.
+    -   **BigQuery Tools**: The functions in `bigquery_tools.py` only simulate BigQuery interactions. They print messages and return static, hardcoded data without actually connecting to or querying any database.
 
-## Core benefits
+-   **Integrating Real LLMs**:
+    -   To make the agents intelligent and responsive to varied inputs, you will need to modify the respective agent functions in `agents.py`.
+    -   For example, `generate_questions_agent` would need to use an LLM to parse the `user_input` string and generate a relevant list of questions. Similarly, `generate_answer_agent` would use an LLM to synthesize a coherent answer from the potentially complex `retrieved_data`.
+    -   This typically involves using an LLM client library (such as LangChain's integrations with models from OpenAI, Anthropic, Google, etc.) to make API calls to the chosen language model.
 
-LangGraph provides low-level supporting infrastructure for *any* long-running, stateful workflow or agent. LangGraph does not abstract prompts or architecture, and provides the following central benefits:
+-   **Integrating Real BigQuery**:
+    -   The placeholder functions in `bigquery_tools.py` (`execute_sql_query`, `get_table_schema`, `list_tables`) must be replaced with actual calls to the Google Cloud BigQuery API.
+    -   This involves:
+        -   Initializing the `google.cloud.bigquery.Client` typically at the beginning of your tool functions or in a shared context.
+        -   For `execute_sql_query`, you would replace the placeholder with code like `client.query(your_sql_query).to_dataframe()` or by iterating over the results using `client.query(your_sql_query).result()`.
+        -   For `get_table_schema`, you would use `client.get_table(table_id).schema`.
+        -   For `list_tables`, you would use `client.list_tables(dataset_id)`.
+    -   Proper authentication (e.g., using Application Default Credentials or service account keys) and robust error handling for API calls will be necessary.
 
-- [Durable execution](https://langchain-ai.github.io/langgraph/concepts/durable_execution/): Build agents that persist through failures and can run for extended periods, automatically resuming from exactly where they left off.
-- [Human-in-the-loop](https://langchain-ai.github.io/langgraph/concepts/human_in_the_loop/): Seamlessly incorporate human oversight by inspecting and modifying agent state at any point during execution.
-- [Comprehensive memory](https://langchain-ai.github.io/langgraph/concepts/memory/): Create truly stateful agents with both short-term working memory for ongoing reasoning and long-term persistent memory across sessions.
-- [Debugging with LangSmith](http://www.langchain.com/langsmith): Gain deep visibility into complex agent behavior with visualization tools that trace execution paths, capture state transitions, and provide detailed runtime metrics.
-- [Production-ready deployment](https://langchain-ai.github.io/langgraph/concepts/deployment_options/): Deploy sophisticated agent systems confidently with scalable infrastructure designed to handle the unique challenges of stateful, long-running workflows.
+-   **Data Input**:
+    -   The original problem statement mentioned, "These data will be provided later." Integrating real BigQuery (as detailed above) will become critical once these actual data sources, table structures, and schemas are defined and accessible. This will allow the `retrieve_data_agent` to work with live, meaningful data, making the entire system fully functional and capable of answering real user queries.
 
-## LangGraph’s ecosystem
+### Interoperability with A2A Protocol
 
-While LangGraph can be used standalone, it also integrates seamlessly with any LangChain product, giving developers a full suite of tools for building agents. To improve your LLM application development, pair LangGraph with:
+The [Agent2Agent (A2A) Protocol](https://google.github.io/A2A/) (see also [Dantemerlino/A2A.git](https://github.com/Dantemerlino/A2A)) is an open standard for enabling AI agents to communicate and collaborate. This system can be enhanced for greater interoperability within an A2A ecosystem:
 
-- [LangSmith](http://www.langchain.com/langsmith) — Helpful for agent evals and observability. Debug poor-performing LLM app runs, evaluate agent trajectories, gain visibility in production, and improve performance over time.
-- [LangGraph Platform](https://langchain-ai.github.io/langgraph/concepts/#langgraph-platform) — Deploy and scale agents effortlessly with a purpose-built deployment platform for long running, stateful workflows. Discover, reuse, configure, and share agents across teams — and iterate quickly with visual prototyping in [LangGraph Studio](https://langchain-ai.github.io/langgraph/concepts/langgraph_studio/).
-- [LangChain](https://python.langchain.com/docs/introduction/) – Provides integrations and composable components to streamline LLM application development.
+*   **Exposing Agents as A2A Services**: The core agents of this system (Question Generator, Data Retriever, Answer Generator) could be wrapped as A2A-compliant services. Each would publish an `AgentCard` describing its capabilities and expose A2A-standard JSON-RPC methods (e.g., `message/send`). This would allow other A2A-compliant agents to discover and utilize their specific skills.
+*   **Consuming External A2A Agents**: The LangGraph workflow can be extended to act as an A2A client. A generic node could be developed to interact with external A2A agents, allowing this system to delegate tasks or leverage specialized capabilities from the broader A2A ecosystem.
+*   **Enhanced Modularity**: Adopting A2A can make the overall architecture more modular, allowing individual components (agents) to be developed, deployed, and scaled independently while maintaining standardized communication interfaces.
 
-> [!NOTE]
-> Looking for the JS version of LangGraph? See the [JS repo](https://github.com/langchain-ai/langgraphjs) and the [JS docs](https://langchain-ai.github.io/langgraphjs/).
-
-## Additional resources
-
-- [Guides](https://langchain-ai.github.io/langgraph/how-tos/): Quick, actionable code snippets for topics such as streaming, adding memory & persistence, and design patterns (e.g. branching, subgraphs, etc.).
-- [Reference](https://langchain-ai.github.io/langgraph/reference/graphs/): Detailed reference on core classes, methods, how to use the graph and checkpointing APIs, and higher-level prebuilt components.
-- [Examples](https://langchain-ai.github.io/langgraph/tutorials/): Guided examples on getting started with LangGraph.
-- [LangChain Academy](https://academy.langchain.com/courses/intro-to-langgraph): Learn the basics of LangGraph in our free, structured course.
-- [Templates](https://langchain-ai.github.io/langgraph/concepts/template_applications/): Pre-built reference apps for common agentic workflows (e.g. ReAct agent, memory, retrieval etc.) that can be cloned and adapted.
-- [Case studies](https://www.langchain.com/built-with-langgraph): Hear how industry leaders use LangGraph to ship AI applications at scale.
-
-## Acknowledgements
-
-LangGraph is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/). The public interface draws inspiration from [NetworkX](https://networkx.org/documentation/latest/). LangGraph is built by LangChain Inc, the creators of LangChain, but can be used without LangChain.
+For detailed information on how this system's components map to A2A concepts and how LLMs can interact with it in an A2A context, please refer to `LLM_DOCUMENTATION.md`.
