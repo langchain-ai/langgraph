@@ -670,13 +670,16 @@ def create_react_agent(
     # This means that this node is the first one called
     workflow.set_entry_point(entrypoint)
 
-    agent_paths = ["tools", END]
-    post_model_hook_paths = [entrypoint, "tools", END]
+    agent_paths = []
+    post_model_hook_paths = [entrypoint, "tools"]
 
     # Add a post model hook node if post_model_hook is provided
     if post_model_hook is not None:
         workflow.add_node("post_model_hook", post_model_hook)
         agent_paths.append("post_model_hook")
+        workflow.add_edge("agent", "post_model_hook")
+    else:
+        agent_paths.append("tools")
 
     # Add a structured output node if response_format is provided
     if response_format is not None:
@@ -690,6 +693,11 @@ def create_react_agent(
             post_model_hook_paths.append("generate_structured_response")
         else:
             agent_paths.append("generate_structured_response")
+    else:
+        if post_model_hook is not None:
+            post_model_hook_paths.append(END)
+        else:
+            agent_paths.append(END)
 
     if post_model_hook is not None:
 
