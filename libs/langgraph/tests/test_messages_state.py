@@ -346,8 +346,6 @@ def test_push_messages_in_graph():
         push_message(HumanMessage(content="Second", id="2"))
         push_message(AIMessage(content="Third", id="3"))
 
-        return {"messages": []}
-
     builder = StateGraph(MessagesState)
     builder.add_node(chat)
     builder.add_edge(START, "chat")
