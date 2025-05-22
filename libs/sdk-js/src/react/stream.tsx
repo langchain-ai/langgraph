@@ -604,6 +604,11 @@ export interface UseStream<
    * The ID of the assistant to use.
    */
   assistantId: string;
+
+  /**
+   * Join an active stream.
+   */
+  joinStream: (runId: string) => Promise<void>;
 }
 
 type ConfigWithConfigurable<ConfigurableType extends Record<string, unknown>> =
@@ -933,10 +938,8 @@ export function useStream<
     }
   }
 
-  const joinStream = async (
-    runId: string,
-    lastEventId: (string & {}) | "-1",
-  ) => {
+  const joinStream = async (runId: string, lastEventId?: string) => {
+    lastEventId ??= "-1";
     if (!threadId) return;
     await consumeStream(async (signal: AbortSignal) => {
       const stream = client.runs.joinStream(threadId, runId, {
@@ -1069,7 +1072,7 @@ export function useStream<
   useEffect(() => {
     if (reconnectKey && reconnectRef.current.shouldReconnect) {
       reconnectRef.current.shouldReconnect = false;
-      joinStreamRef.current?.(reconnectKey.runId, "-1");
+      joinStreamRef.current?.(reconnectKey.runId);
     }
   }, [reconnectKey]);
 
@@ -1090,6 +1093,8 @@ export function useStream<
 
     stop,
     submit,
+
+    joinStream,
 
     branch,
     setBranch,
