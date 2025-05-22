@@ -342,13 +342,11 @@ def test_push_messages_in_graph():
         with pytest.raises(ValueError, match="Message ID is required"):
             push_message(AIMessage(content="No ID"))
 
-        return {
-            "messages": [
-                push_message(AIMessage(content="First", id="1")),
-                push_message(HumanMessage(content="Second", id="2")),
-                push_message(AIMessage(content="Third", id="3")),
-            ]
-        }
+        push_message(AIMessage(content="First", id="1"))
+        push_message(HumanMessage(content="Second", id="2"))
+        push_message(AIMessage(content="Third", id="3"))
+
+        return {"messages": []}
 
     builder = StateGraph(MessagesState)
     builder.add_node(chat)
