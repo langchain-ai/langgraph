@@ -87,9 +87,9 @@ It allows you to explore the infrastructure of the agent as defined by the prese
   <pre><code id="agent-code" class="language-python"></code></pre>
 </div>
 
-<script>
-mermaid.initialize({ startOnLoad: false });
+<script src="https://unpkg.com/mermaid@11.6.0/dist/mermaid.min.js"></script>
 
+<script>
 var graphData = graphData || null;
 
 function getKey() {
@@ -175,6 +175,7 @@ async function loadGraphData() {
 }
 
 async function initializeWidget() {
+    mermaid.initialize({ startOnLoad: false });
     await loadGraphData();
     await render();
     document.querySelectorAll(".agent-graph-features input").forEach((input) => {
