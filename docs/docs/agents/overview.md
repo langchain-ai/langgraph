@@ -63,18 +63,10 @@ outputs.
   <div class="agent-graph-features-container">
     <div class="agent-graph-features">
       <h3 class="agent-section-title">Agent features</h3>
-      <label title="Allows the agent to call tools like functions or APIs.">
-        <input type="checkbox" id="tools" checked> <code>tools</code>
-      </label>
-      <label title="Hook that runs before the model is called. Often used for summarizing messages.">
-        <input type="checkbox" id="pre_model_hook"> <code>pre_model_hook</code>
-      </label>
-      <label title="Hook that runs after the model is called. Useful for applying guardrails or human-in-the-loop logic.">
-        <input type="checkbox" id="post_model_hook"> <code>post_model_hook</code>
-      </label>
-      <label title="Enables enforcing a typed output structure, like via a pydantic BaseModel.">
-        <input type="checkbox" id="response_format"> <code>response_format</code>
-      </label>
+      <label><input type="checkbox" id="tools" checked> <code>tools</code></label>
+      <label><input type="checkbox" id="pre_model_hook"> <code>pre_model_hook</code></label>
+      <label><input type="checkbox" id="post_model_hook"> <code>post_model_hook</code></label>
+      <label><input type="checkbox" id="response_format"> <code>response_format</code></label>
     </div>
   </div>
 

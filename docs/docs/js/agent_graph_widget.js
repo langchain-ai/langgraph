@@ -1,6 +1,6 @@
 mermaid.initialize({ startOnLoad: false });
 
-let graphData = {};
+var graphData = graphData | {};
 
 function getKey() {
   return [
