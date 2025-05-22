@@ -76,8 +76,11 @@ outputs.
   </div>
 </div>
 
-<div class="language-python highlight">
-  <pre><code id="agent-code"></code></pre>
+
+### Code snippet
+
+<div class="language-python">
+  <pre><code id="agent-code" class="language-python"></code></pre>
 </div>
 
 <script src="https://unpkg.com/mermaid@11.6.0/dist/mermaid.min.js"></script>
@@ -185,6 +188,3 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
 });
 </script>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
-<script>hljs.highlightAll();</script>
