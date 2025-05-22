@@ -458,6 +458,11 @@ export interface UseStreamOptions<
   onFinish?: (state: ThreadState<StateType>) => void;
 
   /**
+   * Callback that is called when a new stream is created.
+   */
+  onCreated?: (run: { run_id: string; thread_id: string }) => void;
+
+  /**
    * Callback that is called when an update event is received.
    */
   onUpdateEvent?: (
@@ -504,7 +509,13 @@ export interface UseStreamOptions<
   onThreadId?: (threadId: string) => void;
 
   /** Will rejoin the stream on mount */
-  joinOnMount?: boolean;
+  joinOnMount?: boolean | (() => RunMetadataStorage);
+}
+
+interface RunMetadataStorage {
+  getItem(key: `lg:rejoin:${string}`): string | null;
+  setItem(key: `lg:rejoin:${string}`, value: string): void;
+  removeItem(key: `lg:rejoin:${string}`): void;
 }
 
 export interface UseStream<
@@ -622,6 +633,7 @@ interface SubmitOptions<
    * @default false
    */
   streamSubgraphs?: boolean;
+  streamResumable?: boolean;
 }
 
 export function useStream<
@@ -650,7 +662,17 @@ export function useStream<
     | ErrorStreamEvent
     | FeedbackStreamEvent;
 
-  let { assistantId, messagesKey, onError, onFinish, joinOnMount } = options;
+  let { assistantId, messagesKey, onCreated, onError, onFinish } = options;
+
+  const joinOnMountRef = useRef(options.joinOnMount);
+  const runMetadataStorage = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    const joinOnMount = joinOnMountRef.current;
+    if (joinOnMount === true) return window.sessionStorage;
+    if (typeof joinOnMount === "function") return joinOnMount();
+    return null;
+  }, []);
+
   messagesKey ??= "messages";
 
   const client = useMemo(
@@ -808,11 +830,10 @@ export function useStream<
     if (abortRef.current != null) abortRef.current.abort();
     abortRef.current = null;
 
-    if (options.joinOnMount && threadId) {
-      const rejoinKey = `lg:rejoin:${threadId}`;
-      const runId = window.sessionStorage.getItem(rejoinKey);
+    if (runMetadataStorage && threadId) {
+      const runId = runMetadataStorage.getItem(`lg:rejoin:${threadId}`);
       if (runId) client.runs.cancel(threadId, runId);
-      window.sessionStorage.removeItem(rejoinKey);
+      runMetadataStorage.removeItem(`lg:rejoin:${threadId}`);
     }
   };
 
@@ -918,7 +939,6 @@ export function useStream<
   ) => {
     if (!threadId) return;
     await consumeStream(async (signal: AbortSignal) => {
-      const rejoinKey = `lg:rejoin:${threadId}`;
       const stream = client.runs.joinStream(threadId, runId, {
         signal,
         lastEventId,
@@ -926,7 +946,7 @@ export function useStream<
 
       return {
         onSuccess: () => {
-          window.sessionStorage.removeItem(rejoinKey);
+          runMetadataStorage?.removeItem(`lg:rejoin:${threadId}`);
           return history.mutate(threadId);
         },
         stream,
@@ -980,7 +1000,7 @@ export function useStream<
         submitOptions?.checkpoint ?? threadHead?.checkpoint ?? undefined;
       // @ts-expect-error
       if (checkpoint != null) delete checkpoint.thread_id;
-      let rejoinKey: string | undefined;
+      let rejoinKey: `lg:rejoin:${string}` | undefined;
 
       const stream = client.runs.stream(usableThreadId, assistantId, {
         input: values as Record<string, unknown>,
@@ -994,26 +1014,31 @@ export function useStream<
         onCompletion: submitOptions?.onCompletion,
         onDisconnect:
           submitOptions?.onDisconnect ??
-          (options.joinOnMount ? "continue" : "cancel"),
+          (runMetadataStorage ? "continue" : "cancel"),
 
         signal,
 
         checkpoint,
         streamMode,
         streamSubgraphs: submitOptions?.streamSubgraphs,
-        streamResumable: !!options.joinOnMount,
+        streamResumable: submitOptions?.streamResumable ?? !!runMetadataStorage,
         onRunCreated(params) {
-          if (options.joinOnMount) {
-            rejoinKey = `lg:rejoin:${params.thread_id ?? "temporary"}`;
-            window.sessionStorage.setItem(rejoinKey, params.run_id);
+          const runParams = {
+            run_id: params.run_id,
+            thread_id: params.thread_id ?? usableThreadId,
+          };
+          if (runMetadataStorage) {
+            rejoinKey = `lg:rejoin:${runParams.thread_id}`;
+            runMetadataStorage.setItem(rejoinKey, runParams.run_id);
           }
+          onCreated?.(runParams);
         },
       }) as AsyncGenerator<EventStreamEvent>;
 
       return {
         stream,
         onSuccess: () => {
-          if (rejoinKey) window.sessionStorage.removeItem(rejoinKey);
+          if (rejoinKey) runMetadataStorage?.removeItem(rejoinKey);
           return history.mutate(usableThreadId);
         },
       };
@@ -1021,7 +1046,8 @@ export function useStream<
   };
 
   const joinStreamRef = useRef<typeof joinStream>(joinStream);
-  const autoJoinRef = useRef(options.joinOnMount);
+  const joinOnMount = !!runMetadataStorage;
+  const autoJoinRef = useRef(joinOnMount);
   joinStreamRef.current = joinStream;
 
   const joinKey = useMemo(() => {
