@@ -66,7 +66,7 @@ It allows you to explore the infrastructure of the agent as defined by the prese
 <div class="agent-layout">
   <div class="agent-graph-features-container">
     <div class="agent-graph-features">
-      <h3 class="agent-section-title">Agent features</h3>
+      <h3 class="agent-section-title">Features</h3>
       <label><input type="checkbox" id="tools" checked> <code>tools</code></label>
       <label><input type="checkbox" id="pre_model_hook"> <code>pre_model_hook</code></label>
       <label><input type="checkbox" id="post_model_hook"> <code>post_model_hook</code></label>
@@ -75,7 +75,7 @@ It allows you to explore the infrastructure of the agent as defined by the prese
   </div>
 
   <div class="agent-graph-container">
-    <h3 class="agent-section-title">Agent graph</h3>
+    <h3 class="agent-section-title">Graph</h3>
     <img id="agent-graph-img" src="../assets/react_agent_graphs/0001.svg" alt="graph image" style="max-width: 100%;"/>
   </div>
 </div>

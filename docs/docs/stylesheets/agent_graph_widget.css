@@ -1,7 +1,7 @@
 .agent-layout {
     display: flex;
     flex-wrap: nowrap;
-    gap: 2rem;
+    gap: 1rem;
     align-items: flex-start;
     margin-top: 1rem;
 }
