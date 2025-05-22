@@ -874,16 +874,16 @@ export function useStream<
             return { ...values, [messagesKey!]: messages };
           });
         }
-
-        // TODO: stream created checkpoints to avoid an unnecessary network request
-        const result = await run.onFinish();
-
-        setStreamValues(null);
-        if (streamError != null) throw streamError;
-
-        const lastHead = result.at(0);
-        if (lastHead) onFinish?.(lastHead);
       }
+
+      // TODO: stream created checkpoints to avoid an unnecessary network request
+      const result = await run.onFinish();
+
+      setStreamValues(null);
+      if (streamError != null) throw streamError;
+
+      const lastHead = result.at(0);
+      if (lastHead) onFinish?.(lastHead);
     } catch (error) {
       if (
         !(
@@ -994,6 +994,7 @@ export function useStream<
         checkpoint,
         streamMode,
         streamSubgraphs: submitOptions?.streamSubgraphs,
+        streamResumable: !!options.joinOnMount,
         onRunCreated(params) {
           if (options.joinOnMount) {
             rejoinKey = `lg:rejoin:${params.thread_id ?? "temporary"}`;
