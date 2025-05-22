@@ -179,7 +179,6 @@ async function initializeWidget() {
     await render();
     document.querySelectorAll(".agent-graph-features input").forEach((input) => {
         input.addEventListener("change", async () => await render());
-        console.log("added event listener");
     });
 }
 
