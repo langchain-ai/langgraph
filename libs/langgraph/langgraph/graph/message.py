@@ -23,6 +23,7 @@ from langchain_core.messages import (
 )
 from typing_extensions import TypedDict
 
+from langgraph.constants import CONF, CONFIG_KEY_SEND
 from langgraph.graph.state import StateGraph
 
 Messages = Union[list[MessageLikeRepresentation], MessageLikeRepresentation]
@@ -298,8 +299,13 @@ def _format_messages(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
 
 def push_message(
     message: Union[MessageLikeRepresentation, BaseMessageChunk],
+    *,
+    state_key: Optional[str] = "messages",
 ) -> AnyMessage:
-    """Write a message manually to the `messages` / `messages-tuple` stream mode."""
+    """Write a message manually to the `messages` / `messages-tuple` stream mode.
+
+    Will automatically write to the channel specified in the `state_key` unless `state_key` is `None`.
+    """
 
     from langchain_core.callbacks.base import (
         BaseCallbackHandler,
@@ -333,5 +339,8 @@ def push_message(
             metadata,
         )
         stream_handler._emit(message_meta, message, dedupe=False)
+
+    if state_key:
+        config[CONF][CONFIG_KEY_SEND]([(state_key, message)])
 
     return message
