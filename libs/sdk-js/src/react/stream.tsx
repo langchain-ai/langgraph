@@ -804,14 +804,21 @@ export function useStream<
     );
   })();
 
-  const stop = useCallback(() => {
+  const stop = () => {
     if (abortRef.current != null) abortRef.current.abort();
     abortRef.current = null;
-  }, []);
+
+    if (options.joinOnMount && threadId) {
+      const rejoinKey = `lg:rejoin:${threadId}`;
+      const runId = window.localStorage.getItem(rejoinKey);
+      if (runId) client.runs.cancel(threadId, runId);
+      window.localStorage.removeItem(rejoinKey);
+    }
+  };
 
   async function consumeStream(
     action: (signal: AbortSignal) => Promise<{
-      onFinish: () => Promise<ThreadState<StateType>[]>;
+      onSuccess: () => Promise<ThreadState<StateType>[]>;
       stream: AsyncGenerator<EventStreamEvent>;
     }>,
   ) {
@@ -877,7 +884,7 @@ export function useStream<
       }
 
       // TODO: stream created checkpoints to avoid an unnecessary network request
-      const result = await run.onFinish();
+      const result = await run.onSuccess();
 
       setStreamValues(null);
       if (streamError != null) throw streamError;
@@ -918,8 +925,8 @@ export function useStream<
       }) as AsyncGenerator<EventStreamEvent>;
 
       return {
-        onFinish: async () => {
-          if (rejoinKey) window.localStorage.removeItem(rejoinKey);
+        onSuccess: () => {
+          window.localStorage.removeItem(rejoinKey);
           return history.mutate(threadId);
         },
         stream,
@@ -1005,7 +1012,7 @@ export function useStream<
 
       return {
         stream,
-        onFinish: () => {
+        onSuccess: () => {
           if (rejoinKey) window.localStorage.removeItem(rejoinKey);
           return history.mutate(usableThreadId);
         },
@@ -1014,6 +1021,7 @@ export function useStream<
   };
 
   const joinStreamRef = useRef<typeof joinStream>(joinStream);
+  const autoJoinRef = useRef(options.joinOnMount);
   joinStreamRef.current = joinStream;
 
   const joinKey = useMemo(() => {
@@ -1025,7 +1033,10 @@ export function useStream<
   }, [joinOnMount, isLoading, threadId]);
 
   useEffect(() => {
-    if (joinKey) joinStreamRef.current?.(joinKey.runId, "-1");
+    if (joinKey && autoJoinRef.current) {
+      autoJoinRef.current = false;
+      joinStreamRef.current?.(joinKey.runId, "-1");
+    }
   }, [joinKey]);
 
   const error = streamError ?? historyError;
