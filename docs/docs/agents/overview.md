@@ -76,7 +76,7 @@ It allows you to explore the infrastructure of the agent as defined by the prese
 
   <div class="agent-graph-container">
     <h3 class="agent-section-title">Agent graph</h3>
-    <img id="agent-graph-img" src="../assets/react_agent_graphs/0001.png" alt="graph image" style="max-width: 100%;"/>
+    <img id="agent-graph-img" src="../assets/react_agent_graphs/0001.svg" alt="graph image" style="max-width: 100%;"/>
   </div>
 </div>
 
@@ -163,7 +163,7 @@ function generateCodeSnippet({ tools, pre, post, response }) {
 
 async function render() {
   const key = getKey();
-  document.getElementById("agent-graph-img").src = `../assets/react_agent_graphs/${key}.png`;
+  document.getElementById("agent-graph-img").src = `../assets/react_agent_graphs/${key}.svg`;
 
   const state = {
     tools: document.getElementById("tools").checked,
