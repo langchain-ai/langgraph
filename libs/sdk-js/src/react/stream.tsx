@@ -1045,22 +1045,30 @@ export function useStream<
     });
   };
 
-  const joinStreamRef = useRef<typeof joinStream>(joinStream);
-  const shouldReconnect = !!runMetadataStorage;
-  const reconnectRef = useRef(shouldReconnect);
-  joinStreamRef.current = joinStream;
-
   const reconnectKey = useMemo(() => {
-    if (!shouldReconnect || isLoading) return undefined;
+    if (!runMetadataStorage || isLoading) return undefined;
     if (typeof window === "undefined") return undefined;
-    const runId = window.sessionStorage.getItem(`lg:stream:${threadId}`);
+    const runId = runMetadataStorage?.getItem(`lg:stream:${threadId}`);
     if (!runId) return undefined;
     return { runId, threadId };
-  }, [shouldReconnect, isLoading, threadId]);
+  }, [runMetadataStorage, isLoading, threadId]);
+
+  const shouldReconnect = !!runMetadataStorage;
+  const reconnectRef = useRef({ threadId, shouldReconnect });
+
+  const joinStreamRef = useRef<typeof joinStream>(joinStream);
+  joinStreamRef.current = joinStream;
 
   useEffect(() => {
-    if (reconnectKey && reconnectRef.current) {
-      reconnectRef.current = false;
+    // reset shouldReconnect when switching threads
+    if (reconnectRef.current.threadId !== threadId) {
+      reconnectRef.current = { threadId, shouldReconnect };
+    }
+  }, [threadId, shouldReconnect]);
+
+  useEffect(() => {
+    if (reconnectKey && reconnectRef.current.shouldReconnect) {
+      reconnectRef.current.shouldReconnect = false;
       joinStreamRef.current?.(reconnectKey.runId, "-1");
     }
   }, [reconnectKey]);
