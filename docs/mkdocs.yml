@@ -417,3 +417,6 @@ extra_css:
   - stylesheets/logos.css
   - stylesheets/sticky_navigation.css
   - stylesheets/agent_graph_widget.css
+extra_javascript:
+  - https://unpkg.com/mermaid@11.6.0/dist/mermaid.min.js
+  - js/agent_graph_widget.js
