@@ -76,7 +76,7 @@ It allows you to explore the infrastructure of the agent as defined by the prese
 
   <div class="agent-graph-container">
     <h3 class="agent-section-title">Agent graph</h3>
-    <div class="mermaid" id="agent-graph"></div>
+    <img id="agent-graph-img" src="../assets/react_agent_graphs/0001.png" alt="graph image" style="max-width: 100%;"/>
   </div>
 </div>
 
@@ -87,11 +87,7 @@ It allows you to explore the infrastructure of the agent as defined by the prese
   <pre><code id="agent-code" class="language-python"></code></pre>
 </div>
 
-<script src="https://unpkg.com/mermaid@11.6.0/dist/mermaid.min.js"></script>
-
 <script>
-var graphData = graphData || null;
-
 function getKey() {
     return [
         document.getElementById("response_format").checked ? "1" : "0",
@@ -142,41 +138,22 @@ function generateCodeSnippet({ tools, pre, post, response }) {
 
 async function render() {
     const key = getKey();
-    const default_graph = "graph TD;\n  A --> B;";
-    const graph = graphData === null ? default_graph : (graphData[key] || default_graph);
-    const codeContainer = document.getElementById("agent-code");
-    const graphContainer = document.getElementById("agent-graph");
+    const graphImg = document.getElementById("agent-graph-img");
+    graphImg.src = "../assets/react_agent_graphs/" + key + ".png";
 
-    const flags = {
+    const codeContainer = document.getElementById("agent-code");
+
+    codeContainer.textContent = generateCodeSnippet(
+      {
         tools: document.getElementById("tools").checked,
         pre: document.getElementById("pre_model_hook").checked,
         post: document.getElementById("post_model_hook").checked,
         response: document.getElementById("response_format").checked
-    };
-
-    codeContainer.textContent = generateCodeSnippet(flags);
-    graphContainer.innerHTML = graph;
-    graphContainer.removeAttribute("data-processed");
-    await mermaid.run({ nodes: [graphContainer] });
-}
-
-async function loadGraphData() {
-  if (graphData !== null) {
-      return;
-  }
-  // Load the graph data from the JSON file
-  try {
-      const response = await fetch("../assets/react-agent-graphs.json");
-      graphData = await response.json();
-  } catch (err) {
-      console.error("Failed to load graphData.json:", err);
-  }
-
+      }
+    );
 }
 
 async function initializeWidget() {
-    mermaid.initialize({ startOnLoad: false });
-    await loadGraphData();
     await render();
     document.querySelectorAll(".agent-graph-features input").forEach((input) => {
         input.addEventListener("change", async () => await render());
