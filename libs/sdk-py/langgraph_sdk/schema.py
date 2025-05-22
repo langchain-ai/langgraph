@@ -435,3 +435,13 @@ class Command(TypedDict, total=False):
     """Value to resume execution with after an interruption.
        Used in conjunction with interrupt() to implement control flow.
     """
+
+
+class RunCreateMetadata(TypedDict):
+    """Metadata for a run creation request."""
+
+    run_id: str
+    """The ID of the run."""
+
+    thread_id: Optional[str]
+    """The ID of the thread."""

@@ -13,10 +13,12 @@ import asyncio
 import functools
 import logging
 import os
+import re
 import sys
 from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import (
     Any,
+    Callable,
     Literal,
     Optional,
     Union,
@@ -49,6 +51,7 @@ from langgraph_sdk.schema import (
     OnConflictBehavior,
     Run,
     RunCreate,
+    RunCreateMetadata,
     RunStatus,
     SearchItemsResponse,
     SortOrder,
@@ -114,6 +117,27 @@ def _orjson_default(obj: Any) -> Any:
         return list(obj)
     else:
         raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+
+# Compiled regex pattern for extracting run metadata from Content-Location header
+_RUN_METADATA_PATTERN = re.compile(
+    r"(\/threads\/(?P<thread_id>.+))?\/runs\/(?P<run_id>.+)"
+)
+
+
+def _get_run_metadata_from_response(
+    response: httpx.Response,
+) -> Optional[RunCreateMetadata]:
+    """Extract run metadata from the response headers."""
+    if (content_location := response.headers.get("Content-Location")) and (
+        match := _RUN_METADATA_PATTERN.search(content_location)
+    ):
+        return RunCreateMetadata(
+            run_id=match.group("run_id"),
+            thread_id=match.group("thread_id") or None,
+        )
+
+    return None
 
 
 def get_client(
@@ -226,9 +250,12 @@ class HttpClient:
         *,
         params: Optional[QueryParamTypes] = None,
         headers: Optional[dict[str, str]] = None,
+        on_response: Optional[Callable[[httpx.Response], None]] = None,
     ) -> Any:
         """Send a GET request."""
         r = await self.client.get(path, params=params, headers=headers)
+        if on_response:
+            on_response(r)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -246,6 +273,7 @@ class HttpClient:
         *,
         json: Optional[dict],
         headers: Optional[dict[str, str]] = None,
+        on_response: Optional[Callable[[httpx.Response], None]] = None,
     ) -> Any:
         """Send a POST request."""
         if json is not None:
@@ -256,6 +284,8 @@ class HttpClient:
         if headers:
             request_headers.update(headers)
         r = await self.client.post(path, headers=request_headers, content=content)
+        if on_response:
+            on_response(r)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -268,13 +298,20 @@ class HttpClient:
         return await _adecode_json(r)
 
     async def put(
-        self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None
+        self,
+        path: str,
+        *,
+        json: dict,
+        headers: Optional[dict[str, str]] = None,
+        on_response: Optional[Callable[[httpx.Response], None]] = None,
     ) -> Any:
         """Send a PUT request."""
         request_headers, content = await _aencode_json(json)
         if headers:
             request_headers.update(headers)
         r = await self.client.put(path, headers=request_headers, content=content)
+        if on_response:
+            on_response(r)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -287,13 +324,20 @@ class HttpClient:
         return await _adecode_json(r)
 
     async def patch(
-        self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None
+        self,
+        path: str,
+        *,
+        json: dict,
+        headers: Optional[dict[str, str]] = None,
+        on_response: Optional[Callable[[httpx.Response], None]] = None,
     ) -> Any:
         """Send a PATCH request."""
         request_headers, content = await _aencode_json(json)
         if headers:
             request_headers.update(headers)
         r = await self.client.patch(path, headers=request_headers, content=content)
+        if on_response:
+            on_response(r)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -311,9 +355,12 @@ class HttpClient:
         *,
         json: Optional[Any] = None,
         headers: Optional[dict[str, str]] = None,
+        on_response: Optional[Callable[[httpx.Response], None]] = None,
     ) -> None:
         """Send a DELETE request."""
         r = await self.client.request("DELETE", path, json=json, headers=headers)
+        if on_response:
+            on_response(r)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -332,6 +379,7 @@ class HttpClient:
         json: Optional[dict] = None,
         params: Optional[QueryParamTypes] = None,
         headers: Optional[dict[str, str]] = None,
+        on_response: Optional[Callable[[httpx.Response], None]] = None,
     ) -> AsyncIterator[StreamPart]:
         """Stream results using SSE."""
         request_headers, content = await _aencode_json(json)
@@ -344,6 +392,8 @@ class HttpClient:
         async with self.client.stream(
             method, path, headers=request_headers, content=content, params=params
         ) as res:
+            if on_response:
+                on_response(res)
             # check status
             try:
                 res.raise_for_status()
@@ -1455,6 +1505,7 @@ class RunsClient:
         command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
+        stream_resumable: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
@@ -1469,6 +1520,7 @@ class RunsClient:
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
         headers: Optional[dict[str, str]] = None,
+        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
     ) -> AsyncIterator[StreamPart]: ...
 
     @overload
@@ -1481,6 +1533,7 @@ class RunsClient:
         command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
+        stream_resumable: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint_during: Optional[bool] = None,
@@ -1493,6 +1546,7 @@ class RunsClient:
         webhook: Optional[str] = None,
         after_seconds: Optional[int] = None,
         headers: Optional[dict[str, str]] = None,
+        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
     ) -> AsyncIterator[StreamPart]: ...
 
     def stream(
@@ -1504,6 +1558,7 @@ class RunsClient:
         command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
+        stream_resumable: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
@@ -1519,6 +1574,7 @@ class RunsClient:
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
         headers: Optional[dict[str, str]] = None,
+        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
     ) -> AsyncIterator[StreamPart]:
         """Create a run and stream the results.
 
@@ -1531,6 +1587,8 @@ class RunsClient:
             command: A command to execute. Cannot be combined with input.
             stream_mode: The stream mode(s) to use.
             stream_subgraphs: Whether to stream output from subgraphs.
+            stream_resumable: Whether the stream is considered resumable.
+                If true, the stream can be resumed and replayed in its entirety even after disconnection.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             checkpoint: The checkpoint to resume from.
@@ -1549,6 +1607,7 @@ class RunsClient:
                 Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
+            on_run_created: Callback when a run is created.
 
         Returns:
             AsyncIterator[StreamPart]: Asynchronous iterator of stream results.
@@ -1593,6 +1652,7 @@ class RunsClient:
             "metadata": metadata,
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
+            "stream_resumable": stream_resumable,
             "assistant_id": assistant_id,
             "interrupt_before": interrupt_before,
             "interrupt_after": interrupt_after,
@@ -1612,11 +1672,18 @@ class RunsClient:
             if thread_id is not None
             else "/runs/stream"
         )
+
+        def on_response(res: httpx.Response):
+            """Callback function to handle the response."""
+            if on_run_created and (metadata := _get_run_metadata_from_response(res)):
+                on_run_created(metadata)
+
         return self.http.stream(
             endpoint,
             "POST",
             json={k: v for k, v in payload.items() if v is not None},
             headers=headers,
+            on_response=on_response if on_run_created else None,
         )
 
     @overload
@@ -1629,6 +1696,7 @@ class RunsClient:
         command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
+        stream_resumable: bool = False,
         metadata: Optional[dict] = None,
         checkpoint_during: Optional[bool] = None,
         config: Optional[Config] = None,
@@ -1639,6 +1707,7 @@ class RunsClient:
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
         headers: Optional[dict[str, str]] = None,
+        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
     ) -> Run: ...
 
     @overload
@@ -1651,6 +1720,7 @@ class RunsClient:
         command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
+        stream_resumable: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
@@ -1663,6 +1733,7 @@ class RunsClient:
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
         headers: Optional[dict[str, str]] = None,
+        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
     ) -> Run: ...
 
     async def create(
@@ -1674,6 +1745,7 @@ class RunsClient:
         command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
+        stream_resumable: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
@@ -1687,6 +1759,7 @@ class RunsClient:
         on_completion: Optional[OnCompletionBehavior] = None,
         after_seconds: Optional[int] = None,
         headers: Optional[dict[str, str]] = None,
+        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
     ) -> Run:
         """Create a background run.
 
@@ -1699,6 +1772,8 @@ class RunsClient:
             command: A command to execute. Cannot be combined with input.
             stream_mode: The stream mode(s) to use.
             stream_subgraphs: Whether to stream output from subgraphs.
+            stream_resumable: Whether the stream is considered resumable.
+                If true, the stream can be resumed and replayed in its entirety even after disconnection.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             checkpoint: The checkpoint to resume from.
@@ -1715,6 +1790,7 @@ class RunsClient:
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
             headers: Optional custom headers to include with the request.
+            on_run_created: Optional callback to call when a run is created.
 
         Returns:
             Run: The created background run.
@@ -1794,6 +1870,7 @@ class RunsClient:
             ),
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
+            "stream_resumable": stream_resumable,
             "config": config,
             "metadata": metadata,
             "assistant_id": assistant_id,
@@ -1809,10 +1886,18 @@ class RunsClient:
             "after_seconds": after_seconds,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
-        if thread_id:
-            return await self.http.post(f"/threads/{thread_id}/runs", json=payload)
-        else:
-            return await self.http.post("/runs", json=payload)
+
+        def on_response(res: httpx.Response):
+            """Callback function to handle the response."""
+            if on_run_created and (metadata := _get_run_metadata_from_response(res)):
+                on_run_created(metadata)
+
+        return await self.http.post(
+            f"/threads/{thread_id}/runs" if thread_id else "/runs",
+            json=payload,
+            headers=headers,
+            on_response=on_response if on_run_created else None,
+        )
 
     async def create_batch(self, payloads: list[RunCreate]) -> list[Run]:
         """Create a batch of stateless background runs."""
@@ -1845,6 +1930,7 @@ class RunsClient:
         after_seconds: Optional[int] = None,
         raise_error: bool = True,
         headers: Optional[dict[str, str]] = None,
+        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
     @overload
@@ -1867,6 +1953,7 @@ class RunsClient:
         after_seconds: Optional[int] = None,
         raise_error: bool = True,
         headers: Optional[dict[str, str]] = None,
+        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
     async def wait(
@@ -1891,6 +1978,7 @@ class RunsClient:
         after_seconds: Optional[int] = None,
         raise_error: bool = True,
         headers: Optional[dict[str, str]] = None,
+        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         """Create a run, wait until it finishes and return the final state.
 
@@ -1919,6 +2007,7 @@ class RunsClient:
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
             headers: Optional custom headers to include with the request.
+            on_run_created: Optional callback to call when a run is created.
 
         Returns:
             Union[list[dict], dict[str, Any]]: The output of the run.
@@ -1995,10 +2084,17 @@ class RunsClient:
         endpoint = (
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
         )
+
+        def on_response(res: httpx.Response):
+            """Callback function to handle the response."""
+            if on_run_created and (metadata := _get_run_metadata_from_response(res)):
+                on_run_created(metadata)
+
         response = await self.http.post(
             endpoint,
             json={k: v for k, v in payload.items() if v is not None},
             headers=headers,
+            on_response=on_response if on_run_created else None,
         )
         if (
             raise_error
@@ -2160,6 +2256,7 @@ class RunsClient:
         cancel_on_disconnect: bool = False,
         stream_mode: Optional[Union[StreamMode, Sequence[StreamMode]]] = None,
         headers: Optional[dict[str, str]] = None,
+        last_event_id: Optional[str] = None,
     ) -> AsyncIterator[StreamPart]:
         """Stream output from a run in real-time, until the run is done.
         Output is not buffered, so any output produced before this call will
@@ -2197,7 +2294,11 @@ class RunsClient:
                 "cancel_on_disconnect": cancel_on_disconnect,
                 "stream_mode": stream_mode,
             },
-            headers=headers,
+            headers={
+                **({"Last-Event-ID": last_event_id} if last_event_id else {}),
+                **(headers or {}),
+            }
+            or None,
         )
 
     async def delete(
@@ -2875,9 +2976,12 @@ class SyncHttpClient:
         *,
         params: Optional[QueryParamTypes] = None,
         headers: Optional[dict[str, str]] = None,
+        on_response: Optional[Callable[[httpx.Response], None]] = None,
     ) -> Any:
         """Send a GET request."""
         r = self.client.get(path, params=params, headers=headers)
+        if on_response:
+            on_response(r)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -2895,6 +2999,7 @@ class SyncHttpClient:
         *,
         json: Optional[dict],
         headers: Optional[dict[str, str]] = None,
+        on_response: Optional[Callable[[httpx.Response], None]] = None,
     ) -> Any:
         """Send a POST request."""
         if json is not None:
@@ -2904,6 +3009,8 @@ class SyncHttpClient:
         if headers:
             request_headers.update(headers)
         r = self.client.post(path, headers=request_headers, content=content)
+        if on_response:
+            on_response(r)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -2916,7 +3023,12 @@ class SyncHttpClient:
         return _decode_json(r)
 
     def put(
-        self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None
+        self,
+        path: str,
+        *,
+        json: dict,
+        headers: Optional[dict[str, str]] = None,
+        on_response: Optional[Callable[[httpx.Response], None]] = None,
     ) -> Any:
         """Send a PUT request."""
         request_headers, content = _encode_json(json)
@@ -2924,6 +3036,8 @@ class SyncHttpClient:
             request_headers.update(headers)
 
         r = self.client.put(path, headers=request_headers, content=content)
+        if on_response:
+            on_response(r)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -2936,13 +3050,20 @@ class SyncHttpClient:
         return _decode_json(r)
 
     def patch(
-        self, path: str, *, json: dict, headers: Optional[dict[str, str]] = None
+        self,
+        path: str,
+        *,
+        json: dict,
+        headers: Optional[dict[str, str]] = None,
+        on_response: Optional[Callable[[httpx.Response], None]] = None,
     ) -> Any:
         """Send a PATCH request."""
         request_headers, content = _encode_json(json)
         if headers:
             request_headers.update(headers)
         r = self.client.patch(path, headers=request_headers, content=content)
+        if on_response:
+            on_response(r)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -2960,9 +3081,12 @@ class SyncHttpClient:
         *,
         json: Optional[Any] = None,
         headers: Optional[dict[str, str]] = None,
+        on_response: Optional[Callable[[httpx.Response], None]] = None,
     ) -> None:
         """Send a DELETE request."""
         r = self.client.request("DELETE", path, json=json, headers=headers)
+        if on_response:
+            on_response(r)
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -2981,6 +3105,7 @@ class SyncHttpClient:
         json: Optional[dict] = None,
         params: Optional[QueryParamTypes] = None,
         headers: Optional[dict[str, str]] = None,
+        on_response: Optional[Callable[[httpx.Response], None]] = None,
     ) -> Iterator[StreamPart]:
         """Stream the results of a request using SSE."""
         request_headers, content = _encode_json(json)
@@ -2991,6 +3116,8 @@ class SyncHttpClient:
         with self.client.stream(
             method, path, headers=request_headers, content=content, params=params
         ) as res:
+            if on_response:
+                on_response(res)
             # check status
             try:
                 res.raise_for_status()
@@ -4086,6 +4213,7 @@ class SyncRunsClient:
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
         headers: Optional[dict[str, str]] = None,
+        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
     ) -> Iterator[StreamPart]: ...
 
     @overload
@@ -4098,6 +4226,7 @@ class SyncRunsClient:
         command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
+        stream_resumable: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint_during: Optional[bool] = None,
@@ -4110,6 +4239,7 @@ class SyncRunsClient:
         webhook: Optional[str] = None,
         after_seconds: Optional[int] = None,
         headers: Optional[dict[str, str]] = None,
+        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
     ) -> Iterator[StreamPart]: ...
 
     def stream(
@@ -4121,6 +4251,7 @@ class SyncRunsClient:
         command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
+        stream_resumable: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
@@ -4136,6 +4267,7 @@ class SyncRunsClient:
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
         headers: Optional[dict[str, str]] = None,
+        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
     ) -> Iterator[StreamPart]:
         """Create a run and stream the results.
 
@@ -4148,6 +4280,8 @@ class SyncRunsClient:
             command: The command to execute.
             stream_mode: The stream mode(s) to use.
             stream_subgraphs: Whether to stream output from subgraphs.
+            stream_resumable: Whether the stream is considered resumable.
+                If true, the stream can be resumed and replayed in its entirety even after disconnection.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             checkpoint: The checkpoint to resume from.
@@ -4167,6 +4301,7 @@ class SyncRunsClient:
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
             headers: Optional custom headers to include with the request.
+            on_run_created: Optional callback to call when a run is created.
 
         Returns:
             Iterator[StreamPart]: Iterator of stream results.
@@ -4208,6 +4343,7 @@ class SyncRunsClient:
             "metadata": metadata,
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
+            "stream_resumable": stream_resumable,
             "assistant_id": assistant_id,
             "interrupt_before": interrupt_before,
             "interrupt_after": interrupt_after,
@@ -4227,11 +4363,18 @@ class SyncRunsClient:
             if thread_id is not None
             else "/runs/stream"
         )
+
+        def on_response(res: httpx.Response):
+            """Callback function to handle the response."""
+            if on_run_created and (metadata := _get_run_metadata_from_response(res)):
+                on_run_created(metadata)
+
         return self.http.stream(
             endpoint,
             "POST",
             json={k: v for k, v in payload.items() if v is not None},
             headers=headers,
+            on_response=on_response if on_run_created else None,
         )
 
     @overload
@@ -4244,6 +4387,7 @@ class SyncRunsClient:
         command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
+        stream_resumable: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint_during: Optional[bool] = None,
@@ -4254,6 +4398,7 @@ class SyncRunsClient:
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
         headers: Optional[dict[str, str]] = None,
+        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
     ) -> Run: ...
 
     @overload
@@ -4266,6 +4411,7 @@ class SyncRunsClient:
         command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
+        stream_resumable: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
@@ -4278,6 +4424,7 @@ class SyncRunsClient:
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
         headers: Optional[dict[str, str]] = None,
+        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
     ) -> Run: ...
 
     def create(
@@ -4289,6 +4436,7 @@ class SyncRunsClient:
         command: Optional[Command] = None,
         stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
         stream_subgraphs: bool = False,
+        stream_resumable: bool = False,
         metadata: Optional[dict] = None,
         config: Optional[Config] = None,
         checkpoint: Optional[Checkpoint] = None,
@@ -4302,6 +4450,7 @@ class SyncRunsClient:
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
         headers: Optional[dict[str, str]] = None,
+        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
     ) -> Run:
         """Create a background run.
 
@@ -4314,6 +4463,8 @@ class SyncRunsClient:
             command: The command to execute.
             stream_mode: The stream mode(s) to use.
             stream_subgraphs: Whether to stream output from subgraphs.
+            stream_resumable: Whether the stream is considered resumable.
+                If true, the stream can be resumed and replayed in its entirety even after disconnection.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             checkpoint: The checkpoint to resume from.
@@ -4330,6 +4481,7 @@ class SyncRunsClient:
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
             headers: Optional custom headers to include with the request.
+            on_run_created: Optional callback to call when a run is created.
 
         Returns:
             Run: The created background run.
@@ -4409,6 +4561,7 @@ class SyncRunsClient:
             ),
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
+            "stream_resumable": stream_resumable,
             "config": config,
             "metadata": metadata,
             "assistant_id": assistant_id,
@@ -4424,12 +4577,18 @@ class SyncRunsClient:
             "after_seconds": after_seconds,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
-        if thread_id:
-            return self.http.post(
-                f"/threads/{thread_id}/runs", json=payload, headers=headers
-            )
-        else:
-            return self.http.post("/runs", json=payload, headers=headers)
+
+        def on_response(res: httpx.Response):
+            """Callback function to handle the response."""
+            if on_run_created and (metadata := _get_run_metadata_from_response(res)):
+                on_run_created(metadata)
+
+        return self.http.post(
+            f"/threads/{thread_id}/runs" if thread_id else "/runs",
+            json=payload,
+            headers=headers,
+            on_response=on_response if on_run_created else None,
+        )
 
     def create_batch(
         self, payloads: list[RunCreate], *, headers: Optional[dict[str, str]] = None
@@ -4463,6 +4622,7 @@ class SyncRunsClient:
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
         headers: Optional[dict[str, str]] = None,
+        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
     @overload
@@ -4484,6 +4644,7 @@ class SyncRunsClient:
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
         headers: Optional[dict[str, str]] = None,
+        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
     ) -> Union[list[dict], dict[str, Any]]: ...
 
     def wait(
@@ -4507,6 +4668,7 @@ class SyncRunsClient:
         if_not_exists: Optional[IfNotExists] = None,
         after_seconds: Optional[int] = None,
         headers: Optional[dict[str, str]] = None,
+        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         """Create a run, wait until it finishes and return the final state.
 
@@ -4535,6 +4697,7 @@ class SyncRunsClient:
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
             headers: Optional custom headers to include with the request.
+            on_run_created: Optional callback to call when a run is created.
 
         Returns:
             Union[list[dict], dict[str, Any]]: The output of the run.
@@ -4609,6 +4772,12 @@ class SyncRunsClient:
             "on_completion": on_completion,
             "after_seconds": after_seconds,
         }
+
+        def on_response(res: httpx.Response):
+            """Callback function to handle the response."""
+            if on_run_created and (metadata := _get_run_metadata_from_response(res)):
+                on_run_created(metadata)
+
         endpoint = (
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
         )
@@ -4616,6 +4785,7 @@ class SyncRunsClient:
             endpoint,
             json={k: v for k, v in payload.items() if v is not None},
             headers=headers,
+            on_response=on_response if on_run_created else None,
         )
 
     def list(
@@ -4764,6 +4934,7 @@ class SyncRunsClient:
         stream_mode: Optional[Union[StreamMode, Sequence[StreamMode]]] = None,
         cancel_on_disconnect: bool = False,
         headers: Optional[dict[str, str]] = None,
+        last_event_id: Optional[str] = None,
     ) -> Iterator[StreamPart]:
         """Stream output from a run in real-time, until the run is done.
         Output is not buffered, so any output produced before this call will
@@ -4800,7 +4971,11 @@ class SyncRunsClient:
                 "stream_mode": stream_mode,
                 "cancel_on_disconnect": cancel_on_disconnect,
             },
-            headers=headers,
+            headers={
+                **({"Last-Event-ID": last_event_id} if last_event_id else {}),
+                **(headers or {}),
+            }
+            or None,
         )
 
     def delete(
@@ -5392,7 +5567,9 @@ def get_asgi_transport() -> type[httpx.ASGITransport]:
 
 
 TimeoutTypes = Union[
-    Optional[float],
+    None,
+    float,
+    tuple[Optional[float], Optional[float]],
     tuple[Optional[float], Optional[float], Optional[float], Optional[float]],
     httpx.Timeout,
 ]

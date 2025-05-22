@@ -32,6 +32,7 @@ dev = [
     "langgraph-checkpoint",
     "langgraph-checkpoint-sqlite",
     "langgraph-checkpoint-postgres",
+    "syrupy",
 ]
 
 [tool.uv]

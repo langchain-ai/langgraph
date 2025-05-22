@@ -53,6 +53,7 @@ REDIRECT_MAP = {
     "how-tos/persistence_redis.ipynb": "how-tos/persistence.ipynb#use-in-production",
     "how-tos/subgraph-persistence.ipynb": "how-tos/persistence.ipynb#use-with-subgraphs",
     "how-tos/cross-thread-persistence.ipynb": "how-tos/persistence.ipynb#add-long-term-memory",
+    "cloud/how-tos/copy_threads": "cloud/how-tos/use_threads",
     # tool calling how-tos
     "how-tos/tool-calling-errors.ipynb": "how-tos/tool-calling.ipynb#handle-errors",
     "how-tos/pass-config-to-tools.ipynb": "how-tos/tool-calling.ipynb#access-config",
@@ -70,7 +71,7 @@ REDIRECT_MAP = {
     "cloud/faq/studio.md": "concepts/langgraph_studio.md#studio-faqs",
     "cloud/how-tos/human_in_the_loop_edit_state.md": "cloud/how-tos/add-human-in-the-loop.md",
     "cloud/how-tos/human_in_the_loop_user_input.md": "cloud/how-tos/add-human-in-the-loop.md",
-    "concepts/platform_architecture.md": "langgraph/concepts/langgraph_cloud#architecture",
+    "concepts/platform_architecture.md": "concepts/langgraph_cloud#architecture",
     # cloud streaming redirects
     "cloud/how-tos/stream_values.md": "cloud/how-tos/streaming.md#stream-graph-state",
     "cloud/how-tos/stream_updates.md": "cloud/how-tos/streaming.md#stream-graph-state",

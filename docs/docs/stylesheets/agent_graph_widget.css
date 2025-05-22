@@ -1,0 +1,57 @@
+.agent-layout {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 1rem;
+    align-items: flex-start;
+    margin-top: 1rem;
+}
+
+.agent-layout h3 {
+    margin: 0;
+}
+
+.agent-graph-features {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1rem;
+    max-width: 300px;
+    flex-shrink: 0;
+
+    border: 1px solid var(--md-default-fg-color--lightest);
+    border-radius: 0.5rem;
+    background-color: var(--md-default-bg-color);
+}
+
+.agent-graph-features label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--md-typeset-color);
+    cursor: pointer;
+}
+
+.agent-graph-features input[type="checkbox"] {
+    accent-color: var(--md-accent-fg-color);
+    transform: scale(1.2);
+}
+
+.agent-graph-container {
+    flex: 1 1 50%;
+    max-width: 70%;
+    padding: 1rem;
+
+    overflow: auto;
+    height: auto;
+    box-sizing: border-box;
+
+    border: 1px solid var(--md-default-fg-color--lightest);
+    border-radius: 0.5rem;
+    background-color: var(--md-default-bg-color);
+}
+
+.agent-graph-container img {
+    display: block;
+    margin: 0 auto;
+}
