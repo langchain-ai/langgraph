@@ -808,13 +808,12 @@ export function useStream<
     abortRef.current = null;
   }, []);
 
-  const join = async (
-    metadata: {
-      runId: string;
-      threadId?: string | undefined | null;
-    },
-    lastEventId: (string & {}) | "-1",
-  ) => {
+  async function consumeStream(
+    action: (signal: AbortSignal) => Promise<{
+      onFinish: () => Promise<ThreadState<StateType>[]>;
+      stream: AsyncGenerator<EventStreamEvent>;
+    }>,
+  ) {
     try {
       setIsLoading(true);
       setStreamError(undefined);
@@ -822,15 +821,10 @@ export function useStream<
       submittingRef.current = true;
       abortRef.current = new AbortController();
 
-      const rejoinKey = `lg:rejoin:${metadata.threadId ?? "temporary"}`;
-
-      const run = client.runs.joinStream(metadata.threadId, metadata.runId, {
-        signal: abortRef.current.signal,
-        lastEventId,
-      }) as AsyncGenerator<EventStreamEvent>;
+      const run = await action(abortRef.current.signal);
 
       let streamError: StreamError | undefined;
-      for await (const { event, data } of run) {
+      for await (const { event, data } of run.stream) {
         if (event === "error") {
           streamError = new StreamError(data);
           break;
@@ -879,15 +873,11 @@ export function useStream<
             return { ...values, [messagesKey!]: messages };
           });
         }
-      }
 
-      window.localStorage.removeItem(rejoinKey);
+        // TODO: stream created checkpoints to avoid an unnecessary network request
+        const result = await run.onFinish();
 
-      // TODO: stream created checkpoints to avoid an unnecessary network request
-      if (metadata.threadId) {
-        const result = await history.mutate(metadata.threadId);
         setStreamValues(null);
-
         if (streamError != null) throw streamError;
 
         const lastHead = result.at(0);
@@ -912,6 +902,33 @@ export function useStream<
       submittingRef.current = false;
       abortRef.current = null;
     }
+  }
+
+  const join = async (
+    metadata: {
+      runId: string;
+      threadId?: string | undefined | null;
+    },
+    lastEventId: (string & {}) | "-1",
+  ) => {
+    await consumeStream(async (signal: AbortSignal) => {
+      const usableThreadId = metadata.threadId;
+      const rejoinKey = `lg:rejoin:${usableThreadId ?? "temporary"}`;
+
+      const stream = client.runs.joinStream(usableThreadId, metadata.runId, {
+        signal,
+        lastEventId,
+      }) as AsyncGenerator<EventStreamEvent>;
+
+      return {
+        onFinish: async () => {
+          if (rejoinKey) window.localStorage.removeItem(rejoinKey);
+          if (!usableThreadId) return [];
+          return history.mutate(usableThreadId);
+        },
+        stream,
+      };
+    });
   };
 
   const joinRef = useRef<typeof join>(join);
@@ -935,13 +952,7 @@ export function useStream<
     values: UpdateType | null | undefined,
     submitOptions?: SubmitOptions<StateType, ConfigurableType>,
   ) => {
-    try {
-      setIsLoading(true);
-      setStreamError(undefined);
-
-      submittingRef.current = true;
-      abortRef.current = new AbortController();
-
+    await consumeStream(async (signal: AbortSignal) => {
       // Unbranch things
       const newPath = submitOptions?.checkpoint?.checkpoint_id
         ? branchByCheckpoint[submitOptions?.checkpoint?.checkpoint_id]?.branch
@@ -985,7 +996,7 @@ export function useStream<
       if (checkpoint != null) delete checkpoint.thread_id;
       let rejoinKey: string | undefined;
 
-      const run = client.runs.stream(usableThreadId, assistantId, {
+      const stream = client.runs.stream(usableThreadId, assistantId, {
         input: values as Record<string, unknown>,
         config: submitOptions?.config,
         command: submitOptions?.command,
@@ -999,99 +1010,27 @@ export function useStream<
           submitOptions?.onDisconnect ??
           (options.joinOnMount ? "continue" : "cancel"),
 
-        signal: abortRef.current.signal,
+        signal,
 
         checkpoint,
         streamMode,
         streamSubgraphs: submitOptions?.streamSubgraphs,
-
         onRunCreated(params) {
-          // rejoin the stream if needed
-          rejoinKey = `lg:rejoin:${params.thread_id ?? "temporary"}`;
-          window.localStorage.setItem(rejoinKey, params.run_id);
+          if (options.joinOnMount) {
+            rejoinKey = `lg:rejoin:${params.thread_id ?? "temporary"}`;
+            window.localStorage.setItem(rejoinKey, params.run_id);
+          }
         },
       }) as AsyncGenerator<EventStreamEvent>;
 
-      let streamError: StreamError | undefined;
-      for await (const { event, data } of run) {
-        if (event === "error") {
-          streamError = new StreamError(data);
-          break;
-        }
-
-        if (event === "updates") options.onUpdateEvent?.(data);
-        if (event === "custom")
-          options.onCustomEvent?.(data, {
-            mutate: (update) =>
-              setStreamValues((prev) => {
-                // should not happen
-                if (prev == null) return prev;
-                return {
-                  ...prev,
-                  ...(typeof update === "function" ? update(prev) : update),
-                };
-              }),
-          });
-        if (event === "metadata") options.onMetadataEvent?.(data);
-        if (event === "events") options.onLangChainEvent?.(data);
-        if (event === "debug") options.onDebugEvent?.(data);
-
-        if (event === "values") setStreamValues(data);
-        if (event === "messages") {
-          const [serialized] = data;
-
-          const messageId = messageManagerRef.current.add(serialized);
-          if (!messageId) {
-            console.warn(
-              "Failed to add message to manager, no message ID found",
-            );
-            continue;
-          }
-
-          setStreamValues((streamValues) => {
-            const values = { ...historyValues, ...streamValues };
-
-            // Assumption: we're concatenating the message
-            const messages = getMessages(values).slice();
-            const { chunk, index } =
-              messageManagerRef.current.get(messageId, messages.length) ?? {};
-
-            if (!chunk || index == null) return values;
-            messages[index] = toMessageDict(chunk);
-
-            return { ...values, [messagesKey!]: messages };
-          });
-        }
-      }
-      if (rejoinKey) window.localStorage.removeItem(rejoinKey);
-
-      // TODO: stream created checkpoints to avoid an unnecessary network request
-      const result = await history.mutate(usableThreadId);
-      setStreamValues(null);
-
-      if (streamError != null) throw streamError;
-
-      const lastHead = result.at(0);
-      if (lastHead) onFinish?.(lastHead);
-    } catch (error) {
-      if (
-        !(
-          error instanceof Error &&
-          (error.name === "AbortError" || error.name === "TimeoutError")
-        )
-      ) {
-        console.error(error);
-        setStreamError(error);
-        onError?.(error);
-      }
-    } finally {
-      setIsLoading(false);
-
-      // Assumption: messages are already handled, we can clear the manager
-      messageManagerRef.current.clear();
-      submittingRef.current = false;
-      abortRef.current = null;
-    }
+      return {
+        stream,
+        onFinish: () => {
+          if (rejoinKey) window.localStorage.removeItem(rejoinKey);
+          return history.mutate(usableThreadId);
+        },
+      };
+    });
   };
 
   const error = streamError ?? historyError;
