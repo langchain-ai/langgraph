@@ -725,6 +725,7 @@ export function useStream<
 
   // TODO: this should be done on the server to avoid pagination
   // TODO: should we permit adapter? SWR / React Query?
+  // TODO: make this only when branching is expected
   const history = useThreadHistory<StateType>(
     threadId,
     client,
@@ -904,18 +905,14 @@ export function useStream<
     }
   }
 
-  const join = async (
-    metadata: {
-      runId: string;
-      threadId?: string | undefined | null;
-    },
+  const joinStream = async (
+    runId: string,
     lastEventId: (string & {}) | "-1",
   ) => {
+    if (!threadId) return;
     await consumeStream(async (signal: AbortSignal) => {
-      const usableThreadId = metadata.threadId;
-      const rejoinKey = `lg:rejoin:${usableThreadId ?? "temporary"}`;
-
-      const stream = client.runs.joinStream(usableThreadId, metadata.runId, {
+      const rejoinKey = `lg:rejoin:${threadId}`;
+      const stream = client.runs.joinStream(threadId, runId, {
         signal,
         lastEventId,
       }) as AsyncGenerator<EventStreamEvent>;
@@ -923,30 +920,12 @@ export function useStream<
       return {
         onFinish: async () => {
           if (rejoinKey) window.localStorage.removeItem(rejoinKey);
-          if (!usableThreadId) return [];
-          return history.mutate(usableThreadId);
+          return history.mutate(threadId);
         },
         stream,
       };
     });
   };
-
-  const joinRef = useRef<typeof join>(join);
-  joinRef.current = join;
-
-  const joinKey = useMemo(() => {
-    if (!joinOnMount || isLoading) return undefined;
-    if (typeof window === "undefined") return undefined;
-    const runId = window.localStorage.getItem(`lg:rejoin:${threadId}`);
-
-    if (!runId) return undefined;
-
-    return { runId, threadId };
-  }, [joinOnMount, isLoading, threadId]);
-
-  useEffect(() => {
-    if (joinKey) joinRef.current?.(joinKey, "-1");
-  }, [joinKey]);
 
   const submit = async (
     values: UpdateType | null | undefined,
@@ -1032,6 +1011,21 @@ export function useStream<
       };
     });
   };
+
+  const joinStreamRef = useRef<typeof joinStream>(joinStream);
+  joinStreamRef.current = joinStream;
+
+  const joinKey = useMemo(() => {
+    if (!joinOnMount || isLoading) return undefined;
+    if (typeof window === "undefined") return undefined;
+    const runId = window.localStorage.getItem(`lg:rejoin:${threadId}`);
+    if (!runId) return undefined;
+    return { runId, threadId };
+  }, [joinOnMount, isLoading, threadId]);
+
+  useEffect(() => {
+    if (joinKey) joinStreamRef.current?.(joinKey.runId, "-1");
+  }, [joinKey]);
 
   const error = streamError ?? historyError;
   const values = streamValues ?? historyValues;
