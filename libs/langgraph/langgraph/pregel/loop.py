@@ -509,9 +509,14 @@ class PregelLoop(LoopProtocol):
                     **read_channels(self.channels, self.stream_keys)
                 )
             # produce values output
-            self._emit(
-                "values", map_output_values, self.output_keys, writes, self.channels
-            )
+            if not updated_channels.isdisjoint(
+                (self.output_keys,)
+                if isinstance(self.output_keys, str)
+                else self.output_keys
+            ):
+                self._emit(
+                    "values", map_output_values, self.output_keys, writes, self.channels
+                )
             # clear pending writes
             self.checkpoint_pending_writes.clear()
             # "not skip_done_tasks" only applies to first tick after resuming
@@ -887,7 +892,7 @@ class PregelLoop(LoopProtocol):
                 and self.checkpoint_pending_writes
                 and any(task.writes for task in self.tasks.values())
             ):
-                mv_writes, _ = apply_writes(
+                mv_writes, updated_channels = apply_writes(
                     self.checkpoint,
                     self.channels,
                     self.tasks.values(),
@@ -896,13 +901,18 @@ class PregelLoop(LoopProtocol):
                 )
                 for key, values in mv_writes.items():
                     self._update_mv(key, values)
-                self._emit(
-                    "values",
-                    map_output_values,
-                    self.output_keys,
-                    [w for t in self.tasks.values() for w in t.writes],
-                    self.channels,
-                )
+                if not updated_channels.isdisjoint(
+                    (self.output_keys,)
+                    if isinstance(self.output_keys, str)
+                    else self.output_keys
+                ):
+                    self._emit(
+                        "values",
+                        map_output_values,
+                        self.output_keys,
+                        [w for t in self.tasks.values() for w in t.writes],
+                        self.channels,
+                    )
             # emit INTERRUPT if exception is empty (otherwise emitted by put_writes)
             if exc_value is not None and (not exc_value.args or not exc_value.args[0]):
                 self._emit(

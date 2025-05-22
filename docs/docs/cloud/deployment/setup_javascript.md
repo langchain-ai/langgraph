@@ -155,10 +155,6 @@ const workflow = new StateGraph(MessagesAnnotation)
 export const graph = workflow.compile();
 ```
 
-!!! info "Assign `CompiledGraph` to Variable"
-
-    The build process for LangGraph Platform requires that the `CompiledGraph` object be assigned to a variable at the top-level of a JavaScript module (alternatively, you can provide [a function that creates a graph](./graph_rebuild.md)).
-
 Example file directory:
 
 ```bash

@@ -294,3 +294,44 @@ def _format_messages(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
         return list(messages)
     else:
         return convert_to_messages(convert_to_openai_messages(messages))
+
+
+def push_message(
+    message: Union[MessageLikeRepresentation, BaseMessageChunk],
+) -> AnyMessage:
+    """Write a message manually to the `messages` / `messages-tuple` stream mode."""
+
+    from langchain_core.callbacks.base import (
+        BaseCallbackHandler,
+        BaseCallbackManager,
+    )
+
+    from langgraph.config import get_config
+    from langgraph.constants import NS_SEP
+    from langgraph.pregel.messages import StreamMessagesHandler
+
+    config = get_config()
+    message = next(x for x in convert_to_messages([message]))
+
+    if message.id is None:
+        raise ValueError("Message ID is required")
+
+    if isinstance(config["callbacks"], BaseCallbackManager):
+        manager = config["callbacks"]
+        handlers = manager.handlers
+    elif isinstance(config["callbacks"], list) and all(
+        isinstance(x, BaseCallbackHandler) for x in config["callbacks"]
+    ):
+        handlers = config["callbacks"]
+
+    if stream_handler := next(
+        (x for x in handlers if isinstance(x, StreamMessagesHandler)), None
+    ):
+        metadata = config["metadata"]
+        message_meta = (
+            tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP)),
+            metadata,
+        )
+        stream_handler._emit(message_meta, message, dedupe=False)
+
+    return message
