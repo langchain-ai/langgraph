@@ -810,9 +810,9 @@ export function useStream<
 
     if (options.joinOnMount && threadId) {
       const rejoinKey = `lg:rejoin:${threadId}`;
-      const runId = window.localStorage.getItem(rejoinKey);
+      const runId = window.sessionStorage.getItem(rejoinKey);
       if (runId) client.runs.cancel(threadId, runId);
-      window.localStorage.removeItem(rejoinKey);
+      window.sessionStorage.removeItem(rejoinKey);
     }
   };
 
@@ -926,7 +926,7 @@ export function useStream<
 
       return {
         onSuccess: () => {
-          window.localStorage.removeItem(rejoinKey);
+          window.sessionStorage.removeItem(rejoinKey);
           return history.mutate(threadId);
         },
         stream,
@@ -1005,7 +1005,7 @@ export function useStream<
         onRunCreated(params) {
           if (options.joinOnMount) {
             rejoinKey = `lg:rejoin:${params.thread_id ?? "temporary"}`;
-            window.localStorage.setItem(rejoinKey, params.run_id);
+            window.sessionStorage.setItem(rejoinKey, params.run_id);
           }
         },
       }) as AsyncGenerator<EventStreamEvent>;
@@ -1013,7 +1013,7 @@ export function useStream<
       return {
         stream,
         onSuccess: () => {
-          if (rejoinKey) window.localStorage.removeItem(rejoinKey);
+          if (rejoinKey) window.sessionStorage.removeItem(rejoinKey);
           return history.mutate(usableThreadId);
         },
       };
@@ -1027,7 +1027,7 @@ export function useStream<
   const joinKey = useMemo(() => {
     if (!joinOnMount || isLoading) return undefined;
     if (typeof window === "undefined") return undefined;
-    const runId = window.localStorage.getItem(`lg:rejoin:${threadId}`);
+    const runId = window.sessionStorage.getItem(`lg:rejoin:${threadId}`);
     if (!runId) return undefined;
     return { runId, threadId };
   }, [joinOnMount, isLoading, threadId]);
