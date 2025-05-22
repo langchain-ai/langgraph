@@ -87,81 +87,102 @@ It allows you to explore the infrastructure of the agent as defined by the prese
   <pre><code id="agent-code" class="language-python"></code></pre>
 </div>
 
+
 <script>
+function getCheckedValue(id) {
+  return document.getElementById(id).checked ? "1" : "0";
+}
+
 function getKey() {
-    return [
-        document.getElementById("response_format").checked ? "1" : "0",
-        document.getElementById("post_model_hook").checked ? "1" : "0",
-        document.getElementById("pre_model_hook").checked ? "1" : "0",
-        document.getElementById("tools").checked ? "1" : "0"
-    ].join("");
+  return [
+    getCheckedValue("response_format"),
+    getCheckedValue("post_model_hook"),
+    getCheckedValue("pre_model_hook"),
+    getCheckedValue("tools")
+  ].join("");
 }
 
 function generateCodeSnippet({ tools, pre, post, response }) {
-    const lines = [];
-    lines.push("from langgraph.prebuilt import create_react_agent");
-    lines.push("from langchain_openai import ChatOpenAI");
-    if (response) lines.push("from pydantic import BaseModel");
-    lines.push("");
-    lines.push('model = ChatOpenAI("o4-mini")\n');
-    if (tools) {
-        lines.push("def tool() -> None:");
-        lines.push('    """Testing tool."""');
-        lines.push("    ...\n");
-    }
-    if (pre) {
-        lines.push("def pre_model_hook() -> None:");
-        lines.push('    """Pre-model hook."""');
-        lines.push("    ...\n");
-    }
-    if (post) {
-        lines.push("def post_model_hook() -> None:");
-        lines.push('    """Post-model hook."""');
-        lines.push("    ...\n");
-    }
-    if (response) {
-        lines.push("class ResponseFormat(BaseModel):");
-        lines.push('    """Response format for the agent."""');
-        lines.push("    result: str\n");
-    }
-    lines.push("agent = create_react_agent(");
-    lines.push("    model,");
-    if (tools) lines.push("    tools=[tool],");
-    if (pre) lines.push("    pre_model_hook=pre_model_hook,");
-    if (post) lines.push("    post_model_hook=post_model_hook,");
-    if (response) lines.push("    response_format=ResponseFormat,");
-    lines.push(")");
-    lines.push("");
-    lines.push("agent.get_graph().draw_mermaid_png()");
-    return lines.join("\n");
+  const lines = [
+    "from langgraph.prebuilt import create_react_agent",
+    "from langchain_openai import ChatOpenAI"
+  ];
+
+  if (response) lines.push("from pydantic import BaseModel");
+
+  lines.push("", 'model = ChatOpenAI("o4-mini")', "");
+
+  if (tools) {
+    lines.push(
+      "def tool() -> None:",
+      '    """Testing tool."""',
+      "    ...",
+      ""
+    );
+  }
+
+  if (pre) {
+    lines.push(
+      "def pre_model_hook() -> None:",
+      '    """Pre-model hook."""',
+      "    ...",
+      ""
+    );
+  }
+
+  if (post) {
+    lines.push(
+      "def post_model_hook() -> None:",
+      '    """Post-model hook."""',
+      "    ...",
+      ""
+    );
+  }
+
+  if (response) {
+    lines.push(
+      "class ResponseFormat(BaseModel):",
+      '    """Response format for the agent."""',
+      "    result: str",
+      ""
+    );
+  }
+
+  lines.push("agent = create_react_agent(");
+  lines.push("    model,");
+
+  if (tools) lines.push("    tools=[tool],");
+  if (pre) lines.push("    pre_model_hook=pre_model_hook,");
+  if (post) lines.push("    post_model_hook=post_model_hook,");
+  if (response) lines.push("    response_format=ResponseFormat,");
+
+  lines.push(")", "", "agent.get_graph().draw_mermaid_png()");
+
+  return lines.join("\n");
 }
 
 async function render() {
-    const key = getKey();
-    const graphImg = document.getElementById("agent-graph-img");
-    graphImg.src = "../assets/react_agent_graphs/" + key + ".png";
+  const key = getKey();
+  document.getElementById("agent-graph-img").src = `../assets/react_agent_graphs/${key}.png`;
 
-    const codeContainer = document.getElementById("agent-code");
+  const state = {
+    tools: document.getElementById("tools").checked,
+    pre: document.getElementById("pre_model_hook").checked,
+    post: document.getElementById("post_model_hook").checked,
+    response: document.getElementById("response_format").checked
+  };
 
-    codeContainer.textContent = generateCodeSnippet(
-      {
-        tools: document.getElementById("tools").checked,
-        pre: document.getElementById("pre_model_hook").checked,
-        post: document.getElementById("post_model_hook").checked,
-        response: document.getElementById("response_format").checked
-      }
-    );
+  document.getElementById("agent-code").textContent = generateCodeSnippet(state);
 }
 
-async function initializeWidget() {
-    await render();
-    document.querySelectorAll(".agent-graph-features input").forEach((input) => {
-        input.addEventListener("change", async () => await render());
-    });
+function initializeWidget() {
+  render(); // no need for `await` here
+  document.querySelectorAll(".agent-graph-features input").forEach((input) => {
+    input.addEventListener("change", render);
+  });
 }
 
-// Handle initial load and subsequent navigation
-// See admonition for more details: https://squidfunk.github.io/mkdocs-material/customization/#additional-javascript
+// Init for both full reload and SPA nav (used by MkDocs Material)
 window.addEventListener("DOMContentLoaded", initializeWidget);
 document$.subscribe(initializeWidget);
 </script>
