@@ -2214,12 +2214,14 @@ class Pregel(PregelProtocol):
             validate_keys(output_keys, self.channels)
         interrupt_before = interrupt_before or self.interrupt_before_nodes
         interrupt_after = interrupt_after or self.interrupt_after_nodes
-        stream_mode = stream_mode if stream_mode is not None else self.stream_mode
+        if stream_mode is None and CONFIG_KEY_TASK_ID in config.get(CONF, {}):
+            # if being called as a node in another graph, default to values mode
+            # but don't overwrite stream_mode arg if provided
+            stream_mode = ["values"]
+        elif stream_mode is None:
+            stream_mode = self.stream_mode
         if not isinstance(stream_mode, list):
             stream_mode = [stream_mode]
-        if CONFIG_KEY_TASK_ID in config.get(CONF, {}):
-            # if being called as a node in another graph, always use values mode
-            stream_mode = ["values"]
         if self.checkpointer is False:
             checkpointer: BaseCheckpointSaver | None = None
         elif CONFIG_KEY_CHECKPOINTER in config.get(CONF, {}):
