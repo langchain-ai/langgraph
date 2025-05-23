@@ -9148,3 +9148,31 @@ async def test_draw_invalid():
             {"source": "nothing", "target": "__end__"},
         ],
     }
+
+
+@NEEDS_CONTEXTVARS
+async def test_imp_exception(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    @task()
+    async def my_task(number: int):
+        await asyncio.sleep(1)
+        return number * 2
+
+    @task()
+    async def task_with_exception(number: int):
+        await asyncio.sleep(1)
+        raise Exception("This is a test exception")
+
+    @entrypoint(checkpointer=async_checkpointer)
+    async def my_workflow(number: int):
+        await my_task(number)
+        try:
+            await task_with_exception(number)
+        except Exception as e:
+            print(f"Exception caught: {e}")
+        await my_task(number)
+        return "done"
+
+    thread1 = {"configurable": {"thread_id": "1"}}
+    assert await my_workflow.ainvoke(1, thread1) == "done"
