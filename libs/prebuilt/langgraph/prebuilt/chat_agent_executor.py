@@ -140,7 +140,7 @@ def _get_prompt_runnable(prompt: Optional[Prompt]) -> Runnable:
     return prompt_runnable
 
 
-def _should_bind_tools(model: LanguageModelLike, tools: Sequence[Union[BaseTool, dict[str, Any]]]) -> bool:
+def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> bool:
     if isinstance(model, RunnableSequence):
         model = next(
             (
@@ -443,10 +443,12 @@ def create_react_agent(
         model = cast(BaseChatModel, init_chat_model(model))
 
     tool_calling_enabled = len(tool_classes) > 0
-    builtin_tool_calling_enabled = len(llm_builtin_tools) > 0
 
-    if (_should_bind_tools(model, tool_classes) and tool_calling_enabled) or builtin_tool_calling_enabled:
-        model = cast(BaseChatModel, model).bind_tools(tool_classes + llm_builtin_tools)
+    if _should_bind_tools(model, tool_classes) and len(tool_classes) > 0:
+        model = cast(BaseChatModel, model).bind_tools(tool_classes)
+
+    if len(llm_builtin_tools) > 0:
+        model = cast(BaseChatModel, model).bind_tools(llm_builtin_tools)
 
     model_runnable = _get_prompt_runnable(prompt) | model
 
