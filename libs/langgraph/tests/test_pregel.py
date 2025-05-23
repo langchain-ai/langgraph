@@ -8772,7 +8772,7 @@ def test_get_graph_root_channel(snapshot: SnapshotAssertion) -> None:
 
 
 def test_imp_exception(
-    checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
     @task()
     def my_task(number: int):
@@ -8784,7 +8784,7 @@ def test_imp_exception(
         time.sleep(0.1)
         raise Exception("This is a test exception")
 
-    @entrypoint(checkpointer=checkpointer)
+    @entrypoint(checkpointer=sync_checkpointer)
     def my_workflow(number: int):
         my_task(number)
         try:
