@@ -6873,7 +6873,7 @@ def test_sync_streaming_with_functional_api() -> None:
     should be greater than the time delay between the two tasks.
     """
 
-    time_delay = 0.01
+    time_delay = 0.05
 
     @task()
     def slow() -> dict:
