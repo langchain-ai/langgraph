@@ -457,7 +457,7 @@ def _should_stop_others(
         if fut.cancelled():
             continue
         elif exc := fut.exception():
-            if not isinstance(exc, GraphBubbleUp):
+            if not isinstance(exc, GraphBubbleUp) and fut not in SKIP_RERAISE_SET:
                 return True
 
     return False

@@ -6873,7 +6873,7 @@ def test_sync_streaming_with_functional_api() -> None:
     should be greater than the time delay between the two tasks.
     """
 
-    time_delay = 0.01
+    time_delay = 0.05
 
     @task()
     def slow() -> dict:
@@ -8796,3 +8796,9 @@ def test_imp_exception(
 
     thread1 = {"configurable": {"thread_id": "1"}}
     assert my_workflow.invoke(1, thread1) == "done"
+
+    assert [c for c in my_workflow.stream(1, thread1)] == [
+        {"my_task": 2},
+        {"my_task": 2},
+        {"my_workflow": "done"},
+    ]
