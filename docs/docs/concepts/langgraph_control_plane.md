@@ -47,17 +47,20 @@ This section describes various features of the control plane.
 
 For simplicity, the control plane offers two deployment types with different resource allocations: `Development` and `Production`.
 
-| **Deployment Type** | **CPU** | **Memory** | **Scaling**         |
-|---------------------|---------|------------|---------------------|
-| Development         | 1 CPU   | 1 GB       | Up to 1 container   |
-| Production          | 2 CPU   | 2 GB       | Up to 10 containers |
+| **Deployment Type** | **CPU/Memory**  | **Scaling**         | **Database**                                                                     |
+|---------------------|-----------------|---------------------|----------------------------------------------------------------------------------|
+| Development         | 1 CPU, 1 GB RAM | Up to 1 container   | 10 GB disk, no backups                                                           |
+| Production          | 2 CPU, 2 GB RAM | Up to 10 containers | Autoscaling disk, automatic backups, highly available (multi-zone configuration) |
 
 CPU and memory resources are per container.
 
-!!! info "For [Cloud SaaS](../concepts/langgraph_cloud.md)"
+!!! warning "Immutable Deployment Type"
+
+    Once a deployment is created, the deployment type cannot be changed.
+
+!!! info "Resource Customization"
     For `Production` type deployments, resources can be manually increased on a case-by-case basis depending on use case and capacity constraints. Contact support@langchain.dev to request an increase in resources.
 
-!!! info 
     Resources for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments can be fully customized.
 
 ### Database Provisioning
