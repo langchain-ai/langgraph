@@ -8769,3 +8769,30 @@ def test_get_graph_root_channel(snapshot: SnapshotAssertion) -> None:
 
     assert json.dumps(graph.get_graph().to_json(), indent=2) == snapshot
     assert graph.get_graph().draw_mermaid(with_styles=False) == snapshot
+
+
+def test_imp_exception(
+    checkpointer: BaseCheckpointSaver,
+) -> None:
+    @task()
+    def my_task(number: int):
+        time.sleep(0.1)
+        return number * 2
+
+    @task()
+    def task_with_exception(number: int):
+        time.sleep(0.1)
+        raise Exception("This is a test exception")
+
+    @entrypoint(checkpointer=checkpointer)
+    def my_workflow(number: int):
+        my_task(number)
+        try:
+            task_with_exception(number)
+        except Exception as e:
+            print(f"Exception caught: {e}")
+        my_task(number)
+        return "done"
+
+    thread1 = {"configurable": {"thread_id": "1"}}
+    assert my_workflow.invoke(1, thread1) == "done"

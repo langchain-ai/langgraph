@@ -9156,12 +9156,12 @@ async def test_imp_exception(
 ) -> None:
     @task()
     async def my_task(number: int):
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.1)
         return number * 2
 
     @task()
     async def task_with_exception(number: int):
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.1)
         raise Exception("This is a test exception")
 
     @entrypoint(checkpointer=async_checkpointer)
