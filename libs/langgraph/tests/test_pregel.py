@@ -8796,3 +8796,9 @@ def test_imp_exception(
 
     thread1 = {"configurable": {"thread_id": "1"}}
     assert my_workflow.invoke(1, thread1) == "done"
+
+    assert [c for c in my_workflow.stream(1, thread1)] == [
+        {"my_task": 2},
+        {"my_task": 2},
+        {"my_workflow": "done"},
+    ]
