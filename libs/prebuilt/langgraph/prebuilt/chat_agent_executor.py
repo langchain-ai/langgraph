@@ -425,7 +425,6 @@ def create_react_agent(
         tool_classes = list(tools.tools_by_name.values())
         tool_node = tools
     else:
-        # allowed the allowed list of prebuilt tools.
         llm_builtin_tools = [t for t in tools if isinstance(t, dict)]
         tool_node = ToolNode([t for t in tools if not isinstance(t, dict)])
         tool_classes = list(tool_node.tools_by_name.values())
