@@ -2,8 +2,8 @@
 
 There are two versions of the self-hosted deployment: [Self-Hosted Data Plane](./deployment_options.md#self-hosted-data-plane) and [Self-Hosted Control Plane](./deployment_options.md#self-hosted-control-plane).
 
-!!! important "Beta"
-    The Self-Hosted Control Plane deployment option is currently in beta stage.
+!!! info "Important"
+    The Self-Hosted Control Plane deployment option is currently in beta stage and requires an [Enterprise](../../concepts/plans.md) plan.
 
 ## Requirements
 
