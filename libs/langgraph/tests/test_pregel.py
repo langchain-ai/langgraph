@@ -8786,12 +8786,12 @@ def test_imp_exception(
 
     @entrypoint(checkpointer=sync_checkpointer)
     def my_workflow(number: int):
-        my_task(number)
+        my_task(number).result()
         try:
-            task_with_exception(number)
+            task_with_exception(number).result()
         except Exception as e:
             print(f"Exception caught: {e}")
-        my_task(number)
+        my_task(number).result()
         return "done"
 
     thread1 = {"configurable": {"thread_id": "1"}}
