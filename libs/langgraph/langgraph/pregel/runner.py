@@ -56,7 +56,9 @@ EXCLUDED_FRAME_FNAMES = (
     "concurrent/futures/_base.py",
 )
 
-SKIP_RERAISE_SET = weakref.WeakSet()
+SKIP_RERAISE_SET: weakref.WeakSet[Union[concurrent.futures.Future, asyncio.Future]] = (
+    weakref.WeakSet()
+)
 
 
 class FuturesDict(Generic[F, E], dict[F, Optional[PregelExecutableTask]]):
@@ -432,7 +434,8 @@ class PregelRunner:
                 raise exception
             else:
                 # save error to checkpointer
-                self.put_writes()(task.id, [(ERROR, exception)])  # type: ignore[misc]
+                task.writes.append((ERROR, exception))
+                self.put_writes()(task.id, task.writes)  # type: ignore[misc]
         else:
             if self.node_finished and (
                 task.config is None or TAG_HIDDEN not in task.config.get("tags", [])
