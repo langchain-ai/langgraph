@@ -1099,8 +1099,6 @@ def test_invoke_checkpoint_two(
 def test_pending_writes_resume(
     request: pytest.FixtureRequest, checkpointer_name: str, checkpoint_during: bool
 ) -> None:
-    if not checkpoint_during and "shallow" in checkpointer_name:
-        pytest.skip("Checkpointing during execution not supported")
 
     checkpointer: BaseCheckpointSaver = request.getfixturevalue(
         f"checkpointer_{checkpointer_name}"
@@ -1203,9 +1201,6 @@ def test_pending_writes_resume(
         "value": 6
     }
 
-    if "shallow" in checkpointer_name:
-        assert len(list(checkpointer.list(thread1))) == 1
-        return
 
     # check all final checkpoints
     checkpoints = [c for c in checkpointer.list(thread1)]
@@ -1497,8 +1492,6 @@ def test_send_sequences() -> None:
 def test_imp_task(
     request: pytest.FixtureRequest, checkpointer_name: str, checkpoint_during: bool
 ) -> None:
-    if not checkpoint_during and "shallow" in checkpointer_name:
-        pytest.skip("Checkpointing during execution not supported")
 
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
     mapper_calls = 0
@@ -1594,8 +1587,6 @@ def test_imp_task(
 def test_imp_nested(
     request: pytest.FixtureRequest, checkpointer_name: str, checkpoint_during: bool
 ) -> None:
-    if not checkpoint_during and "shallow" in checkpointer_name:
-        pytest.skip("Checkpointing during execution not supported")
 
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
@@ -1667,8 +1658,6 @@ def test_imp_nested(
 def test_imp_stream_order(
     request: pytest.FixtureRequest, checkpointer_name: str, checkpoint_during: bool
 ) -> None:
-    if not checkpoint_during and "shallow" in checkpointer_name:
-        pytest.skip("Checkpointing during execution not supported")
 
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
@@ -1789,8 +1778,6 @@ def test_invoke_checkpoint_three(
     assert state.values.get("total") == 5
     assert state.next == ()
 
-    if "shallow" in checkpointer_name:
-        return
 
     assert len(list(app.get_state_history(thread_1, limit=1))) == 1
     # list all checkpoints for thread 1
@@ -2398,10 +2385,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(
     ]
 
     app_w_interrupt.update_state(config, {"docs": ["doc5"]})
-    expected_parent_config = (
-        None
-        if "shallow" in checkpointer_name
-        else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+    expected_parent_config = (list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
     )
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
@@ -2677,10 +2661,7 @@ def test_in_one_fan_out_state_graph_defer_node(
     ]
 
     app_w_interrupt.update_state(config, {"docs": ["doc5"]})
-    expected_parent_config = (
-        None
-        if "shallow" in checkpointer_name
-        else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+    expected_parent_config = (list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
     )
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
@@ -2955,10 +2936,7 @@ def test_in_one_fan_out_state_graph_then_defer_node(
     ]
 
     app_w_interrupt.update_state(config, {"docs": ["doc5"]})
-    expected_parent_config = (
-        None
-        if "shallow" in checkpointer_name
-        else list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+    expected_parent_config = (list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
     )
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
@@ -3890,8 +3868,6 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
 def test_subgraph_checkpoint_true(
     request: pytest.FixtureRequest, checkpointer_name: str, checkpoint_during: bool
 ) -> None:
-    if not checkpoint_during and "shallow" in checkpointer_name:
-        pytest.skip("Unsupported combo")
 
     checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
 
@@ -3958,8 +3934,6 @@ def test_subgraph_checkpoint_true(
 def test_subgraph_checkpoint_true_interrupt(
     request: pytest.FixtureRequest, checkpointer_name: str, checkpoint_during: bool
 ) -> None:
-    if not checkpoint_during and "shallow" in checkpointer_name:
-        pytest.skip("Unsupported combo")
 
     checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
 
@@ -4139,8 +4113,6 @@ def test_stream_buffering_single_node(
 def test_nested_graph_interrupts_parallel(
     request: pytest.FixtureRequest, checkpointer_name: str, checkpoint_during: bool
 ) -> None:
-    if not checkpoint_during and "shallow" in checkpointer_name:
-        pytest.skip("Unsupported combo")
 
     checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
 
@@ -4306,8 +4278,6 @@ def test_nested_graph_interrupts_parallel(
 def test_doubly_nested_graph_interrupts(
     request: pytest.FixtureRequest, checkpointer_name: str, checkpoint_during: bool
 ) -> None:
-    if not checkpoint_during and "shallow" in checkpointer_name:
-        pytest.skip("Unsupported combo")
 
     checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
 
@@ -5498,10 +5468,7 @@ def test_parent_command(request: pytest.FixtureRequest, checkpointer_name: str) 
             "parents": {},
         },
         created_at=AnyStr(),
-        parent_config=(
-            None
-            if "shallow" in checkpointer_name
-            else {
+        parent_config=({
                 "configurable": {
                     "thread_id": "1",
                     "checkpoint_ns": "",

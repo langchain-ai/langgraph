@@ -109,9 +109,6 @@ async def test_invoke_two_processes_in_out_interrupt(
         snapshot = await app.aget_state(thread2)
         assert snapshot.next == ()
 
-        if "shallow" in checkpointer_name:
-            return
-
         # list history
         history = [c async for c in app.aget_state_history(thread1)]
         assert history == [
@@ -852,13 +849,9 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                 },
                 "thread_id": "1",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
+            parent_config=[
+                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+            ][-1].config,
             interrupts=(),
         )
 
@@ -911,13 +904,9 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                 },
                 "thread_id": "1",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
+            parent_config=[
+                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+            ][-1].config,
             interrupts=(),
         )
 
@@ -1045,13 +1034,9 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                 },
                 "thread_id": "1",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
+            parent_config=[
+                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+            ][-1].config,
             interrupts=(),
         )
 
@@ -1121,13 +1106,9 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                 },
                 "thread_id": "2",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
+            parent_config=[
+                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+            ][-1].config,
             interrupts=(),
         )
 
@@ -1180,13 +1161,9 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                 },
                 "thread_id": "2",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
+            parent_config=[
+                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+            ][-1].config,
             interrupts=(),
         )
 
@@ -1314,13 +1291,9 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                 },
                 "thread_id": "2",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
+            parent_config=[
+                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+            ][-1].config,
             interrupts=(),
         )
 
@@ -1390,13 +1363,9 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                 },
                 "thread_id": "3",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
+            parent_config=[
+                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+            ][-1].config,
             interrupts=(),
         )
 
@@ -1777,13 +1746,9 @@ async def test_conditional_graph_state(checkpointer_name: str) -> None:
                 },
                 "thread_id": "1",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
+            parent_config=[
+                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+            ][-1].config,
             interrupts=(),
         )
 
@@ -1832,10 +1797,7 @@ async def test_conditional_graph_state(checkpointer_name: str) -> None:
                 },
                 "thread_id": "1",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
+            parent_config=([
                     c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
                 ][-1].config
             ),
@@ -1920,10 +1882,7 @@ async def test_conditional_graph_state(checkpointer_name: str) -> None:
                 },
                 "thread_id": "1",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
+            parent_config=([
                     c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
                 ][-1].config
             ),
@@ -1989,10 +1948,7 @@ async def test_conditional_graph_state(checkpointer_name: str) -> None:
                 },
                 "thread_id": "2",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
+            parent_config=([
                     c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
                 ][-1].config
             ),
@@ -2044,13 +2000,9 @@ async def test_conditional_graph_state(checkpointer_name: str) -> None:
                 },
                 "thread_id": "2",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
+            parent_config=[
+                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+            ][-1].config,
             interrupts=(),
         )
 
@@ -2132,13 +2084,9 @@ async def test_conditional_graph_state(checkpointer_name: str) -> None:
                 },
                 "thread_id": "2",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
+            parent_config=[
+                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+            ][-1].config,
             interrupts=(),
         )
 
@@ -2773,10 +2721,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 },
                 "thread_id": "1",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
+            parent_config=([
                     c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
                 ][-1].config
             ),
@@ -2832,10 +2777,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 },
                 "thread_id": "1",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
+            parent_config=([
                     c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
                 ][-1].config
             ),
@@ -2947,10 +2889,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 },
                 "thread_id": "1",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
+            parent_config=([
                     c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
                 ][-1].config
             ),
@@ -3002,10 +2941,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 },
                 "thread_id": "1",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
+            parent_config=([
                     c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
                 ][-1].config
             ),
@@ -3090,10 +3026,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 },
                 "thread_id": "2",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
+            parent_config=([
                     c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
                 ][-1].config
             ),
@@ -3149,10 +3082,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 },
                 "thread_id": "2",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
+            parent_config=([
                     c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
                 ][-1].config
             ),
@@ -3264,10 +3194,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 },
                 "thread_id": "2",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
+            parent_config=([
                     c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
                 ][-1].config
             ),
@@ -3319,10 +3246,7 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 },
                 "thread_id": "2",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
+            parent_config=([
                     c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
                 ][-1].config
             ),
@@ -3585,10 +3509,7 @@ async def test_message_graph(checkpointer_name: str) -> None:
                 },
                 "thread_id": "1",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
+            parent_config=([
                     c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
                 ][-1].config
             ),
@@ -3640,10 +3561,7 @@ async def test_message_graph(checkpointer_name: str) -> None:
                 },
                 "thread_id": "1",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
+            parent_config=([
                     c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
                 ][-1].config
             ),
@@ -3731,10 +3649,7 @@ async def test_message_graph(checkpointer_name: str) -> None:
                 },
                 "thread_id": "1",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
+            parent_config=([
                     c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
                 ][-1].config
             ),
@@ -3780,10 +3695,7 @@ async def test_message_graph(checkpointer_name: str) -> None:
                 "writes": {"agent": AIMessage(content="answer", id="ai2")},
                 "thread_id": "1",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
+            parent_config=([
                     c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
                 ][-1].config
             ),
@@ -4063,25 +3975,24 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
             "my_key": "value",
             "market": "DE",
         }
-        if "shallow" not in checkpointer_name:
-            assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
-                {
-                    "parents": {},
-                    "source": "loop",
-                    "step": 0,
-                    "writes": None,
-                    "assistant_id": "a",
-                    "thread_id": "1",
-                },
-                {
-                    "parents": {},
-                    "source": "input",
-                    "step": -1,
-                    "writes": {"__start__": {"my_key": "value", "market": "DE"}},
-                    "assistant_id": "a",
-                    "thread_id": "1",
-                },
-            ]
+        assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
+            {
+                "parents": {},
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+                "assistant_id": "a",
+                "thread_id": "1",
+            },
+            {
+                "parents": {},
+                "source": "input",
+                "step": -1,
+                "writes": {"__start__": {"my_key": "value", "market": "DE"}},
+                "assistant_id": "a",
+                "thread_id": "1",
+            },
+        ]
 
         assert await tool_two.aget_state(thread1) == StateSnapshot(
             values={"my_key": "value", "market": "DE"},
@@ -4103,13 +4014,9 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
                 "assistant_id": "a",
                 "thread_id": "1",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
-                    -1
-                ].config
-            ),
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
+            ][-1].config,
             interrupts=(),
         )
         # resume, for same result as above
@@ -4137,13 +4044,9 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
                 "assistant_id": "a",
                 "thread_id": "1",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
-                    -1
-                ].config
-            ),
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
+            ][-1].config,
             interrupts=(),
         )
 
@@ -4173,10 +4076,7 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
                 "assistant_id": "a",
                 "thread_id": "2",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [c async for c in tool_two.checkpointer.alist(thread2, limit=2)][
+            parent_config=([c async for c in tool_two.checkpointer.alist(thread2, limit=2)][
                     -1
                 ].config
             ),
@@ -4207,10 +4107,7 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
                 "assistant_id": "a",
                 "thread_id": "2",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [c async for c in tool_two.checkpointer.alist(thread2, limit=2)][
+            parent_config=([c async for c in tool_two.checkpointer.alist(thread2, limit=2)][
                     -1
                 ].config
             ),
@@ -4243,10 +4140,7 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
                 "assistant_id": "b",
                 "thread_id": "3",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [c async for c in tool_two.checkpointer.alist(thread3, limit=2)][
+            parent_config=([c async for c in tool_two.checkpointer.alist(thread3, limit=2)][
                     -1
                 ].config
             ),
@@ -4274,10 +4168,7 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
                 "assistant_id": "b",
                 "thread_id": "3",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [c async for c in tool_two.checkpointer.alist(thread3, limit=2)][
+            parent_config=([c async for c in tool_two.checkpointer.alist(thread3, limit=2)][
                     -1
                 ].config
             ),
@@ -4308,10 +4199,7 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
                 "assistant_id": "b",
                 "thread_id": "3",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [c async for c in tool_two.checkpointer.alist(thread3, limit=2)][
+            parent_config=([c async for c in tool_two.checkpointer.alist(thread3, limit=2)][
                     -1
                 ].config
             ),
@@ -4851,10 +4739,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "writes": {"prepare": {"my_key": " prepared"}},
                 "thread_id": "11",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+            parent_config=([c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
                     -1
                 ].config
             ),
@@ -4884,10 +4769,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "writes": {"finish": {"my_key": " finished"}},
                 "thread_id": "11",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+            parent_config=([c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
                     -1
                 ].config
             ),
@@ -4919,10 +4801,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "writes": {"prepare": {"my_key": " prepared"}},
                 "thread_id": "12",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [c async for c in tool_two.checkpointer.alist(thread2, limit=2)][
+            parent_config=([c async for c in tool_two.checkpointer.alist(thread2, limit=2)][
                     -1
                 ].config
             ),
@@ -4952,10 +4831,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "writes": {"finish": {"my_key": " finished"}},
                 "thread_id": "12",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [c async for c in tool_two.checkpointer.alist(thread2, limit=2)][
+            parent_config=([c async for c in tool_two.checkpointer.alist(thread2, limit=2)][
                     -1
                 ].config
             ),
@@ -4995,10 +4871,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "writes": {"prepare": {"my_key": " prepared"}},
                 "thread_id": "21",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+            parent_config=([c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
                     -1
                 ].config
             ),
@@ -5028,10 +4901,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "writes": {"finish": {"my_key": " finished"}},
                 "thread_id": "21",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+            parent_config=([c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
                     -1
                 ].config
             ),
@@ -5063,10 +4933,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "writes": {"prepare": {"my_key": " prepared"}},
                 "thread_id": "22",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [c async for c in tool_two.checkpointer.alist(thread2, limit=2)][
+            parent_config=([c async for c in tool_two.checkpointer.alist(thread2, limit=2)][
                     -1
                 ].config
             ),
@@ -5096,10 +4963,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "writes": {"finish": {"my_key": " finished"}},
                 "thread_id": "22",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [c async for c in tool_two.checkpointer.alist(thread2, limit=2)][
+            parent_config=([c async for c in tool_two.checkpointer.alist(thread2, limit=2)][
                     -1
                 ].config
             ),
@@ -5153,7 +5017,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "writes": {"prepare": {"my_key": " prepared"}},
                 "thread_id": "23",
             },
-            parent_config=(None if "shallow" in checkpointer_name else uconfig),
+            parent_config=(uconfig),
             interrupts=(),
         )
         # resume, for same result as above
@@ -5180,10 +5044,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "writes": {"finish": {"my_key": " finished"}},
                 "thread_id": "23",
             },
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [c async for c in tool_two.checkpointer.alist(thread3, limit=2)][
+            parent_config=([c async for c in tool_two.checkpointer.alist(thread3, limit=2)][
                     -1
                 ].config
             ),
@@ -5273,10 +5134,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                 "thread_id": "1",
             },
             created_at=AnyStr(),
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else {
+            parent_config=({
                     "configurable": {
                         "thread_id": "1",
                         "checkpoint_ns": "",
@@ -5337,20 +5195,16 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                             "langgraph_checkpoint_ns": AnyStr("inner:"),
                         },
                         created_at=AnyStr(),
-                        parent_config=(
-                            None
-                            if "shallow" in checkpointer_name
-                            else {
-                                "configurable": {
-                                    "thread_id": "1",
-                                    "checkpoint_ns": AnyStr("inner:"),
-                                    "checkpoint_id": AnyStr(),
-                                    "checkpoint_map": AnyDict(
-                                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
-                                    ),
-                                }
+                        parent_config={
+                            "configurable": {
+                                "thread_id": "1",
+                                "checkpoint_ns": AnyStr("inner:"),
+                                "checkpoint_id": AnyStr(),
+                                "checkpoint_map": AnyDict(
+                                    {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                                ),
                             }
-                        ),
+                        },
                         interrupts=(),
                     ),
                 ),
@@ -5371,10 +5225,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                 "thread_id": "1",
             },
             created_at=AnyStr(),
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else {
+            parent_config=({
                     "configurable": {
                         "thread_id": "1",
                         "checkpoint_ns": "",
@@ -5418,10 +5269,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "thread_id": "1",
                 },
                 created_at=AnyStr(),
-                parent_config=(
-                    None
-                    if "shallow" in checkpointer_name
-                    else {
+                parent_config=({
                         "configurable": {
                             "thread_id": "1",
                             "checkpoint_ns": "",
@@ -5497,9 +5345,6 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
             ),
         ]
 
-        if "shallow" in checkpointer_name:
-            expected_history = expected_history[:1]
-
         assert history == expected_history
 
         # get_state_history for a subgraph returns its checkpoints
@@ -5538,10 +5383,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "langgraph_checkpoint_ns": AnyStr("inner:"),
                 },
                 created_at=AnyStr(),
-                parent_config=(
-                    None
-                    if "shallow" in checkpointer_name
-                    else {
+                parent_config=({
                         "configurable": {
                             "thread_id": "1",
                             "checkpoint_ns": AnyStr("inner:"),
@@ -5643,9 +5485,6 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
             ),
         ]
 
-        if "shallow" in checkpointer_name:
-            expected_child_history = expected_child_history[:1]
-
         assert child_history == expected_child_history
 
         # resume
@@ -5672,10 +5511,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                 "thread_id": "1",
             },
             created_at=AnyStr(),
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else {
+            parent_config=({
                     "configurable": {
                         "thread_id": "1",
                         "checkpoint_ns": "",
@@ -5711,10 +5547,7 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                     "thread_id": "1",
                 },
                 created_at=AnyStr(),
-                parent_config=(
-                    None
-                    if "shallow" in checkpointer_name
-                    else {
+                parent_config=({
                         "configurable": {
                             "thread_id": "1",
                             "checkpoint_ns": "",
@@ -5865,8 +5698,6 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                 interrupts=(),
             ),
         ]
-        if "shallow" in checkpointer_name:
-            expected_history = expected_history[:1]
 
         assert actual_history == expected_history
         # test looking up parent state by checkpoint ID
@@ -5971,10 +5802,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                 "thread_id": "1",
             },
             created_at=AnyStr(),
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else {
+            parent_config=({
                     "configurable": {
                         "thread_id": "1",
                         "checkpoint_ns": "",
@@ -6027,10 +5855,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                 "thread_id": "1",
             },
             created_at=AnyStr(),
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else {
+            parent_config=({
                     "configurable": {
                         "thread_id": "1",
                         "checkpoint_ns": AnyStr("child:"),
@@ -6091,10 +5916,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                 ],
             },
             created_at=AnyStr(),
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else {
+            parent_config=({
                     "configurable": {
                         "thread_id": "1",
                         "checkpoint_ns": AnyStr(),
@@ -6179,10 +6001,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                                         ],
                                     },
                                     created_at=AnyStr(),
-                                    parent_config=(
-                                        None
-                                        if "shallow" in checkpointer_name
-                                        else {
+                                    parent_config=({
                                             "configurable": {
                                                 "thread_id": "1",
                                                 "checkpoint_ns": AnyStr(),
@@ -6231,10 +6050,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                             "langgraph_checkpoint_ns": AnyStr("child:"),
                         },
                         created_at=AnyStr(),
-                        parent_config=(
-                            None
-                            if "shallow" in checkpointer_name
-                            else {
+                        parent_config=({
                                 "configurable": {
                                     "thread_id": "1",
                                     "checkpoint_ns": AnyStr("child:"),
@@ -6265,10 +6081,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                 "thread_id": "1",
             },
             created_at=AnyStr(),
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else {
+            parent_config=({
                     "configurable": {
                         "thread_id": "1",
                         "checkpoint_ns": "",
@@ -6318,10 +6131,7 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                     "thread_id": "1",
                 },
                 created_at=AnyStr(),
-                parent_config=(
-                    None
-                    if "shallow" in checkpointer_name
-                    else {
+                parent_config=({
                         "configurable": {
                             "thread_id": "1",
                             "checkpoint_ns": "",
@@ -6333,8 +6143,6 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
             )
         )
 
-        if "shallow" in checkpointer_name:
-            return
 
         # get outer graph history
         outer_history = [c async for c in app.aget_state_history(config)]
@@ -7138,10 +6946,7 @@ async def test_weather_subgraph(
                 "thread_id": "1",
             },
             created_at=AnyStr(),
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else {
+            parent_config=({
                     "configurable": {
                         "thread_id": "1",
                         "checkpoint_ns": "",
@@ -7235,10 +7040,7 @@ async def test_weather_subgraph(
                 "thread_id": "14",
             },
             created_at=AnyStr(),
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else {
+            parent_config=({
                     "configurable": {
                         "thread_id": "14",
                         "checkpoint_ns": "",
@@ -7285,10 +7087,7 @@ async def test_weather_subgraph(
                             "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
                         },
                         created_at=AnyStr(),
-                        parent_config=(
-                            None
-                            if "shallow" in checkpointer_name
-                            else {
+                        parent_config=({
                                 "configurable": {
                                     "thread_id": "14",
                                     "checkpoint_ns": AnyStr("weather_graph:"),
@@ -7342,10 +7141,7 @@ async def test_weather_subgraph(
                 "thread_id": "14",
             },
             created_at=AnyStr(),
-            parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else {
+            parent_config=({
                     "configurable": {
                         "thread_id": "14",
                         "checkpoint_ns": "",
@@ -7402,10 +7198,7 @@ async def test_weather_subgraph(
                             "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
                         },
                         created_at=AnyStr(),
-                        parent_config=(
-                            None
-                            if "shallow" in checkpointer_name
-                            else {
+                        parent_config=({
                                 "configurable": {
                                     "thread_id": "14",
                                     "checkpoint_ns": AnyStr("weather_graph:"),

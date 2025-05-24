@@ -595,23 +595,22 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
                 )
             },
         ]
-        if "shallow" not in checkpointer_name:
-            assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
-                {
-                    "parents": {},
-                    "source": "loop",
-                    "step": 0,
-                    "writes": None,
-                    "thread_id": "1",
-                },
-                {
-                    "parents": {},
-                    "source": "input",
-                    "step": -1,
-                    "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
-                    "thread_id": "1",
-                },
-            ]
+        assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
+            {
+                "parents": {},
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+                "thread_id": "1",
+            },
+            {
+                "parents": {},
+                "source": "input",
+                "step": -1,
+                "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
+                "thread_id": "1",
+            },
+        ]
         tup = await tool_two.checkpointer.aget_tuple(thread1)
         assert await tool_two.aget_state(thread1) == StateSnapshot(
             values={"my_key": "value ⛰️", "market": "DE"},
@@ -640,9 +639,7 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
                 "thread_id": "1",
             },
             parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+                [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
                     -1
                 ].config
             ),
@@ -673,9 +670,7 @@ async def test_dynamic_interrupt(checkpointer_name: str) -> None:
                 "thread_id": "1",
             },
             parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+                [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
                     -1
                 ].config
             ),
@@ -793,25 +788,22 @@ async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
                 )
             },
         ]
-        if "shallow" not in checkpointer_name:
-            assert [
-                c.metadata async for c in tool_two.checkpointer.alist(thread1root)
-            ] == [
-                {
-                    "parents": {},
-                    "source": "loop",
-                    "step": 0,
-                    "writes": None,
-                    "thread_id": "1",
-                },
-                {
-                    "parents": {},
-                    "source": "input",
-                    "step": -1,
-                    "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
-                    "thread_id": "1",
-                },
-            ]
+        assert [c.metadata async for c in tool_two.checkpointer.alist(thread1root)] == [
+            {
+                "parents": {},
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+                "thread_id": "1",
+            },
+            {
+                "parents": {},
+                "source": "input",
+                "step": -1,
+                "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
+                "thread_id": "1",
+            },
+        ]
         tup = await tool_two.checkpointer.aget_tuple(thread1)
         assert await tool_two.aget_state(thread1) == StateSnapshot(
             values={"my_key": "value ⛰️", "market": "DE"},
@@ -846,11 +838,9 @@ async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
                 "thread_id": "1",
             },
             parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
-                    c async for c in tool_two.checkpointer.alist(thread1root, limit=2)
-                ][-1].config
+                [c async for c in tool_two.checkpointer.alist(thread1root, limit=2)][
+                    -1
+                ].config
             ),
             interrupts=(
                 Interrupt(
@@ -879,11 +869,9 @@ async def test_dynamic_interrupt_subgraph(checkpointer_name: str) -> None:
                 "thread_id": "1",
             },
             parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [
-                    c async for c in tool_two.checkpointer.alist(thread1root, limit=2)
-                ][-1].config
+                [c async for c in tool_two.checkpointer.alist(thread1root, limit=2)][
+                    -1
+                ].config
             ),
             interrupts=(),
         )
@@ -998,23 +986,22 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
             ],
         }
 
-        if "shallow" not in checkpointer_name:
-            assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
-                {
-                    "parents": {},
-                    "source": "loop",
-                    "step": 0,
-                    "writes": None,
-                    "thread_id": "1",
-                },
-                {
-                    "parents": {},
-                    "source": "input",
-                    "step": -1,
-                    "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
-                    "thread_id": "1",
-                },
-            ]
+        assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
+            {
+                "parents": {},
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+                "thread_id": "1",
+            },
+            {
+                "parents": {},
+                "source": "input",
+                "step": -1,
+                "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
+                "thread_id": "1",
+            },
+        ]
 
         tup = await tool_two.checkpointer.aget_tuple(thread1)
         assert await tool_two.aget_state(thread1) == StateSnapshot(
@@ -1053,9 +1040,7 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
                 "thread_id": "1",
             },
             parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+                [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
                     -1
                 ].config
             ),
@@ -1067,10 +1052,6 @@ async def test_copy_checkpoint(checkpointer_name: str) -> None:
                 ),
             ),
         )
-
-        if "shallow" in checkpointer_name:
-            # shallow checkpointer doesn't support copy
-            return
 
         # clear the interrupt and next tasks
         await tool_two.aupdate_state(thread1, None, as_node="__copy__")
@@ -1998,9 +1979,6 @@ async def test_invoke_checkpoint(mocker: MockerFixture, checkpointer_name: str) 
 async def test_pending_writes_resume(
     checkpointer_name: str, checkpoint_during: bool
 ) -> None:
-    if not checkpoint_during and "shallow" in checkpointer_name:
-        pytest.skip("Checkpointing during execution not supported")
-
     class State(TypedDict):
         value: Annotated[int, operator.add]
 
@@ -2105,10 +2083,6 @@ async def test_pending_writes_resume(
         assert await graph.ainvoke(
             None, thread1, checkpoint_during=checkpoint_during
         ) == {"value": 6}
-
-        if "shallow" in checkpointer_name:
-            assert len([c async for c in checkpointer.alist(thread1)]) == 1
-            return
 
         # check all final checkpoints
         checkpoints = [c async for c in checkpointer.alist(thread1)]
@@ -2499,9 +2473,6 @@ async def test_send_sequences(checkpointer_name: str) -> None:
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_task(checkpointer_name: str, checkpoint_during: bool) -> None:
-    if not checkpoint_during and "shallow" in checkpointer_name:
-        pytest.skip("Checkpointing during execution not supported")
-
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         mapper_calls = 0
 
@@ -2562,9 +2533,6 @@ async def test_imp_task(checkpointer_name: str, checkpoint_during: bool) -> None
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_nested(checkpointer_name: str, checkpoint_during: bool) -> None:
-    if not checkpoint_during and "shallow" in checkpointer_name:
-        pytest.skip("Checkpointing during execution not supported")
-
     async def mynode(input: list[str]) -> list[str]:
         return [it + "a" for it in input]
 
@@ -2637,9 +2605,6 @@ async def test_imp_nested(checkpointer_name: str, checkpoint_during: bool) -> No
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_imp_task_cancel(checkpointer_name: str, checkpoint_during: bool) -> None:
-    if not checkpoint_during and "shallow" in checkpointer_name:
-        pytest.skip("Checkpointing during execution not supported")
-
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         mapper_calls = 0
         mapper_cancels = 0
@@ -2700,9 +2665,6 @@ async def test_imp_task_cancel(checkpointer_name: str, checkpoint_during: bool) 
 async def test_imp_sync_from_async(
     checkpointer_name: str, checkpoint_during: bool
 ) -> None:
-    if not checkpoint_during and "shallow" in checkpointer_name:
-        pytest.skip("Checkpointing during execution not supported")
-
     async with awith_checkpointer(checkpointer_name) as checkpointer:
 
         @task()
@@ -2743,9 +2705,6 @@ async def test_imp_sync_from_async(
 async def test_imp_stream_order(
     checkpointer_name: str, checkpoint_during: bool
 ) -> None:
-    if not checkpoint_during and "shallow" in checkpointer_name:
-        pytest.skip("Checkpointing during execution not supported")
-
     async with awith_checkpointer(checkpointer_name) as checkpointer:
 
         @task()
@@ -3324,9 +3283,7 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
             },
             created_at=AnyStr(),
             parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else {
+                {
                     "configurable": {
                         "thread_id": "2",
                         "checkpoint_ns": "",
@@ -3388,9 +3345,7 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
             },
             created_at=AnyStr(),
             parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else {
+                {
                     "configurable": {
                         "thread_id": "2",
                         "checkpoint_ns": "",
@@ -3484,9 +3439,7 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
             },
             created_at=AnyStr(),
             parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else {
+                {
                     "configurable": {
                         "thread_id": "3",
                         "checkpoint_ns": "",
@@ -3576,9 +3529,7 @@ async def test_send_react_interrupt(checkpointer_name: str) -> None:
             },
             created_at=AnyStr(),
             parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else {
+                {
                     "configurable": {
                         "thread_id": "3",
                         "checkpoint_ns": "",
@@ -3794,9 +3745,7 @@ async def test_send_react_interrupt_control(
             },
             created_at=AnyStr(),
             parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else {
+                {
                     "configurable": {
                         "thread_id": "2",
                         "checkpoint_ns": "",
@@ -3858,9 +3807,7 @@ async def test_send_react_interrupt_control(
             },
             created_at=AnyStr(),
             parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else {
+                {
                     "configurable": {
                         "thread_id": "2",
                         "checkpoint_ns": "",
@@ -4097,9 +4044,6 @@ async def test_invoke_checkpoint_three(
         assert state is not None
         assert state.values.get("total") == 5
         assert state.next == ()
-
-        if "shallow" in checkpointer_name:
-            return
 
         assert len([c async for c in app.aget_state_history(thread_1, limit=1)]) == 1
         # list all checkpoints for thread 1
@@ -5019,9 +4963,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
             },
             created_at=AnyStr(),
             parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else {
+                {
                     "configurable": {
                         "thread_id": "1",
                         "checkpoint_ns": "",
@@ -6738,9 +6680,7 @@ async def test_parent_command(checkpointer_name: str) -> None:
             },
             created_at=AnyStr(),
             parent_config=(
-                None
-                if "shallow" in checkpointer_name
-                else {
+                {
                     "configurable": {
                         "thread_id": "1",
                         "checkpoint_ns": "",
@@ -7284,9 +7224,6 @@ async def test_checkpoint_recovery_async(checkpointer_name: str):
         # Retry with updated attempt count
         result = await graph.ainvoke({"steps": [], "attempt": 2}, config)
         assert result == {"steps": ["start", "node1", "node2"], "attempt": 2}
-
-        if "shallow" in checkpointer_name:
-            return
 
         # Verify checkpoint history shows both attempts
         history = [c async for c in graph.aget_state_history(config)]

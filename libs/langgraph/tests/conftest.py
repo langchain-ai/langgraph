@@ -19,10 +19,8 @@ from tests.conftest_checkpointer import (
     _checkpointer_postgres_aio,
     _checkpointer_postgres_aio_pipe,
     _checkpointer_postgres_aio_pool,
-    _checkpointer_postgres_aio_shallow,
     _checkpointer_postgres_pipe,
     _checkpointer_postgres_pool,
-    _checkpointer_postgres_shallow,
     _checkpointer_sqlite,
     _checkpointer_sqlite_aes,
     _checkpointer_sqlite_aio,
@@ -92,12 +90,6 @@ def checkpointer_postgres():
 
 
 @pytest.fixture(scope="function")
-def checkpointer_postgres_shallow():
-    with _checkpointer_postgres_shallow() as checkpointer:
-        yield checkpointer
-
-
-@pytest.fixture(scope="function")
 def checkpointer_postgres_pipe():
     with _checkpointer_postgres_pipe() as checkpointer:
         yield checkpointer
@@ -123,9 +115,6 @@ async def awith_checkpointer(
             yield checkpointer
     elif checkpointer_name == "postgres_aio":
         async with _checkpointer_postgres_aio() as checkpointer:
-            yield checkpointer
-    elif checkpointer_name == "postgres_aio_shallow":
-        async with _checkpointer_postgres_aio_shallow() as checkpointer:
             yield checkpointer
     elif checkpointer_name == "postgres_aio_pipe":
         async with _checkpointer_postgres_aio_pipe() as checkpointer:
@@ -275,7 +264,6 @@ ALL_CHECKPOINTERS_SYNC = [
     "postgres",
     "postgres_pipe",
     "postgres_pool",
-    "postgres_shallow",
 ]
 ALL_CHECKPOINTERS_ASYNC = [
     "memory",
@@ -283,5 +271,4 @@ ALL_CHECKPOINTERS_ASYNC = [
     "postgres_aio",
     "postgres_aio_pipe",
     "postgres_aio_pool",
-    "postgres_aio_shallow",
 ]
