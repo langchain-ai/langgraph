@@ -89,7 +89,11 @@ from langgraph.pregel.algo import (
     should_interrupt,
     task_path_str,
 )
-from langgraph.pregel.checkpoint import create_checkpoint, empty_checkpoint
+from langgraph.pregel.checkpoint import (
+    channels_from_checkpoint,
+    create_checkpoint,
+    empty_checkpoint,
+)
 from langgraph.pregel.debug import (
     map_debug_checkpoint,
     map_debug_task_results,
@@ -111,7 +115,6 @@ from langgraph.pregel.io import (
     read_channels,
     single,
 )
-from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.utils import get_new_channel_versions, is_xxh3_128_hexdigest
 from langgraph.store.base import BaseStore
@@ -119,7 +122,6 @@ from langgraph.types import (
     All,
     CachePolicy,
     Command,
-    LoopProtocol,
     PregelExecutableTask,
     PregelScratchpad,
     RetryPolicy,
@@ -146,7 +148,13 @@ def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
     return StreamProtocol(__call__, {mode for s in streams for mode in s.modes})
 
 
-class PregelLoop(LoopProtocol):
+class PregelLoop:
+    config: RunnableConfig
+    store: Optional["BaseStore"]
+    stream: Optional[StreamProtocol]
+    step: int
+    stop: int
+
     input: Optional[Any]
     input_model: Optional[type[BaseModel]]
     cache: Optional[BaseCache[WritesT]]
@@ -226,13 +234,11 @@ class PregelLoop(LoopProtocol):
         cache_policy: Optional[CachePolicy] = None,
         checkpoint_during: bool = True,
     ) -> None:
-        super().__init__(
-            step=0,
-            stop=0,
-            config=config,
-            stream=stream,
-            store=store,
-        )
+        self.stream = stream
+        self.config = config
+        self.store = store
+        self.step = 0
+        self.stop = 0
         self.input = input
         self.input_model = input_model
         self.checkpointer = checkpointer
@@ -423,6 +429,7 @@ class PregelLoop(LoopProtocol):
                 managed=self.managed,
                 config=task.config,
                 step=self.step,
+                stop=self.stop,
                 for_execution=True,
                 store=self.store,
                 checkpointer=self.checkpointer,
@@ -554,6 +561,7 @@ class PregelLoop(LoopProtocol):
             self.managed,
             self.config,
             self.step,
+            self.stop,
             for_execution=True,
             manager=self.manager,
             store=self.store,
@@ -738,6 +746,7 @@ class PregelLoop(LoopProtocol):
                 self.managed,
                 self.config,
                 self.step,
+                self.stop,
                 for_execution=True,
                 store=None,
                 checkpointer=None,
@@ -1146,8 +1155,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         )
 
         self.submit = self.stack.enter_context(BackgroundExecutor(self.config))
-        self.channels, self.managed = self.stack.enter_context(
-            ChannelsManager(self.specs, self.checkpoint, self)
+        self.channels, self.managed = channels_from_checkpoint(
+            self.specs, self.checkpoint
         )
         self.stack.push(self._suppress_interrupt)
         self.status = "pending"
@@ -1341,8 +1350,8 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         self.submit = await self.stack.enter_async_context(
             AsyncBackgroundExecutor(self.config)
         )
-        self.channels, self.managed = await self.stack.enter_async_context(
-            AsyncChannelsManager(self.specs, self.checkpoint, self)
+        self.channels, self.managed = channels_from_checkpoint(
+            self.specs, self.checkpoint
         )
         self.stack.push(self._suppress_interrupt)
         self.status = "pending"

@@ -364,6 +364,7 @@ def prepare_next_tasks(
     managed: ManagedValueMapping,
     config: RunnableConfig,
     step: int,
+    stop: int,
     *,
     for_execution: Literal[False],
     store: Literal[None] = None,
@@ -385,6 +386,7 @@ def prepare_next_tasks(
     managed: ManagedValueMapping,
     config: RunnableConfig,
     step: int,
+    stop: int,
     *,
     for_execution: Literal[True],
     store: Optional[BaseStore],
@@ -405,6 +407,7 @@ def prepare_next_tasks(
     managed: ManagedValueMapping,
     config: RunnableConfig,
     step: int,
+    stop: int,
     *,
     for_execution: bool,
     store: Optional[BaseStore] = None,
@@ -459,6 +462,7 @@ def prepare_next_tasks(
             managed=managed,
             config=config,
             step=step,
+            stop=stop,
             for_execution=for_execution,
             store=store,
             checkpointer=checkpointer,
@@ -504,6 +508,7 @@ def prepare_next_tasks(
             managed=managed,
             config=config,
             step=step,
+            stop=stop,
             for_execution=for_execution,
             store=store,
             checkpointer=checkpointer,
@@ -532,6 +537,7 @@ def prepare_single_task(
     managed: ManagedValueMapping,
     config: RunnableConfig,
     step: int,
+    stop: int,
     for_execution: bool,
     store: Optional[BaseStore] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
@@ -632,6 +638,8 @@ def prepare_single_task(
                             task_id,
                             xxh3_128_hexdigest(task_checkpoint_ns.encode()),
                             config[CONF].get(CONFIG_KEY_RESUME_MAP),
+                            step,
+                            stop,
                         ),
                     },
                 ),
@@ -752,6 +760,8 @@ def prepare_single_task(
                             task_id,
                             xxh3_128_hexdigest(task_checkpoint_ns.encode()),
                             config[CONF].get(CONFIG_KEY_RESUME_MAP),
+                            step,
+                            stop,
                         ),
                         CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
                             PREVIOUS, None
@@ -785,23 +795,6 @@ def prepare_single_task(
             proc,
         ):
             triggers = tuple(sorted(proc.triggers))
-            try:
-                val = _proc_input(
-                    proc,
-                    managed,
-                    channels,
-                    for_execution=for_execution,
-                    input_cache=input_cache,
-                )
-                if val is MISSING:
-                    return
-            except Exception as exc:
-                if SUPPORTS_EXC_NOTES:
-                    exc.add_note(
-                        f"Before task with name '{name}' and path '{task_path[:3]}'"
-                    )
-                raise
-
             # create task id
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
             task_id = task_id_func(
@@ -813,6 +806,35 @@ def prepare_single_task(
                 *triggers,
             )
             task_checkpoint_ns = f"{checkpoint_ns}{NS_END}{task_id}"
+            # create scratchpad
+            scratchpad = _scratchpad(
+                config[CONF].get(CONFIG_KEY_SCRATCHPAD),
+                pending_writes,
+                task_id,
+                xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+                config[CONF].get(CONFIG_KEY_RESUME_MAP),
+                step,
+                stop,
+            )
+            # create task input
+            try:
+                val = _proc_input(
+                    proc,
+                    managed,
+                    channels,
+                    for_execution=for_execution,
+                    input_cache=input_cache,
+                    scratchpad=scratchpad,
+                )
+                if val is MISSING:
+                    return
+            except Exception as exc:
+                if SUPPORTS_EXC_NOTES:
+                    exc.add_note(
+                        f"Before task with name '{name}' and path '{task_path[:3]}'"
+                    )
+                raise
+
             metadata = {
                 "langgraph_step": step,
                 "langgraph_node": name,
@@ -888,13 +910,7 @@ def prepare_single_task(
                                 },
                                 CONFIG_KEY_CHECKPOINT_ID: None,
                                 CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
-                                CONFIG_KEY_SCRATCHPAD: _scratchpad(
-                                    config[CONF].get(CONFIG_KEY_SCRATCHPAD),
-                                    pending_writes,
-                                    task_id,
-                                    xxh3_128_hexdigest(task_checkpoint_ns.encode()),
-                                    config[CONF].get(CONFIG_KEY_RESUME_MAP),
-                                ),
+                                CONFIG_KEY_SCRATCHPAD: scratchpad,
                                 CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
                                     PREVIOUS, None
                                 ),
@@ -947,6 +963,8 @@ def _scratchpad(
     task_id: str,
     namespace_hash: str,
     resume_map: Optional[dict[str, Any]],
+    step: int,
+    stop: int,
 ) -> PregelScratchpad:
     if len(pending_writes) > 0:
         # find global resume value
@@ -994,6 +1012,8 @@ def _scratchpad(
 
     # using itertools.count as an atomic counter (+= 1 is not thread-safe)
     return PregelScratchpad(
+        step=step,
+        stop=stop,
         # call
         call_counter=LazyAtomicCounter(),
         # interrupt
@@ -1011,6 +1031,7 @@ def _proc_input(
     channels: Mapping[str, BaseChannel],
     *,
     for_execution: bool,
+    scratchpad: PregelScratchpad,
     input_cache: Optional[dict[INPUT_CACHE_KEY_TYPE, Any]],
 ) -> Any:
     """Prepare input for a PULL task, based on the process's channels and triggers."""
@@ -1026,7 +1047,7 @@ def _proc_input(
                 if channels[chan].is_available():
                     val[k] = channels[chan].get()
             else:
-                val[k] = managed[k]()
+                val[k] = managed[k].get(scratchpad)
     elif isinstance(proc.channels, list):
         for chan in proc.channels:
             if chan in channels:
@@ -1034,7 +1055,7 @@ def _proc_input(
                     val = channels[chan].get()
                     break
             else:
-                val = managed[chan]()
+                val = managed[chan].get(scratchpad)
                 break
         else:
             return MISSING
