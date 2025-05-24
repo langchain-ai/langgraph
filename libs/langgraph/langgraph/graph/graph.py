@@ -26,7 +26,7 @@ from langgraph.constants import (
     Send,
 )
 from langgraph.graph.branch import Branch
-from langgraph.pregel import Channel, Pregel
+from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
@@ -428,7 +428,9 @@ class CompiledGraph(Pregel):
 
         # add hidden start node
         if start == START and start not in self.nodes:
-            self.nodes[start] = Channel.subscribe_to(START, tags=[TAG_HIDDEN])
+            self.nodes[start] = (
+                NodeBuilder().subscribe_only(START).meta(TAG_HIDDEN).build()
+            )
 
         # attach branch writer
         self.nodes[start] |= branch.run(get_writes)

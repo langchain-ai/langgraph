@@ -1,5 +1,20 @@
 # Pregel
 
+::: langgraph.pregel.NodeBuilder
+    options:
+      show_if_no_docstring: true
+      show_root_heading: true
+      show_root_full_path: false
+      members:
+        - subscribe_single
+        - subscribe_to
+        - do
+        - write_to
+        - meta
+        - retry
+        - cache
+        - build
+
 ::: langgraph.pregel.Pregel
     options:
       show_if_no_docstring: true

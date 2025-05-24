@@ -8,14 +8,7 @@ import weakref
 from collections import defaultdict, deque
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from functools import partial
-from typing import (
-    Any,
-    Callable,
-    Union,
-    cast,
-    get_type_hints,
-    overload,
-)
+from typing import Any, Callable, Union, cast, get_type_hints, overload
 from uuid import UUID, uuid5
 
 from langchain_core.globals import get_debug
@@ -99,7 +92,7 @@ from langgraph.pregel.io import map_input, read_channels
 from langgraph.pregel.loop import AsyncPregelLoop, StreamProtocol, SyncPregelLoop
 from langgraph.pregel.messages import StreamMessagesHandler
 from langgraph.pregel.protocol import PregelProtocol
-from langgraph.pregel.read import PregelNode
+from langgraph.pregel.read import DEFAULT_BOUND, PregelNode
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.runner import PregelRunner
 from langgraph.pregel.utils import get_new_channel_versions
@@ -127,6 +120,12 @@ from langgraph.utils.config import (
 from langgraph.utils.fields import get_enhanced_type_hints
 from langgraph.utils.pydantic import create_model, is_supported_by_pydantic
 from langgraph.utils.queue import AsyncQueue, SyncQueue  # type: ignore[attr-defined]
+from langgraph.utils.runnable import (
+    Runnable,
+    RunnableLike,
+    RunnableSeq,
+    coerce_to_runnable,
+)
 
 try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler
@@ -136,6 +135,172 @@ except ImportError:
 WriteValue = Union[Callable[[Input], Output], Any]
 
 
+class NodeBuilder:
+    __slots__ = (
+        "_channels",
+        "_triggers",
+        "_tags",
+        "_metadata",
+        "_writes",
+        "_bound",
+        "_retries",
+        "_cache",
+    )
+
+    _channels: list[str] | dict[str, str]
+    _triggers: list[str]
+    _tags: list[str]
+    _metadata: dict[str, Any]
+    _writes: list[ChannelWriteEntry]
+    _bound: Runnable
+    _retries: list[RetryPolicy]
+    _cache: CachePolicy | None
+
+    def __init__(
+        self,
+    ) -> None:
+        self._channels = {}
+        self._triggers = []
+        self._tags = []
+        self._metadata = {}
+        self._writes = []
+        self._bound = DEFAULT_BOUND
+        self._retries = []
+        self._cache = None
+
+    def subscribe_only(
+        self,
+        channel: str,
+    ) -> Self:
+        """Subscribe to a single channel."""
+        if isinstance(self._channels, list):
+            self._channels.append(channel)
+        elif not self._channels:
+            self._channels = [channel]
+        else:
+            raise ValueError(
+                "Cannot subscribe to single channels when other channels are already subscribed to"
+            )
+
+        self._triggers.append(channel)
+
+        return self
+
+    def subscribe_to(
+        self,
+        *channels: str,
+        read: bool = True,
+    ) -> Self:
+        """Add channels to subscribe to. Node will be invoked when any of these
+        channels are updated, with a dict of the channel values as input.
+
+        Args:
+            channels: Channel name(s) to subscribe to
+            read: If True, the channels will be included in the input to the node.
+                Otherwise, they will trigger the node without being sent in input.
+
+        Returns:
+            Self for chaining
+        """
+        if isinstance(self._channels, list):
+            raise ValueError(
+                "Cannot subscribe to channels when subscribed to a single channel"
+            )
+        if read:
+            if not self._channels:
+                self._channels = {chan: chan for chan in channels}
+            else:
+                self._channels.update({chan: chan for chan in channels})
+
+        if isinstance(channels, str):
+            self._triggers.append(channels)
+        else:
+            self._triggers.extend(channels)
+
+        return self
+
+    def read_from(
+        self,
+        *channels: str,
+    ) -> Self:
+        """Adds the specified channels to read from, without subscribing to them."""
+        assert self._channels, "Channels must be specified first"
+        assert isinstance(self._channels, dict), (
+            "Cannot read additional channels when subscribed to single channels"
+        )
+        self._channels.update({c: c for c in channels})
+        return self
+
+    def do(
+        self,
+        node: RunnableLike,
+    ) -> Self:
+        """Adds the specified node."""
+        if self._bound is not DEFAULT_BOUND:
+            self._bound = RunnableSeq(
+                self._bound, coerce_to_runnable(node, name=None, trace=True)
+            )
+        else:
+            self._bound = coerce_to_runnable(node, name=None, trace=True)
+        return self
+
+    def write_to(
+        self,
+        *channels: str | ChannelWriteEntry,
+        **kwargs: WriteValue,
+    ) -> Self:
+        """Add channel writes.
+
+        Args:
+            *channels: Channel names to write to
+            **kwargs: Channel name and value mappings
+
+        Returns:
+            Self for chaining
+        """
+        self._writes.extend(
+            ChannelWriteEntry(c) if isinstance(c, str) else c for c in channels
+        )
+        self._writes.extend(
+            ChannelWriteEntry(k, mapper=v)
+            if callable(v)
+            else ChannelWriteEntry(k, value=v)
+            for k, v in kwargs.items()
+        )
+
+        return self
+
+    def meta(self, *tags: str, **metadata: Any) -> Self:
+        """Add tags or metadata to the node."""
+        self._tags.extend(tags)
+        self._metadata.update(metadata)
+        return self
+
+    def retry(self, *policies: RetryPolicy) -> Self:
+        """Adds retry policies to the node."""
+        self._retries.extend(policies)
+        return self
+
+    def cache(self, policy: CachePolicy) -> Self:
+        """Adds cache policies to the node."""
+        self._cache = policy
+        return self
+
+    def build(self) -> PregelNode:
+        """Builds the node."""
+        return PregelNode(
+            channels=self._channels,
+            triggers=self._triggers,
+            tags=self._tags,
+            metadata=self._metadata,
+            writers=[ChannelWrite(self._writes)],
+            bound=self._bound,
+            retry_policy=self._retries,
+            cache_policy=self._cache,
+        )
+
+
+# Deprecated, remove in 2.0
 class Channel:
     @overload
     @classmethod
@@ -191,12 +356,12 @@ class Channel:
     @classmethod
     def write_to(
         cls,
-        *channels: str,
+        *channels: str | ChannelWriteEntry,
         **kwargs: WriteValue,
     ) -> ChannelWrite:
         """Writes to channels the result of the lambda, or None to skip writing."""
         return ChannelWrite(
-            [ChannelWriteEntry(c) for c in channels]
+            [ChannelWriteEntry(c) if isinstance(c, str) else c for c in channels]
             + [
                 (
                     ChannelWriteEntry(k, mapper=v)
@@ -285,12 +450,12 @@ class Pregel(PregelProtocol):
     Example: Single node application
         ```python
         from langgraph.channels import EphemeralValue
-        from langgraph.pregel import Pregel, Channel, ChannelWriteEntry
+        from langgraph.pregel import Pregel, NodeBuilder
 
         node1 = (
-            Channel.subscribe_to("a")
-            | (lambda x: x + x)
-            | Channel.write_to("b")
+            NodeBuilder().subscribe_only("a")
+            .do(lambda x: x + x)
+            .write_to("b")
         )
 
         app = Pregel(
@@ -313,18 +478,18 @@ class Pregel(PregelProtocol):
     Example: Using multiple nodes and multiple output channels
         ```python
         from langgraph.channels import LastValue, EphemeralValue
-        from langgraph.pregel import Pregel, Channel, ChannelWriteEntry
+        from langgraph.pregel import Pregel, NodeBuilder
 
         node1 = (
-            Channel.subscribe_to("a")
-            | (lambda x: x + x)
-            | Channel.write_to("b")
+            NodeBuilder().subscribe_only("a")
+            .do(lambda x: x + x)
+            .write_to("b")
         )
 
         node2 = (
-            Channel.subscribe_to("b")
-            | (lambda x: x + x)
-            | Channel.write_to("c")
+            NodeBuilder().subscribe_to("b")
+            .do(lambda x: x["b"] + x["b"])
+            .write_to("c")
         )
 
 
@@ -349,23 +514,18 @@ class Pregel(PregelProtocol):
     Example: Using a Topic channel
         ```python
         from langgraph.channels import LastValue, EphemeralValue, Topic
-        from langgraph.pregel import Pregel, Channel, ChannelWriteEntry
+        from langgraph.pregel import Pregel, NodeBuilder
 
         node1 = (
-            Channel.subscribe_to("a")
-            | (lambda x: x + x)
-            | {
-                "b": Channel.write_to("b"),
-                "c": Channel.write_to("c")
-            }
+            NodeBuilder().subscribe_only("a")
+            .do(lambda x: x + x)
+            .write_to("b", "c")
         )
 
         node2 = (
-            Channel.subscribe_to("b")
-            | (lambda x: x + x)
-            | {
-                "c": Channel.write_to("c"),
-            }
+            NodeBuilder().subscribe_only("b")
+            .do(lambda x: x + x)
+            .write_to("c")
         )
 
 
@@ -390,24 +550,19 @@ class Pregel(PregelProtocol):
     Example: Using a BinaryOperatorAggregate channel
         ```python
         from langgraph.channels import EphemeralValue, BinaryOperatorAggregate
-        from langgraph.pregel import Pregel, Channel
+        from langgraph.pregel import Pregel, NodeBuilder
 
 
         node1 = (
-            Channel.subscribe_to("a")
-            | (lambda x: x + x)
-            | {
-                "b": Channel.write_to("b"),
-                "c": Channel.write_to("c")
-            }
+            NodeBuilder().subscribe_only("a")
+            .do(lambda x: x + x)
+            .write_to("b", "c")
         )
 
         node2 = (
-            Channel.subscribe_to("b")
-            | (lambda x: x + x)
-            | {
-                "c": Channel.write_to("c"),
-            }
+            NodeBuilder().subscribe_only("b")
+            .do(lambda x: x + x)
+            .write_to("c")
         )
 
 
@@ -442,12 +597,12 @@ class Pregel(PregelProtocol):
 
         ```python
         from langgraph.channels import EphemeralValue
-        from langgraph.pregel import Pregel, Channel, ChannelWrite, ChannelWriteEntry
+        from langgraph.pregel import Pregel, NodeBuilder, ChannelWriteEntry
 
         example_node = (
-            Channel.subscribe_to("value")
-            | (lambda x: x + x if len(x) < 10 else None)
-            | ChannelWrite(writes=[ChannelWriteEntry(channel="value", skip_none=True)])
+            NodeBuilder().subscribe_only("value")
+            .do(lambda x: x + x if len(x) < 10 else None)
+            .write_to(ChannelWriteEntry(channel="value", skip_none=True))
         )
 
         app = Pregel(
@@ -524,7 +679,7 @@ class Pregel(PregelProtocol):
     def __init__(
         self,
         *,
-        nodes: dict[str, PregelNode],
+        nodes: dict[str, PregelNode | NodeBuilder],
         channels: dict[str, BaseChannel | ManagedValueSpec] | None,
         auto_validate: bool = True,
         stream_mode: StreamMode = "values",
@@ -547,7 +702,9 @@ class Pregel(PregelProtocol):
         trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
         name: str = "LangGraph",
     ) -> None:
-        self.nodes = nodes
+        self.nodes = {
+            k: v.build() if isinstance(v, NodeBuilder) else v for k, v in nodes.items()
+        }
         self.channels = channels or {}
         self.stream_mode = stream_mode
         self.stream_eager = stream_eager
