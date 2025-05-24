@@ -165,6 +165,8 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         results: list[Result] = [None] * num_ops
 
         async with _ainternal.get_connection(self.conn) as conn:
+            conn.autocommit = True
+            conn.prepare_threshold = 0
             if self.pipe:
                 async with self.pipe:
                     await self._execute_batch(grouped_ops, results, conn)
@@ -528,6 +530,8 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
         async with _ainternal.get_connection(self.conn) as conn:
+            conn.autocommit = True
+            conn.prepare_threshold = 0
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
                 # in multiple threads/coroutines, but only one cursor can be

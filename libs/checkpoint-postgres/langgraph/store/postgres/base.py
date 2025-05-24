@@ -910,6 +910,8 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
         with _pg_internal.get_connection(self.conn) as conn:
+            conn.autocommit = True
+            conn.prepare_threshold = 0
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
                 # in multiple threads/coroutines, but only one cursor can be
