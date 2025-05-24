@@ -28,7 +28,7 @@ def validate_graph(
             subscribed_channels.update(node.triggers)
         else:
             raise TypeError(
-                f"Invalid node type {type(node)}, expected Channel.subscribe_to()"
+                f"Invalid node type {type(node)}, expected PregelNode or NodeBuilder"
             )
 
     for chan in subscribed_channels:
