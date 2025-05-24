@@ -135,7 +135,6 @@ P = ParamSpec("P")
 INPUT_DONE = object()
 INPUT_RESUMING = object()
 INPUT_SHOULD_VALIDATE = object()
-SPECIAL_CHANNELS = (ERROR, INTERRUPT, SCHEDULED)
 WritesT = Sequence[tuple[str, Any]]
 
 

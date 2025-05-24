@@ -2891,7 +2891,7 @@ test = [
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "0.1.8"
+version = "0.2.1"
 source = { editable = "../libs/prebuilt" }
 dependencies = [
     { name = "langchain-core" },
@@ -2948,8 +2948,8 @@ dev = [
 
 [[package]]
 name = "langgraph-supervisor"
-version = "0.0.21"
-source = { git = "https://github.com/langchain-ai/langgraph-supervisor-py#6367bebd5462ac899e7def931ac6ab9cc6a9b070" }
+version = "0.0.25"
+source = { git = "https://github.com/langchain-ai/langgraph-supervisor-py#79380b5c21d3170e2d20dc6c55149ee057a306b1" }
 dependencies = [
     { name = "langchain-core" },
     { name = "langgraph" },

@@ -9148,3 +9148,301 @@ async def test_draw_invalid():
             {"source": "nothing", "target": "__end__"},
         ],
     }
+
+
+@NEEDS_CONTEXTVARS
+async def test_imp_exception(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    @task()
+    async def my_task(number: int):
+        await asyncio.sleep(0.1)
+        return number * 2
+
+    @task()
+    async def task_with_exception(number: int):
+        await asyncio.sleep(0.1)
+        raise Exception("This is a test exception")
+
+    @entrypoint(checkpointer=async_checkpointer)
+    async def my_workflow(number: int):
+        await my_task(number)
+        try:
+            await task_with_exception(number)
+        except Exception as e:
+            print(f"Exception caught: {e}")
+        await my_task(number)
+        return "done"
+
+    thread1 = {"configurable": {"thread_id": "1"}}
+    assert await my_workflow.ainvoke(1, thread1) == "done"
+
+    assert [c async for c in my_workflow.astream(1, thread1)] == [
+        {"my_task": 2},
+        {"my_task": 2},
+        {"my_workflow": "done"},
+    ]
+
+    assert [c async for c in my_workflow.astream_events(1, thread1)] == [
+        {
+            "event": "on_chain_start",
+            "data": {"input": 1},
+            "name": "LangGraph",
+            "tags": [],
+            "run_id": AnyStr(),
+            "metadata": {"thread_id": "1"},
+            "parent_ids": [],
+        },
+        {
+            "event": "on_chain_start",
+            "data": {"input": 1},
+            "name": "my_workflow",
+            "tags": ["graph:step:4"],
+            "run_id": AnyStr(),
+            "metadata": {
+                "thread_id": "1",
+                "langgraph_step": 4,
+                "langgraph_node": "my_workflow",
+                "langgraph_triggers": ("__start__",),
+                "langgraph_path": ("__pregel_pull", "my_workflow"),
+                "langgraph_checkpoint_ns": AnyStr(),
+            },
+            "parent_ids": [AnyStr()],
+        },
+        {
+            "event": "on_chain_start",
+            "data": {"input": {"number": 1}},
+            "name": "my_task",
+            "tags": ["seq:step:1"],
+            "run_id": AnyStr(),
+            "metadata": {
+                "thread_id": "1",
+                "langgraph_step": 4,
+                "langgraph_node": "my_task",
+                "langgraph_triggers": ("__pregel_push",),
+                "langgraph_path": (
+                    "__pregel_push",
+                    ("__pregel_pull", "my_workflow"),
+                    2,
+                    True,
+                ),
+                "langgraph_checkpoint_ns": AnyStr(),
+            },
+            "parent_ids": [
+                AnyStr(),
+                AnyStr(),
+            ],
+        },
+        {
+            "event": "on_chain_stream",
+            "run_id": AnyStr(),
+            "name": "my_task",
+            "tags": ["seq:step:1"],
+            "metadata": {
+                "thread_id": "1",
+                "langgraph_step": 4,
+                "langgraph_node": "my_task",
+                "langgraph_triggers": ("__pregel_push",),
+                "langgraph_path": (
+                    "__pregel_push",
+                    ("__pregel_pull", "my_workflow"),
+                    2,
+                    True,
+                ),
+                "langgraph_checkpoint_ns": AnyStr(),
+            },
+            "data": {"chunk": 2},
+            "parent_ids": [
+                AnyStr(),
+                AnyStr(),
+            ],
+        },
+        {
+            "event": "on_chain_end",
+            "data": {"output": 2, "input": {"number": 1}},
+            "run_id": AnyStr(),
+            "name": "my_task",
+            "tags": ["seq:step:1"],
+            "metadata": {
+                "thread_id": "1",
+                "langgraph_step": 4,
+                "langgraph_node": "my_task",
+                "langgraph_triggers": ("__pregel_push",),
+                "langgraph_path": (
+                    "__pregel_push",
+                    ("__pregel_pull", "my_workflow"),
+                    2,
+                    True,
+                ),
+                "langgraph_checkpoint_ns": AnyStr(),
+            },
+            "parent_ids": [
+                AnyStr(),
+                AnyStr(),
+            ],
+        },
+        {
+            "event": "on_chain_stream",
+            "run_id": AnyStr(),
+            "name": "LangGraph",
+            "tags": [],
+            "metadata": {"thread_id": "1"},
+            "data": {"chunk": {"my_task": 2}},
+            "parent_ids": [],
+        },
+        {
+            "event": "on_chain_start",
+            "data": {"input": {"number": 1}},
+            "name": "task_with_exception",
+            "tags": ["seq:step:1"],
+            "run_id": AnyStr(),
+            "metadata": {
+                "thread_id": "1",
+                "langgraph_step": 4,
+                "langgraph_node": "my_task",
+                "langgraph_triggers": ("__pregel_push",),
+                "langgraph_path": (
+                    "__pregel_push",
+                    ("__pregel_pull", "my_workflow"),
+                    2,
+                    True,
+                ),
+                "langgraph_checkpoint_ns": AnyStr(),
+            },
+            "parent_ids": [
+                AnyStr(),
+                AnyStr(),
+            ],
+        },
+        {
+            "event": "on_chain_start",
+            "data": {"input": {"number": 1}},
+            "name": "my_task",
+            "tags": ["seq:step:1"],
+            "run_id": AnyStr(),
+            "metadata": {
+                "thread_id": "1",
+                "langgraph_step": 4,
+                "langgraph_node": "my_task",
+                "langgraph_triggers": ("__pregel_push",),
+                "langgraph_path": (
+                    "__pregel_push",
+                    ("__pregel_pull", "my_workflow"),
+                    2,
+                    True,
+                ),
+                "langgraph_checkpoint_ns": AnyStr(),
+            },
+            "parent_ids": [
+                AnyStr(),
+                AnyStr(),
+            ],
+        },
+        {
+            "event": "on_chain_stream",
+            "run_id": AnyStr(),
+            "name": "my_task",
+            "tags": ["seq:step:1"],
+            "metadata": {
+                "thread_id": "1",
+                "langgraph_step": 4,
+                "langgraph_node": "my_task",
+                "langgraph_triggers": ("__pregel_push",),
+                "langgraph_path": (
+                    "__pregel_push",
+                    ("__pregel_pull", "my_workflow"),
+                    2,
+                    True,
+                ),
+                "langgraph_checkpoint_ns": AnyStr(),
+            },
+            "data": {"chunk": 2},
+            "parent_ids": [
+                AnyStr(),
+                AnyStr(),
+            ],
+        },
+        {
+            "event": "on_chain_end",
+            "data": {"output": 2, "input": {"number": 1}},
+            "run_id": AnyStr(),
+            "name": "my_task",
+            "tags": ["seq:step:1"],
+            "metadata": {
+                "thread_id": "1",
+                "langgraph_step": 4,
+                "langgraph_node": "my_task",
+                "langgraph_triggers": ("__pregel_push",),
+                "langgraph_path": (
+                    "__pregel_push",
+                    ("__pregel_pull", "my_workflow"),
+                    2,
+                    True,
+                ),
+                "langgraph_checkpoint_ns": AnyStr(),
+            },
+            "parent_ids": [
+                AnyStr(),
+                AnyStr(),
+            ],
+        },
+        {
+            "event": "on_chain_stream",
+            "run_id": AnyStr(),
+            "name": "my_workflow",
+            "tags": ["graph:step:4"],
+            "metadata": {
+                "thread_id": "1",
+                "langgraph_step": 4,
+                "langgraph_node": "my_workflow",
+                "langgraph_triggers": ("__start__",),
+                "langgraph_path": ("__pregel_pull", "my_workflow"),
+                "langgraph_checkpoint_ns": AnyStr(),
+            },
+            "data": {"chunk": "done"},
+            "parent_ids": [AnyStr()],
+        },
+        {
+            "event": "on_chain_stream",
+            "run_id": AnyStr(),
+            "name": "LangGraph",
+            "tags": [],
+            "metadata": {"thread_id": "1"},
+            "data": {"chunk": {"my_task": 2}},
+            "parent_ids": [],
+        },
+        {
+            "event": "on_chain_end",
+            "data": {"output": "done", "input": 1},
+            "run_id": AnyStr(),
+            "name": "my_workflow",
+            "tags": ["graph:step:4"],
+            "metadata": {
+                "thread_id": "1",
+                "langgraph_step": 4,
+                "langgraph_node": "my_workflow",
+                "langgraph_triggers": ("__start__",),
+                "langgraph_path": ("__pregel_pull", "my_workflow"),
+                "langgraph_checkpoint_ns": AnyStr(),
+            },
+            "parent_ids": [AnyStr()],
+        },
+        {
+            "event": "on_chain_stream",
+            "run_id": AnyStr(),
+            "name": "LangGraph",
+            "tags": [],
+            "metadata": {"thread_id": "1"},
+            "data": {"chunk": {"my_workflow": "done"}},
+            "parent_ids": [],
+        },
+        {
+            "event": "on_chain_end",
+            "data": {"output": "done"},
+            "run_id": AnyStr(),
+            "name": "LangGraph",
+            "tags": [],
+            "metadata": {"thread_id": "1"},
+            "parent_ids": [],
+        },
+    ]

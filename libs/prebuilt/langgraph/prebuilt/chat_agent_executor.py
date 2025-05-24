@@ -240,7 +240,7 @@ def _validate_chat_history(
 
 def create_react_agent(
     model: Union[str, LanguageModelLike],
-    tools: Union[Sequence[Union[BaseTool, Callable]], ToolNode],
+    tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
     prompt: Optional[Prompt] = None,
     response_format: Optional[
@@ -420,12 +420,13 @@ def create_react_agent(
             else AgentState
         )
 
+    llm_builtin_tools: list[dict] = []
     if isinstance(tools, ToolNode):
         tool_classes = list(tools.tools_by_name.values())
         tool_node = tools
     else:
-        tool_node = ToolNode(tools)
-        # get the tool functions wrapped in a tool class from the ToolNode
+        llm_builtin_tools = [t for t in tools if isinstance(t, dict)]
+        tool_node = ToolNode([t for t in tools if not isinstance(t, dict)])
         tool_classes = list(tool_node.tools_by_name.values())
 
     if isinstance(model, str):
@@ -442,8 +443,12 @@ def create_react_agent(
 
     tool_calling_enabled = len(tool_classes) > 0
 
-    if _should_bind_tools(model, tool_classes) and tool_calling_enabled:
-        model = cast(BaseChatModel, model).bind_tools(tool_classes)
+    if (
+        _should_bind_tools(model, tool_classes)
+        and len(tool_classes) > 0
+        or (len(llm_builtin_tools) > 0)
+    ):
+        model = cast(BaseChatModel, model).bind_tools(tool_classes + llm_builtin_tools)  # type: ignore[operator]
 
     model_runnable = _get_prompt_runnable(prompt) | model
 

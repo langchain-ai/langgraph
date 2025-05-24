@@ -6873,7 +6873,7 @@ def test_sync_streaming_with_functional_api() -> None:
     should be greater than the time delay between the two tasks.
     """
 
-    time_delay = 0.01
+    time_delay = 0.05
 
     @task()
     def slow() -> dict:
@@ -8769,3 +8769,36 @@ def test_get_graph_root_channel(snapshot: SnapshotAssertion) -> None:
 
     assert json.dumps(graph.get_graph().to_json(), indent=2) == snapshot
     assert graph.get_graph().draw_mermaid(with_styles=False) == snapshot
+
+
+def test_imp_exception(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    @task()
+    def my_task(number: int):
+        time.sleep(0.1)
+        return number * 2
+
+    @task()
+    def task_with_exception(number: int):
+        time.sleep(0.1)
+        raise Exception("This is a test exception")
+
+    @entrypoint(checkpointer=sync_checkpointer)
+    def my_workflow(number: int):
+        my_task(number).result()
+        try:
+            task_with_exception(number).result()
+        except Exception as e:
+            print(f"Exception caught: {e}")
+        my_task(number).result()
+        return "done"
+
+    thread1 = {"configurable": {"thread_id": "1"}}
+    assert my_workflow.invoke(1, thread1) == "done"
+
+    assert [c for c in my_workflow.stream(1, thread1)] == [
+        {"my_task": 2},
+        {"my_task": 2},
+        {"my_workflow": "done"},
+    ]

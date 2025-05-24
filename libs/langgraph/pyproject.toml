@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph"
-version = "0.4.5"
+version = "0.4.7"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 requires-python = ">=3.9"
@@ -15,7 +15,7 @@ dependencies = [
     "langchain-core>=0.1",
     "langgraph-checkpoint>=2.0.26",
     "langgraph-sdk>=0.1.42",
-    "langgraph-prebuilt>=0.1.8",
+    "langgraph-prebuilt>=0.2.0",
     "xxhash>=3.5.0",
     "pydantic>=2.7.4",
 ]
