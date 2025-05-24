@@ -422,7 +422,7 @@
   
   '''
 # ---
-# name: test_start_branch_then[memory]
+# name: test_start_branch_then[memory-in_memory]
   '''
   ---
   config:
