@@ -7,6 +7,7 @@ name = "langgraph-docs"
 version = "0.0.1"
 description = "LangGraph docs"
 authors = []
+homepage = "https://github.com/langchain-ai/langgraph"
 requires-python = "~=3.10"
 readme = "README.md"
 license = "MIT"
