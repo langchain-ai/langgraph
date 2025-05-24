@@ -3,13 +3,36 @@ from contextlib import asynccontextmanager, contextmanager
 from uuid import uuid4
 
 import pytest
-from psycopg import AsyncConnection, Connection
-from psycopg_pool import AsyncConnectionPool, ConnectionPool
 
-from langgraph.checkpoint.postgres import PostgresSaver
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from langgraph.checkpoint.sqlite import SqliteSaver
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+# Try to import psycopg and psycopg_pool
+PSYCOPG_AVAILABLE = False
+AsyncConnection = None
+Connection = None
+AsyncConnectionPool = None
+ConnectionPool = None
+PostgresSaver = None
+AsyncPostgresSaver = None
+
+try:
+    from psycopg import AsyncConnection, Connection
+    from psycopg_pool import AsyncConnectionPool, ConnectionPool
+    from langgraph.checkpoint.postgres import PostgresSaver
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+    PSYCOPG_AVAILABLE = True
+except (ImportError, ModuleNotFoundError):
+    pass # psycopg or dependent modules not available
+
+SQLITE_AVAILABLE = False
+SqliteSaver = None
+AsyncSqliteSaver = None
+
+try:
+    from langgraph.checkpoint.sqlite import SqliteSaver
+    from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+    SQLITE_AVAILABLE = True
+except ImportError:
+    pass # sqlite or dependent modules not available. SQLITE_AVAILABLE remains False.
+
 from tests.memory_assert import MemorySaverAssertImmutable
 
 DEFAULT_POSTGRES_URI = "postgres://postgres:postgres@localhost:5442/"
@@ -22,12 +45,16 @@ def _checkpointer_memory():
 
 @contextmanager
 def _checkpointer_sqlite():
+    if not SQLITE_AVAILABLE:
+        pytest.skip("sqlite not available or langgraph.checkpoint.sqlite failed to import")
     with SqliteSaver.from_conn_string(":memory:") as checkpointer:
         yield checkpointer
 
 
 @contextmanager
 def _checkpointer_postgres():
+    if not PSYCOPG_AVAILABLE:
+        pytest.skip("psycopg or psycopg_pool not available")
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
@@ -47,6 +74,8 @@ def _checkpointer_postgres():
 
 @contextmanager
 def _checkpointer_postgres_pipe():
+    if not PSYCOPG_AVAILABLE:
+        pytest.skip("psycopg or psycopg_pool not available")
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
@@ -69,6 +98,8 @@ def _checkpointer_postgres_pipe():
 
 @contextmanager
 def _checkpointer_postgres_pool():
+    if not PSYCOPG_AVAILABLE:
+        pytest.skip("psycopg or psycopg_pool not available")
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
@@ -89,12 +120,16 @@ def _checkpointer_postgres_pool():
 
 @asynccontextmanager
 async def _checkpointer_sqlite_aio():
+    if not SQLITE_AVAILABLE:
+        pytest.skip("sqlite_aio not available or langgraph.checkpoint.sqlite.aio failed to import")
     async with AsyncSqliteSaver.from_conn_string(":memory:") as checkpointer:
         yield checkpointer
 
 
 @asynccontextmanager
 async def _checkpointer_postgres_aio():
+    if not PSYCOPG_AVAILABLE:
+        pytest.skip("psycopg or psycopg_pool not available")
     if sys.version_info < (3, 10):
         pytest.skip("Async Postgres tests require Python 3.10+")
     database = f"test_{uuid4().hex[:16]}"
@@ -120,6 +155,8 @@ async def _checkpointer_postgres_aio():
 
 @asynccontextmanager
 async def _checkpointer_postgres_aio_pipe():
+    if not PSYCOPG_AVAILABLE:
+        pytest.skip("psycopg or psycopg_pool not available")
     if sys.version_info < (3, 10):
         pytest.skip("Async Postgres tests require Python 3.10+")
     database = f"test_{uuid4().hex[:16]}"
@@ -148,6 +185,8 @@ async def _checkpointer_postgres_aio_pipe():
 
 @asynccontextmanager
 async def _checkpointer_postgres_aio_pool():
+    if not PSYCOPG_AVAILABLE:
+        pytest.skip("psycopg or psycopg_pool not available")
     if sys.version_info < (3, 10):
         pytest.skip("Async Postgres tests require Python 3.10+")
     database = f"test_{uuid4().hex[:16]}"

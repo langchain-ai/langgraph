@@ -3,10 +3,22 @@ from contextlib import asynccontextmanager, contextmanager
 from uuid import uuid4
 
 import pytest
-from psycopg import AsyncConnection, Connection
+
+# Initialize PSYCOPG_AVAILABLE and related names
+PSYCOPG_AVAILABLE = False
+AsyncConnection = None
+Connection = None
+PostgresStore = None
+AsyncPostgresStore = None
+
+try:
+    from psycopg import AsyncConnection, Connection
+    from langgraph.store.postgres import AsyncPostgresStore, PostgresStore
+    PSYCOPG_AVAILABLE = True
+except ImportError:
+    pass # psycopg or langgraph.store.postgres not available
 
 from langgraph.store.memory import InMemoryStore
-from langgraph.store.postgres import AsyncPostgresStore, PostgresStore
 
 DEFAULT_POSTGRES_URI = "postgres://postgres:postgres@localhost:5442/"
 
@@ -19,6 +31,8 @@ def _store_memory():
 
 @contextmanager
 def _store_postgres():
+    if not PSYCOPG_AVAILABLE:
+        pytest.skip("psycopg or langgraph.store.postgres not available")
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
@@ -36,6 +50,8 @@ def _store_postgres():
 
 @contextmanager
 def _store_postgres_pipe():
+    if not PSYCOPG_AVAILABLE:
+        pytest.skip("psycopg or langgraph.store.postgres not available")
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
@@ -56,6 +72,8 @@ def _store_postgres_pipe():
 
 @contextmanager
 def _store_postgres_pool():
+    if not PSYCOPG_AVAILABLE:
+        pytest.skip("psycopg or langgraph.store.postgres not available")
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
@@ -75,6 +93,8 @@ def _store_postgres_pool():
 
 @asynccontextmanager
 async def _store_postgres_aio():
+    if not PSYCOPG_AVAILABLE:
+        pytest.skip("psycopg or langgraph.store.postgres not available")
     if sys.version_info < (3, 10):
         pytest.skip("Async Postgres tests require Python 3.10+")
     database = f"test_{uuid4().hex[:16]}"
@@ -97,6 +117,8 @@ async def _store_postgres_aio():
 
 @asynccontextmanager
 async def _store_postgres_aio_pipe():
+    if not PSYCOPG_AVAILABLE:
+        pytest.skip("psycopg or langgraph.store.postgres not available")
     if sys.version_info < (3, 10):
         pytest.skip("Async Postgres tests require Python 3.10+")
     database = f"test_{uuid4().hex[:16]}"
@@ -122,6 +144,8 @@ async def _store_postgres_aio_pipe():
 
 @asynccontextmanager
 async def _store_postgres_aio_pool():
+    if not PSYCOPG_AVAILABLE:
+        pytest.skip("psycopg or langgraph.store.postgres not available")
     if sys.version_info < (3, 10):
         pytest.skip("Async Postgres tests require Python 3.10+")
     database = f"test_{uuid4().hex[:16]}"
