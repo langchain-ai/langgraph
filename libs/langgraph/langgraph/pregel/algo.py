@@ -222,7 +222,7 @@ def apply_writes(
     tasks: Iterable[WritesProtocol],
     get_next_version: Optional[GetNextVersion],
     trigger_to_nodes: Mapping[str, Sequence[str]],
-) -> tuple[dict[str, list[Any]], set[str]]:
+) -> set[str]:
     """Apply writes from a set of tasks (usually the tasks from a Pregel step)
     to the checkpoint and channels, and return managed values writes to be applied
     externally.
@@ -234,8 +234,7 @@ def apply_writes(
         get_next_version: Optional function to determine the next version of a channel.
 
     Returns:
-        A tuple containing the managed values writes to be applied externally, and
-        the set of channels that were updated in this step.
+        Set of channels that were updated in this step.
     """
     # sort tasks on path, to ensure deterministic order for update application
     # any path parts after the 3rd are ignored for sorting
@@ -280,7 +279,6 @@ def apply_writes(
 
     # Group writes by channel
     pending_writes_by_channel: dict[str, list[Any]] = defaultdict(list)
-    pending_writes_by_managed: dict[str, list[Any]] = defaultdict(list)
     for task in tasks:
         for chan, val in task.writes:
             if chan in (NO_WRITES, PUSH, RESUME, INTERRUPT, RETURN, ERROR):
@@ -290,7 +288,9 @@ def apply_writes(
             elif chan in channels:
                 pending_writes_by_channel[chan].append(val)
             else:
-                pending_writes_by_managed[chan].append(val)
+                logger.warning(
+                    f"Task {task.name} with path {task.path} wrote to unknown channel {chan}, ignoring it."
+                )
 
     # Find the highest version of all channels
     if checkpoint["channel_versions"]:
@@ -341,7 +341,7 @@ def apply_writes(
                     updated_channels.add(chan)
 
     # Return managed values writes to be applied externally
-    return pending_writes_by_managed, updated_channels
+    return updated_channels
 
 
 def has_next_tasks(

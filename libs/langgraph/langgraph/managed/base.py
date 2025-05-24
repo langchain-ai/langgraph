@@ -1,13 +1,11 @@
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from inspect import isclass
 from typing import (
     Any,
     Generic,
-    NamedTuple,
     TypeVar,
-    Union,
 )
 
 from typing_extensions import Self, TypeGuard
@@ -54,48 +52,11 @@ class ManagedValue(ABC, Generic[V]):
     def __call__(self) -> V: ...
 
 
-class WritableManagedValue(Generic[V, U], ManagedValue[V], ABC):
-    @abstractmethod
-    def update(self, writes: Sequence[U]) -> None: ...
-
-    @abstractmethod
-    async def aupdate(self, writes: Sequence[U]) -> None: ...
-
-
-class ConfiguredManagedValue(NamedTuple):
-    cls: type[ManagedValue]
-    kwargs: dict[str, Any]
-
-
-ManagedValueSpec = Union[type[ManagedValue], ConfiguredManagedValue]
+ManagedValueSpec = type[ManagedValue]
 
 
 def is_managed_value(value: Any) -> TypeGuard[ManagedValueSpec]:
-    return (isclass(value) and issubclass(value, ManagedValue)) or isinstance(
-        value, ConfiguredManagedValue
-    )
-
-
-def is_readonly_managed_value(value: Any) -> TypeGuard[type[ManagedValue]]:
-    return (
-        isclass(value)
-        and issubclass(value, ManagedValue)
-        and not issubclass(value, WritableManagedValue)
-    ) or (
-        isinstance(value, ConfiguredManagedValue)
-        and not issubclass(value.cls, WritableManagedValue)
-    )
-
-
-def is_writable_managed_value(value: Any) -> TypeGuard[type[WritableManagedValue]]:
-    return (isclass(value) and issubclass(value, WritableManagedValue)) or (
-        isinstance(value, ConfiguredManagedValue)
-        and issubclass(value.cls, WritableManagedValue)
-    )
-
-
-ChannelKeyPlaceholder = object()
-ChannelTypePlaceholder = object()
+    return isclass(value) and issubclass(value, ManagedValue)
 
 
 ManagedValueMapping = dict[str, ManagedValue]

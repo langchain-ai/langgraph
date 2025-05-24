@@ -2,27 +2,21 @@ import asyncio
 import operator
 import re
 import sys
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from typing import (
     Annotated,
-    Any,
     Literal,
     Optional,
     Union,
     cast,
 )
 
-import httpx
 import pytest
 from langchain_core.messages import ToolCall
 from langchain_core.runnables import RunnableConfig, RunnablePick
-from pydantic import BaseModel
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 from typing_extensions import TypedDict
 
-from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -30,7 +24,6 @@ from langgraph.constants import END, PULL, PUSH, START
 from langgraph.graph.graph import Graph
 from langgraph.graph.message import MessageGraph, add_messages
 from langgraph.graph.state import StateGraph
-from langgraph.managed.shared_value import SharedValue
 from langgraph.prebuilt.chat_agent_executor import create_react_agent
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, Pregel
@@ -1529,51 +1522,16 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_conditional_graph_state(
-    mocker: MockerFixture, checkpointer_name: str
-) -> None:
+async def test_conditional_graph_state(checkpointer_name: str) -> None:
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
     from langchain_core.tools import tool
 
-    setup = mocker.Mock()
-    teardown = mocker.Mock()
-
-    @asynccontextmanager
-    async def assert_ctx_once() -> AsyncIterator[None]:
-        assert setup.call_count == 0
-        assert teardown.call_count == 0
-        try:
-            yield
-        finally:
-            assert setup.call_count == 1
-            assert teardown.call_count == 1
-            setup.reset_mock()
-            teardown.reset_mock()
-
-    class MyPydanticContextModel(BaseModel, arbitrary_types_allowed=True):
-        session: httpx.AsyncClient
-        something_else: str
-
-    @asynccontextmanager
-    async def make_context(
-        config: RunnableConfig,
-    ) -> AsyncIterator[MyPydanticContextModel]:
-        assert isinstance(config, dict)
-        setup()
-        session = httpx.AsyncClient()
-        try:
-            yield MyPydanticContextModel(session=session, something_else="hello")
-        finally:
-            await session.aclose()
-            teardown()
-
     class AgentState(TypedDict):
         input: Annotated[str, UntrackedValue]
         agent_outcome: Optional[Union[AgentAction, AgentFinish]]
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
-        context: Annotated[MyPydanticContextModel, Context(make_context)]
 
     # Assemble the tools
     @tool()
@@ -1614,8 +1572,6 @@ async def test_conditional_graph_state(
 
     # Define tool execution logic
     def execute_tools(data: AgentState) -> dict:
-        # check we have httpx session in AgentState
-        assert isinstance(data["context"], MyPydanticContextModel)
         # execute the tool
         agent_action: AgentAction = data.pop("agent_outcome")
         observation = {t.name: t for t in tools}[agent_action.tool].invoke(
@@ -1625,8 +1581,6 @@ async def test_conditional_graph_state(
 
     # Define decision-making logic
     def should_continue(data: AgentState) -> str:
-        # check we have httpx session in AgentState
-        assert isinstance(data["context"], MyPydanticContextModel)
         # Logic to decide whether to continue in the loop or exit
         if isinstance(data["agent_outcome"], AgentFinish):
             return "exit"
@@ -1649,91 +1603,88 @@ async def test_conditional_graph_state(
 
     app = workflow.compile()
 
-    async with assert_ctx_once():
-        assert await app.ainvoke({"input": "what is weather in sf"}) == {
-            "input": "what is weather in sf",
-            "intermediate_steps": [
-                [
-                    AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
-                    "result for query",
-                ],
-                [
-                    AgentAction(
-                        tool="search_api",
-                        tool_input="another",
-                        log="tool:search_api:another",
-                    ),
-                    "result for another",
-                ],
+    assert await app.ainvoke({"input": "what is weather in sf"}) == {
+        "input": "what is weather in sf",
+        "intermediate_steps": [
+            [
+                AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:query",
+                ),
+                "result for query",
             ],
-            "agent_outcome": AgentFinish(
-                return_values={"answer": "answer"}, log="finish:answer"
-            ),
-        }
+            [
+                AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+                "result for another",
+            ],
+        ],
+        "agent_outcome": AgentFinish(
+            return_values={"answer": "answer"}, log="finish:answer"
+        ),
+    }
 
-    async with assert_ctx_once():
-        assert [c async for c in app.astream({"input": "what is weather in sf"})] == [
-            {
-                "agent": {
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
-                }
-            },
-            {
-                "tools": {
-                    "intermediate_steps": [
-                        [
-                            AgentAction(
-                                tool="search_api",
-                                tool_input="query",
-                                log="tool:search_api:query",
-                            ),
-                            "result for query",
-                        ]
+    assert [c async for c in app.astream({"input": "what is weather in sf"})] == [
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:query",
+                ),
+            }
+        },
+        {
+            "tools": {
+                "intermediate_steps": [
+                    [
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    ]
+                ],
+            }
+        },
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
+        {
+            "tools": {
+                "intermediate_steps": [
+                    [
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="another",
+                            log="tool:search_api:another",
+                        ),
+                        "result for another",
                     ],
-                }
-            },
-            {
-                "agent": {
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="another",
-                        log="tool:search_api:another",
-                    ),
-                }
-            },
-            {
-                "tools": {
-                    "intermediate_steps": [
-                        [
-                            AgentAction(
-                                tool="search_api",
-                                tool_input="another",
-                                log="tool:search_api:another",
-                            ),
-                            "result for another",
-                        ],
-                    ],
-                }
-            },
-            {
-                "agent": {
-                    "agent_outcome": AgentFinish(
-                        return_values={"answer": "answer"}, log="finish:answer"
-                    ),
-                }
-            },
-        ]
+                ],
+            }
+        },
+        {
+            "agent": {
+                "agent_outcome": AgentFinish(
+                    return_values={"answer": "answer"}, log="finish:answer"
+                ),
+            }
+        },
+    ]
 
-    async with assert_ctx_once():
-        patches = [c async for c in app.astream_log({"input": "what is weather in sf"})]
+    patches = [c async for c in app.astream_log({"input": "what is weather in sf"})]
     patch_paths = {op["path"] for log in patches for op in log.ops}
 
     # Check that agent (one of the nodes) has its output streamed to the logs
@@ -1774,24 +1725,23 @@ async def test_conditional_graph_state(
         )
         config = {"configurable": {"thread_id": "1"}}
 
-        async with assert_ctx_once():
-            assert [
-                c
-                async for c in app_w_interrupt.astream(
-                    {"input": "what is weather in sf"}, config
-                )
-            ] == [
-                {
-                    "agent": {
-                        "agent_outcome": AgentAction(
-                            tool="search_api",
-                            tool_input="query",
-                            log="tool:search_api:query",
-                        ),
-                    }
-                },
-                {"__interrupt__": ()},
-            ]
+        assert [
+            c
+            async for c in app_w_interrupt.astream(
+                {"input": "what is weather in sf"}, config
+            )
+        ] == [
+            {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                }
+            },
+            {"__interrupt__": ()},
+        ]
 
         assert await app_w_interrupt.aget_state(config) == StateSnapshot(
             values={
@@ -1837,17 +1787,16 @@ async def test_conditional_graph_state(
             interrupts=(),
         )
 
-        async with assert_ctx_once():
-            await app_w_interrupt.aupdate_state(
-                config,
-                {
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:a different query",
-                    )
-                },
-            )
+        await app_w_interrupt.aupdate_state(
+            config,
+            {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:a different query",
+                )
+            },
+        )
 
         assert await app_w_interrupt.aget_state(config) == StateSnapshot(
             values={
@@ -1893,44 +1842,42 @@ async def test_conditional_graph_state(
             interrupts=(),
         )
 
-        async with assert_ctx_once():
-            assert [c async for c in app_w_interrupt.astream(None, config)] == [
-                {
-                    "tools": {
-                        "intermediate_steps": [
-                            [
-                                AgentAction(
-                                    tool="search_api",
-                                    tool_input="query",
-                                    log="tool:search_api:a different query",
-                                ),
-                                "result for query",
-                            ]
-                        ],
-                    }
-                },
-                {
-                    "agent": {
-                        "agent_outcome": AgentAction(
-                            tool="search_api",
-                            tool_input="another",
-                            log="tool:search_api:another",
-                        ),
-                    }
-                },
-                {"__interrupt__": ()},
-            ]
+        assert [c async for c in app_w_interrupt.astream(None, config)] == [
+            {
+                "tools": {
+                    "intermediate_steps": [
+                        [
+                            AgentAction(
+                                tool="search_api",
+                                tool_input="query",
+                                log="tool:search_api:a different query",
+                            ),
+                            "result for query",
+                        ]
+                    ],
+                }
+            },
+            {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="another",
+                        log="tool:search_api:another",
+                    ),
+                }
+            },
+            {"__interrupt__": ()},
+        ]
 
-        async with assert_ctx_once():
-            await app_w_interrupt.aupdate_state(
-                config,
-                {
-                    "agent_outcome": AgentFinish(
-                        return_values={"answer": "a really nice answer"},
-                        log="finish:a really nice answer",
-                    )
-                },
-            )
+        await app_w_interrupt.aupdate_state(
+            config,
+            {
+                "agent_outcome": AgentFinish(
+                    return_values={"answer": "a really nice answer"},
+                    log="finish:a really nice answer",
+                )
+            },
+        )
 
         assert await app_w_interrupt.aget_state(config) == StateSnapshot(
             values={
@@ -2540,7 +2487,6 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
 
     class AgentState(TypedDict):
         messages: Annotated[list[BaseMessage], add_messages]
-        session: Annotated[httpx.AsyncClient, Context(httpx.AsyncClient)]
 
     @tool()
     def search_api(query: str) -> str:
@@ -2585,7 +2531,6 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
 
     # Define decision-making logic
     def should_continue(data: AgentState) -> str:
-        assert isinstance(data["session"], httpx.AsyncClient)
         # Logic to decide whether to continue in the loop or exit
         if tool_calls := data["messages"][-1].tool_calls:
             return [Send("tools", tool_call) for tool_call in tool_calls]
@@ -4077,29 +4022,12 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
-        shared: Annotated[dict[str, dict[str, Any]], SharedValue.on("assistant_id")]
-        other: Annotated[dict[str, dict[str, Any]], SharedValue.on("assistant_id")]
-
-    def assert_shared_value(data: State, config: RunnableConfig) -> State:
-        assert "shared" in data
-        if thread_id := config["configurable"].get("thread_id"):
-            if thread_id == "1":
-                # this is the first thread, so should not see a value
-                assert data["shared"] == {}
-                return {"shared": {"1": {"hello": "world"}}, "other": {"2": {1: 2}}}
-            elif thread_id == "2":
-                # this should get value saved by thread 1
-                assert data["shared"] == {"1": {"hello": "world"}}
-            elif thread_id == "3":
-                # this is a different assistant, so should not see previous value
-                assert data["shared"] == {}
-        return {}
 
     def tool_two_slow(data: State, config: RunnableConfig) -> State:
-        return {"my_key": " slow", **assert_shared_value(data, config)}
+        return {"my_key": " slow"}
 
     def tool_two_fast(data: State, config: RunnableConfig) -> State:
-        return {"my_key": " fast", **assert_shared_value(data, config)}
+        return {"my_key": " fast"}
 
     tool_two_graph = StateGraph(State)
     tool_two_graph.add_node("tool_two_slow", tool_two_slow)
