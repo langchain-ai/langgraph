@@ -2,8 +2,6 @@ from collections.abc import AsyncIterator, Iterator
 from uuid import UUID
 
 import pytest
-from langchain_core import __version__ as core_version
-from packaging import version
 from pytest_mock import MockerFixture
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -30,11 +28,6 @@ from tests.conftest_store import (
 )
 
 pytest.register_assert_rewrite("tests.memory_assert")
-
-# TODO: fix this once core is released
-IS_LANGCHAIN_CORE_030_OR_GREATER = version.parse(core_version) >= version.parse(
-    "0.3.0.dev0"
-)
 
 
 @pytest.fixture

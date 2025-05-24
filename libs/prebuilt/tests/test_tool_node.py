@@ -18,7 +18,6 @@ from langgraph.errors import NodeInterrupt
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.tool_node import TOOL_CALL_ERROR_TEMPLATE
 from langgraph.types import Command, Send
-from tests.conftest import IS_LANGCHAIN_CORE_030_OR_GREATER
 
 pytestmark = pytest.mark.anyio
 
@@ -492,10 +491,6 @@ def test_tool_node_node_interrupt():
             assert exc_info.value == "foo"
 
 
-@pytest.mark.skipif(
-    not IS_LANGCHAIN_CORE_030_OR_GREATER,
-    reason="Langchain core 0.3.0 or greater is required",
-)
 @pytest.mark.parametrize("input_type", ["dict", "tool_calls"])
 async def test_tool_node_command(input_type: str):
     from langchain_core.tools.base import InjectedToolCallId
@@ -797,10 +792,6 @@ async def test_tool_node_command(input_type: str):
     ) == [Command(update={"messages": []}, graph=Command.PARENT)]
 
 
-@pytest.mark.skipif(
-    not IS_LANGCHAIN_CORE_030_OR_GREATER,
-    reason="Langchain core 0.3.0 or greater is required",
-)
 async def test_tool_node_command_list_input():
     from langchain_core.tools.base import InjectedToolCallId
 

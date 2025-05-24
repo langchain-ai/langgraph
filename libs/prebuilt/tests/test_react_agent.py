@@ -55,7 +55,6 @@ from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command, Interrupt, interrupt
 from langgraph.utils.config import get_stream_writer
 from tests.any_str import AnyStr
-from tests.conftest import IS_LANGCHAIN_CORE_030_OR_GREATER
 from tests.messages import _AnyIdHumanMessage, _AnyIdToolMessage
 from tests.model import FakeToolCallingModel
 
@@ -456,10 +455,6 @@ def test__infer_handled_types() -> None:
         _infer_handled_types(handler)
 
 
-@pytest.mark.skipif(
-    not IS_LANGCHAIN_CORE_030_OR_GREATER,
-    reason="Pydantic v1 is required for this test to pass in langchain-core < 0.3",
-)
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 def test_react_agent_with_structured_response(version: str) -> None:
     class WeatherResponse(BaseModel):
@@ -496,10 +491,6 @@ class CustomStatePydantic(AgentStatePydantic):
     user_name: Optional[str] = None
 
 
-@pytest.mark.skipif(
-    not IS_LANGCHAIN_CORE_030_OR_GREATER,
-    reason="Langchain core 0.3.0 or greater is required",
-)
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 @pytest.mark.parametrize("state_schema", [CustomState, CustomStatePydantic])
 def test_react_agent_update_state(
@@ -565,10 +556,6 @@ def test_react_agent_update_state(
     assert tool_message.name == "get_user_name"
 
 
-@pytest.mark.skipif(
-    not IS_LANGCHAIN_CORE_030_OR_GREATER,
-    reason="Langchain core 0.3.0 or greater is required",
-)
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 def test_react_agent_parallel_tool_calls(
     sync_checkpointer: BaseCheckpointSaver, version: str
@@ -832,10 +819,6 @@ def test_create_react_agent_inject_vars(
     assert result["foo"] == 2
 
 
-@pytest.mark.skipif(
-    not IS_LANGCHAIN_CORE_030_OR_GREATER,
-    reason="Langchain core 0.3.0 or greater is required",
-)
 def test_tool_node_inject_store() -> None:
     store = InMemoryStore()
     namespace = ("test",)

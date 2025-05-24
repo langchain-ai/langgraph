@@ -14,6 +14,7 @@ from typing_extensions import TypedDict
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.constants import END, PULL, PUSH, START
 from langgraph.errors import NodeInterrupt
 from langgraph.graph import StateGraph
@@ -22,6 +23,7 @@ from langgraph.graph.message import MessageGraph, MessagesState, add_messages
 from langgraph.prebuilt.chat_agent_executor import create_react_agent
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, Pregel
+from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import (
     Command,
@@ -36,7 +38,6 @@ from langgraph.types import (
 from tests.agents import AgentAction, AgentFinish
 from tests.any_int import AnyInt
 from tests.any_str import AnyDict, AnyStr, UnsortedSequence
-from tests.conftest import ALL_CHECKPOINTERS_SYNC, SHOULD_CHECK_SNAPSHOTS
 from tests.fake_chat import FakeChatModel
 from tests.fake_tracer import FakeTracer
 from tests.messages import (
@@ -47,11 +48,9 @@ from tests.messages import (
 )
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_invoke_two_processes_in_out_interrupt(
-    request: pytest.FixtureRequest, checkpointer_name: str, mocker: MockerFixture
+    sync_checkpointer: BaseCheckpointSaver, mocker: MockerFixture
 ) -> None:
-    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
@@ -65,7 +64,7 @@ def test_invoke_two_processes_in_out_interrupt(
         },
         input_channels="input",
         output_channels="output",
-        checkpointer=checkpointer,
+        checkpointer=sync_checkpointer,
         interrupt_after_nodes=["one"],
     )
     thread1 = {"configurable": {"thread_id": "1"}}
@@ -75,7 +74,7 @@ def test_invoke_two_processes_in_out_interrupt(
     assert app.invoke(2, thread1) is None
 
     # inbox == 3
-    checkpoint = checkpointer.get(thread1)
+    checkpoint = sync_checkpointer.get(thread1)
     assert checkpoint is not None
     assert checkpoint["channel_values"]["inbox"] == 3
 
@@ -86,7 +85,7 @@ def test_invoke_two_processes_in_out_interrupt(
     assert app.invoke(20, thread1) is None
 
     # inbox == 21
-    checkpoint = checkpointer.get(thread1)
+    checkpoint = sync_checkpointer.get(thread1)
     assert checkpoint is not None
     assert checkpoint["channel_values"]["inbox"] == 21
 
@@ -109,7 +108,6 @@ def test_invoke_two_processes_in_out_interrupt(
     # no pending tasks
     snapshot = app.get_state(thread2)
     assert snapshot.next == ()
-
 
     # list history
     history = [c for c in app.get_state_history(thread1)]
@@ -507,18 +505,13 @@ def test_fork_always_re_runs_nodes(
     ]
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_conditional_graph(
-    snapshot: SnapshotAssertion, request: pytest.FixtureRequest, checkpointer_name: str
+    snapshot: SnapshotAssertion, sync_checkpointer: BaseCheckpointSaver
 ) -> None:
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
     from langchain_core.runnables import RunnablePassthrough
     from langchain_core.tools import tool
-
-    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
-        f"checkpointer_{checkpointer_name}"
-    )
 
     # Assemble the tools
     @tool()
@@ -591,7 +584,7 @@ def test_conditional_graph(
 
     app = workflow.compile()
 
-    if SHOULD_CHECK_SNAPSHOTS and checkpointer_name == "memory":
+    if isinstance(sync_checkpointer, InMemorySaver):
         assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
         assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
         assert app.get_graph().draw_mermaid() == snapshot
@@ -719,7 +712,7 @@ def test_conditional_graph(
     # test state get/update methods with interrupt_after
 
     app_w_interrupt = workflow.compile(
-        checkpointer=checkpointer,
+        checkpointer=sync_checkpointer,
         interrupt_after=["agent"],
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -774,7 +767,8 @@ def test_conditional_graph(
             },
             "thread_id": "1",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -834,7 +828,8 @@ def test_conditional_graph(
             },
             "thread_id": "1",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -963,7 +958,8 @@ def test_conditional_graph(
             },
             "thread_id": "1",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -971,7 +967,7 @@ def test_conditional_graph(
     # test state get/update methods with interrupt_before
 
     app_w_interrupt = workflow.compile(
-        checkpointer=checkpointer,
+        checkpointer=sync_checkpointer,
         interrupt_before=["tools"],
     )
     config = {"configurable": {"thread_id": "2"}}
@@ -1027,7 +1023,8 @@ def test_conditional_graph(
             },
             "thread_id": "2",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -1081,7 +1078,8 @@ def test_conditional_graph(
             },
             "thread_id": "2",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -1210,7 +1208,8 @@ def test_conditional_graph(
             },
             "thread_id": "2",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -1218,7 +1217,7 @@ def test_conditional_graph(
     # test re-invoke to continue with interrupt_before
 
     app_w_interrupt = workflow.compile(
-        checkpointer=checkpointer,
+        checkpointer=sync_checkpointer,
         interrupt_before=["tools"],
     )
     config = {"configurable": {"thread_id": "3"}}
@@ -1274,7 +1273,8 @@ def test_conditional_graph(
             },
             "thread_id": "3",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -1398,20 +1398,13 @@ def test_conditional_graph(
     ]
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_conditional_state_graph(
     snapshot: SnapshotAssertion,
-    mocker: MockerFixture,
-    request: pytest.FixtureRequest,
-    checkpointer_name: str,
+    sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
     from langchain_core.tools import tool
-
-    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
-        f"checkpointer_{checkpointer_name}"
-    )
 
     class AgentState(TypedDict, total=False):
         input: Annotated[str, UntrackedValue]
@@ -1495,7 +1488,7 @@ def test_conditional_state_graph(
 
     app = workflow.compile()
 
-    if SHOULD_CHECK_SNAPSHOTS and checkpointer_name == "memory":
+    if isinstance(sync_checkpointer, InMemorySaver):
         assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
         assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
         assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
@@ -1585,7 +1578,7 @@ def test_conditional_state_graph(
     # test state get/update methods with interrupt_after
 
     app_w_interrupt = workflow.compile(
-        checkpointer=checkpointer,
+        checkpointer=sync_checkpointer,
         interrupt_after=["agent"],
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -1637,7 +1630,8 @@ def test_conditional_state_graph(
             },
             "thread_id": "1",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -1687,7 +1681,8 @@ def test_conditional_state_graph(
             },
             "thread_id": "1",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -1770,7 +1765,8 @@ def test_conditional_state_graph(
             },
             "thread_id": "1",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -1778,7 +1774,7 @@ def test_conditional_state_graph(
     # test state get/update methods with interrupt_before
 
     app_w_interrupt = workflow.compile(
-        checkpointer=checkpointer,
+        checkpointer=sync_checkpointer,
         interrupt_before=["tools"],
         debug=True,
     )
@@ -1830,7 +1826,8 @@ def test_conditional_state_graph(
             },
             "thread_id": "2",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -1880,7 +1877,8 @@ def test_conditional_state_graph(
             },
             "thread_id": "2",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -1963,14 +1961,15 @@ def test_conditional_state_graph(
             },
             "thread_id": "2",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
 
     # test w interrupt before all
     app_w_interrupt = workflow.compile(
-        checkpointer=checkpointer,
+        checkpointer=sync_checkpointer,
         interrupt_before="*",
         debug=True,
     )
@@ -2004,7 +2003,8 @@ def test_conditional_state_graph(
             "writes": None,
             "thread_id": "3",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -2052,7 +2052,8 @@ def test_conditional_state_graph(
             },
             "thread_id": "3",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -2121,7 +2122,8 @@ def test_conditional_state_graph(
             },
             "thread_id": "3",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -2141,7 +2143,7 @@ def test_conditional_state_graph(
 
     # test w interrupt after all
     app_w_interrupt = workflow.compile(
-        checkpointer=checkpointer,
+        checkpointer=sync_checkpointer,
         interrupt_after="*",
     )
     config = {"configurable": {"thread_id": "4"}}
@@ -2192,7 +2194,8 @@ def test_conditional_state_graph(
             },
             "thread_id": "4",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -2261,7 +2264,8 @@ def test_conditional_state_graph(
             },
             "thread_id": "4",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -2324,11 +2328,10 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
 
     app = create_react_agent(model, tools)
 
-    if SHOULD_CHECK_SNAPSHOTS:
-        assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
-        assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
-        assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke(
         {"messages": [HumanMessage(content="what is weather in sf")]}
@@ -2632,9 +2635,8 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         ]
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_state_graph_packets(
-    request: pytest.FixtureRequest, checkpointer_name: str, mocker: MockerFixture
+    sync_checkpointer: BaseCheckpointSaver, mocker: MockerFixture
 ) -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
@@ -2647,10 +2649,6 @@ def test_state_graph_packets(
         ToolMessage,
     )
     from langchain_core.tools import tool
-
-    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
-        f"checkpointer_{checkpointer_name}"
-    )
 
     class AgentState(TypedDict):
         messages: Annotated[list[BaseMessage], add_messages]
@@ -2869,7 +2867,7 @@ def test_state_graph_packets(
     # interrupt after agent
 
     app_w_interrupt = workflow.compile(
-        checkpointer=checkpointer,
+        checkpointer=sync_checkpointer,
         interrupt_after=["agent"],
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -2947,7 +2945,8 @@ def test_state_graph_packets(
             },
             "thread_id": "1",
         },
-        parent_config=([*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
+        parent_config=(
+            [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
         ),
         interrupts=(),
     )
@@ -3009,7 +3008,8 @@ def test_state_graph_packets(
             },
             "thread_id": "1",
         },
-        parent_config=([*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
+        parent_config=(
+            [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
         ),
         interrupts=(),
     )
@@ -3126,7 +3126,8 @@ def test_state_graph_packets(
             },
             "thread_id": "1",
         },
-        parent_config=([*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
+        parent_config=(
+            [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
         ),
         interrupts=(),
     )
@@ -3185,7 +3186,8 @@ def test_state_graph_packets(
             },
             "thread_id": "1",
         },
-        parent_config=([*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
+        parent_config=(
+            [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
         ),
         interrupts=(),
     )
@@ -3193,7 +3195,7 @@ def test_state_graph_packets(
     # interrupt before tools
 
     app_w_interrupt = workflow.compile(
-        checkpointer=checkpointer,
+        checkpointer=sync_checkpointer,
         interrupt_before=["tools"],
     )
     config = {"configurable": {"thread_id": "2"}}
@@ -3272,7 +3274,8 @@ def test_state_graph_packets(
             },
             "thread_id": "2",
         },
-        parent_config=([*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
+        parent_config=(
+            [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
         ),
         interrupts=(),
     )
@@ -3328,7 +3331,8 @@ def test_state_graph_packets(
             },
             "thread_id": "2",
         },
-        parent_config=([*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
+        parent_config=(
+            [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
         ),
         interrupts=(),
     )
@@ -3443,7 +3447,8 @@ def test_state_graph_packets(
             },
             "thread_id": "2",
         },
-        parent_config=([*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
+        parent_config=(
+            [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
         ),
         interrupts=(),
     )
@@ -3502,18 +3507,17 @@ def test_state_graph_packets(
             },
             "thread_id": "2",
         },
-        parent_config=([*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
+        parent_config=(
+            [*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config
         ),
         interrupts=(),
     )
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_message_graph(
     snapshot: SnapshotAssertion,
     deterministic_uuids: MockerFixture,
-    request: pytest.FixtureRequest,
-    checkpointer_name: str,
+    sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
     from copy import deepcopy
 
@@ -3524,10 +3528,6 @@ def test_message_graph(
     from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
     from langchain_core.outputs import ChatGeneration, ChatResult
     from langchain_core.tools import tool
-
-    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
-        f"checkpointer_{checkpointer_name}"
-    )
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
         def bind_functions(self, functions: list):
@@ -3634,7 +3634,7 @@ def test_message_graph(
     # meaning you can use it as you would any other runnable
     app = workflow.compile()
 
-    if SHOULD_CHECK_SNAPSHOTS and checkpointer_name == "memory":
+    if isinstance(sync_checkpointer, InMemorySaver):
         assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
         assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
         assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
@@ -3728,7 +3728,7 @@ def test_message_graph(
     ]
 
     app_w_interrupt = workflow.compile(
-        checkpointer=checkpointer,
+        checkpointer=sync_checkpointer,
         interrupt_after=["agent"],
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -3796,7 +3796,8 @@ def test_message_graph(
             },
             "thread_id": "1",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -3845,7 +3846,8 @@ def test_message_graph(
             },
             "thread_id": "1",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -3936,7 +3938,8 @@ def test_message_graph(
             },
             "thread_id": "1",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -3985,13 +3988,14 @@ def test_message_graph(
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
             "thread_id": "1",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
 
     app_w_interrupt = workflow.compile(
-        checkpointer=checkpointer,
+        checkpointer=sync_checkpointer,
         interrupt_before=["tools"],
     )
     config = {"configurable": {"thread_id": "2"}}
@@ -4058,7 +4062,8 @@ def test_message_graph(
             },
             "thread_id": "2",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -4113,7 +4118,8 @@ def test_message_graph(
             },
             "thread_id": "2",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -4204,7 +4210,8 @@ def test_message_graph(
             },
             "thread_id": "2",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -4254,7 +4261,8 @@ def test_message_graph(
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
             "thread_id": "2",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -4304,17 +4312,16 @@ def test_message_graph(
             "writes": {"tools": UnsortedSequence("ai", "an extra message")},
             "thread_id": "2",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_root_graph(
     deterministic_uuids: MockerFixture,
-    request: pytest.FixtureRequest,
-    checkpointer_name: str,
+    sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
     from copy import deepcopy
 
@@ -4330,10 +4337,6 @@ def test_root_graph(
     )
     from langchain_core.outputs import ChatGeneration, ChatResult
     from langchain_core.tools import tool
-
-    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
-        f"checkpointer_{checkpointer_name}"
-    )
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
         def bind_functions(self, functions: list):
@@ -4533,7 +4536,7 @@ def test_root_graph(
     ]
 
     app_w_interrupt = workflow.compile(
-        checkpointer=checkpointer,
+        checkpointer=sync_checkpointer,
         interrupt_after=["agent"],
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -4601,7 +4604,8 @@ def test_root_graph(
             },
             "thread_id": "1",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -4650,7 +4654,8 @@ def test_root_graph(
             },
             "thread_id": "1",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -4742,7 +4747,8 @@ def test_root_graph(
             },
             "thread_id": "1",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -4792,13 +4798,14 @@ def test_root_graph(
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
             "thread_id": "1",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
 
     app_w_interrupt = workflow.compile(
-        checkpointer=checkpointer,
+        checkpointer=sync_checkpointer,
         interrupt_before=["tools"],
     )
     config = {"configurable": {"thread_id": "2"}}
@@ -4865,7 +4872,8 @@ def test_root_graph(
             },
             "thread_id": "2",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -4920,7 +4928,8 @@ def test_root_graph(
             },
             "thread_id": "2",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -5012,7 +5021,8 @@ def test_root_graph(
             },
             "thread_id": "2",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -5061,7 +5071,8 @@ def test_root_graph(
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
             "thread_id": "2",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -5111,7 +5122,8 @@ def test_root_graph(
             "writes": {"tools": UnsortedSequence("ai", "an extra message")},
             "thread_id": "2",
         },
-        parent_config=(list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
+        parent_config=(
+            list(app_w_interrupt.checkpointer.list(config, limit=2))[-1].config
         ),
         interrupts=(),
     )
@@ -5147,7 +5159,7 @@ def test_root_graph(
         },
     )
     new_workflow.add_edge("tools", "agent")
-    new_app = new_workflow.compile(checkpointer=checkpointer)
+    new_app = new_workflow.compile(checkpointer=sync_checkpointer)
     model.i = 0  # reset the llm
 
     # previous state is converted to new schema
@@ -5192,8 +5204,7 @@ def test_root_graph(
             "writes": {"tools": UnsortedSequence("ai", "an extra message")},
             "thread_id": "2",
         },
-        parent_config=(list(new_app.checkpointer.list(config, limit=2))[-1].config
-        ),
+        parent_config=(list(new_app.checkpointer.list(config, limit=2))[-1].config),
         interrupts=(),
     )
 
@@ -5461,12 +5472,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
     ]
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_dynamic_interrupt(
-    request: pytest.FixtureRequest, checkpointer_name: str
-) -> None:
-    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
-
+def test_dynamic_interrupt(sync_checkpointer: BaseCheckpointSaver) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
@@ -5509,7 +5515,7 @@ def test_dynamic_interrupt(
         "market": "US",
     }
 
-    tool_two = tool_two_graph.compile(checkpointer=checkpointer)
+    tool_two = tool_two_graph.compile(checkpointer=sync_checkpointer)
 
     # missing thread_id
     with pytest.raises(ValueError, match="thread_id"):
@@ -5596,8 +5602,7 @@ def test_dynamic_interrupt(
             "writes": None,
             "thread_id": "1",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread1, limit=2))[-1].config),
         interrupts=(
             Interrupt(
                 value="Just because...",
@@ -5628,18 +5633,12 @@ def test_dynamic_interrupt(
             "writes": {},
             "thread_id": "1",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread1, limit=2))[-1].config),
         interrupts=(),
     )
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_copy_checkpoint(
-    request: pytest.FixtureRequest, checkpointer_name: str
-) -> None:
-    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
-
+def test_copy_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
@@ -5690,7 +5689,7 @@ def test_copy_checkpoint(
         "market": "US",
     }
 
-    tool_two = tool_two_graph.compile(checkpointer=checkpointer)
+    tool_two = tool_two_graph.compile(checkpointer=sync_checkpointer)
 
     # missing thread_id
     with pytest.raises(ValueError, match="thread_id"):
@@ -5786,8 +5785,7 @@ def test_copy_checkpoint(
             "writes": None,
             "thread_id": "1",
         },
-        parent_config=([*tool_two.checkpointer.list(thread1, limit=2)][-1].config
-        ),
+        parent_config=([*tool_two.checkpointer.list(thread1, limit=2)][-1].config),
         interrupts=(
             Interrupt(
                 value="Just because...",
@@ -5796,7 +5794,6 @@ def test_copy_checkpoint(
             ),
         ),
     )
-
 
     # clear the interrupt and next tasks
     tool_two.update_state(thread1, None, as_node="__copy__")
@@ -5842,12 +5839,7 @@ def test_copy_checkpoint(
     )
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_dynamic_interrupt_subgraph(
-    request: pytest.FixtureRequest, checkpointer_name: str
-) -> None:
-    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
-
+def test_dynamic_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> None:
     class SubgraphState(TypedDict):
         my_key: str
         market: str
@@ -5902,7 +5894,7 @@ def test_dynamic_interrupt_subgraph(
         "market": "US",
     }
 
-    tool_two = tool_two_graph.compile(checkpointer=checkpointer)
+    tool_two = tool_two_graph.compile(checkpointer=sync_checkpointer)
 
     # missing thread_id
     with pytest.raises(ValueError, match="thread_id"):
@@ -6004,7 +5996,8 @@ def test_dynamic_interrupt_subgraph(
             "writes": None,
             "thread_id": "1",
         },
-        parent_config=(list(
+        parent_config=(
+            list(
                 tool_two.checkpointer.list(
                     {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}, limit=2
                 )
@@ -6040,7 +6033,8 @@ def test_dynamic_interrupt_subgraph(
             "writes": {},
             "thread_id": "1",
         },
-        parent_config=(list(
+        parent_config=(
+            list(
                 tool_two.checkpointer.list(
                     {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}, limit=2
                 )
@@ -6050,12 +6044,11 @@ def test_dynamic_interrupt_subgraph(
     )
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_start_branch_then(
-    snapshot: SnapshotAssertion, request: pytest.FixtureRequest, checkpointer_name: str
+    snapshot: SnapshotAssertion,
+    sync_checkpointer: BaseCheckpointSaver,
+    sync_store: BaseStore,
 ) -> None:
-    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
-
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
@@ -6075,7 +6068,9 @@ def test_start_branch_then(
         path_map=["tool_two_slow", "tool_two_fast"],
     )
     tool_two = tool_two_graph.compile()
-    if checkpointer_name == "memory":
+    if isinstance(sync_checkpointer, InMemorySaver) and isinstance(
+        sync_store, InMemoryStore
+    ):
         assert tool_two.get_graph().draw_mermaid() == snapshot
 
     assert tool_two.invoke({"my_key": "value", "market": "DE"}) == {
@@ -6088,8 +6083,8 @@ def test_start_branch_then(
     }
 
     tool_two = tool_two_graph.compile(
-        store=InMemoryStore(),
-        checkpointer=checkpointer,
+        store=sync_store,
+        checkpointer=sync_checkpointer,
         interrupt_before=["tool_two_fast", "tool_two_slow"],
     )
 
@@ -6143,8 +6138,7 @@ def test_start_branch_then(
             "assistant_id": "a",
             "thread_id": "1",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread1, limit=2))[-1].config),
         interrupts=(),
     )
     # resume, for same result as above
@@ -6172,8 +6166,7 @@ def test_start_branch_then(
             "assistant_id": "a",
             "thread_id": "1",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread1, limit=2))[-1].config),
         interrupts=(),
     )
 
@@ -6203,8 +6196,7 @@ def test_start_branch_then(
             "assistant_id": "a",
             "thread_id": "2",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread2, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread2, limit=2))[-1].config),
         interrupts=(),
     )
     # resume, for same result as above
@@ -6232,8 +6224,7 @@ def test_start_branch_then(
             "assistant_id": "a",
             "thread_id": "2",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread2, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread2, limit=2))[-1].config),
         interrupts=(),
     )
 
@@ -6263,8 +6254,7 @@ def test_start_branch_then(
             "assistant_id": "b",
             "thread_id": "3",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread3, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread3, limit=2))[-1].config),
         interrupts=(),
     )
     # update state
@@ -6289,8 +6279,7 @@ def test_start_branch_then(
             "assistant_id": "b",
             "thread_id": "3",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread3, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread3, limit=2))[-1].config),
         interrupts=(),
     )
     # resume, for same result as above
@@ -6318,18 +6307,14 @@ def test_start_branch_then(
             "assistant_id": "b",
             "thread_id": "3",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread3, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread3, limit=2))[-1].config),
         interrupts=(),
     )
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_branch_then(
-    snapshot: SnapshotAssertion, request: pytest.FixtureRequest, checkpointer_name: str
+    snapshot: SnapshotAssertion, sync_checkpointer: BaseCheckpointSaver
 ) -> None:
-    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
-
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
@@ -6349,7 +6334,7 @@ def test_branch_then(
     tool_two_graph.add_node("finish", lambda s: {"my_key": " finished"})
     tool_two = tool_two_graph.compile()
 
-    if checkpointer_name == "memory":
+    if isinstance(sync_checkpointer, InMemorySaver):
         assert tool_two.get_graph().draw_mermaid(with_styles=False) == snapshot
         assert tool_two.get_graph().draw_mermaid() == snapshot
 
@@ -6363,7 +6348,7 @@ def test_branch_then(
     }
 
     # test stream_mode=debug
-    tool_two = tool_two_graph.compile(checkpointer=checkpointer)
+    tool_two = tool_two_graph.compile(checkpointer=sync_checkpointer)
     thread10 = {"configurable": {"thread_id": "10"}}
 
     res = [
@@ -6663,7 +6648,8 @@ def test_branch_then(
     ]
 
     tool_two = tool_two_graph.compile(
-        checkpointer=checkpointer, interrupt_before=["tool_two_fast", "tool_two_slow"]
+        checkpointer=sync_checkpointer,
+        interrupt_before=["tool_two_fast", "tool_two_slow"],
     )
 
     # missing thread_id
@@ -6695,8 +6681,7 @@ def test_branch_then(
             "writes": {"prepare": {"my_key": " prepared"}},
             "thread_id": "1",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread1, limit=2))[-1].config),
         interrupts=(),
     )
     # resume, for same result as above
@@ -6723,8 +6708,7 @@ def test_branch_then(
             "writes": {"finish": {"my_key": " finished"}},
             "thread_id": "1",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread1, limit=2))[-1].config),
         interrupts=(),
     )
 
@@ -6753,8 +6737,7 @@ def test_branch_then(
             "writes": {"prepare": {"my_key": " prepared"}},
             "thread_id": "2",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread2, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread2, limit=2))[-1].config),
         interrupts=(),
     )
     # resume, for same result as above
@@ -6781,13 +6764,12 @@ def test_branch_then(
             "writes": {"finish": {"my_key": " finished"}},
             "thread_id": "2",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread2, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread2, limit=2))[-1].config),
         interrupts=(),
     )
 
     tool_two = tool_two_graph.compile(
-        checkpointer=checkpointer, interrupt_before=["finish"]
+        checkpointer=sync_checkpointer, interrupt_before=["finish"]
     )
 
     thread1 = {"configurable": {"thread_id": "11"}}
@@ -6819,8 +6801,7 @@ def test_branch_then(
             "writes": {"tool_two_slow": {"my_key": " slow"}},
             "thread_id": "11",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread1, limit=2))[-1].config),
         interrupts=(),
     )
 
@@ -6848,13 +6829,12 @@ def test_branch_then(
             "writes": {"tool_two_slow": {"my_key": "er"}},
             "thread_id": "11",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread1, limit=2))[-1].config),
         interrupts=(),
     )
 
     tool_two = tool_two_graph.compile(
-        checkpointer=checkpointer, interrupt_after=["prepare"]
+        checkpointer=sync_checkpointer, interrupt_after=["prepare"]
     )
 
     # missing thread_id
@@ -6886,8 +6866,7 @@ def test_branch_then(
             "writes": {"prepare": {"my_key": " prepared"}},
             "thread_id": "21",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread1, limit=2))[-1].config),
         interrupts=(),
     )
     # resume, for same result as above
@@ -6914,8 +6893,7 @@ def test_branch_then(
             "writes": {"finish": {"my_key": " finished"}},
             "thread_id": "21",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread1, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread1, limit=2))[-1].config),
         interrupts=(),
     )
 
@@ -6944,8 +6922,7 @@ def test_branch_then(
             "writes": {"prepare": {"my_key": " prepared"}},
             "thread_id": "22",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread2, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread2, limit=2))[-1].config),
         interrupts=(),
     )
     # resume, for same result as above
@@ -6972,8 +6949,7 @@ def test_branch_then(
             "writes": {"finish": {"my_key": " finished"}},
             "thread_id": "22",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread2, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread2, limit=2))[-1].config),
         interrupts=(),
     )
 
@@ -7028,8 +7004,7 @@ def test_branch_then(
             "writes": {"prepare": {"my_key": " prepared"}},
             "thread_id": "23",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread3, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread3, limit=2))[-1].config),
         interrupts=(),
     )
     # resume, for same result as above
@@ -7056,8 +7031,7 @@ def test_branch_then(
             "writes": {"finish": {"my_key": " finished"}},
             "thread_id": "23",
         },
-        parent_config=(list(tool_two.checkpointer.list(thread3, limit=2))[-1].config
-        ),
+        parent_config=(list(tool_two.checkpointer.list(thread3, limit=2))[-1].config),
         interrupts=(),
     )
 
@@ -7445,12 +7419,7 @@ def test_send_dedupe_on_resume(
         assert history[1] == expected_history[2]
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_nested_graph_state(
-    request: pytest.FixtureRequest, checkpointer_name: str
-) -> None:
-    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
-
+def test_nested_graph_state(sync_checkpointer: BaseCheckpointSaver) -> None:
     class InnerState(TypedDict):
         my_key: str
         my_other_key: str
@@ -7496,7 +7465,7 @@ def test_nested_graph_state(
     graph.add_edge("inner", "outer_2")
     graph.set_finish_point("outer_2")
 
-    app = graph.compile(checkpointer=checkpointer)
+    app = graph.compile(checkpointer=sync_checkpointer)
 
     config = {"configurable": {"thread_id": "1"}}
     app.invoke({"my_key": "my value"}, config, debug=True)
@@ -7528,7 +7497,8 @@ def test_nested_graph_state(
             "thread_id": "1",
         },
         created_at=AnyStr(),
-        parent_config=({
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "1",
                     "checkpoint_ns": "",
@@ -7589,7 +7559,8 @@ def test_nested_graph_state(
                         "langgraph_checkpoint_ns": AnyStr("inner:"),
                     },
                     created_at=AnyStr(),
-                    parent_config=({
+                    parent_config=(
+                        {
                             "configurable": {
                                 "thread_id": "1",
                                 "checkpoint_ns": AnyStr("inner:"),
@@ -7620,7 +7591,8 @@ def test_nested_graph_state(
             "thread_id": "1",
         },
         created_at=AnyStr(),
-        parent_config=({
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "1",
                     "checkpoint_ns": "",
@@ -7664,7 +7636,8 @@ def test_nested_graph_state(
                 "thread_id": "1",
             },
             created_at=AnyStr(),
-            parent_config=({
+            parent_config=(
+                {
                     "configurable": {
                         "thread_id": "1",
                         "checkpoint_ns": "",
@@ -7776,7 +7749,8 @@ def test_nested_graph_state(
                 "langgraph_checkpoint_ns": AnyStr("inner:"),
             },
             created_at=AnyStr(),
-            parent_config=({
+            parent_config=(
+                {
                     "configurable": {
                         "thread_id": "1",
                         "checkpoint_ns": AnyStr("inner:"),
@@ -7904,7 +7878,8 @@ def test_nested_graph_state(
             "thread_id": "1",
         },
         created_at=AnyStr(),
-        parent_config=({
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "1",
                     "checkpoint_ns": "",
@@ -7938,7 +7913,8 @@ def test_nested_graph_state(
                 "thread_id": "1",
             },
             created_at=AnyStr(),
-            parent_config=({
+            parent_config=(
+                {
                     "configurable": {
                         "thread_id": "1",
                         "checkpoint_ns": "",
@@ -8093,12 +8069,9 @@ def test_nested_graph_state(
         assert app.get_state(actual_snapshot.config) == expected_snapshot
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_doubly_nested_graph_state(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
-
     class State(TypedDict):
         my_key: str
 
@@ -8146,7 +8119,7 @@ def test_doubly_nested_graph_state(
     graph.add_edge("child", "parent_2")
     graph.set_finish_point("parent_2")
 
-    app = graph.compile(checkpointer=checkpointer)
+    app = graph.compile(checkpointer=sync_checkpointer)
 
     # test invoke w/ nested interrupt
     config = {"configurable": {"thread_id": "1"}}
@@ -8191,7 +8164,8 @@ def test_doubly_nested_graph_state(
             "thread_id": "1",
         },
         created_at=AnyStr(),
-        parent_config=({
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "1",
                     "checkpoint_ns": "",
@@ -8244,7 +8218,8 @@ def test_doubly_nested_graph_state(
             "thread_id": "1",
         },
         created_at=AnyStr(),
-        parent_config=({
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr("child:"),
@@ -8303,7 +8278,8 @@ def test_doubly_nested_graph_state(
             "langgraph_triggers": ["branch:to:child_1"],
         },
         created_at=AnyStr(),
-        parent_config=({
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr(),
@@ -8386,7 +8362,8 @@ def test_doubly_nested_graph_state(
                                     ],
                                 },
                                 created_at=AnyStr(),
-                                parent_config=({
+                                parent_config=(
+                                    {
                                         "configurable": {
                                             "thread_id": "1",
                                             "checkpoint_ns": AnyStr(),
@@ -8431,7 +8408,8 @@ def test_doubly_nested_graph_state(
                         "langgraph_checkpoint_ns": AnyStr("child:"),
                     },
                     created_at=AnyStr(),
-                    parent_config=({
+                    parent_config=(
+                        {
                             "configurable": {
                                 "thread_id": "1",
                                 "checkpoint_ns": AnyStr("child:"),
@@ -8462,7 +8440,8 @@ def test_doubly_nested_graph_state(
             "thread_id": "1",
         },
         created_at=AnyStr(),
-        parent_config=({
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "1",
                     "checkpoint_ns": "",
@@ -8507,7 +8486,8 @@ def test_doubly_nested_graph_state(
                 "thread_id": "1",
             },
             created_at=AnyStr(),
-            parent_config=({
+            parent_config=(
+                {
                     "configurable": {
                         "thread_id": "1",
                         "checkpoint_ns": "",
@@ -8518,7 +8498,6 @@ def test_doubly_nested_graph_state(
             interrupts=(),
         )
     )
-
 
     # get outer graph history
     outer_history = list(app.get_state_history(config))
@@ -9071,12 +9050,7 @@ def test_doubly_nested_graph_state(
     ]
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
-def test_send_to_nested_graphs(
-    request: pytest.FixtureRequest, checkpointer_name: str
-) -> None:
-    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
-
+def test_send_to_nested_graphs(sync_checkpointer: BaseCheckpointSaver) -> None:
     class OverallState(TypedDict):
         subjects: list[str]
         jokes: Annotated[list[str], operator.add]
@@ -9110,7 +9084,7 @@ def test_send_to_nested_graphs(
     builder.add_conditional_edges(START, continue_to_jokes)
     builder.add_edge("generate_joke", END)
 
-    graph = builder.compile(checkpointer=checkpointer)
+    graph = builder.compile(checkpointer=sync_checkpointer)
     config = {"configurable": {"thread_id": "1"}}
     tracer = FakeTracer()
 
@@ -9139,13 +9113,10 @@ def test_send_to_nested_graphs(
     ]
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_send_react_interrupt(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, ToolCall, ToolMessage
-
-    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     ai_message = AIMessage(
         "",
@@ -9200,7 +9171,7 @@ def test_send_react_interrupt(
 
     # simple interrupt-resume flow
     foo_called = 0
-    graph = builder.compile(checkpointer=checkpointer, interrupt_before=["foo"])
+    graph = builder.compile(checkpointer=sync_checkpointer, interrupt_before=["foo"])
     thread1 = {"configurable": {"thread_id": "1"}}
     assert graph.invoke({"messages": [HumanMessage("hello")]}, thread1) == {
         "messages": [
@@ -9243,7 +9214,7 @@ def test_send_react_interrupt(
 
     # interrupt-update-resume flow
     foo_called = 0
-    graph = builder.compile(checkpointer=checkpointer, interrupt_before=["foo"])
+    graph = builder.compile(checkpointer=sync_checkpointer, interrupt_before=["foo"])
     thread1 = {"configurable": {"thread_id": "2"}}
     assert graph.invoke({"messages": [HumanMessage("hello")]}, thread1) == {
         "messages": [
@@ -9313,7 +9284,8 @@ def test_send_react_interrupt(
             "thread_id": "2",
         },
         created_at=AnyStr(),
-        parent_config=({
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "2",
                     "checkpoint_ns": "",
@@ -9374,7 +9346,8 @@ def test_send_react_interrupt(
             "thread_id": "2",
         },
         created_at=AnyStr(),
-        parent_config=({
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "2",
                     "checkpoint_ns": "",
@@ -9397,7 +9370,7 @@ def test_send_react_interrupt(
 
     # interrupt-update-resume flow, creating new Send in update call
     foo_called = 0
-    graph = builder.compile(checkpointer=checkpointer, interrupt_before=["foo"])
+    graph = builder.compile(checkpointer=sync_checkpointer, interrupt_before=["foo"])
     thread1 = {"configurable": {"thread_id": "3"}}
     assert graph.invoke({"messages": [HumanMessage("hello")]}, thread1) == {
         "messages": [
@@ -9469,7 +9442,8 @@ def test_send_react_interrupt(
             "thread_id": "3",
         },
         created_at=AnyStr(),
-        parent_config=({
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "3",
                     "checkpoint_ns": "",
@@ -9558,7 +9532,8 @@ def test_send_react_interrupt(
             "thread_id": "3",
         },
         created_at=AnyStr(),
-        parent_config=({
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "3",
                     "checkpoint_ns": "",
@@ -9602,13 +9577,10 @@ def test_send_react_interrupt(
     assert foo_called == 1
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_send_react_interrupt_control(
-    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
+    sync_checkpointer: BaseCheckpointSaver, snapshot: SnapshotAssertion
 ) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, ToolCall, ToolMessage
-
-    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
 
     ai_message = AIMessage(
         "",
@@ -9635,7 +9607,7 @@ def test_send_react_interrupt_control(
     builder.add_edge(START, "agent")
     graph = builder.compile()
 
-    if checkpointer_name == "memory":
+    if isinstance(sync_checkpointer, InMemorySaver):
         assert graph.get_graph().draw_mermaid() == snapshot
 
     assert graph.invoke({"messages": [HumanMessage("hello")]}) == {
@@ -9662,7 +9634,7 @@ def test_send_react_interrupt_control(
 
     # simple interrupt-resume flow
     foo_called = 0
-    graph = builder.compile(checkpointer=checkpointer, interrupt_before=["foo"])
+    graph = builder.compile(checkpointer=sync_checkpointer, interrupt_before=["foo"])
     thread1 = {"configurable": {"thread_id": "1"}}
     assert graph.invoke({"messages": [HumanMessage("hello")]}, thread1) == {
         "messages": [
@@ -9705,7 +9677,7 @@ def test_send_react_interrupt_control(
 
     # interrupt-update-resume flow
     foo_called = 0
-    graph = builder.compile(checkpointer=checkpointer, interrupt_before=["foo"])
+    graph = builder.compile(checkpointer=sync_checkpointer, interrupt_before=["foo"])
     thread1 = {"configurable": {"thread_id": "2"}}
     assert graph.invoke({"messages": [HumanMessage("hello")]}, thread1) == {
         "messages": [
@@ -9775,7 +9747,8 @@ def test_send_react_interrupt_control(
             "thread_id": "2",
         },
         created_at=AnyStr(),
-        parent_config=({
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "2",
                     "checkpoint_ns": "",
@@ -9836,7 +9809,8 @@ def test_send_react_interrupt_control(
             "thread_id": "2",
         },
         created_at=AnyStr(),
-        parent_config=({
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "2",
                     "checkpoint_ns": "",
@@ -9862,9 +9836,8 @@ def test_send_react_interrupt_control(
     # TODO add here test with invoke(Command())
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_weather_subgraph(
-    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
+    sync_checkpointer: BaseCheckpointSaver, snapshot: SnapshotAssertion
 ) -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
@@ -9873,8 +9846,6 @@ def test_weather_subgraph(
     from langchain_core.tools import tool
 
     from langgraph.graph import MessagesState
-
-    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
 
     # setup subgraph
 
@@ -9970,9 +9941,9 @@ def test_weather_subgraph(
     )
     graph.add_edge("normal_llm_node", END)
     graph.add_edge("weather_graph", END)
-    graph = graph.compile(checkpointer=checkpointer)
+    graph = graph.compile(checkpointer=sync_checkpointer)
 
-    if checkpointer_name == "memory":
+    if isinstance(sync_checkpointer, InMemorySaver):
         assert graph.get_graph(xray=1).draw_mermaid() == snapshot
 
     config = {"configurable": {"thread_id": "1"}}
@@ -10023,7 +9994,8 @@ def test_weather_subgraph(
             "thread_id": "1",
         },
         created_at=AnyStr(),
-        parent_config=({
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "1",
                     "checkpoint_ns": "",
@@ -10113,7 +10085,8 @@ def test_weather_subgraph(
             "thread_id": "14",
         },
         created_at=AnyStr(),
-        parent_config=({
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "14",
                     "checkpoint_ns": "",
@@ -10160,7 +10133,8 @@ def test_weather_subgraph(
                         "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
                     },
                     created_at=AnyStr(),
-                    parent_config=({
+                    parent_config=(
+                        {
                             "configurable": {
                                 "thread_id": "14",
                                 "checkpoint_ns": AnyStr("weather_graph:"),
@@ -10214,7 +10188,8 @@ def test_weather_subgraph(
             "thread_id": "14",
         },
         created_at=AnyStr(),
-        parent_config=({
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "14",
                     "checkpoint_ns": "",
@@ -10268,7 +10243,8 @@ def test_weather_subgraph(
                         "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
                     },
                     created_at=AnyStr(),
-                    parent_config=({
+                    parent_config=(
+                        {
                             "configurable": {
                                 "thread_id": "14",
                                 "checkpoint_ns": AnyStr("weather_graph:"),
