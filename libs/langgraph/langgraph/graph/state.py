@@ -66,12 +66,8 @@ from langgraph.graph.graph import (
 )
 from langgraph.graph.schema_utils import SchemaCoercionMapper
 from langgraph.managed.base import (
-    ChannelKeyPlaceholder,
-    ChannelTypePlaceholder,
-    ConfiguredManagedValue,
     ManagedValueSpec,
     is_managed_value,
-    is_writable_managed_value,
 )
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.write import (
@@ -727,9 +723,7 @@ class CompiledStateGraph(CompiledGraph):
             ]
         else:
             output_keys = list(self.builder.channels) + [
-                k
-                for k, v in self.builder.managed.items()
-                if is_writable_managed_value(v)
+                k for k, v in self.builder.managed.items()
             ]
 
         def _get_updates(
@@ -1211,12 +1205,6 @@ def _is_field_managed_value(name: str, typ: type[Any]) -> Optional[ManagedValueS
         if len(meta) >= 1:
             decoration = get_origin(meta[-1]) or meta[-1]
             if is_managed_value(decoration):
-                if isinstance(decoration, ConfiguredManagedValue):
-                    for k, v in decoration.kwargs.items():
-                        if v is ChannelKeyPlaceholder:
-                            decoration.kwargs[k] = name
-                        if v is ChannelTypePlaceholder:
-                            decoration.kwargs[k] = typ.__origin__
                 return decoration
 
     return None

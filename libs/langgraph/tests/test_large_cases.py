@@ -2,19 +2,15 @@ import json
 import operator
 import re
 import time
-from collections.abc import Iterator
-from contextlib import contextmanager
 from dataclasses import replace
 from typing import Annotated, Any, Literal, Optional, Union, cast
 
-import httpx
 import pytest
 from langchain_core.runnables import RunnableConfig, RunnableMap, RunnablePick
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 from typing_extensions import TypedDict
 
-from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -23,7 +19,6 @@ from langgraph.errors import NodeInterrupt
 from langgraph.graph import StateGraph
 from langgraph.graph.graph import Graph
 from langgraph.graph.message import MessageGraph, MessagesState, add_messages
-from langgraph.managed.shared_value import SharedValue
 from langgraph.prebuilt.chat_agent_executor import create_react_agent
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, Pregel
@@ -1440,39 +1435,14 @@ def test_conditional_state_graph(
     checkpointer: BaseCheckpointSaver = request.getfixturevalue(
         f"checkpointer_{checkpointer_name}"
     )
-    setup = mocker.Mock()
-    teardown = mocker.Mock()
-
-    @contextmanager
-    def assert_ctx_once() -> Iterator[None]:
-        assert setup.call_count == 0
-        assert teardown.call_count == 0
-        try:
-            yield
-        finally:
-            assert setup.call_count == 1
-            assert teardown.call_count == 1
-            setup.reset_mock()
-            teardown.reset_mock()
-
-    @contextmanager
-    def make_httpx_client() -> Iterator[httpx.Client]:
-        setup()
-        with httpx.Client() as client:
-            try:
-                yield client
-            finally:
-                teardown()
 
     class AgentState(TypedDict, total=False):
         input: Annotated[str, UntrackedValue]
         agent_outcome: Optional[Union[AgentAction, AgentFinish]]
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
-        session: Annotated[httpx.Client, Context(make_httpx_client)]
 
     class ToolState(TypedDict, total=False):
         agent_outcome: Union[AgentAction, AgentFinish]
-        session: Annotated[httpx.Client, Context(make_httpx_client)]
 
     # Assemble the tools
     @tool()
@@ -1514,7 +1484,6 @@ def test_conditional_state_graph(
     # Define tool execution logic
     def execute_tools(data: ToolState) -> dict:
         # check session in data
-        assert isinstance(data["session"], httpx.Client)
         assert "input" not in data
         assert "intermediate_steps" not in data
         # execute the tool
@@ -1527,7 +1496,6 @@ def test_conditional_state_graph(
     # Define decision-making logic
     def should_continue(data: AgentState) -> str:
         # check session in data
-        assert isinstance(data["session"], httpx.Client)
         # Logic to decide whether to continue in the loop or exit
         if isinstance(data["agent_outcome"], AgentFinish):
             return "exit"
@@ -1556,88 +1524,86 @@ def test_conditional_state_graph(
         assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
         assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
-    with assert_ctx_once():
-        assert app.invoke({"input": "what is weather in sf"}) == {
-            "input": "what is weather in sf",
-            "intermediate_steps": [
-                [
-                    AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
-                    "result for query",
-                ],
-                [
-                    AgentAction(
-                        tool="search_api",
-                        tool_input="another",
-                        log="tool:search_api:another",
-                    ),
-                    "result for another",
-                ],
+    assert app.invoke({"input": "what is weather in sf"}) == {
+        "input": "what is weather in sf",
+        "intermediate_steps": [
+            [
+                AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:query",
+                ),
+                "result for query",
             ],
-            "agent_outcome": AgentFinish(
-                return_values={"answer": "answer"}, log="finish:answer"
-            ),
-        }
+            [
+                AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+                "result for another",
+            ],
+        ],
+        "agent_outcome": AgentFinish(
+            return_values={"answer": "answer"}, log="finish:answer"
+        ),
+    }
 
-    with assert_ctx_once():
-        assert [*app.stream({"input": "what is weather in sf"})] == [
-            {
-                "agent": {
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
-                }
-            },
-            {
-                "tools": {
-                    "intermediate_steps": [
-                        [
-                            AgentAction(
-                                tool="search_api",
-                                tool_input="query",
-                                log="tool:search_api:query",
-                            ),
-                            "result for query",
-                        ]
+    assert [*app.stream({"input": "what is weather in sf"})] == [
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:query",
+                ),
+            }
+        },
+        {
+            "tools": {
+                "intermediate_steps": [
+                    [
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    ]
+                ],
+            }
+        },
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
+        {
+            "tools": {
+                "intermediate_steps": [
+                    [
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="another",
+                            log="tool:search_api:another",
+                        ),
+                        "result for another",
                     ],
-                }
-            },
-            {
-                "agent": {
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="another",
-                        log="tool:search_api:another",
-                    ),
-                }
-            },
-            {
-                "tools": {
-                    "intermediate_steps": [
-                        [
-                            AgentAction(
-                                tool="search_api",
-                                tool_input="another",
-                                log="tool:search_api:another",
-                            ),
-                            "result for another",
-                        ],
-                    ],
-                }
-            },
-            {
-                "agent": {
-                    "agent_outcome": AgentFinish(
-                        return_values={"answer": "answer"}, log="finish:answer"
-                    ),
-                }
-            },
-        ]
+                ],
+            }
+        },
+        {
+            "agent": {
+                "agent_outcome": AgentFinish(
+                    return_values={"answer": "answer"}, log="finish:answer"
+                ),
+            }
+        },
+    ]
 
     # test state get/update methods with interrupt_after
 
@@ -1647,22 +1613,20 @@ def test_conditional_state_graph(
     )
     config = {"configurable": {"thread_id": "1"}}
 
-    with assert_ctx_once():
-        assert [
-            c
-            for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
-        ] == [
-            {
-                "agent": {
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
-                }
-            },
-            {"__interrupt__": ()},
-        ]
+    assert [
+        c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
+    ] == [
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:query",
+                ),
+            }
+        },
+        {"__interrupt__": ()},
+    ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
@@ -1704,17 +1668,16 @@ def test_conditional_state_graph(
         interrupts=(),
     )
 
-    with assert_ctx_once():
-        app_w_interrupt.update_state(
-            config,
-            {
-                "agent_outcome": AgentAction(
-                    tool="search_api",
-                    tool_input="query",
-                    log="tool:search_api:a different query",
-                )
-            },
-        )
+    app_w_interrupt.update_state(
+        config,
+        {
+            "agent_outcome": AgentAction(
+                tool="search_api",
+                tool_input="query",
+                log="tool:search_api:a different query",
+            )
+        },
+    )
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
@@ -1758,44 +1721,42 @@ def test_conditional_state_graph(
         interrupts=(),
     )
 
-    with assert_ctx_once():
-        assert [c for c in app_w_interrupt.stream(None, config)] == [
-            {
-                "tools": {
-                    "intermediate_steps": [
-                        [
-                            AgentAction(
-                                tool="search_api",
-                                tool_input="query",
-                                log="tool:search_api:a different query",
-                            ),
-                            "result for query",
-                        ]
-                    ],
-                }
-            },
-            {
-                "agent": {
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="another",
-                        log="tool:search_api:another",
-                    ),
-                }
-            },
-            {"__interrupt__": ()},
-        ]
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "tools": {
+                "intermediate_steps": [
+                    [
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:a different query",
+                        ),
+                        "result for query",
+                    ]
+                ],
+            }
+        },
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
+        {"__interrupt__": ()},
+    ]
 
-    with assert_ctx_once():
-        app_w_interrupt.update_state(
-            config,
-            {
-                "agent_outcome": AgentFinish(
-                    return_values={"answer": "a really nice answer"},
-                    log="finish:a really nice answer",
-                )
-            },
-        )
+    app_w_interrupt.update_state(
+        config,
+        {
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "a really nice answer"},
+                log="finish:a really nice answer",
+            )
+        },
+    )
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
@@ -2749,7 +2710,6 @@ def test_state_graph_packets(
 
     class AgentState(TypedDict):
         messages: Annotated[list[BaseMessage], add_messages]
-        session: Annotated[httpx.Client, Context(httpx.Client)]
 
     @tool()
     def search_api(query: str) -> str:
@@ -2794,7 +2754,6 @@ def test_state_graph_packets(
     )
 
     def agent(data: AgentState) -> AgentState:
-        assert isinstance(data["session"], httpx.Client)
         return {
             "messages": model.invoke(data["messages"]),
             "something_extra": "hi there",
@@ -2802,7 +2761,6 @@ def test_state_graph_packets(
 
     # Define decision-making logic
     def should_continue(data: dict) -> str:
-        assert isinstance(data["session"], httpx.Client)
         assert data["something_extra"] == "hi there", (
             "nodes can pass extra data to their cond edges, which isn't saved in state"
         )
@@ -6258,28 +6216,12 @@ def test_start_branch_then(
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
-        shared: Annotated[dict[str, dict[str, Any]], SharedValue.on("assistant_id")]
-
-    def assert_shared_value(data: State, config: RunnableConfig) -> State:
-        assert "shared" in data
-        if thread_id := config["configurable"].get("thread_id"):
-            if thread_id == "1":
-                # this is the first thread, so should not see a value
-                assert data["shared"] == {}
-                return {"shared": {"1": {"hello": "world"}}}
-            elif thread_id == "2":
-                # this should get value saved by thread 1
-                assert data["shared"] == {"1": {"hello": "world"}}
-            elif thread_id == "3":
-                # this is a different assistant, so should not see previous value
-                assert data["shared"] == {}
-        return {}
 
     def tool_two_slow(data: State, config: RunnableConfig) -> State:
-        return {"my_key": " slow", **assert_shared_value(data, config)}
+        return {"my_key": " slow"}
 
     def tool_two_fast(data: State, config: RunnableConfig) -> State:
-        return {"my_key": " fast", **assert_shared_value(data, config)}
+        return {"my_key": " fast"}
 
     tool_two_graph = StateGraph(State)
     tool_two_graph.add_node("tool_two_slow", tool_two_slow)

@@ -902,7 +902,6 @@ class Pregel(PregelProtocol):
                 step=saved.metadata.get("step", -1) + 1,
                 stop=saved.metadata.get("step", -1) + 2,
             ),
-            skip_context=True,
         ) as (channels, managed):
             # tasks for this checkpoint
             next_tasks = prepare_next_tasks(
@@ -1024,7 +1023,6 @@ class Pregel(PregelProtocol):
                 step=saved.metadata.get("step", -1) + 1,
                 stop=saved.metadata.get("step", -1) + 2,
             ),
-            skip_context=True,
         ) as (
             channels,
             managed,
@@ -1700,14 +1698,13 @@ class Pregel(PregelProtocol):
                 if saved and channel_writes:
                     checkpointer.put_writes(checkpoint_config, channel_writes, task_id)
             # apply to checkpoint and save
-            mv_writes, _ = apply_writes(
+            apply_writes(
                 checkpoint,
                 channels,
                 run_tasks,
                 checkpointer.get_next_version,
                 self.trigger_to_nodes,
             )
-            assert not mv_writes, "Can't write to SharedValues from update_state"
             checkpoint = create_checkpoint(checkpoint, channels, step + 1)
             next_config = checkpointer.put(
                 checkpoint_config,
@@ -2125,14 +2122,13 @@ class Pregel(PregelProtocol):
                         checkpoint_config, channel_writes, task_id
                     )
             # apply to checkpoint and save
-            mv_writes, _ = apply_writes(
+            apply_writes(
                 checkpoint,
                 channels,
                 run_tasks,
                 checkpointer.get_next_version,
                 self.trigger_to_nodes,
             )
-            assert not mv_writes, "Can't write to SharedValues from update_state"
             checkpoint = create_checkpoint(checkpoint, channels, step + 1)
             # save checkpoint, after applying writes
             next_config = await checkpointer.aput(

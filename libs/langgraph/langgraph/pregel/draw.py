@@ -60,7 +60,6 @@ def draw_graph(
         specs,
         checkpoint,
         LoopProtocol(step=step, stop=-1, config=config),
-        skip_context=True,
     ) as (channels, managed):
         static_seen: set[Any] = set()
         sources: dict[str, set[tuple[str, bool, Optional[str]]]] = {}
@@ -72,7 +71,7 @@ def draw_graph(
         }
         # apply input writes
         input_writes = list(map_input(input_channels, {}))
-        _, updated_channels = apply_writes(
+        updated_channels = apply_writes(
             checkpoint,
             channels,
             [
@@ -149,7 +148,7 @@ def draw_graph(
                 for trigger, cond, label in triggers:
                     trigger_to_sources[trigger].add((src, cond, label))
             # apply writes
-            _, updated_channels = apply_writes(
+            updated_channels = apply_writes(
                 checkpoint, channels, tasks.values(), get_next_version, trigger_to_nodes
             )
             # prepare next tasks
