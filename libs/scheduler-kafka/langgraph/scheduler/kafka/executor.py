@@ -22,12 +22,12 @@ from langgraph.constants import CONFIG_KEY_DELEGATE, ERROR
 from langgraph.errors import CheckpointNotLatest, GraphDelegate, TaskNotFound
 from langgraph.pregel import Pregel
 from langgraph.pregel.algo import checkpoint_null_version, prepare_single_task
+from langgraph.pregel.checkpoint import channels_from_checkpoint
 from langgraph.pregel.executor import (
     AsyncBackgroundExecutor,
     BackgroundExecutor,
     Submit,
 )
-from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.runner import PregelRunner
 from langgraph.scheduler.kafka.retry import aretry, retry
 from langgraph.scheduler.kafka.types import (
@@ -41,7 +41,7 @@ from langgraph.scheduler.kafka.types import (
     Sendable,
     Topics,
 )
-from langgraph.types import LoopProtocol, PregelExecutableTask, RetryPolicy
+from langgraph.types import PregelExecutableTask, RetryPolicy
 from langgraph.utils.config import patch_configurable, recast_checkpoint_ns
 
 
@@ -184,19 +184,10 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
             raise RuntimeError("Checkpoint not found")
         if saved.checkpoint["id"] != msg["config"]["configurable"]["checkpoint_id"]:
             raise CheckpointNotLatest()
-        async with (
-            AsyncChannelsManager(
-                graph.channels,
-                saved.checkpoint,
-                LoopProtocol(
-                    config=msg["config"],
-                    store=self.graph.store,
-                    step=saved.metadata["step"] + 1,
-                    stop=saved.metadata["step"] + 2,
-                ),
-            ) as (channels, managed),
-            AsyncBackgroundExecutor(msg["config"]) as submit,
-        ):
+        async with AsyncBackgroundExecutor(msg["config"]) as submit:
+            channels, managed = channels_from_checkpoint(
+                graph.channels, saved.checkpoint
+            )
             if task := await asyncio.to_thread(
                 prepare_single_task,
                 msg["task"]["path"],
@@ -208,6 +199,7 @@ class AsyncKafkaExecutor(AbstractAsyncContextManager):
                 managed=managed,
                 config=patch_configurable(msg["config"], {CONFIG_KEY_DELEGATE: True}),
                 step=saved.metadata["step"] + 1,
+                stop=saved.metadata["step"] + 2,
                 for_execution=True,
                 checkpointer=self.graph.checkpointer,
                 store=self.graph.store,
@@ -404,19 +396,10 @@ class KafkaExecutor(AbstractContextManager):
             raise RuntimeError("Checkpoint not found")
         if saved.checkpoint["id"] != msg["config"]["configurable"]["checkpoint_id"]:
             raise CheckpointNotLatest()
-        with (
-            ChannelsManager(
-                graph.channels,
-                saved.checkpoint,
-                LoopProtocol(
-                    config=msg["config"],
-                    store=self.graph.store,
-                    step=saved.metadata["step"] + 1,
-                    stop=saved.metadata["step"] + 2,
-                ),
-            ) as (channels, managed),
-            BackgroundExecutor({}) as submit,
-        ):
+        with BackgroundExecutor({}) as submit:
+            channels, managed = channels_from_checkpoint(
+                graph.channels, saved.checkpoint
+            )
             if task := prepare_single_task(
                 msg["task"]["path"],
                 msg["task"]["id"],
@@ -427,6 +410,7 @@ class KafkaExecutor(AbstractContextManager):
                 managed=managed,
                 config=patch_configurable(msg["config"], {CONFIG_KEY_DELEGATE: True}),
                 step=saved.metadata["step"] + 1,
+                stop=saved.metadata["step"] + 2,
                 for_execution=True,
                 checkpointer=self.graph.checkpointer,
                 checkpoint_id_bytes=binascii.unhexlify(

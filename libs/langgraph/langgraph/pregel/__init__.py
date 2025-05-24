@@ -88,12 +88,15 @@ from langgraph.pregel.algo import (
     prepare_next_tasks,
 )
 from langgraph.pregel.call import identifier
-from langgraph.pregel.checkpoint import create_checkpoint, empty_checkpoint
+from langgraph.pregel.checkpoint import (
+    channels_from_checkpoint,
+    create_checkpoint,
+    empty_checkpoint,
+)
 from langgraph.pregel.debug import tasks_w_writes
 from langgraph.pregel.draw import draw_graph
 from langgraph.pregel.io import map_input, read_channels
 from langgraph.pregel.loop import AsyncPregelLoop, StreamProtocol, SyncPregelLoop
-from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.messages import StreamMessagesHandler
 from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.read import PregelNode
@@ -108,7 +111,6 @@ from langgraph.types import (
     CachePolicy,
     Checkpointer,
     Interrupt,
-    LoopProtocol,
     StateSnapshot,
     StateUpdate,
     StreamChunk,
@@ -894,104 +896,102 @@ class Pregel(PregelProtocol):
         # migrate checkpoint if needed
         self._migrate_checkpoint(saved.checkpoint)
 
-        with ChannelsManager(
+        step = saved.metadata.get("step", -1) + 1
+        stop = step + 2
+        channels, managed = channels_from_checkpoint(
             self.channels,
             saved.checkpoint,
-            LoopProtocol(
-                config=saved.config,
-                step=saved.metadata.get("step", -1) + 1,
-                stop=saved.metadata.get("step", -1) + 2,
+        )
+        # tasks for this checkpoint
+        next_tasks = prepare_next_tasks(
+            saved.checkpoint,
+            saved.pending_writes or [],
+            self.nodes,
+            channels,
+            managed,
+            saved.config,
+            step,
+            stop,
+            for_execution=True,
+            store=self.store,
+            checkpointer=(
+                self.checkpointer
+                if isinstance(self.checkpointer, BaseCheckpointSaver)
+                else None
             ),
-        ) as (channels, managed):
-            # tasks for this checkpoint
-            next_tasks = prepare_next_tasks(
-                saved.checkpoint,
-                saved.pending_writes or [],
-                self.nodes,
-                channels,
-                managed,
-                saved.config,
-                saved.metadata.get("step", -1) + 1,
-                for_execution=True,
-                store=self.store,
-                checkpointer=(
-                    self.checkpointer
-                    if isinstance(self.checkpointer, BaseCheckpointSaver)
-                    else None
-                ),
-                manager=None,
-            )
-            # get the subgraphs
-            subgraphs = dict(self.get_subgraphs())
-            parent_ns = saved.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
-            task_states: dict[str, RunnableConfig | StateSnapshot] = {}
-            for task in next_tasks.values():
-                if task.name not in subgraphs:
-                    continue
-                # assemble checkpoint_ns for this task
-                task_ns = f"{task.name}{NS_END}{task.id}"
-                if parent_ns:
-                    task_ns = f"{parent_ns}{NS_SEP}{task_ns}"
-                if not recurse:
-                    # set config as signal that subgraph checkpoints exist
-                    config = {
-                        CONF: {
-                            "thread_id": saved.config[CONF]["thread_id"],
-                            CONFIG_KEY_CHECKPOINT_NS: task_ns,
-                        }
+            manager=None,
+        )
+        # get the subgraphs
+        subgraphs = dict(self.get_subgraphs())
+        parent_ns = saved.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        task_states: dict[str, RunnableConfig | StateSnapshot] = {}
+        for task in next_tasks.values():
+            if task.name not in subgraphs:
+                continue
+            # assemble checkpoint_ns for this task
+            task_ns = f"{task.name}{NS_END}{task.id}"
+            if parent_ns:
+                task_ns = f"{parent_ns}{NS_SEP}{task_ns}"
+            if not recurse:
+                # set config as signal that subgraph checkpoints exist
+                config = {
+                    CONF: {
+                        "thread_id": saved.config[CONF]["thread_id"],
+                        CONFIG_KEY_CHECKPOINT_NS: task_ns,
                     }
-                    task_states[task.id] = config
-                else:
-                    # get the state of the subgraph
-                    config = {
-                        CONF: {
-                            CONFIG_KEY_CHECKPOINTER: recurse,
-                            "thread_id": saved.config[CONF]["thread_id"],
-                            CONFIG_KEY_CHECKPOINT_NS: task_ns,
-                        }
+                }
+                task_states[task.id] = config
+            else:
+                # get the state of the subgraph
+                config = {
+                    CONF: {
+                        CONFIG_KEY_CHECKPOINTER: recurse,
+                        "thread_id": saved.config[CONF]["thread_id"],
+                        CONFIG_KEY_CHECKPOINT_NS: task_ns,
                     }
-                    task_states[task.id] = subgraphs[task.name].get_state(
-                        config, subgraphs=True
-                    )
-            # apply pending writes
-            if null_writes := [
-                w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
-            ]:
-                apply_writes(
-                    saved.checkpoint,
-                    channels,
-                    [PregelTaskWrites((), INPUT, null_writes, [])],
-                    None,
-                    self.trigger_to_nodes,
+                }
+                task_states[task.id] = subgraphs[task.name].get_state(
+                    config, subgraphs=True
                 )
-            if apply_pending_writes and saved.pending_writes:
-                for tid, k, v in saved.pending_writes:
-                    if k in (ERROR, INTERRUPT, SCHEDULED):
-                        continue
-                    if tid not in next_tasks:
-                        continue
-                    next_tasks[tid].writes.append((k, v))
-                if tasks := [t for t in next_tasks.values() if t.writes]:
-                    apply_writes(
-                        saved.checkpoint, channels, tasks, None, self.trigger_to_nodes
-                    )
-            tasks_with_writes = tasks_w_writes(
-                next_tasks.values(),
-                saved.pending_writes,
-                task_states,
-                self.stream_channels_asis,
+        # apply pending writes
+        if null_writes := [
+            w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
+        ]:
+            apply_writes(
+                saved.checkpoint,
+                channels,
+                [PregelTaskWrites((), INPUT, null_writes, [])],
+                None,
+                self.trigger_to_nodes,
             )
-            # assemble the state snapshot
-            return StateSnapshot(
-                read_channels(channels, self.stream_channels_asis),
-                tuple(t.name for t in next_tasks.values() if not t.writes),
-                patch_checkpoint_map(saved.config, saved.metadata),
-                saved.metadata,
-                saved.checkpoint["ts"],
-                patch_checkpoint_map(saved.parent_config, saved.metadata),
-                tasks_with_writes,
-                tuple([i for task in tasks_with_writes for i in task.interrupts]),
-            )
+        if apply_pending_writes and saved.pending_writes:
+            for tid, k, v in saved.pending_writes:
+                if k in (ERROR, INTERRUPT, SCHEDULED):
+                    continue
+                if tid not in next_tasks:
+                    continue
+                next_tasks[tid].writes.append((k, v))
+            if tasks := [t for t in next_tasks.values() if t.writes]:
+                apply_writes(
+                    saved.checkpoint, channels, tasks, None, self.trigger_to_nodes
+                )
+        tasks_with_writes = tasks_w_writes(
+            next_tasks.values(),
+            saved.pending_writes,
+            task_states,
+            self.stream_channels_asis,
+        )
+        # assemble the state snapshot
+        return StateSnapshot(
+            read_channels(channels, self.stream_channels_asis),
+            tuple(t.name for t in next_tasks.values() if not t.writes),
+            patch_checkpoint_map(saved.config, saved.metadata),
+            saved.metadata,
+            saved.checkpoint["ts"],
+            patch_checkpoint_map(saved.parent_config, saved.metadata),
+            tasks_with_writes,
+            tuple([i for task in tasks_with_writes for i in task.interrupts]),
+        )
 
     async def _aprepare_state_snapshot(
         self,
@@ -1015,108 +1015,103 @@ class Pregel(PregelProtocol):
         # migrate checkpoint if needed
         self._migrate_checkpoint(saved.checkpoint)
 
-        async with AsyncChannelsManager(
+        step = saved.metadata.get("step", -1) + 1
+        stop = step + 2
+        channels, managed = channels_from_checkpoint(
             self.channels,
             saved.checkpoint,
-            LoopProtocol(
-                config=saved.config,
-                step=saved.metadata.get("step", -1) + 1,
-                stop=saved.metadata.get("step", -1) + 2,
-            ),
-        ) as (
+        )
+        # tasks for this checkpoint
+        next_tasks = prepare_next_tasks(
+            saved.checkpoint,
+            saved.pending_writes or [],
+            self.nodes,
             channels,
             managed,
-        ):
-            # tasks for this checkpoint
-            next_tasks = prepare_next_tasks(
-                saved.checkpoint,
-                saved.pending_writes or [],
-                self.nodes,
-                channels,
-                managed,
-                saved.config,
-                saved.metadata.get("step", -1) + 1,
-                for_execution=True,
-                store=self.store,
-                checkpointer=(
-                    self.checkpointer
-                    if isinstance(self.checkpointer, BaseCheckpointSaver)
-                    else None
-                ),
-                manager=None,
-            )
-            # get the subgraphs
-            subgraphs = {n: g async for n, g in self.aget_subgraphs()}
-            parent_ns = saved.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
-            task_states: dict[str, RunnableConfig | StateSnapshot] = {}
-            for task in next_tasks.values():
-                if task.name not in subgraphs:
-                    continue
-                # assemble checkpoint_ns for this task
-                task_ns = f"{task.name}{NS_END}{task.id}"
-                if parent_ns:
-                    task_ns = f"{parent_ns}{NS_SEP}{task_ns}"
-                if not recurse:
-                    # set config as signal that subgraph checkpoints exist
-                    config = {
-                        CONF: {
-                            "thread_id": saved.config[CONF]["thread_id"],
-                            CONFIG_KEY_CHECKPOINT_NS: task_ns,
-                        }
+            saved.config,
+            step,
+            stop,
+            for_execution=True,
+            store=self.store,
+            checkpointer=(
+                self.checkpointer
+                if isinstance(self.checkpointer, BaseCheckpointSaver)
+                else None
+            ),
+            manager=None,
+        )
+        # get the subgraphs
+        subgraphs = {n: g async for n, g in self.aget_subgraphs()}
+        parent_ns = saved.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        task_states: dict[str, RunnableConfig | StateSnapshot] = {}
+        for task in next_tasks.values():
+            if task.name not in subgraphs:
+                continue
+            # assemble checkpoint_ns for this task
+            task_ns = f"{task.name}{NS_END}{task.id}"
+            if parent_ns:
+                task_ns = f"{parent_ns}{NS_SEP}{task_ns}"
+            if not recurse:
+                # set config as signal that subgraph checkpoints exist
+                config = {
+                    CONF: {
+                        "thread_id": saved.config[CONF]["thread_id"],
+                        CONFIG_KEY_CHECKPOINT_NS: task_ns,
                     }
-                    task_states[task.id] = config
-                else:
-                    # get the state of the subgraph
-                    config = {
-                        CONF: {
-                            CONFIG_KEY_CHECKPOINTER: recurse,
-                            "thread_id": saved.config[CONF]["thread_id"],
-                            CONFIG_KEY_CHECKPOINT_NS: task_ns,
-                        }
+                }
+                task_states[task.id] = config
+            else:
+                # get the state of the subgraph
+                config = {
+                    CONF: {
+                        CONFIG_KEY_CHECKPOINTER: recurse,
+                        "thread_id": saved.config[CONF]["thread_id"],
+                        CONFIG_KEY_CHECKPOINT_NS: task_ns,
                     }
-                    task_states[task.id] = await subgraphs[task.name].aget_state(
-                        config, subgraphs=True
-                    )
-            # apply pending writes
-            if null_writes := [
-                w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
-            ]:
-                apply_writes(
-                    saved.checkpoint,
-                    channels,
-                    [PregelTaskWrites((), INPUT, null_writes, [])],
-                    None,
-                    self.trigger_to_nodes,
+                }
+                task_states[task.id] = await subgraphs[task.name].aget_state(
+                    config, subgraphs=True
                 )
-            if apply_pending_writes and saved.pending_writes:
-                for tid, k, v in saved.pending_writes:
-                    if k in (ERROR, INTERRUPT, SCHEDULED):
-                        continue
-                    if tid not in next_tasks:
-                        continue
-                    next_tasks[tid].writes.append((k, v))
-                if tasks := [t for t in next_tasks.values() if t.writes]:
-                    apply_writes(
-                        saved.checkpoint, channels, tasks, None, self.trigger_to_nodes
-                    )
+        # apply pending writes
+        if null_writes := [
+            w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
+        ]:
+            apply_writes(
+                saved.checkpoint,
+                channels,
+                [PregelTaskWrites((), INPUT, null_writes, [])],
+                None,
+                self.trigger_to_nodes,
+            )
+        if apply_pending_writes and saved.pending_writes:
+            for tid, k, v in saved.pending_writes:
+                if k in (ERROR, INTERRUPT, SCHEDULED):
+                    continue
+                if tid not in next_tasks:
+                    continue
+                next_tasks[tid].writes.append((k, v))
+            if tasks := [t for t in next_tasks.values() if t.writes]:
+                apply_writes(
+                    saved.checkpoint, channels, tasks, None, self.trigger_to_nodes
+                )
 
-            tasks_with_writes = tasks_w_writes(
-                next_tasks.values(),
-                saved.pending_writes,
-                task_states,
-                self.stream_channels_asis,
-            )
-            # assemble the state snapshot
-            return StateSnapshot(
-                read_channels(channels, self.stream_channels_asis),
-                tuple(t.name for t in next_tasks.values() if not t.writes),
-                patch_checkpoint_map(saved.config, saved.metadata),
-                saved.metadata,
-                saved.checkpoint["ts"],
-                patch_checkpoint_map(saved.parent_config, saved.metadata),
-                tasks_with_writes,
-                tuple([i for task in tasks_with_writes for i in task.interrupts]),
-            )
+        tasks_with_writes = tasks_w_writes(
+            next_tasks.values(),
+            saved.pending_writes,
+            task_states,
+            self.stream_channels_asis,
+        )
+        # assemble the state snapshot
+        return StateSnapshot(
+            read_channels(channels, self.stream_channels_asis),
+            tuple(t.name for t in next_tasks.values() if not t.writes),
+            patch_checkpoint_map(saved.config, saved.metadata),
+            saved.metadata,
+            saved.checkpoint["ts"],
+            patch_checkpoint_map(saved.parent_config, saved.metadata),
+            tasks_with_writes,
+            tuple([i for task in tasks_with_writes for i in task.interrupts]),
+        )
 
     def get_state(
         self, config: RunnableConfig, *, subgraphs: bool = False
@@ -1383,211 +1378,35 @@ class Pregel(PregelProtocol):
             if saved:
                 checkpoint_config = patch_configurable(config, saved.config[CONF])
                 checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}
-            with ChannelsManager(
+            channels, managed = channels_from_checkpoint(
                 self.channels,
                 checkpoint,
-                LoopProtocol(config=config, step=step + 1, stop=step + 2),
-            ) as (channels, managed):
-                values, as_node = updates[0]
+            )
+            values, as_node = updates[0]
 
-                # no values as END, just clear all tasks
-                if values is None and as_node == END:
-                    if len(updates) > 1:
-                        raise InvalidUpdateError(
-                            "Cannot apply multiple updates when clearing state"
-                        )
-
-                    if saved is not None:
-                        # tasks for this checkpoint
-                        next_tasks = prepare_next_tasks(
-                            checkpoint,
-                            saved.pending_writes or [],
-                            self.nodes,
-                            channels,
-                            managed,
-                            saved.config,
-                            saved.metadata.get("step", -1) + 1,
-                            for_execution=True,
-                            store=self.store,
-                            checkpointer=self.checkpointer
-                            if isinstance(self.checkpointer, BaseCheckpointSaver)
-                            else None,
-                            manager=None,
-                        )
-                        # apply null writes
-                        if null_writes := [
-                            w[1:]
-                            for w in saved.pending_writes or []
-                            if w[0] == NULL_TASK_ID
-                        ]:
-                            apply_writes(
-                                saved.checkpoint,
-                                channels,
-                                [PregelTaskWrites((), INPUT, null_writes, [])],
-                                None,
-                                self.trigger_to_nodes,
-                            )
-                        # apply writes from tasks that already ran
-                        for tid, k, v in saved.pending_writes or []:
-                            if k in (ERROR, INTERRUPT, SCHEDULED):
-                                continue
-                            if tid not in next_tasks:
-                                continue
-                            next_tasks[tid].writes.append((k, v))
-                        # clear all current tasks
-                        apply_writes(
-                            checkpoint,
-                            channels,
-                            next_tasks.values(),
-                            None,
-                            self.trigger_to_nodes,
-                        )
-                    # save checkpoint
-                    next_config = checkpointer.put(
-                        checkpoint_config,
-                        create_checkpoint(checkpoint, None, step),
-                        {
-                            **checkpoint_metadata,
-                            "source": "update",
-                            "step": step + 1,
-                            "writes": {},
-                            "parents": saved.metadata.get("parents", {})
-                            if saved
-                            else {},
-                        },
-                        {},
-                    )
-                    return patch_checkpoint_map(
-                        next_config, saved.metadata if saved else None
-                    )
-                # no values, empty checkpoint
-                if values is None and as_node is None:
-                    if len(updates) > 1:
-                        raise InvalidUpdateError(
-                            "Cannot create empty checkpoint with multiple updates"
-                        )
-
-                    next_checkpoint = create_checkpoint(checkpoint, None, step)
-                    # copy checkpoint
-                    next_config = checkpointer.put(
-                        checkpoint_config,
-                        next_checkpoint,
-                        {
-                            **checkpoint_metadata,
-                            "source": "update",
-                            "step": step + 1,
-                            "writes": {},
-                            "parents": saved.metadata.get("parents", {})
-                            if saved
-                            else {},
-                        },
-                        {},
-                    )
-                    return patch_checkpoint_map(
-                        next_config, saved.metadata if saved else None
+            # no values as END, just clear all tasks
+            if values is None and as_node == END:
+                if len(updates) > 1:
+                    raise InvalidUpdateError(
+                        "Cannot apply multiple updates when clearing state"
                     )
 
-                # act as an input
-                if as_node == INPUT:
-                    if len(updates) > 1:
-                        raise InvalidUpdateError(
-                            "Cannot apply multiple updates when updating as input"
-                        )
-
-                    if input_writes := deque(map_input(self.input_channels, values)):
-                        apply_writes(
-                            checkpoint,
-                            channels,
-                            [PregelTaskWrites((), INPUT, input_writes, [])],
-                            checkpointer.get_next_version,
-                            self.trigger_to_nodes,
-                        )
-
-                        # apply input write to channels
-                        next_step = (
-                            step + 1
-                            if saved and saved.metadata.get("step") is not None
-                            else -1
-                        )
-                        next_config = checkpointer.put(
-                            checkpoint_config,
-                            create_checkpoint(checkpoint, channels, next_step),
-                            {
-                                **checkpoint_metadata,
-                                "source": "input",
-                                "step": next_step,
-                                "writes": dict(input_writes),
-                            },
-                            get_new_channel_versions(
-                                checkpoint_previous_versions,
-                                checkpoint["channel_versions"],
-                            ),
-                        )
-
-                        # store the writes
-                        checkpointer.put_writes(
-                            next_config,
-                            input_writes,
-                            str(uuid5(UUID(checkpoint["id"]), INPUT)),
-                        )
-
-                        return patch_checkpoint_map(
-                            next_config, saved.metadata if saved else None
-                        )
-                    else:
-                        raise InvalidUpdateError(
-                            f"Received no input writes for {self.input_channels}"
-                        )
-
-                # no values, copy checkpoint
-                if values is None and as_node == "__copy__":
-                    if len(updates) > 1:
-                        raise InvalidUpdateError(
-                            "Cannot copy checkpoint with multiple updates"
-                        )
-
-                    next_checkpoint = create_checkpoint(checkpoint, None, step)
-                    # copy checkpoint
-                    next_config = checkpointer.put(
-                        saved.parent_config or saved.config
-                        if saved
-                        else checkpoint_config,
-                        next_checkpoint,
-                        {
-                            **checkpoint_metadata,
-                            "source": "fork",
-                            "step": step + 1,
-                            "parents": saved.metadata.get("parents", {})
-                            if saved
-                            else {},
-                        },
-                        {},
-                    )
-                    return patch_checkpoint_map(
-                        next_config, saved.metadata if saved else None
-                    )
-                # apply pending writes, if not on specific checkpoint
-                if (
-                    CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
-                    and saved is not None
-                    and saved.pending_writes
-                ):
+                if saved is not None:
                     # tasks for this checkpoint
                     next_tasks = prepare_next_tasks(
                         checkpoint,
-                        saved.pending_writes,
+                        saved.pending_writes or [],
                         self.nodes,
                         channels,
                         managed,
                         saved.config,
-                        saved.metadata.get("step", -1) + 1,
+                        step + 1,
+                        step + 3,
                         for_execution=True,
                         store=self.store,
-                        checkpointer=(
-                            self.checkpointer
-                            if isinstance(self.checkpointer, BaseCheckpointSaver)
-                            else None
-                        ),
+                        checkpointer=self.checkpointer
+                        if isinstance(self.checkpointer, BaseCheckpointSaver)
+                        else None,
                         manager=None,
                     )
                     # apply null writes
@@ -1603,17 +1422,184 @@ class Pregel(PregelProtocol):
                             None,
                             self.trigger_to_nodes,
                         )
-                    # apply writes
-                    for tid, k, v in saved.pending_writes:
+                    # apply writes from tasks that already ran
+                    for tid, k, v in saved.pending_writes or []:
                         if k in (ERROR, INTERRUPT, SCHEDULED):
                             continue
                         if tid not in next_tasks:
                             continue
                         next_tasks[tid].writes.append((k, v))
-                    if tasks := [t for t in next_tasks.values() if t.writes]:
-                        apply_writes(
-                            checkpoint, channels, tasks, None, self.trigger_to_nodes
-                        )
+                    # clear all current tasks
+                    apply_writes(
+                        checkpoint,
+                        channels,
+                        next_tasks.values(),
+                        None,
+                        self.trigger_to_nodes,
+                    )
+                # save checkpoint
+                next_config = checkpointer.put(
+                    checkpoint_config,
+                    create_checkpoint(checkpoint, None, step),
+                    {
+                        **checkpoint_metadata,
+                        "source": "update",
+                        "step": step + 1,
+                        "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+            # no values, empty checkpoint
+            if values is None and as_node is None:
+                if len(updates) > 1:
+                    raise InvalidUpdateError(
+                        "Cannot create empty checkpoint with multiple updates"
+                    )
+
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                # copy checkpoint
+                next_config = checkpointer.put(
+                    checkpoint_config,
+                    next_checkpoint,
+                    {
+                        **checkpoint_metadata,
+                        "source": "update",
+                        "step": step + 1,
+                        "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+
+            # act as an input
+            if as_node == INPUT:
+                if len(updates) > 1:
+                    raise InvalidUpdateError(
+                        "Cannot apply multiple updates when updating as input"
+                    )
+
+                if input_writes := deque(map_input(self.input_channels, values)):
+                    apply_writes(
+                        checkpoint,
+                        channels,
+                        [PregelTaskWrites((), INPUT, input_writes, [])],
+                        checkpointer.get_next_version,
+                        self.trigger_to_nodes,
+                    )
+
+                    # apply input write to channels
+                    next_step = (
+                        step + 1
+                        if saved and saved.metadata.get("step") is not None
+                        else -1
+                    )
+                    next_config = checkpointer.put(
+                        checkpoint_config,
+                        create_checkpoint(checkpoint, channels, next_step),
+                        {
+                            **checkpoint_metadata,
+                            "source": "input",
+                            "step": next_step,
+                            "writes": dict(input_writes),
+                        },
+                        get_new_channel_versions(
+                            checkpoint_previous_versions,
+                            checkpoint["channel_versions"],
+                        ),
+                    )
+
+                    # store the writes
+                    checkpointer.put_writes(
+                        next_config,
+                        input_writes,
+                        str(uuid5(UUID(checkpoint["id"]), INPUT)),
+                    )
+
+                    return patch_checkpoint_map(
+                        next_config, saved.metadata if saved else None
+                    )
+                else:
+                    raise InvalidUpdateError(
+                        f"Received no input writes for {self.input_channels}"
+                    )
+
+            # no values, copy checkpoint
+            if values is None and as_node == "__copy__":
+                if len(updates) > 1:
+                    raise InvalidUpdateError(
+                        "Cannot copy checkpoint with multiple updates"
+                    )
+
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                # copy checkpoint
+                next_config = checkpointer.put(
+                    saved.parent_config or saved.config if saved else checkpoint_config,
+                    next_checkpoint,
+                    {
+                        **checkpoint_metadata,
+                        "source": "fork",
+                        "step": step + 1,
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+            # apply pending writes, if not on specific checkpoint
+            if (
+                CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
+                and saved is not None
+                and saved.pending_writes
+            ):
+                # tasks for this checkpoint
+                next_tasks = prepare_next_tasks(
+                    checkpoint,
+                    saved.pending_writes,
+                    self.nodes,
+                    channels,
+                    managed,
+                    saved.config,
+                    step + 1,
+                    step + 3,
+                    for_execution=True,
+                    store=self.store,
+                    checkpointer=(
+                        self.checkpointer
+                        if isinstance(self.checkpointer, BaseCheckpointSaver)
+                        else None
+                    ),
+                    manager=None,
+                )
+                # apply null writes
+                if null_writes := [
+                    w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
+                ]:
+                    apply_writes(
+                        saved.checkpoint,
+                        channels,
+                        [PregelTaskWrites((), INPUT, null_writes, [])],
+                        None,
+                        self.trigger_to_nodes,
+                    )
+                # apply writes
+                for tid, k, v in saved.pending_writes:
+                    if k in (ERROR, INTERRUPT, SCHEDULED):
+                        continue
+                    if tid not in next_tasks:
+                        continue
+                    next_tasks[tid].writes.append((k, v))
+                if tasks := [t for t in next_tasks.values() if t.writes]:
+                    apply_writes(
+                        checkpoint, channels, tasks, None, self.trigger_to_nodes
+                    )
             valid_updates: list[tuple[str, dict[str, Any] | None]] = []
             if len(updates) == 1:
                 values, as_node = updates[0]
@@ -1809,212 +1795,33 @@ class Pregel(PregelProtocol):
             if saved:
                 checkpoint_config = patch_configurable(config, saved.config[CONF])
                 checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}
-            async with AsyncChannelsManager(
+            channels, managed = channels_from_checkpoint(
                 self.channels,
                 checkpoint,
-                LoopProtocol(config=config, step=step + 1, stop=step + 2),
-            ) as (
-                channels,
-                managed,
-            ):
-                values, as_node = updates[0]
-                # no values, just clear all tasks
-                if values is None and as_node == END:
-                    if len(updates) > 1:
-                        raise InvalidUpdateError(
-                            "Cannot apply multiple updates when clearing state"
-                        )
-                    if saved is not None:
-                        # tasks for this checkpoint
-                        next_tasks = prepare_next_tasks(
-                            checkpoint,
-                            saved.pending_writes or [],
-                            self.nodes,
-                            channels,
-                            managed,
-                            saved.config,
-                            saved.metadata.get("step", -1) + 1,
-                            for_execution=True,
-                            store=self.store,
-                            checkpointer=self.checkpointer
-                            if isinstance(self.checkpointer, BaseCheckpointSaver)
-                            else None,
-                            manager=None,
-                        )
-                        # apply null writes
-                        if null_writes := [
-                            w[1:]
-                            for w in saved.pending_writes or []
-                            if w[0] == NULL_TASK_ID
-                        ]:
-                            apply_writes(
-                                saved.checkpoint,
-                                channels,
-                                [PregelTaskWrites((), INPUT, null_writes, [])],
-                                None,
-                                self.trigger_to_nodes,
-                            )
-                        # apply writes from tasks that already ran
-                        for tid, k, v in saved.pending_writes or []:
-                            if k in (ERROR, INTERRUPT, SCHEDULED):
-                                continue
-                            if tid not in next_tasks:
-                                continue
-                            next_tasks[tid].writes.append((k, v))
-                        # clear all current tasks
-                        apply_writes(
-                            checkpoint,
-                            channels,
-                            next_tasks.values(),
-                            None,
-                            self.trigger_to_nodes,
-                        )
-                    # save checkpoint
-                    next_config = await checkpointer.aput(
-                        checkpoint_config,
-                        create_checkpoint(checkpoint, None, step),
-                        {
-                            **checkpoint_metadata,
-                            "source": "update",
-                            "step": step + 1,
-                            "writes": {},
-                            "parents": saved.metadata.get("parents", {})
-                            if saved
-                            else {},
-                        },
-                        {},
+            )
+            values, as_node = updates[0]
+            # no values, just clear all tasks
+            if values is None and as_node == END:
+                if len(updates) > 1:
+                    raise InvalidUpdateError(
+                        "Cannot apply multiple updates when clearing state"
                     )
-                    return patch_checkpoint_map(
-                        next_config, saved.metadata if saved else None
-                    )
-                # no values, empty checkpoint
-                if values is None and as_node is None:
-                    if len(updates) > 1:
-                        raise InvalidUpdateError(
-                            "Cannot create empty checkpoint with multiple updates"
-                        )
-
-                    next_checkpoint = create_checkpoint(checkpoint, None, step)
-                    # copy checkpoint
-                    next_config = await checkpointer.aput(
-                        checkpoint_config,
-                        next_checkpoint,
-                        {
-                            **checkpoint_metadata,
-                            "source": "update",
-                            "step": step + 1,
-                            "writes": {},
-                            "parents": saved.metadata.get("parents", {})
-                            if saved
-                            else {},
-                        },
-                        {},
-                    )
-                    return patch_checkpoint_map(
-                        next_config, saved.metadata if saved else None
-                    )
-
-                # act as an input
-                if as_node == INPUT:
-                    if len(updates) > 1:
-                        raise InvalidUpdateError(
-                            "Cannot apply multiple updates when updating as input"
-                        )
-
-                    if input_writes := deque(map_input(self.input_channels, values)):
-                        apply_writes(
-                            checkpoint,
-                            channels,
-                            [PregelTaskWrites((), INPUT, input_writes, [])],
-                            checkpointer.get_next_version,
-                            self.trigger_to_nodes,
-                        )
-
-                        # apply input write to channels
-                        next_step = (
-                            step + 1
-                            if saved and saved.metadata.get("step") is not None
-                            else -1
-                        )
-                        next_config = await checkpointer.aput(
-                            checkpoint_config,
-                            create_checkpoint(checkpoint, channels, next_step),
-                            {
-                                **checkpoint_metadata,
-                                "source": "input",
-                                "step": next_step,
-                                "writes": dict(input_writes),
-                            },
-                            get_new_channel_versions(
-                                checkpoint_previous_versions,
-                                checkpoint["channel_versions"],
-                            ),
-                        )
-
-                        # store the writes
-                        await checkpointer.aput_writes(
-                            next_config,
-                            input_writes,
-                            str(uuid5(UUID(checkpoint["id"]), INPUT)),
-                        )
-
-                        return patch_checkpoint_map(
-                            next_config, saved.metadata if saved else None
-                        )
-                    else:
-                        raise InvalidUpdateError(
-                            f"Received no input writes for {self.input_channels}"
-                        )
-
-                # no values, copy checkpoint
-                if values is None and as_node == "__copy__":
-                    if len(updates) > 1:
-                        raise InvalidUpdateError(
-                            "Cannot copy checkpoint with multiple updates"
-                        )
-
-                    next_checkpoint = create_checkpoint(checkpoint, None, step)
-                    # copy checkpoint
-                    next_config = await checkpointer.aput(
-                        saved.parent_config or saved.config
-                        if saved
-                        else checkpoint_config,
-                        next_checkpoint,
-                        {
-                            **checkpoint_metadata,
-                            "source": "fork",
-                            "step": step + 1,
-                            "parents": saved.metadata.get("parents", {})
-                            if saved
-                            else {},
-                        },
-                        {},
-                    )
-                    return patch_checkpoint_map(
-                        next_config, saved.metadata if saved else None
-                    )
-                # apply pending writes, if not on specific checkpoint
-                if (
-                    CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
-                    and saved is not None
-                    and saved.pending_writes
-                ):
+                if saved is not None:
                     # tasks for this checkpoint
                     next_tasks = prepare_next_tasks(
                         checkpoint,
-                        saved.pending_writes,
+                        saved.pending_writes or [],
                         self.nodes,
                         channels,
                         managed,
                         saved.config,
-                        saved.metadata.get("step", -1) + 1,
+                        step + 1,
+                        step + 3,
                         for_execution=True,
                         store=self.store,
-                        checkpointer=(
-                            self.checkpointer
-                            if isinstance(self.checkpointer, BaseCheckpointSaver)
-                            else None
-                        ),
+                        checkpointer=self.checkpointer
+                        if isinstance(self.checkpointer, BaseCheckpointSaver)
+                        else None,
                         manager=None,
                     )
                     # apply null writes
@@ -2030,16 +1837,183 @@ class Pregel(PregelProtocol):
                             None,
                             self.trigger_to_nodes,
                         )
-                    for tid, k, v in saved.pending_writes:
+                    # apply writes from tasks that already ran
+                    for tid, k, v in saved.pending_writes or []:
                         if k in (ERROR, INTERRUPT, SCHEDULED):
                             continue
                         if tid not in next_tasks:
                             continue
                         next_tasks[tid].writes.append((k, v))
-                    if tasks := [t for t in next_tasks.values() if t.writes]:
-                        apply_writes(
-                            checkpoint, channels, tasks, None, self.trigger_to_nodes
-                        )
+                    # clear all current tasks
+                    apply_writes(
+                        checkpoint,
+                        channels,
+                        next_tasks.values(),
+                        None,
+                        self.trigger_to_nodes,
+                    )
+                # save checkpoint
+                next_config = await checkpointer.aput(
+                    checkpoint_config,
+                    create_checkpoint(checkpoint, None, step),
+                    {
+                        **checkpoint_metadata,
+                        "source": "update",
+                        "step": step + 1,
+                        "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+            # no values, empty checkpoint
+            if values is None and as_node is None:
+                if len(updates) > 1:
+                    raise InvalidUpdateError(
+                        "Cannot create empty checkpoint with multiple updates"
+                    )
+
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                # copy checkpoint
+                next_config = await checkpointer.aput(
+                    checkpoint_config,
+                    next_checkpoint,
+                    {
+                        **checkpoint_metadata,
+                        "source": "update",
+                        "step": step + 1,
+                        "writes": {},
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+
+            # act as an input
+            if as_node == INPUT:
+                if len(updates) > 1:
+                    raise InvalidUpdateError(
+                        "Cannot apply multiple updates when updating as input"
+                    )
+
+                if input_writes := deque(map_input(self.input_channels, values)):
+                    apply_writes(
+                        checkpoint,
+                        channels,
+                        [PregelTaskWrites((), INPUT, input_writes, [])],
+                        checkpointer.get_next_version,
+                        self.trigger_to_nodes,
+                    )
+
+                    # apply input write to channels
+                    next_step = (
+                        step + 1
+                        if saved and saved.metadata.get("step") is not None
+                        else -1
+                    )
+                    next_config = await checkpointer.aput(
+                        checkpoint_config,
+                        create_checkpoint(checkpoint, channels, next_step),
+                        {
+                            **checkpoint_metadata,
+                            "source": "input",
+                            "step": next_step,
+                            "writes": dict(input_writes),
+                        },
+                        get_new_channel_versions(
+                            checkpoint_previous_versions,
+                            checkpoint["channel_versions"],
+                        ),
+                    )
+
+                    # store the writes
+                    await checkpointer.aput_writes(
+                        next_config,
+                        input_writes,
+                        str(uuid5(UUID(checkpoint["id"]), INPUT)),
+                    )
+
+                    return patch_checkpoint_map(
+                        next_config, saved.metadata if saved else None
+                    )
+                else:
+                    raise InvalidUpdateError(
+                        f"Received no input writes for {self.input_channels}"
+                    )
+
+            # no values, copy checkpoint
+            if values is None and as_node == "__copy__":
+                if len(updates) > 1:
+                    raise InvalidUpdateError(
+                        "Cannot copy checkpoint with multiple updates"
+                    )
+
+                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                # copy checkpoint
+                next_config = await checkpointer.aput(
+                    saved.parent_config or saved.config if saved else checkpoint_config,
+                    next_checkpoint,
+                    {
+                        **checkpoint_metadata,
+                        "source": "fork",
+                        "step": step + 1,
+                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                    },
+                    {},
+                )
+                return patch_checkpoint_map(
+                    next_config, saved.metadata if saved else None
+                )
+            # apply pending writes, if not on specific checkpoint
+            if (
+                CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
+                and saved is not None
+                and saved.pending_writes
+            ):
+                # tasks for this checkpoint
+                next_tasks = prepare_next_tasks(
+                    checkpoint,
+                    saved.pending_writes,
+                    self.nodes,
+                    channels,
+                    managed,
+                    saved.config,
+                    step + 1,
+                    step + 3,
+                    for_execution=True,
+                    store=self.store,
+                    checkpointer=(
+                        self.checkpointer
+                        if isinstance(self.checkpointer, BaseCheckpointSaver)
+                        else None
+                    ),
+                    manager=None,
+                )
+                # apply null writes
+                if null_writes := [
+                    w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
+                ]:
+                    apply_writes(
+                        saved.checkpoint,
+                        channels,
+                        [PregelTaskWrites((), INPUT, null_writes, [])],
+                        None,
+                        self.trigger_to_nodes,
+                    )
+                for tid, k, v in saved.pending_writes:
+                    if k in (ERROR, INTERRUPT, SCHEDULED):
+                        continue
+                    if tid not in next_tasks:
+                        continue
+                    next_tasks[tid].writes.append((k, v))
+                if tasks := [t for t in next_tasks.values() if t.writes]:
+                    apply_writes(
+                        checkpoint, channels, tasks, None, self.trigger_to_nodes
+                    )
             valid_updates: list[tuple[str, dict[str, Any] | None]] = []
             if len(updates) == 1:
                 values, as_node = updates[0]
