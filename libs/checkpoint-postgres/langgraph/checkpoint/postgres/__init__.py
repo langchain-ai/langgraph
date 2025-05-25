@@ -181,11 +181,11 @@ class PostgresSaver(BasePostgresSaver):
                             "checkpoint_id": value["checkpoint_id"],
                         }
                     },
-                    self._load_checkpoint(
-                        value["checkpoint"],
-                        value["channel_values"],
-                    ),
-                    self._load_metadata(value["metadata"]),
+                    {
+                        **value["checkpoint"],
+                        "channel_values": self._load_blobs(value["channel_values"]),
+                    },
+                    value["metadata"],
                     (
                         {
                             "configurable": {
@@ -277,11 +277,11 @@ class PostgresSaver(BasePostgresSaver):
                         "checkpoint_id": value["checkpoint_id"],
                     }
                 },
-                self._load_checkpoint(
-                    value["checkpoint"],
-                    value["channel_values"],
-                ),
-                self._load_metadata(value["metadata"]),
+                {
+                    **value["checkpoint"],
+                    "channel_values": self._load_blobs(value["channel_values"]),
+                },
+                value["metadata"],
                 (
                     {
                         "configurable": {
@@ -361,8 +361,8 @@ class PostgresSaver(BasePostgresSaver):
                     checkpoint_ns,
                     checkpoint["id"],
                     checkpoint_id,
-                    Jsonb(self._dump_checkpoint(copy)),
-                    self._dump_metadata(get_checkpoint_metadata(config, metadata)),
+                    Jsonb(copy),
+                    Jsonb(get_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config

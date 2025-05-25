@@ -9,11 +9,8 @@ from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
-    Checkpoint,
-    CheckpointMetadata,
     get_checkpoint_id,
 )
-from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import TASKS
 
 MetadataInput = Optional[dict[str, Any]]
@@ -150,7 +147,6 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
     UPSERT_CHECKPOINT_WRITES_SQL = UPSERT_CHECKPOINT_WRITES_SQL
     INSERT_CHECKPOINT_WRITES_SQL = INSERT_CHECKPOINT_WRITES_SQL
 
-    jsonplus_serde = JsonPlusSerializer()
     supports_pipeline: bool
 
     def _migrate_pending_sends(
@@ -172,19 +168,6 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             if checkpoint["channel_versions"]
             else self.get_next_version(None)
         )
-
-    def _load_checkpoint(
-        self,
-        checkpoint: dict[str, Any],
-        channel_values: list[tuple[bytes, bytes, bytes]],
-    ) -> Checkpoint:
-        return {
-            **checkpoint,
-            "channel_values": self._load_blobs(channel_values),
-        }
-
-    def _dump_checkpoint(self, checkpoint: Checkpoint) -> dict[str, Any]:
-        return checkpoint
 
     def _load_blobs(
         self, blob_values: list[tuple[bytes, bytes, bytes]]
@@ -260,14 +243,6 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             )
             for idx, (channel, value) in enumerate(writes)
         ]
-
-    def _load_metadata(self, metadata: dict[str, Any]) -> CheckpointMetadata:
-        return self.jsonplus_serde.loads(self.jsonplus_serde.dumps(metadata))
-
-    def _dump_metadata(self, metadata: CheckpointMetadata) -> str:
-        serialized_metadata = self.jsonplus_serde.dumps(metadata)
-        # NOTE: we're using JSON serializer (not msgpack), so we need to remove null characters before writing
-        return serialized_metadata.decode().replace("\\u0000", "")
 
     def get_next_version(self, current: Optional[str]) -> str:
         if current is None:

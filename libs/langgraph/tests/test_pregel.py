@@ -1071,7 +1071,6 @@ def test_pending_writes_resume(
         "parents": {},
         "source": "loop",
         "step": 0,
-        "writes": None,
         "thread_id": "1",
     }
     # get_state with checkpoint_id should not apply any pending writes
@@ -1162,7 +1161,6 @@ def test_pending_writes_resume(
             "parents": {},
             "step": 1,
             "source": "loop",
-            "writes": {"one": {"value": 2}, "two": {"value": 3}},
             "thread_id": "1",
         },
         parent_config={
@@ -1211,7 +1209,6 @@ def test_pending_writes_resume(
             "parents": {},
             "step": 0,
             "source": "loop",
-            "writes": None,
             "thread_id": "1",
         },
         parent_config={
@@ -1264,7 +1261,6 @@ def test_pending_writes_resume(
             "parents": {},
             "step": -1,
             "source": "input",
-            "writes": {"__start__": {"value": 1}},
             "thread_id": "1",
         },
         parent_config=None,
@@ -2273,7 +2269,6 @@ def test_in_one_fan_out_state_graph_waiting_edge(
             "parents": {},
             "source": "update",
             "step": 4,
-            "writes": {"retriever_one": {"docs": ["doc5"]}},
             "thread_id": "2",
         },
         parent_config=expected_parent_config,
@@ -2544,7 +2539,6 @@ def test_in_one_fan_out_state_graph_defer_node(
             "parents": {},
             "source": "update",
             "step": 4,
-            "writes": {"analyzer_one": {"docs": ["doc5"]}},
             "thread_id": "2",
         },
         parent_config=expected_parent_config,
@@ -2814,7 +2808,6 @@ def test_in_one_fan_out_state_graph_then_defer_node(
             "parents": {},
             "source": "update",
             "step": 4,
-            "writes": {"retriever_one": {"docs": ["doc5"]}},
             "thread_id": "2",
         },
         parent_config=expected_parent_config,
@@ -5265,11 +5258,6 @@ def test_parent_command(sync_checkpointer: BaseCheckpointSaver) -> None:
         },
         metadata={
             "source": "loop",
-            "writes": {
-                "alice": {
-                    "user_name": "Meow",
-                }
-            },
             "thread_id": "1",
             "step": 1,
             "parents": {},
@@ -5984,11 +5972,6 @@ def test_falsy_return_from_task(
                     "parents": {},
                     "source": "input",
                     "step": -1,
-                    "writes": {
-                        "__start__": {
-                            "a": 5,
-                        },
-                    },
                 },
                 "next": [
                     "graph",
@@ -6097,11 +6080,6 @@ def test_falsy_return_from_task(
                     "source": "input",
                     "step": -1,
                     "thread_id": AnyStr(),
-                    "writes": {
-                        "__start__": {
-                            "a": 5,
-                        },
-                    },
                 },
                 "next": [
                     "graph",
@@ -6191,10 +6169,6 @@ def test_falsy_return_from_task(
                     "parents": {},
                     "source": "loop",
                     "step": 0,
-                    "writes": {
-                        "falsy_task": False,
-                        "graph": None,
-                    },
                 },
                 "next": [],
                 "parent_config": {
@@ -8035,11 +8009,6 @@ def test_bulk_state_updates(
     # Check if there are only two checkpoints
     checkpoints = list(sync_checkpointer.list(config))
     assert len(checkpoints) == 2
-    assert checkpoints[0].metadata["writes"] == {
-        "node_a": {"foo": "updated"},
-        "node_b": {"baz": "new"},
-    }
-    assert checkpoints[1].metadata["writes"] == {"node_a": {"foo": "bar"}}
 
     # perform multiple steps at the same time
     config = {"configurable": {"thread_id": "2"}}
@@ -8062,11 +8031,6 @@ def test_bulk_state_updates(
 
     checkpoints = list(sync_checkpointer.list(config))
     assert len(checkpoints) == 2
-    assert checkpoints[0].metadata["writes"] == {
-        "node_a": {"foo": "updated"},
-        "node_b": {"baz": "new"},
-    }
-    assert checkpoints[1].metadata["writes"] == {"node_a": {"foo": "bar"}}
 
     # Should raise error if updating without as_node
     with pytest.raises(InvalidUpdateError):
