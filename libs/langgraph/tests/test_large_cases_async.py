@@ -25,7 +25,7 @@ from langgraph.graph.message import MessageGraph, add_messages
 from langgraph.graph.state import StateGraph
 from langgraph.prebuilt.chat_agent_executor import create_react_agent
 from langgraph.prebuilt.tool_node import ToolNode
-from langgraph.pregel import Channel, Pregel
+from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.store.base import BaseStore
 from langgraph.types import PregelTask, Send, StateSnapshot, StreamWriter
 from tests.any_int import AnyInt
@@ -46,8 +46,8 @@ async def test_invoke_two_processes_in_out_interrupt(
     async_checkpointer: BaseCheckpointSaver, mocker: MockerFixture
 ) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
-    two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
+    one = NodeBuilder().subscribe_only("input").do(add_one).write_to("inbox")
+    two = NodeBuilder().subscribe_only("inbox").do(add_one).write_to("output")
     app = Pregel(
         nodes={"one": one, "two": two},
         channels={
