@@ -19,7 +19,6 @@ from langgraph.checkpoint.base import (
     get_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
-from langgraph.checkpoint.serde.types import ChannelProtocol
 from langgraph.checkpoint.sqlite.utils import search_where
 
 _AIO_ERROR_MSG = (
@@ -535,14 +534,13 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
 
-    def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
+    def get_next_version(self, current: Optional[str]) -> str:
         """Generate the next version ID for a channel.
 
         This method creates a new version identifier for a channel based on its current version.
 
         Args:
             current (Optional[str]): The current version identifier of the channel.
-            channel (BaseChannel): The channel being versioned.
 
         Returns:
             str: The next version identifier, which is guaranteed to be monotonically increasing.

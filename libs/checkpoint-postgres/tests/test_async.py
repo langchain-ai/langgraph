@@ -14,10 +14,10 @@ from langgraph.checkpoint.base import (
     EXCLUDED_METADATA_KEYS,
     Checkpoint,
     CheckpointMetadata,
-    create_checkpoint,
-    empty_checkpoint,
 )
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.checkpoint.serde.types import TASKS
+from tests.checkpoint_utils import create_checkpoint, empty_checkpoint
 from tests.conftest import DEFAULT_POSTGRES_URI
 
 
@@ -263,3 +263,52 @@ async def test_null_chars(saver_name: str, test_data) -> None:
         assert [c async for c in saver.alist(None, filter={"my_key": "abc"})][
             0
         ].metadata["my_key"] == "abc"
+
+
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
+async def test_pending_sends_migration(saver_name: str) -> None:
+    async with _saver(saver_name) as saver:
+        config = {
+            "configurable": {
+                "thread_id": "thread-1",
+                "checkpoint_ns": "",
+            }
+        }
+
+        # create the first checkpoint
+        # and put some pending sends
+        checkpoint_0 = empty_checkpoint()
+        config = await saver.aput(config, checkpoint_0, {}, {})
+        await saver.aput_writes(
+            config, [(TASKS, "send-1"), (TASKS, "send-2")], task_id="task-1"
+        )
+        await saver.aput_writes(config, [(TASKS, "send-3")], task_id="task-2")
+
+        # check that fetching checkpoint_0 doesn't attach pending sends
+        # (they should be attached to the next checkpoint)
+        tuple_0 = await saver.aget_tuple(config)
+        assert tuple_0.checkpoint["channel_values"] == {}
+        assert tuple_0.checkpoint["channel_versions"] == {}
+
+        # create the second checkpoint
+        checkpoint_1 = create_checkpoint(checkpoint_0, {}, 1)
+        config = await saver.aput(config, checkpoint_1, {}, {})
+
+        # check that pending sends are attached to checkpoint_1
+        tuple_1 = await saver.aget_tuple(config)
+        assert tuple_1.checkpoint["channel_values"] == {
+            TASKS: ["send-1", "send-2", "send-3"]
+        }
+        assert TASKS in tuple_1.checkpoint["channel_versions"]
+
+        # check that list also applies the migration
+        search_results = [
+            c async for c in saver.alist({"configurable": {"thread_id": "thread-1"}})
+        ]
+        assert len(search_results) == 2
+        assert search_results[-1].checkpoint["channel_values"] == {}
+        assert search_results[-1].checkpoint["channel_versions"] == {}
+        assert search_results[0].checkpoint["channel_values"] == {
+            TASKS: ["send-1", "send-2", "send-3"]
+        }
+        assert TASKS in search_results[0].checkpoint["channel_versions"]

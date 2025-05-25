@@ -65,7 +65,6 @@ from langgraph.constants import (
     RESUME,
     SCHEDULED,
     TAG_HIDDEN,
-    TASKS,
 )
 from langgraph.errors import (
     CheckpointNotLatest,
@@ -318,9 +317,6 @@ class PregelLoop:
         """Put writes for a task, to be read by the next tick."""
         if not writes:
             return
-        # always checkpoint writes containing Send, as they are fetched from the
-        # parent checkpoint, not the current one
-        checkpoint_during = self.checkpoint_during or any(w[0] == TASKS for w in writes)
         # deduplicate writes to special channels, last write wins
         if all(w[0] in WRITES_IDX_MAP for w in writes):
             writes = list({w[0]: w for w in writes}.values())
@@ -330,7 +326,7 @@ class PregelLoop:
         ]
         # save writes
         self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
-        if checkpoint_during and self.checkpointer_put_writes is not None:
+        if self.checkpoint_during and self.checkpointer_put_writes is not None:
             config = patch_configurable(
                 self.checkpoint_config,
                 {
@@ -806,7 +802,6 @@ class PregelLoop:
                         else self.stream_keys
                     ),
                 )
-            self.checkpoint_id_prev = self.checkpoint["id"] if self.step > -1 else None
         # do checkpoint?
         do_checkpoint = self._checkpointer_put_after_previous is not None and (
             exiting or self.checkpoint_during
@@ -836,7 +831,6 @@ class PregelLoop:
                 CONF: {
                     **self.checkpoint_config[CONF],
                     # this is guaranteed to be set by code above
-                    CONFIG_KEY_CHECKPOINT_ID: self.checkpoint_id_prev,
                     CONFIG_KEY_CHECKPOINT_NS: self.config[CONF].get(
                         CONFIG_KEY_CHECKPOINT_NS, ""
                     ),

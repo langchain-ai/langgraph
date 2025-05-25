@@ -350,7 +350,6 @@ SAVED_CHECKPOINTS = {
                     "docs": ["doc1", "doc2", "doc3", "doc4"],
                     "answer": "doc1,doc2,doc3,doc4",
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
@@ -413,7 +412,6 @@ SAVED_CHECKPOINTS = {
                     "docs": ["doc1", "doc2", "doc3", "doc4"],
                     "branch:to:qa": None,
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
@@ -491,7 +489,6 @@ SAVED_CHECKPOINTS = {
                     "branch:to:retriever_one": None,
                     "docs": ["doc3", "doc4"],
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
@@ -548,7 +545,6 @@ SAVED_CHECKPOINTS = {
                     "branch:to:analyzer_one": None,
                     "branch:to:retriever_two": None,
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
@@ -605,7 +601,6 @@ SAVED_CHECKPOINTS = {
                     "query": "what is weather in sf",
                     "branch:to:rewrite_query": None,
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
@@ -656,7 +651,6 @@ SAVED_CHECKPOINTS = {
                 },
                 "versions_seen": {"__input__": {}},
                 "channel_values": {"__start__": {"query": "what is weather in sf"}},
-                "pending_sends": [],
             },
             metadata={
                 "source": "input",
@@ -744,7 +738,6 @@ SAVED_CHECKPOINTS = {
                     "answer": "doc1,doc2,doc3,doc4",
                     "qa": "qa",
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
@@ -808,7 +801,6 @@ SAVED_CHECKPOINTS = {
                     "docs": ["doc1", "doc2", "doc3", "doc4"],
                     "retriever_one": "retriever_one",
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
@@ -889,7 +881,6 @@ SAVED_CHECKPOINTS = {
                     "docs": ["doc3", "doc4"],
                     "retriever_two": "retriever_two",
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
@@ -950,7 +941,6 @@ SAVED_CHECKPOINTS = {
                     "rewrite_query": "rewrite_query",
                     "branch:to:retriever_two": "rewrite_query",
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
@@ -1012,7 +1002,6 @@ SAVED_CHECKPOINTS = {
                     "query": "what is weather in sf",
                     "start:rewrite_query": "__start__",
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
@@ -1063,7 +1052,6 @@ SAVED_CHECKPOINTS = {
                 },
                 "versions_seen": {"__input__": {}},
                 "channel_values": {"__start__": {"query": "what is weather in sf"}},
-                "pending_sends": [],
             },
             metadata={
                 "source": "input",
@@ -1151,7 +1139,6 @@ SAVED_CHECKPOINTS = {
                         "retriever_one": "00000000000000000000000000000005.0.222301724202566"
                     },
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
@@ -1215,7 +1202,6 @@ SAVED_CHECKPOINTS = {
                         "analyzer_one": "00000000000000000000000000000004.0.2684613370070208"
                     },
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
@@ -1296,7 +1282,6 @@ SAVED_CHECKPOINTS = {
                         "branch:rewrite_query:rewrite_query_then:retriever_two": "00000000000000000000000000000003.0.8992241767805405"
                     },
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
@@ -1357,7 +1342,6 @@ SAVED_CHECKPOINTS = {
                         "start:rewrite_query": "00000000000000000000000000000002.0.32002588286540445"
                     },
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
@@ -1419,7 +1403,6 @@ SAVED_CHECKPOINTS = {
                         "__start__": "00000000000000000000000000000001.0.6759219622820284"
                     },
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
@@ -1470,7 +1453,6 @@ SAVED_CHECKPOINTS = {
                     "__start__": "00000000000000000000000000000001.0.6759219622820284"
                 },
                 "versions_seen": {"__input__": {}},
-                "pending_sends": [],
             },
             metadata={
                 "source": "input",

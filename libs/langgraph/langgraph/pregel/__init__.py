@@ -22,17 +22,12 @@ from langchain_core.runnables.config import (
     get_callback_manager_for_config,
 )
 from langchain_core.runnables.graph import Graph
-from langchain_core.runnables.utils import (
-    ConfigurableFieldSpec,
-    get_unique_config_specs,
-)
 from pydantic import BaseModel
 from typing_extensions import Self
 
 from langgraph.cache.base import BaseCache
-from langgraph.channels.base import (
-    BaseChannel,
-)
+from langgraph.channels.base import BaseChannel
+from langgraph.channels.topic import Topic
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
@@ -49,7 +44,6 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_NODE_FINISHED,
     CONFIG_KEY_READ,
-    CONFIG_KEY_RESUMING,
     CONFIG_KEY_RUNNER_SUBMIT,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STORE,
@@ -66,6 +60,7 @@ from langgraph.constants import (
     NULL_TASK_ID,
     PUSH,
     SCHEDULED,
+    TASKS,
 )
 from langgraph.errors import (
     ErrorCode,
@@ -104,6 +99,7 @@ from langgraph.types import (
     CachePolicy,
     Checkpointer,
     Interrupt,
+    Send,
     StateSnapshot,
     StateUpdate,
     StreamChunk,
@@ -117,8 +113,7 @@ from langgraph.utils.config import (
     patch_configurable,
     recast_checkpoint_ns,
 )
-from langgraph.utils.fields import get_enhanced_type_hints
-from langgraph.utils.pydantic import create_model, is_supported_by_pydantic
+from langgraph.utils.pydantic import create_model
 from langgraph.utils.queue import AsyncQueue, SyncQueue  # type: ignore[attr-defined]
 from langgraph.utils.runnable import (
     Runnable,
@@ -706,6 +701,12 @@ class Pregel(PregelProtocol):
             k: v.build() if isinstance(v, NodeBuilder) else v for k, v in nodes.items()
         }
         self.channels = channels or {}
+        if TASKS in self.channels and not isinstance(self.channels[TASKS], Topic):
+            raise ValueError(
+                f"Channel '{TASKS}' is reserved and cannot be used in the graph."
+            )
+        else:
+            self.channels[TASKS] = Topic(Send, accumulate=False)
         self.stream_mode = stream_mode
         self.stream_eager = stream_eager
         self.output_channels = output_channels
@@ -830,54 +831,10 @@ class Pregel(PregelProtocol):
         self.trigger_to_nodes = _trigger_to_nodes(self.nodes)
         return self
 
-    @property
-    def config_specs(self) -> list[ConfigurableFieldSpec]:
-        return [
-            spec
-            for spec in get_unique_config_specs(
-                [spec for node in self.nodes.values() for spec in node.config_specs]
-                + (
-                    self.checkpointer.config_specs
-                    if isinstance(self.checkpointer, BaseCheckpointSaver)
-                    else []
-                )
-                + (
-                    [
-                        ConfigurableFieldSpec(
-                            id=name,
-                            annotation=typ,
-                            default=default,
-                            description=description,
-                        )
-                        for name, typ, default, description in get_enhanced_type_hints(
-                            self.config_type
-                        )
-                    ]
-                    if self.config_type is not None
-                    else []
-                )
-            )
-            # these are provided by the Pregel class
-            if spec.id
-            not in [
-                CONFIG_KEY_READ,
-                CONFIG_KEY_SEND,
-                CONFIG_KEY_CHECKPOINTER,
-                CONFIG_KEY_RESUMING,
-            ]
-        ]
-
     def config_schema(self, *, include: Sequence[str] | None = None) -> type[BaseModel]:
-        # If the config type is not set explicitly, we will try to infer it.
-        # If the config type is provided, but isn't directly supported by pydantic
-        # (e.g., vanilla python class), we will also delegate to the parent class,
-        # which handles cases where Pydantic doesn't support the type.
-        if self.config_type is None or not is_supported_by_pydantic(self.config_type):
-            return super().config_schema(include=include)
-
         include = include or []
         fields = {
-            "configurable": (self.config_type, None),
+            **({"configurable": (self.config_type, None)} if self.config_type else {}),
             **{
                 field_name: (field_type, None)
                 for field_name, field_type in get_type_hints(RunnableConfig).items()
@@ -2359,7 +2316,8 @@ class Pregel(PregelProtocol):
             checkpointer = self.checkpointer
         if checkpointer and not config.get(CONF):
             raise ValueError(
-                f"Checkpointer requires one or more of the following 'configurable' keys: {[s.id for s in checkpointer.config_specs]}"
+                "Checkpointer requires one or more of the following 'configurable' "
+                "keys: thread_id, checkpoint_ns, checkpoint_id"
             )
         if CONFIG_KEY_STORE in config.get(CONF, {}):
             store: BaseStore | None = config[CONF][CONFIG_KEY_STORE]

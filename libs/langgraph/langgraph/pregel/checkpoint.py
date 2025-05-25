@@ -8,7 +8,7 @@ from langgraph.checkpoint.base.id import uuid6
 from langgraph.constants import MISSING
 from langgraph.managed.base import ManagedValueMapping, ManagedValueSpec
 
-LATEST_VERSION = 3
+LATEST_VERSION = 4
 
 
 def empty_checkpoint() -> Checkpoint:
@@ -19,7 +19,6 @@ def empty_checkpoint() -> Checkpoint:
         channel_values={},
         channel_versions={},
         versions_seen={},
-        pending_sends=[],
     )
 
 
@@ -49,7 +48,6 @@ def create_checkpoint(
         channel_values=values,
         channel_versions=checkpoint["channel_versions"],
         versions_seen=checkpoint["versions_seen"],
-        pending_sends=checkpoint.get("pending_sends", []),
     )
 
 

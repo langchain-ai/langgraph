@@ -71,12 +71,14 @@ class Topic(
         return empty
 
     def update(self, values: Sequence[Union[Value, list[Value]]]) -> bool:
-        current = list(self.values)
+        updated = False
         if not self.accumulate:
+            updated = bool(self.values)
             self.values = list[Value]()
-        if flat_values := flatten(values):
+        if flat_values := tuple(flatten(values)):
+            updated = True
             self.values.extend(flat_values)
-        return self.values != current
+        return updated
 
     def get(self) -> Sequence[Value]:
         if self.values:
