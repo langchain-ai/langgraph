@@ -727,6 +727,10 @@ def create_react_agent(
             ]
 
             if pending_tool_calls:
+                pending_tool_calls = [
+                    tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
+                    for call in pending_tool_calls
+                ]
                 return [Send("tools", [tool_call]) for tool_call in pending_tool_calls]
             elif isinstance(messages[-1], ToolMessage):
                 return entrypoint
