@@ -72,6 +72,7 @@ from langgraph.errors import (
 from langgraph.managed.base import ManagedValueSpec
 from langgraph.pregel.algo import (
     PregelTaskWrites,
+    _scratchpad,
     apply_writes,
     local_read,
     prepare_next_tasks,
@@ -1782,6 +1783,15 @@ class Pregel(PregelProtocol):
                             CONFIG_KEY_SEND: writes.extend,
                             CONFIG_KEY_READ: partial(
                                 local_read,
+                                _scratchpad(
+                                    None,
+                                    [],
+                                    task_id,
+                                    "",
+                                    None,
+                                    step,
+                                    step + 2,
+                                ),
                                 channels,
                                 managed,
                                 task,
@@ -2188,6 +2198,15 @@ class Pregel(PregelProtocol):
                             CONFIG_KEY_SEND: writes.extend,
                             CONFIG_KEY_READ: partial(
                                 local_read,
+                                _scratchpad(
+                                    None,
+                                    [],
+                                    task_id,
+                                    "",
+                                    None,
+                                    step,
+                                    step + 2,
+                                ),
                                 channels,
                                 managed,
                                 task,
