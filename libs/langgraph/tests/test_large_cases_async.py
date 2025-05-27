@@ -6452,12 +6452,22 @@ async def test_weather_subgraph(
     inputs = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
 
     # run with custom output
-    assert [c async for c in graph.astream(inputs, thread2, stream_mode="custom")] == [
-        "I'm",
-        " very",
+    assert [
+        c
+        async for c in graph.astream(
+            inputs, thread2, stream_mode="custom", subgraphs=True
+        )
+    ] == [
+        ((), "I'm"),
+        ((AnyStr("weather_graph:"),), " very"),
     ]
-    assert [c async for c in graph.astream(None, thread2, stream_mode="custom")] == [
-        " good",
+    assert [
+        c
+        async for c in graph.astream(
+            None, thread2, stream_mode="custom", subgraphs=True
+        )
+    ] == [
+        ((AnyStr("weather_graph:"),), " good"),
     ]
 
     # run until interrupt
@@ -6774,6 +6784,114 @@ async def test_weather_subgraph(
                         _AnyIdAIMessage(content="rainy"),
                     ]
                 }
+            },
+        ),
+    ]
+
+    # run with custom output, without subgraph streaming, should omit subgraph chunks
+    assert [
+        c
+        async for c in graph.astream(
+            inputs, {"configurable": {"thread_id": "3"}}, stream_mode="custom"
+        )
+    ] == [
+        "I'm",
+    ]
+
+    # run with messages output, with subgraph streaming, should inc subgraph messages
+    assert [
+        c
+        async for c in graph.astream(
+            inputs,
+            {"configurable": {"thread_id": "4"}},
+            stream_mode="messages",
+            subgraphs=True,
+        )
+    ] == [
+        (
+            (),
+            (
+                _AnyIdAIMessage(
+                    content="",
+                    tool_calls=[
+                        ToolCall(
+                            id="tool_call123",
+                            name="router",
+                            args={"dest": "weather"},
+                        )
+                    ],
+                ),
+                {
+                    "thread_id": "4",
+                    "langgraph_step": 1,
+                    "langgraph_node": "router_node",
+                    "langgraph_triggers": ("branch:to:router_node",),
+                    "langgraph_path": ("__pregel_pull", "router_node"),
+                    "langgraph_checkpoint_ns": AnyStr("router_node:"),
+                    "checkpoint_ns": AnyStr("router_node:"),
+                    "ls_provider": "fakemessageslistchatmodel",
+                    "ls_model_type": "chat",
+                },
+            ),
+        ),
+        (
+            (AnyStr("weather_graph:"),),
+            (
+                _AnyIdAIMessage(
+                    content="",
+                    tool_calls=[
+                        ToolCall(
+                            id="tool_call123",
+                            name="get_weather",
+                            args={"city": "San Francisco"},
+                        )
+                    ],
+                ),
+                {
+                    "thread_id": "4",
+                    "langgraph_step": 1,
+                    "langgraph_node": "model_node",
+                    "langgraph_triggers": ("branch:to:model_node",),
+                    "langgraph_path": ("__pregel_pull", "model_node"),
+                    "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
+                    "checkpoint_ns": AnyStr("weather_graph:"),
+                    "ls_provider": "fakemessageslistchatmodel",
+                    "ls_model_type": "chat",
+                },
+            ),
+        ),
+    ]
+
+    # run with messages output, without subgraph streaming, should exc subgraph messages
+    assert [
+        c
+        async for c in graph.astream(
+            inputs,
+            {"configurable": {"thread_id": "5"}},
+            stream_mode="messages",
+        )
+    ] == [
+        (
+            _AnyIdAIMessage(
+                content="",
+                tool_calls=[
+                    ToolCall(
+                        id="tool_call123",
+                        name="router",
+                        args={"dest": "weather"},
+                    )
+                ],
+            ),
+            {
+                "thread_id": "5",
+                "langgraph_step": 1,
+                "langgraph_node": "router_node",
+                "langgraph_triggers": ("branch:to:router_node",),
+                "langgraph_path": ("__pregel_pull", "router_node"),
+                "langgraph_checkpoint_ns": AnyStr("router_node:"),
+                "checkpoint_ns": AnyStr("router_node:"),
+                "ls_provider": "fakemessageslistchatmodel",
+                "ls_model_type": "chat",
             },
         ),
     ]

@@ -5372,6 +5372,7 @@ async def test_stream_subgraphs_during_execution(
     ]
 
 
+@NEEDS_CONTEXTVARS
 async def test_stream_buffering_single_node(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
