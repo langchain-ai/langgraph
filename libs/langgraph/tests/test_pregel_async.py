@@ -8,8 +8,6 @@ import random
 import sys
 import uuid
 from collections import Counter, deque
-from collections.abc import AsyncGenerator, AsyncIterator, Generator
-from contextlib import asynccontextmanager, contextmanager
 from dataclasses import replace
 from time import perf_counter
 from typing import (
@@ -21,7 +19,6 @@ from typing import (
 )
 from uuid import UUID
 
-import httpx
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePassthrough
@@ -34,7 +31,6 @@ from typing_extensions import TypedDict
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
-from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.checkpoint.base import (
@@ -4313,75 +4309,6 @@ async def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
     assert await app.ainvoke(2) is None
 
 
-async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
-    setup_sync = mocker.Mock()
-    cleanup_sync = mocker.Mock()
-    setup_async = mocker.Mock()
-    cleanup_async = mocker.Mock()
-
-    @contextmanager
-    def an_int() -> Generator[int, None, None]:
-        setup_sync()
-        try:
-            yield 5
-        finally:
-            cleanup_sync()
-
-    @asynccontextmanager
-    async def an_int_async() -> AsyncGenerator[int, None]:
-        setup_async()
-        try:
-            yield 5
-        finally:
-            cleanup_async()
-
-    add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
-    two = (
-        Channel.subscribe_to("inbox")
-        | RunnableLambda(add_one).abatch
-        | Channel.write_to("output").abatch
-    )
-
-    app = Pregel(
-        nodes={"one": one, "two": two},
-        channels={
-            "input": LastValue(int),
-            "output": LastValue(int),
-            "inbox": Topic(int),
-            "ctx": Context(an_int, an_int_async),
-        },
-        input_channels="input",
-        output_channels=["inbox", "output"],
-        stream_channels=["inbox", "output"],
-    )
-
-    async def aenumerate(aiter: AsyncIterator[Any]) -> AsyncIterator[tuple[int, Any]]:
-        i = 0
-        async for chunk in aiter:
-            yield i, chunk
-            i += 1
-
-    assert setup_sync.call_count == 0
-    assert cleanup_sync.call_count == 0
-    assert setup_async.call_count == 0
-    assert cleanup_async.call_count == 0
-    async for i, chunk in aenumerate(app.astream(2)):
-        assert setup_sync.call_count == 0, "Sync context manager should not be used"
-        assert cleanup_sync.call_count == 0, "Sync context manager should not be used"
-        assert setup_async.call_count == 1, "Expected setup to be called once"
-        if i == 0:
-            assert chunk == {"inbox": [3]}
-        elif i == 1:
-            assert chunk == {"output": 4}
-        else:
-            assert False, "Expected only two chunks"
-    assert setup_sync.call_count == 0
-    assert cleanup_sync.call_count == 0
-    assert setup_async.call_count == 1, "Expected setup to be called once"
-    assert cleanup_async.call_count == 1, "Expected cleanup to be called once"
-
-
 async def test_conditional_entrypoint_graph() -> None:
     async def left(data: str) -> str:
         return data + "->left"
@@ -4959,32 +4886,8 @@ async def test_nested_pydantic_models() -> None:
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
-    snapshot: SnapshotAssertion, mocker: MockerFixture, checkpointer_name: str
+    checkpointer_name: str,
 ) -> None:
-    setup = mocker.Mock()
-    teardown = mocker.Mock()
-
-    @asynccontextmanager
-    async def assert_ctx_once() -> AsyncIterator[None]:
-        assert setup.call_count == 0
-        assert teardown.call_count == 0
-        try:
-            yield
-        finally:
-            assert setup.call_count == 1
-            assert teardown.call_count == 1
-            setup.reset_mock()
-            teardown.reset_mock()
-
-    @asynccontextmanager
-    async def make_httpx_client() -> AsyncIterator[httpx.AsyncClient]:
-        setup()
-        async with httpx.AsyncClient() as client:
-            try:
-                yield client
-            finally:
-                teardown()
-
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
     ) -> list[str]:
@@ -5000,7 +4903,6 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
         query: str
         answer: Optional[str] = None
         docs: Annotated[list[str], sorted_add]
-        client: Annotated[httpx.AsyncClient, Context(make_httpx_client)]
 
     class Input(BaseModel):
         query: str
@@ -5053,24 +4955,21 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
 
     app = workflow.compile()
 
-    async with assert_ctx_once():
-        with pytest.raises(ValidationError):
-            await app.ainvoke({"query": {}})
+    with pytest.raises(ValidationError):
+        await app.ainvoke({"query": {}})
 
-    async with assert_ctx_once():
-        assert await app.ainvoke({"query": "what is weather in sf"}) == {
-            "docs": ["doc1", "doc2", "doc3", "doc4"],
-            "answer": "doc1,doc2,doc3,doc4",
-        }
+    assert await app.ainvoke({"query": "what is weather in sf"}) == {
+        "docs": ["doc1", "doc2", "doc3", "doc4"],
+        "answer": "doc1,doc2,doc3,doc4",
+    }
 
-    async with assert_ctx_once():
-        assert [c async for c in app.astream({"query": "what is weather in sf"})] == [
-            {"rewrite_query": {"query": "query: what is weather in sf"}},
-            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-            {"retriever_two": {"docs": ["doc3", "doc4"]}},
-            {"retriever_one": {"docs": ["doc1", "doc2"]}},
-            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-        ]
+    assert [c async for c in app.astream({"query": "what is weather in sf"})] == [
+        {"rewrite_query": {"query": "query: what is weather in sf"}},
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+    ]
 
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         app_w_interrupt = workflow.compile(
@@ -5079,24 +4978,22 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
         )
         config = {"configurable": {"thread_id": "1"}}
 
-        async with assert_ctx_once():
-            assert [
-                c
-                async for c in app_w_interrupt.astream(
-                    {"query": "what is weather in sf"}, config
-                )
-            ] == [
-                {"rewrite_query": {"query": "query: what is weather in sf"}},
-                {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-                {"retriever_two": {"docs": ["doc3", "doc4"]}},
-                {"retriever_one": {"docs": ["doc1", "doc2"]}},
-                {"__interrupt__": ()},
-            ]
+        assert [
+            c
+            async for c in app_w_interrupt.astream(
+                {"query": "what is weather in sf"}, config
+            )
+        ] == [
+            {"rewrite_query": {"query": "query: what is weather in sf"}},
+            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {"retriever_two": {"docs": ["doc3", "doc4"]}},
+            {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"__interrupt__": ()},
+        ]
 
-        async with assert_ctx_once():
-            assert [c async for c in app_w_interrupt.astream(None, config)] == [
-                {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-            ]
+        assert [c async for c in app_w_interrupt.astream(None, config)] == [
+            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+        ]
 
         assert await app_w_interrupt.aget_state(config) == StateSnapshot(
             values={
@@ -5135,16 +5032,15 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
             interrupts=(),
         )
 
-        async with assert_ctx_once():
-            assert await app_w_interrupt.aupdate_state(
-                config, {"docs": ["doc5"]}, as_node="rewrite_query"
-            ) == {
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_id": AnyStr(),
-                    "checkpoint_ns": "",
-                }
+        assert await app_w_interrupt.aupdate_state(
+            config, {"docs": ["doc5"]}, as_node="rewrite_query"
+        ) == {
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_id": AnyStr(),
+                "checkpoint_ns": "",
             }
+        }
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)

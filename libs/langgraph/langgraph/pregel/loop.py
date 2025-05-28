@@ -76,7 +76,6 @@ from langgraph.errors import (
 from langgraph.managed.base import (
     ManagedValueMapping,
     ManagedValueSpec,
-    WritableManagedValue,
 )
 from langgraph.pregel.algo import (
     Call,
@@ -490,16 +489,13 @@ class PregelLoop(LoopProtocol):
                     ),
                 )
             # all tasks have finished
-            mv_writes, updated_channels = apply_writes(
+            updated_channels = apply_writes(
                 self.checkpoint,
                 self.channels,
                 self.tasks.values(),
                 self.checkpointer_get_next_version,
                 self.trigger_to_nodes,
             )
-            # apply writes to managed values
-            for key, values in mv_writes.items():
-                self._update_mv(key, values)
             # validate input if requested
             if self.input is INPUT_SHOULD_VALIDATE:
                 self.input = INPUT_DONE
@@ -700,15 +696,13 @@ class PregelLoop(LoopProtocol):
         if null_writes := [
             w[1:] for w in self.checkpoint_pending_writes if w[0] == NULL_TASK_ID
         ]:
-            mv_writes, _ = apply_writes(
+            apply_writes(
                 self.checkpoint,
                 self.channels,
                 [PregelTaskWrites((), INPUT, null_writes, [])],
                 self.checkpointer_get_next_version,
                 self.trigger_to_nodes,
             )
-            for key, values in mv_writes.items():
-                self._update_mv(key, values)
         # proceed past previous checkpoint
         if is_resuming:
             self.checkpoint["versions_seen"].setdefault(INTERRUPT, {})
@@ -750,7 +744,7 @@ class PregelLoop(LoopProtocol):
                 manager=None,
             )
             # apply input writes
-            mv_writes, updated_channels = apply_writes(
+            updated_channels = apply_writes(
                 self.checkpoint,
                 self.channels,
                 [
@@ -760,7 +754,6 @@ class PregelLoop(LoopProtocol):
                 self.checkpointer_get_next_version,
                 self.trigger_to_nodes,
             )
-            assert not mv_writes, "Can't write to SharedValues in graph input"
             # save input checkpoint
             self._put_checkpoint({"source": "input", "writes": dict(input_writes)})
             # set flag
@@ -869,9 +862,6 @@ class PregelLoop(LoopProtocol):
             # increment step
             self.step += 1
 
-    def _update_mv(self, key: str, values: Sequence[Any]) -> None:
-        raise NotImplementedError
-
     def _suppress_interrupt(
         self,
         exc_type: Optional[type[BaseException]],
@@ -891,15 +881,13 @@ class PregelLoop(LoopProtocol):
                 and self.checkpoint_pending_writes
                 and any(task.writes for task in self.tasks.values())
             ):
-                mv_writes, updated_channels = apply_writes(
+                updated_channels = apply_writes(
                     self.checkpoint,
                     self.channels,
                     self.tasks.values(),
                     self.checkpointer_get_next_version,
                     self.trigger_to_nodes,
                 )
-                for key, values in mv_writes.items():
-                    self._update_mv(key, values)
                 if not updated_channels.isdisjoint(
                     (self.output_keys,)
                     if isinstance(self.output_keys, str)
@@ -1065,13 +1053,6 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             cast(BaseCheckpointSaver, self.checkpointer).put(
                 config, checkpoint, metadata, new_versions
             )
-
-    def _update_mv(self, key: str, values: Sequence[Any]) -> None:
-        managed_value = self.managed.get(key)
-        if managed_value is None:
-            return
-
-        return self.submit(cast(WritableManagedValue, managed_value).update, values)
 
     def match_cached_writes(self) -> Sequence[PregelExecutableTask]:
         if self.cache is None:
@@ -1262,13 +1243,6 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             await cast(BaseCheckpointSaver, self.checkpointer).aput(
                 config, checkpoint, metadata, new_versions
             )
-
-    def _update_mv(self, key: str, values: Sequence[Any]) -> None:
-        managed_value = self.managed.get(key)
-        if managed_value is None:
-            return
-
-        return self.submit(cast(WritableManagedValue, managed_value).aupdate, values)
 
     async def amatch_cached_writes(self) -> Sequence[PregelExecutableTask]:
         if self.cache is None:

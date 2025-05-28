@@ -9,14 +9,12 @@ import time
 import uuid
 import warnings
 from collections import Counter, deque
-from collections.abc import Generator, Iterator, Sequence
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from random import randrange
 from typing import Annotated, Any, Literal, Optional, Union, get_type_hints
 
-import httpx
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
 from langchain_core.runnables import (
@@ -34,7 +32,6 @@ from typing_extensions import TypedDict
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
-from langgraph.channels.context import Context
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
@@ -2013,52 +2010,6 @@ def test_invoke_two_processes_no_in(mocker: MockerFixture) -> None:
         Pregel(nodes={"one": one, "two": two})
 
 
-def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
-    setup = mocker.Mock()
-    cleanup = mocker.Mock()
-
-    @contextmanager
-    def an_int() -> Generator[int, None, None]:
-        setup()
-        try:
-            yield 5
-        finally:
-            cleanup()
-
-    add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
-    two = (
-        Channel.subscribe_to("inbox")
-        | RunnableLambda(add_one).batch
-        | Channel.write_to("output").batch
-    )
-
-    app = Pregel(
-        nodes={"one": one, "two": two},
-        channels={
-            "inbox": Topic(int),
-            "ctx": Context(an_int),
-            "output": LastValue(int),
-            "input": LastValue(int),
-        },
-        input_channels="input",
-        output_channels=["inbox", "output"],
-        stream_channels=["inbox", "output"],
-    )
-
-    assert setup.call_count == 0
-    assert cleanup.call_count == 0
-    for i, chunk in enumerate(app.stream(2)):
-        assert setup.call_count == 1, "Expected setup to be called once"
-        if i == 0:
-            assert chunk == {"inbox": [3]}
-        elif i == 1:
-            assert chunk == {"output": 4}
-        else:
-            assert False, "Expected only two chunks"
-    assert cleanup.call_count == 1, "Expected cleanup to be called once"
-
-
 def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
     def left(data: str) -> str:
         return data + "->left"
@@ -3139,34 +3090,10 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
     snapshot: SnapshotAssertion,
-    mocker: MockerFixture,
     request: pytest.FixtureRequest,
     checkpointer_name: str,
 ) -> None:
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
-    setup = mocker.Mock()
-    teardown = mocker.Mock()
-
-    @contextmanager
-    def assert_ctx_once() -> Iterator[None]:
-        assert setup.call_count == 0
-        assert teardown.call_count == 0
-        try:
-            yield
-        finally:
-            assert setup.call_count == 1
-            assert teardown.call_count == 1
-            setup.reset_mock()
-            teardown.reset_mock()
-
-    @contextmanager
-    def make_httpx_client() -> Iterator[httpx.Client]:
-        setup()
-        with httpx.Client() as client:
-            try:
-                yield client
-            finally:
-                teardown()
 
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
@@ -3187,7 +3114,6 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
         inner: Annotated[InnerObject, lambda x, y: y]
         answer: Optional[str] = None
         docs: Annotated[list[str], sorted_add]
-        client: Annotated[httpx.Client, Context(make_httpx_client)]
 
     class StateUpdate(BaseModel):
         query: Optional[str] = None
@@ -3251,25 +3177,21 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
         assert app.get_input_schema().model_json_schema() == snapshot
         assert app.get_output_schema().model_json_schema() == snapshot
 
-    with pytest.raises(ValidationError), assert_ctx_once():
+    with pytest.raises(ValidationError):
         app.invoke({"query": {}})
 
-    with assert_ctx_once():
-        assert app.invoke({"query": "what is weather in sf", "inner": {"yo": 1}}) == {
-            "docs": ["doc1", "doc2", "doc3", "doc4"],
-            "answer": "doc1,doc2,doc3,doc4",
-        }
+    assert app.invoke({"query": "what is weather in sf", "inner": {"yo": 1}}) == {
+        "docs": ["doc1", "doc2", "doc3", "doc4"],
+        "answer": "doc1,doc2,doc3,doc4",
+    }
 
-    with assert_ctx_once():
-        assert [
-            *app.stream({"query": "what is weather in sf", "inner": {"yo": 1}})
-        ] == [
-            {"rewrite_query": {"query": "query: what is weather in sf"}},
-            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-            {"retriever_two": {"docs": ["doc3", "doc4"]}},
-            {"retriever_one": {"docs": ["doc1", "doc2"]}},
-            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-        ]
+    assert [*app.stream({"query": "what is weather in sf", "inner": {"yo": 1}})] == [
+        {"rewrite_query": {"query": "query: what is weather in sf"}},
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+    ]
 
     app_w_interrupt = workflow.compile(
         checkpointer=checkpointer,
@@ -3277,35 +3199,32 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
     )
     config = {"configurable": {"thread_id": "1"}}
 
-    with assert_ctx_once():
-        assert [
-            c
-            for c in app_w_interrupt.stream(
-                {"query": "what is weather in sf", "inner": {"yo": 1}}, config
-            )
-        ] == [
-            {"rewrite_query": {"query": "query: what is weather in sf"}},
-            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-            {"retriever_two": {"docs": ["doc3", "doc4"]}},
-            {"retriever_one": {"docs": ["doc1", "doc2"]}},
-            {"__interrupt__": ()},
-        ]
+    assert [
+        c
+        for c in app_w_interrupt.stream(
+            {"query": "what is weather in sf", "inner": {"yo": 1}}, config
+        )
+    ] == [
+        {"rewrite_query": {"query": "query: what is weather in sf"}},
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"__interrupt__": ()},
+    ]
 
-    with assert_ctx_once():
-        assert [c for c in app_w_interrupt.stream(None, config)] == [
-            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-        ]
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+    ]
 
-    with assert_ctx_once():
-        assert app_w_interrupt.update_state(
-            config, {"docs": ["doc5"]}, as_node="rewrite_query"
-        ) == {
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_id": AnyStr(),
-                "checkpoint_ns": "",
-            }
+    assert app_w_interrupt.update_state(
+        config, {"docs": ["doc5"]}, as_node="rewrite_query"
+    ) == {
+        "configurable": {
+            "thread_id": "1",
+            "checkpoint_id": AnyStr(),
+            "checkpoint_ns": "",
         }
+    }
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
