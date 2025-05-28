@@ -172,6 +172,7 @@ def should_interrupt(
 
 
 def local_read(
+    scratchpad: PregelScratchpad,
     channels: Mapping[str, BaseChannel],
     managed: ManagedValueMapping,
     task: WritesProtocol,
@@ -208,7 +209,7 @@ def local_read(
     else:
         values = read_channels(channels, select)
     if managed_keys:
-        values.update({k: managed[k]() for k in managed_keys})
+        values.update({k: managed[k].get(scratchpad) for k in managed_keys})
     return values
 
 
@@ -571,6 +572,15 @@ def prepare_single_task(
                 )
             else:
                 cache_key = None
+            scratchpad = _scratchpad(
+                config[CONF].get(CONFIG_KEY_SCRATCHPAD),
+                pending_writes,
+                task_id,
+                xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+                config[CONF].get(CONFIG_KEY_RESUME_MAP),
+                step,
+                stop,
+            )
             return PregelExecutableTask(
                 name,
                 call.input,
@@ -587,6 +597,7 @@ def prepare_single_task(
                         CONFIG_KEY_SEND: writes.extend,
                         CONFIG_KEY_READ: partial(
                             local_read,
+                            scratchpad,
                             channels,
                             managed,
                             PregelTaskWrites(task_path, name, writes, triggers),
@@ -601,15 +612,7 @@ def prepare_single_task(
                         },
                         CONFIG_KEY_CHECKPOINT_ID: None,
                         CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
-                        CONFIG_KEY_SCRATCHPAD: _scratchpad(
-                            config[CONF].get(CONFIG_KEY_SCRATCHPAD),
-                            pending_writes,
-                            task_id,
-                            xxh3_128_hexdigest(task_checkpoint_ns.encode()),
-                            config[CONF].get(CONFIG_KEY_RESUME_MAP),
-                            step,
-                            stop,
-                        ),
+                        CONFIG_KEY_SCRATCHPAD: scratchpad,
                     },
                 ),
                 triggers,
@@ -695,6 +698,15 @@ def prepare_single_task(
                 )
             else:
                 cache_key = None
+            scratchpad = _scratchpad(
+                config[CONF].get(CONFIG_KEY_SCRATCHPAD),
+                pending_writes,
+                task_id,
+                xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+                config[CONF].get(CONFIG_KEY_RESUME_MAP),
+                step,
+                stop,
+            )
             return PregelExecutableTask(
                 packet.node,
                 packet.arg,
@@ -712,6 +724,7 @@ def prepare_single_task(
                         CONFIG_KEY_SEND: writes.extend,
                         CONFIG_KEY_READ: partial(
                             local_read,
+                            scratchpad,
                             channels,
                             managed,
                             PregelTaskWrites(task_path, packet.node, writes, triggers),
@@ -726,15 +739,7 @@ def prepare_single_task(
                         },
                         CONFIG_KEY_CHECKPOINT_ID: None,
                         CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
-                        CONFIG_KEY_SCRATCHPAD: _scratchpad(
-                            config[CONF].get(CONFIG_KEY_SCRATCHPAD),
-                            pending_writes,
-                            task_id,
-                            xxh3_128_hexdigest(task_checkpoint_ns.encode()),
-                            config[CONF].get(CONFIG_KEY_RESUME_MAP),
-                            step,
-                            stop,
-                        ),
+                        CONFIG_KEY_SCRATCHPAD: scratchpad,
                         CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
                             PREVIOUS, None
                         ),
@@ -860,6 +865,7 @@ def prepare_single_task(
                                 CONFIG_KEY_SEND: writes.extend,
                                 CONFIG_KEY_READ: partial(
                                     local_read,
+                                    scratchpad,
                                     channels,
                                     managed,
                                     PregelTaskWrites(
