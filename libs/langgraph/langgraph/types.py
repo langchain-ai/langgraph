@@ -27,7 +27,6 @@ from langgraph.utils.fields import get_update_as_tuples
 
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
-    from langgraph.store.base import BaseStore
 
 
 try:
@@ -380,31 +379,10 @@ class StreamProtocol:
         self.modes = modes
 
 
-class LoopProtocol:
-    config: RunnableConfig
-    store: Optional["BaseStore"]
-    stream: Optional[StreamProtocol]
-    step: int
-    stop: int
-
-    def __init__(
-        self,
-        *,
-        step: int,
-        stop: int,
-        config: RunnableConfig,
-        store: Optional["BaseStore"] = None,
-        stream: Optional[StreamProtocol] = None,
-    ) -> None:
-        self.stream = stream
-        self.config = config
-        self.store = store
-        self.step = step
-        self.stop = stop
-
-
 @dataclasses.dataclass(**_DC_KWARGS)
 class PregelScratchpad:
+    step: int
+    stop: int
     # call
     call_counter: Callable[[], int]
     # interrupt

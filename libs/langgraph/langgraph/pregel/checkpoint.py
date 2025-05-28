@@ -1,11 +1,12 @@
 from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Union
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.constants import MISSING
+from langgraph.managed.base import ManagedValueMapping, ManagedValueSpec
 
 LATEST_VERSION = 3
 
@@ -49,4 +50,25 @@ def create_checkpoint(
         channel_versions=checkpoint["channel_versions"],
         versions_seen=checkpoint["versions_seen"],
         pending_sends=checkpoint.get("pending_sends", []),
+    )
+
+
+def channels_from_checkpoint(
+    specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
+    checkpoint: Checkpoint,
+) -> tuple[Mapping[str, BaseChannel], ManagedValueMapping]:
+    """Get channels from a checkpoint."""
+    channel_specs: dict[str, BaseChannel] = {}
+    managed_specs: dict[str, ManagedValueSpec] = {}
+    for k, v in specs.items():
+        if isinstance(v, BaseChannel):
+            channel_specs[k] = v
+        else:
+            managed_specs[k] = v
+    return (
+        {
+            k: v.from_checkpoint(checkpoint["channel_values"].get(k, MISSING))
+            for k, v in channel_specs.items()
+        },
+        managed_specs,
     )
