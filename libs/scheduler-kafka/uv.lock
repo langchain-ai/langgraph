@@ -1,4 +1,5 @@
 version = 1
+revision = 1
 requires-python = ">=3.9"
 resolution-markers = [
     "python_full_version >= '3.12.4'",
@@ -557,7 +558,7 @@ dev = [
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "0.2.1"
+version = "0.2.2"
 source = { editable = "../prebuilt" }
 dependencies = [
     { name = "langchain-core" },
