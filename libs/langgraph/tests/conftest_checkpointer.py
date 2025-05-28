@@ -11,7 +11,10 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-from tests.memory_assert import MemorySaverAssertImmutable
+
+pytest.register_assert_rewrite("tests.memory_assert")
+
+from tests.memory_assert import MemorySaverAssertImmutable  # noqa: E402
 
 DEFAULT_POSTGRES_URI = "postgres://postgres:postgres@localhost:5442/"
 

@@ -14,7 +14,6 @@ import pytest
 from langchain_core.messages import ToolCall
 from langchain_core.runnables import RunnableConfig, RunnablePick
 from pytest_mock import MockerFixture
-from syrupy import SnapshotAssertion
 from typing_extensions import TypedDict
 
 from langgraph.channels.last_value import LastValue
@@ -27,14 +26,10 @@ from langgraph.graph.state import StateGraph
 from langgraph.prebuilt.chat_agent_executor import create_react_agent
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, Pregel
-from langgraph.store.memory import InMemoryStore
+from langgraph.store.base import BaseStore
 from langgraph.types import PregelTask, Send, StateSnapshot, StreamWriter
 from tests.any_int import AnyInt
 from tests.any_str import AnyDict, AnyStr, UnsortedSequence
-from tests.conftest import (
-    ALL_CHECKPOINTERS_ASYNC,
-    awith_checkpointer,
-)
 from tests.fake_chat import FakeChatModel
 from tests.fake_tracer import FakeTracer
 from tests.messages import (
@@ -47,274 +42,262 @@ from tests.messages import (
 pytestmark = pytest.mark.anyio
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_invoke_two_processes_in_out_interrupt(
-    checkpointer_name: str, mocker: MockerFixture
+    async_checkpointer: BaseCheckpointSaver, mocker: MockerFixture
 ) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        app = Pregel(
-            nodes={"one": one, "two": two},
-            channels={
-                "inbox": LastValue(int),
-                "output": LastValue(int),
-                "input": LastValue(int),
+    app = Pregel(
+        nodes={"one": one, "two": two},
+        channels={
+            "inbox": LastValue(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
+        checkpointer=async_checkpointer,
+        interrupt_after_nodes=["one"],
+    )
+    thread1 = {"configurable": {"thread_id": "1"}}
+    thread2 = {"configurable": {"thread_id": "2"}}
+
+    # start execution, stop at inbox
+    assert await app.ainvoke(2, thread1) is None
+
+    # inbox == 3
+    checkpoint = await async_checkpointer.aget(thread1)
+    assert checkpoint is not None
+    assert checkpoint["channel_values"]["inbox"] == 3
+
+    # resume execution, finish
+    assert await app.ainvoke(None, thread1) == 4
+
+    # start execution again, stop at inbox
+    assert await app.ainvoke(20, thread1) is None
+
+    # inbox == 21
+    checkpoint = await async_checkpointer.aget(thread1)
+    assert checkpoint is not None
+    assert checkpoint["channel_values"]["inbox"] == 21
+
+    # send a new value in, interrupting the previous execution
+    assert await app.ainvoke(3, thread1) is None
+    assert await app.ainvoke(None, thread1) == 5
+
+    # start execution again, stopping at inbox
+    assert await app.ainvoke(20, thread2) is None
+
+    # inbox == 21
+    snapshot = await app.aget_state(thread2)
+    assert snapshot.values["inbox"] == 21
+    assert snapshot.next == ("two",)
+
+    # update the state, resume
+    await app.aupdate_state(thread2, 25, as_node="one")
+    assert await app.ainvoke(None, thread2) == 26
+
+    # no pending tasks
+    snapshot = await app.aget_state(thread2)
+    assert snapshot.next == ()
+
+    # list history
+    history = [c async for c in app.aget_state_history(thread1)]
+    assert history == [
+        StateSnapshot(
+            values={"inbox": 4, "output": 5, "input": 3},
+            tasks=(),
+            next=(),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
             },
-            input_channels="input",
-            output_channels="output",
-            checkpointer=checkpointer,
-            interrupt_after_nodes=["one"],
-        )
-        thread1 = {"configurable": {"thread_id": "1"}}
-        thread2 = {"configurable": {"thread_id": "2"}}
-
-        # start execution, stop at inbox
-        assert await app.ainvoke(2, thread1) is None
-
-        # inbox == 3
-        checkpoint = await checkpointer.aget(thread1)
-        assert checkpoint is not None
-        assert checkpoint["channel_values"]["inbox"] == 3
-
-        # resume execution, finish
-        assert await app.ainvoke(None, thread1) == 4
-
-        # start execution again, stop at inbox
-        assert await app.ainvoke(20, thread1) is None
-
-        # inbox == 21
-        checkpoint = await checkpointer.aget(thread1)
-        assert checkpoint is not None
-        assert checkpoint["channel_values"]["inbox"] == 21
-
-        # send a new value in, interrupting the previous execution
-        assert await app.ainvoke(3, thread1) is None
-        assert await app.ainvoke(None, thread1) == 5
-
-        # start execution again, stopping at inbox
-        assert await app.ainvoke(20, thread2) is None
-
-        # inbox == 21
-        snapshot = await app.aget_state(thread2)
-        assert snapshot.values["inbox"] == 21
-        assert snapshot.next == ("two",)
-
-        # update the state, resume
-        await app.aupdate_state(thread2, 25, as_node="one")
-        assert await app.ainvoke(None, thread2) == 26
-
-        # no pending tasks
-        snapshot = await app.aget_state(thread2)
-        assert snapshot.next == ()
-
-        # list history
-        history = [c async for c in app.aget_state_history(thread1)]
-        assert history == [
-            StateSnapshot(
-                values={"inbox": 4, "output": 5, "input": 3},
-                tasks=(),
-                next=(),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "parents": {},
-                    "source": "loop",
-                    "step": 6,
-                    "writes": {"two": 5},
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "step": 6,
+                "writes": {"two": 5},
+                "thread_id": "1",
+            },
+            created_at=AnyStr(),
+            parent_config=history[1].config,
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={"inbox": 4, "output": 4, "input": 3},
+            tasks=(PregelTask(AnyStr(), "two", (PULL, "two"), result={"output": 5}),),
+            next=("two",),
+            config={
+                "configurable": {
                     "thread_id": "1",
-                },
-                created_at=AnyStr(),
-                parent_config=history[1].config,
-                interrupts=(),
-            ),
-            StateSnapshot(
-                values={"inbox": 4, "output": 4, "input": 3},
-                tasks=(
-                    PregelTask(AnyStr(), "two", (PULL, "two"), result={"output": 5}),
-                ),
-                next=("two",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "parents": {},
-                    "source": "loop",
-                    "step": 5,
-                    "writes": {"one": None},
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "step": 5,
+                "writes": {"one": None},
+                "thread_id": "1",
+            },
+            created_at=AnyStr(),
+            parent_config=history[2].config,
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={"inbox": 21, "output": 4, "input": 3},
+            tasks=(PregelTask(AnyStr(), "one", (PULL, "one"), result={"inbox": 4}),),
+            next=("one",),
+            config={
+                "configurable": {
                     "thread_id": "1",
-                },
-                created_at=AnyStr(),
-                parent_config=history[2].config,
-                interrupts=(),
-            ),
-            StateSnapshot(
-                values={"inbox": 21, "output": 4, "input": 3},
-                tasks=(
-                    PregelTask(AnyStr(), "one", (PULL, "one"), result={"inbox": 4}),
-                ),
-                next=("one",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "parents": {},
-                    "source": "input",
-                    "step": 4,
-                    "writes": {"input": 3},
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "parents": {},
+                "source": "input",
+                "step": 4,
+                "writes": {"input": 3},
+                "thread_id": "1",
+            },
+            created_at=AnyStr(),
+            parent_config=history[3].config,
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={"inbox": 21, "output": 4, "input": 20},
+            tasks=(PregelTask(AnyStr(), "two", (PULL, "two")),),
+            next=("two",),
+            config={
+                "configurable": {
                     "thread_id": "1",
-                },
-                created_at=AnyStr(),
-                parent_config=history[3].config,
-                interrupts=(),
-            ),
-            StateSnapshot(
-                values={"inbox": 21, "output": 4, "input": 20},
-                tasks=(PregelTask(AnyStr(), "two", (PULL, "two")),),
-                next=("two",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "parents": {},
-                    "source": "loop",
-                    "step": 3,
-                    "writes": {"one": None},
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "step": 3,
+                "writes": {"one": None},
+                "thread_id": "1",
+            },
+            created_at=AnyStr(),
+            parent_config=history[4].config,
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={"inbox": 3, "output": 4, "input": 20},
+            tasks=(PregelTask(AnyStr(), "one", (PULL, "one"), result={"inbox": 21}),),
+            next=("one",),
+            config={
+                "configurable": {
                     "thread_id": "1",
-                },
-                created_at=AnyStr(),
-                parent_config=history[4].config,
-                interrupts=(),
-            ),
-            StateSnapshot(
-                values={"inbox": 3, "output": 4, "input": 20},
-                tasks=(
-                    PregelTask(AnyStr(), "one", (PULL, "one"), result={"inbox": 21}),
-                ),
-                next=("one",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "parents": {},
-                    "source": "input",
-                    "step": 2,
-                    "writes": {"input": 20},
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "parents": {},
+                "source": "input",
+                "step": 2,
+                "writes": {"input": 20},
+                "thread_id": "1",
+            },
+            created_at=AnyStr(),
+            parent_config=history[5].config,
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={"inbox": 3, "output": 4, "input": 2},
+            tasks=(),
+            next=(),
+            config={
+                "configurable": {
                     "thread_id": "1",
-                },
-                created_at=AnyStr(),
-                parent_config=history[5].config,
-                interrupts=(),
-            ),
-            StateSnapshot(
-                values={"inbox": 3, "output": 4, "input": 2},
-                tasks=(),
-                next=(),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "parents": {},
-                    "source": "loop",
-                    "step": 1,
-                    "writes": {"two": 4},
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "step": 1,
+                "writes": {"two": 4},
+                "thread_id": "1",
+            },
+            created_at=AnyStr(),
+            parent_config=history[6].config,
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={"inbox": 3, "input": 2},
+            tasks=(PregelTask(AnyStr(), "two", (PULL, "two"), result={"output": 4}),),
+            next=("two",),
+            config={
+                "configurable": {
                     "thread_id": "1",
-                },
-                created_at=AnyStr(),
-                parent_config=history[6].config,
-                interrupts=(),
-            ),
-            StateSnapshot(
-                values={"inbox": 3, "input": 2},
-                tasks=(
-                    PregelTask(AnyStr(), "two", (PULL, "two"), result={"output": 4}),
-                ),
-                next=("two",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "parents": {},
-                    "source": "loop",
-                    "step": 0,
-                    "writes": {"one": None},
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "step": 0,
+                "writes": {"one": None},
+                "thread_id": "1",
+            },
+            created_at=AnyStr(),
+            parent_config=history[7].config,
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={"input": 2},
+            tasks=(PregelTask(AnyStr(), "one", (PULL, "one"), result={"inbox": 3}),),
+            next=("one",),
+            config={
+                "configurable": {
                     "thread_id": "1",
-                },
-                created_at=AnyStr(),
-                parent_config=history[7].config,
-                interrupts=(),
-            ),
-            StateSnapshot(
-                values={"input": 2},
-                tasks=(
-                    PregelTask(AnyStr(), "one", (PULL, "one"), result={"inbox": 3}),
-                ),
-                next=("one",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "parents": {},
-                    "source": "input",
-                    "step": -1,
-                    "writes": {"input": 2},
-                    "thread_id": "1",
-                },
-                created_at=AnyStr(),
-                parent_config=None,
-                interrupts=(),
-            ),
-        ]
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "parents": {},
+                "source": "input",
+                "step": -1,
+                "writes": {"input": 2},
+                "thread_id": "1",
+            },
+            created_at=AnyStr(),
+            parent_config=None,
+            interrupts=(),
+        ),
+    ]
 
-        # forking from any previous checkpoint should re-run nodes
-        assert [
-            c async for c in app.astream(None, history[0].config, stream_mode="updates")
-        ] == []
-        assert [
-            c async for c in app.astream(None, history[1].config, stream_mode="updates")
-        ] == [
-            {"two": {"output": 5}},
-        ]
-        assert [
-            c async for c in app.astream(None, history[2].config, stream_mode="updates")
-        ] == [
-            {"one": {"inbox": 4}},
-            {"__interrupt__": ()},
-        ]
+    # forking from any previous checkpoint should re-run nodes
+    assert [
+        c async for c in app.astream(None, history[0].config, stream_mode="updates")
+    ] == []
+    assert [
+        c async for c in app.astream(None, history[1].config, stream_mode="updates")
+    ] == [
+        {"two": {"output": 5}},
+    ]
+    assert [
+        c async for c in app.astream(None, history[2].config, stream_mode="updates")
+    ] == [
+        {"one": {"inbox": 4}},
+        {"__interrupt__": ()},
+    ]
 
 
 async def test_fork_always_re_runs_nodes(
@@ -523,8 +506,7 @@ async def test_fork_always_re_runs_nodes(
     ]
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_conditional_graph(checkpointer_name: str) -> None:
+async def test_conditional_graph(async_checkpointer: BaseCheckpointSaver) -> None:
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
@@ -787,77 +769,88 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
         },
     ]
 
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        # test state get/update methods with interrupt_after
+    # test state get/update methods with interrupt_after
 
-        app_w_interrupt = workflow.compile(
-            checkpointer=checkpointer,
-            interrupt_after=["agent"],
+    app_w_interrupt = workflow.compile(
+        checkpointer=async_checkpointer,
+        interrupt_after=["agent"],
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert [
+        c
+        async for c in app_w_interrupt.astream(
+            {"input": "what is weather in sf"}, config
         )
-        config = {"configurable": {"thread_id": "1"}}
-
-        assert [
-            c
-            async for c in app_w_interrupt.astream(
-                {"input": "what is weather in sf"}, config
-            )
-        ] == [
-            {
-                "agent": {
-                    "input": "what is weather in sf",
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
-                }
+    ] == [
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:query",
+                ),
             }
-        ]
+        }
+    ]
 
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "agent": {
+                "input": "what is weather in sf",
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:query",
+                ),
+            },
+        },
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
+        next=("tools",),
+        config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
+            "ts"
+        ],
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 0,
+            "writes": {
                 "agent": {
-                    "input": "what is weather in sf",
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
-                },
-            },
-            tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
-            next=("tools",),
-            config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-            created_at=(
-                await app_w_interrupt.checkpointer.aget_tuple(config)
-            ).checkpoint["ts"],
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 0,
-                "writes": {
                     "agent": {
-                        "agent": {
-                            "input": "what is weather in sf",
-                            "agent_outcome": AgentAction(
-                                tool="search_api",
-                                tool_input="query",
-                                log="tool:search_api:query",
-                            ),
-                        }
+                        "input": "what is weather in sf",
+                        "agent_outcome": AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
                     }
-                },
-                "thread_id": "1",
+                }
             },
-            parent_config=[
-                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-            ][-1].config,
-            interrupts=(),
-        )
+            "thread_id": "1",
+        },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
+        interrupts=(),
+    )
 
-        await app_w_interrupt.aupdate_state(
-            config,
-            {
+    await app_w_interrupt.aupdate_state(
+        config,
+        {
+            "agent_outcome": AgentAction(
+                tool="search_api",
+                tool_input="query",
+                log="tool:search_api:a different query",
+            ),
+            "input": "what is weather in sf",
+        },
+    )
+
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "agent": {
                 "agent_outcome": AgentAction(
                     tool="search_api",
                     tool_input="query",
@@ -865,10 +858,22 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                 ),
                 "input": "what is weather in sf",
             },
-        )
-
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
+        },
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
+        next=("tools",),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "update",
+            "step": 1,
+            "writes": {
                 "agent": {
                     "agent_outcome": AgentAction(
                         tool="search_api",
@@ -876,91 +881,88 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                         log="tool:search_api:a different query",
                     ),
                     "input": "what is weather in sf",
-                },
-            },
-            tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
-            next=("tools",),
-            config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
                 }
             },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "update",
-                "step": 1,
-                "writes": {
-                    "agent": {
-                        "agent_outcome": AgentAction(
+            "thread_id": "1",
+        },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
+        interrupts=(),
+    )
+
+    assert [c async for c in app_w_interrupt.astream(None, config)] == [
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:a different query",
+                ),
+                "input": "what is weather in sf",
+            },
+        },
+        {
+            "tools": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    [
+                        AgentAction(
                             tool="search_api",
                             tool_input="query",
                             log="tool:search_api:a different query",
                         ),
-                        "input": "what is weather in sf",
-                    }
-                },
-                "thread_id": "1",
-            },
-            parent_config=[
-                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-            ][-1].config,
-            interrupts=(),
-        )
+                        "result for query",
+                    ]
+                ],
+            }
+        },
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    [
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:a different query",
+                        ),
+                        "result for query",
+                    ]
+                ],
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
+    ]
 
-        assert [c async for c in app_w_interrupt.astream(None, config)] == [
-            {
-                "agent": {
-                    "agent_outcome": AgentAction(
+    await app_w_interrupt.aupdate_state(
+        config,
+        {
+            "input": "what is weather in sf",
+            "intermediate_steps": [
+                [
+                    AgentAction(
                         tool="search_api",
                         tool_input="query",
                         log="tool:search_api:a different query",
                     ),
-                    "input": "what is weather in sf",
-                },
-            },
-            {
-                "tools": {
-                    "input": "what is weather in sf",
-                    "intermediate_steps": [
-                        [
-                            AgentAction(
-                                tool="search_api",
-                                tool_input="query",
-                                log="tool:search_api:a different query",
-                            ),
-                            "result for query",
-                        ]
-                    ],
-                }
-            },
-            {
-                "agent": {
-                    "input": "what is weather in sf",
-                    "intermediate_steps": [
-                        [
-                            AgentAction(
-                                tool="search_api",
-                                tool_input="query",
-                                log="tool:search_api:a different query",
-                            ),
-                            "result for query",
-                        ]
-                    ],
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="another",
-                        log="tool:search_api:another",
-                    ),
-                }
-            },
-        ]
+                    "result for query",
+                ]
+            ],
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "a really nice answer"},
+                log="finish:a really nice answer",
+            ),
+        },
+    )
 
-        await app_w_interrupt.aupdate_state(
-            config,
-            {
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "agent": {
                 "input": "what is weather in sf",
                 "intermediate_steps": [
                     [
@@ -977,10 +979,22 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                     log="finish:a really nice answer",
                 ),
             },
-        )
-
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
+        },
+        tasks=(),
+        next=(),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "update",
+            "step": 4,
+            "writes": {
                 "agent": {
                     "input": "what is weather in sf",
                     "intermediate_steps": [
@@ -997,124 +1011,103 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                         return_values={"answer": "a really nice answer"},
                         log="finish:a really nice answer",
                     ),
-                },
-            },
-            tasks=(),
-            next=(),
-            config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
                 }
             },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "update",
-                "step": 4,
-                "writes": {
+            "thread_id": "1",
+        },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
+        interrupts=(),
+    )
+
+    # test state get/update methods with interrupt_before
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=async_checkpointer,
+        interrupt_before=["tools"],
+    )
+    config = {"configurable": {"thread_id": "2"}}
+    llm.i = 0
+
+    assert [
+        c
+        async for c in app_w_interrupt.astream(
+            {"input": "what is weather in sf"}, config
+        )
+    ] == [
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:query",
+                ),
+            }
+        }
+    ]
+
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "agent": {
+                "input": "what is weather in sf",
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:query",
+                ),
+            },
+        },
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
+        next=("tools",),
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 0,
+            "writes": {
+                "agent": {
                     "agent": {
                         "input": "what is weather in sf",
-                        "intermediate_steps": [
-                            [
-                                AgentAction(
-                                    tool="search_api",
-                                    tool_input="query",
-                                    log="tool:search_api:a different query",
-                                ),
-                                "result for query",
-                            ]
-                        ],
-                        "agent_outcome": AgentFinish(
-                            return_values={"answer": "a really nice answer"},
-                            log="finish:a really nice answer",
+                        "agent_outcome": AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
                         ),
                     }
-                },
-                "thread_id": "1",
-            },
-            parent_config=[
-                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-            ][-1].config,
-            interrupts=(),
-        )
-
-        # test state get/update methods with interrupt_before
-
-        app_w_interrupt = workflow.compile(
-            checkpointer=checkpointer,
-            interrupt_before=["tools"],
-        )
-        config = {"configurable": {"thread_id": "2"}}
-        llm.i = 0
-
-        assert [
-            c
-            async for c in app_w_interrupt.astream(
-                {"input": "what is weather in sf"}, config
-            )
-        ] == [
-            {
-                "agent": {
-                    "input": "what is weather in sf",
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
-                }
-            }
-        ]
-
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
-                "agent": {
-                    "input": "what is weather in sf",
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
-                },
-            },
-            tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
-            next=("tools",),
-            config={
-                "configurable": {
-                    "thread_id": "2",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
                 }
             },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 0,
-                "writes": {
-                    "agent": {
-                        "agent": {
-                            "input": "what is weather in sf",
-                            "agent_outcome": AgentAction(
-                                tool="search_api",
-                                tool_input="query",
-                                log="tool:search_api:query",
-                            ),
-                        }
-                    }
-                },
-                "thread_id": "2",
-            },
-            parent_config=[
-                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-            ][-1].config,
-            interrupts=(),
-        )
+            "thread_id": "2",
+        },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
+        interrupts=(),
+    )
 
-        await app_w_interrupt.aupdate_state(
-            config,
-            {
+    await app_w_interrupt.aupdate_state(
+        config,
+        {
+            "agent_outcome": AgentAction(
+                tool="search_api",
+                tool_input="query",
+                log="tool:search_api:a different query",
+            ),
+            "input": "what is weather in sf",
+        },
+    )
+
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "agent": {
                 "agent_outcome": AgentAction(
                     tool="search_api",
                     tool_input="query",
@@ -1122,10 +1115,22 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                 ),
                 "input": "what is weather in sf",
             },
-        )
-
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
+        },
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
+        next=("tools",),
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "update",
+            "step": 1,
+            "writes": {
                 "agent": {
                     "agent_outcome": AgentAction(
                         tool="search_api",
@@ -1133,91 +1138,88 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                         log="tool:search_api:a different query",
                     ),
                     "input": "what is weather in sf",
-                },
-            },
-            tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
-            next=("tools",),
-            config={
-                "configurable": {
-                    "thread_id": "2",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
                 }
             },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "update",
-                "step": 1,
-                "writes": {
-                    "agent": {
-                        "agent_outcome": AgentAction(
+            "thread_id": "2",
+        },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
+        interrupts=(),
+    )
+
+    assert [c async for c in app_w_interrupt.astream(None, config)] == [
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:a different query",
+                ),
+                "input": "what is weather in sf",
+            },
+        },
+        {
+            "tools": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    [
+                        AgentAction(
                             tool="search_api",
                             tool_input="query",
                             log="tool:search_api:a different query",
                         ),
-                        "input": "what is weather in sf",
-                    }
-                },
-                "thread_id": "2",
-            },
-            parent_config=[
-                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-            ][-1].config,
-            interrupts=(),
-        )
+                        "result for query",
+                    ]
+                ],
+            }
+        },
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    [
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:a different query",
+                        ),
+                        "result for query",
+                    ]
+                ],
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
+    ]
 
-        assert [c async for c in app_w_interrupt.astream(None, config)] == [
-            {
-                "agent": {
-                    "agent_outcome": AgentAction(
+    await app_w_interrupt.aupdate_state(
+        config,
+        {
+            "input": "what is weather in sf",
+            "intermediate_steps": [
+                [
+                    AgentAction(
                         tool="search_api",
                         tool_input="query",
                         log="tool:search_api:a different query",
                     ),
-                    "input": "what is weather in sf",
-                },
-            },
-            {
-                "tools": {
-                    "input": "what is weather in sf",
-                    "intermediate_steps": [
-                        [
-                            AgentAction(
-                                tool="search_api",
-                                tool_input="query",
-                                log="tool:search_api:a different query",
-                            ),
-                            "result for query",
-                        ]
-                    ],
-                }
-            },
-            {
-                "agent": {
-                    "input": "what is weather in sf",
-                    "intermediate_steps": [
-                        [
-                            AgentAction(
-                                tool="search_api",
-                                tool_input="query",
-                                log="tool:search_api:a different query",
-                            ),
-                            "result for query",
-                        ]
-                    ],
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="another",
-                        log="tool:search_api:another",
-                    ),
-                }
-            },
-        ]
+                    "result for query",
+                ]
+            ],
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "a really nice answer"},
+                log="finish:a really nice answer",
+            ),
+        },
+    )
 
-        await app_w_interrupt.aupdate_state(
-            config,
-            {
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "agent": {
                 "input": "what is weather in sf",
                 "intermediate_steps": [
                     [
@@ -1234,10 +1236,22 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                     log="finish:a really nice answer",
                 ),
             },
-        )
-
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
+        },
+        tasks=(),
+        next=(),
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "update",
+            "step": 4,
+            "writes": {
                 "agent": {
                     "input": "what is weather in sf",
                     "intermediate_steps": [
@@ -1254,244 +1268,210 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
                         return_values={"answer": "a really nice answer"},
                         log="finish:a really nice answer",
                     ),
-                },
-            },
-            tasks=(),
-            next=(),
-            config={
-                "configurable": {
-                    "thread_id": "2",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
                 }
             },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "update",
-                "step": 4,
-                "writes": {
-                    "agent": {
-                        "input": "what is weather in sf",
-                        "intermediate_steps": [
-                            [
-                                AgentAction(
-                                    tool="search_api",
-                                    tool_input="query",
-                                    log="tool:search_api:a different query",
-                                ),
-                                "result for query",
-                            ]
-                        ],
-                        "agent_outcome": AgentFinish(
-                            return_values={"answer": "a really nice answer"},
-                            log="finish:a really nice answer",
-                        ),
-                    }
-                },
-                "thread_id": "2",
-            },
-            parent_config=[
-                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-            ][-1].config,
-            interrupts=(),
+            "thread_id": "2",
+        },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
+        interrupts=(),
+    )
+
+    # test re-invoke to continue with interrupt_before
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=async_checkpointer,
+        interrupt_before=["tools"],
+    )
+    config = {"configurable": {"thread_id": "3"}}
+    llm.i = 0  # reset the llm
+
+    assert [
+        c
+        async for c in app_w_interrupt.astream(
+            {"input": "what is weather in sf"}, config
         )
-
-        # test re-invoke to continue with interrupt_before
-
-        app_w_interrupt = workflow.compile(
-            checkpointer=checkpointer,
-            interrupt_before=["tools"],
-        )
-        config = {"configurable": {"thread_id": "3"}}
-        llm.i = 0  # reset the llm
-
-        assert [
-            c
-            async for c in app_w_interrupt.astream(
-                {"input": "what is weather in sf"}, config
-            )
-        ] == [
-            {
-                "agent": {
-                    "input": "what is weather in sf",
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
-                }
+    ] == [
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:query",
+                ),
             }
-        ]
+        }
+    ]
 
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
-                "agent": {
-                    "input": "what is weather in sf",
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
-                },
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "agent": {
+                "input": "what is weather in sf",
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:query",
+                ),
             },
-            tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
-            next=("tools",),
-            config={
-                "configurable": {
-                    "thread_id": "3",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 0,
-                "writes": {
-                    "agent": {
-                        "agent": {
-                            "input": "what is weather in sf",
-                            "agent_outcome": AgentAction(
-                                tool="search_api",
-                                tool_input="query",
-                                log="tool:search_api:query",
-                            ),
-                        }
-                    }
-                },
+        },
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
+        next=("tools",),
+        config={
+            "configurable": {
                 "thread_id": "3",
-            },
-            parent_config=[
-                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-            ][-1].config,
-            interrupts=(),
-        )
-
-        assert [c async for c in app_w_interrupt.astream(None, config)] == [
-            {
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 0,
+            "writes": {
                 "agent": {
-                    "input": "what is weather in sf",
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
-                },
-            },
-            {
-                "tools": {
-                    "input": "what is weather in sf",
-                    "intermediate_steps": [
-                        [
-                            AgentAction(
-                                tool="search_api",
-                                tool_input="query",
-                                log="tool:search_api:query",
-                            ),
-                            "result for query",
-                        ]
-                    ],
+                    "agent": {
+                        "input": "what is weather in sf",
+                        "agent_outcome": AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                    }
                 }
             },
-            {
-                "agent": {
-                    "input": "what is weather in sf",
-                    "intermediate_steps": [
-                        [
-                            AgentAction(
-                                tool="search_api",
-                                tool_input="query",
-                                log="tool:search_api:query",
-                            ),
-                            "result for query",
-                        ]
-                    ],
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="another",
-                        log="tool:search_api:another",
-                    ),
-                }
-            },
-        ]
+            "thread_id": "3",
+        },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
+        interrupts=(),
+    )
 
-        assert [c async for c in app_w_interrupt.astream(None, config)] == [
-            {
-                "agent": {
-                    "input": "what is weather in sf",
-                    "intermediate_steps": [
-                        [
-                            AgentAction(
-                                tool="search_api",
-                                tool_input="query",
-                                log="tool:search_api:query",
-                            ),
-                            "result for query",
-                        ]
-                    ],
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="another",
-                        log="tool:search_api:another",
-                    ),
-                }
+    assert [c async for c in app_w_interrupt.astream(None, config)] == [
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:query",
+                ),
             },
-            {
-                "tools": {
-                    "input": "what is weather in sf",
-                    "intermediate_steps": [
-                        [
-                            AgentAction(
-                                tool="search_api",
-                                tool_input="query",
-                                log="tool:search_api:query",
-                            ),
-                            "result for query",
-                        ],
-                        [
-                            AgentAction(
-                                tool="search_api",
-                                tool_input="another",
-                                log="tool:search_api:another",
-                            ),
-                            "result for another",
-                        ],
+        },
+        {
+            "tools": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    [
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    ]
+                ],
+            }
+        },
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    [
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    ]
+                ],
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
+    ]
+
+    assert [c async for c in app_w_interrupt.astream(None, config)] == [
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    [
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    ]
+                ],
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
+        {
+            "tools": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    [
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
                     ],
-                }
-            },
-            {
-                "agent": {
-                    "input": "what is weather in sf",
-                    "intermediate_steps": [
-                        [
-                            AgentAction(
-                                tool="search_api",
-                                tool_input="query",
-                                log="tool:search_api:query",
-                            ),
-                            "result for query",
-                        ],
-                        [
-                            AgentAction(
-                                tool="search_api",
-                                tool_input="another",
-                                log="tool:search_api:another",
-                            ),
-                            "result for another",
-                        ],
+                    [
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="another",
+                            log="tool:search_api:another",
+                        ),
+                        "result for another",
                     ],
-                    "agent_outcome": AgentFinish(
-                        return_values={"answer": "answer"}, log="finish:answer"
-                    ),
-                }
-            },
-        ]
+                ],
+            }
+        },
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    [
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    ],
+                    [
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="another",
+                            log="tool:search_api:another",
+                        ),
+                        "result for another",
+                    ],
+                ],
+                "agent_outcome": AgentFinish(
+                    return_values={"answer": "answer"}, log="finish:answer"
+                ),
+            }
+        },
+    ]
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_conditional_graph_state(checkpointer_name: str) -> None:
+async def test_conditional_graph_state(async_checkpointer: BaseCheckpointSaver) -> None:
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
@@ -1685,226 +1665,56 @@ async def test_conditional_graph_state(checkpointer_name: str) -> None:
         },
     ]
 
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        # test state get/update methods with interrupt_after
+    # test state get/update methods with interrupt_after
 
-        app_w_interrupt = workflow.compile(
-            checkpointer=checkpointer,
-            interrupt_after=["agent"],
+    app_w_interrupt = workflow.compile(
+        checkpointer=async_checkpointer,
+        interrupt_after=["agent"],
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert [
+        c
+        async for c in app_w_interrupt.astream(
+            {"input": "what is weather in sf"}, config
         )
-        config = {"configurable": {"thread_id": "1"}}
-
-        assert [
-            c
-            async for c in app_w_interrupt.astream(
-                {"input": "what is weather in sf"}, config
-            )
-        ] == [
-            {
-                "agent": {
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
-                }
-            },
-            {"__interrupt__": ()},
-        ]
-
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
+    ] == [
+        {
+            "agent": {
                 "agent_outcome": AgentAction(
                     tool="search_api",
                     tool_input="query",
                     log="tool:search_api:query",
                 ),
-                "intermediate_steps": [],
-            },
-            tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
-            next=("tools",),
-            config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 1,
-                "writes": {
-                    "agent": {
-                        "agent_outcome": AgentAction(
-                            tool="search_api",
-                            tool_input="query",
-                            log="tool:search_api:query",
-                        ),
-                    }
-                },
-                "thread_id": "1",
-            },
-            parent_config=[
-                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-            ][-1].config,
-            interrupts=(),
-        )
+            }
+        },
+        {"__interrupt__": ()},
+    ]
 
-        await app_w_interrupt.aupdate_state(
-            config,
-            {
-                "agent_outcome": AgentAction(
-                    tool="search_api",
-                    tool_input="query",
-                    log="tool:search_api:a different query",
-                )
-            },
-        )
-
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
-                "agent_outcome": AgentAction(
-                    tool="search_api",
-                    tool_input="query",
-                    log="tool:search_api:a different query",
-                ),
-                "intermediate_steps": [],
-            },
-            tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
-            next=("tools",),
-            config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "update",
-                "step": 2,
-                "writes": {
-                    "agent": {
-                        "agent_outcome": AgentAction(
-                            tool="search_api",
-                            tool_input="query",
-                            log="tool:search_api:a different query",
-                        )
-                    }
-                },
-                "thread_id": "1",
-            },
-            parent_config=([
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "agent_outcome": AgentAction(
+                tool="search_api",
+                tool_input="query",
+                log="tool:search_api:query",
             ),
-            interrupts=(),
-        )
-
-        assert [c async for c in app_w_interrupt.astream(None, config)] == [
-            {
-                "tools": {
-                    "intermediate_steps": [
-                        [
-                            AgentAction(
-                                tool="search_api",
-                                tool_input="query",
-                                log="tool:search_api:a different query",
-                            ),
-                            "result for query",
-                        ]
-                    ],
-                }
-            },
-            {
-                "agent": {
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="another",
-                        log="tool:search_api:another",
-                    ),
-                }
-            },
-            {"__interrupt__": ()},
-        ]
-
-        await app_w_interrupt.aupdate_state(
-            config,
-            {
-                "agent_outcome": AgentFinish(
-                    return_values={"answer": "a really nice answer"},
-                    log="finish:a really nice answer",
-                )
-            },
-        )
-
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
-                "agent_outcome": AgentFinish(
-                    return_values={"answer": "a really nice answer"},
-                    log="finish:a really nice answer",
-                ),
-                "intermediate_steps": [
-                    [
-                        AgentAction(
-                            tool="search_api",
-                            tool_input="query",
-                            log="tool:search_api:a different query",
-                        ),
-                        "result for query",
-                    ]
-                ],
-            },
-            tasks=(),
-            next=(),
-            config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "update",
-                "step": 5,
-                "writes": {
-                    "agent": {
-                        "agent_outcome": AgentFinish(
-                            return_values={"answer": "a really nice answer"},
-                            log="finish:a really nice answer",
-                        )
-                    }
-                },
+            "intermediate_steps": [],
+        },
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
+        next=("tools",),
+        config={
+            "configurable": {
                 "thread_id": "1",
-            },
-            parent_config=([
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
-            interrupts=(),
-        )
-
-        # test state get/update methods with interrupt_before
-
-        app_w_interrupt = workflow.compile(
-            checkpointer=checkpointer,
-            interrupt_before=["tools"],
-        )
-        config = {"configurable": {"thread_id": "2"}}
-        llm.i = 0  # reset the llm
-
-        assert [
-            c
-            async for c in app_w_interrupt.astream(
-                {"input": "what is weather in sf"}, config
-            )
-        ] == [
-            {
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 1,
+            "writes": {
                 "agent": {
                     "agent_outcome": AgentAction(
                         tool="search_api",
@@ -1913,142 +1723,70 @@ async def test_conditional_graph_state(checkpointer_name: str) -> None:
                     ),
                 }
             },
-            {"__interrupt__": ()},
-        ]
+            "thread_id": "1",
+        },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
+        interrupts=(),
+    )
 
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
-                "agent_outcome": AgentAction(
-                    tool="search_api", tool_input="query", log="tool:search_api:query"
-                ),
-                "intermediate_steps": [],
-            },
-            tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
-            next=("tools",),
-            config={
-                "configurable": {
-                    "thread_id": "2",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 1,
-                "writes": {
-                    "agent": {
-                        "agent_outcome": AgentAction(
-                            tool="search_api",
-                            tool_input="query",
-                            log="tool:search_api:query",
-                        ),
-                    }
-                },
-                "thread_id": "2",
-            },
-            parent_config=([
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
+    await app_w_interrupt.aupdate_state(
+        config,
+        {
+            "agent_outcome": AgentAction(
+                tool="search_api",
+                tool_input="query",
+                log="tool:search_api:a different query",
+            )
+        },
+    )
+
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "agent_outcome": AgentAction(
+                tool="search_api",
+                tool_input="query",
+                log="tool:search_api:a different query",
             ),
-            interrupts=(),
-        )
-
-        await app_w_interrupt.aupdate_state(
-            config,
-            {
-                "agent_outcome": AgentAction(
-                    tool="search_api",
-                    tool_input="query",
-                    log="tool:search_api:a different query",
-                )
-            },
-        )
-
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
-                "agent_outcome": AgentAction(
-                    tool="search_api",
-                    tool_input="query",
-                    log="tool:search_api:a different query",
-                ),
-                "intermediate_steps": [],
-            },
-            tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
-            next=("tools",),
-            config={
-                "configurable": {
-                    "thread_id": "2",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "update",
-                "step": 2,
-                "writes": {
-                    "agent": {
-                        "agent_outcome": AgentAction(
-                            tool="search_api",
-                            tool_input="query",
-                            log="tool:search_api:a different query",
-                        )
-                    }
-                },
-                "thread_id": "2",
-            },
-            parent_config=[
-                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-            ][-1].config,
-            interrupts=(),
-        )
-
-        assert [c async for c in app_w_interrupt.astream(None, config)] == [
-            {
-                "tools": {
-                    "intermediate_steps": [
-                        [
-                            AgentAction(
-                                tool="search_api",
-                                tool_input="query",
-                                log="tool:search_api:a different query",
-                            ),
-                            "result for query",
-                        ]
-                    ],
-                }
-            },
-            {
+            "intermediate_steps": [],
+        },
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
+        next=("tools",),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "update",
+            "step": 2,
+            "writes": {
                 "agent": {
                     "agent_outcome": AgentAction(
                         tool="search_api",
-                        tool_input="another",
-                        log="tool:search_api:another",
-                    ),
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    )
                 }
             },
-            {"__interrupt__": ()},
-        ]
+            "thread_id": "1",
+        },
+        parent_config=(
+            [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
+                -1
+            ].config
+        ),
+        interrupts=(),
+    )
 
-        await app_w_interrupt.aupdate_state(
-            config,
-            {
-                "agent_outcome": AgentFinish(
-                    return_values={"answer": "a really nice answer"},
-                    log="finish:a really nice answer",
-                )
-            },
-        )
-
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
-                "agent_outcome": AgentFinish(
-                    return_values={"answer": "a really nice answer"},
-                    log="finish:a really nice answer",
-                ),
+    assert [c async for c in app_w_interrupt.astream(None, config)] == [
+        {
+            "tools": {
                 "intermediate_steps": [
                     [
                         AgentAction(
@@ -2059,36 +1797,280 @@ async def test_conditional_graph_state(checkpointer_name: str) -> None:
                         "result for query",
                     ]
                 ],
-            },
-            tasks=(),
-            next=(),
-            config={
-                "configurable": {
-                    "thread_id": "2",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
+            }
+        },
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
+        {"__interrupt__": ()},
+    ]
+
+    await app_w_interrupt.aupdate_state(
+        config,
+        {
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "a really nice answer"},
+                log="finish:a really nice answer",
+            )
+        },
+    )
+
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "a really nice answer"},
+                log="finish:a really nice answer",
+            ),
+            "intermediate_steps": [
+                [
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    ),
+                    "result for query",
+                ]
+            ],
+        },
+        tasks=(),
+        next=(),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "update",
+            "step": 5,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentFinish(
+                        return_values={"answer": "a really nice answer"},
+                        log="finish:a really nice answer",
+                    )
                 }
             },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "update",
-                "step": 5,
-                "writes": {
-                    "agent": {
-                        "agent_outcome": AgentFinish(
-                            return_values={"answer": "a really nice answer"},
-                            log="finish:a really nice answer",
-                        )
-                    }
-                },
-                "thread_id": "2",
-            },
-            parent_config=[
-                c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-            ][-1].config,
-            interrupts=(),
+            "thread_id": "1",
+        },
+        parent_config=(
+            [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
+                -1
+            ].config
+        ),
+        interrupts=(),
+    )
+
+    # test state get/update methods with interrupt_before
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=async_checkpointer,
+        interrupt_before=["tools"],
+    )
+    config = {"configurable": {"thread_id": "2"}}
+    llm.i = 0  # reset the llm
+
+    assert [
+        c
+        async for c in app_w_interrupt.astream(
+            {"input": "what is weather in sf"}, config
         )
+    ] == [
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:query",
+                ),
+            }
+        },
+        {"__interrupt__": ()},
+    ]
+
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "agent_outcome": AgentAction(
+                tool="search_api", tool_input="query", log="tool:search_api:query"
+            ),
+            "intermediate_steps": [],
+        },
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
+        next=("tools",),
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 1,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                }
+            },
+            "thread_id": "2",
+        },
+        parent_config=(
+            [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
+                -1
+            ].config
+        ),
+        interrupts=(),
+    )
+
+    await app_w_interrupt.aupdate_state(
+        config,
+        {
+            "agent_outcome": AgentAction(
+                tool="search_api",
+                tool_input="query",
+                log="tool:search_api:a different query",
+            )
+        },
+    )
+
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "agent_outcome": AgentAction(
+                tool="search_api",
+                tool_input="query",
+                log="tool:search_api:a different query",
+            ),
+            "intermediate_steps": [],
+        },
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
+        next=("tools",),
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "update",
+            "step": 2,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    )
+                }
+            },
+            "thread_id": "2",
+        },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
+        interrupts=(),
+    )
+
+    assert [c async for c in app_w_interrupt.astream(None, config)] == [
+        {
+            "tools": {
+                "intermediate_steps": [
+                    [
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:a different query",
+                        ),
+                        "result for query",
+                    ]
+                ],
+            }
+        },
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
+        {"__interrupt__": ()},
+    ]
+
+    await app_w_interrupt.aupdate_state(
+        config,
+        {
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "a really nice answer"},
+                log="finish:a really nice answer",
+            )
+        },
+    )
+
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "a really nice answer"},
+                log="finish:a really nice answer",
+            ),
+            "intermediate_steps": [
+                [
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    ),
+                    "result for query",
+                ]
+            ],
+        },
+        tasks=(),
+        next=(),
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "update",
+            "step": 5,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentFinish(
+                        return_values={"answer": "a really nice answer"},
+                        log="finish:a really nice answer",
+                    )
+                }
+            },
+            "thread_id": "2",
+        },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
+        interrupts=(),
+    )
 
 
 async def test_prebuilt_tool_chat() -> None:
@@ -2420,8 +2402,7 @@ async def test_prebuilt_tool_chat() -> None:
     ]
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_state_graph_packets(checkpointer_name: str) -> None:
+async def test_state_graph_packets(async_checkpointer: BaseCheckpointSaver) -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
@@ -2639,22 +2620,128 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
         {"agent": {"messages": AIMessage(content="answer", id="ai3")}},
     ]
 
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        # interrupt after agent
+    # interrupt after agent
 
-        app_w_interrupt = workflow.compile(
-            checkpointer=checkpointer,
-            interrupt_after=["agent"],
+    app_w_interrupt = workflow.compile(
+        checkpointer=async_checkpointer,
+        interrupt_after=["agent"],
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert [
+        c
+        async for c in app_w_interrupt.astream(
+            {"messages": HumanMessage(content="what is weather in sf")}, config
         )
-        config = {"configurable": {"thread_id": "1"}}
+    ] == [
+        {
+            "agent": {
+                "messages": AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        },
+                    ],
+                )
+            }
+        },
+        {"__interrupt__": ()},
+    ]
 
-        assert [
-            c
-            async for c in app_w_interrupt.astream(
-                {"messages": HumanMessage(content="what is weather in sf")}, config
-            )
-        ] == [
-            {
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "messages": [
+                _AnyIdHumanMessage(content="what is weather in sf"),
+                AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        },
+                    ],
+                ),
+            ]
+        },
+        tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0, False)),),
+        next=("tools",),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 1,
+            "writes": {
+                "agent": {
+                    "messages": AIMessage(
+                        content="",
+                        id="ai1",
+                        tool_calls=[
+                            {
+                                "name": "search_api",
+                                "args": {"query": "query"},
+                                "id": "tool_call123",
+                                "type": "tool_call",
+                            }
+                        ],
+                    )
+                }
+            },
+            "thread_id": "1",
+        },
+        parent_config=(
+            [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
+                -1
+            ].config
+        ),
+        interrupts=(),
+    )
+
+    # modify ai message
+    last_message = (await app_w_interrupt.aget_state(config)).values["messages"][-1]
+    last_message.tool_calls[0]["args"]["query"] = "a different query"
+    await app_w_interrupt.aupdate_state(config, {"messages": last_message})
+
+    # message was replaced instead of appended
+    tup = await app_w_interrupt.checkpointer.aget_tuple(config)
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "messages": [
+                _AnyIdHumanMessage(content="what is weather in sf"),
+                AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        },
+                    ],
+                ),
+            ]
+        },
+        tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0, False)),),
+        next=("tools",),
+        config=tup.config,
+        created_at=tup.checkpoint["ts"],
+        metadata={
+            "parents": {},
+            "source": "update",
+            "step": 2,
+            "writes": {
                 "agent": {
                     "messages": AIMessage(
                         id="ai1",
@@ -2663,443 +2750,106 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                             {
                                 "id": "tool_call123",
                                 "name": "search_api",
-                                "args": {"query": "query"},
-                            },
-                        ],
-                    )
-                }
-            },
-            {"__interrupt__": ()},
-        ]
-
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
-                "messages": [
-                    _AnyIdHumanMessage(content="what is weather in sf"),
-                    AIMessage(
-                        id="ai1",
-                        content="",
-                        tool_calls=[
-                            {
-                                "id": "tool_call123",
-                                "name": "search_api",
-                                "args": {"query": "query"},
-                            },
-                        ],
-                    ),
-                ]
-            },
-            tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0, False)),),
-            next=("tools",),
-            config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 1,
-                "writes": {
-                    "agent": {
-                        "messages": AIMessage(
-                            content="",
-                            id="ai1",
-                            tool_calls=[
-                                {
-                                    "name": "search_api",
-                                    "args": {"query": "query"},
-                                    "id": "tool_call123",
-                                    "type": "tool_call",
-                                }
-                            ],
-                        )
-                    }
-                },
-                "thread_id": "1",
-            },
-            parent_config=([
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
-            interrupts=(),
-        )
-
-        # modify ai message
-        last_message = (await app_w_interrupt.aget_state(config)).values["messages"][-1]
-        last_message.tool_calls[0]["args"]["query"] = "a different query"
-        await app_w_interrupt.aupdate_state(config, {"messages": last_message})
-
-        # message was replaced instead of appended
-        tup = await app_w_interrupt.checkpointer.aget_tuple(config)
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
-                "messages": [
-                    _AnyIdHumanMessage(content="what is weather in sf"),
-                    AIMessage(
-                        id="ai1",
-                        content="",
-                        tool_calls=[
-                            {
-                                "id": "tool_call123",
-                                "name": "search_api",
                                 "args": {"query": "a different query"},
                             },
                         ],
-                    ),
-                ]
-            },
-            tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0, False)),),
-            next=("tools",),
-            config=tup.config,
-            created_at=tup.checkpoint["ts"],
-            metadata={
-                "parents": {},
-                "source": "update",
-                "step": 2,
-                "writes": {
-                    "agent": {
-                        "messages": AIMessage(
-                            id="ai1",
-                            content="",
-                            tool_calls=[
-                                {
-                                    "id": "tool_call123",
-                                    "name": "search_api",
-                                    "args": {"query": "a different query"},
-                                },
-                            ],
-                        )
-                    }
-                },
-                "thread_id": "1",
-            },
-            parent_config=([
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
-            interrupts=(),
-        )
-
-        assert [c async for c in app_w_interrupt.astream(None, config)] == [
-            {
-                "tools": {
-                    "messages": _AnyIdToolMessage(
-                        content="result for a different query",
-                        name="search_api",
-                        tool_call_id="tool_call123",
                     )
                 }
             },
-            {
-                "agent": {
-                    "messages": AIMessage(
-                        id="ai2",
-                        content="",
-                        tool_calls=[
-                            {
-                                "id": "tool_call234",
-                                "name": "search_api",
-                                "args": {"query": "another", "idx": 0},
-                            },
-                            {
-                                "id": "tool_call567",
-                                "name": "search_api",
-                                "args": {"query": "a third one", "idx": 1},
-                            },
-                        ],
-                    )
-                },
-            },
-            {"__interrupt__": ()},
-        ]
+            "thread_id": "1",
+        },
+        parent_config=(
+            [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
+                -1
+            ].config
+        ),
+        interrupts=(),
+    )
 
-        tup = await app_w_interrupt.checkpointer.aget_tuple(config)
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
-                "messages": [
-                    _AnyIdHumanMessage(content="what is weather in sf"),
-                    AIMessage(
-                        id="ai1",
-                        content="",
-                        tool_calls=[
-                            {
-                                "id": "tool_call123",
-                                "name": "search_api",
-                                "args": {"query": "a different query"},
-                            },
-                        ],
-                    ),
-                    _AnyIdToolMessage(
-                        content="result for a different query",
-                        name="search_api",
-                        tool_call_id="tool_call123",
-                    ),
-                    AIMessage(
-                        id="ai2",
-                        content="",
-                        tool_calls=[
-                            {
-                                "id": "tool_call234",
-                                "name": "search_api",
-                                "args": {"query": "another", "idx": 0},
-                            },
-                            {
-                                "id": "tool_call567",
-                                "name": "search_api",
-                                "args": {"query": "a third one", "idx": 1},
-                            },
-                        ],
-                    ),
-                ]
+    assert [c async for c in app_w_interrupt.astream(None, config)] == [
+        {
+            "tools": {
+                "messages": _AnyIdToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    tool_call_id="tool_call123",
+                )
+            }
+        },
+        {
+            "agent": {
+                "messages": AIMessage(
+                    id="ai2",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call234",
+                            "name": "search_api",
+                            "args": {"query": "another", "idx": 0},
+                        },
+                        {
+                            "id": "tool_call567",
+                            "name": "search_api",
+                            "args": {"query": "a third one", "idx": 1},
+                        },
+                    ],
+                )
             },
-            tasks=(
-                PregelTask(AnyStr(), "tools", (PUSH, 0, False)),
-                PregelTask(AnyStr(), "tools", (PUSH, 1, False)),
-            ),
-            next=("tools", "tools"),
-            config=tup.config,
-            created_at=tup.checkpoint["ts"],
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 4,
-                "writes": {
-                    "agent": {
-                        "messages": AIMessage(
-                            id="ai2",
-                            content="",
-                            tool_calls=[
-                                {
-                                    "id": "tool_call234",
-                                    "name": "search_api",
-                                    "args": {"query": "another", "idx": 0},
-                                },
-                                {
-                                    "id": "tool_call567",
-                                    "name": "search_api",
-                                    "args": {"query": "a third one", "idx": 1},
-                                },
-                            ],
-                        ),
-                    },
-                },
-                "thread_id": "1",
-            },
-            parent_config=([
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
-            interrupts=(),
-        )
+        },
+        {"__interrupt__": ()},
+    ]
 
-        await app_w_interrupt.aupdate_state(
-            config,
-            {"messages": AIMessage(content="answer", id="ai2")},
-        )
-
-        # replaces message even if object identity is different, as long as id is the same
-        tup = await app_w_interrupt.checkpointer.aget_tuple(config)
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
-                "messages": [
-                    _AnyIdHumanMessage(content="what is weather in sf"),
-                    AIMessage(
-                        id="ai1",
-                        content="",
-                        tool_calls=[
-                            {
-                                "id": "tool_call123",
-                                "name": "search_api",
-                                "args": {"query": "a different query"},
-                            },
-                        ],
-                    ),
-                    _AnyIdToolMessage(
-                        content="result for a different query",
-                        name="search_api",
-                        tool_call_id="tool_call123",
-                    ),
-                    AIMessage(content="answer", id="ai2"),
-                ]
-            },
-            tasks=(),
-            next=(),
-            config=tup.config,
-            created_at=tup.checkpoint["ts"],
-            metadata={
-                "parents": {},
-                "source": "update",
-                "step": 5,
-                "writes": {
-                    "agent": {
-                        "messages": AIMessage(content="answer", id="ai2"),
-                    }
-                },
-                "thread_id": "1",
-            },
-            parent_config=([
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
-            interrupts=(),
-        )
-
-        # interrupt before tools
-
-        app_w_interrupt = workflow.compile(
-            checkpointer=checkpointer,
-            interrupt_before=["tools"],
-        )
-        config = {"configurable": {"thread_id": "2"}}
-        model.i = 0
-
-        assert [
-            c
-            async for c in app_w_interrupt.astream(
-                {"messages": HumanMessage(content="what is weather in sf")}, config
-            )
-        ] == [
-            {
-                "agent": {
-                    "messages": AIMessage(
-                        id="ai1",
-                        content="",
-                        tool_calls=[
-                            {
-                                "id": "tool_call123",
-                                "name": "search_api",
-                                "args": {"query": "query"},
-                            },
-                        ],
-                    )
-                }
-            },
-            {"__interrupt__": ()},
-        ]
-        tup = await app_w_interrupt.checkpointer.aget_tuple(config)
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
-                "messages": [
-                    _AnyIdHumanMessage(content="what is weather in sf"),
-                    AIMessage(
-                        id="ai1",
-                        content="",
-                        tool_calls=[
-                            {
-                                "id": "tool_call123",
-                                "name": "search_api",
-                                "args": {"query": "query"},
-                            },
-                        ],
-                    ),
-                ]
-            },
-            tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0, False)),),
-            next=("tools",),
-            config=tup.config,
-            created_at=tup.checkpoint["ts"],
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 1,
-                "writes": {
-                    "agent": {
-                        "messages": AIMessage(
-                            content="",
-                            additional_kwargs={},
-                            response_metadata={},
-                            id="ai1",
-                            tool_calls=[
-                                {
-                                    "name": "search_api",
-                                    "args": {"query": "query"},
-                                    "id": "tool_call123",
-                                    "type": "tool_call",
-                                }
-                            ],
-                        )
-                    }
-                },
-                "thread_id": "2",
-            },
-            parent_config=([
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
-            interrupts=(),
-        )
-
-        # modify ai message
-        last_message = (await app_w_interrupt.aget_state(config)).values["messages"][-1]
-        last_message.tool_calls[0]["args"]["query"] = "a different query"
-        await app_w_interrupt.aupdate_state(config, {"messages": last_message})
-
-        # message was replaced instead of appended
-        tup = await app_w_interrupt.checkpointer.aget_tuple(config)
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
-                "messages": [
-                    _AnyIdHumanMessage(content="what is weather in sf"),
-                    AIMessage(
-                        id="ai1",
-                        content="",
-                        tool_calls=[
-                            {
-                                "id": "tool_call123",
-                                "name": "search_api",
-                                "args": {"query": "a different query"},
-                            },
-                        ],
-                    ),
-                ]
-            },
-            tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0, False)),),
-            next=("tools",),
-            config=tup.config,
-            created_at=tup.checkpoint["ts"],
-            metadata={
-                "parents": {},
-                "source": "update",
-                "step": 2,
-                "writes": {
-                    "agent": {
-                        "messages": AIMessage(
-                            id="ai1",
-                            content="",
-                            tool_calls=[
-                                {
-                                    "id": "tool_call123",
-                                    "name": "search_api",
-                                    "args": {"query": "a different query"},
-                                },
-                            ],
-                        )
-                    }
-                },
-                "thread_id": "2",
-            },
-            parent_config=([
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
-            interrupts=(),
-        )
-
-        assert [c async for c in app_w_interrupt.astream(None, config)] == [
-            {
-                "tools": {
-                    "messages": _AnyIdToolMessage(
-                        content="result for a different query",
-                        name="search_api",
-                        tool_call_id="tool_call123",
-                    )
-                }
-            },
-            {
+    tup = await app_w_interrupt.checkpointer.aget_tuple(config)
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "messages": [
+                _AnyIdHumanMessage(content="what is weather in sf"),
+                AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        },
+                    ],
+                ),
+                _AnyIdToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    tool_call_id="tool_call123",
+                ),
+                AIMessage(
+                    id="ai2",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call234",
+                            "name": "search_api",
+                            "args": {"query": "another", "idx": 0},
+                        },
+                        {
+                            "id": "tool_call567",
+                            "name": "search_api",
+                            "args": {"query": "a third one", "idx": 1},
+                        },
+                    ],
+                ),
+            ]
+        },
+        tasks=(
+            PregelTask(AnyStr(), "tools", (PUSH, 0, False)),
+            PregelTask(AnyStr(), "tools", (PUSH, 1, False)),
+        ),
+        next=("tools", "tools"),
+        config=tup.config,
+        created_at=tup.checkpoint["ts"],
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 4,
+            "writes": {
                 "agent": {
                     "messages": AIMessage(
                         id="ai2",
@@ -3116,18 +2866,193 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                                 "args": {"query": "a third one", "idx": 1},
                             },
                         ],
-                    )
+                    ),
                 },
             },
-            {"__interrupt__": ()},
-        ]
+            "thread_id": "1",
+        },
+        parent_config=(
+            [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
+                -1
+            ].config
+        ),
+        interrupts=(),
+    )
 
-        tup = await app_w_interrupt.checkpointer.aget_tuple(config)
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
-                "messages": [
-                    _AnyIdHumanMessage(content="what is weather in sf"),
-                    AIMessage(
+    await app_w_interrupt.aupdate_state(
+        config,
+        {"messages": AIMessage(content="answer", id="ai2")},
+    )
+
+    # replaces message even if object identity is different, as long as id is the same
+    tup = await app_w_interrupt.checkpointer.aget_tuple(config)
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "messages": [
+                _AnyIdHumanMessage(content="what is weather in sf"),
+                AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        },
+                    ],
+                ),
+                _AnyIdToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    tool_call_id="tool_call123",
+                ),
+                AIMessage(content="answer", id="ai2"),
+            ]
+        },
+        tasks=(),
+        next=(),
+        config=tup.config,
+        created_at=tup.checkpoint["ts"],
+        metadata={
+            "parents": {},
+            "source": "update",
+            "step": 5,
+            "writes": {
+                "agent": {
+                    "messages": AIMessage(content="answer", id="ai2"),
+                }
+            },
+            "thread_id": "1",
+        },
+        parent_config=(
+            [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
+                -1
+            ].config
+        ),
+        interrupts=(),
+    )
+
+    # interrupt before tools
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=async_checkpointer,
+        interrupt_before=["tools"],
+    )
+    config = {"configurable": {"thread_id": "2"}}
+    model.i = 0
+
+    assert [
+        c
+        async for c in app_w_interrupt.astream(
+            {"messages": HumanMessage(content="what is weather in sf")}, config
+        )
+    ] == [
+        {
+            "agent": {
+                "messages": AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        },
+                    ],
+                )
+            }
+        },
+        {"__interrupt__": ()},
+    ]
+    tup = await app_w_interrupt.checkpointer.aget_tuple(config)
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "messages": [
+                _AnyIdHumanMessage(content="what is weather in sf"),
+                AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        },
+                    ],
+                ),
+            ]
+        },
+        tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0, False)),),
+        next=("tools",),
+        config=tup.config,
+        created_at=tup.checkpoint["ts"],
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 1,
+            "writes": {
+                "agent": {
+                    "messages": AIMessage(
+                        content="",
+                        additional_kwargs={},
+                        response_metadata={},
+                        id="ai1",
+                        tool_calls=[
+                            {
+                                "name": "search_api",
+                                "args": {"query": "query"},
+                                "id": "tool_call123",
+                                "type": "tool_call",
+                            }
+                        ],
+                    )
+                }
+            },
+            "thread_id": "2",
+        },
+        parent_config=(
+            [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
+                -1
+            ].config
+        ),
+        interrupts=(),
+    )
+
+    # modify ai message
+    last_message = (await app_w_interrupt.aget_state(config)).values["messages"][-1]
+    last_message.tool_calls[0]["args"]["query"] = "a different query"
+    await app_w_interrupt.aupdate_state(config, {"messages": last_message})
+
+    # message was replaced instead of appended
+    tup = await app_w_interrupt.checkpointer.aget_tuple(config)
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "messages": [
+                _AnyIdHumanMessage(content="what is weather in sf"),
+                AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        },
+                    ],
+                ),
+            ]
+        },
+        tasks=(PregelTask(AnyStr(), "tools", (PUSH, 0, False)),),
+        next=("tools",),
+        config=tup.config,
+        created_at=tup.checkpoint["ts"],
+        metadata={
+            "parents": {},
+            "source": "update",
+            "step": 2,
+            "writes": {
+                "agent": {
+                    "messages": AIMessage(
                         id="ai1",
                         content="",
                         tool_calls=[
@@ -3137,13 +3062,105 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                                 "args": {"query": "a different query"},
                             },
                         ],
-                    ),
-                    _AnyIdToolMessage(
-                        content="result for a different query",
-                        name="search_api",
-                        tool_call_id="tool_call123",
-                    ),
-                    AIMessage(
+                    )
+                }
+            },
+            "thread_id": "2",
+        },
+        parent_config=(
+            [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
+                -1
+            ].config
+        ),
+        interrupts=(),
+    )
+
+    assert [c async for c in app_w_interrupt.astream(None, config)] == [
+        {
+            "tools": {
+                "messages": _AnyIdToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    tool_call_id="tool_call123",
+                )
+            }
+        },
+        {
+            "agent": {
+                "messages": AIMessage(
+                    id="ai2",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call234",
+                            "name": "search_api",
+                            "args": {"query": "another", "idx": 0},
+                        },
+                        {
+                            "id": "tool_call567",
+                            "name": "search_api",
+                            "args": {"query": "a third one", "idx": 1},
+                        },
+                    ],
+                )
+            },
+        },
+        {"__interrupt__": ()},
+    ]
+
+    tup = await app_w_interrupt.checkpointer.aget_tuple(config)
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "messages": [
+                _AnyIdHumanMessage(content="what is weather in sf"),
+                AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        },
+                    ],
+                ),
+                _AnyIdToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    tool_call_id="tool_call123",
+                ),
+                AIMessage(
+                    id="ai2",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call234",
+                            "name": "search_api",
+                            "args": {"query": "another", "idx": 0},
+                        },
+                        {
+                            "id": "tool_call567",
+                            "name": "search_api",
+                            "args": {"query": "a third one", "idx": 1},
+                        },
+                    ],
+                ),
+            ]
+        },
+        tasks=(
+            PregelTask(AnyStr(), "tools", (PUSH, 0, False)),
+            PregelTask(AnyStr(), "tools", (PUSH, 1, False)),
+        ),
+        next=("tools", "tools"),
+        config=tup.config,
+        created_at=tup.checkpoint["ts"],
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 4,
+            "writes": {
+                "agent": {
+                    "messages": AIMessage(
                         id="ai2",
                         content="",
                         tool_calls=[
@@ -3159,103 +3176,73 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                             },
                         ],
                     ),
-                ]
-            },
-            tasks=(
-                PregelTask(AnyStr(), "tools", (PUSH, 0, False)),
-                PregelTask(AnyStr(), "tools", (PUSH, 1, False)),
-            ),
-            next=("tools", "tools"),
-            config=tup.config,
-            created_at=tup.checkpoint["ts"],
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 4,
-                "writes": {
-                    "agent": {
-                        "messages": AIMessage(
-                            id="ai2",
-                            content="",
-                            tool_calls=[
-                                {
-                                    "id": "tool_call234",
-                                    "name": "search_api",
-                                    "args": {"query": "another", "idx": 0},
-                                },
-                                {
-                                    "id": "tool_call567",
-                                    "name": "search_api",
-                                    "args": {"query": "a third one", "idx": 1},
-                                },
-                            ],
-                        ),
-                    },
                 },
-                "thread_id": "2",
             },
-            parent_config=([
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
-            interrupts=(),
-        )
+            "thread_id": "2",
+        },
+        parent_config=(
+            [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
+                -1
+            ].config
+        ),
+        interrupts=(),
+    )
 
-        await app_w_interrupt.aupdate_state(
-            config,
-            {"messages": AIMessage(content="answer", id="ai2")},
-        )
+    await app_w_interrupt.aupdate_state(
+        config,
+        {"messages": AIMessage(content="answer", id="ai2")},
+    )
 
-        # replaces message even if object identity is different, as long as id is the same
-        tup = await app_w_interrupt.checkpointer.aget_tuple(config)
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values={
-                "messages": [
-                    _AnyIdHumanMessage(content="what is weather in sf"),
-                    AIMessage(
-                        id="ai1",
-                        content="",
-                        tool_calls=[
-                            {
-                                "id": "tool_call123",
-                                "name": "search_api",
-                                "args": {"query": "a different query"},
-                            },
-                        ],
-                    ),
-                    _AnyIdToolMessage(
-                        content="result for a different query",
-                        name="search_api",
-                        tool_call_id="tool_call123",
-                    ),
-                    AIMessage(content="answer", id="ai2"),
-                ]
+    # replaces message even if object identity is different, as long as id is the same
+    tup = await app_w_interrupt.checkpointer.aget_tuple(config)
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "messages": [
+                _AnyIdHumanMessage(content="what is weather in sf"),
+                AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        },
+                    ],
+                ),
+                _AnyIdToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    tool_call_id="tool_call123",
+                ),
+                AIMessage(content="answer", id="ai2"),
+            ]
+        },
+        tasks=(),
+        next=(),
+        config=tup.config,
+        created_at=tup.checkpoint["ts"],
+        metadata={
+            "parents": {},
+            "source": "update",
+            "step": 5,
+            "writes": {
+                "agent": {
+                    "messages": AIMessage(content="answer", id="ai2"),
+                }
             },
-            tasks=(),
-            next=(),
-            config=tup.config,
-            created_at=tup.checkpoint["ts"],
-            metadata={
-                "parents": {},
-                "source": "update",
-                "step": 5,
-                "writes": {
-                    "agent": {
-                        "messages": AIMessage(content="answer", id="ai2"),
-                    }
-                },
-                "thread_id": "2",
-            },
-            parent_config=([
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
-            interrupts=(),
-        )
+            "thread_id": "2",
+        },
+        parent_config=(
+            [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
+                -1
+            ].config
+        ),
+        interrupts=(),
+    )
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_message_graph(checkpointer_name: str) -> None:
+async def test_message_graph(async_checkpointer: BaseCheckpointSaver) -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
@@ -3441,20 +3428,59 @@ async def test_message_graph(checkpointer_name: str) -> None:
         {"agent": AIMessage(content="answer", id="ai3")},
     ]
 
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        app_w_interrupt = workflow.compile(
-            checkpointer=checkpointer,
-            interrupt_after=["agent"],
-        )
-        config = {"configurable": {"thread_id": "1"}}
+    app_w_interrupt = workflow.compile(
+        checkpointer=async_checkpointer,
+        interrupt_after=["agent"],
+    )
+    config = {"configurable": {"thread_id": "1"}}
 
-        assert [
-            c
-            async for c in app_w_interrupt.astream(
-                HumanMessage(content="what is weather in sf"), config
+    assert [
+        c
+        async for c in app_w_interrupt.astream(
+            HumanMessage(content="what is weather in sf"), config
+        )
+    ] == [
+        {
+            "agent": AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    }
+                ],
+                id="ai1",
             )
-        ] == [
-            {
+        },
+        {"__interrupt__": ()},
+    ]
+
+    tup = await app_w_interrupt.checkpointer.aget_tuple(config)
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values=[
+            _AnyIdHumanMessage(content="what is weather in sf"),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    }
+                ],
+                id="ai1",
+            ),
+        ],
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
+        next=("tools",),
+        config=tup.config,
+        created_at=tup.checkpoint["ts"],
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 1,
+            "writes": {
                 "agent": AIMessage(
                     content="",
                     tool_calls=[
@@ -3467,154 +3493,137 @@ async def test_message_graph(checkpointer_name: str) -> None:
                     id="ai1",
                 )
             },
-            {"__interrupt__": ()},
-        ]
+            "thread_id": "1",
+        },
+        parent_config=(
+            [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
+                -1
+            ].config
+        ),
+        interrupts=(),
+    )
 
-        tup = await app_w_interrupt.checkpointer.aget_tuple(config)
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values=[
-                _AnyIdHumanMessage(content="what is weather in sf"),
-                AIMessage(
-                    content="",
-                    tool_calls=[
-                        {
-                            "id": "tool_call123",
-                            "name": "search_api",
-                            "args": {"query": "query"},
-                        }
-                    ],
-                    id="ai1",
-                ),
-            ],
-            tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
-            next=("tools",),
-            config=tup.config,
-            created_at=tup.checkpoint["ts"],
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 1,
-                "writes": {
-                    "agent": AIMessage(
-                        content="",
-                        tool_calls=[
-                            {
-                                "id": "tool_call123",
-                                "name": "search_api",
-                                "args": {"query": "query"},
-                            }
-                        ],
-                        id="ai1",
-                    )
-                },
-                "thread_id": "1",
-            },
-            parent_config=([
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
+    # modify ai message
+    last_message = (await app_w_interrupt.aget_state(config)).values[-1]
+    last_message.tool_calls[0]["args"] = {"query": "a different query"}
+    await app_w_interrupt.aupdate_state(config, last_message)
+
+    # message was replaced instead of appended
+    tup = await app_w_interrupt.checkpointer.aget_tuple(config)
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values=[
+            _AnyIdHumanMessage(content="what is weather in sf"),
+            AIMessage(
+                content="",
+                id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
             ),
-            interrupts=(),
-        )
-
-        # modify ai message
-        last_message = (await app_w_interrupt.aget_state(config)).values[-1]
-        last_message.tool_calls[0]["args"] = {"query": "a different query"}
-        await app_w_interrupt.aupdate_state(config, last_message)
-
-        # message was replaced instead of appended
-        tup = await app_w_interrupt.checkpointer.aget_tuple(config)
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values=[
-                _AnyIdHumanMessage(content="what is weather in sf"),
-                AIMessage(
-                    content="",
-                    id="ai1",
-                    tool_calls=[
-                        {
-                            "id": "tool_call123",
-                            "name": "search_api",
-                            "args": {"query": "a different query"},
-                        }
-                    ],
-                ),
-            ],
-            tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
-            next=("tools",),
-            config=tup.config,
-            created_at=tup.checkpoint["ts"],
-            metadata={
-                "parents": {},
-                "source": "update",
-                "step": 2,
-                "writes": {
-                    "agent": AIMessage(
-                        content="",
-                        tool_calls=[
-                            {
-                                "id": "tool_call123",
-                                "name": "search_api",
-                                "args": {"query": "a different query"},
-                            }
-                        ],
-                        id="ai1",
-                    )
-                },
-                "thread_id": "1",
-            },
-            parent_config=([
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
-            interrupts=(),
-        )
-
-        assert [c async for c in app_w_interrupt.astream(None, config)] == [
-            {
-                "tools": [
-                    _AnyIdToolMessage(
-                        content="result for a different query",
-                        name="search_api",
-                        tool_call_id="tool_call123",
-                    )
-                ]
-            },
-            {
+        ],
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
+        next=("tools",),
+        config=tup.config,
+        created_at=tup.checkpoint["ts"],
+        metadata={
+            "parents": {},
+            "source": "update",
+            "step": 2,
+            "writes": {
                 "agent": AIMessage(
                     content="",
                     tool_calls=[
                         {
-                            "id": "tool_call456",
-                            "name": "search_api",
-                            "args": {"query": "another"},
-                        }
-                    ],
-                    id="ai2",
-                )
-            },
-            {"__interrupt__": ()},
-        ]
-
-        tup = await app_w_interrupt.checkpointer.aget_tuple(config)
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values=[
-                _AnyIdHumanMessage(content="what is weather in sf"),
-                AIMessage(
-                    content="",
-                    id="ai1",
-                    tool_calls=[
-                        {
                             "id": "tool_call123",
                             "name": "search_api",
                             "args": {"query": "a different query"},
                         }
                     ],
-                ),
+                    id="ai1",
+                )
+            },
+            "thread_id": "1",
+        },
+        parent_config=(
+            [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
+                -1
+            ].config
+        ),
+        interrupts=(),
+    )
+
+    assert [c async for c in app_w_interrupt.astream(None, config)] == [
+        {
+            "tools": [
                 _AnyIdToolMessage(
                     content="result for a different query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                ),
-                AIMessage(
+                )
+            ]
+        },
+        {
+            "agent": AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    }
+                ],
+                id="ai2",
+            )
+        },
+        {"__interrupt__": ()},
+    ]
+
+    tup = await app_w_interrupt.checkpointer.aget_tuple(config)
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values=[
+            _AnyIdHumanMessage(content="what is weather in sf"),
+            AIMessage(
+                content="",
+                id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
+            ),
+            _AnyIdToolMessage(
+                content="result for a different query",
+                name="search_api",
+                tool_call_id="tool_call123",
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    }
+                ],
+                id="ai2",
+            ),
+        ],
+        tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
+        next=("tools",),
+        config=tup.config,
+        created_at=tup.checkpoint["ts"],
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 4,
+            "writes": {
+                "agent": AIMessage(
                     content="",
                     tool_calls=[
                         {
@@ -3624,83 +3633,64 @@ async def test_message_graph(checkpointer_name: str) -> None:
                         }
                     ],
                     id="ai2",
-                ),
-            ],
-            tasks=(PregelTask(AnyStr(), "tools", (PULL, "tools")),),
-            next=("tools",),
-            config=tup.config,
-            created_at=tup.checkpoint["ts"],
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 4,
-                "writes": {
-                    "agent": AIMessage(
-                        content="",
-                        tool_calls=[
-                            {
-                                "id": "tool_call456",
-                                "name": "search_api",
-                                "args": {"query": "another"},
-                            }
-                        ],
-                        id="ai2",
-                    )
-                },
-                "thread_id": "1",
+                )
             },
-            parent_config=([
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
-            interrupts=(),
-        )
+            "thread_id": "1",
+        },
+        parent_config=(
+            [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
+                -1
+            ].config
+        ),
+        interrupts=(),
+    )
 
-        await app_w_interrupt.aupdate_state(
-            config,
+    await app_w_interrupt.aupdate_state(
+        config,
+        AIMessage(content="answer", id="ai2"),
+    )
+
+    # replaces message even if object identity is different, as long as id is the same
+    tup = await app_w_interrupt.checkpointer.aget_tuple(config)
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values=[
+            _AnyIdHumanMessage(content="what is weather in sf"),
+            AIMessage(
+                content="",
+                id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
+            ),
+            _AnyIdToolMessage(
+                content="result for a different query",
+                name="search_api",
+                tool_call_id="tool_call123",
+            ),
             AIMessage(content="answer", id="ai2"),
-        )
-
-        # replaces message even if object identity is different, as long as id is the same
-        tup = await app_w_interrupt.checkpointer.aget_tuple(config)
-        assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-            values=[
-                _AnyIdHumanMessage(content="what is weather in sf"),
-                AIMessage(
-                    content="",
-                    id="ai1",
-                    tool_calls=[
-                        {
-                            "id": "tool_call123",
-                            "name": "search_api",
-                            "args": {"query": "a different query"},
-                        }
-                    ],
-                ),
-                _AnyIdToolMessage(
-                    content="result for a different query",
-                    name="search_api",
-                    tool_call_id="tool_call123",
-                ),
-                AIMessage(content="answer", id="ai2"),
-            ],
-            tasks=(),
-            next=(),
-            config=tup.config,
-            created_at=tup.checkpoint["ts"],
-            metadata={
-                "parents": {},
-                "source": "update",
-                "step": 5,
-                "writes": {"agent": AIMessage(content="answer", id="ai2")},
-                "thread_id": "1",
-            },
-            parent_config=([
-                    c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
-                ][-1].config
-            ),
-            interrupts=(),
-        )
+        ],
+        tasks=(),
+        next=(),
+        config=tup.config,
+        created_at=tup.checkpoint["ts"],
+        metadata={
+            "parents": {},
+            "source": "update",
+            "step": 5,
+            "writes": {"agent": AIMessage(content="answer", id="ai2")},
+            "thread_id": "1",
+        },
+        parent_config=(
+            [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
+                -1
+            ].config
+        ),
+        interrupts=(),
+    )
 
 
 async def test_in_one_fan_out_out_one_graph_state() -> None:
@@ -3929,8 +3919,9 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
     ]
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_start_branch_then(checkpointer_name: str) -> None:
+async def test_start_branch_then(
+    async_checkpointer: BaseCheckpointSaver, async_store: BaseStore
+) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
@@ -3958,257 +3949,250 @@ async def test_start_branch_then(checkpointer_name: str) -> None:
         "market": "US",
     }
 
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        tool_two = tool_two_graph.compile(
-            store=InMemoryStore(),
-            checkpointer=checkpointer,
-            interrupt_before=["tool_two_fast", "tool_two_slow"],
-        )
+    tool_two = tool_two_graph.compile(
+        store=async_store,
+        checkpointer=async_checkpointer,
+        interrupt_before=["tool_two_fast", "tool_two_slow"],
+    )
 
-        # missing thread_id
-        with pytest.raises(ValueError, match="thread_id"):
-            await tool_two.ainvoke({"my_key": "value", "market": "DE"})
+    # missing thread_id
+    with pytest.raises(ValueError, match="thread_id"):
+        await tool_two.ainvoke({"my_key": "value", "market": "DE"})
 
-        thread1 = {"configurable": {"thread_id": "1", "assistant_id": "a"}}
-        # stop when about to enter node
-        assert await tool_two.ainvoke({"my_key": "value", "market": "DE"}, thread1) == {
-            "my_key": "value",
-            "market": "DE",
-        }
-        assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
-            {
-                "parents": {},
-                "source": "loop",
-                "step": 0,
-                "writes": None,
-                "assistant_id": "a",
-                "thread_id": "1",
-            },
-            {
-                "parents": {},
-                "source": "input",
-                "step": -1,
-                "writes": {"__start__": {"my_key": "value", "market": "DE"}},
-                "assistant_id": "a",
-                "thread_id": "1",
-            },
-        ]
+    thread1 = {"configurable": {"thread_id": "1", "assistant_id": "a"}}
+    # stop when about to enter node
+    assert await tool_two.ainvoke({"my_key": "value", "market": "DE"}, thread1) == {
+        "my_key": "value",
+        "market": "DE",
+    }
+    assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
+        {
+            "parents": {},
+            "source": "loop",
+            "step": 0,
+            "writes": None,
+            "assistant_id": "a",
+            "thread_id": "1",
+        },
+        {
+            "parents": {},
+            "source": "input",
+            "step": -1,
+            "writes": {"__start__": {"my_key": "value", "market": "DE"}},
+            "assistant_id": "a",
+            "thread_id": "1",
+        },
+    ]
 
-        assert await tool_two.aget_state(thread1) == StateSnapshot(
-            values={"my_key": "value", "market": "DE"},
-            tasks=(PregelTask(AnyStr(), "tool_two_slow", (PULL, "tool_two_slow")),),
-            next=("tool_two_slow",),
-            config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": AnyStr(),
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 0,
-                "writes": None,
-                "assistant_id": "a",
+    assert await tool_two.aget_state(thread1) == StateSnapshot(
+        values={"my_key": "value", "market": "DE"},
+        tasks=(PregelTask(AnyStr(), "tool_two_slow", (PULL, "tool_two_slow")),),
+        next=("tool_two_slow",),
+        config={
+            "configurable": {
                 "thread_id": "1",
-            },
-            parent_config=[
-                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
-            ][-1].config,
-            interrupts=(),
-        )
-        # resume, for same result as above
-        assert await tool_two.ainvoke(None, thread1, debug=1) == {
-            "my_key": "value slow",
-            "market": "DE",
-        }
-        assert await tool_two.aget_state(thread1) == StateSnapshot(
-            values={"my_key": "value slow", "market": "DE"},
-            tasks=(),
-            next=(),
-            config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": AnyStr(),
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 1,
-                "writes": {"tool_two_slow": {"my_key": " slow"}},
-                "assistant_id": "a",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 0,
+            "writes": None,
+            "assistant_id": "a",
+            "thread_id": "1",
+        },
+        parent_config=[c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+            -1
+        ].config,
+        interrupts=(),
+    )
+    # resume, for same result as above
+    assert await tool_two.ainvoke(None, thread1, debug=1) == {
+        "my_key": "value slow",
+        "market": "DE",
+    }
+    assert await tool_two.aget_state(thread1) == StateSnapshot(
+        values={"my_key": "value slow", "market": "DE"},
+        tasks=(),
+        next=(),
+        config={
+            "configurable": {
                 "thread_id": "1",
-            },
-            parent_config=[
-                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
-            ][-1].config,
-            interrupts=(),
-        )
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 1,
+            "writes": {"tool_two_slow": {"my_key": " slow"}},
+            "assistant_id": "a",
+            "thread_id": "1",
+        },
+        parent_config=[c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+            -1
+        ].config,
+        interrupts=(),
+    )
 
-        thread2 = {"configurable": {"thread_id": "2", "assistant_id": "a"}}
-        # stop when about to enter node
-        assert await tool_two.ainvoke({"my_key": "value", "market": "US"}, thread2) == {
-            "my_key": "value",
-            "market": "US",
-        }
-        assert await tool_two.aget_state(thread2) == StateSnapshot(
-            values={"my_key": "value", "market": "US"},
-            tasks=(PregelTask(AnyStr(), "tool_two_fast", (PULL, "tool_two_fast")),),
-            next=("tool_two_fast",),
-            config={
-                "configurable": {
-                    "thread_id": "2",
-                    "checkpoint_ns": AnyStr(),
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 0,
-                "writes": None,
-                "assistant_id": "a",
+    thread2 = {"configurable": {"thread_id": "2", "assistant_id": "a"}}
+    # stop when about to enter node
+    assert await tool_two.ainvoke({"my_key": "value", "market": "US"}, thread2) == {
+        "my_key": "value",
+        "market": "US",
+    }
+    assert await tool_two.aget_state(thread2) == StateSnapshot(
+        values={"my_key": "value", "market": "US"},
+        tasks=(PregelTask(AnyStr(), "tool_two_fast", (PULL, "tool_two_fast")),),
+        next=("tool_two_fast",),
+        config={
+            "configurable": {
                 "thread_id": "2",
-            },
-            parent_config=([c async for c in tool_two.checkpointer.alist(thread2, limit=2)][
-                    -1
-                ].config
-            ),
-            interrupts=(),
-        )
-        # resume, for same result as above
-        assert await tool_two.ainvoke(None, thread2, debug=1) == {
-            "my_key": "value fast",
-            "market": "US",
-        }
-        assert await tool_two.aget_state(thread2) == StateSnapshot(
-            values={"my_key": "value fast", "market": "US"},
-            tasks=(),
-            next=(),
-            config={
-                "configurable": {
-                    "thread_id": "2",
-                    "checkpoint_ns": AnyStr(),
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 1,
-                "writes": {"tool_two_fast": {"my_key": " fast"}},
-                "assistant_id": "a",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 0,
+            "writes": None,
+            "assistant_id": "a",
+            "thread_id": "2",
+        },
+        parent_config=(
+            [c async for c in tool_two.checkpointer.alist(thread2, limit=2)][-1].config
+        ),
+        interrupts=(),
+    )
+    # resume, for same result as above
+    assert await tool_two.ainvoke(None, thread2, debug=1) == {
+        "my_key": "value fast",
+        "market": "US",
+    }
+    assert await tool_two.aget_state(thread2) == StateSnapshot(
+        values={"my_key": "value fast", "market": "US"},
+        tasks=(),
+        next=(),
+        config={
+            "configurable": {
                 "thread_id": "2",
-            },
-            parent_config=([c async for c in tool_two.checkpointer.alist(thread2, limit=2)][
-                    -1
-                ].config
-            ),
-            interrupts=(),
-        )
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 1,
+            "writes": {"tool_two_fast": {"my_key": " fast"}},
+            "assistant_id": "a",
+            "thread_id": "2",
+        },
+        parent_config=(
+            [c async for c in tool_two.checkpointer.alist(thread2, limit=2)][-1].config
+        ),
+        interrupts=(),
+    )
 
-        thread3 = {"configurable": {"thread_id": "3", "assistant_id": "b"}}
-        # stop when about to enter node
-        assert await tool_two.ainvoke({"my_key": "value", "market": "US"}, thread3) == {
-            "my_key": "value",
-            "market": "US",
-        }
-        assert await tool_two.aget_state(thread3) == StateSnapshot(
-            values={"my_key": "value", "market": "US"},
-            tasks=(PregelTask(AnyStr(), "tool_two_fast", (PULL, "tool_two_fast")),),
-            next=("tool_two_fast",),
-            config={
-                "configurable": {
-                    "thread_id": "3",
-                    "checkpoint_ns": AnyStr(),
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 0,
-                "writes": None,
-                "assistant_id": "b",
+    thread3 = {"configurable": {"thread_id": "3", "assistant_id": "b"}}
+    # stop when about to enter node
+    assert await tool_two.ainvoke({"my_key": "value", "market": "US"}, thread3) == {
+        "my_key": "value",
+        "market": "US",
+    }
+    assert await tool_two.aget_state(thread3) == StateSnapshot(
+        values={"my_key": "value", "market": "US"},
+        tasks=(PregelTask(AnyStr(), "tool_two_fast", (PULL, "tool_two_fast")),),
+        next=("tool_two_fast",),
+        config={
+            "configurable": {
                 "thread_id": "3",
-            },
-            parent_config=([c async for c in tool_two.checkpointer.alist(thread3, limit=2)][
-                    -1
-                ].config
-            ),
-            interrupts=(),
-        )
-        # update state
-        await tool_two.aupdate_state(thread3, {"my_key": "key"})  # appends to my_key
-        assert await tool_two.aget_state(thread3) == StateSnapshot(
-            values={"my_key": "valuekey", "market": "US"},
-            tasks=(PregelTask(AnyStr(), "tool_two_fast", (PULL, "tool_two_fast")),),
-            next=("tool_two_fast",),
-            config={
-                "configurable": {
-                    "thread_id": "3",
-                    "checkpoint_ns": AnyStr(),
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "update",
-                "step": 1,
-                "writes": {START: {"my_key": "key"}},
-                "assistant_id": "b",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 0,
+            "writes": None,
+            "assistant_id": "b",
+            "thread_id": "3",
+        },
+        parent_config=(
+            [c async for c in tool_two.checkpointer.alist(thread3, limit=2)][-1].config
+        ),
+        interrupts=(),
+    )
+    # update state
+    await tool_two.aupdate_state(thread3, {"my_key": "key"})  # appends to my_key
+    assert await tool_two.aget_state(thread3) == StateSnapshot(
+        values={"my_key": "valuekey", "market": "US"},
+        tasks=(PregelTask(AnyStr(), "tool_two_fast", (PULL, "tool_two_fast")),),
+        next=("tool_two_fast",),
+        config={
+            "configurable": {
                 "thread_id": "3",
-            },
-            parent_config=([c async for c in tool_two.checkpointer.alist(thread3, limit=2)][
-                    -1
-                ].config
-            ),
-            interrupts=(),
-        )
-        # resume, for same result as above
-        assert await tool_two.ainvoke(None, thread3, debug=1) == {
-            "my_key": "valuekey fast",
-            "market": "US",
-        }
-        assert await tool_two.aget_state(thread3) == StateSnapshot(
-            values={"my_key": "valuekey fast", "market": "US"},
-            tasks=(),
-            next=(),
-            config={
-                "configurable": {
-                    "thread_id": "3",
-                    "checkpoint_ns": AnyStr(),
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 2,
-                "writes": {"tool_two_fast": {"my_key": " fast"}},
-                "assistant_id": "b",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "update",
+            "step": 1,
+            "writes": {START: {"my_key": "key"}},
+            "assistant_id": "b",
+            "thread_id": "3",
+        },
+        parent_config=(
+            [c async for c in tool_two.checkpointer.alist(thread3, limit=2)][-1].config
+        ),
+        interrupts=(),
+    )
+    # resume, for same result as above
+    assert await tool_two.ainvoke(None, thread3, debug=1) == {
+        "my_key": "valuekey fast",
+        "market": "US",
+    }
+    assert await tool_two.aget_state(thread3) == StateSnapshot(
+        values={"my_key": "valuekey fast", "market": "US"},
+        tasks=(),
+        next=(),
+        config={
+            "configurable": {
                 "thread_id": "3",
-            },
-            parent_config=([c async for c in tool_two.checkpointer.alist(thread3, limit=2)][
-                    -1
-                ].config
-            ),
-            interrupts=(),
-        )
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 2,
+            "writes": {"tool_two_fast": {"my_key": " fast"}},
+            "assistant_id": "b",
+            "thread_id": "3",
+        },
+        parent_config=(
+            [c async for c in tool_two.checkpointer.alist(thread3, limit=2)][-1].config
+        ),
+        interrupts=(),
+    )
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_branch_then(checkpointer_name: str) -> None:
+async def test_branch_then(async_checkpointer: BaseCheckpointSaver) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
@@ -4236,824 +4220,811 @@ async def test_branch_then(checkpointer_name: str) -> None:
         "market": "US",
     }
 
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        # test stream_mode=debug
-        tool_two = tool_two_graph.compile(checkpointer=checkpointer)
-        thread10 = {"configurable": {"thread_id": "10"}}
-        assert [
-            c
-            async for c in tool_two.astream(
-                {"my_key": "value", "market": "DE"}, thread10, stream_mode="debug"
-            )
-        ] == [
-            {
-                "type": "checkpoint",
-                "timestamp": AnyStr(),
-                "step": -1,
-                "payload": {
-                    "config": {
-                        "tags": [],
-                        "metadata": {"thread_id": "10"},
-                        "callbacks": None,
-                        "recursion_limit": 25,
-                        "configurable": {
-                            "thread_id": "10",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        },
-                    },
-                    "values": {"my_key": ""},
-                    "metadata": {
-                        "parents": {},
-                        "source": "input",
-                        "step": -1,
-                        "writes": {"__start__": {"my_key": "value", "market": "DE"}},
-                        "thread_id": "10",
-                    },
-                    "parent_config": None,
-                    "next": ["__start__"],
-                    "tasks": [
-                        {
-                            "id": AnyStr(),
-                            "name": "__start__",
-                            "interrupts": (),
-                            "state": None,
-                        }
-                    ],
-                },
-            },
-            {
-                "type": "checkpoint",
-                "timestamp": AnyStr(),
-                "step": 0,
-                "payload": {
-                    "config": {
-                        "tags": [],
-                        "metadata": {"thread_id": "10"},
-                        "callbacks": None,
-                        "recursion_limit": 25,
-                        "configurable": {
-                            "thread_id": "10",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        },
-                    },
-                    "values": {
-                        "my_key": "value",
-                        "market": "DE",
-                    },
-                    "metadata": {
-                        "parents": {},
-                        "source": "loop",
-                        "step": 0,
-                        "writes": None,
-                        "thread_id": "10",
-                    },
-                    "parent_config": {
-                        "tags": [],
-                        "metadata": {"thread_id": "10"},
-                        "callbacks": None,
-                        "recursion_limit": 25,
-                        "configurable": {
-                            "thread_id": "10",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        },
-                    },
-                    "next": ["prepare"],
-                    "tasks": [
-                        {
-                            "id": AnyStr(),
-                            "name": "prepare",
-                            "interrupts": (),
-                            "state": None,
-                        }
-                    ],
-                },
-            },
-            {
-                "type": "task",
-                "timestamp": AnyStr(),
-                "step": 1,
-                "payload": {
-                    "id": AnyStr(),
-                    "name": "prepare",
-                    "input": {"my_key": "value", "market": "DE"},
-                    "triggers": ("branch:to:prepare",),
-                },
-            },
-            {
-                "type": "task_result",
-                "timestamp": AnyStr(),
-                "step": 1,
-                "payload": {
-                    "id": AnyStr(),
-                    "name": "prepare",
-                    "result": [("my_key", " prepared")],
-                    "error": None,
-                    "interrupts": [],
-                },
-            },
-            {
-                "type": "checkpoint",
-                "timestamp": AnyStr(),
-                "step": 1,
-                "payload": {
-                    "config": {
-                        "tags": [],
-                        "metadata": {"thread_id": "10"},
-                        "callbacks": None,
-                        "recursion_limit": 25,
-                        "configurable": {
-                            "thread_id": "10",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        },
-                    },
-                    "values": {
-                        "my_key": "value prepared",
-                        "market": "DE",
-                    },
-                    "metadata": {
-                        "parents": {},
-                        "source": "loop",
-                        "step": 1,
-                        "writes": {"prepare": {"my_key": " prepared"}},
-                        "thread_id": "10",
-                    },
-                    "parent_config": {
-                        "tags": [],
-                        "metadata": {"thread_id": "10"},
-                        "callbacks": None,
-                        "recursion_limit": 25,
-                        "configurable": {
-                            "thread_id": "10",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        },
-                    },
-                    "next": ["tool_two_slow"],
-                    "tasks": [
-                        {
-                            "id": AnyStr(),
-                            "name": "tool_two_slow",
-                            "interrupts": (),
-                            "state": None,
-                        }
-                    ],
-                },
-            },
-            {
-                "type": "task",
-                "timestamp": AnyStr(),
-                "step": 2,
-                "payload": {
-                    "id": AnyStr(),
-                    "name": "tool_two_slow",
-                    "input": {"my_key": "value prepared", "market": "DE"},
-                    "triggers": ("branch:to:tool_two_slow",),
-                },
-            },
-            {
-                "type": "task_result",
-                "timestamp": AnyStr(),
-                "step": 2,
-                "payload": {
-                    "id": AnyStr(),
-                    "name": "tool_two_slow",
-                    "result": [("my_key", " slow")],
-                    "error": None,
-                    "interrupts": [],
-                },
-            },
-            {
-                "type": "checkpoint",
-                "timestamp": AnyStr(),
-                "step": 2,
-                "payload": {
-                    "config": {
-                        "tags": [],
-                        "metadata": {"thread_id": "10"},
-                        "callbacks": None,
-                        "recursion_limit": 25,
-                        "configurable": {
-                            "thread_id": "10",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        },
-                    },
-                    "values": {
-                        "my_key": "value prepared slow",
-                        "market": "DE",
-                    },
-                    "metadata": {
-                        "parents": {},
-                        "source": "loop",
-                        "step": 2,
-                        "writes": {"tool_two_slow": {"my_key": " slow"}},
-                        "thread_id": "10",
-                    },
-                    "parent_config": {
-                        "tags": [],
-                        "metadata": {"thread_id": "10"},
-                        "callbacks": None,
-                        "recursion_limit": 25,
-                        "configurable": {
-                            "thread_id": "10",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        },
-                    },
-                    "next": ["finish"],
-                    "tasks": [
-                        {
-                            "id": AnyStr(),
-                            "name": "finish",
-                            "interrupts": (),
-                            "state": None,
-                        }
-                    ],
-                },
-            },
-            {
-                "type": "task",
-                "timestamp": AnyStr(),
-                "step": 3,
-                "payload": {
-                    "id": AnyStr(),
-                    "name": "finish",
-                    "input": {"my_key": "value prepared slow", "market": "DE"},
-                    "triggers": (
-                        "branch:prepare:condition::then",
-                        "branch:to:finish",
-                    ),
-                },
-            },
-            {
-                "type": "task_result",
-                "timestamp": AnyStr(),
-                "step": 3,
-                "payload": {
-                    "id": AnyStr(),
-                    "name": "finish",
-                    "result": [("my_key", " finished")],
-                    "error": None,
-                    "interrupts": [],
-                },
-            },
-            {
-                "type": "checkpoint",
-                "timestamp": AnyStr(),
-                "step": 3,
-                "payload": {
-                    "config": {
-                        "tags": [],
-                        "metadata": {"thread_id": "10"},
-                        "callbacks": None,
-                        "recursion_limit": 25,
-                        "configurable": {
-                            "thread_id": "10",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        },
-                    },
-                    "values": {
-                        "my_key": "value prepared slow finished",
-                        "market": "DE",
-                    },
-                    "metadata": {
-                        "parents": {},
-                        "source": "loop",
-                        "step": 3,
-                        "writes": {"finish": {"my_key": " finished"}},
-                        "thread_id": "10",
-                    },
-                    "parent_config": {
-                        "tags": [],
-                        "metadata": {"thread_id": "10"},
-                        "callbacks": None,
-                        "recursion_limit": 25,
-                        "configurable": {
-                            "thread_id": "10",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        },
-                    },
-                    "next": [],
-                    "tasks": [],
-                },
-            },
-        ]
-
-        tool_two = tool_two_graph.compile(
-            checkpointer=checkpointer,
-            interrupt_before=["tool_two_fast", "tool_two_slow"],
+    # test stream_mode=debug
+    tool_two = tool_two_graph.compile(checkpointer=async_checkpointer)
+    thread10 = {"configurable": {"thread_id": "10"}}
+    assert [
+        c
+        async for c in tool_two.astream(
+            {"my_key": "value", "market": "DE"}, thread10, stream_mode="debug"
         )
+    ] == [
+        {
+            "type": "checkpoint",
+            "timestamp": AnyStr(),
+            "step": -1,
+            "payload": {
+                "config": {
+                    "tags": [],
+                    "metadata": {"thread_id": "10"},
+                    "callbacks": None,
+                    "recursion_limit": 25,
+                    "configurable": {
+                        "thread_id": "10",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    },
+                },
+                "values": {"my_key": ""},
+                "metadata": {
+                    "parents": {},
+                    "source": "input",
+                    "step": -1,
+                    "writes": {"__start__": {"my_key": "value", "market": "DE"}},
+                    "thread_id": "10",
+                },
+                "parent_config": None,
+                "next": ["__start__"],
+                "tasks": [
+                    {
+                        "id": AnyStr(),
+                        "name": "__start__",
+                        "interrupts": (),
+                        "state": None,
+                    }
+                ],
+            },
+        },
+        {
+            "type": "checkpoint",
+            "timestamp": AnyStr(),
+            "step": 0,
+            "payload": {
+                "config": {
+                    "tags": [],
+                    "metadata": {"thread_id": "10"},
+                    "callbacks": None,
+                    "recursion_limit": 25,
+                    "configurable": {
+                        "thread_id": "10",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    },
+                },
+                "values": {
+                    "my_key": "value",
+                    "market": "DE",
+                },
+                "metadata": {
+                    "parents": {},
+                    "source": "loop",
+                    "step": 0,
+                    "writes": None,
+                    "thread_id": "10",
+                },
+                "parent_config": {
+                    "tags": [],
+                    "metadata": {"thread_id": "10"},
+                    "callbacks": None,
+                    "recursion_limit": 25,
+                    "configurable": {
+                        "thread_id": "10",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    },
+                },
+                "next": ["prepare"],
+                "tasks": [
+                    {
+                        "id": AnyStr(),
+                        "name": "prepare",
+                        "interrupts": (),
+                        "state": None,
+                    }
+                ],
+            },
+        },
+        {
+            "type": "task",
+            "timestamp": AnyStr(),
+            "step": 1,
+            "payload": {
+                "id": AnyStr(),
+                "name": "prepare",
+                "input": {"my_key": "value", "market": "DE"},
+                "triggers": ("branch:to:prepare",),
+            },
+        },
+        {
+            "type": "task_result",
+            "timestamp": AnyStr(),
+            "step": 1,
+            "payload": {
+                "id": AnyStr(),
+                "name": "prepare",
+                "result": [("my_key", " prepared")],
+                "error": None,
+                "interrupts": [],
+            },
+        },
+        {
+            "type": "checkpoint",
+            "timestamp": AnyStr(),
+            "step": 1,
+            "payload": {
+                "config": {
+                    "tags": [],
+                    "metadata": {"thread_id": "10"},
+                    "callbacks": None,
+                    "recursion_limit": 25,
+                    "configurable": {
+                        "thread_id": "10",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    },
+                },
+                "values": {
+                    "my_key": "value prepared",
+                    "market": "DE",
+                },
+                "metadata": {
+                    "parents": {},
+                    "source": "loop",
+                    "step": 1,
+                    "writes": {"prepare": {"my_key": " prepared"}},
+                    "thread_id": "10",
+                },
+                "parent_config": {
+                    "tags": [],
+                    "metadata": {"thread_id": "10"},
+                    "callbacks": None,
+                    "recursion_limit": 25,
+                    "configurable": {
+                        "thread_id": "10",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    },
+                },
+                "next": ["tool_two_slow"],
+                "tasks": [
+                    {
+                        "id": AnyStr(),
+                        "name": "tool_two_slow",
+                        "interrupts": (),
+                        "state": None,
+                    }
+                ],
+            },
+        },
+        {
+            "type": "task",
+            "timestamp": AnyStr(),
+            "step": 2,
+            "payload": {
+                "id": AnyStr(),
+                "name": "tool_two_slow",
+                "input": {"my_key": "value prepared", "market": "DE"},
+                "triggers": ("branch:to:tool_two_slow",),
+            },
+        },
+        {
+            "type": "task_result",
+            "timestamp": AnyStr(),
+            "step": 2,
+            "payload": {
+                "id": AnyStr(),
+                "name": "tool_two_slow",
+                "result": [("my_key", " slow")],
+                "error": None,
+                "interrupts": [],
+            },
+        },
+        {
+            "type": "checkpoint",
+            "timestamp": AnyStr(),
+            "step": 2,
+            "payload": {
+                "config": {
+                    "tags": [],
+                    "metadata": {"thread_id": "10"},
+                    "callbacks": None,
+                    "recursion_limit": 25,
+                    "configurable": {
+                        "thread_id": "10",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    },
+                },
+                "values": {
+                    "my_key": "value prepared slow",
+                    "market": "DE",
+                },
+                "metadata": {
+                    "parents": {},
+                    "source": "loop",
+                    "step": 2,
+                    "writes": {"tool_two_slow": {"my_key": " slow"}},
+                    "thread_id": "10",
+                },
+                "parent_config": {
+                    "tags": [],
+                    "metadata": {"thread_id": "10"},
+                    "callbacks": None,
+                    "recursion_limit": 25,
+                    "configurable": {
+                        "thread_id": "10",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    },
+                },
+                "next": ["finish"],
+                "tasks": [
+                    {
+                        "id": AnyStr(),
+                        "name": "finish",
+                        "interrupts": (),
+                        "state": None,
+                    }
+                ],
+            },
+        },
+        {
+            "type": "task",
+            "timestamp": AnyStr(),
+            "step": 3,
+            "payload": {
+                "id": AnyStr(),
+                "name": "finish",
+                "input": {"my_key": "value prepared slow", "market": "DE"},
+                "triggers": (
+                    "branch:prepare:condition::then",
+                    "branch:to:finish",
+                ),
+            },
+        },
+        {
+            "type": "task_result",
+            "timestamp": AnyStr(),
+            "step": 3,
+            "payload": {
+                "id": AnyStr(),
+                "name": "finish",
+                "result": [("my_key", " finished")],
+                "error": None,
+                "interrupts": [],
+            },
+        },
+        {
+            "type": "checkpoint",
+            "timestamp": AnyStr(),
+            "step": 3,
+            "payload": {
+                "config": {
+                    "tags": [],
+                    "metadata": {"thread_id": "10"},
+                    "callbacks": None,
+                    "recursion_limit": 25,
+                    "configurable": {
+                        "thread_id": "10",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    },
+                },
+                "values": {
+                    "my_key": "value prepared slow finished",
+                    "market": "DE",
+                },
+                "metadata": {
+                    "parents": {},
+                    "source": "loop",
+                    "step": 3,
+                    "writes": {"finish": {"my_key": " finished"}},
+                    "thread_id": "10",
+                },
+                "parent_config": {
+                    "tags": [],
+                    "metadata": {"thread_id": "10"},
+                    "callbacks": None,
+                    "recursion_limit": 25,
+                    "configurable": {
+                        "thread_id": "10",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    },
+                },
+                "next": [],
+                "tasks": [],
+            },
+        },
+    ]
 
-        # missing thread_id
-        with pytest.raises(ValueError, match="thread_id"):
-            await tool_two.ainvoke({"my_key": "value", "market": "DE"})
+    tool_two = tool_two_graph.compile(
+        checkpointer=async_checkpointer,
+        interrupt_before=["tool_two_fast", "tool_two_slow"],
+    )
 
-        thread1 = {"configurable": {"thread_id": "11"}}
-        # stop when about to enter node
-        assert [
-            c
-            async for c in tool_two.astream(
-                {"my_key": "value", "market": "DE"}, thread1, stream_mode="debug"
-            )
-        ] == [
-            {
-                "type": "checkpoint",
-                "timestamp": AnyStr(),
-                "step": -1,
-                "payload": {
-                    "config": {
-                        "tags": [],
-                        "metadata": {"thread_id": "11"},
-                        "callbacks": None,
-                        "recursion_limit": 25,
-                        "configurable": {
-                            "thread_id": "11",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        },
-                    },
-                    "values": {"my_key": ""},
-                    "metadata": {
-                        "parents": {},
-                        "source": "input",
-                        "step": -1,
-                        "writes": {"__start__": {"my_key": "value", "market": "DE"}},
+    # missing thread_id
+    with pytest.raises(ValueError, match="thread_id"):
+        await tool_two.ainvoke({"my_key": "value", "market": "DE"})
+
+    thread1 = {"configurable": {"thread_id": "11"}}
+    # stop when about to enter node
+    assert [
+        c
+        async for c in tool_two.astream(
+            {"my_key": "value", "market": "DE"}, thread1, stream_mode="debug"
+        )
+    ] == [
+        {
+            "type": "checkpoint",
+            "timestamp": AnyStr(),
+            "step": -1,
+            "payload": {
+                "config": {
+                    "tags": [],
+                    "metadata": {"thread_id": "11"},
+                    "callbacks": None,
+                    "recursion_limit": 25,
+                    "configurable": {
                         "thread_id": "11",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     },
-                    "parent_config": None,
-                    "next": ["__start__"],
-                    "tasks": [
-                        {
-                            "id": AnyStr(),
-                            "name": "__start__",
-                            "interrupts": (),
-                            "state": None,
-                        }
-                    ],
                 },
-            },
-            {
-                "type": "checkpoint",
-                "timestamp": AnyStr(),
-                "step": 0,
-                "payload": {
-                    "config": {
-                        "tags": [],
-                        "metadata": {"thread_id": "11"},
-                        "callbacks": None,
-                        "recursion_limit": 25,
-                        "configurable": {
-                            "thread_id": "11",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        },
-                    },
-                    "values": {
-                        "my_key": "value",
-                        "market": "DE",
-                    },
-                    "metadata": {
-                        "parents": {},
-                        "source": "loop",
-                        "step": 0,
-                        "writes": None,
-                        "thread_id": "11",
-                    },
-                    "parent_config": {
-                        "tags": [],
-                        "metadata": {"thread_id": "11"},
-                        "callbacks": None,
-                        "recursion_limit": 25,
-                        "configurable": {
-                            "thread_id": "11",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        },
-                    },
-                    "next": ["prepare"],
-                    "tasks": [
-                        {
-                            "id": AnyStr(),
-                            "name": "prepare",
-                            "interrupts": (),
-                            "state": None,
-                        }
-                    ],
-                },
-            },
-            {
-                "type": "task",
-                "timestamp": AnyStr(),
-                "step": 1,
-                "payload": {
-                    "id": AnyStr(),
-                    "name": "prepare",
-                    "input": {"my_key": "value", "market": "DE"},
-                    "triggers": ("branch:to:prepare",),
-                },
-            },
-            {
-                "type": "task_result",
-                "timestamp": AnyStr(),
-                "step": 1,
-                "payload": {
-                    "id": AnyStr(),
-                    "name": "prepare",
-                    "result": [("my_key", " prepared")],
-                    "error": None,
-                    "interrupts": [],
-                },
-            },
-            {
-                "type": "checkpoint",
-                "timestamp": AnyStr(),
-                "step": 1,
-                "payload": {
-                    "config": {
-                        "tags": [],
-                        "metadata": {"thread_id": "11"},
-                        "callbacks": None,
-                        "recursion_limit": 25,
-                        "configurable": {
-                            "thread_id": "11",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        },
-                    },
-                    "values": {
-                        "my_key": "value prepared",
-                        "market": "DE",
-                    },
-                    "metadata": {
-                        "parents": {},
-                        "source": "loop",
-                        "step": 1,
-                        "writes": {"prepare": {"my_key": " prepared"}},
-                        "thread_id": "11",
-                    },
-                    "parent_config": {
-                        "tags": [],
-                        "metadata": {"thread_id": "11"},
-                        "callbacks": None,
-                        "recursion_limit": 25,
-                        "configurable": {
-                            "thread_id": "11",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        },
-                    },
-                    "next": ["tool_two_slow"],
-                    "tasks": [
-                        {
-                            "id": AnyStr(),
-                            "name": "tool_two_slow",
-                            "interrupts": (),
-                            "state": None,
-                        }
-                    ],
-                },
-            },
-        ]
-        assert await tool_two.aget_state(thread1) == StateSnapshot(
-            values={"my_key": "value prepared", "market": "DE"},
-            tasks=(PregelTask(AnyStr(), "tool_two_slow", (PULL, "tool_two_slow")),),
-            next=("tool_two_slow",),
-            config={
-                "configurable": {
+                "values": {"my_key": ""},
+                "metadata": {
+                    "parents": {},
+                    "source": "input",
+                    "step": -1,
+                    "writes": {"__start__": {"my_key": "value", "market": "DE"}},
                     "thread_id": "11",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
+                },
+                "parent_config": None,
+                "next": ["__start__"],
+                "tasks": [
+                    {
+                        "id": AnyStr(),
+                        "name": "__start__",
+                        "interrupts": (),
+                        "state": None,
+                    }
+                ],
             },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 1,
-                "writes": {"prepare": {"my_key": " prepared"}},
-                "thread_id": "11",
-            },
-            parent_config=([c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
-                    -1
-                ].config
-            ),
-            interrupts=(),
-        )
-        # resume, for same result as above
-        assert await tool_two.ainvoke(None, thread1, debug=1) == {
-            "my_key": "value prepared slow finished",
-            "market": "DE",
-        }
-        assert await tool_two.aget_state(thread1) == StateSnapshot(
-            values={"my_key": "value prepared slow finished", "market": "DE"},
-            tasks=(),
-            next=(),
-            config={
-                "configurable": {
+        },
+        {
+            "type": "checkpoint",
+            "timestamp": AnyStr(),
+            "step": 0,
+            "payload": {
+                "config": {
+                    "tags": [],
+                    "metadata": {"thread_id": "11"},
+                    "callbacks": None,
+                    "recursion_limit": 25,
+                    "configurable": {
+                        "thread_id": "11",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    },
+                },
+                "values": {
+                    "my_key": "value",
+                    "market": "DE",
+                },
+                "metadata": {
+                    "parents": {},
+                    "source": "loop",
+                    "step": 0,
+                    "writes": None,
                     "thread_id": "11",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
+                },
+                "parent_config": {
+                    "tags": [],
+                    "metadata": {"thread_id": "11"},
+                    "callbacks": None,
+                    "recursion_limit": 25,
+                    "configurable": {
+                        "thread_id": "11",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    },
+                },
+                "next": ["prepare"],
+                "tasks": [
+                    {
+                        "id": AnyStr(),
+                        "name": "prepare",
+                        "interrupts": (),
+                        "state": None,
+                    }
+                ],
             },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 3,
-                "writes": {"finish": {"my_key": " finished"}},
+        },
+        {
+            "type": "task",
+            "timestamp": AnyStr(),
+            "step": 1,
+            "payload": {
+                "id": AnyStr(),
+                "name": "prepare",
+                "input": {"my_key": "value", "market": "DE"},
+                "triggers": ("branch:to:prepare",),
+            },
+        },
+        {
+            "type": "task_result",
+            "timestamp": AnyStr(),
+            "step": 1,
+            "payload": {
+                "id": AnyStr(),
+                "name": "prepare",
+                "result": [("my_key", " prepared")],
+                "error": None,
+                "interrupts": [],
+            },
+        },
+        {
+            "type": "checkpoint",
+            "timestamp": AnyStr(),
+            "step": 1,
+            "payload": {
+                "config": {
+                    "tags": [],
+                    "metadata": {"thread_id": "11"},
+                    "callbacks": None,
+                    "recursion_limit": 25,
+                    "configurable": {
+                        "thread_id": "11",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    },
+                },
+                "values": {
+                    "my_key": "value prepared",
+                    "market": "DE",
+                },
+                "metadata": {
+                    "parents": {},
+                    "source": "loop",
+                    "step": 1,
+                    "writes": {"prepare": {"my_key": " prepared"}},
+                    "thread_id": "11",
+                },
+                "parent_config": {
+                    "tags": [],
+                    "metadata": {"thread_id": "11"},
+                    "callbacks": None,
+                    "recursion_limit": 25,
+                    "configurable": {
+                        "thread_id": "11",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    },
+                },
+                "next": ["tool_two_slow"],
+                "tasks": [
+                    {
+                        "id": AnyStr(),
+                        "name": "tool_two_slow",
+                        "interrupts": (),
+                        "state": None,
+                    }
+                ],
+            },
+        },
+    ]
+    assert await tool_two.aget_state(thread1) == StateSnapshot(
+        values={"my_key": "value prepared", "market": "DE"},
+        tasks=(PregelTask(AnyStr(), "tool_two_slow", (PULL, "tool_two_slow")),),
+        next=("tool_two_slow",),
+        config={
+            "configurable": {
                 "thread_id": "11",
-            },
-            parent_config=([c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
-                    -1
-                ].config
-            ),
-            interrupts=(),
-        )
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 1,
+            "writes": {"prepare": {"my_key": " prepared"}},
+            "thread_id": "11",
+        },
+        parent_config=(
+            [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][-1].config
+        ),
+        interrupts=(),
+    )
+    # resume, for same result as above
+    assert await tool_two.ainvoke(None, thread1, debug=1) == {
+        "my_key": "value prepared slow finished",
+        "market": "DE",
+    }
+    assert await tool_two.aget_state(thread1) == StateSnapshot(
+        values={"my_key": "value prepared slow finished", "market": "DE"},
+        tasks=(),
+        next=(),
+        config={
+            "configurable": {
+                "thread_id": "11",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 3,
+            "writes": {"finish": {"my_key": " finished"}},
+            "thread_id": "11",
+        },
+        parent_config=(
+            [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][-1].config
+        ),
+        interrupts=(),
+    )
 
-        thread2 = {"configurable": {"thread_id": "12"}}
-        # stop when about to enter node
-        assert await tool_two.ainvoke({"my_key": "value", "market": "US"}, thread2) == {
-            "my_key": "value prepared",
-            "market": "US",
-        }
-        assert await tool_two.aget_state(thread2) == StateSnapshot(
-            values={"my_key": "value prepared", "market": "US"},
-            tasks=(PregelTask(AnyStr(), "tool_two_fast", (PULL, "tool_two_fast")),),
-            next=("tool_two_fast",),
-            config={
-                "configurable": {
-                    "thread_id": "12",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 1,
-                "writes": {"prepare": {"my_key": " prepared"}},
+    thread2 = {"configurable": {"thread_id": "12"}}
+    # stop when about to enter node
+    assert await tool_two.ainvoke({"my_key": "value", "market": "US"}, thread2) == {
+        "my_key": "value prepared",
+        "market": "US",
+    }
+    assert await tool_two.aget_state(thread2) == StateSnapshot(
+        values={"my_key": "value prepared", "market": "US"},
+        tasks=(PregelTask(AnyStr(), "tool_two_fast", (PULL, "tool_two_fast")),),
+        next=("tool_two_fast",),
+        config={
+            "configurable": {
                 "thread_id": "12",
-            },
-            parent_config=([c async for c in tool_two.checkpointer.alist(thread2, limit=2)][
-                    -1
-                ].config
-            ),
-            interrupts=(),
-        )
-        # resume, for same result as above
-        assert await tool_two.ainvoke(None, thread2, debug=1) == {
-            "my_key": "value prepared fast finished",
-            "market": "US",
-        }
-        assert await tool_two.aget_state(thread2) == StateSnapshot(
-            values={"my_key": "value prepared fast finished", "market": "US"},
-            tasks=(),
-            next=(),
-            config={
-                "configurable": {
-                    "thread_id": "12",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 3,
-                "writes": {"finish": {"my_key": " finished"}},
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 1,
+            "writes": {"prepare": {"my_key": " prepared"}},
+            "thread_id": "12",
+        },
+        parent_config=(
+            [c async for c in tool_two.checkpointer.alist(thread2, limit=2)][-1].config
+        ),
+        interrupts=(),
+    )
+    # resume, for same result as above
+    assert await tool_two.ainvoke(None, thread2, debug=1) == {
+        "my_key": "value prepared fast finished",
+        "market": "US",
+    }
+    assert await tool_two.aget_state(thread2) == StateSnapshot(
+        values={"my_key": "value prepared fast finished", "market": "US"},
+        tasks=(),
+        next=(),
+        config={
+            "configurable": {
                 "thread_id": "12",
-            },
-            parent_config=([c async for c in tool_two.checkpointer.alist(thread2, limit=2)][
-                    -1
-                ].config
-            ),
-            interrupts=(),
-        )
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 3,
+            "writes": {"finish": {"my_key": " finished"}},
+            "thread_id": "12",
+        },
+        parent_config=(
+            [c async for c in tool_two.checkpointer.alist(thread2, limit=2)][-1].config
+        ),
+        interrupts=(),
+    )
 
-        tool_two = tool_two_graph.compile(
-            checkpointer=checkpointer, interrupt_after=["prepare"]
-        )
+    tool_two = tool_two_graph.compile(
+        checkpointer=async_checkpointer, interrupt_after=["prepare"]
+    )
 
-        # missing thread_id
-        with pytest.raises(ValueError, match="thread_id"):
-            await tool_two.ainvoke({"my_key": "value", "market": "DE"})
+    # missing thread_id
+    with pytest.raises(ValueError, match="thread_id"):
+        await tool_two.ainvoke({"my_key": "value", "market": "DE"})
 
-        thread1 = {"configurable": {"thread_id": "21"}}
-        # stop when about to enter node
-        assert await tool_two.ainvoke({"my_key": "value", "market": "DE"}, thread1) == {
-            "my_key": "value prepared",
-            "market": "DE",
-        }
-        assert await tool_two.aget_state(thread1) == StateSnapshot(
-            values={"my_key": "value prepared", "market": "DE"},
-            tasks=(PregelTask(AnyStr(), "tool_two_slow", (PULL, "tool_two_slow")),),
-            next=("tool_two_slow",),
-            config={
-                "configurable": {
-                    "thread_id": "21",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 1,
-                "writes": {"prepare": {"my_key": " prepared"}},
+    thread1 = {"configurable": {"thread_id": "21"}}
+    # stop when about to enter node
+    assert await tool_two.ainvoke({"my_key": "value", "market": "DE"}, thread1) == {
+        "my_key": "value prepared",
+        "market": "DE",
+    }
+    assert await tool_two.aget_state(thread1) == StateSnapshot(
+        values={"my_key": "value prepared", "market": "DE"},
+        tasks=(PregelTask(AnyStr(), "tool_two_slow", (PULL, "tool_two_slow")),),
+        next=("tool_two_slow",),
+        config={
+            "configurable": {
                 "thread_id": "21",
-            },
-            parent_config=([c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
-                    -1
-                ].config
-            ),
-            interrupts=(),
-        )
-        # resume, for same result as above
-        assert await tool_two.ainvoke(None, thread1, debug=1) == {
-            "my_key": "value prepared slow finished",
-            "market": "DE",
-        }
-        assert await tool_two.aget_state(thread1) == StateSnapshot(
-            values={"my_key": "value prepared slow finished", "market": "DE"},
-            tasks=(),
-            next=(),
-            config={
-                "configurable": {
-                    "thread_id": "21",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 3,
-                "writes": {"finish": {"my_key": " finished"}},
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 1,
+            "writes": {"prepare": {"my_key": " prepared"}},
+            "thread_id": "21",
+        },
+        parent_config=(
+            [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][-1].config
+        ),
+        interrupts=(),
+    )
+    # resume, for same result as above
+    assert await tool_two.ainvoke(None, thread1, debug=1) == {
+        "my_key": "value prepared slow finished",
+        "market": "DE",
+    }
+    assert await tool_two.aget_state(thread1) == StateSnapshot(
+        values={"my_key": "value prepared slow finished", "market": "DE"},
+        tasks=(),
+        next=(),
+        config={
+            "configurable": {
                 "thread_id": "21",
-            },
-            parent_config=([c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
-                    -1
-                ].config
-            ),
-            interrupts=(),
-        )
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 3,
+            "writes": {"finish": {"my_key": " finished"}},
+            "thread_id": "21",
+        },
+        parent_config=(
+            [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][-1].config
+        ),
+        interrupts=(),
+    )
 
-        thread2 = {"configurable": {"thread_id": "22"}}
-        # stop when about to enter node
-        assert await tool_two.ainvoke({"my_key": "value", "market": "US"}, thread2) == {
-            "my_key": "value prepared",
-            "market": "US",
-        }
-        assert await tool_two.aget_state(thread2) == StateSnapshot(
-            values={"my_key": "value prepared", "market": "US"},
-            tasks=(PregelTask(AnyStr(), "tool_two_fast", (PULL, "tool_two_fast")),),
-            next=("tool_two_fast",),
-            config={
-                "configurable": {
-                    "thread_id": "22",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 1,
-                "writes": {"prepare": {"my_key": " prepared"}},
+    thread2 = {"configurable": {"thread_id": "22"}}
+    # stop when about to enter node
+    assert await tool_two.ainvoke({"my_key": "value", "market": "US"}, thread2) == {
+        "my_key": "value prepared",
+        "market": "US",
+    }
+    assert await tool_two.aget_state(thread2) == StateSnapshot(
+        values={"my_key": "value prepared", "market": "US"},
+        tasks=(PregelTask(AnyStr(), "tool_two_fast", (PULL, "tool_two_fast")),),
+        next=("tool_two_fast",),
+        config={
+            "configurable": {
                 "thread_id": "22",
-            },
-            parent_config=([c async for c in tool_two.checkpointer.alist(thread2, limit=2)][
-                    -1
-                ].config
-            ),
-            interrupts=(),
-        )
-        # resume, for same result as above
-        assert await tool_two.ainvoke(None, thread2, debug=1) == {
-            "my_key": "value prepared fast finished",
-            "market": "US",
-        }
-        assert await tool_two.aget_state(thread2) == StateSnapshot(
-            values={"my_key": "value prepared fast finished", "market": "US"},
-            tasks=(),
-            next=(),
-            config={
-                "configurable": {
-                    "thread_id": "22",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 3,
-                "writes": {"finish": {"my_key": " finished"}},
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 1,
+            "writes": {"prepare": {"my_key": " prepared"}},
+            "thread_id": "22",
+        },
+        parent_config=(
+            [c async for c in tool_two.checkpointer.alist(thread2, limit=2)][-1].config
+        ),
+        interrupts=(),
+    )
+    # resume, for same result as above
+    assert await tool_two.ainvoke(None, thread2, debug=1) == {
+        "my_key": "value prepared fast finished",
+        "market": "US",
+    }
+    assert await tool_two.aget_state(thread2) == StateSnapshot(
+        values={"my_key": "value prepared fast finished", "market": "US"},
+        tasks=(),
+        next=(),
+        config={
+            "configurable": {
                 "thread_id": "22",
-            },
-            parent_config=([c async for c in tool_two.checkpointer.alist(thread2, limit=2)][
-                    -1
-                ].config
-            ),
-            interrupts=(),
-        )
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 3,
+            "writes": {"finish": {"my_key": " finished"}},
+            "thread_id": "22",
+        },
+        parent_config=(
+            [c async for c in tool_two.checkpointer.alist(thread2, limit=2)][-1].config
+        ),
+        interrupts=(),
+    )
 
-        thread3 = {"configurable": {"thread_id": "23"}}
-        # update an empty thread before first run
-        uconfig = await tool_two.aupdate_state(
-            thread3, {"my_key": "key", "market": "DE"}
-        )
-        # check current state
-        assert await tool_two.aget_state(thread3) == StateSnapshot(
-            values={"my_key": "key", "market": "DE"},
-            tasks=(PregelTask(AnyStr(), "prepare", (PULL, "prepare")),),
-            next=("prepare",),
-            config=uconfig,
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "update",
-                "step": 0,
-                "writes": {START: {"my_key": "key", "market": "DE"}},
+    thread3 = {"configurable": {"thread_id": "23"}}
+    # update an empty thread before first run
+    uconfig = await tool_two.aupdate_state(thread3, {"my_key": "key", "market": "DE"})
+    # check current state
+    assert await tool_two.aget_state(thread3) == StateSnapshot(
+        values={"my_key": "key", "market": "DE"},
+        tasks=(PregelTask(AnyStr(), "prepare", (PULL, "prepare")),),
+        next=("prepare",),
+        config=uconfig,
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "update",
+            "step": 0,
+            "writes": {START: {"my_key": "key", "market": "DE"}},
+            "thread_id": "23",
+        },
+        parent_config=None,
+        interrupts=(),
+    )
+    # run from this point
+    assert await tool_two.ainvoke(None, thread3) == {
+        "my_key": "key prepared",
+        "market": "DE",
+    }
+    # get state after first node
+    assert await tool_two.aget_state(thread3) == StateSnapshot(
+        values={"my_key": "key prepared", "market": "DE"},
+        tasks=(PregelTask(AnyStr(), "tool_two_slow", (PULL, "tool_two_slow")),),
+        next=("tool_two_slow",),
+        config={
+            "configurable": {
                 "thread_id": "23",
-            },
-            parent_config=None,
-            interrupts=(),
-        )
-        # run from this point
-        assert await tool_two.ainvoke(None, thread3) == {
-            "my_key": "key prepared",
-            "market": "DE",
-        }
-        # get state after first node
-        assert await tool_two.aget_state(thread3) == StateSnapshot(
-            values={"my_key": "key prepared", "market": "DE"},
-            tasks=(PregelTask(AnyStr(), "tool_two_slow", (PULL, "tool_two_slow")),),
-            next=("tool_two_slow",),
-            config={
-                "configurable": {
-                    "thread_id": "23",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 1,
-                "writes": {"prepare": {"my_key": " prepared"}},
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 1,
+            "writes": {"prepare": {"my_key": " prepared"}},
+            "thread_id": "23",
+        },
+        parent_config=(uconfig),
+        interrupts=(),
+    )
+    # resume, for same result as above
+    assert await tool_two.ainvoke(None, thread3, debug=1) == {
+        "my_key": "key prepared slow finished",
+        "market": "DE",
+    }
+    assert await tool_two.aget_state(thread3) == StateSnapshot(
+        values={"my_key": "key prepared slow finished", "market": "DE"},
+        tasks=(),
+        next=(),
+        config={
+            "configurable": {
                 "thread_id": "23",
-            },
-            parent_config=(uconfig),
-            interrupts=(),
-        )
-        # resume, for same result as above
-        assert await tool_two.ainvoke(None, thread3, debug=1) == {
-            "my_key": "key prepared slow finished",
-            "market": "DE",
-        }
-        assert await tool_two.aget_state(thread3) == StateSnapshot(
-            values={"my_key": "key prepared slow finished", "market": "DE"},
-            tasks=(),
-            next=(),
-            config={
-                "configurable": {
-                    "thread_id": "23",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "step": 3,
-                "writes": {"finish": {"my_key": " finished"}},
-                "thread_id": "23",
-            },
-            parent_config=([c async for c in tool_two.checkpointer.alist(thread3, limit=2)][
-                    -1
-                ].config
-            ),
-            interrupts=(),
-        )
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        created_at=AnyStr(),
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "step": 3,
+            "writes": {"finish": {"my_key": " finished"}},
+            "thread_id": "23",
+        },
+        parent_config=(
+            [c async for c in tool_two.checkpointer.alist(thread3, limit=2)][-1].config
+        ),
+        interrupts=(),
+    )
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_nested_graph_state(checkpointer_name: str) -> None:
+async def test_nested_graph_state(async_checkpointer: BaseCheckpointSaver) -> None:
     class InnerState(TypedDict):
         my_key: str
         my_other_key: str
@@ -5099,291 +5070,71 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
     graph.add_edge("inner", "outer_2")
     graph.set_finish_point("outer_2")
 
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        app = graph.compile(checkpointer=checkpointer)
+    app = graph.compile(checkpointer=async_checkpointer)
 
-        config = {"configurable": {"thread_id": "1"}}
-        await app.ainvoke({"my_key": "my value"}, config, debug=True)
-        # test state w/ nested subgraph state (right after interrupt)
-        # first get_state without subgraph state
-        assert await app.aget_state(config) == StateSnapshot(
-            values={"my_key": "hi my value"},
-            tasks=(
-                PregelTask(
-                    AnyStr(),
-                    "inner",
-                    (PULL, "inner"),
-                    state={
-                        "configurable": {"thread_id": "1", "checkpoint_ns": AnyStr()}
-                    },
-                ),
+    config = {"configurable": {"thread_id": "1"}}
+    await app.ainvoke({"my_key": "my value"}, config, debug=True)
+    # test state w/ nested subgraph state (right after interrupt)
+    # first get_state without subgraph state
+    assert await app.aget_state(config) == StateSnapshot(
+        values={"my_key": "hi my value"},
+        tasks=(
+            PregelTask(
+                AnyStr(),
+                "inner",
+                (PULL, "inner"),
+                state={"configurable": {"thread_id": "1", "checkpoint_ns": AnyStr()}},
             ),
-            next=("inner",),
-            config={
+        ),
+        next=("inner",),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "writes": {"outer_1": {"my_key": "hi my value"}},
+            "step": 1,
+            "thread_id": "1",
+        },
+        created_at=AnyStr(),
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "1",
                     "checkpoint_ns": "",
                     "checkpoint_id": AnyStr(),
                 }
-            },
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "writes": {"outer_1": {"my_key": "hi my value"}},
-                "step": 1,
-                "thread_id": "1",
-            },
-            created_at=AnyStr(),
-            parent_config=({
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                }
-            ),
-            interrupts=(),
-        )
-        # now, get_state with subgraphs state
-        assert await app.aget_state(config, subgraphs=True) == StateSnapshot(
-            values={"my_key": "hi my value"},
-            tasks=(
-                PregelTask(
-                    AnyStr(),
-                    "inner",
-                    (PULL, "inner"),
-                    state=StateSnapshot(
-                        values={
-                            "my_key": "hi my value here",
-                            "my_other_key": "hi my value",
-                        },
-                        tasks=(
-                            PregelTask(
-                                AnyStr(),
-                                "inner_2",
-                                (PULL, "inner_2"),
-                            ),
-                        ),
-                        next=("inner_2",),
-                        config={
-                            "configurable": {
-                                "thread_id": "1",
-                                "checkpoint_ns": AnyStr("inner:"),
-                                "checkpoint_id": AnyStr(),
-                                "checkpoint_map": AnyDict(
-                                    {"": AnyStr(), AnyStr("child:"): AnyStr()}
-                                ),
-                            }
-                        },
-                        metadata={
-                            "parents": {
-                                "": AnyStr(),
-                            },
-                            "source": "loop",
-                            "writes": {
-                                "inner_1": {
-                                    "my_key": "hi my value here",
-                                    "my_other_key": "hi my value",
-                                }
-                            },
-                            "step": 1,
-                            "thread_id": "1",
-                            "langgraph_node": "inner",
-                            "langgraph_path": [PULL, "inner"],
-                            "langgraph_step": 2,
-                            "langgraph_triggers": ["branch:to:inner"],
-                            "langgraph_checkpoint_ns": AnyStr("inner:"),
-                        },
-                        created_at=AnyStr(),
-                        parent_config={
-                            "configurable": {
-                                "thread_id": "1",
-                                "checkpoint_ns": AnyStr("inner:"),
-                                "checkpoint_id": AnyStr(),
-                                "checkpoint_map": AnyDict(
-                                    {"": AnyStr(), AnyStr("child:"): AnyStr()}
-                                ),
-                            }
-                        },
-                        interrupts=(),
-                    ),
-                ),
-            ),
-            next=("inner",),
-            config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "writes": {"outer_1": {"my_key": "hi my value"}},
-                "step": 1,
-                "thread_id": "1",
-            },
-            created_at=AnyStr(),
-            parent_config=({
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                }
-            ),
-            interrupts=(),
-        )
-        # get_state_history returns outer graph checkpoints
-        history = [c async for c in app.aget_state_history(config)]
-        expected_history = [
-            StateSnapshot(
-                values={"my_key": "hi my value"},
-                tasks=(
-                    PregelTask(
-                        AnyStr(),
-                        "inner",
-                        (PULL, "inner"),
-                        state={
-                            "configurable": {
-                                "thread_id": "1",
-                                "checkpoint_ns": AnyStr("inner:"),
-                            }
-                        },
-                    ),
-                ),
-                next=("inner",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "parents": {},
-                    "source": "loop",
-                    "writes": {"outer_1": {"my_key": "hi my value"}},
-                    "step": 1,
-                    "thread_id": "1",
-                },
-                created_at=AnyStr(),
-                parent_config=({
-                        "configurable": {
-                            "thread_id": "1",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        }
-                    }
-                ),
-                interrupts=(),
-            ),
-            StateSnapshot(
-                values={"my_key": "my value"},
-                tasks=(
-                    PregelTask(
-                        AnyStr(),
-                        "outer_1",
-                        (PULL, "outer_1"),
-                        result={"my_key": "hi my value"},
-                    ),
-                ),
-                next=("outer_1",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "parents": {},
-                    "source": "loop",
-                    "writes": None,
-                    "step": 0,
-                    "thread_id": "1",
-                },
-                created_at=AnyStr(),
-                parent_config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                interrupts=(),
-            ),
-            StateSnapshot(
-                values={},
-                tasks=(
-                    PregelTask(
-                        AnyStr(),
-                        "__start__",
-                        (PULL, "__start__"),
-                        result={"my_key": "my value"},
-                    ),
-                ),
-                next=("__start__",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "parents": {},
-                    "source": "input",
-                    "writes": {"__start__": {"my_key": "my value"}},
-                    "step": -1,
-                    "thread_id": "1",
-                },
-                created_at=AnyStr(),
-                parent_config=None,
-                interrupts=(),
-            ),
-        ]
-
-        assert history == expected_history
-
-        # get_state_history for a subgraph returns its checkpoints
-        child_history = [
-            c async for c in app.aget_state_history(history[0].tasks[0].state)
-        ]
-        expected_child_history = [
-            StateSnapshot(
-                values={"my_key": "hi my value here", "my_other_key": "hi my value"},
-                next=("inner_2",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": AnyStr("inner:"),
-                        "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict(
-                            {"": AnyStr(), AnyStr("child:"): AnyStr()}
-                        ),
-                    }
-                },
-                metadata={
-                    "source": "loop",
-                    "writes": {
-                        "inner_1": {
-                            "my_key": "hi my value here",
-                            "my_other_key": "hi my value",
-                        }
+            }
+        ),
+        interrupts=(),
+    )
+    # now, get_state with subgraphs state
+    assert await app.aget_state(config, subgraphs=True) == StateSnapshot(
+        values={"my_key": "hi my value"},
+        tasks=(
+            PregelTask(
+                AnyStr(),
+                "inner",
+                (PULL, "inner"),
+                state=StateSnapshot(
+                    values={
+                        "my_key": "hi my value here",
+                        "my_other_key": "hi my value",
                     },
-                    "step": 1,
-                    "parents": {"": AnyStr()},
-                    "thread_id": "1",
-                    "langgraph_node": "inner",
-                    "langgraph_path": [PULL, "inner"],
-                    "langgraph_step": 2,
-                    "langgraph_triggers": ["branch:to:inner"],
-                    "langgraph_checkpoint_ns": AnyStr("inner:"),
-                },
-                created_at=AnyStr(),
-                parent_config=({
+                    tasks=(
+                        PregelTask(
+                            AnyStr(),
+                            "inner_2",
+                            (PULL, "inner_2"),
+                        ),
+                    ),
+                    next=("inner_2",),
+                    config={
                         "configurable": {
                             "thread_id": "1",
                             "checkpoint_ns": AnyStr("inner:"),
@@ -5392,64 +5143,217 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                                 {"": AnyStr(), AnyStr("child:"): AnyStr()}
                             ),
                         }
-                    }
-                ),
-                tasks=(PregelTask(AnyStr(), "inner_2", (PULL, "inner_2")),),
-                interrupts=(),
-            ),
-            StateSnapshot(
-                values={"my_key": "hi my value"},
-                next=("inner_1",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": AnyStr("inner:"),
-                        "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict(
-                            {"": AnyStr(), AnyStr("child:"): AnyStr()}
-                        ),
-                    }
-                },
-                metadata={
-                    "source": "loop",
-                    "writes": None,
-                    "step": 0,
-                    "parents": {"": AnyStr()},
-                    "thread_id": "1",
-                    "langgraph_node": "inner",
-                    "langgraph_path": [PULL, "inner"],
-                    "langgraph_step": 2,
-                    "langgraph_triggers": ["branch:to:inner"],
-                    "langgraph_checkpoint_ns": AnyStr("inner:"),
-                },
-                created_at=AnyStr(),
-                parent_config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": AnyStr("inner:"),
-                        "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict(
-                            {"": AnyStr(), AnyStr("child:"): AnyStr()}
-                        ),
-                    }
-                },
-                tasks=(
-                    PregelTask(
-                        AnyStr(),
-                        "inner_1",
-                        (PULL, "inner_1"),
-                        result={
-                            "my_key": "hi my value here",
-                            "my_other_key": "hi my value",
+                    },
+                    metadata={
+                        "parents": {
+                            "": AnyStr(),
                         },
-                    ),
+                        "source": "loop",
+                        "writes": {
+                            "inner_1": {
+                                "my_key": "hi my value here",
+                                "my_other_key": "hi my value",
+                            }
+                        },
+                        "step": 1,
+                        "thread_id": "1",
+                        "langgraph_node": "inner",
+                        "langgraph_path": [PULL, "inner"],
+                        "langgraph_step": 2,
+                        "langgraph_triggers": ["branch:to:inner"],
+                        "langgraph_checkpoint_ns": AnyStr("inner:"),
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": AnyStr("inner:"),
+                            "checkpoint_id": AnyStr(),
+                            "checkpoint_map": AnyDict(
+                                {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                            ),
+                        }
+                    },
+                    interrupts=(),
                 ),
-                interrupts=(),
             ),
-            StateSnapshot(
-                values={},
-                next=("__start__",),
-                config={
+        ),
+        next=("inner",),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "writes": {"outer_1": {"my_key": "hi my value"}},
+            "step": 1,
+            "thread_id": "1",
+        },
+        created_at=AnyStr(),
+        parent_config=(
+            {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            }
+        ),
+        interrupts=(),
+    )
+    # get_state_history returns outer graph checkpoints
+    history = [c async for c in app.aget_state_history(config)]
+    expected_history = [
+        StateSnapshot(
+            values={"my_key": "hi my value"},
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "inner",
+                    (PULL, "inner"),
+                    state={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": AnyStr("inner:"),
+                        }
+                    },
+                ),
+            ),
+            next=("inner",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "writes": {"outer_1": {"my_key": "hi my value"}},
+                "step": 1,
+                "thread_id": "1",
+            },
+            created_at=AnyStr(),
+            parent_config=(
+                {
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                }
+            ),
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={"my_key": "my value"},
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "outer_1",
+                    (PULL, "outer_1"),
+                    result={"my_key": "hi my value"},
+                ),
+            ),
+            next=("outer_1",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "writes": None,
+                "step": 0,
+                "thread_id": "1",
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={},
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "__start__",
+                    (PULL, "__start__"),
+                    result={"my_key": "my value"},
+                ),
+            ),
+            next=("__start__",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "parents": {},
+                "source": "input",
+                "writes": {"__start__": {"my_key": "my value"}},
+                "step": -1,
+                "thread_id": "1",
+            },
+            created_at=AnyStr(),
+            parent_config=None,
+            interrupts=(),
+        ),
+    ]
+
+    assert history == expected_history
+
+    # get_state_history for a subgraph returns its checkpoints
+    child_history = [c async for c in app.aget_state_history(history[0].tasks[0].state)]
+    expected_child_history = [
+        StateSnapshot(
+            values={"my_key": "hi my value here", "my_other_key": "hi my value"},
+            next=("inner_2",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("inner:"),
+                    "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                    ),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {
+                    "inner_1": {
+                        "my_key": "hi my value here",
+                        "my_other_key": "hi my value",
+                    }
+                },
+                "step": 1,
+                "parents": {"": AnyStr()},
+                "thread_id": "1",
+                "langgraph_node": "inner",
+                "langgraph_path": [PULL, "inner"],
+                "langgraph_step": 2,
+                "langgraph_triggers": ["branch:to:inner"],
+                "langgraph_checkpoint_ns": AnyStr("inner:"),
+            },
+            created_at=AnyStr(),
+            parent_config=(
+                {
                     "configurable": {
                         "thread_id": "1",
                         "checkpoint_ns": AnyStr("inner:"),
@@ -5458,39 +5362,140 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                             {"": AnyStr(), AnyStr("child:"): AnyStr()}
                         ),
                     }
-                },
-                metadata={
-                    "source": "input",
-                    "writes": {"__start__": {"my_key": "hi my value"}},
-                    "step": -1,
-                    "parents": {"": AnyStr()},
-                    "thread_id": "1",
-                    "langgraph_node": "inner",
-                    "langgraph_path": [PULL, "inner"],
-                    "langgraph_step": 2,
-                    "langgraph_triggers": ["branch:to:inner"],
-                    "langgraph_checkpoint_ns": AnyStr("inner:"),
-                },
-                created_at=AnyStr(),
-                parent_config=None,
-                tasks=(
-                    PregelTask(
-                        AnyStr(),
-                        "__start__",
-                        (PULL, "__start__"),
-                        result={"my_key": "hi my value"},
-                    ),
-                ),
-                interrupts=(),
+                }
             ),
-        ]
+            tasks=(PregelTask(AnyStr(), "inner_2", (PULL, "inner_2")),),
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={"my_key": "hi my value"},
+            next=("inner_1",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("inner:"),
+                    "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                    ),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": None,
+                "step": 0,
+                "parents": {"": AnyStr()},
+                "thread_id": "1",
+                "langgraph_node": "inner",
+                "langgraph_path": [PULL, "inner"],
+                "langgraph_step": 2,
+                "langgraph_triggers": ["branch:to:inner"],
+                "langgraph_checkpoint_ns": AnyStr("inner:"),
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("inner:"),
+                    "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                    ),
+                }
+            },
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "inner_1",
+                    (PULL, "inner_1"),
+                    result={
+                        "my_key": "hi my value here",
+                        "my_other_key": "hi my value",
+                    },
+                ),
+            ),
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={},
+            next=("__start__",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("inner:"),
+                    "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                    ),
+                }
+            },
+            metadata={
+                "source": "input",
+                "writes": {"__start__": {"my_key": "hi my value"}},
+                "step": -1,
+                "parents": {"": AnyStr()},
+                "thread_id": "1",
+                "langgraph_node": "inner",
+                "langgraph_path": [PULL, "inner"],
+                "langgraph_step": 2,
+                "langgraph_triggers": ["branch:to:inner"],
+                "langgraph_checkpoint_ns": AnyStr("inner:"),
+            },
+            created_at=AnyStr(),
+            parent_config=None,
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "__start__",
+                    (PULL, "__start__"),
+                    result={"my_key": "hi my value"},
+                ),
+            ),
+            interrupts=(),
+        ),
+    ]
 
-        assert child_history == expected_child_history
+    assert child_history == expected_child_history
 
-        # resume
-        await app.ainvoke(None, config, debug=True)
-        # test state w/ nested subgraph state (after resuming from interrupt)
-        assert await app.aget_state(config) == StateSnapshot(
+    # resume
+    await app.ainvoke(None, config, debug=True)
+    # test state w/ nested subgraph state (after resuming from interrupt)
+    assert await app.aget_state(config) == StateSnapshot(
+        values={"my_key": "hi my value here and there and back again"},
+        tasks=(),
+        next=(),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "writes": {
+                "outer_2": {"my_key": "hi my value here and there and back again"}
+            },
+            "step": 3,
+            "thread_id": "1",
+        },
+        created_at=AnyStr(),
+        parent_config=(
+            {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            }
+        ),
+        interrupts=(),
+    )
+    # test full history at the end
+    actual_history = [c async for c in app.aget_state_history(config)]
+    expected_history = [
+        StateSnapshot(
             values={"my_key": "hi my value here and there and back again"},
             tasks=(),
             next=(),
@@ -5511,7 +5516,8 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                 "thread_id": "1",
             },
             created_at=AnyStr(),
-            parent_config=({
+            parent_config=(
+                {
                     "configurable": {
                         "thread_id": "1",
                         "checkpoint_ns": "",
@@ -5520,193 +5526,158 @@ async def test_nested_graph_state(checkpointer_name: str) -> None:
                 }
             ),
             interrupts=(),
-        )
-        # test full history at the end
-        actual_history = [c async for c in app.aget_state_history(config)]
-        expected_history = [
-            StateSnapshot(
-                values={"my_key": "hi my value here and there and back again"},
-                tasks=(),
-                next=(),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "parents": {},
-                    "source": "loop",
-                    "writes": {
-                        "outer_2": {
-                            "my_key": "hi my value here and there and back again"
-                        }
-                    },
-                    "step": 3,
+        ),
+        StateSnapshot(
+            values={"my_key": "hi my value here and there"},
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "outer_2",
+                    (PULL, "outer_2"),
+                    result={"my_key": "hi my value here and there and back again"},
+                ),
+            ),
+            next=("outer_2",),
+            config={
+                "configurable": {
                     "thread_id": "1",
-                },
-                created_at=AnyStr(),
-                parent_config=({
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "writes": {"inner": {"my_key": "hi my value here and there"}},
+                "step": 2,
+                "thread_id": "1",
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={"my_key": "hi my value"},
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "inner",
+                    (PULL, "inner"),
+                    state={
                         "configurable": {
                             "thread_id": "1",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
+                            "checkpoint_ns": AnyStr(),
                         }
-                    }
+                    },
+                    result={"my_key": "hi my value here and there"},
                 ),
-                interrupts=(),
             ),
-            StateSnapshot(
-                values={"my_key": "hi my value here and there"},
-                tasks=(
-                    PregelTask(
-                        AnyStr(),
-                        "outer_2",
-                        (PULL, "outer_2"),
-                        result={"my_key": "hi my value here and there and back again"},
-                    ),
-                ),
-                next=("outer_2",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "parents": {},
-                    "source": "loop",
-                    "writes": {"inner": {"my_key": "hi my value here and there"}},
-                    "step": 2,
+            next=("inner",),
+            config={
+                "configurable": {
                     "thread_id": "1",
-                },
-                created_at=AnyStr(),
-                parent_config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                interrupts=(),
-            ),
-            StateSnapshot(
-                values={"my_key": "hi my value"},
-                tasks=(
-                    PregelTask(
-                        AnyStr(),
-                        "inner",
-                        (PULL, "inner"),
-                        state={
-                            "configurable": {
-                                "thread_id": "1",
-                                "checkpoint_ns": AnyStr(),
-                            }
-                        },
-                        result={"my_key": "hi my value here and there"},
-                    ),
-                ),
-                next=("inner",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "parents": {},
-                    "source": "loop",
-                    "writes": {"outer_1": {"my_key": "hi my value"}},
-                    "step": 1,
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "writes": {"outer_1": {"my_key": "hi my value"}},
+                "step": 1,
+                "thread_id": "1",
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
                     "thread_id": "1",
-                },
-                created_at=AnyStr(),
-                parent_config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                interrupts=(),
-            ),
-            StateSnapshot(
-                values={"my_key": "my value"},
-                tasks=(
-                    PregelTask(
-                        AnyStr(),
-                        "outer_1",
-                        (PULL, "outer_1"),
-                        result={"my_key": "hi my value"},
-                    ),
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={"my_key": "my value"},
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "outer_1",
+                    (PULL, "outer_1"),
+                    result={"my_key": "hi my value"},
                 ),
-                next=("outer_1",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "parents": {},
-                    "source": "loop",
-                    "writes": None,
-                    "step": 0,
-                    "thread_id": "1",
-                },
-                created_at=AnyStr(),
-                parent_config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                interrupts=(),
             ),
-            StateSnapshot(
-                values={},
-                tasks=(
-                    PregelTask(
-                        AnyStr(),
-                        "__start__",
-                        (PULL, "__start__"),
-                        result={"my_key": "my value"},
-                    ),
+            next=("outer_1",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "parents": {},
+                "source": "loop",
+                "writes": None,
+                "step": 0,
+                "thread_id": "1",
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={},
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "__start__",
+                    (PULL, "__start__"),
+                    result={"my_key": "my value"},
                 ),
-                next=("__start__",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={
-                    "parents": {},
-                    "source": "input",
-                    "writes": {"__start__": {"my_key": "my value"}},
-                    "step": -1,
-                    "thread_id": "1",
-                },
-                created_at=AnyStr(),
-                parent_config=None,
-                interrupts=(),
             ),
-        ]
+            next=("__start__",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "parents": {},
+                "source": "input",
+                "writes": {"__start__": {"my_key": "my value"}},
+                "step": -1,
+                "thread_id": "1",
+            },
+            created_at=AnyStr(),
+            parent_config=None,
+            interrupts=(),
+        ),
+    ]
 
-        assert actual_history == expected_history
-        # test looking up parent state by checkpoint ID
-        for actual_snapshot, expected_snapshot in zip(actual_history, expected_history):
-            assert await app.aget_state(actual_snapshot.config) == expected_snapshot
+    assert actual_history == expected_history
+    # test looking up parent state by checkpoint ID
+    for actual_snapshot, expected_snapshot in zip(actual_history, expected_history):
+        assert await app.aget_state(actual_snapshot.config) == expected_snapshot
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
+async def test_doubly_nested_graph_state(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
     class State(TypedDict):
         my_key: str
 
@@ -5754,82 +5725,109 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
     graph.add_edge("child", "parent_2")
     graph.set_finish_point("parent_2")
 
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        app = graph.compile(checkpointer=checkpointer)
+    app = graph.compile(checkpointer=async_checkpointer)
 
-        # test invoke w/ nested interrupt
-        config = {"configurable": {"thread_id": "1"}}
-        assert [
-            c async for c in app.astream({"my_key": "my value"}, config, subgraphs=True)
-        ] == [
-            ((), {"parent_1": {"my_key": "hi my value"}}),
-            (
-                (AnyStr("child:"), AnyStr("child_1:")),
-                {"grandchild_1": {"my_key": "hi my value here"}},
+    # test invoke w/ nested interrupt
+    config = {"configurable": {"thread_id": "1"}}
+    assert [
+        c async for c in app.astream({"my_key": "my value"}, config, subgraphs=True)
+    ] == [
+        ((), {"parent_1": {"my_key": "hi my value"}}),
+        (
+            (AnyStr("child:"), AnyStr("child_1:")),
+            {"grandchild_1": {"my_key": "hi my value here"}},
+        ),
+        ((), {"__interrupt__": ()}),
+    ]
+    # get state without subgraphs
+    outer_state = await app.aget_state(config)
+    assert outer_state == StateSnapshot(
+        values={"my_key": "hi my value"},
+        tasks=(
+            PregelTask(
+                AnyStr(),
+                "child",
+                (PULL, "child"),
+                state={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": AnyStr("child"),
+                    }
+                },
             ),
-            ((), {"__interrupt__": ()}),
-        ]
-        # get state without subgraphs
-        outer_state = await app.aget_state(config)
-        assert outer_state == StateSnapshot(
-            values={"my_key": "hi my value"},
-            tasks=(
-                PregelTask(
-                    AnyStr(),
-                    "child",
-                    (PULL, "child"),
-                    state={
-                        "configurable": {
-                            "thread_id": "1",
-                            "checkpoint_ns": AnyStr("child"),
-                        }
-                    },
-                ),
-            ),
-            next=("child",),
-            config={
+        ),
+        next=("child",),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "writes": {"parent_1": {"my_key": "hi my value"}},
+            "step": 1,
+            "thread_id": "1",
+        },
+        created_at=AnyStr(),
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "1",
                     "checkpoint_ns": "",
                     "checkpoint_id": AnyStr(),
                 }
-            },
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "writes": {"parent_1": {"my_key": "hi my value"}},
-                "step": 1,
-                "thread_id": "1",
-            },
-            created_at=AnyStr(),
-            parent_config=({
+            }
+        ),
+        interrupts=(),
+    )
+    child_state = await app.aget_state(outer_state.tasks[0].state)
+    assert child_state == StateSnapshot(
+        values={"my_key": "hi my value"},
+        tasks=(
+            PregelTask(
+                AnyStr(),
+                "child_1",
+                (PULL, "child_1"),
+                state={
                     "configurable": {
                         "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
+                        "checkpoint_ns": AnyStr(),
                     }
-                }
+                },
             ),
-            interrupts=(),
-        )
-        child_state = await app.aget_state(outer_state.tasks[0].state)
-        assert child_state == StateSnapshot(
-            values={"my_key": "hi my value"},
-            tasks=(
-                PregelTask(
-                    AnyStr(),
-                    "child_1",
-                    (PULL, "child_1"),
-                    state={
-                        "configurable": {
-                            "thread_id": "1",
-                            "checkpoint_ns": AnyStr(),
-                        }
-                    },
+        ),
+        next=("child_1",),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr("child:"),
+                "checkpoint_id": AnyStr(),
+                "checkpoint_map": AnyDict(
+                    {
+                        "": AnyStr(),
+                        AnyStr("child:"): AnyStr(),
+                    }
                 ),
-            ),
-            next=("child_1",),
-            config={
+            }
+        },
+        metadata={
+            "langgraph_checkpoint_ns": AnyStr("child:"),
+            "langgraph_node": "child",
+            "langgraph_path": ["__pregel_pull", "child"],
+            "langgraph_step": 2,
+            "langgraph_triggers": ["branch:to:child"],
+            "parents": {"": AnyStr()},
+            "source": "loop",
+            "writes": None,
+            "step": 0,
+            "thread_id": "1",
+        },
+        created_at=AnyStr(),
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr("child:"),
@@ -5841,48 +5839,57 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         }
                     ),
                 }
-            },
-            metadata={
-                "langgraph_checkpoint_ns": AnyStr("child:"),
-                "langgraph_node": "child",
-                "langgraph_path": ["__pregel_pull", "child"],
-                "langgraph_step": 2,
-                "langgraph_triggers": ["branch:to:child"],
-                "parents": {"": AnyStr()},
-                "source": "loop",
-                "writes": None,
-                "step": 0,
+            }
+        ),
+        interrupts=(),
+    )
+    grandchild_state = await app.aget_state(child_state.tasks[0].state)
+    assert grandchild_state == StateSnapshot(
+        values={"my_key": "hi my value here"},
+        tasks=(
+            PregelTask(
+                AnyStr(),
+                "grandchild_2",
+                (PULL, "grandchild_2"),
+            ),
+        ),
+        next=("grandchild_2",),
+        config={
+            "configurable": {
                 "thread_id": "1",
-            },
-            created_at=AnyStr(),
-            parent_config=({
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": AnyStr("child:"),
-                        "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict(
-                            {
-                                "": AnyStr(),
-                                AnyStr("child:"): AnyStr(),
-                            }
-                        ),
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+                "checkpoint_map": AnyDict(
+                    {
+                        "": AnyStr(),
+                        AnyStr("child:"): AnyStr(),
+                        AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
                     }
+                ),
+            }
+        },
+        metadata={
+            "parents": AnyDict(
+                {
+                    "": AnyStr(),
+                    AnyStr("child:"): AnyStr(),
                 }
             ),
-            interrupts=(),
-        )
-        grandchild_state = await app.aget_state(child_state.tasks[0].state)
-        assert grandchild_state == StateSnapshot(
-            values={"my_key": "hi my value here"},
-            tasks=(
-                PregelTask(
-                    AnyStr(),
-                    "grandchild_2",
-                    (PULL, "grandchild_2"),
-                ),
-            ),
-            next=("grandchild_2",),
-            config={
+            "source": "loop",
+            "writes": {"grandchild_1": {"my_key": "hi my value here"}},
+            "step": 1,
+            "thread_id": "1",
+            "langgraph_checkpoint_ns": AnyStr("child:"),
+            "langgraph_node": "child_1",
+            "langgraph_path": [PULL, AnyStr("child_1")],
+            "langgraph_step": 1,
+            "langgraph_triggers": [
+                "branch:to:child_1",
+            ],
+        },
+        created_at=AnyStr(),
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr(),
@@ -5895,70 +5902,78 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                         }
                     ),
                 }
-            },
-            metadata={
-                "parents": AnyDict(
-                    {
-                        "": AnyStr(),
-                        AnyStr("child:"): AnyStr(),
-                    }
-                ),
-                "source": "loop",
-                "writes": {"grandchild_1": {"my_key": "hi my value here"}},
-                "step": 1,
-                "thread_id": "1",
-                "langgraph_checkpoint_ns": AnyStr("child:"),
-                "langgraph_node": "child_1",
-                "langgraph_path": [PULL, AnyStr("child_1")],
-                "langgraph_step": 1,
-                "langgraph_triggers": [
-                    "branch:to:child_1",
-                ],
-            },
-            created_at=AnyStr(),
-            parent_config=({
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": AnyStr(),
-                        "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict(
-                            {
-                                "": AnyStr(),
-                                AnyStr("child:"): AnyStr(),
-                                AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
-                            }
-                        ),
-                    }
-                }
-            ),
-            interrupts=(),
-        )
-        # get state with subgraphs
-        assert await app.aget_state(config, subgraphs=True) == StateSnapshot(
-            values={"my_key": "hi my value"},
-            tasks=(
-                PregelTask(
-                    AnyStr(),
-                    "child",
-                    (PULL, "child"),
-                    state=StateSnapshot(
-                        values={"my_key": "hi my value"},
-                        tasks=(
-                            PregelTask(
-                                AnyStr(),
-                                "child_1",
-                                (PULL, "child_1"),
-                                state=StateSnapshot(
-                                    values={"my_key": "hi my value here"},
-                                    tasks=(
-                                        PregelTask(
-                                            AnyStr(),
-                                            "grandchild_2",
-                                            (PULL, "grandchild_2"),
-                                        ),
+            }
+        ),
+        interrupts=(),
+    )
+    # get state with subgraphs
+    assert await app.aget_state(config, subgraphs=True) == StateSnapshot(
+        values={"my_key": "hi my value"},
+        tasks=(
+            PregelTask(
+                AnyStr(),
+                "child",
+                (PULL, "child"),
+                state=StateSnapshot(
+                    values={"my_key": "hi my value"},
+                    tasks=(
+                        PregelTask(
+                            AnyStr(),
+                            "child_1",
+                            (PULL, "child_1"),
+                            state=StateSnapshot(
+                                values={"my_key": "hi my value here"},
+                                tasks=(
+                                    PregelTask(
+                                        AnyStr(),
+                                        "grandchild_2",
+                                        (PULL, "grandchild_2"),
                                     ),
-                                    next=("grandchild_2",),
-                                    config={
+                                ),
+                                next=("grandchild_2",),
+                                config={
+                                    "configurable": {
+                                        "thread_id": "1",
+                                        "checkpoint_ns": AnyStr(),
+                                        "checkpoint_id": AnyStr(),
+                                        "checkpoint_map": AnyDict(
+                                            {
+                                                "": AnyStr(),
+                                                AnyStr("child:"): AnyStr(),
+                                                AnyStr(
+                                                    re.compile(r"child:.+|child1:")
+                                                ): AnyStr(),
+                                            }
+                                        ),
+                                    }
+                                },
+                                metadata={
+                                    "parents": AnyDict(
+                                        {
+                                            "": AnyStr(),
+                                            AnyStr("child:"): AnyStr(),
+                                        }
+                                    ),
+                                    "source": "loop",
+                                    "writes": {
+                                        "grandchild_1": {"my_key": "hi my value here"}
+                                    },
+                                    "step": 1,
+                                    "thread_id": "1",
+                                    "langgraph_checkpoint_ns": AnyStr("child:"),
+                                    "langgraph_node": "child_1",
+                                    "langgraph_path": [
+                                        PULL,
+                                        AnyStr("child_1"),
+                                    ],
+                                    "langgraph_step": 1,
+                                    "langgraph_triggers": [
+                                        "branch:to:child_1",
+                                    ],
+                                },
+                                created_at=AnyStr(),
+                                parent_config=(
+                                    {
                                         "configurable": {
                                             "thread_id": "1",
                                             "checkpoint_ns": AnyStr(),
@@ -5973,59 +5988,40 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                                                 }
                                             ),
                                         }
-                                    },
-                                    metadata={
-                                        "parents": AnyDict(
-                                            {
-                                                "": AnyStr(),
-                                                AnyStr("child:"): AnyStr(),
-                                            }
-                                        ),
-                                        "source": "loop",
-                                        "writes": {
-                                            "grandchild_1": {
-                                                "my_key": "hi my value here"
-                                            }
-                                        },
-                                        "step": 1,
-                                        "thread_id": "1",
-                                        "langgraph_checkpoint_ns": AnyStr("child:"),
-                                        "langgraph_node": "child_1",
-                                        "langgraph_path": [
-                                            PULL,
-                                            AnyStr("child_1"),
-                                        ],
-                                        "langgraph_step": 1,
-                                        "langgraph_triggers": [
-                                            "branch:to:child_1",
-                                        ],
-                                    },
-                                    created_at=AnyStr(),
-                                    parent_config=({
-                                            "configurable": {
-                                                "thread_id": "1",
-                                                "checkpoint_ns": AnyStr(),
-                                                "checkpoint_id": AnyStr(),
-                                                "checkpoint_map": AnyDict(
-                                                    {
-                                                        "": AnyStr(),
-                                                        AnyStr("child:"): AnyStr(),
-                                                        AnyStr(
-                                                            re.compile(
-                                                                r"child:.+|child1:"
-                                                            )
-                                                        ): AnyStr(),
-                                                    }
-                                                ),
-                                            }
-                                        }
-                                    ),
-                                    interrupts=(),
+                                    }
                                 ),
+                                interrupts=(),
                             ),
                         ),
-                        next=("child_1",),
-                        config={
+                    ),
+                    next=("child_1",),
+                    config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": AnyStr("child:"),
+                            "checkpoint_id": AnyStr(),
+                            "checkpoint_map": AnyDict(
+                                {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                            ),
+                        }
+                    },
+                    metadata={
+                        "parents": {"": AnyStr()},
+                        "source": "loop",
+                        "writes": None,
+                        "step": 0,
+                        "thread_id": "1",
+                        "langgraph_node": "child",
+                        "langgraph_path": [PULL, AnyStr("child")],
+                        "langgraph_step": 2,
+                        "langgraph_triggers": [
+                            "branch:to:child",
+                        ],
+                        "langgraph_checkpoint_ns": AnyStr("child:"),
+                    },
+                    created_at=AnyStr(),
+                    parent_config=(
+                        {
                             "configurable": {
                                 "thread_id": "1",
                                 "checkpoint_ns": AnyStr("child:"),
@@ -6034,38 +6030,60 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                                     {"": AnyStr(), AnyStr("child:"): AnyStr()}
                                 ),
                             }
-                        },
-                        metadata={
-                            "parents": {"": AnyStr()},
-                            "source": "loop",
-                            "writes": None,
-                            "step": 0,
-                            "thread_id": "1",
-                            "langgraph_node": "child",
-                            "langgraph_path": [PULL, AnyStr("child")],
-                            "langgraph_step": 2,
-                            "langgraph_triggers": [
-                                "branch:to:child",
-                            ],
-                            "langgraph_checkpoint_ns": AnyStr("child:"),
-                        },
-                        created_at=AnyStr(),
-                        parent_config=({
-                                "configurable": {
-                                    "thread_id": "1",
-                                    "checkpoint_ns": AnyStr("child:"),
-                                    "checkpoint_id": AnyStr(),
-                                    "checkpoint_map": AnyDict(
-                                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
-                                    ),
-                                }
-                            }
-                        ),
-                        interrupts=(),
+                        }
                     ),
+                    interrupts=(),
                 ),
             ),
-            next=("child",),
+        ),
+        next=("child",),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "parents": {},
+            "source": "loop",
+            "writes": {"parent_1": {"my_key": "hi my value"}},
+            "step": 1,
+            "thread_id": "1",
+        },
+        created_at=AnyStr(),
+        parent_config=(
+            {
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            }
+        ),
+        interrupts=(),
+    )
+    # resume
+    assert [c async for c in app.astream(None, config, subgraphs=True)] == [
+        (
+            (AnyStr("child:"), AnyStr("child_1:")),
+            {"grandchild_2": {"my_key": "hi my value here and there"}},
+        ),
+        (
+            (AnyStr("child:"),),
+            {"child_1": {"my_key": "hi my value here and there"}},
+        ),
+        ((), {"child": {"my_key": "hi my value here and there"}}),
+        ((), {"parent_2": {"my_key": "hi my value here and there and back again"}}),
+    ]
+    # get state with and without subgraphs
+    assert (
+        await app.aget_state(config)
+        == await app.aget_state(config, subgraphs=True)
+        == StateSnapshot(
+            values={"my_key": "hi my value here and there and back again"},
+            tasks=(),
+            next=(),
             config={
                 "configurable": {
                     "thread_id": "1",
@@ -6076,12 +6094,15 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
             metadata={
                 "parents": {},
                 "source": "loop",
-                "writes": {"parent_1": {"my_key": "hi my value"}},
-                "step": 1,
+                "writes": {
+                    "parent_2": {"my_key": "hi my value here and there and back again"}
+                },
+                "step": 3,
                 "thread_id": "1",
             },
             created_at=AnyStr(),
-            parent_config=({
+            parent_config=(
+                {
                     "configurable": {
                         "thread_id": "1",
                         "checkpoint_ns": "",
@@ -6091,24 +6112,14 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
             ),
             interrupts=(),
         )
-        # resume
-        assert [c async for c in app.astream(None, config, subgraphs=True)] == [
-            (
-                (AnyStr("child:"), AnyStr("child_1:")),
-                {"grandchild_2": {"my_key": "hi my value here and there"}},
-            ),
-            (
-                (AnyStr("child:"),),
-                {"child_1": {"my_key": "hi my value here and there"}},
-            ),
-            ((), {"child": {"my_key": "hi my value here and there"}}),
-            ((), {"parent_2": {"my_key": "hi my value here and there and back again"}}),
-        ]
-        # get state with and without subgraphs
-        assert (
-            await app.aget_state(config)
-            == await app.aget_state(config, subgraphs=True)
-            == StateSnapshot(
+    )
+
+    # get outer graph history
+    outer_history = [c async for c in app.aget_state_history(config)]
+    assert (
+        outer_history[0]
+        == [
+            StateSnapshot(
                 values={"my_key": "hi my value here and there and back again"},
                 tasks=(),
                 next=(),
@@ -6131,511 +6142,112 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                     "thread_id": "1",
                 },
                 created_at=AnyStr(),
-                parent_config=({
-                        "configurable": {
-                            "thread_id": "1",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        }
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
-                ),
+                },
                 interrupts=(),
-            )
-        )
-
-
-        # get outer graph history
-        outer_history = [c async for c in app.aget_state_history(config)]
-        assert (
-            outer_history[0]
-            == [
-                StateSnapshot(
-                    values={"my_key": "hi my value here and there and back again"},
-                    tasks=(),
-                    next=(),
-                    config={
-                        "configurable": {
-                            "thread_id": "1",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        }
-                    },
-                    metadata={
-                        "parents": {},
-                        "source": "loop",
-                        "writes": {
-                            "parent_2": {
-                                "my_key": "hi my value here and there and back again"
-                            }
-                        },
-                        "step": 3,
-                        "thread_id": "1",
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {
-                            "thread_id": "1",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        }
-                    },
-                    interrupts=(),
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value here and there"},
-                    next=("parent_2",),
-                    config={
-                        "configurable": {
-                            "thread_id": "1",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        }
-                    },
-                    metadata={
-                        "parents": {},
-                        "source": "loop",
-                        "writes": {"child": {"my_key": "hi my value here and there"}},
-                        "step": 2,
-                        "thread_id": "1",
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {
-                            "thread_id": "1",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        }
-                    },
-                    tasks=(
-                        PregelTask(
-                            id=AnyStr(), name="parent_2", path=(PULL, "parent_2")
-                        ),
-                    ),
-                    interrupts=(),
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    tasks=(
-                        PregelTask(
-                            AnyStr(),
-                            "child",
-                            (PULL, "child"),
-                            state={
-                                "configurable": {
-                                    "thread_id": "1",
-                                    "checkpoint_ns": AnyStr("child"),
-                                }
-                            },
-                        ),
-                    ),
-                    next=("child",),
-                    config={
-                        "configurable": {
-                            "thread_id": "1",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        }
-                    },
-                    metadata={
-                        "parents": {},
-                        "source": "loop",
-                        "writes": {"parent_1": {"my_key": "hi my value"}},
-                        "step": 1,
-                        "thread_id": "1",
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {
-                            "thread_id": "1",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        }
-                    },
-                    interrupts=(),
-                ),
-                StateSnapshot(
-                    values={"my_key": "my value"},
-                    next=("parent_1",),
-                    config={
-                        "configurable": {
-                            "thread_id": "1",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        }
-                    },
-                    metadata={
-                        "parents": {},
-                        "source": "loop",
-                        "writes": None,
-                        "step": 0,
-                        "thread_id": "1",
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {
-                            "thread_id": "1",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        }
-                    },
-                    tasks=(
-                        PregelTask(
-                            id=AnyStr(), name="parent_1", path=(PULL, "parent_1")
-                        ),
-                    ),
-                    interrupts=(),
-                ),
-                StateSnapshot(
-                    values={},
-                    next=("__start__",),
-                    config={
-                        "configurable": {
-                            "thread_id": "1",
-                            "checkpoint_ns": "",
-                            "checkpoint_id": AnyStr(),
-                        }
-                    },
-                    metadata={
-                        "parents": {},
-                        "source": "input",
-                        "writes": {"my_key": "my value"},
-                        "step": -1,
-                        "thread_id": "1",
-                    },
-                    created_at=AnyStr(),
-                    parent_config=None,
-                    tasks=(
-                        PregelTask(
-                            id=AnyStr(), name="__start__", path=(PULL, "__start__")
-                        ),
-                    ),
-                    interrupts=(),
-                ),
-            ][0]
-        )
-        # get child graph history
-        child_history = [
-            c async for c in app.aget_state_history(outer_history[2].tasks[0].state)
-        ]
-        assert child_history == [
+            ),
             StateSnapshot(
                 values={"my_key": "hi my value here and there"},
-                next=(),
+                next=("parent_2",),
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "checkpoint_ns": AnyStr("child:"),
+                        "checkpoint_ns": "",
                         "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict(
-                            {"": AnyStr(), AnyStr("child:"): AnyStr()}
-                        ),
                     }
                 },
                 metadata={
+                    "parents": {},
                     "source": "loop",
-                    "writes": {"child_1": {"my_key": "hi my value here and there"}},
-                    "step": 1,
-                    "parents": {"": AnyStr()},
+                    "writes": {"child": {"my_key": "hi my value here and there"}},
+                    "step": 2,
                     "thread_id": "1",
-                    "langgraph_node": "child",
-                    "langgraph_path": [PULL, AnyStr("child")],
-                    "langgraph_step": 2,
-                    "langgraph_triggers": ["branch:to:child"],
-                    "langgraph_checkpoint_ns": AnyStr("child:"),
                 },
                 created_at=AnyStr(),
                 parent_config={
                     "configurable": {
                         "thread_id": "1",
-                        "checkpoint_ns": AnyStr("child:"),
+                        "checkpoint_ns": "",
                         "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict(
-                            {"": AnyStr(), AnyStr("child:"): AnyStr()}
-                        ),
                     }
                 },
-                tasks=(),
+                tasks=(
+                    PregelTask(id=AnyStr(), name="parent_2", path=(PULL, "parent_2")),
+                ),
                 interrupts=(),
             ),
             StateSnapshot(
                 values={"my_key": "hi my value"},
-                next=("child_1",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": AnyStr("child:"),
-                        "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict(
-                            {"": AnyStr(), AnyStr("child:"): AnyStr()}
-                        ),
-                    }
-                },
-                metadata={
-                    "source": "loop",
-                    "writes": None,
-                    "step": 0,
-                    "parents": {"": AnyStr()},
-                    "thread_id": "1",
-                    "langgraph_node": "child",
-                    "langgraph_path": [PULL, AnyStr("child")],
-                    "langgraph_step": 2,
-                    "langgraph_triggers": ["branch:to:child"],
-                    "langgraph_checkpoint_ns": AnyStr("child:"),
-                },
-                created_at=AnyStr(),
-                parent_config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": AnyStr("child:"),
-                        "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict(
-                            {"": AnyStr(), AnyStr("child:"): AnyStr()}
-                        ),
-                    }
-                },
                 tasks=(
                     PregelTask(
-                        id=AnyStr(),
-                        name="child_1",
-                        path=(PULL, "child_1"),
+                        AnyStr(),
+                        "child",
+                        (PULL, "child"),
                         state={
                             "configurable": {
                                 "thread_id": "1",
-                                "checkpoint_ns": AnyStr("child:"),
+                                "checkpoint_ns": AnyStr("child"),
                             }
                         },
-                        result={"my_key": "hi my value here and there"},
                     ),
                 ),
-                interrupts=(),
-            ),
-            StateSnapshot(
-                values={},
-                next=("__start__",),
+                next=("child",),
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "checkpoint_ns": AnyStr("child:"),
+                        "checkpoint_ns": "",
                         "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict(
-                            {"": AnyStr(), AnyStr("child:"): AnyStr()}
-                        ),
                     }
                 },
                 metadata={
-                    "source": "input",
-                    "writes": {"__start__": {"my_key": "hi my value"}},
-                    "step": -1,
-                    "parents": {"": AnyStr()},
-                    "thread_id": "1",
-                    "langgraph_node": "child",
-                    "langgraph_path": [PULL, AnyStr("child")],
-                    "langgraph_step": 2,
-                    "langgraph_triggers": ["branch:to:child"],
-                    "langgraph_checkpoint_ns": AnyStr("child:"),
-                },
-                created_at=AnyStr(),
-                parent_config=None,
-                tasks=(
-                    PregelTask(
-                        id=AnyStr(),
-                        name="__start__",
-                        path=(PULL, "__start__"),
-                        result={"my_key": "hi my value"},
-                    ),
-                ),
-                interrupts=(),
-            ),
-        ]
-        # get grandchild graph history
-        grandchild_history = [
-            c async for c in app.aget_state_history(child_history[1].tasks[0].state)
-        ]
-        assert grandchild_history == [
-            StateSnapshot(
-                values={"my_key": "hi my value here and there"},
-                next=(),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": AnyStr(),
-                        "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict(
-                            {
-                                "": AnyStr(),
-                                AnyStr("child:"): AnyStr(),
-                                AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
-                            }
-                        ),
-                    }
-                },
-                metadata={
+                    "parents": {},
                     "source": "loop",
-                    "writes": {
-                        "grandchild_2": {"my_key": "hi my value here and there"}
-                    },
-                    "step": 2,
-                    "parents": AnyDict(
-                        {
-                            "": AnyStr(),
-                            AnyStr("child:"): AnyStr(),
-                        }
-                    ),
-                    "thread_id": "1",
-                    "langgraph_checkpoint_ns": AnyStr("child:"),
-                    "langgraph_node": "child_1",
-                    "langgraph_path": [
-                        PULL,
-                        AnyStr("child_1"),
-                    ],
-                    "langgraph_step": 1,
-                    "langgraph_triggers": [
-                        "branch:to:child_1",
-                    ],
-                },
-                created_at=AnyStr(),
-                parent_config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": AnyStr(),
-                        "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict(
-                            {
-                                "": AnyStr(),
-                                AnyStr("child:"): AnyStr(),
-                                AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
-                            }
-                        ),
-                    }
-                },
-                tasks=(),
-                interrupts=(),
-            ),
-            StateSnapshot(
-                values={"my_key": "hi my value here"},
-                next=("grandchild_2",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": AnyStr(),
-                        "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict(
-                            {
-                                "": AnyStr(),
-                                AnyStr("child:"): AnyStr(),
-                                AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
-                            }
-                        ),
-                    }
-                },
-                metadata={
-                    "source": "loop",
-                    "writes": {"grandchild_1": {"my_key": "hi my value here"}},
+                    "writes": {"parent_1": {"my_key": "hi my value"}},
                     "step": 1,
-                    "parents": AnyDict(
-                        {
-                            "": AnyStr(),
-                            AnyStr("child:"): AnyStr(),
-                        }
-                    ),
                     "thread_id": "1",
-                    "langgraph_checkpoint_ns": AnyStr("child:"),
-                    "langgraph_node": "child_1",
-                    "langgraph_path": [
-                        PULL,
-                        AnyStr("child_1"),
-                    ],
-                    "langgraph_step": 1,
-                    "langgraph_triggers": [
-                        "branch:to:child_1",
-                    ],
                 },
                 created_at=AnyStr(),
                 parent_config={
                     "configurable": {
                         "thread_id": "1",
-                        "checkpoint_ns": AnyStr(),
+                        "checkpoint_ns": "",
                         "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict(
-                            {
-                                "": AnyStr(),
-                                AnyStr("child:"): AnyStr(),
-                                AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
-                            }
-                        ),
                     }
                 },
-                tasks=(
-                    PregelTask(
-                        id=AnyStr(),
-                        name="grandchild_2",
-                        path=(PULL, "grandchild_2"),
-                        result={"my_key": "hi my value here and there"},
-                    ),
-                ),
                 interrupts=(),
             ),
             StateSnapshot(
-                values={"my_key": "hi my value"},
-                next=("grandchild_1",),
+                values={"my_key": "my value"},
+                next=("parent_1",),
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "checkpoint_ns": AnyStr(),
+                        "checkpoint_ns": "",
                         "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict(
-                            {
-                                "": AnyStr(),
-                                AnyStr("child:"): AnyStr(),
-                                AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
-                            }
-                        ),
                     }
                 },
                 metadata={
+                    "parents": {},
                     "source": "loop",
                     "writes": None,
                     "step": 0,
-                    "parents": AnyDict(
-                        {
-                            "": AnyStr(),
-                            AnyStr("child:"): AnyStr(),
-                        }
-                    ),
                     "thread_id": "1",
-                    "langgraph_checkpoint_ns": AnyStr("child:"),
-                    "langgraph_node": "child_1",
-                    "langgraph_path": [
-                        PULL,
-                        AnyStr("child_1"),
-                    ],
-                    "langgraph_step": 1,
-                    "langgraph_triggers": [
-                        "branch:to:child_1",
-                    ],
                 },
                 created_at=AnyStr(),
                 parent_config={
                     "configurable": {
                         "thread_id": "1",
-                        "checkpoint_ns": AnyStr(),
+                        "checkpoint_ns": "",
                         "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict(
-                            {
-                                "": AnyStr(),
-                                AnyStr("child:"): AnyStr(),
-                                AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
-                            }
-                        ),
                     }
                 },
                 tasks=(
-                    PregelTask(
-                        id=AnyStr(),
-                        name="grandchild_1",
-                        path=(PULL, "grandchild_1"),
-                        result={"my_key": "hi my value here"},
-                    ),
+                    PregelTask(id=AnyStr(), name="parent_1", path=(PULL, "parent_1")),
                 ),
                 interrupts=(),
             ),
@@ -6645,70 +6257,416 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "checkpoint_ns": AnyStr(),
+                        "checkpoint_ns": "",
                         "checkpoint_id": AnyStr(),
-                        "checkpoint_map": AnyDict(
-                            {
-                                "": AnyStr(),
-                                AnyStr("child:"): AnyStr(),
-                                AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
-                            }
-                        ),
                     }
                 },
                 metadata={
+                    "parents": {},
                     "source": "input",
-                    "writes": {"__start__": {"my_key": "hi my value"}},
+                    "writes": {"my_key": "my value"},
                     "step": -1,
-                    "parents": AnyDict(
-                        {
-                            "": AnyStr(),
-                            AnyStr("child:"): AnyStr(),
-                        }
-                    ),
                     "thread_id": "1",
-                    "langgraph_checkpoint_ns": AnyStr("child:"),
-                    "langgraph_node": "child_1",
-                    "langgraph_path": [
-                        PULL,
-                        AnyStr("child_1"),
-                    ],
-                    "langgraph_step": 1,
-                    "langgraph_triggers": [
-                        "branch:to:child_1",
-                    ],
                 },
                 created_at=AnyStr(),
                 parent_config=None,
                 tasks=(
-                    PregelTask(
-                        id=AnyStr(),
-                        name="__start__",
-                        path=(PULL, "__start__"),
-                        result={"my_key": "hi my value"},
-                    ),
+                    PregelTask(id=AnyStr(), name="__start__", path=(PULL, "__start__")),
                 ),
                 interrupts=(),
             ),
-        ]
-
-        # replay grandchild checkpoint
-        assert [
-            c
-            async for c in app.astream(
-                None, grandchild_history[2].config, subgraphs=True
-            )
-        ] == [
-            (
-                (AnyStr("child:"), AnyStr("child_1:")),
-                {"grandchild_1": {"my_key": "hi my value here"}},
+        ][0]
+    )
+    # get child graph history
+    child_history = [
+        c async for c in app.aget_state_history(outer_history[2].tasks[0].state)
+    ]
+    assert child_history == [
+        StateSnapshot(
+            values={"my_key": "hi my value here and there"},
+            next=(),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("child:"),
+                    "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                    ),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"child_1": {"my_key": "hi my value here and there"}},
+                "step": 1,
+                "parents": {"": AnyStr()},
+                "thread_id": "1",
+                "langgraph_node": "child",
+                "langgraph_path": [PULL, AnyStr("child")],
+                "langgraph_step": 2,
+                "langgraph_triggers": ["branch:to:child"],
+                "langgraph_checkpoint_ns": AnyStr("child:"),
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("child:"),
+                    "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                    ),
+                }
+            },
+            tasks=(),
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={"my_key": "hi my value"},
+            next=("child_1",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("child:"),
+                    "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                    ),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": None,
+                "step": 0,
+                "parents": {"": AnyStr()},
+                "thread_id": "1",
+                "langgraph_node": "child",
+                "langgraph_path": [PULL, AnyStr("child")],
+                "langgraph_step": 2,
+                "langgraph_triggers": ["branch:to:child"],
+                "langgraph_checkpoint_ns": AnyStr("child:"),
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("child:"),
+                    "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                    ),
+                }
+            },
+            tasks=(
+                PregelTask(
+                    id=AnyStr(),
+                    name="child_1",
+                    path=(PULL, "child_1"),
+                    state={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": AnyStr("child:"),
+                        }
+                    },
+                    result={"my_key": "hi my value here and there"},
+                ),
             ),
-            ((), {"__interrupt__": ()}),
-        ]
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={},
+            next=("__start__",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("child:"),
+                    "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                    ),
+                }
+            },
+            metadata={
+                "source": "input",
+                "writes": {"__start__": {"my_key": "hi my value"}},
+                "step": -1,
+                "parents": {"": AnyStr()},
+                "thread_id": "1",
+                "langgraph_node": "child",
+                "langgraph_path": [PULL, AnyStr("child")],
+                "langgraph_step": 2,
+                "langgraph_triggers": ["branch:to:child"],
+                "langgraph_checkpoint_ns": AnyStr("child:"),
+            },
+            created_at=AnyStr(),
+            parent_config=None,
+            tasks=(
+                PregelTask(
+                    id=AnyStr(),
+                    name="__start__",
+                    path=(PULL, "__start__"),
+                    result={"my_key": "hi my value"},
+                ),
+            ),
+            interrupts=(),
+        ),
+    ]
+    # get grandchild graph history
+    grandchild_history = [
+        c async for c in app.aget_state_history(child_history[1].tasks[0].state)
+    ]
+    assert grandchild_history == [
+        StateSnapshot(
+            values={"my_key": "hi my value here and there"},
+            next=(),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr(),
+                    "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {
+                            "": AnyStr(),
+                            AnyStr("child:"): AnyStr(),
+                            AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                        }
+                    ),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"grandchild_2": {"my_key": "hi my value here and there"}},
+                "step": 2,
+                "parents": AnyDict(
+                    {
+                        "": AnyStr(),
+                        AnyStr("child:"): AnyStr(),
+                    }
+                ),
+                "thread_id": "1",
+                "langgraph_checkpoint_ns": AnyStr("child:"),
+                "langgraph_node": "child_1",
+                "langgraph_path": [
+                    PULL,
+                    AnyStr("child_1"),
+                ],
+                "langgraph_step": 1,
+                "langgraph_triggers": [
+                    "branch:to:child_1",
+                ],
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr(),
+                    "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {
+                            "": AnyStr(),
+                            AnyStr("child:"): AnyStr(),
+                            AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                        }
+                    ),
+                }
+            },
+            tasks=(),
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={"my_key": "hi my value here"},
+            next=("grandchild_2",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr(),
+                    "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {
+                            "": AnyStr(),
+                            AnyStr("child:"): AnyStr(),
+                            AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                        }
+                    ),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"grandchild_1": {"my_key": "hi my value here"}},
+                "step": 1,
+                "parents": AnyDict(
+                    {
+                        "": AnyStr(),
+                        AnyStr("child:"): AnyStr(),
+                    }
+                ),
+                "thread_id": "1",
+                "langgraph_checkpoint_ns": AnyStr("child:"),
+                "langgraph_node": "child_1",
+                "langgraph_path": [
+                    PULL,
+                    AnyStr("child_1"),
+                ],
+                "langgraph_step": 1,
+                "langgraph_triggers": [
+                    "branch:to:child_1",
+                ],
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr(),
+                    "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {
+                            "": AnyStr(),
+                            AnyStr("child:"): AnyStr(),
+                            AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                        }
+                    ),
+                }
+            },
+            tasks=(
+                PregelTask(
+                    id=AnyStr(),
+                    name="grandchild_2",
+                    path=(PULL, "grandchild_2"),
+                    result={"my_key": "hi my value here and there"},
+                ),
+            ),
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={"my_key": "hi my value"},
+            next=("grandchild_1",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr(),
+                    "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {
+                            "": AnyStr(),
+                            AnyStr("child:"): AnyStr(),
+                            AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                        }
+                    ),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": None,
+                "step": 0,
+                "parents": AnyDict(
+                    {
+                        "": AnyStr(),
+                        AnyStr("child:"): AnyStr(),
+                    }
+                ),
+                "thread_id": "1",
+                "langgraph_checkpoint_ns": AnyStr("child:"),
+                "langgraph_node": "child_1",
+                "langgraph_path": [
+                    PULL,
+                    AnyStr("child_1"),
+                ],
+                "langgraph_step": 1,
+                "langgraph_triggers": [
+                    "branch:to:child_1",
+                ],
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr(),
+                    "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {
+                            "": AnyStr(),
+                            AnyStr("child:"): AnyStr(),
+                            AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                        }
+                    ),
+                }
+            },
+            tasks=(
+                PregelTask(
+                    id=AnyStr(),
+                    name="grandchild_1",
+                    path=(PULL, "grandchild_1"),
+                    result={"my_key": "hi my value here"},
+                ),
+            ),
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={},
+            next=("__start__",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr(),
+                    "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {
+                            "": AnyStr(),
+                            AnyStr("child:"): AnyStr(),
+                            AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                        }
+                    ),
+                }
+            },
+            metadata={
+                "source": "input",
+                "writes": {"__start__": {"my_key": "hi my value"}},
+                "step": -1,
+                "parents": AnyDict(
+                    {
+                        "": AnyStr(),
+                        AnyStr("child:"): AnyStr(),
+                    }
+                ),
+                "thread_id": "1",
+                "langgraph_checkpoint_ns": AnyStr("child:"),
+                "langgraph_node": "child_1",
+                "langgraph_path": [
+                    PULL,
+                    AnyStr("child_1"),
+                ],
+                "langgraph_step": 1,
+                "langgraph_triggers": [
+                    "branch:to:child_1",
+                ],
+            },
+            created_at=AnyStr(),
+            parent_config=None,
+            tasks=(
+                PregelTask(
+                    id=AnyStr(),
+                    name="__start__",
+                    path=(PULL, "__start__"),
+                    result={"my_key": "hi my value"},
+                ),
+            ),
+            interrupts=(),
+        ),
+    ]
+
+    # replay grandchild checkpoint
+    assert [
+        c async for c in app.astream(None, grandchild_history[2].config, subgraphs=True)
+    ] == [
+        (
+            (AnyStr("child:"), AnyStr("child_1:")),
+            {"grandchild_1": {"my_key": "hi my value here"}},
+        ),
+        ((), {"__interrupt__": ()}),
+    ]
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
+async def test_send_to_nested_graphs(async_checkpointer: BaseCheckpointSaver) -> None:
     class OverallState(TypedDict):
         subjects: list[str]
         jokes: Annotated[list[str], operator.add]
@@ -6742,43 +6700,41 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
     builder.add_conditional_edges(START, continue_to_jokes)
     builder.add_edge("generate_joke", END)
 
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        graph = builder.compile(checkpointer=checkpointer)
-        config = {"configurable": {"thread_id": "1"}}
-        tracer = FakeTracer()
+    graph = builder.compile(checkpointer=async_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    tracer = FakeTracer()
 
-        # invoke and pause at nested interrupt
-        assert await graph.ainvoke(
-            {"subjects": ["cats", "dogs"]},
-            config={**config, "callbacks": [tracer]},
-        ) == {
-            "subjects": ["cats", "dogs"],
-            "jokes": [],
-        }
-        assert len(tracer.runs) == 1, "Should produce exactly 1 root run"
+    # invoke and pause at nested interrupt
+    assert await graph.ainvoke(
+        {"subjects": ["cats", "dogs"]},
+        config={**config, "callbacks": [tracer]},
+    ) == {
+        "subjects": ["cats", "dogs"],
+        "jokes": [],
+    }
+    assert len(tracer.runs) == 1, "Should produce exactly 1 root run"
 
-        # check state
-        outer_state = await graph.aget_state(config)
+    # check state
+    outer_state = await graph.aget_state(config)
 
-        # update state of dogs joke graph
-        await graph.aupdate_state(
-            outer_state.tasks[1].state, {"subject": "turtles - hohoho"}
-        )
+    # update state of dogs joke graph
+    await graph.aupdate_state(
+        outer_state.tasks[1].state, {"subject": "turtles - hohoho"}
+    )
 
-        # continue past interrupt
-        assert await graph.ainvoke(None, config=config) == {
-            "subjects": ["cats", "dogs"],
-            "jokes": ["Joke about cats - hohoho", "Joke about turtles - hohoho"],
-        }
+    # continue past interrupt
+    assert await graph.ainvoke(None, config=config) == {
+        "subjects": ["cats", "dogs"],
+        "jokes": ["Joke about cats - hohoho", "Joke about turtles - hohoho"],
+    }
 
 
 @pytest.mark.skipif(
     sys.version_info < (3, 11),
     reason="Python 3.11+ is required for async contextvars support",
 )
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_weather_subgraph(
-    checkpointer_name: str, snapshot: SnapshotAssertion
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
@@ -6836,9 +6792,6 @@ async def test_weather_subgraph(
     class RouterState(MessagesState):
         route: Literal["weather", "other"]
 
-    class Router(TypedDict):
-        route: Literal["weather", "other"]
-
     router_model = FakeMessagesListChatModel(
         responses=[
             AIMessage(
@@ -6891,177 +6844,199 @@ async def test_weather_subgraph(
     def get_first_in_list():
         return [*graph.get_state_history(config, limit=1)][0]
 
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        graph = graph.compile(checkpointer=checkpointer)
+    graph = graph.compile(checkpointer=async_checkpointer)
 
-        config = {"configurable": {"thread_id": "1"}}
-        thread2 = {"configurable": {"thread_id": "2"}}
-        inputs = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
+    config = {"configurable": {"thread_id": "1"}}
+    thread2 = {"configurable": {"thread_id": "2"}}
+    inputs = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
 
-        # run with custom output
-        assert [
-            c async for c in graph.astream(inputs, thread2, stream_mode="custom")
-        ] == [
-            "I'm",
-            " very",
-        ]
-        assert [
-            c async for c in graph.astream(None, thread2, stream_mode="custom")
-        ] == [
-            " good",
-        ]
+    # run with custom output
+    assert [c async for c in graph.astream(inputs, thread2, stream_mode="custom")] == [
+        "I'm",
+        " very",
+    ]
+    assert [c async for c in graph.astream(None, thread2, stream_mode="custom")] == [
+        " good",
+    ]
 
-        # run until interrupt
-        assert [
-            c
-            async for c in graph.astream(
-                inputs, config=config, stream_mode="updates", subgraphs=True
-            )
-        ] == [
-            ((), {"router_node": {"route": "weather"}}),
-            ((AnyStr("weather_graph:"),), {"model_node": {"city": "San Francisco"}}),
-            ((), {"__interrupt__": ()}),
-        ]
+    # run until interrupt
+    assert [
+        c
+        async for c in graph.astream(
+            inputs, config=config, stream_mode="updates", subgraphs=True
+        )
+    ] == [
+        ((), {"router_node": {"route": "weather"}}),
+        ((AnyStr("weather_graph:"),), {"model_node": {"city": "San Francisco"}}),
+        ((), {"__interrupt__": ()}),
+    ]
 
-        # check current state
-        state = await graph.aget_state(config)
-        assert state == StateSnapshot(
-            values={
-                "messages": [_AnyIdHumanMessage(content="what's the weather in sf")],
-                "route": "weather",
-            },
-            next=("weather_graph",),
-            config={
+    # check current state
+    state = await graph.aget_state(config)
+    assert state == StateSnapshot(
+        values={
+            "messages": [_AnyIdHumanMessage(content="what's the weather in sf")],
+            "route": "weather",
+        },
+        next=("weather_graph",),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "source": "loop",
+            "writes": {"router_node": {"route": "weather"}},
+            "step": 1,
+            "parents": {},
+            "thread_id": "1",
+        },
+        created_at=AnyStr(),
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "1",
                     "checkpoint_ns": "",
                     "checkpoint_id": AnyStr(),
                 }
-            },
-            metadata={
-                "source": "loop",
-                "writes": {"router_node": {"route": "weather"}},
-                "step": 1,
-                "parents": {},
-                "thread_id": "1",
-            },
-            created_at=AnyStr(),
-            parent_config=({
+            }
+        ),
+        tasks=(
+            PregelTask(
+                id=AnyStr(),
+                name="weather_graph",
+                path=(PULL, "weather_graph"),
+                state={
                     "configurable": {
                         "thread_id": "1",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
+                        "checkpoint_ns": AnyStr("weather_graph:"),
                     }
-                }
+                },
             ),
-            tasks=(
-                PregelTask(
-                    id=AnyStr(),
-                    name="weather_graph",
-                    path=(PULL, "weather_graph"),
-                    state={
+        ),
+        interrupts=(),
+    )
+    # confirm that list() delegates to alist() correctly
+    assert await asyncio.to_thread(get_first_in_list) == state
+
+    # update
+    await graph.aupdate_state(state.tasks[0].state, {"city": "la"})
+
+    # run after update
+    assert [
+        c
+        async for c in graph.astream(
+            None, config=config, stream_mode="updates", subgraphs=True
+        )
+    ] == [
+        (
+            (AnyStr("weather_graph:"),),
+            {
+                "weather_node": {
+                    "messages": [{"role": "assistant", "content": "I'ts sunny in la!"}]
+                }
+            },
+        ),
+        (
+            (),
+            {
+                "weather_graph": {
+                    "messages": [
+                        _AnyIdHumanMessage(content="what's the weather in sf"),
+                        _AnyIdAIMessage(content="I'ts sunny in la!"),
+                    ]
+                }
+            },
+        ),
+    ]
+
+    # try updating acting as weather node
+    config = {"configurable": {"thread_id": "14"}}
+    inputs = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
+    assert [
+        c
+        async for c in graph.astream(
+            inputs, config=config, stream_mode="updates", subgraphs=True
+        )
+    ] == [
+        ((), {"router_node": {"route": "weather"}}),
+        ((AnyStr("weather_graph:"),), {"model_node": {"city": "San Francisco"}}),
+        ((), {"__interrupt__": ()}),
+    ]
+    state = await graph.aget_state(config, subgraphs=True)
+    assert state == StateSnapshot(
+        values={
+            "messages": [_AnyIdHumanMessage(content="what's the weather in sf")],
+            "route": "weather",
+        },
+        next=("weather_graph",),
+        config={
+            "configurable": {
+                "thread_id": "14",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "source": "loop",
+            "writes": {"router_node": {"route": "weather"}},
+            "step": 1,
+            "parents": {},
+            "thread_id": "14",
+        },
+        created_at=AnyStr(),
+        parent_config=(
+            {
+                "configurable": {
+                    "thread_id": "14",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            }
+        ),
+        tasks=(
+            PregelTask(
+                id=AnyStr(),
+                name="weather_graph",
+                path=(PULL, "weather_graph"),
+                state=StateSnapshot(
+                    values={
+                        "messages": [
+                            _AnyIdHumanMessage(content="what's the weather in sf")
+                        ],
+                        "city": "San Francisco",
+                    },
+                    next=("weather_node",),
+                    config={
                         "configurable": {
-                            "thread_id": "1",
+                            "thread_id": "14",
                             "checkpoint_ns": AnyStr("weather_graph:"),
+                            "checkpoint_id": AnyStr(),
+                            "checkpoint_map": AnyDict(
+                                {
+                                    "": AnyStr(),
+                                    AnyStr("weather_graph:"): AnyStr(),
+                                }
+                            ),
                         }
                     },
-                ),
-            ),
-            interrupts=(),
-        )
-        # confirm that list() delegates to alist() correctly
-        assert await asyncio.to_thread(get_first_in_list) == state
-
-        # update
-        await graph.aupdate_state(state.tasks[0].state, {"city": "la"})
-
-        # run after update
-        assert [
-            c
-            async for c in graph.astream(
-                None, config=config, stream_mode="updates", subgraphs=True
-            )
-        ] == [
-            (
-                (AnyStr("weather_graph:"),),
-                {
-                    "weather_node": {
-                        "messages": [
-                            {"role": "assistant", "content": "I'ts sunny in la!"}
-                        ]
-                    }
-                },
-            ),
-            (
-                (),
-                {
-                    "weather_graph": {
-                        "messages": [
-                            _AnyIdHumanMessage(content="what's the weather in sf"),
-                            _AnyIdAIMessage(content="I'ts sunny in la!"),
-                        ]
-                    }
-                },
-            ),
-        ]
-
-        # try updating acting as weather node
-        config = {"configurable": {"thread_id": "14"}}
-        inputs = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
-        assert [
-            c
-            async for c in graph.astream(
-                inputs, config=config, stream_mode="updates", subgraphs=True
-            )
-        ] == [
-            ((), {"router_node": {"route": "weather"}}),
-            ((AnyStr("weather_graph:"),), {"model_node": {"city": "San Francisco"}}),
-            ((), {"__interrupt__": ()}),
-        ]
-        state = await graph.aget_state(config, subgraphs=True)
-        assert state == StateSnapshot(
-            values={
-                "messages": [_AnyIdHumanMessage(content="what's the weather in sf")],
-                "route": "weather",
-            },
-            next=("weather_graph",),
-            config={
-                "configurable": {
-                    "thread_id": "14",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            metadata={
-                "source": "loop",
-                "writes": {"router_node": {"route": "weather"}},
-                "step": 1,
-                "parents": {},
-                "thread_id": "14",
-            },
-            created_at=AnyStr(),
-            parent_config=({
-                    "configurable": {
+                    metadata={
+                        "source": "loop",
+                        "writes": {"model_node": {"city": "San Francisco"}},
+                        "step": 1,
+                        "parents": {"": AnyStr()},
                         "thread_id": "14",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                }
-            ),
-            tasks=(
-                PregelTask(
-                    id=AnyStr(),
-                    name="weather_graph",
-                    path=(PULL, "weather_graph"),
-                    state=StateSnapshot(
-                        values={
-                            "messages": [
-                                _AnyIdHumanMessage(content="what's the weather in sf")
-                            ],
-                            "city": "San Francisco",
-                        },
-                        next=("weather_node",),
-                        config={
+                        "langgraph_node": "weather_graph",
+                        "langgraph_path": [PULL, "weather_graph"],
+                        "langgraph_step": 2,
+                        "langgraph_triggers": ["branch:to:weather_graph"],
+                        "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
+                    },
+                    created_at=AnyStr(),
+                    parent_config=(
+                        {
                             "configurable": {
                                 "thread_id": "14",
                                 "checkpoint_ns": AnyStr("weather_graph:"),
@@ -7073,166 +7048,140 @@ async def test_weather_subgraph(
                                     }
                                 ),
                             }
-                        },
-                        metadata={
-                            "source": "loop",
-                            "writes": {"model_node": {"city": "San Francisco"}},
-                            "step": 1,
-                            "parents": {"": AnyStr()},
-                            "thread_id": "14",
-                            "langgraph_node": "weather_graph",
-                            "langgraph_path": [PULL, "weather_graph"],
-                            "langgraph_step": 2,
-                            "langgraph_triggers": ["branch:to:weather_graph"],
-                            "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
-                        },
-                        created_at=AnyStr(),
-                        parent_config=({
-                                "configurable": {
-                                    "thread_id": "14",
-                                    "checkpoint_ns": AnyStr("weather_graph:"),
-                                    "checkpoint_id": AnyStr(),
-                                    "checkpoint_map": AnyDict(
-                                        {
-                                            "": AnyStr(),
-                                            AnyStr("weather_graph:"): AnyStr(),
-                                        }
-                                    ),
-                                }
-                            }
-                        ),
-                        interrupts=(),
-                        tasks=(
-                            PregelTask(
-                                id=AnyStr(),
-                                name="weather_node",
-                                path=(PULL, "weather_node"),
-                            ),
+                        }
+                    ),
+                    interrupts=(),
+                    tasks=(
+                        PregelTask(
+                            id=AnyStr(),
+                            name="weather_node",
+                            path=(PULL, "weather_node"),
                         ),
                     ),
                 ),
             ),
-            interrupts=(),
-        )
-        await graph.aupdate_state(
-            state.tasks[0].state.config,
-            {"messages": [{"role": "assistant", "content": "rainy"}]},
-            as_node="weather_node",
-        )
-        state = await graph.aget_state(config, subgraphs=True)
-        assert state == StateSnapshot(
-            values={
-                "messages": [_AnyIdHumanMessage(content="what's the weather in sf")],
-                "route": "weather",
-            },
-            next=("weather_graph",),
-            config={
+        ),
+        interrupts=(),
+    )
+    await graph.aupdate_state(
+        state.tasks[0].state.config,
+        {"messages": [{"role": "assistant", "content": "rainy"}]},
+        as_node="weather_node",
+    )
+    state = await graph.aget_state(config, subgraphs=True)
+    assert state == StateSnapshot(
+        values={
+            "messages": [_AnyIdHumanMessage(content="what's the weather in sf")],
+            "route": "weather",
+        },
+        next=("weather_graph",),
+        config={
+            "configurable": {
+                "thread_id": "14",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "source": "loop",
+            "writes": {"router_node": {"route": "weather"}},
+            "step": 1,
+            "parents": {},
+            "thread_id": "14",
+        },
+        created_at=AnyStr(),
+        parent_config=(
+            {
                 "configurable": {
                     "thread_id": "14",
                     "checkpoint_ns": "",
                     "checkpoint_id": AnyStr(),
                 }
-            },
-            metadata={
-                "source": "loop",
-                "writes": {"router_node": {"route": "weather"}},
-                "step": 1,
-                "parents": {},
-                "thread_id": "14",
-            },
-            created_at=AnyStr(),
-            parent_config=({
-                    "configurable": {
-                        "thread_id": "14",
-                        "checkpoint_ns": "",
-                        "checkpoint_id": AnyStr(),
-                    }
-                }
-            ),
-            interrupts=(),
-            tasks=(
-                PregelTask(
-                    id=AnyStr(),
-                    name="weather_graph",
-                    path=(PULL, "weather_graph"),
-                    state=StateSnapshot(
-                        values={
-                            "messages": [
-                                _AnyIdHumanMessage(content="what's the weather in sf"),
-                                _AnyIdAIMessage(content="rainy"),
-                            ],
-                            "city": "San Francisco",
-                        },
-                        next=(),
-                        config={
-                            "configurable": {
-                                "thread_id": "14",
-                                "checkpoint_ns": AnyStr("weather_graph:"),
-                                "checkpoint_id": AnyStr(),
-                                "checkpoint_map": AnyDict(
-                                    {
-                                        "": AnyStr(),
-                                        AnyStr("weather_graph:"): AnyStr(),
-                                    }
-                                ),
-                            }
-                        },
-                        metadata={
-                            "step": 2,
-                            "source": "update",
-                            "writes": {
-                                "weather_node": {
-                                    "messages": [
-                                        {"role": "assistant", "content": "rainy"}
-                                    ]
-                                }
-                            },
-                            "parents": {"": AnyStr()},
-                            "thread_id": "14",
-                            "checkpoint_id": AnyStr(),
-                            "checkpoint_ns": AnyStr("weather_graph:"),
-                            "langgraph_node": "weather_graph",
-                            "langgraph_path": [PULL, "weather_graph"],
-                            "langgraph_step": 2,
-                            "langgraph_triggers": ["branch:to:weather_graph"],
-                            "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
-                        },
-                        created_at=AnyStr(),
-                        parent_config=({
-                                "configurable": {
-                                    "thread_id": "14",
-                                    "checkpoint_ns": AnyStr("weather_graph:"),
-                                    "checkpoint_id": AnyStr(),
-                                    "checkpoint_map": AnyDict(
-                                        {
-                                            "": AnyStr(),
-                                            AnyStr("weather_graph:"): AnyStr(),
-                                        }
-                                    ),
-                                }
-                            }
-                        ),
-                        tasks=(),
-                        interrupts=(),
-                    ),
-                ),
-            ),
-        )
-        assert [
-            c
-            async for c in graph.astream(
-                None, config=config, stream_mode="updates", subgraphs=True
-            )
-        ] == [
-            (
-                (),
-                {
-                    "weather_graph": {
+            }
+        ),
+        interrupts=(),
+        tasks=(
+            PregelTask(
+                id=AnyStr(),
+                name="weather_graph",
+                path=(PULL, "weather_graph"),
+                state=StateSnapshot(
+                    values={
                         "messages": [
                             _AnyIdHumanMessage(content="what's the weather in sf"),
                             _AnyIdAIMessage(content="rainy"),
-                        ]
-                    }
-                },
+                        ],
+                        "city": "San Francisco",
+                    },
+                    next=(),
+                    config={
+                        "configurable": {
+                            "thread_id": "14",
+                            "checkpoint_ns": AnyStr("weather_graph:"),
+                            "checkpoint_id": AnyStr(),
+                            "checkpoint_map": AnyDict(
+                                {
+                                    "": AnyStr(),
+                                    AnyStr("weather_graph:"): AnyStr(),
+                                }
+                            ),
+                        }
+                    },
+                    metadata={
+                        "step": 2,
+                        "source": "update",
+                        "writes": {
+                            "weather_node": {
+                                "messages": [{"role": "assistant", "content": "rainy"}]
+                            }
+                        },
+                        "parents": {"": AnyStr()},
+                        "thread_id": "14",
+                        "checkpoint_id": AnyStr(),
+                        "checkpoint_ns": AnyStr("weather_graph:"),
+                        "langgraph_node": "weather_graph",
+                        "langgraph_path": [PULL, "weather_graph"],
+                        "langgraph_step": 2,
+                        "langgraph_triggers": ["branch:to:weather_graph"],
+                        "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
+                    },
+                    created_at=AnyStr(),
+                    parent_config=(
+                        {
+                            "configurable": {
+                                "thread_id": "14",
+                                "checkpoint_ns": AnyStr("weather_graph:"),
+                                "checkpoint_id": AnyStr(),
+                                "checkpoint_map": AnyDict(
+                                    {
+                                        "": AnyStr(),
+                                        AnyStr("weather_graph:"): AnyStr(),
+                                    }
+                                ),
+                            }
+                        }
+                    ),
+                    tasks=(),
+                    interrupts=(),
+                ),
             ),
-        ]
+        ),
+    )
+    assert [
+        c
+        async for c in graph.astream(
+            None, config=config, stream_mode="updates", subgraphs=True
+        )
+    ] == [
+        (
+            (),
+            {
+                "weather_graph": {
+                    "messages": [
+                        _AnyIdHumanMessage(content="what's the weather in sf"),
+                        _AnyIdAIMessage(content="rainy"),
+                    ]
+                }
+            },
+        ),
+    ]
