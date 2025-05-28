@@ -25,7 +25,7 @@ with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
     # call .setup() the first time you're using the checkpointer
     checkpointer.setup()
     checkpoint = {
-        "v": 2,
+        "v": 4,
         "ts": "2024-07-31T20:14:19.804150+00:00",
         "id": "1ef4f797-8335-6428-8001-8a1503f9b875",
         "channel_values": {
@@ -47,7 +47,6 @@ with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
             "start:node": 2
             }
         },
-        "pending_sends": [],
     }
 
     # store checkpoint
@@ -67,7 +66,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 async with AsyncPostgresSaver.from_conn_string(DB_URI) as checkpointer:
     checkpoint = {
-        "v": 2,
+        "v": 4,
         "ts": "2024-07-31T20:14:19.804150+00:00",
         "id": "1ef4f797-8335-6428-8001-8a1503f9b875",
         "channel_values": {
@@ -89,7 +88,6 @@ async with AsyncPostgresSaver.from_conn_string(DB_URI) as checkpointer:
             "start:node": 2
             }
         },
-        "pending_sends": [],
     }
 
     # store checkpoint

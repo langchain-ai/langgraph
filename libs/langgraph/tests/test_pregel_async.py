@@ -29,7 +29,6 @@ from syrupy import SnapshotAssertion
 from typing_extensions import TypedDict
 
 from langgraph.cache.base import BaseCache
-from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
@@ -104,7 +103,7 @@ async def test_checkpoint_errors() -> None:
             raise ValueError("Faulty put_writes")
 
     class FaultyVersionCheckpointer(InMemorySaver):
-        def get_next_version(self, current: Optional[int], channel: BaseChannel) -> int:
+        def get_next_version(self, current: Optional[int]) -> int:
             raise ValueError("Faulty get_next_version")
 
     def logic(inp: str) -> str:
@@ -1940,10 +1939,9 @@ async def test_pending_writes_resume(
             }
         },
         checkpoint={
-            "v": 3,
+            "v": 4,
             "id": AnyStr(),
             "ts": AnyStr(),
-            "pending_sends": [],
             "versions_seen": {
                 "one": {
                     "branch:to:one": AnyVersion(),
@@ -1998,10 +1996,9 @@ async def test_pending_writes_resume(
             }
         },
         checkpoint={
-            "v": 3,
+            "v": 4,
             "id": AnyStr(),
             "ts": AnyStr(),
-            "pending_sends": [],
             "versions_seen": {
                 "__input__": {},
                 "__start__": {
@@ -2031,11 +2028,11 @@ async def test_pending_writes_resume(
             "configurable": {
                 "thread_id": "1",
                 "checkpoint_ns": "",
-                "checkpoint_id": checkpoints[2].config["configurable"]["checkpoint_id"]
-                if checkpoint_during
-                else AnyStr(),
+                "checkpoint_id": checkpoints[2].config["configurable"]["checkpoint_id"],
             }
-        },
+        }
+        if checkpoint_during
+        else None,
         pending_writes=UnsortedSequence(
             (AnyStr(), "value", 2),
             (AnyStr(), "__error__", 'ConnectionError("I\'m not good")'),
@@ -2060,10 +2057,9 @@ async def test_pending_writes_resume(
             }
         },
         checkpoint={
-            "v": 3,
+            "v": 4,
             "id": AnyStr(),
             "ts": AnyStr(),
-            "pending_sends": [],
             "versions_seen": {"__input__": {}},
             "channel_versions": {
                 "__start__": AnyVersion(),
@@ -2936,8 +2932,10 @@ async def test_send_dedupe_on_resume(
     if checkpoint_during:
         assert history == expected_history
     else:
-        assert history[0] == expected_history[0]
-        assert history[1] == expected_history[2]
+        assert history[0] == expected_history[0]._replace(
+            parent_config=history[1].config
+        )
+        assert history[1] == expected_history[2]._replace(parent_config=None)
 
 
 async def test_send_react_interrupt(async_checkpointer: BaseCheckpointSaver) -> None:

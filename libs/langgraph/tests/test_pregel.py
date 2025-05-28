@@ -30,7 +30,6 @@ from syrupy import SnapshotAssertion
 from typing_extensions import TypedDict
 
 from langgraph.cache.base import BaseCache
-from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
@@ -237,7 +236,7 @@ def test_checkpoint_errors() -> None:
             raise ValueError("Faulty put_writes")
 
     class FaultyVersionCheckpointer(InMemorySaver):
-        def get_next_version(self, current: Optional[int], channel: BaseChannel) -> int:
+        def get_next_version(self, current: Optional[int]) -> int:
             raise ValueError("Faulty get_next_version")
 
     def logic(inp: str) -> str:
@@ -1130,10 +1129,9 @@ def test_pending_writes_resume(
             }
         },
         checkpoint={
-            "v": 3,
+            "v": 4,
             "id": AnyStr(),
             "ts": AnyStr(),
-            "pending_sends": [],
             "versions_seen": {
                 "one": {
                     "branch:to:one": AnyVersion(),
@@ -1188,10 +1186,9 @@ def test_pending_writes_resume(
             }
         },
         checkpoint={
-            "v": 3,
+            "v": 4,
             "id": AnyStr(),
             "ts": AnyStr(),
-            "pending_sends": [],
             "versions_seen": {
                 "__input__": {},
                 "__start__": {
@@ -1223,11 +1220,11 @@ def test_pending_writes_resume(
                 "checkpoint_ns": "",
                 "checkpoint_id": (
                     checkpoints[2].config["configurable"]["checkpoint_id"]
-                    if checkpoint_during
-                    else AnyStr()
                 ),
             }
-        },
+        }
+        if checkpoint_during
+        else None,
         pending_writes=(
             UnsortedSequence(
                 (AnyStr(), "value", 2),
@@ -1254,10 +1251,9 @@ def test_pending_writes_resume(
             }
         },
         checkpoint={
-            "v": 3,
+            "v": 4,
             "id": AnyStr(),
             "ts": AnyStr(),
-            "pending_sends": [],
             "versions_seen": {"__input__": {}},
             "channel_versions": {
                 "__start__": AnyVersion(),
@@ -1407,7 +1403,7 @@ def test_imp_task(
 ) -> None:
     mapper_calls = 0
 
-    class Configurable:
+    class Configurable(TypedDict):
         model: str
 
     @task()
@@ -1438,25 +1434,9 @@ def test_imp_task(
         "$defs": {
             "Configurable": {
                 "properties": {
-                    "model": {"default": None, "title": "Model", "type": "string"},
-                    "checkpoint_id": {
-                        "anyOf": [{"type": "string"}, {"type": "null"}],
-                        "default": None,
-                        "description": "Pass to fetch a past checkpoint. If None, fetches the latest checkpoint.",
-                        "title": "Checkpoint ID",
-                    },
-                    "checkpoint_ns": {
-                        "default": "",
-                        "description": 'Checkpoint namespace. Denotes the path to the subgraph node the checkpoint originates from, separated by `|` character, e.g. `"child|grandchild"`. Defaults to "" (root graph).',
-                        "title": "Checkpoint NS",
-                        "type": "string",
-                    },
-                    "thread_id": {
-                        "default": "",
-                        "title": "Thread ID",
-                        "type": "string",
-                    },
+                    "model": {"title": "Model", "type": "string"},
                 },
+                "required": ["model"],
                 "title": "Configurable",
                 "type": "object",
             }

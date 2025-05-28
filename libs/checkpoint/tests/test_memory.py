@@ -6,10 +6,12 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
+)
+from langgraph.checkpoint.memory import InMemorySaver
+from tests.checkpoint_utils import (  # type: ignore[import-untyped]
     create_checkpoint,
     empty_checkpoint,
 )
-from langgraph.checkpoint.memory import InMemorySaver
 
 
 class TestMemorySaver:

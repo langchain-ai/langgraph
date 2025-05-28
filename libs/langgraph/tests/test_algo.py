@@ -1,7 +1,6 @@
-from langgraph.checkpoint.base import empty_checkpoint
 from langgraph.constants import PULL, PUSH
 from langgraph.pregel.algo import prepare_next_tasks, task_path_str
-from langgraph.pregel.checkpoint import channels_from_checkpoint
+from langgraph.pregel.checkpoint import channels_from_checkpoint, empty_checkpoint
 
 
 def test_prepare_next_tasks() -> None:
