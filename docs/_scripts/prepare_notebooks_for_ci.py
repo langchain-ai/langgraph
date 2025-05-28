@@ -5,6 +5,7 @@ import os
 import json
 import click
 import nbformat
+import re
 
 logger = logging.getLogger(__name__)
 NOTEBOOK_DIRS = ("docs/how-tos","docs/tutorials")
@@ -20,7 +21,6 @@ BLOCKLIST_COMMANDS = (
 
 NOTEBOOKS_NO_CASSETTES = (
     "docs/how-tos/visualization.ipynb",
-    "docs/how-tos/many-tools.ipynb"
 )
 
 NOTEBOOKS_NO_EXECUTION = [
@@ -49,7 +49,10 @@ NOTEBOOKS_NO_EXECUTION = [
     "docs/how-tos/map-reduce.ipynb",  # flakiness from structured output, only when running with VCR
     "docs/tutorials/tot/tot.ipynb",
     "docs/how-tos/visualization.ipynb",
-    "docs/tutorials/llm-compiler/LLMCompiler.ipynb"
+    "docs/how-tos/streaming-specific-nodes.ipynb",
+    "docs/tutorials/llm-compiler/LLMCompiler.ipynb",
+    "docs/tutorials/customer-support/customer-support.ipynb",  # relies on openai embeddings, doesn't play well w/ VCR
+    "docs/how-tos/many-tools.ipynb",  # relies on openai embeddings, doesn't play well w/ VCR
 ]
 
 
@@ -86,6 +89,11 @@ def has_blocklisted_command(code: str, metadata: dict) -> bool:
             return True
     return False
 
+MERMAID_PATTERN = re.compile(r'display\(Image\((\w+)\.get_graph\(\)\.draw_mermaid_png\(\)\)\)')
+
+def remove_mermaid(code: str) -> str:
+    return MERMAID_PATTERN.sub('print()', code)
+
 
 def add_vcr_to_notebook(
     notebook: nbformat.NotebookNode, cassette_prefix: str
@@ -99,6 +107,8 @@ def add_vcr_to_notebook(
             continue
 
         lines = cell.source.splitlines()
+        # remove the special tag for hidden cells
+        lines = [line for line in lines if not line.strip().startswith("# hide-cell")]
         # skip if empty cell
         if not lines:
             continue
@@ -180,6 +190,20 @@ def add_vcr_to_notebook(
     return notebook
 
 
+def remove_mermaid_from_notebook(notebook: nbformat.NotebookNode) -> nbformat.NotebookNode:
+    for cell in notebook.cells:
+        if cell.cell_type != "code":
+            continue
+
+        cell.source = remove_mermaid(cell.source)
+
+        # skip the cell entirely if it contains PYPPETEER
+        if "PYPPETEER" in cell.source:
+            cell.source = ""
+
+    return notebook
+
+
 def process_notebooks(should_comment_install_cells: bool) -> None:
     for directory in NOTEBOOK_DIRS:
         for root, _, files in os.walk(directory):
@@ -200,6 +224,8 @@ def process_notebooks(should_comment_install_cells: bool) -> None:
                         notebook = add_vcr_to_notebook(
                             notebook, cassette_prefix=cassette_prefix
                         )
+
+                    notebook = remove_mermaid_from_notebook(notebook)
 
                     if notebook_path in NOTEBOOKS_NO_EXECUTION:
                         # Add a cell at the beginning to indicate that this notebook should not be executed

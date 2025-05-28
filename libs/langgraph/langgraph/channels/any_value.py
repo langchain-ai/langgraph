@@ -1,4 +1,5 @@
-from typing import Any, Generic, Optional, Sequence, Type
+from collections.abc import Sequence
+from typing import Any, Generic
 
 from typing_extensions import Self
 
@@ -21,19 +22,24 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
         return isinstance(value, AnyValue)
 
     @property
-    def ValueType(self) -> Type[Value]:
+    def ValueType(self) -> type[Value]:
         """The type of the value stored in the channel."""
         return self.typ
 
     @property
-    def UpdateType(self) -> Type[Value]:
+    def UpdateType(self) -> type[Value]:
         """The type of the update received by the channel."""
         return self.typ
 
-    def from_checkpoint(self, checkpoint: Optional[Value]) -> Self:
-        empty = self.__class__(self.typ)
-        empty.key = self.key
-        if checkpoint is not None:
+    def copy(self) -> Self:
+        """Return a copy of the channel."""
+        empty = self.__class__(self.typ, self.key)
+        empty.value = self.value
+        return empty
+
+    def from_checkpoint(self, checkpoint: Value) -> Self:
+        empty = self.__class__(self.typ, self.key)
+        if checkpoint is not MISSING:
             empty.value = checkpoint
         return empty
 
@@ -55,3 +61,6 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
 
     def is_available(self) -> bool:
         return self.value is not MISSING
+
+    def checkpoint(self) -> Value:
+        return self.value

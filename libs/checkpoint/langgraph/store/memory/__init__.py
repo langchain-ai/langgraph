@@ -104,9 +104,10 @@ import concurrent.futures as cf
 import functools
 import logging
 from collections import defaultdict
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from importlib import util
-from typing import Any, Iterable, Optional
+from typing import Any, Optional
 
 from langchain_core.embeddings import Embeddings
 

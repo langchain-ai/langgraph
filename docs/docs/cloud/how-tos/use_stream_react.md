@@ -1,7 +1,8 @@
 # How to integrate LangGraph into your React application
 
-!!! info "Prerequisites"
-    - [LangGraph Platform](../../concepts/langgraph_platform.md)
+!!! info "Prerequisites" 
+
+    - [LangGraph Platform](../../concepts/langgraph_platform.md) 
     - [LangGraph Server](../../concepts/langgraph_server.md)
 
 The `useStream()` React hook provides a seamless way to integrate LangGraph into your React applications. It handles all the complexities of streaming, state management, and branching logic, letting you focus on building great chat experiences.
@@ -157,7 +158,7 @@ export default function HomePage() {
 }
 ```
 
-Under the hood, the `useStream()` hook will use the `streamMode: "messages-key"` to receive a stream of messages (i.e. individual LLM tokens) from any LangChain chat model invocations inside your graph nodes. Learn more about messages streaming in the [How to stream messages from your graph](./stream_messages.md) guide.
+Under the hood, the `useStream()` hook will use the `streamMode: "messages-tuple"` to receive a stream of messages (i.e. individual LLM tokens) from any LangChain chat model invocations inside your graph nodes. Learn more about messages streaming in the [streaming](../how-tos/streaming.md#messages) guide.
 
 ### Interrupts
 
@@ -169,10 +170,7 @@ The `useStream()` hook exposes the `interrupt` property, which will be filled wi
 Learn more about interrupts in the [How to handle interrupts](../../how-tos/human_in_the_loop/wait-user-input.ipynb) guide.
 
 ```tsx
-const thread = useStream<
-  { messages: Message[] },
-  { InterruptType: string }
->({
+const thread = useStream<{ messages: Message[] }, { InterruptType: string }>({
   apiUrl: "http://localhost:2024",
   assistantId: "agent",
   messagesKey: "messages",
@@ -182,7 +180,6 @@ if (thread.interrupt) {
   return (
     <div>
       Interrupted! {thread.interrupt.value}
-
       <button
         type="button"
         onClick={() => {
@@ -313,7 +310,7 @@ export default function App() {
                   onEdit={(message) =>
                     thread.submit(
                       { messages: [message] },
-                      { checkpoint: parentCheckpoint },
+                      { checkpoint: parentCheckpoint }
                     )
                   }
                 />
@@ -370,6 +367,33 @@ export default function App() {
 
 For advanced use cases you can use the `experimental_branchTree` property to get the tree representation of the thread, which can be used to render branching controls for non-message based graphs.
 
+### Optimistic Updates
+
+You can optimistically update the client state before performing a network request to the agent, allowing you to provide immediate feedback to the user, such as showing the user message immediately before the agent has seen the request.
+
+```tsx
+const stream = useStream({
+  apiUrl: "http://localhost:2024",
+  assistantId: "agent",
+  messagesKey: "messages",
+});
+
+const handleSubmit = (text: string) => {
+  const newMessage = { type: "human" as const, content: text };
+
+  stream.submit(
+    { messages: [newMessage] },
+    {
+      optimisticValues(prev) {
+        const prevMessages = prev.messages ?? [];
+        const newMessages = [...prevMessages, newMessage];
+        return { ...prev, messages: newMessages };
+      },
+    }
+  );
+};
+```
+
 ### TypeScript
 
 The `useStream()` hook is friendly for apps written in TypeScript and you can specify types for the state to get better type safety and IDE support.
@@ -397,21 +421,23 @@ You can also optionally specify types for different scenarios, such as:
 - `UpdateType`: Type for the submit function (default: `Partial<State>`)
 
 ```tsx
-
-const thread = useStream<State, {
-  UpdateType: {
-    messages: Message[] | Message;
-    context?: Record<string, unknown>;
-  };
-  InterruptType: string;
-  CustomEventType: {
-    type: "progress" | "debug";
-    payload: unknown;
-  };
-  ConfigurableType: {
-    model: string;
-  };
-}>({
+const thread = useStream<
+  State,
+  {
+    UpdateType: {
+      messages: Message[] | Message;
+      context?: Record<string, unknown>;
+    };
+    InterruptType: string;
+    CustomEventType: {
+      type: "progress" | "debug";
+      payload: unknown;
+    };
+    ConfigurableType: {
+      model: string;
+    };
+  }
+>({
   apiUrl: "http://localhost:2024",
   assistantId: "agent",
   messagesKey: "messages",
@@ -450,7 +476,7 @@ The `useStream()` hook provides several callback options to help you respond to 
 - `onError`: Called when an error occurs.
 - `onFinish`: Called when the stream is finished.
 - `onUpdateEvent`: Called when an update event is received.
-- `onCustomEvent`: Called when a custom event is received. See [Custom events](../../concepts/streaming.md#custom) to learn how to stream custom events.
+- `onCustomEvent`: Called when a custom event is received. See the [streaming](../../how-tos/streaming.md#stream-custom-data) guide to learn how to stream custom events.
 - `onMetadataEvent`: Called when a metadata event is received, which contains the Run ID and Thread ID.
 
 ## Learn More

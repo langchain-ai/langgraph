@@ -16,6 +16,7 @@ from langchain_core.messages import (
     AIMessage,
     AnyMessage,
     HumanMessage,
+    RemoveMessage,
     SystemMessage,
     ToolCall,
     ToolMessage,
@@ -29,6 +30,7 @@ from typing_extensions import TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import START, MessagesState, StateGraph, add_messages
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.prebuilt import (
     ToolNode,
     create_react_agent,
@@ -53,12 +55,7 @@ from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command, Interrupt, interrupt
 from langgraph.utils.config import get_stream_writer
 from tests.any_str import AnyStr
-from tests.conftest import (
-    ALL_CHECKPOINTERS_ASYNC,
-    ALL_CHECKPOINTERS_SYNC,
-    IS_LANGCHAIN_CORE_030_OR_GREATER,
-    awith_checkpointer,
-)
+from tests.conftest import IS_LANGCHAIN_CORE_030_OR_GREATER
 from tests.messages import _AnyIdHumanMessage, _AnyIdToolMessage
 from tests.model import FakeToolCallingModel
 
@@ -67,20 +64,14 @@ pytestmark = pytest.mark.anyio
 REACT_TOOL_CALL_VERSIONS = ["v1", "v2"]
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_no_prompt(
-    request: pytest.FixtureRequest, checkpointer_name: str, version: str
-) -> None:
-    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
-        "checkpointer_" + checkpointer_name
-    )
+def test_no_prompt(sync_checkpointer: BaseCheckpointSaver, version: str) -> None:
     model = FakeToolCallingModel()
 
     agent = create_react_agent(
         model,
         [],
-        checkpointer=checkpointer,
+        checkpointer=sync_checkpointer,
         version=version,
     )
     inputs = [HumanMessage("hi?")]
@@ -89,91 +80,72 @@ def test_no_prompt(
     expected_response = {"messages": inputs + [AIMessage(content="hi?", id="0")]}
     assert response == expected_response
 
-    if checkpointer:
-        saved = checkpointer.get_tuple(thread)
-        assert saved is not None
-        assert saved.checkpoint["channel_values"] == {
-            "messages": [
-                _AnyIdHumanMessage(content="hi?"),
-                AIMessage(content="hi?", id="0"),
-            ],
-            "agent": "agent",
-        }
-        assert saved.metadata == {
-            "parents": {},
-            "source": "loop",
-            "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
-            "step": 1,
-            "thread_id": "123",
-        }
-        assert saved.pending_writes == []
+    saved = sync_checkpointer.get_tuple(thread)
+    assert saved is not None
+    assert saved.checkpoint["channel_values"] == {
+        "messages": [
+            _AnyIdHumanMessage(content="hi?"),
+            AIMessage(content="hi?", id="0"),
+        ],
+    }
+    assert saved.metadata == {
+        "parents": {},
+        "source": "loop",
+        "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
+        "step": 1,
+        "thread_id": "123",
+    }
+    assert saved.pending_writes == []
 
 
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_no_prompt_async(checkpointer_name: str) -> None:
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        model = FakeToolCallingModel()
-
-        agent = create_react_agent(model, [], checkpointer=checkpointer)
-        inputs = [HumanMessage("hi?")]
-        thread = {"configurable": {"thread_id": "123"}}
-        response = await agent.ainvoke({"messages": inputs}, thread, debug=True)
-        expected_response = {"messages": inputs + [AIMessage(content="hi?", id="0")]}
-        assert response == expected_response
-
-        if checkpointer:
-            saved = await checkpointer.aget_tuple(thread)
-            assert saved is not None
-            assert saved.checkpoint["channel_values"] == {
-                "messages": [
-                    _AnyIdHumanMessage(content="hi?"),
-                    AIMessage(content="hi?", id="0"),
-                ],
-                "agent": "agent",
-            }
-            assert saved.metadata == {
-                "parents": {},
-                "source": "loop",
-                "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
-                "step": 1,
-                "thread_id": "123",
-            }
-            assert saved.pending_writes == []
-
-
-def test_passing_two_modifiers():
+async def test_no_prompt_async(async_checkpointer: BaseCheckpointSaver) -> None:
     model = FakeToolCallingModel()
 
-    with pytest.raises(ValueError):
-        create_react_agent(model, [], state_modifier="Foo", prompt="Bar")
+    agent = create_react_agent(model, [], checkpointer=async_checkpointer)
+    inputs = [HumanMessage("hi?")]
+    thread = {"configurable": {"thread_id": "123"}}
+    response = await agent.ainvoke({"messages": inputs}, thread, debug=True)
+    expected_response = {"messages": inputs + [AIMessage(content="hi?", id="0")]}
+    assert response == expected_response
+
+    saved = await async_checkpointer.aget_tuple(thread)
+    assert saved is not None
+    assert saved.checkpoint["channel_values"] == {
+        "messages": [
+            _AnyIdHumanMessage(content="hi?"),
+            AIMessage(content="hi?", id="0"),
+        ],
+    }
+    assert saved.metadata == {
+        "parents": {},
+        "source": "loop",
+        "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
+        "step": 1,
+        "thread_id": "123",
+    }
+    assert saved.pending_writes == []
 
 
 def test_system_message_prompt():
     prompt = SystemMessage(content="Foo")
-    for agent in (
-        create_react_agent(FakeToolCallingModel(), [], prompt=prompt),
-        create_react_agent(FakeToolCallingModel(), [], state_modifier=prompt),
-    ):
-        inputs = [HumanMessage("hi?")]
-        response = agent.invoke({"messages": inputs})
-        expected_response = {
-            "messages": inputs + [AIMessage(content="Foo-hi?", id="0", tool_calls=[])]
-        }
-        assert response == expected_response
+    agent = create_react_agent(FakeToolCallingModel(), [], prompt=prompt)
+    inputs = [HumanMessage("hi?")]
+    response = agent.invoke({"messages": inputs})
+    expected_response = {
+        "messages": inputs + [AIMessage(content="Foo-hi?", id="0", tool_calls=[])]
+    }
+    assert response == expected_response
 
 
 def test_string_prompt():
     prompt = "Foo"
-    for agent in (
-        create_react_agent(FakeToolCallingModel(), [], prompt=prompt),
-        create_react_agent(FakeToolCallingModel(), [], state_modifier=prompt),
-    ):
-        inputs = [HumanMessage("hi?")]
-        response = agent.invoke({"messages": inputs})
-        expected_response = {
-            "messages": inputs + [AIMessage(content="Foo-hi?", id="0", tool_calls=[])]
-        }
-        assert response == expected_response
+    agent = create_react_agent(FakeToolCallingModel(), [], prompt=prompt)
+    inputs = [HumanMessage("hi?")]
+    response = agent.invoke({"messages": inputs})
+    expected_response = {
+        "messages": inputs + [AIMessage(content="Foo-hi?", id="0", tool_calls=[])]
+    }
+    assert response == expected_response
 
 
 def test_callable_prompt():
@@ -181,16 +153,11 @@ def test_callable_prompt():
         modified_message = f"Bar {state['messages'][-1].content}"
         return [HumanMessage(content=modified_message)]
 
-    for agent in (
-        create_react_agent(FakeToolCallingModel(), [], prompt=prompt),
-        create_react_agent(FakeToolCallingModel(), [], state_modifier=prompt),
-    ):
-        inputs = [HumanMessage("hi?")]
-        response = agent.invoke({"messages": inputs})
-        expected_response = {
-            "messages": inputs + [AIMessage(content="Bar hi?", id="0")]
-        }
-        assert response == expected_response
+    agent = create_react_agent(FakeToolCallingModel(), [], prompt=prompt)
+    inputs = [HumanMessage("hi?")]
+    response = agent.invoke({"messages": inputs})
+    expected_response = {"messages": inputs + [AIMessage(content="Bar hi?", id="0")]}
+    assert response == expected_response
 
 
 async def test_callable_prompt_async():
@@ -198,16 +165,11 @@ async def test_callable_prompt_async():
         modified_message = f"Bar {state['messages'][-1].content}"
         return [HumanMessage(content=modified_message)]
 
-    for agent in (
-        create_react_agent(FakeToolCallingModel(), [], prompt=prompt),
-        create_react_agent(FakeToolCallingModel(), [], state_modifier=prompt),
-    ):
-        inputs = [HumanMessage("hi?")]
-        response = await agent.ainvoke({"messages": inputs})
-        expected_response = {
-            "messages": inputs + [AIMessage(content="Bar hi?", id="0")]
-        }
-        assert response == expected_response
+    agent = create_react_agent(FakeToolCallingModel(), [], prompt=prompt)
+    inputs = [HumanMessage("hi?")]
+    response = await agent.ainvoke({"messages": inputs})
+    expected_response = {"messages": inputs + [AIMessage(content="Bar hi?", id="0")]}
+    assert response == expected_response
 
 
 def test_runnable_prompt():
@@ -215,16 +177,11 @@ def test_runnable_prompt():
         lambda state: [HumanMessage(content=f"Baz {state['messages'][-1].content}")]
     )
 
-    for agent in (
-        create_react_agent(FakeToolCallingModel(), [], prompt=prompt),
-        create_react_agent(FakeToolCallingModel(), [], state_modifier=prompt),
-    ):
-        inputs = [HumanMessage("hi?")]
-        response = agent.invoke({"messages": inputs})
-        expected_response = {
-            "messages": inputs + [AIMessage(content="Baz hi?", id="0")]
-        }
-        assert response == expected_response
+    agent = create_react_agent(FakeToolCallingModel(), [], prompt=prompt)
+    inputs = [HumanMessage("hi?")]
+    response = agent.invoke({"messages": inputs})
+    expected_response = {"messages": inputs + [AIMessage(content="Baz hi?", id="0")]}
+    assert response == expected_response
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
@@ -543,19 +500,13 @@ class CustomStatePydantic(AgentStatePydantic):
     not IS_LANGCHAIN_CORE_030_OR_GREATER,
     reason="Langchain core 0.3.0 or greater is required",
 )
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 @pytest.mark.parametrize("state_schema", [CustomState, CustomStatePydantic])
 def test_react_agent_update_state(
-    request: pytest.FixtureRequest,
-    checkpointer_name: str,
+    sync_checkpointer: BaseCheckpointSaver,
     version: str,
     state_schema: StateSchemaType,
 ) -> None:
-    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
-        "checkpointer_" + checkpointer_name
-    )
-
     @dec_tool
     def get_user_name(tool_call_id: Annotated[str, InjectedToolCallId]):
         """Retrieve user name"""
@@ -597,7 +548,7 @@ def test_react_agent_update_state(
         [get_user_name],
         state_schema=state_schema,
         prompt=prompt,
-        checkpointer=checkpointer,
+        checkpointer=sync_checkpointer,
         version=version,
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -618,21 +569,10 @@ def test_react_agent_update_state(
     not IS_LANGCHAIN_CORE_030_OR_GREATER,
     reason="Langchain core 0.3.0 or greater is required",
 )
-@pytest.mark.parametrize(
-    "checkpointer_name",
-    [
-        checkpointer
-        for checkpointer in ALL_CHECKPOINTERS_SYNC
-        if "shallow" not in checkpointer
-    ],
-)
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 def test_react_agent_parallel_tool_calls(
-    request: pytest.FixtureRequest, checkpointer_name: str, version: str
+    sync_checkpointer: BaseCheckpointSaver, version: str
 ) -> None:
-    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
-        "checkpointer_" + checkpointer_name
-    )
     human_assistance_execution_count = 0
 
     @dec_tool
@@ -663,7 +603,7 @@ def test_react_agent_parallel_tool_calls(
     agent = create_react_agent(
         model,
         [human_assistance, get_weather],
-        checkpointer=checkpointer,
+        checkpointer=sync_checkpointer,
         version=version,
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -672,7 +612,8 @@ def test_react_agent_parallel_tool_calls(
     for event in agent.stream(
         {"messages": [("user", query)]}, config, stream_mode="values"
     ):
-        message_types.append([message.type for message in event["messages"]])
+        if messages := event.get("messages"):
+            message_types.append([m.type for m in messages])
 
     if version == "v1":
         assert message_types == [
@@ -691,7 +632,8 @@ def test_react_agent_parallel_tool_calls(
     for event in agent.stream(
         Command(resume={"data": "Hello"}), config, stream_mode="values"
     ):
-        message_types.append([message.type for message in event["messages"]])
+        if messages := event.get("messages"):
+            message_types.append([m.type for m in messages])
 
     assert message_types == [
         ["human", "ai"],
@@ -941,9 +883,9 @@ def test_tool_node_inject_store() -> None:
         for result in (node_result, graph_result):
             result["messages"][-1]
             tool_message = result["messages"][-1]
-            assert (
-                tool_message.content == "Some val: 1, store val: bar"
-            ), f"Failed for tool={tool_name}"
+            assert tool_message.content == "Some val: 1, store val: bar", (
+                f"Failed for tool={tool_name}"
+            )
 
     tool_call = {
         "name": "tool3",
@@ -957,9 +899,9 @@ def test_tool_node_inject_store() -> None:
     for result in (node_result, graph_result):
         result["messages"][-1]
         tool_message = result["messages"][-1]
-        assert (
-            tool_message.content == "Some val: 1, store val: bar, state val: baz"
-        ), f"Failed for tool={tool_name}"
+        assert tool_message.content == "Some val: 1, store val: bar, state val: baz", (
+            f"Failed for tool={tool_name}"
+        )
 
     # test injected store without passing store to compiled graph
     failing_graph = builder.compile()
@@ -1076,7 +1018,9 @@ async def test_return_direct(version: str) -> None:
         ),
     ]
     model = FakeToolCallingModel(tool_calls=[second_tool_call, []])
-    agent = create_react_agent(model, [tool_return_direct, tool_normal])
+    agent = create_react_agent(
+        model, [tool_return_direct, tool_normal], version=version
+    )
     result = agent.invoke(
         {"messages": [HumanMessage(content="Test normal", id="hum1")]}
     )
@@ -1105,7 +1049,9 @@ async def test_return_direct(version: str) -> None:
         ),
     ]
     model = FakeToolCallingModel(tool_calls=[both_tool_calls, []])
-    agent = create_react_agent(model, [tool_return_direct, tool_normal])
+    agent = create_react_agent(
+        model, [tool_return_direct, tool_normal], version=version
+    )
     result = agent.invoke({"messages": [HumanMessage(content="Test both", id="hum2")]})
     assert result["messages"] == [
         HumanMessage(content="Test both", id="hum2"),
@@ -1147,14 +1093,9 @@ def test_inspect_react() -> None:
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_react_with_subgraph_tools(
-    request: pytest.FixtureRequest, checkpointer_name: str, version: str
+    sync_checkpointer: BaseCheckpointSaver, version: str
 ) -> None:
-    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
-        "checkpointer_" + checkpointer_name
-    )
-
     class State(TypedDict):
         a: int
         b: int
@@ -1205,7 +1146,7 @@ def test_react_with_subgraph_tools(
     agent = create_react_agent(
         model,
         tool_node,
-        checkpointer=checkpointer,
+        checkpointer=sync_checkpointer,
         version=version,
     )
     result = agent.invoke(
@@ -1292,14 +1233,9 @@ def test_tool_node_stream_writer() -> None:
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_tool_node_node_interrupt(
-    request: pytest.FixtureRequest, checkpointer_name: str, version: str
+    sync_checkpointer: BaseCheckpointSaver, version: str
 ) -> None:
-    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
-        "checkpointer_" + checkpointer_name
-    )
-
     def tool_normal(some_val: int) -> str:
         """Tool docstring."""
         return "normal"
@@ -1323,7 +1259,7 @@ def test_tool_node_node_interrupt(
     agent = create_react_agent(
         model,
         [tool_interrupt, tool_normal],
-        checkpointer=checkpointer,
+        checkpointer=sync_checkpointer,
         version=version,
     )
     result = agent.invoke({"messages": [HumanMessage("hi?")]}, config)
@@ -1354,10 +1290,6 @@ def test_tool_node_node_interrupt(
         assert result["messages"] == expected_messages[:-1]
     elif version == "v2":
         assert result["messages"] == expected_messages
-
-    # TODO: figure out why this is not working w/ shallow postgres checkpointer
-    if "shallow" in checkpointer_name:
-        return
 
     state = agent.get_state(config)
     assert state.next == ("tools",)
@@ -1434,3 +1366,237 @@ def test_get_model() -> None:
 
     with pytest.raises(TypeError):
         _get_model(RunnableLambda(lambda message: message))
+
+
+def test_pre_model_hook() -> None:
+    model = FakeToolCallingModel(tool_calls=[])
+
+    # Test `llm_input_messages`
+    def pre_model_hook(state: AgentState):
+        return {"llm_input_messages": [HumanMessage("Hello!")]}
+
+    agent = create_react_agent(model, [], pre_model_hook=pre_model_hook)
+    assert "pre_model_hook" in agent.nodes
+    result = agent.invoke({"messages": [HumanMessage("hi?")]})
+    assert result == {
+        "messages": [
+            _AnyIdHumanMessage(content="hi?"),
+            AIMessage(content="Hello!", id="0"),
+        ]
+    }
+
+    # Test `messages`
+    def pre_model_hook(state: AgentState):
+        return {
+            "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), HumanMessage("Hello!")]
+        }
+
+    agent = create_react_agent(model, [], pre_model_hook=pre_model_hook)
+    result = agent.invoke({"messages": [HumanMessage("hi?")]})
+    assert result == {
+        "messages": [
+            _AnyIdHumanMessage(content="Hello!"),
+            AIMessage(content="Hello!", id="1"),
+        ]
+    }
+
+
+def test_post_model_hook() -> None:
+    class FlagState(AgentState):
+        flag: bool
+
+    model = FakeToolCallingModel(tool_calls=[])
+
+    def post_model_hook(state: FlagState) -> dict[str, bool]:
+        return {"flag": True}
+
+    pmh_agent = create_react_agent(
+        model, [], post_model_hook=post_model_hook, state_schema=FlagState
+    )
+
+    assert "post_model_hook" in pmh_agent.nodes
+
+    result = pmh_agent.invoke({"messages": [HumanMessage("hi?")], "flag": False})
+    assert result["flag"] is True
+
+    events = list(pmh_agent.stream({"messages": [HumanMessage("hi?")], "flag": False}))
+    assert events == [
+        {
+            "agent": {
+                "messages": [
+                    AIMessage(
+                        content="hi?",
+                        additional_kwargs={},
+                        response_metadata={},
+                        id="1",
+                    )
+                ]
+            }
+        },
+        {"post_model_hook": {"flag": True}},
+    ]
+
+
+def test_post_model_hook_with_structured_output() -> None:
+    class WeatherResponse(BaseModel):
+        temperature: float = Field(description="The temperature in fahrenheit")
+
+    tool_calls = [[{"args": {}, "id": "1", "name": "get_weather"}]]
+
+    def get_weather():
+        """Get the weather"""
+        return "The weather is sunny and 75°F."
+
+    expected_structured_response = WeatherResponse(temperature=75)
+    model = FakeToolCallingModel(
+        tool_calls=tool_calls, structured_response=expected_structured_response
+    )
+
+    class State(AgentState):
+        flag: bool
+        structured_response: WeatherResponse
+
+    def post_model_hook(state: State) -> Union[dict[str, bool], Command]:
+        return {"flag": True}
+
+    agent = create_react_agent(
+        model,
+        [get_weather],
+        response_format=WeatherResponse,
+        post_model_hook=post_model_hook,
+        state_schema=State,
+    )
+
+    assert "post_model_hook" in agent.nodes
+    assert "generate_structured_response" in agent.nodes
+
+    response = agent.invoke(
+        {"messages": [HumanMessage("What's the weather?")], "flag": False}
+    )
+    assert response["flag"] is True
+    assert response["structured_response"] == expected_structured_response
+
+    events = list(
+        agent.stream({"messages": [HumanMessage("What's the weather?")], "flag": False})
+    )
+    assert "generate_structured_response" in events[-1]
+    assert events == [
+        {
+            "agent": {
+                "messages": [
+                    AIMessage(
+                        content="What's the weather?",
+                        additional_kwargs={},
+                        response_metadata={},
+                        id="2",
+                        tool_calls=[
+                            {
+                                "name": "get_weather",
+                                "args": {},
+                                "id": "1",
+                                "type": "tool_call",
+                            }
+                        ],
+                    )
+                ]
+            }
+        },
+        {"post_model_hook": {"flag": True}},
+        {
+            "tools": {
+                "messages": [
+                    _AnyIdToolMessage(
+                        content="The weather is sunny and 75°F.",
+                        name="get_weather",
+                        tool_call_id="1",
+                    ),
+                ]
+            }
+        },
+        {
+            "agent": {
+                "messages": [
+                    AIMessage(
+                        content="What's the weather?-What's the weather?-The weather is sunny and 75°F.",
+                        additional_kwargs={},
+                        response_metadata={},
+                        id="3",
+                        tool_calls=[
+                            {
+                                "name": "get_weather",
+                                "args": {},
+                                "id": "1",
+                                "type": "tool_call",
+                            }
+                        ],
+                    )
+                ]
+            }
+        },
+        {"post_model_hook": {"flag": True}},
+        {
+            "generate_structured_response": {
+                "structured_response": WeatherResponse(temperature=75.0)
+            }
+        },
+    ]
+
+
+@pytest.mark.parametrize(
+    "state_schema", [AgentStateExtraKey, AgentStateExtraKeyPydantic]
+)
+def test_create_react_agent_inject_vars_with_post_model_hook(
+    state_schema: StateSchemaType,
+) -> None:
+    store = InMemoryStore()
+    namespace = ("test",)
+    store.put(namespace, "test_key", {"bar": 3})
+
+    if issubclass(state_schema, AgentStatePydantic):
+
+        def tool1(
+            some_val: int,
+            state: Annotated[AgentStateExtraKeyPydantic, InjectedState],
+            store: Annotated[BaseStore, InjectedStore()],
+        ) -> str:
+            """Tool 1 docstring."""
+            store_val = store.get(namespace, "test_key").value["bar"]
+            return some_val + state.foo + store_val
+    else:
+
+        def tool1(
+            some_val: int,
+            state: Annotated[dict, InjectedState],
+            store: Annotated[BaseStore, InjectedStore()],
+        ) -> str:
+            """Tool 1 docstring."""
+            store_val = store.get(namespace, "test_key").value["bar"]
+            return some_val + state["foo"] + store_val
+
+    tool_call = {
+        "name": "tool1",
+        "args": {"some_val": 1},
+        "id": "some 0",
+        "type": "tool_call",
+    }
+
+    def post_model_hook(state: dict) -> None:
+        return
+
+    model = FakeToolCallingModel(tool_calls=[[tool_call], []])
+    agent = create_react_agent(
+        model,
+        [tool1],
+        state_schema=state_schema,
+        store=store,
+        post_model_hook=post_model_hook,
+    )
+    input_message = HumanMessage("hi")
+    result = agent.invoke({"messages": [input_message], "foo": 2})
+    assert result["messages"] == [
+        input_message,
+        AIMessage(content="hi", tool_calls=[tool_call], id="0"),
+        _AnyIdToolMessage(content="6", name="tool1", tool_call_id="some 0"),
+        AIMessage("hi-hi-6", id="1"),
+    ]
+    assert result["foo"] == 2

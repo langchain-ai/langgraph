@@ -44,21 +44,30 @@ class Progress:
             sys.stdout.flush()
 
     def __enter__(self) -> Callable[[str], None]:
-        self.thread = threading.Thread(target=self.spinner_task)
-        self.thread.start()
+        if sys.stdout.isatty():
+            self.thread = threading.Thread(target=self.spinner_task)
+            self.thread.start()
 
-        def set_message(message):
-            self.message = message
-            if not message:
-                self.thread.join()
+            def set_message(message):
+                self.message = message
+                if not message:
+                    self.thread.join()
 
-        return set_message
+            return set_message
+        else:
+
+            def set_message(message):
+                sys.stderr.write(message + "\n")
+                sys.stderr.flush()
+
+            return set_message
 
     def __exit__(self, exception, value, tb):
-        self.message = ""
-        try:
-            self.thread.join()
-        finally:
-            del self.thread
-        if exception is not None:
-            return False
+        if sys.stdout.isatty():
+            self.message = ""
+            try:
+                self.thread.join()
+            finally:
+                del self.thread
+            if exception is not None:
+                return False

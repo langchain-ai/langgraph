@@ -3,9 +3,6 @@ name: CLI integration test
 on:
   workflow_call:
 
-env:
-  POETRY_VERSION: "1.7.1"
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -25,13 +22,14 @@ jobs:
         uses: Ana06/get-changed-files@v2.3.0
         with:
           filter: "libs/cli/**"
-      - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
+      - name: Set up Python ${{ matrix.python-version }}
         if: steps.changed-files.outputs.all
-        uses: "./.github/actions/poetry_setup"
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
-          poetry-version: ${{ env.POETRY_VERSION }}
-          cache-key: integration-test-cli
+          enable-cache: true
+          cache-suffix: "cli-integration-test"
+          ignore-nothing-to-cache: true
       - name: Setup env
         if: steps.changed-files.outputs.all
         working-directory: libs/cli/examples
@@ -71,4 +69,3 @@ jobs:
         working-directory: libs/cli/js-examples
         run: |
           langgraph build -t langgraph-test-e
-  

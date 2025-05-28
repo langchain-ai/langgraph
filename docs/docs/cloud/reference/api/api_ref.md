@@ -1,12 +1,12 @@
 # API Reference
 
-The LangGraph Cloud API reference is available with each deployment at the `/docs` URL path (e.g. `http://localhost:8124/docs`).
+The LangGraph Platform API reference is available with each deployment at the `/docs` URL path (e.g. `http://localhost:8124/docs`).
 
 Click <a href="/langgraph/cloud/reference/api/api_ref.html" target="_blank">here</a> to view the API reference.
 
 ## Authentication
 
-For deployments to LangGraph Cloud, authentication is required. Pass the `X-Api-Key` header with each request to the LangGraph Cloud API. The value of the header should be set to a valid LangSmith API key for the organization where the API is deployed.
+For deployments to LangGraph Platform, authentication is required. Pass the `X-Api-Key` header with each request to the LangGraph Platform API. The value of the header should be set to a valid LangSmith API key for the organization where the API is deployed.
 
 Example `curl` command:
 ```shell

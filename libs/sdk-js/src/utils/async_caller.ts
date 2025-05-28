@@ -12,10 +12,8 @@ const STATUS_NO_RETRY = [
   406, // Not Acceptable
   407, // Proxy Authentication Required
   408, // Request Timeout
-  422, // Unprocessable Entity
-];
-const STATUS_IGNORE = [
   409, // Conflict
+  422, // Unprocessable Entity
 ];
 
 type ResponseCallback = (response?: Response) => Promise<boolean>;
@@ -171,8 +169,6 @@ export class AsyncCaller {
               if (error instanceof HTTPError) {
                 if (STATUS_NO_RETRY.includes(error.status)) {
                   throw error;
-                } else if (STATUS_IGNORE.includes(error.status)) {
-                  return;
                 }
                 if (onFailedResponseHook && error.response) {
                   await onFailedResponseHook(error.response);

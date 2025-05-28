@@ -1,10 +1,8 @@
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import (
     Any,
-    AsyncIterator,
-    Iterator,
     Optional,
-    Sequence,
     Union,
 )
 

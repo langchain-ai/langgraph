@@ -1,4 +1,5 @@
-from typing import Generic, Optional, Sequence, Type
+from collections.abc import Sequence
+from typing import Generic
 
 from typing_extensions import Self
 
@@ -12,7 +13,7 @@ class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
 
     __slots__ = ("value", "guard")
 
-    def __init__(self, typ: Type[Value], guard: bool = True) -> None:
+    def __init__(self, typ: type[Value], guard: bool = True) -> None:
         super().__init__(typ)
         self.guard = guard
         self.value = MISSING
@@ -21,19 +22,26 @@ class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
         return isinstance(value, UntrackedValue) and value.guard == self.guard
 
     @property
-    def ValueType(self) -> Type[Value]:
+    def ValueType(self) -> type[Value]:
         """The type of the value stored in the channel."""
         return self.typ
 
     @property
-    def UpdateType(self) -> Type[Value]:
+    def UpdateType(self) -> type[Value]:
         """The type of the update received by the channel."""
         return self.typ
 
-    def checkpoint(self) -> Value:
-        raise EmptyChannelError()
+    def copy(self) -> Self:
+        """Return a copy of the channel."""
+        empty = self.__class__(self.typ, self.guard)
+        empty.key = self.key
+        empty.value = self.value
+        return empty
 
-    def from_checkpoint(self, checkpoint: Optional[Value]) -> Self:
+    def checkpoint(self) -> Value:
+        return MISSING
+
+    def from_checkpoint(self, checkpoint: Value) -> Self:
         empty = self.__class__(self.typ, self.guard)
         empty.key = self.key
         return empty

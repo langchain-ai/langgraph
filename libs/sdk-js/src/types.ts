@@ -19,7 +19,7 @@ export type StreamEvent =
 
 export interface Send {
   node: string;
-  input: Record<string, unknown> | null;
+  input: unknown | null;
 }
 
 export interface Command {
@@ -66,6 +66,11 @@ interface RunsInvokePayload {
    * Checkpoint for when creating a new run.
    */
   checkpoint?: Omit<Checkpoint, "thread_id">;
+
+  /**
+   * Whether to checkpoint during the run (or only at the end/interruption).
+   */
+  checkpointDuring?: boolean;
 
   /**
    * Interrupt execution before entering these nodes.
@@ -130,6 +135,11 @@ interface RunsInvokePayload {
    * One or more commands to invoke the graph with.
    */
   command?: Command;
+
+  /**
+   * Callback when a run is created.
+   */
+  onRunCreated?: (params: { run_id: string; thread_id?: string }) => void;
 }
 
 export interface RunsStreamPayload<
@@ -145,6 +155,12 @@ export interface RunsStreamPayload<
    * Stream output from subgraphs. By default, streams only the top graph.
    */
   streamSubgraphs?: TSubgraphs;
+
+  /**
+   * Whether the stream is considered resumable.
+   * If true, the stream can be resumed and replayed in its entirety even after disconnection.
+   */
+  streamResumable?: boolean;
 
   /**
    * Pass one or more feedbackKeys if you want to request short-lived signed URLs
@@ -163,6 +179,12 @@ export interface RunsCreatePayload extends RunsInvokePayload {
    * Stream output from subgraphs. By default, streams only the top graph.
    */
   streamSubgraphs?: boolean;
+
+  /**
+   * Whether the stream is considered resumable.
+   * If true, the stream can be resumed and replayed in its entirety even after disconnection.
+   */
+  streamResumable?: boolean;
 }
 
 export interface CronsCreatePayload extends RunsCreatePayload {

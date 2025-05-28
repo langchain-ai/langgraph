@@ -1,45 +1,53 @@
-[tool.poetry]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
 name = "langgraph-scheduler-kafka"
 version = "1.0.0"
 description = "Library with Kafka-based work scheduler."
 authors = []
-license = "MIT"
+requires-python = ">=3.9"
 readme = "README.md"
-repository = "https://www.github.com/langchain-ai/langgraph"
-packages = [{ include = "langgraph" }]
+license = "MIT"
+license-files = ['LICENSE']
+dependencies = [
+    "orjson>=3.10.7",
+    "crc32c~=2.7.post1",
+    "aiokafka>=0.11.0",
+    "langgraph>=0.2.19",
+]
 
-[tool.poetry.dependencies]
-python = "^3.9.0,<4.0"
-orjson = "^3.10.7"
-crc32c = "^2.7.post1"
-aiokafka = "^0.11.0"
-langgraph = ">=0.2.19,<0.4.0"
+[project.urls]
+Repository = "https://www.github.com/langchain-ai/langgraph"
 
-[tool.poetry.group.dev.dependencies]
-ruff = "^0.6.2"
-codespell = "^2.2.0"
-pytest = "^7.2.1"
-pytest-mock = "^3.11.1"
-pytest-watcher = "^0.4.1"
-mypy = "^1.10.0"
-langgraph = {path = "../langgraph", develop = true}
-langgraph-checkpoint-postgres = {path = "../checkpoint-postgres", develop = true}
-langgraph-checkpoint = {path = "../checkpoint", develop = true}
-kafka-python-ng = "^2.2.2"
+[dependency-groups]
+dev = [
+  "ruff",
+  "codespell",
+  "pytest",
+  "pytest-mock",
+  "pytest-watcher ; python_version < '4.0'",
+  "mypy",
+  "langgraph",
+  "langgraph-checkpoint-postgres",
+  "langgraph-checkpoint",
+  "kafka-python-ng",
+]
+
+[tool.uv]
+default-groups = ['dev']
+
+[tool.uv.sources]
+langgraph = { path = "../langgraph", editable = true }
+langgraph-checkpoint-postgres = { path = "../checkpoint-postgres", editable = true }
+langgraph-checkpoint = { path = "../checkpoint", editable = true }
+
+[tool.hatch.build.targets.wheel]
+include = ["langgraph"]
 
 [tool.pytest.ini_options]
-# --strict-markers will raise errors on unknown marks.
-# https://docs.pytest.org/en/7.1.x/how-to/mark.html#raising-errors-on-unknown-marks
-#
-# https://docs.pytest.org/en/7.1.x/reference/reference.html
-# --strict-config       any warnings encountered while parsing the `pytest`
-#                       section of the configuration file raise errors.
 addopts = "--strict-markers --strict-config --durations=5 -vv"
-
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
 lint.select = [

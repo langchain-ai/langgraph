@@ -1,10 +1,11 @@
+---
+search:
+  boost: 2
+---
+
 # Authentication & Access Control
 
 LangGraph Platform provides a flexible authentication and authorization system that can integrate with most authentication schemes.
-
-!!! note "Python only"
-
-    We currently only support custom authentication and authorization in Python deployments with `langgraph-api>=0.0.11`. Support for LangGraph.JS will be added soon.
 
 ## Core Concepts
 
@@ -21,14 +22,14 @@ In LangGraph Platform, authentication is handled by your [`@auth.authenticate`](
 
 LangGraph Platform provides different security defaults:
 
-### LangGraph Cloud
+### LangGraph Platform
 
 - Uses LangSmith API keys by default
 - Requires valid API key in `x-api-key` header
 - Can be customized with your auth handler
 
 !!! note "Custom auth"
-    Custom auth **is supported** for all plans in LangGraph Cloud.
+    Custom auth **is supported** for all plans in LangGraph Platform.
 
 ### Self-Hosted
 
@@ -37,8 +38,8 @@ LangGraph Platform provides different security defaults:
 - You control all aspects of authentication and authorization
 
 !!! note "Custom auth"
-    Custom auth is supported for **Enterprise** self-hosted plans.
-    Self-hosted lite plans do not support custom auth natively.
+    Custom auth is supported for **Enterprise** self-hosted deployments.
+    Standalone Container (Lite) deployments do not support custom auth natively.
 
 ## System Architecture
 
@@ -146,7 +147,7 @@ The returned user information is available:
 
 After authentication, LangGraph calls your [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) handlers to control access to specific resources (e.g., threads, assistants, crons). These handlers can:
 
-1. Add metadata to be saved during resource creation by mutating the `value["metadata"]` dictionary directly. See the [supported actions table](##supported-actions) for the list of types the value can take for each action.
+1. Add metadata to be saved during resource creation by mutating the `value["metadata"]` dictionary directly. See the [supported actions table](#supported-actions) for the list of types the value can take for each action.
 2. Filter resources by metadata during search/list or read operations by returning a [filter dictionary](#filter-operations).
 3. Raise an HTTP exception if access is denied.
 
@@ -289,7 +290,7 @@ async def on_assistant_create(
         )
 ```
 
-Notice that we are mixing global and resource-specific handlers in the above example. Since each request is handled by the most specific handler, a request to create a `thread` would match the `on_thread_create` handler but NOT the `reject_unhandled_requests` handler. A request to `update` a thread, however would be handled by the global handler, since we don't have a more specific handler for that resource and action. Requests to create, update, 
+Notice that we are mixing global and resource-specific handlers in the above example. Since each request is handled by the most specific handler, a request to create a `thread` would match the `on_thread_create` handler but NOT the `reject_unhandled_requests` handler. A request to `update` a thread, however would be handled by the global handler, since we don't have a more specific handler for that resource and action.
 
 ### Filter Operations {#filter-operations}
 
@@ -423,6 +424,7 @@ Here are all the supported action handlers:
 | | `@auth.on.crons.search` | Listing cron jobs | [`CronsSearch`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.CronsSearch) |
 
 ???+ note "About Runs"
+
     Runs are scoped to their parent thread for access control. This means permissions are typically inherited from the thread, reflecting the conversational nature of the data model. All run operations (reading, listing) except creation are controlled by the thread's handlers.
     There is a specific `create_run` handler for creating new runs because it had more arguments that you can view in the handler.
 

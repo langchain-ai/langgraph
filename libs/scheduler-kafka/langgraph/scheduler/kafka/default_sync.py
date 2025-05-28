@@ -1,5 +1,6 @@
 import concurrent.futures
-from typing import Optional, Sequence
+from collections.abc import Sequence
+from typing import Optional
 
 from kafka import KafkaConsumer, KafkaProducer
 from langgraph.scheduler.kafka.types import ConsumerRecord, TopicPartition
