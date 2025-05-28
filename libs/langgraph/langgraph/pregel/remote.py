@@ -653,7 +653,11 @@ class RemoteGraph(PregelProtocol):
         if checkpoint_ns:
             merged_config = patch_configurable(
                 merged_config,
-                {"thread_id": str(uuid5(UUID(str(thread_id)), checkpoint_ns)) if thread_id else None},
+                {
+                    "thread_id": str(uuid5(UUID(str(thread_id)), checkpoint_ns))
+                    if thread_id
+                    else None
+                },
             )
 
         sanitized_config = self._sanitize_config(merged_config)
@@ -760,7 +764,11 @@ class RemoteGraph(PregelProtocol):
         if checkpoint_ns:
             merged_config = patch_configurable(
                 merged_config,
-                {"thread_id": str(uuid5(UUID(str(thread_id)), checkpoint_ns)) if thread_id else None},
+                {
+                    "thread_id": str(uuid5(UUID(str(thread_id)), checkpoint_ns))
+                    if thread_id
+                    else None
+                },
             )
         sanitized_config = self._sanitize_config(merged_config)
         stream_modes, requested, req_single, stream = self._get_stream_modes(
