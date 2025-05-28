@@ -5456,10 +5456,7 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
         if event["event"] == "on_chain_end" and event["run_id"] == str(UUID(int=0)):
             times_called += 1
             assert event["data"] == {
-                "output": [
-                    {"inner": {"my_key": "my value there"}},
-                    {"side": {"my_key": "my value there and back again"}},
-                ]
+                "output": {"side": {"my_key": "my value there and back again"}}
             }
     assert times_called == 1
 
