@@ -12,7 +12,6 @@ from typing import (
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
-from langchain_core.runnables.utils import ConfigurableFieldSpec
 
 from langgraph.constants import CONF, CONFIG_KEY_SEND, MISSING, TASKS, Send
 from langgraph.errors import InvalidUpdateError
@@ -56,13 +55,13 @@ class ChannelWrite(RunnableCallable):
         self,
         writes: Sequence[ChannelWriteEntry | ChannelWriteTupleEntry | Send],
         *,
-        tags: Sequence[str] | None = None,  # ignored
-        require_at_least_one_of: Sequence[str] | None = None,  # ignored
+        tags: Sequence[str] | None = None,
     ):
         super().__init__(
             func=self._write,
             afunc=self._awrite,
             name=None,
+            tags=tags,
             trace=False,
             func_accepts_config=True,
         )
@@ -74,18 +73,6 @@ class ChannelWrite(RunnableCallable):
         if not name:
             name = f"ChannelWrite<{','.join(w.channel if isinstance(w, ChannelWriteEntry) else '...' if isinstance(w, ChannelWriteTupleEntry) else w.node for w in self.writes)}>"
         return super().get_name(suffix, name=name)
-
-    @property
-    def config_specs(self) -> list[ConfigurableFieldSpec]:
-        return [
-            ConfigurableFieldSpec(
-                id=CONFIG_KEY_SEND,
-                name=CONFIG_KEY_SEND,
-                description=None,
-                default=None,
-                annotation=None,
-            ),
-        ]
 
     def _write(self, input: Any, config: RunnableConfig) -> None:
         writes = [
@@ -122,7 +109,6 @@ class ChannelWrite(RunnableCallable):
         config: RunnableConfig,
         writes: Sequence[ChannelWriteEntry | ChannelWriteTupleEntry | Send],
         allow_passthrough: bool = True,
-        require_at_least_one_of: Sequence[str] | None = None,  # ignored
     ) -> None:
         # validate
         for w in writes:

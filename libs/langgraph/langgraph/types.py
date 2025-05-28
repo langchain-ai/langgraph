@@ -488,6 +488,7 @@ def interrupt(value: Any) -> Any:
     Raises:
         GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
     """
+    from langgraph.config import get_config
     from langgraph.constants import (
         CONFIG_KEY_CHECKPOINT_NS,
         CONFIG_KEY_SCRATCHPAD,
@@ -496,7 +497,6 @@ def interrupt(value: Any) -> Any:
         RESUME,
     )
     from langgraph.errors import GraphInterrupt
-    from langgraph.utils.config import get_config
 
     conf = get_config()["configurable"]
     # track interrupt index
