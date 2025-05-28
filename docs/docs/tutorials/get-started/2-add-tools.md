@@ -146,7 +146,7 @@ graph_builder.add_node("tools", tool_node)
 
 !!! note
 
-    If you do not want to build this yourself in the future, you can use LangGraph's prebuilt [ToolNode](https://langchain-ai.github.io/langgraph/reference/prebuilt/#toolnode).
+    If you do not want to build this yourself in the future, you can use LangGraph's prebuilt [ToolNode](https://langchain-ai.github.io/langgraph/reference/agents/#langgraph.prebuilt.tool_node.ToolNode).
 
 ## 6. Define the `conditional_edges`
 
