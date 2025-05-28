@@ -45,11 +45,6 @@ class CheckpointMetadata(TypedDict, total=False):
     0 for the first "loop" checkpoint.
     ... for the nth checkpoint afterwards.
     """
-    writes: dict[str, Any]
-    """The writes that were made between the previous checkpoint and this one.
-
-    Mapping from node name to writes emitted by that node.
-    """
     parents: dict[str, str]
     """The IDs of the parent checkpoints.
 
@@ -377,7 +372,10 @@ def get_checkpoint_metadata(
     config: RunnableConfig, metadata: CheckpointMetadata
 ) -> CheckpointMetadata:
     """Get checkpoint metadata in a backwards-compatible manner."""
-    metadata = metadata.copy()
+    metadata = {
+        k: v.replace("\u0000", "") if isinstance(v, str) else v
+        for k, v in metadata.items()
+    }
     for obj in (config.get("metadata"), config.get("configurable")):
         if not obj:
             continue
@@ -385,8 +383,10 @@ def get_checkpoint_metadata(
             if key in metadata or key in EXCLUDED_METADATA_KEYS or key.startswith("__"):
                 continue
             v = obj[key]
-            if isinstance(v, (str, int, bool, float)):
-                metadata[key] = v  # type: ignore[literal-required]
+            if isinstance(v, str):
+                metadata[key] = v.replace("\u0000", "")
+            elif isinstance(v, (int, bool, float)):
+                metadata[key] = v
     return metadata
 
 

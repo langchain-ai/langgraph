@@ -112,7 +112,6 @@ from langgraph.pregel.io import (
     map_output_updates,
     map_output_values,
     read_channels,
-    single,
 )
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.utils import get_new_channel_versions, is_xxh3_128_hexdigest
@@ -520,17 +519,7 @@ class PregelLoop:
             # "not skip_done_tasks" only applies to first tick after resuming
             self.skip_done_tasks = True
             # save checkpoint
-            self._put_checkpoint(
-                {
-                    "source": "loop",
-                    "writes": single(
-                        map_output_updates(
-                            self.output_keys,
-                            [(t, t.writes) for t in self.tasks.values()],
-                        )
-                    ),
-                }
-            )
+            self._put_checkpoint({"source": "loop"})
             # after execution, check if we should interrupt
             if self.interrupt_after and should_interrupt(
                 self.checkpoint, self.interrupt_after, self.tasks.values()
@@ -760,7 +749,7 @@ class PregelLoop:
                 self.trigger_to_nodes,
             )
             # save input checkpoint
-            self._put_checkpoint({"source": "input", "writes": dict(input_writes)})
+            self._put_checkpoint({"source": "input"})
             # set flag
             if (
                 self.input_model is not None

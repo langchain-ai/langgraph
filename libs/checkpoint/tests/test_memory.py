@@ -8,7 +8,7 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
 )
 from langgraph.checkpoint.memory import InMemorySaver
-from tests.checkpoint_utils import (  # type: ignore[import-untyped]
+from tests.checkpoint_utils import (
     create_checkpoint,
     empty_checkpoint,
 )

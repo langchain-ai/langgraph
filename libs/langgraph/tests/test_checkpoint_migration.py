@@ -44,7 +44,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
             },
             metadata={
                 "source": "loop",
-                "writes": {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
                 "step": 4,
                 "parents": {},
                 "thread_id": "1",
@@ -75,7 +74,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
             },
             metadata={
                 "source": "loop",
-                "writes": {"retriever_one": {"docs": ["doc1", "doc2"]}},
                 "step": 3,
                 "parents": {},
                 "thread_id": "1",
@@ -134,10 +132,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
             },
             metadata={
                 "source": "loop",
-                "writes": {
-                    "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-                    "retriever_two": {"docs": ["doc3", "doc4"]},
-                },
                 "step": 2,
                 "parents": {},
                 "thread_id": "1",
@@ -175,7 +169,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
             },
             metadata={
                 "source": "loop",
-                "writes": {"rewrite_query": {"query": "query: what is weather in sf"}},
                 "step": 1,
                 "parents": {},
                 "thread_id": "1",
@@ -226,7 +219,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
             },
             metadata={
                 "source": "loop",
-                "writes": None,
                 "step": 0,
                 "parents": {},
                 "thread_id": "1",
@@ -266,7 +258,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
             },
             metadata={
                 "source": "input",
-                "writes": {"__start__": {"query": "what is weather in sf"}},
                 "step": -1,
                 "parents": {},
                 "thread_id": "1",
@@ -353,7 +344,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "writes": {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
                 "step": 4,
                 "parents": {},
                 "thread_id": "1",
@@ -415,7 +405,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "writes": {"retriever_one": {"docs": ["doc1", "doc2"]}},
                 "step": 3,
                 "parents": {},
                 "thread_id": "1",
@@ -492,10 +481,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "writes": {
-                    "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-                    "retriever_two": {"docs": ["doc3", "doc4"]},
-                },
                 "step": 2,
                 "parents": {},
                 "thread_id": "1",
@@ -548,7 +533,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "writes": {"rewrite_query": {"query": "query: what is weather in sf"}},
                 "step": 1,
                 "parents": {},
                 "thread_id": "1",
@@ -604,7 +588,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "writes": None,
                 "step": 0,
                 "parents": {},
                 "thread_id": "1",
@@ -654,7 +637,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "input",
-                "writes": {"__start__": {"query": "what is weather in sf"}},
                 "step": -1,
                 "parents": {},
                 "thread_id": "1",
@@ -741,7 +723,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "writes": {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
                 "thread_id": "1",
                 "step": 4,
                 "parents": {},
@@ -804,7 +785,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "writes": {"retriever_one": {"docs": ["doc1", "doc2"]}},
                 "thread_id": "1",
                 "step": 3,
                 "parents": {},
@@ -884,10 +864,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "writes": {
-                    "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-                    "retriever_two": {"docs": ["doc3", "doc4"]},
-                },
                 "thread_id": "1",
                 "step": 2,
                 "parents": {},
@@ -944,7 +920,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "writes": {"rewrite_query": {"query": "query: what is weather in sf"}},
                 "thread_id": "1",
                 "step": 1,
                 "parents": {},
@@ -1005,7 +980,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "writes": None,
                 "thread_id": "1",
                 "step": 0,
                 "parents": {},
@@ -1055,7 +1029,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "input",
-                "writes": {"__start__": {"query": "what is weather in sf"}},
                 "thread_id": "1",
                 "step": -1,
                 "parents": {},
@@ -1142,7 +1115,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "writes": {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
                 "thread_id": "1",
                 "step": 4,
                 "parents": {},
@@ -1205,7 +1177,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "writes": {"retriever_one": {"docs": ["doc1", "doc2"]}},
                 "thread_id": "1",
                 "step": 3,
                 "parents": {},
@@ -1285,10 +1256,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "writes": {
-                    "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-                    "retriever_two": {"docs": ["doc3", "doc4"]},
-                },
                 "thread_id": "1",
                 "step": 2,
                 "parents": {},
@@ -1345,7 +1312,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "writes": {"rewrite_query": {"query": "query: what is weather in sf"}},
                 "thread_id": "1",
                 "step": 1,
                 "parents": {},
@@ -1406,7 +1372,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "writes": None,
                 "thread_id": "1",
                 "step": 0,
                 "parents": {},
@@ -1456,7 +1421,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "input",
-                "writes": {"__start__": {"query": "what is weather in sf"}},
                 "thread_id": "1",
                 "step": -1,
                 "parents": {},

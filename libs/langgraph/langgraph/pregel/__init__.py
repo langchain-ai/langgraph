@@ -1559,7 +1559,6 @@ class Pregel(PregelProtocol):
                         **checkpoint_metadata,
                         "source": "update",
                         "step": step + 1,
-                        "writes": {},
                         "parents": saved.metadata.get("parents", {}) if saved else {},
                     },
                     {},
@@ -1583,7 +1582,6 @@ class Pregel(PregelProtocol):
                         **checkpoint_metadata,
                         "source": "update",
                         "step": step + 1,
-                        "writes": {},
                         "parents": saved.metadata.get("parents", {}) if saved else {},
                     },
                     {},
@@ -1621,7 +1619,6 @@ class Pregel(PregelProtocol):
                             **checkpoint_metadata,
                             "source": "input",
                             "step": next_step,
-                            "writes": dict(input_writes),
                         },
                         get_new_channel_versions(
                             checkpoint_previous_versions,
@@ -1813,7 +1810,6 @@ class Pregel(PregelProtocol):
                     **checkpoint_metadata,
                     "source": "update",
                     "step": step + 1,
-                    "writes": {as_node: values for as_node, values in valid_updates},
                     "parents": saved.metadata.get("parents", {}) if saved else {},
                 },
                 get_new_channel_versions(
@@ -1974,7 +1970,6 @@ class Pregel(PregelProtocol):
                         **checkpoint_metadata,
                         "source": "update",
                         "step": step + 1,
-                        "writes": {},
                         "parents": saved.metadata.get("parents", {}) if saved else {},
                     },
                     {},
@@ -1998,7 +1993,6 @@ class Pregel(PregelProtocol):
                         **checkpoint_metadata,
                         "source": "update",
                         "step": step + 1,
-                        "writes": {},
                         "parents": saved.metadata.get("parents", {}) if saved else {},
                     },
                     {},
@@ -2036,7 +2030,6 @@ class Pregel(PregelProtocol):
                             **checkpoint_metadata,
                             "source": "input",
                             "step": next_step,
-                            "writes": dict(input_writes),
                         },
                         get_new_channel_versions(
                             checkpoint_previous_versions,
@@ -2226,7 +2219,6 @@ class Pregel(PregelProtocol):
                     **checkpoint_metadata,
                     "source": "update",
                     "step": step + 1,
-                    "writes": {as_node: values for as_node, values in valid_updates},
                     "parents": saved.metadata.get("parents", {}) if saved else {},
                 },
                 get_new_channel_versions(

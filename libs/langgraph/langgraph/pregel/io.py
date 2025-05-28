@@ -1,6 +1,6 @@
 from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Any, Literal, Optional, TypeVar, Union
+from typing import Any, Literal, Optional, Union
 
 from langgraph.channels.base import BaseChannel, EmptyChannelError
 from langgraph.constants import (
@@ -172,11 +172,3 @@ def map_output_updates(
     if cached:
         grouped["__metadata__"] = {"cached": cached}
     yield grouped
-
-
-T = TypeVar("T")
-
-
-def single(iter: Iterator[T]) -> Optional[T]:
-    for item in iter:
-        return item
