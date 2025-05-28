@@ -2387,7 +2387,7 @@ class Pregel(PregelProtocol):
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
-            checkpoint_during: Whether to checkpoint intermediate steps, defaults to True. If False, only the final checkpoint is saved.
+            checkpoint_during: Whether to checkpoint intermediate steps, defaults to False. If False, only the final checkpoint is saved.
             debug: Whether to print debug information during execution, defaults to False.
             subgraphs: Whether to stream events from inside subgraphs, defaults to False.
                 If True, the events will be emitted as tuples `(namespace, data)`,
@@ -2494,7 +2494,7 @@ class Pregel(PregelProtocol):
                 debug=debug,
                 checkpoint_during=checkpoint_during
                 if checkpoint_during is not None
-                else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, True),
+                else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, False),
                 trigger_to_nodes=self.trigger_to_nodes,
                 migrate_checkpoint=self._migrate_checkpoint,
                 retry_policy=self.retry_policy,
@@ -2608,7 +2608,7 @@ class Pregel(PregelProtocol):
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
-            checkpoint_during: Whether to checkpoint intermediate steps, defaults to True. If False, only the final checkpoint is saved.
+            checkpoint_during: Whether to checkpoint intermediate steps, defaults to False. If False, only the final checkpoint is saved.
             debug: Whether to print debug information during execution, defaults to False.
             subgraphs: Whether to stream events from inside subgraphs, defaults to False.
                 If True, the events will be emitted as tuples `(namespace, data)`,
@@ -2737,7 +2737,7 @@ class Pregel(PregelProtocol):
                 debug=debug,
                 checkpoint_during=checkpoint_during
                 if checkpoint_during is not None
-                else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, True),
+                else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, False),
                 trigger_to_nodes=self.trigger_to_nodes,
                 migrate_checkpoint=self._migrate_checkpoint,
                 retry_policy=self.retry_policy,
@@ -2816,7 +2816,6 @@ class Pregel(PregelProtocol):
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        checkpoint_during: bool | None = None,
         debug: bool | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
@@ -2849,7 +2848,6 @@ class Pregel(PregelProtocol):
             output_keys=output_keys,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
-            checkpoint_during=checkpoint_during,
             debug=debug,
             **kwargs,
         ):
@@ -2884,7 +2882,6 @@ class Pregel(PregelProtocol):
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        checkpoint_during: bool | None = None,
         debug: bool | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
@@ -2918,7 +2915,6 @@ class Pregel(PregelProtocol):
             output_keys=output_keys,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
-            checkpoint_during=checkpoint_during,
             debug=debug,
             **kwargs,
         ):
