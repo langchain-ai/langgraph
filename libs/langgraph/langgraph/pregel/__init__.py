@@ -8,7 +8,7 @@ import weakref
 from collections import defaultdict, deque
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from functools import partial
-from typing import Any, Callable, Union, cast, get_type_hints, overload
+from typing import Any, Callable, Union, cast, get_type_hints
 from uuid import UUID, uuid5
 
 from langchain_core.globals import get_debug
@@ -294,79 +294,6 @@ class NodeBuilder:
             bound=self._bound,
             retry_policy=self._retries,
             cache_policy=self._cache,
-        )
-
-
-# Deprecated, remove in 2.0
-class Channel:
-    @overload
-    @classmethod
-    def subscribe_to(
-        cls,
-        channels: str,
-        *,
-        key: str | None = None,
-        tags: list[str] | None = None,
-    ) -> PregelNode: ...
-
-    @overload
-    @classmethod
-    def subscribe_to(
-        cls,
-        channels: Sequence[str],
-        *,
-        key: None = None,
-        tags: list[str] | None = None,
-    ) -> PregelNode: ...
-
-    @classmethod
-    def subscribe_to(
-        cls,
-        channels: str | Sequence[str],
-        *,
-        key: str | None = None,
-        tags: list[str] | None = None,
-    ) -> PregelNode:
-        """Runs process.invoke() each time channels are updated,
-        with a dict of the channel values as input."""
-        if not isinstance(channels, str) and key is not None:
-            raise ValueError(
-                "Can't specify a key when subscribing to multiple channels"
-            )
-        return PregelNode(
-            channels=cast(
-                Union[list[str], Mapping[str, str]],
-                (
-                    {key: channels}
-                    if isinstance(channels, str) and key is not None
-                    else (
-                        [channels]
-                        if isinstance(channels, str)
-                        else {chan: chan for chan in channels}
-                    )
-                ),
-            ),
-            triggers=[channels] if isinstance(channels, str) else channels,
-            tags=tags,
-        )
-
-    @classmethod
-    def write_to(
-        cls,
-        *channels: str | ChannelWriteEntry,
-        **kwargs: WriteValue,
-    ) -> ChannelWrite:
-        """Writes to channels the result of the lambda, or None to skip writing."""
-        return ChannelWrite(
-            [ChannelWriteEntry(c) if isinstance(c, str) else c for c in channels]
-            + [
-                (
-                    ChannelWriteEntry(k, mapper=v)
-                    if callable(v)
-                    else ChannelWriteEntry(k, value=v)
-                )
-                for k, v in kwargs.items()
-            ]
         )
 
 

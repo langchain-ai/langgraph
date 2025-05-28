@@ -6,8 +6,9 @@
       show_root_heading: true
       show_root_full_path: false
       members:
-        - subscribe_single
+        - subscribe_only
         - subscribe_to
+        - read_from
         - do
         - write_to
         - meta

@@ -49,14 +49,12 @@ from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.message import MessageGraph, MessagesState, add_messages
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import (
-    Channel,
     GraphRecursionError,
     NodeBuilder,
     Pregel,
     StateSnapshot,
 )
 from langgraph.pregel.loop import SyncPregelLoop
-from langgraph.pregel.read import PregelNode
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.runner import PregelRunner
 from langgraph.store.base import BaseStore
@@ -266,15 +264,9 @@ def test_checkpoint_errors() -> None:
         graph.invoke("", {"configurable": {"thread_id": "thread-1"}})
 
 
-@pytest.mark.parametrize("use_node_builder", [True, False])
-def test_config_json_schema(use_node_builder: bool) -> None:
+def test_config_json_schema() -> None:
     """Test that config json schema is generated properly."""
-    if use_node_builder:
-        chain: Union[NodeBuilder, PregelNode] = (
-            NodeBuilder().subscribe_only("input").write_to("output")
-        )
-    else:
-        chain = Channel.subscribe_to("input") | Channel.write_to("output")
+    chain = NodeBuilder().subscribe_only("input").write_to("output")
 
     @dataclass
     class Foo:
@@ -481,15 +473,9 @@ def test_reducer_before_first_node() -> None:
     }
 
 
-@pytest.mark.parametrize("use_node_builder", [True, False])
-def test_invoke_single_process_in_out(
-    mocker: MockerFixture, use_node_builder: bool
-) -> None:
+def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    if use_node_builder:
-        chain = NodeBuilder().subscribe_only("input").do(add_one).write_to("output")
-    else:
-        chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
+    chain = NodeBuilder().subscribe_only("input").do(add_one).write_to("output")
 
     app = Pregel(
         nodes={
@@ -544,24 +530,14 @@ def test_invoke_single_process_in_out_falsy_values(falsy_value: Any) -> None:
     assert gapp.invoke(1) == falsy_value
 
 
-@pytest.mark.parametrize("use_node_builder", [True, False])
-def test_invoke_single_process_in_write_kwargs(
-    mocker: MockerFixture, use_node_builder: bool
-) -> None:
+def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    if use_node_builder:
-        chain = (
-            NodeBuilder()
-            .subscribe_only("input")
-            .do(add_one)
-            .write_to("output", fixed=5, output_plus_one=lambda x: x + 1)
-        )
-    else:
-        chain = (
-            Channel.subscribe_to("input")
-            | add_one
-            | Channel.write_to("output", fixed=5, output_plus_one=lambda x: x + 1)
-        )
+    chain = (
+        NodeBuilder()
+        .subscribe_only("input")
+        .do(add_one)
+        .write_to("output", fixed=5, output_plus_one=lambda x: x + 1)
+    )
 
     app = Pregel(
         nodes={"one": chain},
@@ -595,15 +571,9 @@ def test_invoke_single_process_in_write_kwargs(
     assert app.invoke(2) == {"output": 3, "fixed": 5, "output_plus_one": 4}
 
 
-@pytest.mark.parametrize("use_node_builder", [True, False])
-def test_invoke_single_process_in_out_dict(
-    mocker: MockerFixture, use_node_builder: bool
-) -> None:
+def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    if use_node_builder:
-        chain = NodeBuilder().subscribe_only("input").do(add_one).write_to("output")
-    else:
-        chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
+    chain = NodeBuilder().subscribe_only("input").do(add_one).write_to("output")
 
     app = Pregel(
         nodes={"one": chain},
@@ -626,15 +596,9 @@ def test_invoke_single_process_in_out_dict(
     assert app.invoke(2) == {"output": 3}
 
 
-@pytest.mark.parametrize("use_node_builder", [True, False])
-def test_invoke_single_process_in_dict_out_dict(
-    mocker: MockerFixture, use_node_builder: bool
-) -> None:
+def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    if use_node_builder:
-        chain = NodeBuilder().subscribe_only("input").do(add_one).write_to("output")
-    else:
-        chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
+    chain = NodeBuilder().subscribe_only("input").do(add_one).write_to("output")
 
     app = Pregel(
         nodes={"one": chain},
@@ -657,17 +621,10 @@ def test_invoke_single_process_in_dict_out_dict(
     assert app.invoke({"input": 2}) == {"output": 3}
 
 
-@pytest.mark.parametrize("use_node_builder", [True, False])
-def test_invoke_two_processes_in_out(
-    mocker: MockerFixture, use_node_builder: bool
-) -> None:
+def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    if use_node_builder:
-        one = NodeBuilder().subscribe_only("input").do(add_one).write_to("inbox")
-        two = NodeBuilder().subscribe_only("inbox").do(add_one).write_to("output")
-    else:
-        one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
-        two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
+    one = NodeBuilder().subscribe_only("input").do(add_one).write_to("inbox")
+    two = NodeBuilder().subscribe_only("inbox").do(add_one).write_to("output")
 
     app = Pregel(
         nodes={"one": one, "two": two},
