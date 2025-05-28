@@ -20,7 +20,6 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.postgres import _ainternal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
-from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
 Conn = _ainternal.Conn  # For backward compatibility
@@ -532,4 +531,4 @@ class AsyncPostgresSaver(BasePostgresSaver):
         ).result()
 
 
-__all__ = ["AsyncPostgresSaver", "AsyncShallowPostgresSaver", "Conn"]
+__all__ = ["AsyncPostgresSaver", "Conn"]
