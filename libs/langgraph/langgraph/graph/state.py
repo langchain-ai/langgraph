@@ -64,7 +64,6 @@ from langgraph.graph.graph import (
     Graph,
     Send,
 )
-from langgraph.graph.schema_utils import SchemaCoercionMapper
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
     ChannelTypePlaceholder,
@@ -1042,11 +1041,8 @@ def _pick_mapper(
 ) -> Optional[Callable[[Any], Any]]:
     if state_keys == ["__root__"]:
         return None
-    if isclass(schema):
-        if issubclass(schema, dict):
-            return None
-        if issubclass(schema, BaseModel):
-            return SchemaCoercionMapper(schema, type_hints=type_hints)
+    if isclass(schema) and issubclass(schema, dict):
+        return None
     return partial(_coerce_state, schema)
 
 
