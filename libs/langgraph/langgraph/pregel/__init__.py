@@ -34,6 +34,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     copy_checkpoint,
 )
+from langgraph.config import get_config
 from langgraph.constants import (
     CACHE_NS_WRITES,
     CONF,
@@ -2432,13 +2433,27 @@ class Pregel(PregelProtocol):
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
-                    StreamMessagesHandler(stream.put)
+                    StreamMessagesHandler(stream.put, subgraphs)
                 )
             # set up custom stream mode
             if "custom" in stream_modes:
                 config[CONF][CONFIG_KEY_STREAM_WRITER] = lambda c: stream.put(
-                    ((), "custom", c)
+                    (
+                        tuple(
+                            get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(NS_SEP)[
+                                :-1
+                            ]
+                        ),
+                        "custom",
+                        c,
+                    )
                 )
+            elif (
+                CONFIG_KEY_STREAM not in config[CONF]
+                and CONFIG_KEY_STREAM_WRITER in config[CONF]
+            ):
+                # remove parent graph stream writer if subgraph streaming not requested
+                del config[CONF][CONFIG_KEY_STREAM_WRITER]
             # set checkpointing mode for subgraphs
             if checkpoint_during is not None:
                 config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
@@ -2658,15 +2673,30 @@ class Pregel(PregelProtocol):
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
-                    StreamMessagesHandler(stream_put)
+                    StreamMessagesHandler(stream_put, subgraphs)
                 )
             # set up custom stream mode
             if "custom" in stream_modes:
                 config[CONF][CONFIG_KEY_STREAM_WRITER] = (
                     lambda c: aioloop.call_soon_threadsafe(
-                        stream.put_nowait, ((), "custom", c)
+                        stream.put_nowait,
+                        (
+                            tuple(
+                                get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(
+                                    NS_SEP
+                                )[:-1]
+                            ),
+                            "custom",
+                            c,
+                        ),
                     )
                 )
+            elif (
+                CONFIG_KEY_STREAM not in config[CONF]
+                and CONFIG_KEY_STREAM_WRITER in config[CONF]
+            ):
+                # remove parent graph stream writer if subgraph streaming not requested
+                del config[CONF][CONFIG_KEY_STREAM_WRITER]
             # set checkpointing mode for subgraphs
             if checkpoint_during is not None:
                 config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during

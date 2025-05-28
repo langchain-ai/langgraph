@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import BaseMessage
-from langchain_core.outputs import ChatGenerationChunk, LLMResult
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
 
 from langgraph.constants import NS_SEP, TAG_HIDDEN, TAG_NOSTREAM, TAG_NOSTREAM_ALT
 from langgraph.types import Command, StreamChunk
@@ -32,8 +32,9 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
     run_inline = True
     """We want this callback to run in the main thread, to avoid order/locking issues."""
 
-    def __init__(self, stream: Callable[[StreamChunk], None]):
+    def __init__(self, stream: Callable[[StreamChunk], None], subgraphs: bool):
         self.stream = stream
+        self.subgraphs = subgraphs
         self.metadata: dict[UUID, Meta] = {}
         self.seen: set[Union[int, str]] = set()
 
@@ -96,10 +97,15 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         if metadata and (
             not tags or (TAG_NOSTREAM not in tags and TAG_NOSTREAM_ALT not in tags)
         ):
-            self.metadata[run_id] = (
-                tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP)),
-                metadata,
-            )
+            ns = tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP))[
+                :-1
+            ]
+            if not self.subgraphs and len(ns) > 0:
+                return
+            if tags:
+                if filtered_tags := [t for t in tags if not t.startswith("seq:step")]:
+                    metadata["tags"] = filtered_tags
+            self.metadata[run_id] = (ns, metadata)
 
     def on_llm_new_token(
         self,
@@ -114,9 +120,6 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         if not isinstance(chunk, ChatGenerationChunk):
             return
         if meta := self.metadata.get(run_id):
-            filtered_tags = [t for t in (tags or []) if not t.startswith("seq:step")]
-            if filtered_tags:
-                meta[1]["tags"] = filtered_tags
             self._emit(meta, chunk.message)
 
     def on_llm_end(
@@ -127,6 +130,11 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         parent_run_id: Optional[UUID] = None,
         **kwargs: Any,
     ) -> Any:
+        if meta := self.metadata.get(run_id):
+            if response.generations and response.generations[0]:
+                gen = response.generations[0][0]
+                if isinstance(gen, ChatGeneration):
+                    self._emit(meta, gen.message, dedupe=True)
         self.metadata.pop(run_id, None)
 
     def on_llm_error(
@@ -155,10 +163,12 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             and kwargs.get("name") == metadata.get("langgraph_node")
             and (not tags or TAG_HIDDEN not in tags)
         ):
-            self.metadata[run_id] = (
-                tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP)),
-                metadata,
-            )
+            ns = tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP))[
+                :-1
+            ]
+            if not self.subgraphs and len(ns) > 0:
+                return
+            self.metadata[run_id] = (ns, metadata)
             if isinstance(inputs, dict):
                 for key, value in inputs.items():
                     if isinstance(value, BaseMessage):
