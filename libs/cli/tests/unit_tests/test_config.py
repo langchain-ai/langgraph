@@ -1091,4 +1091,3 @@ def test_docker_tag_different_node_versions_with_distro():
         })
         tag = docker_tag(config)
         assert tag == expected_tag, f"Failed for Node.js {node_version}"
-
