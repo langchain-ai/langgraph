@@ -18,7 +18,7 @@ import pytest
 from typing_extensions import NotRequired, Required, TypedDict
 
 from langgraph.graph import END, StateGraph
-from langgraph.graph.graph import CompiledGraph
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.utils.config import _is_not_empty
 from langgraph.utils.fields import (
     _is_optional_type,
@@ -103,7 +103,7 @@ def test_is_generator() -> None:
 
 
 @pytest.fixture
-def rt_graph() -> CompiledGraph:
+def rt_graph() -> CompiledStateGraph:
     class State(TypedDict):
         foo: int
         node_run_id: int
@@ -120,7 +120,7 @@ def rt_graph() -> CompiledGraph:
     return graph.compile()
 
 
-def test_runnable_callable_tracing_nested(rt_graph: CompiledGraph) -> None:
+def test_runnable_callable_tracing_nested(rt_graph: CompiledStateGraph) -> None:
     with patch("langsmith.client.Client", spec=langsmith.Client) as mock_client:
         with patch("langchain_core.tracers.langchain.get_client") as mock_get_client:
             mock_get_client.return_value = mock_client
@@ -133,7 +133,9 @@ def test_runnable_callable_tracing_nested(rt_graph: CompiledGraph) -> None:
     sys.version_info < (3, 11),
     reason="Python 3.11+ is required for async contextvars support",
 )
-async def test_runnable_callable_tracing_nested_async(rt_graph: CompiledGraph) -> None:
+async def test_runnable_callable_tracing_nested_async(
+    rt_graph: CompiledStateGraph,
+) -> None:
     with patch("langsmith.client.Client", spec=langsmith.Client) as mock_client:
         with patch("langchain_core.tracers.langchain.get_client") as mock_get_client:
             mock_get_client.return_value = mock_client
