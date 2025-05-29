@@ -1325,7 +1325,10 @@ def docker_tag(
     base_image: Optional[str] = None,
 ) -> str:
     base_image = base_image or default_base_image(config)
-    wolfi_tag = "-wolfi" if config.get("image_distro") == "wolfi" else ""
+
+    image_distro = config.get("image_distro")
+    distro_tag = "" if image_distro == DEFAULT_IMAGE_DISTRO else f"-{image_distro}"
+
     if config.get("_INTERNAL_docker_tag"):
         return f"{base_image}:{config['_INTERNAL_docker_tag']}"
 
@@ -1333,8 +1336,8 @@ def docker_tag(
         return f"{base_image}-py{config['python_version']}"
 
     if config.get("node_version") and not config.get("python_version"):
-        return f"{base_image}:{config['node_version']}{wolfi_tag}"
-    return f"{base_image}:{config['python_version']}{wolfi_tag}"
+        return f"{base_image}:{config['node_version']}{distro_tag}"
+    return f"{base_image}:{config['python_version']}{distro_tag}"
 
 
 def config_to_docker(
