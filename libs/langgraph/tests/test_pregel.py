@@ -45,7 +45,7 @@ from langgraph.config import get_stream_writer
 from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, START
 from langgraph.errors import InvalidUpdateError
 from langgraph.func import entrypoint, task
-from langgraph.graph import END, Graph, StateGraph
+from langgraph.graph import END, StateGraph
 from langgraph.graph.message import MessageGraph, MessagesState, add_messages
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import (
@@ -83,81 +83,6 @@ logger = logging.getLogger(__name__)
 
 
 def test_graph_validation() -> None:
-    def logic(inp: str) -> str:
-        return ""
-
-    workflow = Graph()
-    workflow.add_node("agent", logic)
-    workflow.set_entry_point("agent")
-    workflow.set_finish_point("agent")
-    assert workflow.compile(), "valid graph"
-
-    # Accept a dead-end
-    workflow = Graph()
-    workflow.add_node("agent", logic)
-    workflow.set_entry_point("agent")
-    workflow.compile()
-
-    workflow = Graph()
-    workflow.add_node("agent", logic)
-    workflow.set_finish_point("agent")
-    with pytest.raises(ValueError, match="must have an entrypoint"):
-        workflow.compile()
-
-    workflow = Graph()
-    workflow.add_node("agent", logic)
-    workflow.add_node("tools", logic)
-    workflow.set_entry_point("agent")
-    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
-    workflow.add_edge("tools", "agent")
-    assert workflow.compile(), "valid graph"
-
-    workflow = Graph()
-    workflow.add_node("agent", logic)
-    workflow.add_node("tools", logic)
-    workflow.set_entry_point("tools")
-    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
-    workflow.add_edge("tools", "agent")
-    assert workflow.compile(), "valid graph"
-
-    workflow = Graph()
-    workflow.set_entry_point("tools")
-    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
-    workflow.add_edge("tools", "agent")
-    workflow.add_node("agent", logic)
-    workflow.add_node("tools", logic)
-    assert workflow.compile(), "valid graph"
-
-    workflow = Graph()
-    workflow.set_entry_point("tools")
-    workflow.add_conditional_edges(
-        "agent", logic, {"continue": "tools", "exit": END, "hmm": "extra"}
-    )
-    workflow.add_edge("tools", "agent")
-    workflow.add_node("agent", logic)
-    workflow.add_node("tools", logic)
-    with pytest.raises(ValueError, match="unknown"):  # extra is not defined
-        workflow.compile()
-
-    workflow = Graph()
-    workflow.set_entry_point("agent")
-    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
-    workflow.add_edge("tools", "extra")
-    workflow.add_node("agent", logic)
-    workflow.add_node("tools", logic)
-    with pytest.raises(ValueError, match="unknown"):  # extra is not defined
-        workflow.compile()
-
-    workflow = Graph()
-    workflow.add_node("agent", logic)
-    workflow.add_node("tools", logic)
-    workflow.add_node("extra", logic)
-    workflow.set_entry_point("agent")
-    workflow.add_conditional_edges("agent", logic)
-    workflow.add_edge("tools", "agent")
-    # Accept, even though extra is dead-end
-    workflow.compile()
-
     class State(TypedDict):
         hello: str
 
@@ -490,11 +415,6 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
         input_channels="input",
         output_channels="output",
     )
-    graph = Graph()
-    graph.add_node("add_one", add_one)
-    graph.set_entry_point("add_one")
-    graph.set_finish_point("add_one")
-    gapp = graph.compile()
 
     assert app.input_schema.model_json_schema() == {
         "title": "LangGraphInput",
@@ -515,21 +435,6 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     assert app.invoke(2) == 3
     assert app.invoke(2, output_keys=["output"]) == {"output": 3}
     assert repr(app), "does not raise recursion error"
-
-    assert gapp.invoke(2, debug=True) == 3
-
-
-@pytest.mark.parametrize(
-    "falsy_value",
-    [None, False, 0, "", [], {}, set(), frozenset(), 0.0, 0j],
-)
-def test_invoke_single_process_in_out_falsy_values(falsy_value: Any) -> None:
-    graph = Graph()
-    graph.add_node("return_falsy_const", lambda *args, **kwargs: falsy_value)
-    graph.set_entry_point("return_falsy_const")
-    graph.set_finish_point("return_falsy_const")
-    gapp = graph.compile()
-    assert gapp.invoke(1) == falsy_value
 
 
 def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
@@ -644,29 +549,6 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     with pytest.raises(GraphRecursionError):
         app.invoke(2, {"recursion_limit": 1}, debug=1)
 
-    graph = Graph()
-    graph.add_node("add_one", add_one)
-    graph.add_node("add_one_more", add_one)
-    graph.set_entry_point("add_one")
-    graph.set_finish_point("add_one_more")
-    graph.add_edge("add_one", "add_one_more")
-    gapp = graph.compile()
-
-    assert gapp.invoke(2) == 4
-
-    for step, values in enumerate(gapp.stream(2, debug=1), start=1):
-        if step == 1:
-            assert values == {
-                "add_one": 3,
-            }
-        elif step == 2:
-            assert values == {
-                "add_one_more": 4,
-            }
-        else:
-            assert 0, f"{step}:{values}"
-    assert step == 2
-
 
 def test_run_from_checkpoint_id_retains_previous_writes(
     sync_checkpointer: BaseCheckpointSaver,
@@ -772,16 +654,6 @@ def test_batch_two_processes_in_out() -> None:
         {"output": 5},
         {"output": 7},
     ]
-
-    graph = Graph()
-    graph.add_node("add_one", add_one_with_delay)
-    graph.add_node("add_one_more", add_one_with_delay)
-    graph.set_entry_point("add_one")
-    graph.set_finish_point("add_one_more")
-    graph.add_edge("add_one", "add_one_more")
-    gapp = graph.compile()
-
-    assert gapp.batch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
 
 
 def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:
@@ -1825,50 +1697,6 @@ def test_invoke_two_processes_no_in(mocker: MockerFixture) -> None:
 
     with pytest.raises(TypeError):
         Pregel(nodes={"one": one, "two": two})
-
-
-def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
-    def left(data: str) -> str:
-        return data + "->left"
-
-    def right(data: str) -> str:
-        return data + "->right"
-
-    def should_start(data: str) -> str:
-        # Logic to decide where to start
-        if len(data) > 10:
-            return "go-right"
-        else:
-            return "go-left"
-
-    # Define a new graph
-    workflow = Graph()
-
-    workflow.add_node("left", left)
-    workflow.add_node("right", right)
-
-    workflow.set_conditional_entry_point(
-        should_start, {"go-left": "left", "go-right": "right"}
-    )
-
-    workflow.add_conditional_edges("left", lambda data: END, {END: END})
-    workflow.add_edge("right", END)
-
-    app = workflow.compile()
-
-    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
-
-    assert (
-        app.invoke("what is weather in sf", debug=True)
-        == "what is weather in sf->right"
-    )
-
-    assert [*app.stream("what is weather in sf")] == [
-        {"right": "what is weather in sf->right"},
-    ]
 
 
 def test_conditional_entrypoint_to_multiple_state_graph(

@@ -43,7 +43,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, PUSH, START
 from langgraph.errors import InvalidUpdateError, NodeInterrupt
 from langgraph.func import entrypoint, task
-from langgraph.graph import END, Graph, StateGraph
+from langgraph.graph import END, StateGraph
 from langgraph.graph.message import MessagesState, add_messages
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import GraphRecursionError, NodeBuilder, Pregel, StateSnapshot
@@ -262,7 +262,10 @@ async def test_checkpoint_put_after_cancellation() -> None:
         finally:
             logs.append("awhile.end")
 
-    builder = Graph()
+    class State(TypedDict):
+        hello: str
+
+    builder = StateGraph(State)
     builder.add_node("agent", awhile)
     builder.set_entry_point("agent")
     builder.set_finish_point("agent")
@@ -271,7 +274,7 @@ async def test_checkpoint_put_after_cancellation() -> None:
     thread1 = {"configurable": {"thread_id": "1"}}
 
     # start the task
-    t = asyncio.create_task(graph.ainvoke(1, thread1))
+    t = asyncio.create_task(graph.ainvoke({"hello": "world"}, thread1))
     # cancel after 0.2 seconds
     await asyncio.sleep(0.2)
     t.cancel()
@@ -325,7 +328,10 @@ async def test_checkpoint_put_after_cancellation_stream_anext() -> None:
         finally:
             logs.append("awhile.end")
 
-    builder = Graph()
+    class State(TypedDict):
+        hello: str
+
+    builder = StateGraph(State)
     builder.add_node("agent", awhile)
     builder.set_entry_point("agent")
     builder.set_finish_point("agent")
@@ -334,7 +340,7 @@ async def test_checkpoint_put_after_cancellation_stream_anext() -> None:
     thread1 = {"configurable": {"thread_id": "1"}}
 
     # start the task
-    s = graph.astream(1, thread1)
+    s = graph.astream({"hello": "world"}, thread1)
     t = asyncio.create_task(s.__anext__())
     # cancel after 0.2 seconds
     await asyncio.sleep(0.2)
@@ -389,7 +395,10 @@ async def test_checkpoint_put_after_cancellation_stream_events_anext() -> None:
         finally:
             logs.append("awhile.end")
 
-    builder = Graph()
+    class State(TypedDict):
+        hello: str
+
+    builder = StateGraph(State)
     builder.add_node("agent", awhile)
     builder.set_entry_point("agent")
     builder.set_finish_point("agent")
@@ -398,7 +407,9 @@ async def test_checkpoint_put_after_cancellation_stream_events_anext() -> None:
     thread1 = {"configurable": {"thread_id": "1"}}
 
     # start the task
-    s = graph.astream_events(1, thread1, version="v2", include_names=["LangGraph"])
+    s = graph.astream_events(
+        {"hello": "world"}, thread1, version="v2", include_names=["LangGraph"]
+    )
     # skip first event (happens right away)
     await s.__anext__()
     # start the task for 2nd event
@@ -436,7 +447,10 @@ async def test_node_cancellation_on_external_cancel() -> None:
             inner_task_cancelled = True
             raise
 
-    builder = Graph()
+    class State(TypedDict):
+        hello: str
+
+    builder = StateGraph(State)
     builder.add_node("agent", awhile)
     builder.set_entry_point("agent")
     builder.set_finish_point("agent")
@@ -444,7 +458,7 @@ async def test_node_cancellation_on_external_cancel() -> None:
     graph = builder.compile()
 
     with pytest.raises(asyncio.TimeoutError):
-        await asyncio.wait_for(graph.ainvoke(1), 0.5)
+        await asyncio.wait_for(graph.ainvoke({"hello": "world"}), 0.5)
 
     assert inner_task_cancelled
 
@@ -463,7 +477,10 @@ async def test_node_cancellation_on_other_node_exception() -> None:
     async def iambad(input: Any) -> None:
         raise ValueError("I am bad")
 
-    builder = Graph()
+    class State(TypedDict):
+        hello: str
+
+    builder = StateGraph(State)
     builder.add_node("agent", awhile)
     builder.add_node("bad", iambad)
     builder.set_conditional_entry_point(lambda _: ["agent", "bad"], then=END)
@@ -472,7 +489,7 @@ async def test_node_cancellation_on_other_node_exception() -> None:
 
     with pytest.raises(ValueError, match="I am bad"):
         # This will raise ValueError, not TimeoutError
-        await asyncio.wait_for(graph.ainvoke(1), 0.5)
+        await asyncio.wait_for(graph.ainvoke({"hello": "world"}), 0.5)
 
     assert inner_task_cancelled
 
@@ -484,7 +501,10 @@ async def test_node_cancellation_on_other_node_exception_two() -> None:
     async def iambad(input: Any) -> None:
         raise ValueError("I am bad")
 
-    builder = Graph()
+    class State(TypedDict):
+        hello: str
+
+    builder = StateGraph(State)
     builder.add_node("agent", awhile)
     builder.add_node("bad", iambad)
     builder.set_conditional_entry_point(lambda _: ["agent", "bad"], then=END)
@@ -493,7 +513,7 @@ async def test_node_cancellation_on_other_node_exception_two() -> None:
 
     with pytest.raises(ValueError, match="I am bad"):
         # This will raise ValueError, not CancelledError
-        await graph.ainvoke(1)
+        await graph.ainvoke({"hello": "world"})
 
 
 @NEEDS_CONTEXTVARS
@@ -1113,9 +1133,12 @@ async def test_step_timeout_on_stream_hang(stream_hang_s: float) -> None:
 
     async def alittlewhile(input: Any) -> None:
         await asyncio.sleep(0.6)
-        return "1"
+        return {"hello": "1"}
 
-    builder = Graph()
+    class State(TypedDict):
+        hello: str
+
+    builder = StateGraph(State)
     builder.add_node(awhile)
     builder.add_node(alittlewhile)
     builder.set_conditional_entry_point(lambda _: ["awhile", "alittlewhile"], then=END)
@@ -1123,8 +1146,8 @@ async def test_step_timeout_on_stream_hang(stream_hang_s: float) -> None:
     graph.step_timeout = 1
 
     with pytest.raises(asyncio.TimeoutError):
-        async for chunk in graph.astream(1, stream_mode="updates"):
-            assert chunk == {"alittlewhile": {"alittlewhile": "1"}}
+        async for chunk in graph.astream({"hello": "world"}, stream_mode="updates"):
+            assert chunk == {"alittlewhile": {"hello": "1"}}
             await asyncio.sleep(stream_hang_s)
 
     assert inner_task_cancelled
@@ -1382,11 +1405,6 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
         input_channels="input",
         output_channels="output",
     )
-    graph = Graph()
-    graph.add_node("add_one", add_one)
-    graph.set_entry_point("add_one")
-    graph.set_finish_point("add_one")
-    gapp = graph.compile()
 
     assert app.input_schema.model_json_schema() == {
         "title": "LangGraphInput",
@@ -1398,21 +1416,6 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     }
     assert await app.ainvoke(2) == 3
     assert await app.ainvoke(2, output_keys=["output"]) == {"output": 3}
-
-    assert await gapp.ainvoke(2) == 3
-
-
-@pytest.mark.parametrize(
-    "falsy_value",
-    [None, False, 0, "", [], {}, set(), frozenset(), 0.0, 0j],
-)
-async def test_invoke_single_process_in_out_falsy_values(falsy_value: Any) -> None:
-    graph = Graph()
-    graph.add_node("return_falsy_const", lambda *args, **kwargs: falsy_value)
-    graph.set_entry_point("return_falsy_const")
-    graph.set_finish_point("return_falsy_const")
-    gapp = graph.compile()
-    assert falsy_value == await gapp.ainvoke(1)
 
 
 async def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
@@ -1543,29 +1546,6 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
             }
     assert step == 2
 
-    graph = Graph()
-    graph.add_node("add_one", add_one)
-    graph.add_node("add_one_more", add_one)
-    graph.set_entry_point("add_one")
-    graph.set_finish_point("add_one_more")
-    graph.add_edge("add_one", "add_one_more")
-    gapp = graph.compile()
-
-    assert await gapp.ainvoke(2) == 4
-
-    step = 0
-    async for values in gapp.astream(2):
-        step += 1
-        if step == 1:
-            assert values == {
-                "add_one": 3,
-            }
-        elif step == 2:
-            assert values == {
-                "add_one_more": 4,
-            }
-    assert step == 2
-
 
 async def test_batch_two_processes_in_out() -> None:
     async def add_one_with_delay(inp: int) -> int:
@@ -1594,16 +1574,6 @@ async def test_batch_two_processes_in_out() -> None:
         {"output": 5},
         {"output": 7},
     ]
-
-    graph = Graph()
-    graph.add_node("add_one", add_one_with_delay)
-    graph.add_node("add_one_more", add_one_with_delay)
-    graph.set_entry_point("add_one")
-    graph.set_finish_point("add_one_more")
-    graph.add_edge("add_one", "add_one_more")
-    gapp = graph.compile()
-
-    assert await gapp.abatch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
 
 
 async def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:
@@ -3843,42 +3813,6 @@ async def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
     # It finishes executing (once no more messages being published)
     # but returns nothing, as nothing was published to "output" topic
     assert await app.ainvoke(2) is None
-
-
-async def test_conditional_entrypoint_graph() -> None:
-    async def left(data: str) -> str:
-        return data + "->left"
-
-    async def right(data: str) -> str:
-        return data + "->right"
-
-    def should_start(data: str) -> str:
-        # Logic to decide where to start
-        if len(data) > 10:
-            return "go-right"
-        else:
-            return "go-left"
-
-    # Define a new graph
-    workflow = Graph()
-
-    workflow.add_node("left", left)
-    workflow.add_node("right", right)
-
-    workflow.set_conditional_entry_point(
-        should_start, {"go-left": "left", "go-right": "right"}
-    )
-
-    workflow.add_conditional_edges("left", lambda data: END)
-    workflow.add_edge("right", END)
-
-    app = workflow.compile()
-
-    assert await app.ainvoke("what is weather in sf") == "what is weather in sf->right"
-
-    assert [c async for c in app.astream("what is weather in sf")] == [
-        {"right": "what is weather in sf->right"},
-    ]
 
 
 async def test_conditional_entrypoint_graph_state() -> None:
