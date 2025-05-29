@@ -135,6 +135,7 @@ def add_human_in_the_loop(
             "allow_accept": True,
             "allow_edit": True,
             "allow_respond": True,
+            "allow_ignore": True,
         }
 
     @create_tool(  # (1)!
