@@ -45,6 +45,10 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             if message.id is None:
                 message.id = str(uuid4())
             self.seen.add(message.id)
+            if hasattr(message, 'usage_metadata') and message.usage_metadata:
+                if not hasattr(message, 'additional_kwargs'):
+                    message.additional_kwargs = {}
+                message.additional_kwargs['usage_metadata'] = message.usage_metadata
             self.stream((meta[0], "messages", (message, meta[1])))
 
     def _find_and_emit_messages(self, meta: Meta, response: Any) -> None:
