@@ -154,13 +154,20 @@ async def test_checkpoint_errors() -> None:
     builder.add_edge(START, "parallel")
     graph = builder.compile(checkpointer=FaultyPutWritesCheckpointer())
     with pytest.raises(ValueError, match="Faulty put_writes"):
-        await graph.ainvoke("", {"configurable": {"thread_id": "thread-1"}})
+        await graph.ainvoke(
+            "", {"configurable": {"thread_id": "thread-1"}}, checkpoint_during=True
+        )
     with pytest.raises(ValueError, match="Faulty put_writes"):
-        async for _ in graph.astream("", {"configurable": {"thread_id": "thread-2"}}):
+        async for _ in graph.astream(
+            "", {"configurable": {"thread_id": "thread-2"}}, checkpoint_during=True
+        ):
             pass
     with pytest.raises(ValueError, match="Faulty put_writes"):
         async for _ in graph.astream_events(
-            "", {"configurable": {"thread_id": "thread-3"}}, version="v2"
+            "",
+            {"configurable": {"thread_id": "thread-3"}},
+            version="v2",
+            checkpoint_during=True,
         ):
             pass
 
@@ -271,7 +278,6 @@ async def test_checkpoint_put_after_cancellation() -> None:
     # check logs before cancellation is handled
     assert sorted(logs) == [
         "awhile.start",
-        "checkpoint.aput.start",
     ], "Cancelled before checkpoint put started"
     # wait for task to finish
     try:
@@ -336,7 +342,6 @@ async def test_checkpoint_put_after_cancellation_stream_anext() -> None:
     # check logs before cancellation is handled
     assert sorted(logs) == [
         "awhile.start",
-        "checkpoint.aput.start",
     ], "Cancelled before checkpoint put started"
     # wait for task to finish
     try:
@@ -403,7 +408,6 @@ async def test_checkpoint_put_after_cancellation_stream_events_anext() -> None:
     t.cancel()
     # check logs before cancellation is handled
     assert logs == [
-        "checkpoint.aput.start",
         "awhile.start",
     ], "Cancelled before checkpoint put started"
     # wait for task to finish
@@ -412,9 +416,9 @@ async def test_checkpoint_put_after_cancellation_stream_events_anext() -> None:
     except asyncio.CancelledError:
         # check logs after cancellation is handled
         assert logs == [
-            "checkpoint.aput.start",
             "awhile.start",
             "awhile.end",
+            "checkpoint.aput.start",
             "checkpoint.aput.end",
         ], "Checkpoint put is not cancelled"
     else:
@@ -590,12 +594,6 @@ async def test_dynamic_interrupt(async_checkpointer: BaseCheckpointSaver) -> Non
             "step": 0,
             "thread_id": "1",
         },
-        {
-            "parents": {},
-            "source": "input",
-            "step": -1,
-            "thread_id": "1",
-        },
     ]
     tup = await tool_two.checkpointer.aget_tuple(thread1)
     assert await tool_two.aget_state(thread1) == StateSnapshot(
@@ -623,9 +621,7 @@ async def test_dynamic_interrupt(async_checkpointer: BaseCheckpointSaver) -> Non
             "step": 0,
             "thread_id": "1",
         },
-        parent_config=(
-            [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][-1].config
-        ),
+        parent_config=None,
         interrupts=(
             Interrupt(
                 value="Just because...",
@@ -771,12 +767,6 @@ async def test_dynamic_interrupt_subgraph(
             "step": 0,
             "thread_id": "1",
         },
-        {
-            "parents": {},
-            "source": "input",
-            "step": -1,
-            "thread_id": "1",
-        },
     ]
     tup = await tool_two.checkpointer.aget_tuple(thread1)
     assert await tool_two.aget_state(thread1) == StateSnapshot(
@@ -810,11 +800,7 @@ async def test_dynamic_interrupt_subgraph(
             "step": 0,
             "thread_id": "1",
         },
-        parent_config=(
-            [c async for c in tool_two.checkpointer.alist(thread1root, limit=2)][
-                -1
-            ].config
-        ),
+        parent_config=None,
         interrupts=(
             Interrupt(
                 value="Just because...",
@@ -959,12 +945,6 @@ async def test_copy_checkpoint(async_checkpointer: BaseCheckpointSaver) -> None:
             "step": 0,
             "thread_id": "1",
         },
-        {
-            "parents": {},
-            "source": "input",
-            "step": -1,
-            "thread_id": "1",
-        },
     ]
 
     tup = await tool_two.checkpointer.aget_tuple(thread1)
@@ -1002,9 +982,7 @@ async def test_copy_checkpoint(async_checkpointer: BaseCheckpointSaver) -> None:
             "step": 0,
             "thread_id": "1",
         },
-        parent_config=(
-            [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][-1].config
-        ),
+        parent_config=None,
         interrupts=(
             Interrupt(
                 value="Just because...",
@@ -1044,9 +1022,7 @@ async def test_copy_checkpoint(async_checkpointer: BaseCheckpointSaver) -> None:
             "thread_id": "1",
         },
         parent_config=(
-            [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
-                -1
-            ].parent_config
+            [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][-1].config
         ),
         interrupts=(),
     )
@@ -2104,7 +2080,7 @@ async def test_run_from_checkpoint_id_retains_previous_writes(
     thread_id = uuid.uuid4()
     thread1 = {"configurable": {"thread_id": str(thread_id)}}
 
-    result = await graph.ainvoke({"myval": 1}, thread1)
+    result = await graph.ainvoke({"myval": 1}, thread1, checkpoint_during=True)
     assert result["myval"] == 4
     history = [c async for c in graph.aget_state_history(thread1)]
 
@@ -3061,15 +3037,7 @@ async def test_send_react_interrupt(async_checkpointer: BaseCheckpointSaver) -> 
             "thread_id": "2",
         },
         created_at=AnyStr(),
-        parent_config=(
-            {
-                "configurable": {
-                    "thread_id": "2",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            }
-        ),
+        parent_config=None,
         tasks=(
             PregelTask(
                 id=AnyStr(),
@@ -3193,15 +3161,7 @@ async def test_send_react_interrupt(async_checkpointer: BaseCheckpointSaver) -> 
             "thread_id": "3",
         },
         created_at=AnyStr(),
-        parent_config=(
-            {
-                "configurable": {
-                    "thread_id": "3",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            }
-        ),
+        parent_config=None,
         tasks=(
             PregelTask(
                 id=AnyStr(),
@@ -3466,15 +3426,7 @@ async def test_send_react_interrupt_control(
             "thread_id": "2",
         },
         created_at=AnyStr(),
-        parent_config=(
-            {
-                "configurable": {
-                    "thread_id": "2",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            }
-        ),
+        parent_config=None,
         tasks=(
             PregelTask(
                 id=AnyStr(),
@@ -3710,7 +3662,7 @@ async def test_invoke_checkpoint_three(
 
     thread_1 = {"configurable": {"thread_id": "1"}}
     # total starts out as 0, so output is 0+2=2
-    assert await app.ainvoke(2, thread_1) == 2
+    assert await app.ainvoke(2, thread_1, checkpoint_during=True) == 2
     state = await app.aget_state(thread_1)
     assert state is not None
     assert state.values.get("total") == 2
@@ -3719,7 +3671,7 @@ async def test_invoke_checkpoint_three(
         == (await async_checkpointer.aget(thread_1))["id"]
     )
     # total is now 2, so output is 2+3=5
-    assert await app.ainvoke(3, thread_1) == 5
+    assert await app.ainvoke(3, thread_1, checkpoint_during=True) == 5
     state = await app.aget_state(thread_1)
     assert state is not None
     assert state.values.get("total") == 7
@@ -3729,7 +3681,7 @@ async def test_invoke_checkpoint_three(
     )
     # total is now 2+5=7, so output would be 7+4=11, but raises ValueError
     with pytest.raises(ValueError):
-        await app.ainvoke(4, thread_1)
+        await app.ainvoke(4, thread_1, checkpoint_during=True)
     # checkpoint is not updated
     state = await app.aget_state(thread_1)
     assert state is not None
@@ -3737,7 +3689,7 @@ async def test_invoke_checkpoint_three(
     assert state.next == ("one",)
     """we checkpoint inputs and it failed on "one", so the next node is one"""
     # we can recover from error by sending new inputs
-    assert await app.ainvoke(2, thread_1) == 9
+    assert await app.ainvoke(2, thread_1, checkpoint_during=True) == 9
     state = await app.aget_state(thread_1)
     assert state is not None
     assert state.values.get("total") == 16, "total is now 7+9=16"
@@ -3746,7 +3698,7 @@ async def test_invoke_checkpoint_three(
     thread_2 = {"configurable": {"thread_id": "2"}}
     # on a new thread, total starts out as 0, so output is 0+5=5
     assert await app.ainvoke(5, thread_2) == 5
-    state = await app.aget_state({"configurable": {"thread_id": "1"}})
+    state = await app.aget_state(thread_1)
     assert state is not None
     assert state.values.get("total") == 16
     assert state.next == ()
@@ -6005,7 +5957,7 @@ async def test_debug_retry(async_checkpointer: BaseCheckpointSaver):
     graph = builder.compile(checkpointer=async_checkpointer)
 
     config = {"configurable": {"thread_id": "1"}}
-    await graph.ainvoke({"messages": []}, config=config)
+    await graph.ainvoke({"messages": []}, config=config, checkpoint_during=True)
 
     # re-run step: 1
     async for c in async_checkpointer.alist(config):
@@ -6017,7 +5969,10 @@ async def test_debug_retry(async_checkpointer: BaseCheckpointSaver):
     update_config = await graph.aupdate_state(target_config, values=None)
 
     events = [
-        c async for c in graph.astream(None, config=update_config, stream_mode="debug")
+        c
+        async for c in graph.astream(
+            None, config=update_config, stream_mode="debug", checkpoint_during=True
+        )
     ]
 
     checkpoint_events = list(
@@ -6048,7 +6003,9 @@ async def test_debug_retry(async_checkpointer: BaseCheckpointSaver):
         assert stream_parent_conf == history_parent_conf
 
 
-async def test_debug_subgraphs(async_checkpointer: BaseCheckpointSaver):
+async def test_debug_subgraphs(
+    async_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
+):
     class State(TypedDict):
         messages: Annotated[list[str], operator.add]
 
@@ -6082,12 +6039,15 @@ async def test_debug_subgraphs(async_checkpointer: BaseCheckpointSaver):
             {"messages": []},
             config=config,
             stream_mode="debug",
+            checkpoint_during=checkpoint_during,
         )
     ]
 
     checkpoint_events = list(
         reversed([e["payload"] for e in events if e["type"] == "checkpoint"])
     )
+    if not checkpoint_during:
+        checkpoint_events = checkpoint_events[:1]
     checkpoint_history = [c async for c in graph.aget_state_history(config)]
 
     assert len(checkpoint_events) == len(checkpoint_history)
@@ -6114,7 +6074,9 @@ async def test_debug_subgraphs(async_checkpointer: BaseCheckpointSaver):
             assert stream_task.get("state") == history_task.state
 
 
-async def test_debug_nested_subgraphs(async_checkpointer: BaseCheckpointSaver):
+async def test_debug_nested_subgraphs(
+    async_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
+) -> None:
     from collections import defaultdict
 
     class State(TypedDict):
@@ -6158,6 +6120,7 @@ async def test_debug_nested_subgraphs(async_checkpointer: BaseCheckpointSaver):
             config=config,
             stream_mode="debug",
             subgraphs=True,
+            checkpoint_during=checkpoint_during,
         )
     ]
 
@@ -6202,6 +6165,9 @@ async def test_debug_nested_subgraphs(async_checkpointer: BaseCheckpointSaver):
     for checkpoint_events, checkpoint_history in zip(
         stream_ns.values(), history_ns.values()
     ):
+        if not checkpoint_during:
+            checkpoint_events = checkpoint_events[-1:]
+        assert len(checkpoint_events) == len(checkpoint_history)
         for stream, history in zip(checkpoint_events, checkpoint_history):
             assert stream["values"] == history.values
             assert stream["next"] == list(history.next)
@@ -6282,15 +6248,7 @@ async def test_parent_command(async_checkpointer: BaseCheckpointSaver) -> None:
             "parents": {},
         },
         created_at=AnyStr(),
-        parent_config=(
-            {
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            }
-        ),
+        parent_config=None,
         tasks=(),
         interrupts=(),
     )
@@ -6772,7 +6730,7 @@ async def test_concurrent_execution():
 
 
 async def test_checkpoint_recovery_async(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
 ) -> None:
     """Test recovery from checkpoints after failures with async nodes."""
 
@@ -6802,7 +6760,11 @@ async def test_checkpoint_recovery_async(
 
     # First attempt should fail
     with pytest.raises(RuntimeError):
-        await graph.ainvoke({"steps": ["start"], "attempt": 1}, config)
+        await graph.ainvoke(
+            {"steps": ["start"], "attempt": 1},
+            config,
+            checkpoint_during=checkpoint_during,
+        )
 
     # Verify checkpoint state
     state = await graph.aget_state(config)
@@ -6811,12 +6773,17 @@ async def test_checkpoint_recovery_async(
     assert state.next == ("node1",)  # Should retry failed node
 
     # Retry with updated attempt count
-    result = await graph.ainvoke({"steps": [], "attempt": 2}, config)
+    result = await graph.ainvoke(
+        {"steps": [], "attempt": 2}, config, checkpoint_during=checkpoint_during
+    )
     assert result == {"steps": ["start", "node1", "node2"], "attempt": 2}
 
     # Verify checkpoint history shows both attempts
     history = [c async for c in graph.aget_state_history(config)]
-    assert len(history) == 6  # Initial + failed attempt + successful attempt
+    if checkpoint_during:
+        assert len(history) == 6  # Initial + failed attempt + successful attempt
+    else:
+        assert len(history) == 2  # error + success
 
     # Verify the error was recorded in checkpoint
     failed_checkpoint = next(c for c in history if c.tasks and c.tasks[0].error)
@@ -8291,7 +8258,9 @@ async def test_bulk_state_updates(async_checkpointer: BaseCheckpointSaver) -> No
         )
 
 
-async def test_update_as_input(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_update_as_input(
+    async_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
+) -> None:
     class State(TypedDict):
         foo: str
 
@@ -8311,11 +8280,15 @@ async def test_update_as_input(async_checkpointer: BaseCheckpointSaver) -> None:
     )
 
     assert await graph.ainvoke(
-        {"foo": "input"}, {"configurable": {"thread_id": "1"}}
+        {"foo": "input"},
+        {"configurable": {"thread_id": "1"}},
+        checkpoint_during=checkpoint_during,
     ) == {"foo": "tool"}
 
     assert await graph.ainvoke(
-        {"foo": "input"}, {"configurable": {"thread_id": "1"}}
+        {"foo": "input"},
+        {"configurable": {"thread_id": "1"}},
+        checkpoint_during=checkpoint_during,
     ) == {"foo": "tool"}
 
     def map_snapshot(i: StateSnapshot) -> dict:
@@ -8354,10 +8327,15 @@ async def test_update_as_input(async_checkpointer: BaseCheckpointSaver) -> None:
         async for s in graph.aget_state_history({"configurable": {"thread_id": "2"}})
     ]
 
-    assert new_history == history
+    if checkpoint_during:
+        assert new_history == history
+    else:
+        assert [new_history[0], new_history[4]] == history
 
 
-async def test_batch_update_as_input(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_batch_update_as_input(
+    async_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
+) -> None:
     class State(TypedDict):
         foo: str
         tasks: Annotated[list[int], operator.add]
@@ -8389,7 +8367,9 @@ async def test_batch_update_as_input(async_checkpointer: BaseCheckpointSaver) ->
     )
 
     assert await graph.ainvoke(
-        {"foo": "input"}, {"configurable": {"thread_id": "1"}}
+        {"foo": "input"},
+        {"configurable": {"thread_id": "1"}},
+        checkpoint_during=checkpoint_during,
     ) == {"foo": "map", "tasks": [0, 1, 2]}
 
     def map_snapshot(i: StateSnapshot) -> dict:
@@ -8440,7 +8420,10 @@ async def test_batch_update_as_input(async_checkpointer: BaseCheckpointSaver) ->
         async for s in graph.aget_state_history({"configurable": {"thread_id": "2"}})
     ]
 
-    assert new_history == history
+    if checkpoint_during:
+        assert new_history == history
+    else:
+        assert new_history[:1] == history
 
 
 async def test_draw_invalid():

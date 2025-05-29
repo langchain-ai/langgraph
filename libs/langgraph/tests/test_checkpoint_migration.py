@@ -1541,7 +1541,9 @@ def test_latest_checkpoint_state_graph(
     app = builder.compile(checkpointer=sync_checkpointer)
     config = {"configurable": {"thread_id": "1"}}
 
-    assert [*app.stream({"query": "what is weather in sf"}, config)] == [
+    assert [
+        *app.stream({"query": "what is weather in sf"}, config, checkpoint_during=True)
+    ] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
@@ -1557,7 +1559,7 @@ def test_latest_checkpoint_state_graph(
         },
     ]
 
-    assert [*app.stream(Command(resume=""), config)] == [
+    assert [*app.stream(Command(resume=""), config, checkpoint_during=True)] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
 
@@ -1582,7 +1584,10 @@ async def test_latest_checkpoint_state_graph_async(
     config = {"configurable": {"thread_id": "1"}}
 
     assert [
-        c async for c in app.astream({"query": "what is weather in sf"}, config)
+        c
+        async for c in app.astream(
+            {"query": "what is weather in sf"}, config, checkpoint_during=True
+        )
     ] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
@@ -1599,7 +1604,9 @@ async def test_latest_checkpoint_state_graph_async(
         },
     ]
 
-    assert [c async for c in app.astream(Command(resume=""), config)] == [
+    assert [
+        c async for c in app.astream(Command(resume=""), config, checkpoint_during=True)
+    ] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
 
