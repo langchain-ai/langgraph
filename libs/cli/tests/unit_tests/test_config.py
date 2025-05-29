@@ -34,6 +34,7 @@ def test_validate_config():
         "python_version": "3.11",
         "node_version": None,
         "pip_config_file": None,
+        "image_distro": "debian",
         "dockerfile_lines": [],
         "env": {},
         "store": None,
@@ -54,6 +55,7 @@ def test_validate_config():
         "python_version": "3.12",
         "node_version": None,
         "pip_config_file": "pipconfig.txt",
+        "image_distro": "debian",
         "dockerfile_lines": ["ARG meow"],
         "dependencies": [".", "langchain"],
         "graphs": {
@@ -120,18 +122,90 @@ def test_validate_config():
         }
     )
     assert config["python_version"] == "3.12-slim"
-    with pytest.raises(
-        ValueError,
-        match="Invalid http.app format",
-    ):
+    with pytest.raises(ValueError, match="Invalid http.app format"):
+        validate_config({
+            "python_version": "3.12",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "http": {"app": "../../examples/my_app.py"},
+        })
+
+
+def test_validate_config_image_distro():
+    """Test validation of image_distro field."""
+    # Valid image_distro values should work
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "image_distro": "debian",
+        }
+    )
+    assert config["image_distro"] == "debian"
+
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "image_distro": "wolfi",
+        }
+    )
+    assert config["image_distro"] == "wolfi"
+
+    # Missing image_distro should default to 'debian'
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+        }
+    )
+    assert config["image_distro"] == "debian"
+
+    # Invalid image_distro values should raise error
+    with pytest.raises(click.UsageError) as exc_info:
         validate_config(
             {
-                "python_version": "3.12",
+                "python_version": "3.11",
                 "dependencies": ["."],
                 "graphs": {"agent": "./agent.py:graph"},
-                "http": {"app": "../../examples/my_app.py"},
+                "image_distro": "ubuntu",
             }
         )
+    assert "Invalid image_distro: 'ubuntu'" in str(exc_info.value)
+    assert "Must be either 'debian' or 'wolfi'" in str(exc_info.value)
+
+    with pytest.raises(click.UsageError) as exc_info:
+        validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+                "image_distro": "alpine",
+            }
+        )
+    assert "Invalid image_distro: 'alpine'" in str(exc_info.value)
+
+    # Test with Node.js config too
+    config = validate_config(
+        {
+            "node_version": "20",
+            "graphs": {"agent": "./agent.js:graph"},
+            "image_distro": "wolfi",
+        }
+    )
+    assert config["image_distro"] == "wolfi"
+
+    # Test Node.js config with default
+    config = validate_config(
+        {
+            "node_version": "20",
+            "graphs": {"agent": "./agent.js:graph"},
+        }
+    )
+    assert config["image_distro"] == "debian"
 
 
 def test_validate_config_file():

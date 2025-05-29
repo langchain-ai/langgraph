@@ -13,6 +13,8 @@ DEFAULT_NODE_VERSION = "20"
 MIN_PYTHON_VERSION = "3.11"
 DEFAULT_PYTHON_VERSION = "3.11"
 
+DEFAULT_IMAGE_DISTRO = "debian"
+
 
 class TTLConfig(TypedDict, total=False):
     """Configuration for TTL (time-to-live) behavior in the store."""
@@ -367,6 +369,12 @@ class Config(TypedDict, total=False):
     
     Defaults to langchain/langgraph-api or langchain/langgraphjs-api."""
 
+    image_distro: Optional[str]
+    """Optional. Linux distribution for the base image.
+    
+    Must be either 'debian' or 'wolfi'. If omitted, defaults to 'debian'.
+    """
+
     pip_config_file: Optional[str]
     """Optional. Path to a pip config file (e.g., "/etc/pip.conf" or "pip.ini") for controlling
     package installation (custom indices, credentials, etc.).
@@ -517,12 +525,15 @@ def validate_config(config: Config) -> Config:
         "python_version", DEFAULT_PYTHON_VERSION if some_python else None
     )
 
+    image_distro = config.get("image_distro", DEFAULT_IMAGE_DISTRO)
+
     config = {
         "node_version": node_version,
         "python_version": python_version,
         "pip_config_file": config.get("pip_config_file"),
         "_INTERNAL_docker_tag": config.get("_INTERNAL_docker_tag"),
         "base_image": config.get("base_image"),
+        "image_distro": image_distro,
         "dependencies": config.get("dependencies", []),
         "dockerfile_lines": config.get("dockerfile_lines", []),
         "graphs": config.get("graphs", {}),
@@ -575,6 +586,14 @@ def validate_config(config: Config) -> Config:
             "No graphs found in config. "
             "Add at least one graph to 'graphs' dictionary."
         )
+
+    # Validate image_distro config
+    if image_distro := config.get("image_distro"):
+        if image_distro not in ["debian", "wolfi"]:
+            raise click.UsageError(
+                f"Invalid image_distro: '{image_distro}'. "
+                "Must be either 'debian' or 'wolfi'."
+            )
 
     # Validate auth config
     if auth_conf := config.get("auth"):
@@ -1306,6 +1325,7 @@ def docker_tag(
     base_image: Optional[str] = None,
 ) -> str:
     base_image = base_image or default_base_image(config)
+    wolfi_tag = "-wolfi" if config.get("image_distro") == "wolfi" else ""
     if config.get("_INTERNAL_docker_tag"):
         return f"{base_image}:{config['_INTERNAL_docker_tag']}"
 
@@ -1313,8 +1333,8 @@ def docker_tag(
         return f"{base_image}-py{config['python_version']}"
 
     if config.get("node_version") and not config.get("python_version"):
-        return f"{base_image}:{config['node_version']}"
-    return f"{base_image}:{config['python_version']}"
+        return f"{base_image}:{config['node_version']}{wolfi_tag}"
+    return f"{base_image}:{config['python_version']}{wolfi_tag}"
 
 
 def config_to_docker(
