@@ -9,6 +9,7 @@ import posixpath
 import re
 from typing import Any, Dict
 
+from bs4 import BeautifulSoup
 from mkdocs.config.defaults import MkDocsConfig
 from mkdocs.structure.files import Files, File
 from mkdocs.structure.pages import Page
@@ -335,10 +336,17 @@ def _inject_gtm(html: str) -> str:
 height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 <!-- End Google Tag Manager (noscript) -->
 """
-    return html.replace("<body>", "<body>" + gtm_code, 1)
+    soup = BeautifulSoup(html, "html.parser")
+    body = soup.body
+    if body:
+        # Insert the GTM code as raw HTML at the top of <body>
+        body.insert(0, BeautifulSoup(gtm_code, "html.parser"))
+        return str(soup)
+    else:
+        return html  # fallback if no <body> found
 
 
-def on_post_page(output: str, page: Page, config: MkDocsConfig, **kwargs) -> str:
+def on_post_page(output: str, page: Page, config: MkDocsConfig) -> str:
     """Inject Google Tag Manager noscript tag immediately after <body>.
 
     Args:
@@ -350,7 +358,9 @@ def on_post_page(output: str, page: Page, config: MkDocsConfig, **kwargs) -> str
     Returns:
         modified HTML output with GTM code injected.
     """
-    return _inject_gtm(output)
+    new_page = _inject_gtm(output)
+    print(new_page)
+    raise ValueError("here")
 
 
 # Create HTML files for redirects after site dir has been built
