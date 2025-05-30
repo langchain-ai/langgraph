@@ -25,7 +25,6 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel
 from typing_extensions import Self
 
-from langgraph._api.deprecation import LangGraphDeprecationWarning
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -171,27 +170,17 @@ class StateGraph:
 
     def __init__(
         self,
-        state_schema: Optional[type[Any]] = None,
+        state_schema: type[Any],
         config_schema: Optional[type[Any]] = None,
         *,
         input: Optional[type[Any]] = None,
         output: Optional[type[Any]] = None,
     ) -> None:
-        if state_schema is None:
-            if input is None or output is None:
-                raise ValueError("Must provide state_schema or input and output")
-            state_schema = input
-            warnings.warn(
-                "Initializing StateGraph without state_schema is deprecated. "
-                "Please pass in an explicit state_schema instead of just an input and output schema.",
-                LangGraphDeprecationWarning,
-                stacklevel=2,
-            )
-        else:
-            if input is None:
-                input = state_schema
-            if output is None:
-                output = state_schema
+        if input is None:
+            input = state_schema
+        if output is None:
+            output = state_schema
+
         self.nodes = {}
         self.edges = set[tuple[str, str]]()
         self.branches = defaultdict(dict)
