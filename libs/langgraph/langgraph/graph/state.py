@@ -14,7 +14,6 @@ from typing import (
     Literal,
     NamedTuple,
     Optional,
-    TypeVar,
     Union,
     cast,
     get_args,
