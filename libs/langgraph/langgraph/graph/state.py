@@ -10,9 +10,11 @@ from types import FunctionType
 from typing import (
     Any,
     Callable,
+    Generic,
     Literal,
     NamedTuple,
     Optional,
+    TypeVar,
     Union,
     cast,
     get_args,
@@ -63,6 +65,7 @@ from langgraph.managed.base import (
     is_managed_value,
 )
 from langgraph.pregel import Pregel
+from langgraph.pregel.protocol import StateT
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.write import (
     ChannelWrite,
@@ -109,7 +112,7 @@ class StateNodeSpec(NamedTuple):
     defer: bool = False
 
 
-class StateGraph:
+class StateGraph(Generic[StateT]):
     """A graph whose nodes communicate by reading and writing to a shared state.
     The signature of each node is State -> Partial<State>.
 
@@ -170,16 +173,14 @@ class StateGraph:
 
     def __init__(
         self,
-        state_schema: type[Any],
+        state_schema: type[StateT],
         config_schema: Optional[type[Any]] = None,
         *,
         input: Optional[type[Any]] = None,
         output: Optional[type[Any]] = None,
     ) -> None:
-        if input is None:
-            input = state_schema
-        if output is None:
-            output = state_schema
+        input = input or state_schema
+        output = output or state_schema
 
         self.nodes = {}
         self.edges = set[tuple[str, str]]()
@@ -698,7 +699,7 @@ class StateGraph:
         interrupt_after: Optional[Union[All, list[str]]] = None,
         debug: bool = False,
         name: Optional[str] = None,
-    ) -> "CompiledStateGraph":
+    ) -> "CompiledStateGraph[StateT]":
         """Compiles the state graph into a `CompiledStateGraph` object.
 
         The compiled graph implements the `Runnable` interface and can be invoked,
@@ -750,7 +751,7 @@ class StateGraph:
             ]
         )
 
-        compiled = CompiledStateGraph(
+        compiled = CompiledStateGraph[StateT](
             builder=self,
             schema_to_mapper={},
             config_type=self.config_schema,
@@ -798,8 +799,8 @@ class StateGraph:
         return compiled.validate()
 
 
-class CompiledStateGraph(Pregel):
-    builder: StateGraph
+class CompiledStateGraph(Pregel[StateT], Generic[StateT]):
+    builder: StateGraph[StateT]
     schema_to_mapper: dict[type[Any], Optional[Callable[[Any], Any]]]
 
     def __init__(

@@ -1,21 +1,32 @@
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Sequence
-from typing import (
-    Any,
-    Optional,
-    Union,
-)
+from typing import Any, Generic, Optional, TypeVar, Union
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.graph import Graph as DrawableGraph
+from pydantic import BaseModel
 from typing_extensions import Self
 
 from langgraph.pregel.types import All, StateSnapshot, StateUpdate, StreamMode
 
+StateT = TypeVar("StateT", bound=Union[dict[str, Any], BaseModel, object])
+"""Type variable used to represent the state in a graph.
 
-class PregelProtocol(
-    Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]], ABC
-):
+It can either be a`TypedDict`, `dataclass`, or Pydantic `BaseModel`.
+"""
+
+InputT = TypeVar("InputT", bound=Union[dict[str, Any], BaseModel, object])
+"""Type variable used to represent the input to a graph.
+
+It can either be a `TypedDict`, `dataclass`, or Pydantic `BaseModel`."""
+
+OutputT = TypeVar("OutputT", bound=Union[dict[str, Any], BaseModel, object])
+"""Type variable used to represent the output of a graph.
+
+It can either be a `TypedDict`, `dataclass`, or Pydantic `BaseModel`."""
+
+
+class PregelProtocol(Runnable[StateT, StateT], Generic[StateT], ABC):
     @abstractmethod
     def with_config(
         self, config: Optional[RunnableConfig] = None, **kwargs: Any
@@ -100,7 +111,7 @@ class PregelProtocol(
     @abstractmethod
     def stream(
         self,
-        input: Union[dict[str, Any], Any],
+        input: StateT,
         config: Optional[RunnableConfig] = None,
         *,
         stream_mode: Optional[Union[StreamMode, list[StreamMode]]] = None,
@@ -112,7 +123,7 @@ class PregelProtocol(
     @abstractmethod
     def astream(
         self,
-        input: Union[dict[str, Any], Any],
+        input: StateT,
         config: Optional[RunnableConfig] = None,
         *,
         stream_mode: Optional[Union[StreamMode, list[StreamMode]]] = None,
@@ -124,7 +135,7 @@ class PregelProtocol(
     @abstractmethod
     def invoke(
         self,
-        input: Union[dict[str, Any], Any],
+        input: StateT,
         config: Optional[RunnableConfig] = None,
         *,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
@@ -134,7 +145,7 @@ class PregelProtocol(
     @abstractmethod
     async def ainvoke(
         self,
-        input: Union[dict[str, Any], Any],
+        input: StateT,
         config: Optional[RunnableConfig] = None,
         *,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
