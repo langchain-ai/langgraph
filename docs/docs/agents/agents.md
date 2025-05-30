@@ -189,7 +189,89 @@ Note that in the above example, when the agent is invoked the second time with t
 
 For more information, see [Memory](./memory.md).
 
-## 6. Configure structured output
+
+## 6. Add human-in-the-loop
+
+Add `human-in-the-loop` controls using the prebuilt `InterruptToolNode`. This allows you to define a function that will be called before the agent takes any action.
+
+```python
+# highlight-next-line
+from langgraph.prebuilt.interrupt import HumanInterruptConfig, InterruptToolNode
+from langgraph.prebuilt import create_react_agent
+from langgraph.checkpoint.memory import InMemorySaver
+
+def get_available_items() -> list[str]:  # (1)!
+   """Return a list of items the user can buy."""
+   return [
+      "4k LED TV",
+      "1080p Monitor",
+      "Wireless Headphones",
+      "Gaming Keyboard",
+   ]
+
+def purchase(item: str) -> str:  # (2)!
+   """Buy the given item."""
+   return f"✅ Purchased '{item}' successfully."
+
+# highlight-next-line
+checkpointer = InMemorySaver()  # (3)!
+
+# Configure a human-interrupt hook for `purchase`
+interrupt_hook = InterruptToolNode(  # (4)!
+   purchase=HumanInterruptConfig(
+      allow_accept=True,
+      allow_edit=False,
+      allow_ignore=False,
+      allow_respond=True,
+   )
+)
+
+agent = create_react_agent(
+   model="anthropic:claude-3-5-haiku-latest",
+   tools=[get_available_items, purchase],
+   prompt="You are a helpful shopping assistant.",
+   post_model_hook=interrupt_hook, # (5)!
+   checkpointer=checkpointer, # (6)!
+)
+
+agent.invoke( # (7)!
+   {
+      "messages": [
+         {"role": "user", "content": "Buy me something. Surprise me"}
+      ],
+   },
+   {"configurable": {"thread_id": "1"}},
+)
+
+# Resume execution using the Command primitive
+from langgraph.types import Command # (8)!
+
+agent.invoke(
+   Command(
+      # highlight-next-line
+      resume={ # (9)!
+         "type": "accept",
+      }
+   ),
+   {"configurable": {"thread_id": "1"}},
+)
+```
+
+1. Define a tool for listing available items. This tool is safe to call without human review.
+2. Define a tool for purchasing an item. This tool requires human review before proceeding.
+3. Human-in-the-loop requires a checkpointer. Use `InMemorySaver` for development and testing. In production, use a persistent checkpointer.
+4. Specify what kind of human-in-the-loop interaction you want to allow. In this case, the user can accept the purchase, but not edit or ignore it. The user can also `respond` to the agent with a message, directing it to do something else.
+5. The `post_model_hook` will be called after the LLM generates a response but before any actions like `purchase` are executed. This allows you to intercept the response and decide whether to proceed with the action or do something else.
+6. The `checkpointer` is required to store the state of the agent and allow for asynchronous human-in-the-loop interactions. The agent can be paused for an indefinite time while waiting for human input.
+7. Invoke the agent with a message and a configuration containing `thread_id`. The agent will use the checkpointer to store its state and allow for human-in-the-loop interactions. The agent will run until it reaches the `purchase` step, at which point it will pause and output an `__interrupt__` key in the response. The interrupt will look like this:
+`Interrupt(value=[{'action_request': {'action': 'purchase', 'args': {'item': 'Wireless Headphones'}}, 'config': {'allow_accept': True, 'allow_edit': False, 'allow_ignore': False, 'allow_respond': True}, 'description': 'Please review tool call for `purchase` before execution.'}], ...)`
+8. The `Command` primitive is used to resume the agent's execution. It allows you to specify what action to take next.
+9. The `resume` value will be passed to the location where the agent was interrupted.
+
+
+For more information, see [Human-in-the-loop](./human-in-the-loop.md).
+
+## 7. Configure structured output
 
 To produce structured responses conforming to a schema, use the `response_format` parameter. The schema can be defined with a `Pydantic` model or `TypedDict`. The result will be accessible via the `structured_response` field.
 
