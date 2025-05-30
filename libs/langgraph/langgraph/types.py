@@ -14,7 +14,6 @@ from typing import (
     TypeVar,
     Union,
     cast,
-    get_type_hints,
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
@@ -23,7 +22,7 @@ from xxhash import xxh3_128_hexdigest
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 from langgraph.utils.cache import default_cache_key
-from langgraph.utils.fields import get_update_as_tuples
+from langgraph.utils.fields import get_cached_annotated_keys, get_update_as_tuples
 
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
@@ -350,8 +349,8 @@ class Command(Generic[N], ToolOutputMixin):
             for t in self.update
         ):
             return self.update
-        elif hints := get_type_hints(type(self.update)):
-            return get_update_as_tuples(self.update, tuple(hints.keys()))
+        elif keys := get_cached_annotated_keys(type(self.update)):
+            return get_update_as_tuples(self.update, keys)
         elif self.update is not None:
             return [("__root__", self.update)]
         else:
