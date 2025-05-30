@@ -3,7 +3,7 @@
 You might need to rebuild your graph with a different configuration for a new run. For example, you might need to use a different graph state or graph structure depending on the config. This guide shows how you can do this.
 
 !!! note "Note"
-In most cases, customizing behavior based on the config should be handled by a single graph where each node can read a config and change its behavior based on it
+    In most cases, customizing behavior based on the config should be handled by a single graph where each node can read a config and change its behavior based on it
 
 ## Prerequisites
 
