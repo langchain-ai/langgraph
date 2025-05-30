@@ -43,10 +43,12 @@ from langgraph.channels.named_barrier_value import (
 from langgraph.checkpoint.base import Checkpoint
 from langgraph.constants import (
     EMPTY_SEQ,
+    END,
     INTERRUPT,
     MISSING,
     NS_END,
     NS_SEP,
+    START,
     TAG_HIDDEN,
     TASKS,
 )
@@ -57,17 +59,11 @@ from langgraph.errors import (
     create_error_message,
 )
 from langgraph.graph.branch import Branch
-from langgraph.graph.graph import (
-    END,
-    START,
-    CompiledGraph,
-    Graph,
-    Send,
-)
 from langgraph.managed.base import (
     ManagedValueSpec,
     is_managed_value,
 )
+from langgraph.pregel import Pregel
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.write import (
     ChannelWrite,
@@ -75,7 +71,7 @@ from langgraph.pregel.write import (
     ChannelWriteTupleEntry,
 )
 from langgraph.store.base import BaseStore
-from langgraph.types import All, CachePolicy, Checkpointer, Command, RetryPolicy
+from langgraph.types import All, CachePolicy, Checkpointer, Command, RetryPolicy, Send
 from langgraph.utils.fields import get_field_default, get_update_as_tuples
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.runnable import RunnableLike, coerce_to_runnable
@@ -114,7 +110,7 @@ class StateNodeSpec(NamedTuple):
     defer: bool = False
 
 
-class StateGraph(Graph):
+class StateGraph:
     """A graph whose nodes communicate by reading and writing to a shared state.
     The signature of each node is State -> Partial<State>.
 
@@ -166,7 +162,9 @@ class StateGraph(Graph):
         ```
     """
 
-    nodes: dict[str, StateNodeSpec]  # type: ignore[assignment]
+    edges: set[tuple[str, str]]
+    nodes: dict[str, StateNodeSpec]
+    branches: defaultdict[str, dict[str, Branch]]
     channels: dict[str, BaseChannel]
     managed: dict[str, ManagedValueSpec]
     schemas: dict[type[Any], dict[str, Union[BaseChannel, ManagedValueSpec]]]
@@ -179,7 +177,6 @@ class StateGraph(Graph):
         input: Optional[type[Any]] = None,
         output: Optional[type[Any]] = None,
     ) -> None:
-        super().__init__()
         if state_schema is None:
             if input is None or output is None:
                 raise ValueError("Must provide state_schema or input and output")
@@ -195,10 +192,14 @@ class StateGraph(Graph):
                 input = state_schema
             if output is None:
                 output = state_schema
+        self.nodes = {}
+        self.edges = set[tuple[str, str]]()
+        self.branches = defaultdict(dict)
+        self.support_multiple_edges = False
+        self.compiled = False
         self.schemas = {}
         self.channels = {}
         self.managed = {}
-        self.type_hints: dict[type[Any], dict[str, Any]] = {}
         self.schema = state_schema
         self.input = input
         self.output = output
@@ -226,7 +227,6 @@ class StateGraph(Graph):
                     " Managed channels are not permitted in Input/Output schema."
                 )
             self.schemas[schema] = {**channels, **managed}
-            self.type_hints[schema] = type_hints
             for key, channel in channels.items():
                 if key in self.channels:
                     if self.channels[key] != channel:
@@ -373,7 +373,7 @@ class StateGraph(Graph):
             raise ValueError(f"Node `{node}` is reserved.")
 
         for character in (NS_SEP, NS_END):
-            if character in cast(str, node):
+            if character in node:
                 raise ValueError(
                     f"'{character}' is a reserved character and is not allowed in the node names."
                 )
@@ -428,8 +428,8 @@ class StateGraph(Graph):
 
         if input is not None:
             self._add_schema(input)
-        self.nodes[cast(str, node)] = StateNodeSpec(
-            coerce_to_runnable(action, name=cast(str, node), trace=False),
+        self.nodes[node] = StateNodeSpec(
+            coerce_to_runnable(action, name=node, trace=False),
             metadata,
             input=input or self.schema,
             retry_policy=retry,
@@ -456,14 +456,30 @@ class StateGraph(Graph):
         Returns:
             Self: The instance of the state graph, allowing for method chaining.
         """
-        if isinstance(start_key, str):
-            return super().add_edge(start_key, end_key)
-
         if self.compiled:
             logger.warning(
                 "Adding an edge to a graph that has already been compiled. This will "
                 "not be reflected in the compiled graph."
             )
+
+        if isinstance(start_key, str):
+            if start_key == END:
+                raise ValueError("END cannot be a start node")
+            if end_key == START:
+                raise ValueError("START cannot be an end node")
+
+            # run this validation only for non-StateGraph graphs
+            if not hasattr(self, "channels") and start_key in set(
+                start for start, _ in self.edges
+            ):
+                raise ValueError(
+                    f"Already found path for node '{start_key}'.\n"
+                    "For multiple edges, use StateGraph with an Annotated state key."
+                )
+
+            self.edges.add((start_key, end_key))
+            return self
+
         for start in start_key:
             if start == END:
                 raise ValueError("END cannot be a start node")
@@ -568,6 +584,119 @@ class StateGraph(Graph):
 
             previous_name = name
 
+        return self
+
+    def set_entry_point(self, key: str) -> Self:
+        """Specifies the first node to be called in the graph.
+
+        Equivalent to calling `add_edge(START, key)`.
+
+        Parameters:
+            key (str): The key of the node to set as the entry point.
+
+        Returns:
+            Self: The instance of the graph, allowing for method chaining.
+        """
+        return self.add_edge(START, key)
+
+    def set_conditional_entry_point(
+        self,
+        path: Union[
+            Callable[..., Union[Hashable, list[Hashable]]],
+            Callable[..., Awaitable[Union[Hashable, list[Hashable]]]],
+            Runnable[Any, Union[Hashable, list[Hashable]]],
+        ],
+        path_map: Optional[Union[dict[Hashable, str], list[str]]] = None,
+        then: Optional[str] = None,
+    ) -> Self:
+        """Sets a conditional entry point in the graph.
+
+        Args:
+            path: The callable that determines the next
+                node or nodes. If not specifying `path_map` it should return one or
+                more nodes. If it returns END, the graph will stop execution.
+            path_map: Optional mapping of paths to node
+                names. If omitted the paths returned by `path` should be node names.
+            then: The name of a node to execute after the nodes
+                selected by `path`.
+
+        Returns:
+            Self: The instance of the graph, allowing for method chaining.
+        """
+        return self.add_conditional_edges(START, path, path_map, then)
+
+    def set_finish_point(self, key: str) -> Self:
+        """Marks a node as a finish point of the graph.
+
+        If the graph reaches this node, it will cease execution.
+
+        Parameters:
+            key (str): The key of the node to set as the finish point.
+
+        Returns:
+            Self: The instance of the graph, allowing for method chaining.
+        """
+        return self.add_edge(key, END)
+
+    def validate(self, interrupt: Optional[Sequence[str]] = None) -> Self:
+        # assemble sources
+        all_sources = {src for src, _ in self._all_edges}
+        for start, branches in self.branches.items():
+            all_sources.add(start)
+            for cond, branch in branches.items():
+                if branch.then is not None:
+                    if branch.ends is not None:
+                        for end in branch.ends.values():
+                            if end != END:
+                                all_sources.add(end)
+                    else:
+                        for node in self.nodes:
+                            if node != start and node != branch.then:
+                                all_sources.add(node)
+        for name, spec in self.nodes.items():
+            if spec.ends:
+                all_sources.add(name)
+        # validate sources
+        for source in all_sources:
+            if source not in self.nodes and source != START:
+                raise ValueError(f"Found edge starting at unknown node '{source}'")
+
+        if START not in all_sources:
+            raise ValueError(
+                "Graph must have an entrypoint: add at least one edge from START to another node"
+            )
+
+        # assemble targets
+        all_targets = {end for _, end in self._all_edges}
+        for start, branches in self.branches.items():
+            for cond, branch in branches.items():
+                if branch.then is not None:
+                    all_targets.add(branch.then)
+                if branch.ends is not None:
+                    for end in branch.ends.values():
+                        if end not in self.nodes and end != END:
+                            raise ValueError(
+                                f"At '{start}' node, '{cond}' branch found unknown target '{end}'"
+                            )
+                        all_targets.add(end)
+                else:
+                    all_targets.add(END)
+                    for node in self.nodes:
+                        if node != start and node != branch.then:
+                            all_targets.add(node)
+        for name, spec in self.nodes.items():
+            if spec.ends:
+                all_targets.update(spec.ends)
+        for target in all_targets:
+            if target not in self.nodes and target != END:
+                raise ValueError(f"Found edge ending at unknown node `{target}`")
+        # validate interrupts
+        if interrupt:
+            for node in interrupt:
+                if node not in self.nodes:
+                    raise ValueError(f"Interrupt node `{node}` not found")
+
+        self.compiled = True
         return self
 
     def compile(
@@ -680,17 +809,19 @@ class StateGraph(Graph):
         return compiled.validate()
 
 
-class CompiledStateGraph(CompiledGraph):
+class CompiledStateGraph(Pregel):
     builder: StateGraph
     schema_to_mapper: dict[type[Any], Optional[Callable[[Any], Any]]]
 
     def __init__(
         self,
         *,
+        builder: StateGraph,
         schema_to_mapper: dict[type[Any], Optional[Callable[[Any], Any]]],
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
+        self.builder = builder
         self.schema_to_mapper = schema_to_mapper
 
     def get_input_schema(
@@ -794,7 +925,6 @@ class CompiledStateGraph(CompiledGraph):
                 mapper = _pick_mapper(
                     list(input_values),
                     input_schema,
-                    self.builder.type_hints[input_schema],
                 )
                 self.schema_to_mapper[input_schema] = mapper
 
@@ -890,7 +1020,7 @@ class CompiledStateGraph(CompiledGraph):
             if schema in self.schema_to_mapper:
                 mapper = self.schema_to_mapper[schema]
             else:
-                mapper = _pick_mapper(channels, schema, self.builder.type_hints[schema])
+                mapper = _pick_mapper(channels, schema)
                 self.schema_to_mapper[schema] = mapper
             # create reader
             reader: Optional[Callable[[RunnableConfig], Any]] = partial(
@@ -1031,7 +1161,7 @@ class CompiledStateGraph(CompiledGraph):
 
 
 def _pick_mapper(
-    state_keys: Sequence[str], schema: type[Any], type_hints: Optional[dict[str, Any]]
+    state_keys: Sequence[str], schema: type[Any]
 ) -> Optional[Callable[[Any], Any]]:
     if state_keys == ["__root__"]:
         return None
