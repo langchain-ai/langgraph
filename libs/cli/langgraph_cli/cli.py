@@ -714,6 +714,118 @@ def dev(
     )
 
 
+@click.option(
+    "--host",
+    default="127.0.0.1",
+    help="Host to bind the server to",
+)
+@click.option(
+    "--port",
+    "-p",
+    type=int,
+    default=2024,
+    help="Port to bind the server to",
+)
+@click.option(
+    "--no-reload",
+    is_flag=True,
+    help="Disable auto-reload on file changes",
+)
+@click.option(
+    "--no-browser",
+    is_flag=True,
+    help="Don't open the browser automatically",
+)
+@click.option(
+    "--debug-port",
+    type=int,
+    help="Port for the debugger",
+)
+@click.option(
+    "--wait-for-client",
+    is_flag=True,
+    help="Wait for client to connect before starting",
+)
+@click.option(
+    "--allow-blocking",
+    is_flag=True,
+    help="Allow blocking operations",
+)
+@click.option(
+    "--server-log-level",
+    default="WARNING",
+    help="Log level for the server",
+)
+@click.argument("graph_ref", required=True)
+@cli.command(
+    "simple",
+    help="🚀 Run a LangGraph directly from a file:object reference without requiring langgraph.json"
+)
+@log_command
+def simple(
+    host: str,
+    port: int,
+    no_reload: bool,
+    no_browser: bool,
+    debug_port: Optional[int],
+    wait_for_client: bool,
+    allow_blocking: bool,
+    server_log_level: str,
+    graph_ref: str,
+):
+    """Run a LangGraph directly from a file:object reference without requiring langgraph.json."""
+    try:
+        from langgraph_api.cli import run_server  # type: ignore
+    except ImportError:
+        py_version_msg = ""
+        if sys.version_info < (3, 11):
+            py_version_msg = (
+                "
+                f" You are currently using Python {sys.version_info.major}.{sys.version_info.minor}."
+                ' Please upgrade your Python version before installing "langgraph-cli[inmem]".'
+            )
+        raise click.UsageError(
+            "Required package 'langgraph-api' is not installed.
+            "Please install it with:
+            '    pip install -U "langgraph-cli[inmem]"'
+            f"{py_version_msg}"
+        ) from None
+
+    # Parse the file:object reference
+    if ":" not in graph_ref:
+        raise click.UsageError(
+            f"Invalid graph reference '{graph_ref}'. Expected format: 'file.py:object_name'"
+        )
+    
+    # Add current directory to Python path for module loading
+    cwd = os.getcwd()
+    sys.path.append(cwd)
+    
+    # Create a minimal graphs configuration
+    graphs = {"main": graph_ref}
+    
+    run_server(
+        host,
+        port,
+        not no_reload,
+        graphs,
+        n_jobs_per_worker=None,
+        open_browser=not no_browser,
+        debug_port=debug_port,
+        env=None,
+        store=None,
+        wait_for_client=wait_for_client,
+        auth=None,
+        http=None,
+        ui=None,
+        ui_config=None,
+        studio_url=None,
+        allow_blocking=allow_blocking,
+        tunnel=False,
+        server_level=server_log_level,
+    )
+
+
 @click.argument("path", required=False)
 @click.option(
     "--template",
@@ -816,3 +928,4 @@ def prepare(
         base_image=base_image,
     )
     return args, stdin
+
