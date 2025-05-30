@@ -474,7 +474,10 @@ def test_stream():
             {"input": "data"},
             # pretend we invoked this as a subgraph
             config={
-                "configurable": {"thread_id": "thread_1", "checkpoint_ns": "some_ns"}
+                "configurable": {
+                    "thread_id": "bb661bf3-a116-4a80-b89b-da2a99d0da88",
+                    "checkpoint_ns": "some_ns",
+                }
             },
             stream_mode="values",
         ):
@@ -648,7 +651,10 @@ async def test_astream():
             {"input": "data"},
             # pretend we invoked this as a subgraph
             config={
-                "configurable": {"thread_id": "thread_1", "checkpoint_ns": "some_ns"}
+                "configurable": {
+                    "thread_id": "bb661bf3-a116-4a80-b89b-da2a99d0da88",
+                    "checkpoint_ns": "some_ns",
+                }
             },
             stream_mode="values",
         ):

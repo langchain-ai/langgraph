@@ -7,6 +7,7 @@ from typing import (
     Union,
     cast,
 )
+from uuid import UUID, uuid5
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.graph import (
@@ -44,7 +45,7 @@ from langgraph.errors import GraphInterrupt
 from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.types import All, PregelTask, StateSnapshot, StreamMode
 from langgraph.types import Command, Interrupt, StreamProtocol
-from langgraph.utils.config import merge_configs
+from langgraph.utils.config import merge_configs, patch_configurable
 
 CONF_DROPLIST = frozenset(
     (
@@ -647,6 +648,18 @@ class RemoteGraph(PregelProtocol):
         """
         sync_client = self._validate_sync_client()
         merged_config = merge_configs(self.config, config)
+        thread_id = merged_config["configurable"].get("thread_id")
+        checkpoint_ns = merged_config["configurable"].get("checkpoint_ns")
+        if checkpoint_ns:
+            merged_config = patch_configurable(
+                merged_config,
+                {
+                    "thread_id": str(uuid5(UUID(str(thread_id)), checkpoint_ns))
+                    if thread_id
+                    else None
+                },
+            )
+
         sanitized_config = self._sanitize_config(merged_config)
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
@@ -746,6 +759,17 @@ class RemoteGraph(PregelProtocol):
         """
         client = self._validate_client()
         merged_config = merge_configs(self.config, config)
+        thread_id = merged_config["configurable"].get("thread_id")
+        checkpoint_ns = merged_config["configurable"].get("checkpoint_ns")
+        if checkpoint_ns:
+            merged_config = patch_configurable(
+                merged_config,
+                {
+                    "thread_id": str(uuid5(UUID(str(thread_id)), checkpoint_ns))
+                    if thread_id
+                    else None
+                },
+            )
         sanitized_config = self._sanitize_config(merged_config)
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
