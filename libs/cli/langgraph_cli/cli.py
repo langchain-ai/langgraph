@@ -2,6 +2,7 @@
 
 import os
 import pathlib
+import importlib.util
 import shutil
 import sys
 from collections.abc import Sequence
@@ -21,6 +22,118 @@ from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.progress import Progress
 from langgraph_cli.templates import TEMPLATE_HELP_STRING, create_new
 from langgraph_cli.version import __version__
+
+
+def parse_graph_spec(graph_spec: str) -> tuple[str, str]:
+    """Parse a graph specification in the format '$file:$object'.
+    
+    Args:
+        graph_spec: String in format 'path/to/file.py:object_name'
+        
+    Returns:
+        Tuple of (file_path, object_name)
+        
+    Raises:
+        click.UsageError: If the format is invalid
+    """
+    if ':' not in graph_spec:
+        raise click.UsageError(
+            f"Invalid graph specification '{graph_spec}'. "
+            "Expected format: 'path/to/file.py:object_name'"
+        )
+    
+    file_path, object_name = graph_spec.rsplit(':', 1)
+    
+    if not file_path or not object_name:
+        raise click.UsageError(
+            f"Invalid graph specification '{graph_spec}'. "
+            "Both file path and object name must be non-empty."
+        )
+    
+    # Convert to absolute path
+    file_path = os.path.abspath(file_path)
+    
+    # Validate file exists and is a Python file
+    if not os.path.exists(file_path):
+        raise click.UsageError(f"File not found: {file_path}")
+    
+    if not file_path.endswith('.py'):
+        raise click.UsageError(f"File must be a Python file (.py): {file_path}")
+    
+    return file_path, object_name
+
+
+def load_graph_from_spec(file_path: str, object_name: str):
+    """Load a graph object from a Python file.
+    
+    Args:
+        file_path: Absolute path to the Python file
+        object_name: Name of the object to extract from the module
+        
+    Returns:
+        The loaded graph object
+        
+    Raises:
+        click.UsageError: If the module cannot be loaded or object not found
+    """
+    try:
+        # Load module from file path
+        spec = importlib.util.spec_from_file_location("graph_module", file_path)
+        if spec is None or spec.loader is None:
+            raise click.UsageError(f"Could not load module from {file_path}")
+        
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        
+        # Extract the specified object
+        if not hasattr(module, object_name):
+            raise click.UsageError(f"Object '{object_name}' not found in {file_path}")
+        
+        graph_obj = getattr(module, object_name)
+        
+        # Basic validation - check if it looks like a graph object
+        if not (callable(graph_obj) or hasattr(graph_obj, 'invoke')):
+            click.secho(
+                f"Warning: '{object_name}' may not be a valid LangGraph object. "
+                "Expected a callable or object with 'invoke' method.",
+                fg="yellow"
+            )
+        
+        return graph_obj
+        
+    except Exception as e:
+        if isinstance(e, click.UsageError):
+            raise
+        raise click.UsageError(f"Error loading graph from {file_path}: {str(e)}")
+
+
+def create_minimal_config(graph_spec: str) -> dict:
+    """Create a minimal in-memory configuration for a single graph.
+    
+    Args:
+        graph_spec: Graph specification in format 'path/to/file.py:object_name'
+        
+    Returns:
+        Configuration dictionary compatible with langgraph_cli.config
+    """
+    file_path, object_name = parse_graph_spec(graph_spec)
+    
+    # Load and validate the graph object
+    graph_obj = load_graph_from_spec(file_path, object_name)
+    
+    # Create minimal configuration structure
+    config = {
+        "dependencies": ["."],  # Include current directory
+        "graphs": {
+            "default": graph_spec  # Use the original spec format
+        },
+        "env": {},  # Empty environment variables
+        "python_version": "3.11",  # Default Python version
+        "dockerfile_lines": []  # No additional dockerfile lines
+    }
+    
+    return config
+
 
 OPT_DOCKER_COMPOSE = click.option(
     "--docker-compose",
@@ -743,7 +856,33 @@ def new(path: Optional[str], template: Optional[str]) -> None:
 @log_command
 def simple(graph_spec: str, port: int, host: str) -> None:
     """Run a single LangGraph without requiring a langgraph.json configuration file."""
-    click.echo(f"Starting simple server for {graph_spec} on {host}:{port}")
+    try:
+        from langgraph_api.cli import run_server  # type: ignore
+    except ImportError:
+        raise click.UsageError(
+            "Required package 'langgraph-api' is not installed.
+            "Please install it with:
+            '    pip install -U "langgraph-cli[inmem]"'
+        ) from None
+    
+    click.secho(f"Starting simple server for {graph_spec} on {host}:{port}", fg="green")
+    
+    # Create minimal configuration
+    config = create_minimal_config(graph_spec)
+    
+    # Add current directory to Python path for imports
+    cwd = os.getcwd()
+    if cwd not in sys.path:
+        sys.path.append(cwd)
+    
+    # Run the server with minimal configuration
+    run_server(
+        host=host,
+        port=port,
+        reload=True,  # Enable reload by default for development
+        graphs=config["graphs"],
+        env=config.get("env", {}),
+    )
 
 
 def prepare_args_and_stdin(
@@ -835,4 +974,5 @@ def prepare(
         base_image=base_image,
     )
     return args, stdin
+
 
