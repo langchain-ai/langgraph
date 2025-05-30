@@ -353,14 +353,11 @@ def on_post_page(output: str, page: Page, config: MkDocsConfig) -> str:
         output: The HTML output of the page.
         page: The page instance.
         config: The MkDocs configuration object.
-        **kwargs: Additional keyword arguments.
 
     Returns:
         modified HTML output with GTM code injected.
     """
-    new_page = _inject_gtm(output)
-    print(new_page)
-    raise ValueError("here")
+    return _inject_gtm(output)
 
 
 # Create HTML files for redirects after site dir has been built
