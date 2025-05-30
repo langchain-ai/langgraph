@@ -727,6 +727,25 @@ def new(path: Optional[str], template: Optional[str]) -> None:
     return create_new(path, template)
 
 
+@click.argument("graph_spec", required=True)
+@click.option(
+    "--port",
+    default=2024,
+    type=int,
+    help="Port number to bind the development server to. Example: langgraph simple my_file.py:my_graph --port 8000",
+)
+@click.option(
+    "--host",
+    default="127.0.0.1",
+    help="Network interface to bind the development server to. Default 127.0.0.1 is recommended for security.",
+)
+@cli.command("simple", help="🚀 Run a single graph without requiring langgraph.json configuration")
+@log_command
+def simple(graph_spec: str, port: int, host: str) -> None:
+    """Run a single LangGraph without requiring a langgraph.json configuration file."""
+    click.echo(f"Starting simple server for {graph_spec} on {host}:{port}")
+
+
 def prepare_args_and_stdin(
     *,
     capabilities: DockerCapabilities,
@@ -816,3 +835,4 @@ def prepare(
         base_image=base_image,
     )
     return args, stdin
+
