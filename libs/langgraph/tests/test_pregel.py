@@ -45,8 +45,8 @@ from langgraph.config import get_stream_writer
 from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, START
 from langgraph.errors import InvalidUpdateError
 from langgraph.func import entrypoint, task
-from langgraph.graph import END, Graph, StateGraph
-from langgraph.graph.message import MessageGraph, MessagesState, add_messages
+from langgraph.graph import END, StateGraph
+from langgraph.graph.message import MessagesState, add_messages
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import (
     GraphRecursionError,
@@ -83,81 +83,6 @@ logger = logging.getLogger(__name__)
 
 
 def test_graph_validation() -> None:
-    def logic(inp: str) -> str:
-        return ""
-
-    workflow = Graph()
-    workflow.add_node("agent", logic)
-    workflow.set_entry_point("agent")
-    workflow.set_finish_point("agent")
-    assert workflow.compile(), "valid graph"
-
-    # Accept a dead-end
-    workflow = Graph()
-    workflow.add_node("agent", logic)
-    workflow.set_entry_point("agent")
-    workflow.compile()
-
-    workflow = Graph()
-    workflow.add_node("agent", logic)
-    workflow.set_finish_point("agent")
-    with pytest.raises(ValueError, match="must have an entrypoint"):
-        workflow.compile()
-
-    workflow = Graph()
-    workflow.add_node("agent", logic)
-    workflow.add_node("tools", logic)
-    workflow.set_entry_point("agent")
-    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
-    workflow.add_edge("tools", "agent")
-    assert workflow.compile(), "valid graph"
-
-    workflow = Graph()
-    workflow.add_node("agent", logic)
-    workflow.add_node("tools", logic)
-    workflow.set_entry_point("tools")
-    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
-    workflow.add_edge("tools", "agent")
-    assert workflow.compile(), "valid graph"
-
-    workflow = Graph()
-    workflow.set_entry_point("tools")
-    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
-    workflow.add_edge("tools", "agent")
-    workflow.add_node("agent", logic)
-    workflow.add_node("tools", logic)
-    assert workflow.compile(), "valid graph"
-
-    workflow = Graph()
-    workflow.set_entry_point("tools")
-    workflow.add_conditional_edges(
-        "agent", logic, {"continue": "tools", "exit": END, "hmm": "extra"}
-    )
-    workflow.add_edge("tools", "agent")
-    workflow.add_node("agent", logic)
-    workflow.add_node("tools", logic)
-    with pytest.raises(ValueError, match="unknown"):  # extra is not defined
-        workflow.compile()
-
-    workflow = Graph()
-    workflow.set_entry_point("agent")
-    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
-    workflow.add_edge("tools", "extra")
-    workflow.add_node("agent", logic)
-    workflow.add_node("tools", logic)
-    with pytest.raises(ValueError, match="unknown"):  # extra is not defined
-        workflow.compile()
-
-    workflow = Graph()
-    workflow.add_node("agent", logic)
-    workflow.add_node("tools", logic)
-    workflow.add_node("extra", logic)
-    workflow.set_entry_point("agent")
-    workflow.add_conditional_edges("agent", logic)
-    workflow.add_edge("tools", "agent")
-    # Accept, even though extra is dead-end
-    workflow.compile()
-
     class State(TypedDict):
         hello: str
 
@@ -261,7 +186,9 @@ def test_checkpoint_errors() -> None:
     builder.add_edge(START, "parallel")
     graph = builder.compile(checkpointer=FaultyPutWritesCheckpointer())
     with pytest.raises(ValueError, match="Faulty put_writes"):
-        graph.invoke("", {"configurable": {"thread_id": "thread-1"}})
+        graph.invoke(
+            "", {"configurable": {"thread_id": "thread-1"}}, checkpoint_during=True
+        )
 
 
 def test_config_json_schema() -> None:
@@ -488,11 +415,6 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
         input_channels="input",
         output_channels="output",
     )
-    graph = Graph()
-    graph.add_node("add_one", add_one)
-    graph.set_entry_point("add_one")
-    graph.set_finish_point("add_one")
-    gapp = graph.compile()
 
     assert app.input_schema.model_json_schema() == {
         "title": "LangGraphInput",
@@ -513,21 +435,6 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     assert app.invoke(2) == 3
     assert app.invoke(2, output_keys=["output"]) == {"output": 3}
     assert repr(app), "does not raise recursion error"
-
-    assert gapp.invoke(2, debug=True) == 3
-
-
-@pytest.mark.parametrize(
-    "falsy_value",
-    [None, False, 0, "", [], {}, set(), frozenset(), 0.0, 0j],
-)
-def test_invoke_single_process_in_out_falsy_values(falsy_value: Any) -> None:
-    graph = Graph()
-    graph.add_node("return_falsy_const", lambda *args, **kwargs: falsy_value)
-    graph.set_entry_point("return_falsy_const")
-    graph.set_finish_point("return_falsy_const")
-    gapp = graph.compile()
-    assert gapp.invoke(1) == falsy_value
 
 
 def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
@@ -642,29 +549,6 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     with pytest.raises(GraphRecursionError):
         app.invoke(2, {"recursion_limit": 1}, debug=1)
 
-    graph = Graph()
-    graph.add_node("add_one", add_one)
-    graph.add_node("add_one_more", add_one)
-    graph.set_entry_point("add_one")
-    graph.set_finish_point("add_one_more")
-    graph.add_edge("add_one", "add_one_more")
-    gapp = graph.compile()
-
-    assert gapp.invoke(2) == 4
-
-    for step, values in enumerate(gapp.stream(2, debug=1), start=1):
-        if step == 1:
-            assert values == {
-                "add_one": 3,
-            }
-        elif step == 2:
-            assert values == {
-                "add_one_more": 4,
-            }
-        else:
-            assert 0, f"{step}:{values}"
-    assert step == 2
-
 
 def test_run_from_checkpoint_id_retains_previous_writes(
     sync_checkpointer: BaseCheckpointSaver,
@@ -706,7 +590,7 @@ def test_run_from_checkpoint_id_retains_previous_writes(
     thread_id = uuid.uuid4()
     thread1 = {"configurable": {"thread_id": str(thread_id)}}
 
-    result = graph.invoke({"myval": 1}, thread1)
+    result = graph.invoke({"myval": 1}, thread1, checkpoint_during=True)
     assert result["myval"] == 4
     history = [c for c in graph.get_state_history(thread1)]
 
@@ -770,16 +654,6 @@ def test_batch_two_processes_in_out() -> None:
         {"output": 5},
         {"output": 7},
     ]
-
-    graph = Graph()
-    graph.add_node("add_one", add_one_with_delay)
-    graph.add_node("add_one_more", add_one_with_delay)
-    graph.set_entry_point("add_one")
-    graph.set_finish_point("add_one_more")
-    graph.add_edge("add_one", "add_one_more")
-    gapp = graph.compile()
-
-    assert gapp.batch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
 
 
 def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:
@@ -1568,7 +1442,7 @@ def test_invoke_checkpoint_three(
 
     thread_1 = {"configurable": {"thread_id": "1"}}
     # total starts out as 0, so output is 0+2=2
-    assert app.invoke(2, thread_1, debug=1) == 2
+    assert app.invoke(2, thread_1, checkpoint_during=True) == 2
     state = app.get_state(thread_1)
     assert state is not None
     assert state.values.get("total") == 2
@@ -1578,7 +1452,7 @@ def test_invoke_checkpoint_three(
         == sync_checkpointer.get(thread_1)["id"]
     )
     # total is now 2, so output is 2+3=5
-    assert app.invoke(3, thread_1) == 5
+    assert app.invoke(3, thread_1, checkpoint_during=True) == 5
     state = app.get_state(thread_1)
     assert state is not None
     assert state.values.get("total") == 7
@@ -1588,7 +1462,7 @@ def test_invoke_checkpoint_three(
     )
     # total is now 2+5=7, so output would be 7+4=11, but raises ValueError
     with pytest.raises(ValueError):
-        app.invoke(4, thread_1)
+        app.invoke(4, thread_1, checkpoint_during=True)
     # checkpoint is updated with new input
     state = app.get_state(thread_1)
     assert state is not None
@@ -1596,7 +1470,7 @@ def test_invoke_checkpoint_three(
     assert state.next == ("one",)
     """we checkpoint inputs and it failed on "one", so the next node is one"""
     # we can recover from error by sending new inputs
-    assert app.invoke(2, thread_1) == 9
+    assert app.invoke(2, thread_1, checkpoint_during=True) == 9
     state = app.get_state(thread_1)
     assert state is not None
     assert state.values.get("total") == 16, "total is now 7+9=16"
@@ -1604,8 +1478,8 @@ def test_invoke_checkpoint_three(
 
     thread_2 = {"configurable": {"thread_id": "2"}}
     # on a new thread, total starts out as 0, so output is 0+5=5
-    assert app.invoke(5, thread_2, debug=True) == 5
-    state = app.get_state({"configurable": {"thread_id": "1"}})
+    assert app.invoke(5, thread_2) == 5
+    state = app.get_state(thread_1)
     assert state is not None
     assert state.values.get("total") == 16
     assert state.next == (), "checkpoint of other thread not touched"
@@ -1823,50 +1697,6 @@ def test_invoke_two_processes_no_in(mocker: MockerFixture) -> None:
 
     with pytest.raises(TypeError):
         Pregel(nodes={"one": one, "two": two})
-
-
-def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
-    def left(data: str) -> str:
-        return data + "->left"
-
-    def right(data: str) -> str:
-        return data + "->right"
-
-    def should_start(data: str) -> str:
-        # Logic to decide where to start
-        if len(data) > 10:
-            return "go-right"
-        else:
-            return "go-left"
-
-    # Define a new graph
-    workflow = Graph()
-
-    workflow.add_node("left", left)
-    workflow.add_node("right", right)
-
-    workflow.set_conditional_entry_point(
-        should_start, {"go-left": "left", "go-right": "right"}
-    )
-
-    workflow.add_conditional_edges("left", lambda data: END, {END: END})
-    workflow.add_edge("right", END)
-
-    app = workflow.compile()
-
-    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
-
-    assert (
-        app.invoke("what is weather in sf", debug=True)
-        == "what is weather in sf->right"
-    )
-
-    assert [*app.stream("what is weather in sf")] == [
-        {"right": "what is weather in sf->right"},
-    ]
 
 
 def test_conditional_entrypoint_to_multiple_state_graph(
@@ -4381,9 +4211,14 @@ def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:
 def test_remove_message_via_state_update(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
+    from langchain_core.messages import (
+        AIMessage,
+        AnyMessage,
+        HumanMessage,
+        RemoveMessage,
+    )
 
-    workflow = MessageGraph()
+    workflow = StateGraph(Annotated[list[AnyMessage], add_messages])
     workflow.add_node(
         "chatbot",
         lambda state: [
@@ -4414,9 +4249,14 @@ def test_remove_message_via_state_update(
 
 
 def test_remove_message_from_node():
-    from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
+    from langchain_core.messages import (
+        AIMessage,
+        AnyMessage,
+        HumanMessage,
+        RemoveMessage,
+    )
 
-    workflow = MessageGraph()
+    workflow = StateGraph(Annotated[list[AnyMessage], add_messages])
     workflow.add_node(
         "chatbot",
         lambda state: [
@@ -4805,7 +4645,7 @@ def test_debug_retry(sync_checkpointer: BaseCheckpointSaver):
     graph = builder.compile(checkpointer=sync_checkpointer)
 
     config = {"configurable": {"thread_id": "1"}}
-    graph.invoke({"messages": []}, config=config)
+    graph.invoke({"messages": []}, config=config, checkpoint_during=True)
 
     # re-run step: 1
     target_config = next(
@@ -4815,7 +4655,11 @@ def test_debug_retry(sync_checkpointer: BaseCheckpointSaver):
     )
     update_config = graph.update_state(target_config, values=None)
 
-    events = [*graph.stream(None, config=update_config, stream_mode="debug")]
+    events = [
+        *graph.stream(
+            None, config=update_config, stream_mode="debug", checkpoint_during=True
+        )
+    ]
 
     checkpoint_events = list(
         reversed([e["payload"] for e in events if e["type"] == "checkpoint"])
@@ -4845,7 +4689,9 @@ def test_debug_retry(sync_checkpointer: BaseCheckpointSaver):
         assert stream_parent_conf == history_parent_conf
 
 
-def test_debug_subgraphs(sync_checkpointer: BaseCheckpointSaver):
+def test_debug_subgraphs(
+    sync_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
+):
     class State(TypedDict):
         messages: Annotated[list[str], operator.add]
 
@@ -4878,12 +4724,15 @@ def test_debug_subgraphs(sync_checkpointer: BaseCheckpointSaver):
             {"messages": []},
             config=config,
             stream_mode="debug",
+            checkpoint_during=checkpoint_during,
         )
     ]
 
     checkpoint_events = list(
         reversed([e["payload"] for e in events if e["type"] == "checkpoint"])
     )
+    if not checkpoint_during:
+        checkpoint_events = checkpoint_events[:1]
     checkpoint_history = list(graph.get_state_history(config))
 
     assert len(checkpoint_events) == len(checkpoint_history)
@@ -4912,7 +4761,9 @@ def test_debug_subgraphs(sync_checkpointer: BaseCheckpointSaver):
             assert stream_task.get("state") == history_task.state
 
 
-def test_debug_nested_subgraphs(sync_checkpointer: BaseCheckpointSaver):
+def test_debug_nested_subgraphs(
+    sync_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
+):
     from collections import defaultdict
 
     class State(TypedDict):
@@ -4955,6 +4806,7 @@ def test_debug_nested_subgraphs(sync_checkpointer: BaseCheckpointSaver):
             config=config,
             stream_mode="debug",
             subgraphs=True,
+            checkpoint_during=checkpoint_during,
         )
     ]
 
@@ -4994,6 +4846,9 @@ def test_debug_nested_subgraphs(sync_checkpointer: BaseCheckpointSaver):
     for checkpoint_events, checkpoint_history in zip(
         stream_ns.values(), history_ns.values()
     ):
+        if not checkpoint_during:
+            checkpoint_events = checkpoint_events[-1:]
+        assert len(checkpoint_events) == len(checkpoint_history)
         for stream, history in zip(checkpoint_events, checkpoint_history):
             assert stream["values"] == history.values
             assert stream["next"] == list(history.next)
@@ -5220,15 +5075,7 @@ def test_parent_command(sync_checkpointer: BaseCheckpointSaver) -> None:
             "parents": {},
         },
         created_at=AnyStr(),
-        parent_config=(
-            {
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            }
-        ),
+        parent_config=None,
         tasks=(),
         interrupts=(),
     )
@@ -5788,7 +5635,9 @@ def test_concurrent_execution_thread_safety():
         assert result["counter"] == 1
 
 
-def test_checkpoint_recovery(sync_checkpointer: BaseCheckpointSaver):
+def test_checkpoint_recovery(
+    sync_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
+):
     """Test recovery from checkpoints after failures."""
 
     class State(TypedDict):
@@ -5815,7 +5664,11 @@ def test_checkpoint_recovery(sync_checkpointer: BaseCheckpointSaver):
 
     # First attempt should fail
     with pytest.raises(RuntimeError):
-        graph.invoke({"steps": ["start"], "attempt": 1}, config)
+        graph.invoke(
+            {"steps": ["start"], "attempt": 1},
+            config,
+            checkpoint_during=checkpoint_during,
+        )
 
     # Verify checkpoint state
     state = graph.get_state(config)
@@ -5825,12 +5678,17 @@ def test_checkpoint_recovery(sync_checkpointer: BaseCheckpointSaver):
     assert "RuntimeError('Simulated failure')" in state.tasks[0].error
 
     # Retry with updated attempt count
-    result = graph.invoke({"steps": [], "attempt": 2}, config)
+    result = graph.invoke(
+        {"steps": [], "attempt": 2}, config, checkpoint_during=checkpoint_during
+    )
     assert result == {"steps": ["start", "node1", "node2"], "attempt": 2}
 
     # Verify checkpoint history shows both attempts
     history = list(graph.get_state_history(config))
-    assert len(history) == 6  # Initial + failed attempt + successful attempt
+    if checkpoint_during:
+        assert len(history) == 6  # Initial + failed attempt + successful attempt
+    else:
+        assert len(history) == 2  # error + success
 
     # Verify the error was recorded in checkpoint
     failed_checkpoint = next(c for c in history if c.tasks and c.tasks[0].error)
@@ -5893,9 +5751,7 @@ def test_multiple_updates() -> None:
     ]
 
 
-def test_falsy_return_from_task(
-    sync_checkpointer: BaseCheckpointSaver, snapshot: SnapshotAssertion
-):
+def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
     """Test with a falsy return from a task."""
 
     @task
@@ -5915,15 +5771,11 @@ def test_falsy_return_from_task(
         {
             "payload": {
                 "config": {
-                    "callbacks": None,
                     "configurable": {
                         "checkpoint_id": AnyStr(),
                         "checkpoint_ns": "",
                         "thread_id": AnyStr(),
                     },
-                    "metadata": {},
-                    "recursion_limit": 25,
-                    "tags": [],
                 },
                 "metadata": {
                     "parents": {},
@@ -6014,7 +5866,6 @@ def test_falsy_return_from_task(
             "type": "task_result",
         },
     ]
-    print(type(configurable["configurable"]["thread_id"]))
     assert [
         c
         for c in graph.stream(Command(resume="123"), configurable, stream_mode="debug")
@@ -6022,15 +5873,11 @@ def test_falsy_return_from_task(
         {
             "payload": {
                 "config": {
-                    "callbacks": None,
                     "configurable": {
                         "checkpoint_id": AnyStr(),
                         "checkpoint_ns": "",
                         "thread_id": AnyStr(),
                     },
-                    "metadata": {},
-                    "recursion_limit": 25,
-                    "tags": [],
                 },
                 "metadata": {
                     "parents": {},
@@ -6112,15 +5959,11 @@ def test_falsy_return_from_task(
         {
             "payload": {
                 "config": {
-                    "callbacks": None,
                     "configurable": {
                         "checkpoint_id": AnyStr(),
                         "checkpoint_ns": "",
                         "thread_id": AnyStr(),
                     },
-                    "metadata": {},
-                    "recursion_limit": 25,
-                    "tags": [],
                 },
                 "metadata": {
                     "parents": {},
@@ -6128,17 +5971,7 @@ def test_falsy_return_from_task(
                     "step": 0,
                 },
                 "next": [],
-                "parent_config": {
-                    "callbacks": None,
-                    "configurable": {
-                        "checkpoint_id": AnyStr(),
-                        "checkpoint_ns": "",
-                        "thread_id": AnyStr(),
-                    },
-                    "metadata": {},
-                    "recursion_limit": 25,
-                    "tags": [],
-                },
+                "parent_config": None,
                 "tasks": [],
                 "values": None,
             },
@@ -8046,7 +7879,9 @@ def test_pregel_node_copy() -> None:
     graph.nodes["agent"].copy({})
 
 
-def test_update_as_input(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_update_as_input(
+    sync_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
+) -> None:
     class State(TypedDict):
         foo: str
 
@@ -8065,13 +7900,17 @@ def test_update_as_input(sync_checkpointer: BaseCheckpointSaver) -> None:
         .compile(checkpointer=sync_checkpointer)
     )
 
-    assert graph.invoke({"foo": "input"}, {"configurable": {"thread_id": "1"}}) == {
-        "foo": "tool"
-    }
+    assert graph.invoke(
+        {"foo": "input"},
+        {"configurable": {"thread_id": "1"}},
+        checkpoint_during=checkpoint_during,
+    ) == {"foo": "tool"}
 
-    assert graph.invoke({"foo": "input"}, {"configurable": {"thread_id": "1"}}) == {
-        "foo": "tool"
-    }
+    assert graph.invoke(
+        {"foo": "input"},
+        {"configurable": {"thread_id": "1"}},
+        checkpoint_during=checkpoint_during,
+    ) == {"foo": "tool"}
 
     def map_snapshot(i: StateSnapshot) -> dict:
         return {
@@ -8109,11 +7948,14 @@ def test_update_as_input(sync_checkpointer: BaseCheckpointSaver) -> None:
         for s in graph.get_state_history({"configurable": {"thread_id": "2"}})
     ]
 
-    assert new_history == history
+    if checkpoint_during:
+        assert new_history == history
+    else:
+        assert [new_history[0], new_history[4]] == history
 
 
 def test_batch_update_as_input(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
 ) -> None:
     class State(TypedDict):
         foo: str
@@ -8145,7 +7987,11 @@ def test_batch_update_as_input(
         .compile(checkpointer=sync_checkpointer)
     )
 
-    assert graph.invoke({"foo": "input"}, {"configurable": {"thread_id": "1"}}) == {
+    assert graph.invoke(
+        {"foo": "input"},
+        {"configurable": {"thread_id": "1"}},
+        checkpoint_during=checkpoint_during,
+    ) == {
         "foo": "map",
         "tasks": [0, 1, 2],
     }
@@ -8198,7 +8044,10 @@ def test_batch_update_as_input(
         for s in graph.get_state_history({"configurable": {"thread_id": "2"}})
     ]
 
-    assert new_history == history
+    if checkpoint_during:
+        assert new_history == history
+    else:
+        assert new_history[:1] == history
 
 
 def test_migration_graph(snapshot: SnapshotAssertion) -> None:

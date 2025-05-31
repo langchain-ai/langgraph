@@ -9,6 +9,8 @@ There are two versions of the self-hosted deployment: [Self-Hosted Data Plane](.
 
 - You use `langgraph-cli` and/or [LangGraph Studio](./langgraph_studio.md) app to test graph locally.
 - You use `langgraph build` command to build image.
+- You have a Self-Hosted LangSmith instance deployed.
+- You are using Ingress for your LangSmith instance. All agents will be deployed as Kubernetes services behind this ingress.
 
 ## Self-Hosted Control Plane
 
@@ -29,4 +31,4 @@ The [Self-Hosted Control Plane](./langgraph_self_hosted_control_plane.md) deploy
  - **Kubernetes**: The Self-Hosted Control Plane deployment option supports deploying control plane and data plane infrastructure to any Kubernetes cluster.
 
 !!! tip
-    If you would like to deploy to Kubernetes, you can use this [Helm chart](https://github.com/langchain-ai/helm/blob/main/charts/langgraph-cloud/README.md).
+    If you would like to enable this on your LangSmith instance, please follow the [Self-Hosted Control Plane deployment guide](../deployment/self_hosted_control_plane.md).

@@ -41,7 +41,8 @@ Before deploying, review the [conceptual guide for the Self-Hosted Control Plane
           pullPolicy: IfNotPresent
           tag: "aa9dff4"
 
-1. In your `values.yaml` file, enable the `langgraphPlatform` option. Note that you must also have a valid ingress setup:
+1. In your `langsmith_config.yaml` file, enable the `langgraphPlatform` option. Note that you must also have a valid ingress setup:
+
         config:
           langgraphPlatform:
             enabled: true
