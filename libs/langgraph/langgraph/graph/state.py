@@ -29,11 +29,6 @@ from langgraph._api.deprecation import LangGraphDeprecationWarning
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
-from langgraph.channels.dynamic_barrier_value import (
-    DynamicBarrierValue,
-    DynamicBarrierValueAfterFinish,
-    WaitForNames,
-)
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue, LastValueAfterFinish
 from langgraph.channels.named_barrier_value import (
@@ -502,7 +497,6 @@ class StateGraph:
             Runnable[Any, Union[Hashable, list[Hashable]]],
         ],
         path_map: Optional[Union[dict[Hashable, str], list[str]]] = None,
-        then: Optional[str] = None,
     ) -> Self:
         """Add a conditional edge from the starting node to any number of destination nodes.
 
@@ -514,8 +508,6 @@ class StateGraph:
                 more nodes. If it returns END, the graph will stop execution.
             path_map: Optional mapping of paths to node
                 names. If omitted the paths returned by `path` should be node names.
-            then: The name of a node to execute after the nodes
-                selected by `path`.
 
         Returns:
             Self: The instance of the graph, allowing for method chaining.
@@ -539,7 +531,7 @@ class StateGraph:
                 f"Branch with name `{path.name}` already exists for node `{source}`"
             )
         # save it
-        self.branches[source][name] = Branch.from_path(path, path_map, then, True)
+        self.branches[source][name] = Branch.from_path(path, path_map, True)
         if schema := self.branches[source][name].input_schema:
             self._add_schema(schema)
         return self
@@ -607,7 +599,6 @@ class StateGraph:
             Runnable[Any, Union[Hashable, list[Hashable]]],
         ],
         path_map: Optional[Union[dict[Hashable, str], list[str]]] = None,
-        then: Optional[str] = None,
     ) -> Self:
         """Sets a conditional entry point in the graph.
 
@@ -617,13 +608,11 @@ class StateGraph:
                 more nodes. If it returns END, the graph will stop execution.
             path_map: Optional mapping of paths to node
                 names. If omitted the paths returned by `path` should be node names.
-            then: The name of a node to execute after the nodes
-                selected by `path`.
 
         Returns:
             Self: The instance of the graph, allowing for method chaining.
         """
-        return self.add_conditional_edges(START, path, path_map, then)
+        return self.add_conditional_edges(START, path, path_map)
 
     def set_finish_point(self, key: str) -> Self:
         """Marks a node as a finish point of the graph.
@@ -643,16 +632,6 @@ class StateGraph:
         all_sources = {src for src, _ in self._all_edges}
         for start, branches in self.branches.items():
             all_sources.add(start)
-            for cond, branch in branches.items():
-                if branch.then is not None:
-                    if branch.ends is not None:
-                        for end in branch.ends.values():
-                            if end != END:
-                                all_sources.add(end)
-                    else:
-                        for node in self.nodes:
-                            if node != start and node != branch.then:
-                                all_sources.add(node)
         for name, spec in self.nodes.items():
             if spec.ends:
                 all_sources.add(name)
@@ -670,8 +649,6 @@ class StateGraph:
         all_targets = {end for _, end in self._all_edges}
         for start, branches in self.branches.items():
             for cond, branch in branches.items():
-                if branch.then is not None:
-                    all_targets.add(branch.then)
                 if branch.ends is not None:
                     for end in branch.ends.values():
                         if end not in self.nodes and end != END:
@@ -682,7 +659,7 @@ class StateGraph:
                 else:
                     all_targets.add(END)
                     for node in self.nodes:
-                        if node != start and node != branch.then:
+                        if node != start:
                             all_targets.add(node)
         for name, spec in self.nodes.items():
             if spec.ends:
@@ -995,17 +972,6 @@ class CompiledStateGraph(Pregel):
             ]
             if not writes:
                 return []
-            if branch.then and branch.then != END:
-                writes.append(
-                    ChannelWriteEntry(
-                        f"branch:{start}:{name}::then",
-                        WaitForNames(
-                            frozenset(
-                                p.node if isinstance(p, Send) else p for p in packets
-                            )
-                        ),
-                    )
-                )
             return writes
 
         if with_reader:
@@ -1035,25 +1001,6 @@ class CompiledStateGraph(Pregel):
 
         # attach branch publisher
         self.nodes[start].writers.append(branch.run(get_writes, reader))
-
-        # attach then subscriber
-        if branch.then and branch.then != END:
-            ends = (
-                branch.ends.values()
-                if branch.ends
-                else [node for node in self.builder.nodes if node != branch.then]
-            )
-            channel_name = f"branch:{start}:{name}::then"
-            if self.builder.nodes[branch.then].defer:
-                self.channels[channel_name] = DynamicBarrierValueAfterFinish(str)
-            else:
-                self.channels[channel_name] = DynamicBarrierValue(str)
-            self.nodes[branch.then].triggers.append(channel_name)
-            for end in ends:
-                if end != END:
-                    self.nodes[end].writers.append(
-                        ChannelWrite((ChannelWriteEntry(channel_name, end),))
-                    )
 
     def _migrate_checkpoint(self, checkpoint: Checkpoint) -> None:
         """Migrate a checkpoint to new channel layout."""
