@@ -8,7 +8,7 @@ import weakref
 from collections import defaultdict, deque
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from functools import partial
-from typing import Any, Callable, Union, cast, get_type_hints
+from typing import Any, Callable, Generic, Union, cast, get_type_hints
 from uuid import UUID, uuid5
 
 from langchain_core.globals import get_debug
@@ -88,7 +88,7 @@ from langgraph.pregel.draw import draw_graph
 from langgraph.pregel.io import map_input, read_channels
 from langgraph.pregel.loop import AsyncPregelLoop, StreamProtocol, SyncPregelLoop
 from langgraph.pregel.messages import StreamMessagesHandler
-from langgraph.pregel.protocol import PregelProtocol
+from langgraph.pregel.protocol import PregelProtocol, StateT
 from langgraph.pregel.read import DEFAULT_BOUND, PregelNode
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.runner import PregelRunner
@@ -297,7 +297,7 @@ class NodeBuilder:
         )
 
 
-class Pregel(PregelProtocol):
+class Pregel(PregelProtocol[StateT], Generic[StateT]):
     """Pregel manages the runtime behavior for LangGraph applications.
 
     ## Overview
@@ -2279,7 +2279,7 @@ class Pregel(PregelProtocol):
 
     def stream(
         self,
-        input: dict[str, Any] | Any,
+        input: StateT,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode | list[StreamMode] | None = None,
@@ -2500,7 +2500,7 @@ class Pregel(PregelProtocol):
 
     async def astream(
         self,
-        input: dict[str, Any] | Any,
+        input: StateT,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode | list[StreamMode] | None = None,
@@ -2736,7 +2736,7 @@ class Pregel(PregelProtocol):
 
     def invoke(
         self,
-        input: dict[str, Any] | Any,
+        input: StateT,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode = "values",
@@ -2802,7 +2802,7 @@ class Pregel(PregelProtocol):
 
     async def ainvoke(
         self,
-        input: dict[str, Any] | Any,
+        input: StateT,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode = "values",

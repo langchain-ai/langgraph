@@ -10,6 +10,7 @@ from types import FunctionType
 from typing import (
     Any,
     Callable,
+    Generic,
     Literal,
     NamedTuple,
     Optional,
@@ -25,7 +26,6 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel
 from typing_extensions import Self
 
-from langgraph._api.deprecation import LangGraphDeprecationWarning
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -64,6 +64,7 @@ from langgraph.managed.base import (
     is_managed_value,
 )
 from langgraph.pregel import Pregel
+from langgraph.pregel.protocol import StateT
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.write import (
     ChannelWrite,
@@ -114,7 +115,7 @@ class StateNodeSpec(NamedTuple):
     defer: bool = False
 
 
-class StateGraph:
+class StateGraph(Generic[StateT]):
     """A graph whose nodes communicate by reading and writing to a shared state.
     The signature of each node is State -> Partial<State>.
 
@@ -175,27 +176,15 @@ class StateGraph:
 
     def __init__(
         self,
-        state_schema: Optional[type[Any]] = None,
+        state_schema: type[StateT],
         config_schema: Optional[type[Any]] = None,
         *,
         input: Optional[type[Any]] = None,
         output: Optional[type[Any]] = None,
     ) -> None:
-        if state_schema is None:
-            if input is None or output is None:
-                raise ValueError("Must provide state_schema or input and output")
-            state_schema = input
-            warnings.warn(
-                "Initializing StateGraph without state_schema is deprecated. "
-                "Please pass in an explicit state_schema instead of just an input and output schema.",
-                LangGraphDeprecationWarning,
-                stacklevel=2,
-            )
-        else:
-            if input is None:
-                input = state_schema
-            if output is None:
-                output = state_schema
+        input = input or state_schema
+        output = output or state_schema
+
         self.nodes = {}
         self.edges = set[tuple[str, str]]()
         self.branches = defaultdict(dict)
@@ -713,7 +702,7 @@ class StateGraph:
         interrupt_after: Optional[Union[All, list[str]]] = None,
         debug: bool = False,
         name: Optional[str] = None,
-    ) -> "CompiledStateGraph":
+    ) -> "CompiledStateGraph[StateT]":
         """Compiles the state graph into a `CompiledStateGraph` object.
 
         The compiled graph implements the `Runnable` interface and can be invoked,
@@ -765,7 +754,7 @@ class StateGraph:
             ]
         )
 
-        compiled = CompiledStateGraph(
+        compiled = CompiledStateGraph[StateT](
             builder=self,
             schema_to_mapper={},
             config_type=self.config_schema,
@@ -813,8 +802,8 @@ class StateGraph:
         return compiled.validate()
 
 
-class CompiledStateGraph(Pregel):
-    builder: StateGraph
+class CompiledStateGraph(Pregel[StateT], Generic[StateT]):
+    builder: StateGraph[StateT]
     schema_to_mapper: dict[type[Any], Optional[Callable[[Any], Any]]]
 
     def __init__(
