@@ -87,7 +87,6 @@ def _get_branch_path_input_schema(
 class Branch(NamedTuple):
     path: Runnable[Any, Union[Hashable, list[Hashable]]]
     ends: Optional[dict[Hashable, str]]
-    then: Optional[str] = None
     input_schema: Optional[type[Any]] = None
 
     @classmethod
@@ -95,7 +94,6 @@ class Branch(NamedTuple):
         cls,
         path: Runnable[Any, Union[Hashable, list[Hashable]]],
         path_map: Optional[Union[dict[Hashable, str], list[str]]],
-        then: Optional[str] = None,
         infer_schema: bool = False,
     ) -> "Branch":
         # coerce path_map to a dictionary
@@ -123,7 +121,7 @@ class Branch(NamedTuple):
         # infer input schema
         input_schema = _get_branch_path_input_schema(path) if infer_schema else None
         # create branch
-        return cls(path=path, ends=path_map_, then=then, input_schema=input_schema)
+        return cls(path=path, ends=path_map_, input_schema=input_schema)
 
     def run(
         self,
