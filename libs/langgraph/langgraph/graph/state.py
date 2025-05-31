@@ -72,7 +72,11 @@ from langgraph.pregel.write import (
 )
 from langgraph.store.base import BaseStore
 from langgraph.types import All, CachePolicy, Checkpointer, Command, RetryPolicy, Send
-from langgraph.utils.fields import get_field_default, get_update_as_tuples
+from langgraph.utils.fields import (
+    get_cached_annotated_keys,
+    get_field_default,
+    get_update_as_tuples,
+)
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.runnable import RunnableLike, coerce_to_runnable
 
@@ -885,7 +889,7 @@ class CompiledStateGraph(Pregel):
                     else:
                         updates.extend(_get_updates(i) or ())
                 return updates
-            elif (t := type(input)) and get_type_hints(t):
+            elif (t := type(input)) and get_cached_annotated_keys(t):
                 return get_update_as_tuples(input, output_keys)
             else:
                 msg = create_error_message(
