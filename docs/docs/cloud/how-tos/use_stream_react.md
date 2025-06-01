@@ -1,8 +1,8 @@
-# How to integrate LangGraph into your React application
+How to integrate LangGraph into your React application# How to integrate LangGraph into your React application
 
-!!! info "Prerequisites" 
+!!! info "Prerequisites"
 
-    - [LangGraph Platform](../../concepts/langgraph_platform.md) 
+    - [LangGraph Platform](../../concepts/langgraph_platform.md)
     - [LangGraph Server](../../concepts/langgraph_server.md)
 
 The `useStream()` React hook provides a seamless way to integrate LangGraph into your React applications. It handles all the complexities of streaming, state management, and branching logic, letting you focus on building great chat experiences.
@@ -113,6 +113,115 @@ export default function App() {
 }
 ```
 
+### Resume a stream after page refresh
+
+The `useStream()` hook can automatically resume an already ongoing run on mount by passing `reconnectOnMount: true`. This is useful for resuming an ongoing stream after a full page refresh without losing any messages that were generated in the meantime.
+
+```tsx
+const thread = useStream<{ messages: Message[] }>({
+  apiUrl: "http://localhost:2024",
+  assistantId: "agent",
+  reconnectOnMount: true,
+});
+```
+
+By default the ID of the created run is stored in `window.sessionStorage` under `lg:stream:${threadId}` key. This can be swapped by passing a custom storage in `reconnectOnMount`.
+
+```tsx
+const thread = useStream<{ messages: Message[] }>({
+  apiUrl: "http://localhost:2024",
+  assistantId: "agent",
+  reconnectOnMount: () => window.localStorage,
+});
+```
+
+Finally, you can manually handle the lifecycle of stream resuming by using the run callbacks and `joinStream` method. Make sure to pass `streamResumable: true` and `onDisconnect: "continue"` when creating the run.
+
+````tsx
+import type { Message } from "@langchain/langgraph-sdk";
+import { useStream } from "@langchain/langgraph-sdk/react";
+import { useCallback, useState, useEffect, useRef } from "react";
+
+export default function App() {
+  const [threadId, onThreadId] = useSearchParam("threadId");
+
+  const thread = useStream<{ messages: Message[] }>({
+    apiUrl: "http://localhost:2024",
+    assistantId: "agent",
+
+    threadId,
+    onThreadId,
+
+    onCreated: (run) => {
+      window.sessionStorage.setItem(`resume:${run.thread_id}`, run.run_id);
+    },
+    onFinish: (_, run) => {
+      window.sessionStorage.removeItem(`resume:${run?.thread_id}`);
+    },
+  });
+
+  // Ensure that we only join the stream once per thread.
+  const joinedThreadId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!threadId) return;
+
+    const resume = window.sessionStorage.getItem(`resume:${threadId}`);
+    if (resume && joinedThreadId.current !== threadId) {
+      thread.joinStream(resume);
+      joinedThreadId.current = threadId;
+    }
+  }, [threadId]);
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        const form = e.target as HTMLFormElement;
+        const message = new FormData(form).get("message") as string;
+        thread.submit(
+          { messages: [{ type: "human", content: message }] },
+          { streamResumable: true }
+        );
+      }}
+    >
+      <div>
+        {thread.messages.map((message) => (
+          <div key={message.id}>{JSON.stringify(message.content)}</div>
+        ))}
+      </div>
+      <input type="text" name="message" />
+      <button type="submit">Send</button>
+    </form>
+  );
+}
+
+// Utility method to retrieve and persist data in URL as search param
+function useSearchParam(key: string) {
+  const [value, setValue] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get(key) ?? null;
+  });
+
+  const update = useCallback(
+    (value: string | null) => {
+      setValue(value);
+
+      const url = new URL(window.location.href);
+      if (value == null) {
+        url.searchParams.delete(key);
+      } else {
+        url.searchParams.set(key, value);
+      }
+
+      window.history.pushState({}, "", url.toString());
+    },
+    [key]
+  );
+
+  return [value, update] as const;
+}
+```
+
 ### Thread Management
 
 Keep track of conversations with built-in thread management. You can access the current thread ID and get notified when new threads are created:
@@ -127,7 +236,7 @@ const thread = useStream<{ messages: Message[] }>({
   threadId: threadId,
   onThreadId: setThreadId,
 });
-```
+````
 
 We recommend storing the `threadId` in your URL's query parameters to let users resume conversations after page refreshes.
 
