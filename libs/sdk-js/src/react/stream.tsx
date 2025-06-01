@@ -405,6 +405,11 @@ type GetCustomEventType<Bag extends BagTemplate> = Bag extends {
   ? Bag["CustomEventType"]
   : unknown;
 
+interface RunCallbackMeta {
+  run_id: string;
+  thread_id: string;
+}
+
 export interface UseStreamOptions<
   StateType extends Record<string, unknown> = Record<string, unknown>,
   Bag extends BagTemplate = BagTemplate,
@@ -450,17 +455,20 @@ export interface UseStreamOptions<
   /**
    * Callback that is called when an error occurs.
    */
-  onError?: (error: unknown) => void;
+  onError?: (error: unknown, run: RunCallbackMeta | undefined) => void;
 
   /**
    * Callback that is called when the stream is finished.
    */
-  onFinish?: (state: ThreadState<StateType>) => void;
+  onFinish?: (
+    state: ThreadState<StateType>,
+    run: RunCallbackMeta | undefined,
+  ) => void;
 
   /**
    * Callback that is called when a new stream is created.
    */
-  onCreated?: (run: { run_id: string; thread_id: string }) => void;
+  onCreated?: (run: RunCallbackMeta) => void;
 
   /**
    * Callback that is called when an update event is received.
@@ -846,8 +854,12 @@ export function useStream<
     action: (signal: AbortSignal) => Promise<{
       onSuccess: () => Promise<ThreadState<StateType>[]>;
       stream: AsyncGenerator<EventStreamEvent>;
+      getCallbackMeta: () => { thread_id: string; run_id: string } | undefined;
     }>,
   ) {
+    let getCallbackMeta:
+      | (() => { thread_id: string; run_id: string } | undefined)
+      | undefined;
     try {
       setIsLoading(true);
       setStreamError(undefined);
@@ -856,6 +868,7 @@ export function useStream<
       abortRef.current = new AbortController();
 
       const run = await action(abortRef.current.signal);
+      getCallbackMeta = run.getCallbackMeta;
 
       let streamError: StreamError | undefined;
       for await (const { event, data } of run.stream) {
@@ -916,7 +929,7 @@ export function useStream<
       if (streamError != null) throw streamError;
 
       const lastHead = result.at(0);
-      if (lastHead) onFinish?.(lastHead);
+      if (lastHead) onFinish?.(lastHead, getCallbackMeta?.());
     } catch (error) {
       if (
         !(
@@ -926,7 +939,7 @@ export function useStream<
       ) {
         console.error(error);
         setStreamError(error);
-        onError?.(error);
+        onError?.(error, getCallbackMeta?.());
       }
     } finally {
       setIsLoading(false);
@@ -953,6 +966,7 @@ export function useStream<
           return history.mutate(threadId);
         },
         stream,
+        getCallbackMeta: () => ({ thread_id: threadId, run_id: runId }),
       };
     });
   };
@@ -1004,6 +1018,9 @@ export function useStream<
       // @ts-expect-error
       if (checkpoint != null) delete checkpoint.thread_id;
       let rejoinKey: `lg:stream:${string}` | undefined;
+      let callbackMeta: RunCallbackMeta | undefined;
+      const streamResumable =
+        submitOptions?.streamResumable ?? !!runMetadataStorage;
 
       const stream = client.runs.stream(usableThreadId, assistantId, {
         input: values as Record<string, unknown>,
@@ -1017,29 +1034,31 @@ export function useStream<
         onCompletion: submitOptions?.onCompletion,
         onDisconnect:
           submitOptions?.onDisconnect ??
-          (runMetadataStorage ? "continue" : "cancel"),
+          (streamResumable ? "continue" : "cancel"),
 
         signal,
 
         checkpoint,
         streamMode,
         streamSubgraphs: submitOptions?.streamSubgraphs,
-        streamResumable: submitOptions?.streamResumable ?? !!runMetadataStorage,
+        streamResumable,
         onRunCreated(params) {
-          const runParams = {
+          callbackMeta = {
             run_id: params.run_id,
             thread_id: params.thread_id ?? usableThreadId,
           };
+
           if (runMetadataStorage) {
-            rejoinKey = `lg:stream:${runParams.thread_id}`;
-            runMetadataStorage.setItem(rejoinKey, runParams.run_id);
+            rejoinKey = `lg:stream:${callbackMeta.thread_id}`;
+            runMetadataStorage.setItem(rejoinKey, callbackMeta.run_id);
           }
-          onCreated?.(runParams);
+          onCreated?.(callbackMeta);
         },
       }) as AsyncGenerator<EventStreamEvent>;
 
       return {
         stream,
+        getCallbackMeta: () => callbackMeta,
         onSuccess: () => {
           if (rejoinKey) runMetadataStorage?.removeItem(rejoinKey);
           return history.mutate(usableThreadId);
