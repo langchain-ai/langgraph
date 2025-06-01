@@ -35,7 +35,7 @@ def fanout_to_subgraph() -> StateGraph:
         return END if state["jokes"][0].endswith(" a" * 10) else "bump"
 
     # subgraph
-    subgraph = StateGraph(input=JokeInput, output=JokeOutput)
+    subgraph = StateGraph(JokeInput)
     subgraph.add_node("edit", edit)
     subgraph.add_node("generate", generate)
     subgraph.add_node("bump", bump)
@@ -83,7 +83,7 @@ def fanout_to_subgraph_sync() -> StateGraph:
         return END if state["jokes"][0].endswith(" a" * 10) else "bump"
 
     # subgraph
-    subgraph = StateGraph(input=JokeInput, output=JokeOutput)
+    subgraph = StateGraph(JokeOutput)
     subgraph.add_node("edit", edit)
     subgraph.add_node("generate", generate)
     subgraph.add_node("bump", bump)
