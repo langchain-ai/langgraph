@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Sequence
-from typing import Any, Generic, Optional, TypeVar, Union
+from typing import Any, Generic, Optional, Union
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.graph import Graph as DrawableGraph
@@ -13,9 +13,7 @@ from langgraph.typing import InputT
 
 
 # TODO: remove Runnable inheritance here!
-class PregelProtocol(
-    Runnable[InputT, Any], Generic[InputT], ABC
-):
+class PregelProtocol(Runnable[InputT, Any], Generic[InputT], ABC):
     @abstractmethod
     def with_config(
         self, config: Optional[RunnableConfig] = None, **kwargs: Any

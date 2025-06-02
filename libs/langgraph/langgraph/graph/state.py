@@ -17,7 +17,6 @@ from typing import (
     NamedTuple,
     Optional,
     Protocol,
-    TypeVar,
     Union,
     cast,
     get_args,
@@ -71,7 +70,9 @@ from langgraph.pregel.write import (
 )
 from langgraph.store.base import BaseStore
 from langgraph.types import All, CachePolicy, Checkpointer, Command, RetryPolicy, Send
+from langgraph.typing import InputT, StateT, StateT_contra
 from langgraph.utils.fields import (
+    get_cached_annotated_keys,
     get_field_default,
     get_update_as_tuples,
 )
@@ -690,7 +691,7 @@ class StateGraph(Generic[StateT, InputT]):
 
         self.compiled = True
         return self
-    
+
     @overload
     def compile(
         self: StateGraph[StateT, _UnsetType],
@@ -702,9 +703,8 @@ class StateGraph(Generic[StateT, InputT]):
         interrupt_after: Optional[Union[All, list[str]]] = None,
         debug: bool = False,
         name: Optional[str] = None,
-    ) -> CompiledStateGraph[StateT, StateT]:
-        ...
-        
+    ) -> CompiledStateGraph[StateT, StateT]: ...
+
     @overload
     def compile(
         self: StateGraph[StateT, InputT],
@@ -716,8 +716,7 @@ class StateGraph(Generic[StateT, InputT]):
         interrupt_after: Optional[Union[All, list[str]]] = None,
         debug: bool = False,
         name: Optional[str] = None,
-    ) -> CompiledStateGraph[StateT, InputT]:
-        ...
+    ) -> CompiledStateGraph[StateT, InputT]: ...
 
     def compile(
         self,
