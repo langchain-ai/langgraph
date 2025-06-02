@@ -38,7 +38,7 @@ client = MultiServerMCPClient(
             "transport": "stdio",
         },
         "weather": {
-            # Ensure your start your weather server on port 8000
+            # Ensure you start your weather server on port 8000
             "url": "http://localhost:8000/mcp",
             "transport": "streamable_http",
         }
