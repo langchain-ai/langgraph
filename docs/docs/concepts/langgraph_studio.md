@@ -21,7 +21,7 @@ Key features of LangGraph Studio:
 
 - Visualize your graph architecture
 - [Run and interact with your agent](../cloud/how-tos/invoke_studio.md)
-- [Manage assistants](../cloud/how-tos/studio/manage_assistants.md.md)
+- [Manage assistants](../cloud/how-tos/studio/manage_assistants.md)
 - [Manage threads](../cloud/how-tos/threads_studio.md)
 - [Iterate on prompts](../cloud/how-tos/iterate_graph_studio.md)
 - Manage [long term memory](memory.md)
@@ -33,7 +33,7 @@ Studio supports two modes:
 
 ### Graph mode
 
-Graph mode exposes the full feature-set of Studio and is useful when you would like as many details about the execution of your agent, including the nodes traversed, intermediate states, and LangSmith integrations (such as adding to datasets an playground).
+Graph mode exposes the full feature-set of Studio and is useful when you would like as many details about the execution of your agent, including the nodes traversed, intermediate states, and LangSmith integrations (such as adding to datasets and playground).
 
 ### Chat mode
 

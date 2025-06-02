@@ -109,7 +109,7 @@ Here are some high-level tips on writing a good how-to guide:
 LangGraph's conceptual guides fall under the **Explanation** quadrant of Diataxis. They should cover LangChain terms and concepts
 in a more abstract way than how-to guides or tutorials, and should be geared towards curious users interested in
 gaining a deeper understanding of the framework. Try to avoid excessively large code examples. The goal here is to
-impart perspective to the user rather than to finish a practical project. These guides should cover **why** things work they way they do.
+impart perspective to the user rather than to finish a practical project. These guides should cover **why** things work the way they do.
 
 
 To quote the Diataxis website:

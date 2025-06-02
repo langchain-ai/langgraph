@@ -483,7 +483,7 @@ async def test_node_cancellation_on_other_node_exception() -> None:
     builder = StateGraph(State)
     builder.add_node("agent", awhile)
     builder.add_node("bad", iambad)
-    builder.set_conditional_entry_point(lambda _: ["agent", "bad"], then=END)
+    builder.set_conditional_entry_point(lambda _: ["agent", "bad"])
 
     graph = builder.compile()
 
@@ -507,7 +507,7 @@ async def test_node_cancellation_on_other_node_exception_two() -> None:
     builder = StateGraph(State)
     builder.add_node("agent", awhile)
     builder.add_node("bad", iambad)
-    builder.set_conditional_entry_point(lambda _: ["agent", "bad"], then=END)
+    builder.set_conditional_entry_point(lambda _: ["agent", "bad"])
 
     graph = builder.compile()
 
@@ -1076,7 +1076,7 @@ async def test_node_not_cancelled_on_other_node_interrupted(
     builder = StateGraph(State)
     builder.add_node("agent", awhile)
     builder.add_node("bad", iambad)
-    builder.set_conditional_entry_point(lambda _: ["agent", "bad"], then=END)
+    builder.set_conditional_entry_point(lambda _: ["agent", "bad"])
 
     graph = builder.compile(checkpointer=async_checkpointer)
     thread = {"configurable": {"thread_id": "1"}}
@@ -1141,7 +1141,7 @@ async def test_step_timeout_on_stream_hang(stream_hang_s: float) -> None:
     builder = StateGraph(State)
     builder.add_node(awhile)
     builder.add_node(alittlewhile)
-    builder.set_conditional_entry_point(lambda _: ["awhile", "alittlewhile"], then=END)
+    builder.set_conditional_entry_point(lambda _: ["awhile", "alittlewhile"])
     graph = builder.compile()
     graph.step_timeout = 1
 
@@ -4001,97 +4001,6 @@ async def test_in_one_fan_out_state_graph_defer_node(
         workflow.add_edge("retriever_one", "qa")
         workflow.add_edge("retriever_two", "qa")
     workflow.set_finish_point("qa")
-
-    app = workflow.compile()
-
-    assert await app.ainvoke({"query": "what is weather in sf"}, debug=True) == {
-        "query": "analyzed: query: what is weather in sf",
-        "docs": ["doc1", "doc2", "doc3", "doc4"],
-        "answer": "doc1,doc2,doc3,doc4",
-    }
-
-    assert [c async for c in app.astream({"query": "what is weather in sf"})] == [
-        {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-        {"retriever_two": {"docs": ["doc3", "doc4"]}},
-        {"retriever_one": {"docs": ["doc1", "doc2"]}},
-        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-    ]
-
-    app_w_interrupt = workflow.compile(
-        checkpointer=async_checkpointer,
-        interrupt_after=["retriever_one"],
-    )
-    config = {"configurable": {"thread_id": "1"}}
-
-    assert [
-        c
-        async for c in app_w_interrupt.astream(
-            {"query": "what is weather in sf"}, config
-        )
-    ] == [
-        {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-        {"retriever_two": {"docs": ["doc3", "doc4"]}},
-        {"retriever_one": {"docs": ["doc1", "doc2"]}},
-        {"__interrupt__": ()},
-    ]
-
-    assert [c async for c in app_w_interrupt.astream(None, config)] == [
-        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-    ]
-
-
-@pytest.mark.parametrize("with_path_map", (True, False))
-async def test_in_one_fan_out_state_graph_then_defer_node(
-    async_checkpointer: BaseCheckpointSaver, with_path_map: bool
-) -> None:
-    def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
-    ) -> list[str]:
-        if isinstance(y[0], tuple):
-            for rem, _ in y:
-                x.remove(rem)
-            y = [t[1] for t in y]
-        return sorted(operator.add(x, y))
-
-    class State(TypedDict, total=False):
-        query: str
-        answer: str
-        docs: Annotated[list[str], sorted_add]
-
-    async def rewrite_query(data: State) -> State:
-        return {"query": f"query: {data['query']}"}
-
-    async def analyzer_one(data: State) -> State:
-        return {"query": f"analyzed: {data['query']}"}
-
-    async def retriever_one(data: State) -> State:
-        return {"docs": ["doc1", "doc2"]}
-
-    async def retriever_two(data: State) -> State:
-        await asyncio.sleep(0.1)
-        return {"docs": ["doc3", "doc4"]}
-
-    async def qa(data: State) -> State:
-        return {"answer": ",".join(data["docs"])}
-
-    workflow = StateGraph(State)
-
-    workflow.add_node("rewrite_query", rewrite_query)
-    workflow.add_node("analyzer_one", analyzer_one)
-    workflow.add_node("retriever_one", retriever_one)
-    workflow.add_node("retriever_two", retriever_two)
-    workflow.add_node("qa", qa, defer=True)
-
-    workflow.set_entry_point("rewrite_query")
-    workflow.add_conditional_edges(
-        "rewrite_query",
-        lambda _: ["analyzer_one", "retriever_two"],
-        ["analyzer_one", "retriever_two"] if with_path_map else None,
-        then="qa",
-    )
-    workflow.add_edge("analyzer_one", "retriever_one")
 
     app = workflow.compile()
 

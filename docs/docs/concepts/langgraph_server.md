@@ -26,7 +26,7 @@ Feature Differences:
 |-------|------------|------------|
 | [Cron Jobs](../cloud/concepts/cron_jobs.md) |❌|✅|
 | [Custom Authentication](../concepts/auth.md) |❌|✅|
-| [Deployment options](../concepts/deployment_options.md) | Standalone container | Cloud Saas, Self-Hosted Data Plane, Self-Hosted Control Plane, Standalone container
+| [Deployment options](../concepts/deployment_options.md) | Standalone container | Cloud SaaS, Self-Hosted Data Plane, Self-Hosted Control Plane, Standalone container
 
 ## Application structure
 

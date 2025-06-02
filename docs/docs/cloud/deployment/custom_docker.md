@@ -16,4 +16,4 @@ Users can add an array of additional lines to add to the Dockerfile following th
 }
 ```
 
-This would install the system packages required to use Pillow if we were working with `jpeq` or `png` image formats. 
+This would install the system packages required to use Pillow if we were working with `jpeg` or `png` image formats. 
