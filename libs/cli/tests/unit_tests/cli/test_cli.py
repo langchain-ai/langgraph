@@ -462,7 +462,7 @@ def test_dockerfile_command_shows_wolfi_warning() -> None:
 
         # Assert command was successful
         assert result.exit_code == 0, result.output
-        
+
         # Check that warning is shown
         assert "Security Recommendation" in result.output
         assert "Wolfi Linux" in result.output
@@ -492,7 +492,7 @@ def test_dockerfile_command_no_wolfi_warning_when_wolfi_set() -> None:
 
         # Assert command was successful
         assert result.exit_code == 0, result.output
-        
+
         # Check that warning is NOT shown
         assert "Security Recommendation" not in result.output
         assert "Wolfi Linux" not in result.output
@@ -516,11 +516,17 @@ def test_build_command_shows_wolfi_warning() -> None:
         with runner.isolated_filesystem():
             result = runner.invoke(
                 cli,
-                ["build", "--tag", "test-image", "--config", str(temp_dir / "config.json")],
+                [
+                    "build",
+                    "--tag",
+                    "test-image",
+                    "--config",
+                    str(temp_dir / "config.json"),
+                ],
                 catch_exceptions=True,
             )
 
-        # The command will fail because docker isn't available or we're mocking, 
+        # The command will fail because docker isn't available or we're mocking,
         # but we should still see the warning before it fails
         assert "Security Recommendation" in result.output
         assert "Wolfi Linux" in result.output

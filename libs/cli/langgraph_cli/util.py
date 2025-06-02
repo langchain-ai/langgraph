@@ -19,7 +19,7 @@ def warn_non_wolfi_distro(config_json: dict) -> None:
             fg="yellow",
         )
         click.secho(
-            "   To switch, add '\"image_distro\": \"wolfi\"' to your langgraph.json config file.",
+            '   To switch, add \'"image_distro": "wolfi"\' to your langgraph.json config file.',
             fg="yellow",
         )
         click.secho("")  # Empty line for better readability
