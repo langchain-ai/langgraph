@@ -115,7 +115,7 @@ export default function App() {
 
 ### Resume a stream after page refresh
 
-The `useStream()` hook can automatically resume an already ongoing run on mount by passing `reconnectOnMount: true`. This is useful for resuming an ongoing stream after a full page refresh without losing any messages that were generated in the meantime.
+The `useStream()` hook can automatically resume an ongoing run upon mounting by setting `reconnectOnMount: true`. This is useful for continuing a stream after a page refresh, ensuring no messages and events generated during the downtime are lost.
 
 ```tsx
 const thread = useStream<{ messages: Message[] }>({
@@ -125,7 +125,7 @@ const thread = useStream<{ messages: Message[] }>({
 });
 ```
 
-By default the ID of the created run is stored in `window.sessionStorage` under `lg:stream:${threadId}` key. This can be swapped by passing a custom storage in `reconnectOnMount`.
+By default the ID of the created run is stored in `window.sessionStorage`, which can be swapped by passing a custom storage in `reconnectOnMount` instead. The storage is used to persist the in-flight run ID for a thread (under `lg:stream:${threadId}` key).
 
 ```tsx
 const thread = useStream<{ messages: Message[] }>({
@@ -135,7 +135,7 @@ const thread = useStream<{ messages: Message[] }>({
 });
 ```
 
-Finally, you can manually handle the lifecycle of stream resuming by using the run callbacks and `joinStream` method. Make sure to pass `streamResumable: true` and `onDisconnect: "continue"` when creating the run.
+You can also manually manage the resuming process by using the run callbacks to persist the run metadata and the `joinStream` function to resume the stream. Make sure to pass `streamResumable: true` when creating the run; otherwise some events might be lost.
 
 ````tsx
 import type { Message } from "@langchain/langgraph-sdk";
@@ -186,7 +186,7 @@ export default function App() {
     >
       <div>
         {thread.messages.map((message) => (
-          <div key={message.id}>{JSON.stringify(message.content)}</div>
+          <div key={message.id}>{message.content as string}</div>
         ))}
       </div>
       <input type="text" name="message" />
