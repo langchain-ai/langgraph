@@ -44,9 +44,8 @@ stop-postgres:
 	docker compose -f tests/compose-postgres.yml down -v
 
 start-dev-server:
-	LOG_LEVEL=warning uv run langgraph dev --config tests/example_app/langgraph.json --no-browser &
+	LOG_LEVEL=warning uv run langgraph dev --config tests/example_app/langgraph.json --no-browser & echo "$$!" > .devserver.pid
 	@echo "Dev server started."
-	@echo "Dev server PID: $$!" > .devserver.pid
 
 stop-dev-server:
 	@if [ -f .devserver.pid ]; then \
