@@ -6030,7 +6030,10 @@ async def test_debug_nested_subgraphs(
                 assert stream_task.get("state") == history_task.state
 
 
-async def test_parent_command(async_checkpointer: BaseCheckpointSaver) -> None:
+@pytest.mark.parametrize("subgraph_persist", [True, False])
+async def test_parent_command(
+    async_checkpointer: BaseCheckpointSaver, subgraph_persist: bool
+) -> None:
     from langchain_core.messages import BaseMessage
     from langchain_core.tools import tool
 
@@ -6042,7 +6045,7 @@ async def test_parent_command(async_checkpointer: BaseCheckpointSaver) -> None:
     subgraph_builder = StateGraph(MessagesState)
     subgraph_builder.add_node("tool", get_user_name)
     subgraph_builder.add_edge(START, "tool")
-    subgraph = subgraph_builder.compile()
+    subgraph = subgraph_builder.compile(checkpointer=subgraph_persist)
 
     class CustomParentState(TypedDict):
         messages: Annotated[list[BaseMessage], add_messages]
@@ -8650,3 +8653,43 @@ async def test_imp_exception(
             "parent_ids": [],
         },
     ]
+
+
+@pytest.mark.parametrize("subgraph_persist", [True, False])
+async def test_parent_command_goto(
+    async_checkpointer: BaseCheckpointSaver, subgraph_persist: bool
+) -> None:
+    class State(TypedDict):
+        dialog_state: Annotated[list[str], operator.add]
+
+    async def node_a_child(state):
+        return {"dialog_state": ["a_child_state"]}
+
+    async def node_b_child(state):
+        return Command(
+            graph=Command.PARENT,
+            goto="node_b_parent",
+            update={"dialog_state": ["b_child_state"]},
+        )
+
+    sub_builder = StateGraph(State)
+    sub_builder.add_node(node_a_child)
+    sub_builder.add_node(node_b_child)
+    sub_builder.add_edge(START, "node_a_child")
+    sub_builder.add_edge("node_a_child", "node_b_child")
+    sub_graph = sub_builder.compile(checkpointer=subgraph_persist)
+
+    async def node_b_parent(state):
+        return {"dialog_state": ["node_b_parent"]}
+
+    main_builder = StateGraph(State)
+    main_builder.add_node(node_b_parent)
+    main_builder.add_edge(START, "subgraph_node")
+    main_builder.add_node("subgraph_node", sub_graph, destinations=("node_b_parent",))
+
+    main_graph = main_builder.compile(async_checkpointer, name="parent")
+    config = {"configurable": {"thread_id": 1}}
+
+    assert await main_graph.ainvoke(
+        input={"dialog_state": ["init_state"]}, config=config
+    ) == {"dialog_state": ["init_state", "b_child_state", "node_b_parent"]}

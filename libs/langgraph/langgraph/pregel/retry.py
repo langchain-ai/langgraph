@@ -41,7 +41,7 @@ def run_with_retry(
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
-            if cmd.graph == ns:
+            if cmd.graph in (ns, task.name):
                 # this command is for the current graph, handle it
                 for w in task.writers:
                     w.invoke(cmd, config)
@@ -137,7 +137,7 @@ async def arun_with_retry(
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
-            if cmd.graph == ns:
+            if cmd.graph in (ns, task.name):
                 # this command is for the current graph, handle it
                 for w in task.writers:
                     w.invoke(cmd, config)
