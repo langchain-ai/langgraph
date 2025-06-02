@@ -1,9 +1,16 @@
+"""mkdocs hooks for adding custom logic to documentation pipeline.
+
+Lifecycle events: https://www.mkdocs.org/dev-guide/plugins/#events
+"""
+
 import logging
 import os
 import posixpath
 import re
 from typing import Any, Dict
 
+from bs4 import BeautifulSoup
+from mkdocs.config.defaults import MkDocsConfig
 from mkdocs.structure.files import Files, File
 from mkdocs.structure.pages import Page
 
@@ -71,7 +78,7 @@ REDIRECT_MAP = {
     "cloud/faq/studio.md": "concepts/langgraph_studio.md#studio-faqs",
     "cloud/how-tos/human_in_the_loop_edit_state.md": "cloud/how-tos/add-human-in-the-loop.md",
     "cloud/how-tos/human_in_the_loop_user_input.md": "cloud/how-tos/add-human-in-the-loop.md",
-    "concepts/platform_architecture.md": "langgraph/concepts/langgraph_cloud#architecture",
+    "concepts/platform_architecture.md": "concepts/langgraph_cloud#architecture",
     # cloud streaming redirects
     "cloud/how-tos/stream_values.md": "cloud/how-tos/streaming.md#stream-graph-state",
     "cloud/how-tos/stream_updates.md": "cloud/how-tos/streaming.md#stream-graph-state",
@@ -101,8 +108,7 @@ REDIRECT_MAP = {
     "how-tos/deploy-self-hosted.md": "cloud/deployment/self_hosted_data_plane.md",
     "concepts/self_hosted.md": "concepts/langgraph_self_hosted_data_plane.md",
     # assistant redirects
-    "cloud/how-tos/assistant_versioning.md": "cloud/how-tos/configuration_cloud.md"
-
+    "cloud/how-tos/assistant_versioning.md": "cloud/how-tos/configuration_cloud.md",
 }
 
 
@@ -292,7 +298,7 @@ Redirecting...
 """
 
 
-def write_html(site_dir, old_path, new_path):
+def _write_html(site_dir, old_path, new_path):
     """Write an HTML file in the site_dir with a meta redirect to the new page"""
     # Determine all relevant paths
     old_path_abs = os.path.join(site_dir, old_path)
@@ -306,6 +312,52 @@ def write_html(site_dir, old_path, new_path):
     content = HTML_TEMPLATE.format(url=new_path)
     with open(old_path_abs, "w", encoding="utf-8") as f:
         f.write(content)
+
+
+def _inject_gtm(html: str) -> str:
+    """Inject Google Tag Manager code into the HTML.
+
+    Code to inject Google Tag Manager noscript tag immediately after <body>.
+
+    This is done via hooks rather than via a template because the MkDocs material
+    theme does not seem to allow placing the code immediately after the <body> tag
+    without modifying the template files directly.
+
+    Args:
+        html: The HTML content to modify.
+
+    Returns:
+        The modified HTML content with GTM code injected.
+    """
+    # Code was copied from Google Tag Manager setup instructions.
+    gtm_code = """
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-T35S4S46"
+height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+"""
+    soup = BeautifulSoup(html, "html.parser")
+    body = soup.body
+    if body:
+        # Insert the GTM code as raw HTML at the top of <body>
+        body.insert(0, BeautifulSoup(gtm_code, "html.parser"))
+        return str(soup)
+    else:
+        return html  # fallback if no <body> found
+
+
+def on_post_page(output: str, page: Page, config: MkDocsConfig) -> str:
+    """Inject Google Tag Manager noscript tag immediately after <body>.
+
+    Args:
+        output: The HTML output of the page.
+        page: The page instance.
+        config: The MkDocs configuration object.
+
+    Returns:
+        modified HTML output with GTM code injected.
+    """
+    return _inject_gtm(output)
 
 
 # Create HTML files for redirects after site dir has been built
@@ -324,4 +376,4 @@ def on_post_build(config):
             + hash
             + suffix
         )
-        write_html(config["site_dir"], old_html_path, new_html_path)
+        _write_html(config["site_dir"], old_html_path, new_html_path)

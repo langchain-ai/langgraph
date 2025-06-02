@@ -1,0 +1,19 @@
+{
+    "0000": "graph TD;\n\t__start__ --> agent;\n\tagent --> __end__;",
+    "0001": "graph TD;\n\t__start__ --> agent;\n\tagent -.-> __end__;\n\tagent -.-> tools;\n\ttools --> agent;",
+    "0010": "graph TD;\n\t__start__ --> pre_model_hook;\n\tpre_model_hook --> agent;\n\tagent --> __end__;",
+    "0011": "graph TD;\n\t__start__ --> pre_model_hook;\n\tagent -.-> __end__;\n\tagent -.-> tools;\n\tpre_model_hook --> agent;\n\ttools --> pre_model_hook;",
+    "0100": "graph TD;\n\t__start__ --> agent;\n\tagent --> post_model_hook;\n\tpost_model_hook --> __end__;",
+    "0101": "graph TD;\n\t__start__ --> agent;\n\tagent --> post_model_hook;\n\tpost_model_hook -.-> __end__;\n\tpost_model_hook -.-> agent;\n\tpost_model_hook -.-> tools;\n\ttools --> agent;",
+    "0110": "graph TD;\n\t__start__ --> pre_model_hook;\n\tagent --> post_model_hook;\n\tpre_model_hook --> agent;\n\tpost_model_hook --> __end__;",
+    "0111": "graph TD;\n\t__start__ --> pre_model_hook;\n\tagent --> post_model_hook;\n\tpost_model_hook -.-> __end__;\n\tpost_model_hook -.-> pre_model_hook;\n\tpost_model_hook -.-> tools;\n\tpre_model_hook --> agent;\n\ttools --> pre_model_hook;",
+    "1000": "graph TD;\n\t__start__ --> agent;\n\tagent --> generate_structured_response;\n\tgenerate_structured_response --> __end__;",
+    "1001": "graph TD;\n\t__start__ --> agent;\n\tagent -.-> generate_structured_response;\n\tagent -.-> tools;\n\ttools --> agent;\n\tgenerate_structured_response --> __end__;",
+    "1010": "graph TD;\n\t__start__ --> pre_model_hook;\n\tagent --> generate_structured_response;\n\tpre_model_hook --> agent;\n\tgenerate_structured_response --> __end__;",
+    "1011": "graph TD;\n\t__start__ --> pre_model_hook;\n\tagent -.-> generate_structured_response;\n\tagent -.-> tools;\n\tpre_model_hook --> agent;\n\ttools --> pre_model_hook;\n\tgenerate_structured_response --> __end__;",
+    "1100": "graph TD;\n\t__start__ --> agent;\n\tagent --> post_model_hook;\n\tpost_model_hook --> generate_structured_response;\n\tgenerate_structured_response --> __end__;",
+    "1101": "graph TD;\n\t__start__ --> agent;\n\tagent --> post_model_hook;\n\tpost_model_hook -.-> agent;\n\tpost_model_hook -.-> generate_structured_response;\n\tpost_model_hook -.-> tools;\n\ttools --> agent;\n\tgenerate_structured_response --> __end__;",
+    "1110": "graph TD;\n\t__start__ --> pre_model_hook;\n\tagent --> post_model_hook;\n\tpost_model_hook --> generate_structured_response;\n\tpre_model_hook --> agent;\n\tgenerate_structured_response --> __end__;",
+    "1111": "graph TD;\n\t__start__ --> pre_model_hook;\n\tagent --> post_model_hook;\n\tpost_model_hook -.-> generate_structured_response;\n\tpost_model_hook -.-> pre_model_hook;\n\tpost_model_hook -.-> tools;\n\tpre_model_hook --> agent;\n\ttools --> pre_model_hook;\n\tgenerate_structured_response --> __end__;"
+}
+  

@@ -405,6 +405,11 @@ type GetCustomEventType<Bag extends BagTemplate> = Bag extends {
   ? Bag["CustomEventType"]
   : unknown;
 
+interface RunCallbackMeta {
+  run_id: string;
+  thread_id: string;
+}
+
 export interface UseStreamOptions<
   StateType extends Record<string, unknown> = Record<string, unknown>,
   Bag extends BagTemplate = BagTemplate,
@@ -450,12 +455,20 @@ export interface UseStreamOptions<
   /**
    * Callback that is called when an error occurs.
    */
-  onError?: (error: unknown) => void;
+  onError?: (error: unknown, run: RunCallbackMeta | undefined) => void;
 
   /**
    * Callback that is called when the stream is finished.
    */
-  onFinish?: (state: ThreadState<StateType>) => void;
+  onFinish?: (
+    state: ThreadState<StateType>,
+    run: RunCallbackMeta | undefined,
+  ) => void;
+
+  /**
+   * Callback that is called when a new stream is created.
+   */
+  onCreated?: (run: RunCallbackMeta) => void;
 
   /**
    * Callback that is called when an update event is received.
@@ -502,6 +515,15 @@ export interface UseStreamOptions<
    * Callback that is called when the thread ID is updated (ie when a new thread is created).
    */
   onThreadId?: (threadId: string) => void;
+
+  /** Will reconnect the stream on mount */
+  reconnectOnMount?: boolean | (() => RunMetadataStorage);
+}
+
+interface RunMetadataStorage {
+  getItem(key: `lg:stream:${string}`): string | null;
+  setItem(key: `lg:stream:${string}`, value: string): void;
+  removeItem(key: `lg:stream:${string}`): void;
 }
 
 export interface UseStream<
@@ -590,6 +612,11 @@ export interface UseStream<
    * The ID of the assistant to use.
    */
   assistantId: string;
+
+  /**
+   * Join an active stream.
+   */
+  joinStream: (runId: string) => Promise<void>;
 }
 
 type ConfigWithConfigurable<ConfigurableType extends Record<string, unknown>> =
@@ -619,6 +646,7 @@ interface SubmitOptions<
    * @default false
    */
   streamSubgraphs?: boolean;
+  streamResumable?: boolean;
 }
 
 export function useStream<
@@ -647,7 +675,17 @@ export function useStream<
     | ErrorStreamEvent
     | FeedbackStreamEvent;
 
-  let { assistantId, messagesKey, onError, onFinish } = options;
+  let { assistantId, messagesKey, onCreated, onError, onFinish } = options;
+
+  const reconnectOnMountRef = useRef(options.reconnectOnMount);
+  const runMetadataStorage = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    const storage = reconnectOnMountRef.current;
+    if (storage === true) return window.sessionStorage;
+    if (typeof storage === "function") return storage();
+    return null;
+  }, []);
+
   messagesKey ??= "messages";
 
   const client = useMemo(
@@ -722,6 +760,7 @@ export function useStream<
 
   // TODO: this should be done on the server to avoid pagination
   // TODO: should we permit adapter? SWR / React Query?
+  // TODO: make this only when branching is expected
   const history = useThreadHistory<StateType>(
     threadId,
     client,
@@ -800,15 +839,27 @@ export function useStream<
     );
   })();
 
-  const stop = useCallback(() => {
+  const stop = () => {
     if (abortRef.current != null) abortRef.current.abort();
     abortRef.current = null;
-  }, []);
 
-  const submit = async (
-    values: UpdateType | null | undefined,
-    submitOptions?: SubmitOptions<StateType, ConfigurableType>,
-  ) => {
+    if (runMetadataStorage && threadId) {
+      const runId = runMetadataStorage.getItem(`lg:stream:${threadId}`);
+      if (runId) client.runs.cancel(threadId, runId);
+      runMetadataStorage.removeItem(`lg:stream:${threadId}`);
+    }
+  };
+
+  async function consumeStream(
+    action: (signal: AbortSignal) => Promise<{
+      onSuccess: () => Promise<ThreadState<StateType>[]>;
+      stream: AsyncGenerator<EventStreamEvent>;
+      getCallbackMeta: () => { thread_id: string; run_id: string } | undefined;
+    }>,
+  ) {
+    let getCallbackMeta:
+      | (() => { thread_id: string; run_id: string } | undefined)
+      | undefined;
     try {
       setIsLoading(true);
       setStreamError(undefined);
@@ -816,69 +867,11 @@ export function useStream<
       submittingRef.current = true;
       abortRef.current = new AbortController();
 
-      // Unbranch things
-      const newPath = submitOptions?.checkpoint?.checkpoint_id
-        ? branchByCheckpoint[submitOptions?.checkpoint?.checkpoint_id]?.branch
-        : undefined;
-
-      if (newPath != null) setBranch(newPath ?? "");
-
-      // Assumption: we're setting the initial value
-      // Used for instant feedback
-      setStreamValues(() => {
-        const values = { ...historyValues };
-
-        if (submitOptions?.optimisticValues != null) {
-          return {
-            ...values,
-            ...(typeof submitOptions.optimisticValues === "function"
-              ? submitOptions.optimisticValues(values)
-              : submitOptions.optimisticValues),
-          };
-        }
-
-        return values;
-      });
-
-      let usableThreadId = threadId;
-      if (!usableThreadId) {
-        const thread = await client.threads.create();
-        onThreadId(thread.thread_id);
-        usableThreadId = thread.thread_id;
-      }
-
-      const streamMode = unique([
-        ...(submitOptions?.streamMode ?? []),
-        ...trackStreamModeRef.current,
-        ...callbackStreamMode,
-      ]);
-
-      const checkpoint =
-        submitOptions?.checkpoint ?? threadHead?.checkpoint ?? undefined;
-      // @ts-expect-error
-      if (checkpoint != null) delete checkpoint.thread_id;
-
-      const run = client.runs.stream(usableThreadId, assistantId, {
-        input: values as Record<string, unknown>,
-        config: submitOptions?.config,
-        command: submitOptions?.command,
-
-        interruptBefore: submitOptions?.interruptBefore,
-        interruptAfter: submitOptions?.interruptAfter,
-        metadata: submitOptions?.metadata,
-        multitaskStrategy: submitOptions?.multitaskStrategy,
-        onCompletion: submitOptions?.onCompletion,
-        onDisconnect: submitOptions?.onDisconnect ?? "cancel",
-
-        signal: abortRef.current.signal,
-
-        checkpoint,
-        streamMode,
-        streamSubgraphs: submitOptions?.streamSubgraphs,
-      }) as AsyncGenerator<EventStreamEvent>;
+      const run = await action(abortRef.current.signal);
+      getCallbackMeta = run.getCallbackMeta;
 
       let streamError: StreamError | undefined;
-      for await (const { event, data } of run) {
+      for await (const { event, data } of run.stream) {
         if (event === "error") {
           streamError = new StreamError(data);
           break;
@@ -930,13 +923,13 @@ export function useStream<
       }
 
       // TODO: stream created checkpoints to avoid an unnecessary network request
-      const result = await history.mutate(usableThreadId);
-      setStreamValues(null);
+      const result = await run.onSuccess();
 
+      setStreamValues(null);
       if (streamError != null) throw streamError;
 
       const lastHead = result.at(0);
-      if (lastHead) onFinish?.(lastHead);
+      if (lastHead) onFinish?.(lastHead, getCallbackMeta?.());
     } catch (error) {
       if (
         !(
@@ -946,7 +939,7 @@ export function useStream<
       ) {
         console.error(error);
         setStreamError(error);
-        onError?.(error);
+        onError?.(error, getCallbackMeta?.());
       }
     } finally {
       setIsLoading(false);
@@ -956,7 +949,151 @@ export function useStream<
       submittingRef.current = false;
       abortRef.current = null;
     }
+  }
+
+  const joinStream = async (runId: string, lastEventId?: string) => {
+    lastEventId ??= "-1";
+    if (!threadId) return;
+    await consumeStream(async (signal: AbortSignal) => {
+      const stream = client.runs.joinStream(threadId, runId, {
+        signal,
+        lastEventId,
+      }) as AsyncGenerator<EventStreamEvent>;
+
+      return {
+        onSuccess: () => {
+          runMetadataStorage?.removeItem(`lg:stream:${threadId}`);
+          return history.mutate(threadId);
+        },
+        stream,
+        getCallbackMeta: () => ({ thread_id: threadId, run_id: runId }),
+      };
+    });
   };
+
+  const submit = async (
+    values: UpdateType | null | undefined,
+    submitOptions?: SubmitOptions<StateType, ConfigurableType>,
+  ) => {
+    await consumeStream(async (signal: AbortSignal) => {
+      // Unbranch things
+      const newPath = submitOptions?.checkpoint?.checkpoint_id
+        ? branchByCheckpoint[submitOptions?.checkpoint?.checkpoint_id]?.branch
+        : undefined;
+
+      if (newPath != null) setBranch(newPath ?? "");
+
+      // Assumption: we're setting the initial value
+      // Used for instant feedback
+      setStreamValues(() => {
+        const values = { ...historyValues };
+
+        if (submitOptions?.optimisticValues != null) {
+          return {
+            ...values,
+            ...(typeof submitOptions.optimisticValues === "function"
+              ? submitOptions.optimisticValues(values)
+              : submitOptions.optimisticValues),
+          };
+        }
+
+        return values;
+      });
+
+      let usableThreadId = threadId;
+      if (!usableThreadId) {
+        const thread = await client.threads.create();
+        onThreadId(thread.thread_id);
+        usableThreadId = thread.thread_id;
+      }
+
+      const streamMode = unique([
+        ...(submitOptions?.streamMode ?? []),
+        ...trackStreamModeRef.current,
+        ...callbackStreamMode,
+      ]);
+
+      const checkpoint =
+        submitOptions?.checkpoint ?? threadHead?.checkpoint ?? undefined;
+      // @ts-expect-error
+      if (checkpoint != null) delete checkpoint.thread_id;
+      let rejoinKey: `lg:stream:${string}` | undefined;
+      let callbackMeta: RunCallbackMeta | undefined;
+      const streamResumable =
+        submitOptions?.streamResumable ?? !!runMetadataStorage;
+
+      const stream = client.runs.stream(usableThreadId, assistantId, {
+        input: values as Record<string, unknown>,
+        config: submitOptions?.config,
+        command: submitOptions?.command,
+
+        interruptBefore: submitOptions?.interruptBefore,
+        interruptAfter: submitOptions?.interruptAfter,
+        metadata: submitOptions?.metadata,
+        multitaskStrategy: submitOptions?.multitaskStrategy,
+        onCompletion: submitOptions?.onCompletion,
+        onDisconnect:
+          submitOptions?.onDisconnect ??
+          (streamResumable ? "continue" : "cancel"),
+
+        signal,
+
+        checkpoint,
+        streamMode,
+        streamSubgraphs: submitOptions?.streamSubgraphs,
+        streamResumable,
+        onRunCreated(params) {
+          callbackMeta = {
+            run_id: params.run_id,
+            thread_id: params.thread_id ?? usableThreadId,
+          };
+
+          if (runMetadataStorage) {
+            rejoinKey = `lg:stream:${callbackMeta.thread_id}`;
+            runMetadataStorage.setItem(rejoinKey, callbackMeta.run_id);
+          }
+          onCreated?.(callbackMeta);
+        },
+      }) as AsyncGenerator<EventStreamEvent>;
+
+      return {
+        stream,
+        getCallbackMeta: () => callbackMeta,
+        onSuccess: () => {
+          if (rejoinKey) runMetadataStorage?.removeItem(rejoinKey);
+          return history.mutate(usableThreadId);
+        },
+      };
+    });
+  };
+
+  const reconnectKey = useMemo(() => {
+    if (!runMetadataStorage || isLoading) return undefined;
+    if (typeof window === "undefined") return undefined;
+    const runId = runMetadataStorage?.getItem(`lg:stream:${threadId}`);
+    if (!runId) return undefined;
+    return { runId, threadId };
+  }, [runMetadataStorage, isLoading, threadId]);
+
+  const shouldReconnect = !!runMetadataStorage;
+  const reconnectRef = useRef({ threadId, shouldReconnect });
+
+  const joinStreamRef = useRef<typeof joinStream>(joinStream);
+  joinStreamRef.current = joinStream;
+
+  useEffect(() => {
+    // reset shouldReconnect when switching threads
+    if (reconnectRef.current.threadId !== threadId) {
+      reconnectRef.current = { threadId, shouldReconnect };
+    }
+  }, [threadId, shouldReconnect]);
+
+  useEffect(() => {
+    if (reconnectKey && reconnectRef.current.shouldReconnect) {
+      reconnectRef.current.shouldReconnect = false;
+      joinStreamRef.current?.(reconnectKey.runId);
+    }
+  }, [reconnectKey]);
 
   const error = streamError ?? historyError;
   const values = streamValues ?? historyValues;
@@ -975,6 +1112,8 @@ export function useStream<
 
     stop,
     submit,
+
+    joinStream,
 
     branch,
     setBranch,

@@ -56,6 +56,10 @@ EXCLUDED_FRAME_FNAMES = (
     "concurrent/futures/_base.py",
 )
 
+SKIP_RERAISE_SET: weakref.WeakSet[Union[concurrent.futures.Future, asyncio.Future]] = (
+    weakref.WeakSet()
+)
+
 
 class FuturesDict(Generic[F, E], dict[F, Optional[PregelExecutableTask]]):
     event: E
@@ -165,7 +169,6 @@ class PregelRunner:
                             futures=weakref.ref(futures),
                             schedule_task=schedule_task,
                             submit=self.submit,
-                            reraise=reraise,
                         ),
                     },
                 )
@@ -207,7 +210,6 @@ class PregelRunner:
                         futures=weakref.ref(futures),
                         schedule_task=schedule_task,
                         submit=self.submit,
-                        reraise=reraise,
                     ),
                 },
                 __reraise_on_exit__=reraise,
@@ -302,7 +304,6 @@ class PregelRunner:
                             futures=weakref.ref(futures),
                             schedule_task=schedule_task,
                             submit=self.submit,
-                            reraise=reraise,
                             loop=loop,
                         ),
                     },
@@ -349,7 +350,6 @@ class PregelRunner:
                             futures=weakref.ref(futures),
                             schedule_task=schedule_task,
                             submit=self.submit,
-                            reraise=reraise,
                             loop=loop,
                         ),
                     },
@@ -434,7 +434,8 @@ class PregelRunner:
                 raise exception
             else:
                 # save error to checkpointer
-                self.put_writes()(task.id, [(ERROR, exception)])  # type: ignore[misc]
+                task.writes.append((ERROR, exception))
+                self.put_writes()(task.id, task.writes)  # type: ignore[misc]
         else:
             if self.node_finished and (
                 task.config is None or TAG_HIDDEN not in task.config.get("tags", [])
@@ -456,7 +457,7 @@ def _should_stop_others(
         if fut.cancelled():
             continue
         elif exc := fut.exception():
-            if not isinstance(exc, GraphBubbleUp):
+            if not isinstance(exc, GraphBubbleUp) and fut not in SKIP_RERAISE_SET:
                 return True
 
     return False
@@ -494,7 +495,8 @@ def _panic_or_proceed(
     interrupts: list[GraphInterrupt] = []
     while done:
         # if any task failed
-        if exc := _exception(done.pop()):
+        fut = done.pop()
+        if exc := _exception(fut):
             # cancel all pending tasks
             while inflight:
                 inflight.pop().cancel()
@@ -503,7 +505,7 @@ def _panic_or_proceed(
                 if isinstance(exc, GraphInterrupt):
                     # collect interrupts
                     interrupts.append(exc)
-                else:
+                elif fut not in SKIP_RERAISE_SET:
                     raise exc
     # raise combined interrupts
     if interrupts:
@@ -530,7 +532,6 @@ def _call(
         [PregelExecutableTask, int, Optional[Call]], Optional[PregelExecutableTask]
     ],
     submit: weakref.ref[Submit],
-    reraise: bool,
 ) -> concurrent.futures.Future[Any]:
     if asyncio.iscoroutinefunction(func):
         raise RuntimeError("In an sync context async tasks cannot be called")
@@ -582,14 +583,16 @@ def _call(
                         callbacks=callbacks,
                         schedule_task=schedule_task,
                         submit=submit,
-                        reraise=reraise,
                     ),
                 },
-                __reraise_on_exit__=reraise,
+                __reraise_on_exit__=False,
                 # starting a new task in the next tick ensures
                 # updates from this tick are committed/streamed first
                 __next_tick__=True,
             )
+            # exceptions for call() tasks are raised into the parent task
+            # so we should not re-raise at the end of the tick
+            SKIP_RERAISE_SET.add(fut)
             futures()[fut] = next_task  # type: ignore[index]
     fut = cast(Union[asyncio.Future, concurrent.futures.Future], fut)
     # return a chained future to ensure commit() callback is called
@@ -613,7 +616,6 @@ def _acall(
     ],
     submit: weakref.ref[Submit],
     loop: asyncio.AbstractEventLoop,
-    reraise: bool = False,
     stream: bool = False,
 ) -> Union[asyncio.Future[Any], concurrent.futures.Future[Any]]:
     # return a chained future to ensure commit() callback is called
@@ -643,7 +645,6 @@ def _acall(
             schedule_task=schedule_task,
             submit=submit,
             loop=loop,
-            reraise=reraise,
             stream=stream,
         ),
         loop,
@@ -669,7 +670,6 @@ async def _acall_impl(
     ],
     submit: weakref.ref[Submit],
     loop: asyncio.AbstractEventLoop,
-    reraise: bool = False,
     stream: bool = False,
 ) -> None:
     try:
@@ -726,17 +726,19 @@ async def _acall_impl(
                                 schedule_task=schedule_task,
                                 submit=submit,
                                 loop=loop,
-                                reraise=reraise,
                             ),
                         },
-                        __name__=task().name,  # type: ignore[union-attr]
+                        __name__=next_task.name,
                         __cancel_on_exit__=True,
-                        __reraise_on_exit__=reraise,
+                        __reraise_on_exit__=False,
                         # starting a new task in the next tick ensures
                         # updates from this tick are committed/streamed first
                         __next_tick__=True,
                     ),
                 )
+                # exceptions for call() tasks are raised into the parent task
+                # so we should not re-raise at the end of the tick
+                SKIP_RERAISE_SET.add(fut)
                 futures()[fut] = next_task  # type: ignore[index]
         if fut is not None:
             chain_future(fut, destination)

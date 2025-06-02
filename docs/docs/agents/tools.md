@@ -280,7 +280,21 @@ LangGraph allows access to short-term and long-term memory from tools. See [Memo
 
 ## Prebuilt tools
 
-LangChain supports a wide range of prebuilt tool integrations for interacting with APIs, databases, file systems, web data, and more. These tools extend the functionality of agents and enable rapid development.
+You can use prebuilt tools from model providers by passing a dictionary with tool specs to the `tools` parameter of `create_react_agent`. For example, to use the `web_search_preview` tool from OpenAI:
+
+```python
+from langgraph.prebuilt import create_react_agent
+
+agent = create_react_agent(
+    model="openai:gpt-4o-mini", 
+    tools=[{"type": "web_search_preview"}]
+)
+response = agent.invoke(
+    {"messages": ["What was a positive news story from today?"]}
+)
+```
+
+Additionally, LangChain supports a wide range of prebuilt tool integrations for interacting with APIs, databases, file systems, web data, and more. These tools extend the functionality of agents and enable rapid development.
 
 You can browse the full list of available integrations in the [LangChain integrations directory](https://python.langchain.com/docs/integrations/tools/).
 

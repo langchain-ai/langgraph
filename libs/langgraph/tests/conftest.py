@@ -1,11 +1,7 @@
 from collections.abc import AsyncIterator, Iterator
-from contextlib import asynccontextmanager
-from typing import Optional
 from uuid import UUID
 
 import pytest
-from langchain_core import __version__ as core_version
-from packaging import version
 from pytest_mock import MockerFixture
 
 from langgraph.cache.base import BaseCache
@@ -19,10 +15,8 @@ from tests.conftest_checkpointer import (
     _checkpointer_postgres_aio,
     _checkpointer_postgres_aio_pipe,
     _checkpointer_postgres_aio_pool,
-    _checkpointer_postgres_aio_shallow,
     _checkpointer_postgres_pipe,
     _checkpointer_postgres_pool,
-    _checkpointer_postgres_shallow,
     _checkpointer_sqlite,
     _checkpointer_sqlite_aes,
     _checkpointer_sqlite_aio,
@@ -36,14 +30,6 @@ from tests.conftest_store import (
     _store_postgres_pipe,
     _store_postgres_pool,
 )
-
-pytest.register_assert_rewrite("tests.memory_assert")
-
-# TODO: fix this once core is released
-IS_LANGCHAIN_CORE_030_OR_GREATER = version.parse(core_version) >= version.parse(
-    "0.3.0.dev0"
-)
-SHOULD_CHECK_SNAPSHOTS = IS_LANGCHAIN_CORE_030_OR_GREATER
 
 
 @pytest.fixture
@@ -62,82 +48,6 @@ def deterministic_uuids(mocker: MockerFixture) -> MockerFixture:
 @pytest.fixture(params=[True, False])
 def checkpoint_during(request: pytest.FixtureRequest) -> bool:
     return request.param
-
-
-# --- start of deprecated fixtures ---
-
-
-@pytest.fixture(scope="function")
-def checkpointer_memory():
-    with _checkpointer_memory() as checkpointer:
-        yield checkpointer
-
-
-@pytest.fixture(scope="function")
-def checkpointer_sqlite():
-    with _checkpointer_sqlite() as checkpointer:
-        yield checkpointer
-
-
-@pytest.fixture(scope="function")
-def checkpointer_sqlite_aes():
-    with _checkpointer_sqlite_aes() as checkpointer:
-        yield checkpointer
-
-
-@pytest.fixture(scope="function")
-def checkpointer_postgres():
-    with _checkpointer_postgres() as checkpointer:
-        yield checkpointer
-
-
-@pytest.fixture(scope="function")
-def checkpointer_postgres_shallow():
-    with _checkpointer_postgres_shallow() as checkpointer:
-        yield checkpointer
-
-
-@pytest.fixture(scope="function")
-def checkpointer_postgres_pipe():
-    with _checkpointer_postgres_pipe() as checkpointer:
-        yield checkpointer
-
-
-@pytest.fixture(scope="function")
-def checkpointer_postgres_pool():
-    with _checkpointer_postgres_pool() as checkpointer:
-        yield checkpointer
-
-
-@asynccontextmanager
-async def awith_checkpointer(
-    checkpointer_name: Optional[str],
-) -> AsyncIterator[BaseCheckpointSaver]:
-    if checkpointer_name is None:
-        yield None
-    elif checkpointer_name == "memory":
-        with _checkpointer_memory() as checkpointer:
-            yield checkpointer
-    elif checkpointer_name == "sqlite_aio":
-        async with _checkpointer_sqlite_aio() as checkpointer:
-            yield checkpointer
-    elif checkpointer_name == "postgres_aio":
-        async with _checkpointer_postgres_aio() as checkpointer:
-            yield checkpointer
-    elif checkpointer_name == "postgres_aio_shallow":
-        async with _checkpointer_postgres_aio_shallow() as checkpointer:
-            yield checkpointer
-    elif checkpointer_name == "postgres_aio_pipe":
-        async with _checkpointer_postgres_aio_pipe() as checkpointer:
-            yield checkpointer
-    elif checkpointer_name == "postgres_aio_pool":
-        async with _checkpointer_postgres_aio_pool() as checkpointer:
-            yield checkpointer
-    else:
-        raise NotImplementedError(f"Unknown checkpointer: {checkpointer_name}")
-
-
-# --- end of deprecated fixtures ---
 
 
 @pytest.fixture(scope="function", params=["sqlite", "memory"])
@@ -266,22 +176,3 @@ async def async_checkpointer(
             yield checkpointer
     else:
         raise NotImplementedError(f"Unknown checkpointer: {checkpointer_name}")
-
-
-ALL_CHECKPOINTERS_SYNC = [
-    "memory",
-    "sqlite",
-    "sqlite_aes",
-    "postgres",
-    "postgres_pipe",
-    "postgres_pool",
-    "postgres_shallow",
-]
-ALL_CHECKPOINTERS_ASYNC = [
-    "memory",
-    "sqlite_aio",
-    "postgres_aio",
-    "postgres_aio_pipe",
-    "postgres_aio_pool",
-    "postgres_aio_shallow",
-]

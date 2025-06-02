@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-prebuilt"
-version = "0.1.8"
+version = "0.2.2"
 description = "Library with high-level APIs for creating and executing LangGraph agents and tools."
 authors = []
 requires-python = ">=3.9"
@@ -32,6 +32,7 @@ dev = [
     "langgraph-checkpoint",
     "langgraph-checkpoint-sqlite",
     "langgraph-checkpoint-postgres",
+    "syrupy",
 ]
 
 [tool.uv]

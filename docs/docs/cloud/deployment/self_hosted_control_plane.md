@@ -2,8 +2,8 @@
 
 Before deploying, review the [conceptual guide for the Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md) deployment option.
 
-!!! important "Beta"
-    The Self-Hosted Control Plane deployment option is currently in beta stage.
+!!! info "Important"
+    The Self-Hosted Control Plane deployment option is currently in beta stage and requires an [Enterprise](../../concepts/plans.md) plan.
 
 ## Prerequisites
 
@@ -41,7 +41,8 @@ Before deploying, review the [conceptual guide for the Self-Hosted Control Plane
           pullPolicy: IfNotPresent
           tag: "aa9dff4"
 
-1. In your `values.yaml` file, enable the `langgraphPlatform` option. Note that you must also have a valid ingress setup:
+1. In your `langsmith_config.yaml` file, enable the `langgraphPlatform` option. Note that you must also have a valid ingress setup:
+
         config:
           langgraphPlatform:
             enabled: true

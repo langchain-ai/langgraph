@@ -447,7 +447,7 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "0.4.5"
+version = "0.4.7"
 source = { editable = "../langgraph" }
 dependencies = [
     { name = "langchain-core" },
@@ -558,7 +558,7 @@ dev = [
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "0.1.8"
+version = "0.2.2"
 source = { editable = "../prebuilt" }
 dependencies = [
     { name = "langchain-core" },
@@ -584,6 +584,7 @@ dev = [
     { name = "pytest-mock" },
     { name = "pytest-watcher" },
     { name = "ruff" },
+    { name = "syrupy" },
 ]
 
 [[package]]
@@ -635,7 +636,7 @@ dev = [
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.1.69"
+version = "0.1.70"
 source = { editable = "../sdk-py" }
 dependencies = [
     { name = "httpx" },

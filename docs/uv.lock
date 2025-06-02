@@ -2590,7 +2590,7 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "0.4.5"
+version = "0.4.7"
 source = { editable = "../libs/langgraph" }
 dependencies = [
     { name = "langchain-core" },
@@ -2891,7 +2891,7 @@ test = [
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "0.1.8"
+version = "0.2.2"
 source = { editable = "../libs/prebuilt" }
 dependencies = [
     { name = "langchain-core" },
@@ -2917,11 +2917,12 @@ dev = [
     { name = "pytest-mock" },
     { name = "pytest-watcher" },
     { name = "ruff" },
+    { name = "syrupy" },
 ]
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.1.69"
+version = "0.1.70"
 source = { editable = "../libs/sdk-py" }
 dependencies = [
     { name = "httpx" },
@@ -2947,8 +2948,8 @@ dev = [
 
 [[package]]
 name = "langgraph-supervisor"
-version = "0.0.21"
-source = { git = "https://github.com/langchain-ai/langgraph-supervisor-py#6367bebd5462ac899e7def931ac6ab9cc6a9b070" }
+version = "0.0.25"
+source = { git = "https://github.com/langchain-ai/langgraph-supervisor-py#79380b5c21d3170e2d20dc6c55149ee057a306b1" }
 dependencies = [
     { name = "langchain-core" },
     { name = "langgraph" },

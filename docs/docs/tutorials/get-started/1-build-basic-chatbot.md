@@ -6,7 +6,7 @@ In this tutorial, you will build a basic chatbot. This chatbot is the basis for 
 
 Before you start this tutorial, ensure you have access to a LLM that supports
 tool-calling features, such as [OpenAI](https://platform.openai.com/api-keys),
-[Anthropic](https://console.anthropic.com/settings/admin-keys), or
+[Anthropic](https://console.anthropic.com/settings/keys), or
 [Google Gemini](https://ai.google.dev/gemini-api/docs/api-key).
 
 ## 1. Install packages

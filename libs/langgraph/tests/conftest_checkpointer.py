@@ -6,15 +6,15 @@ import pytest
 from psycopg import AsyncConnection, Connection
 from psycopg_pool import AsyncConnectionPool, ConnectionPool
 
-from langgraph.checkpoint.postgres import PostgresSaver, ShallowPostgresSaver
-from langgraph.checkpoint.postgres.aio import (
-    AsyncPostgresSaver,
-    AsyncShallowPostgresSaver,
-)
+from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-from tests.memory_assert import MemorySaverAssertImmutable
+
+pytest.register_assert_rewrite("tests.memory_assert")
+
+from tests.memory_assert import MemorySaverAssertImmutable  # noqa: E402
 
 DEFAULT_POSTGRES_URI = "postgres://postgres:postgres@localhost:5442/"
 
@@ -48,25 +48,6 @@ def _checkpointer_postgres():
     try:
         # yield checkpointer
         with PostgresSaver.from_conn_string(
-            DEFAULT_POSTGRES_URI + database
-        ) as checkpointer:
-            checkpointer.setup()
-            yield checkpointer
-    finally:
-        # drop unique db
-        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-            conn.execute(f"DROP DATABASE {database}")
-
-
-@contextmanager
-def _checkpointer_postgres_shallow():
-    database = f"test_{uuid4().hex[:16]}"
-    # create unique db
-    with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-        conn.execute(f"CREATE DATABASE {database}")
-    try:
-        # yield checkpointer
-        with ShallowPostgresSaver.from_conn_string(
             DEFAULT_POSTGRES_URI + database
         ) as checkpointer:
             checkpointer.setup()
@@ -151,31 +132,6 @@ async def _checkpointer_postgres_aio():
 
 
 @asynccontextmanager
-async def _checkpointer_postgres_aio_shallow():
-    if sys.version_info < (3, 10):
-        pytest.skip("Async Postgres tests require Python 3.10+")
-    database = f"test_{uuid4().hex[:16]}"
-    # create unique db
-    async with await AsyncConnection.connect(
-        DEFAULT_POSTGRES_URI, autocommit=True
-    ) as conn:
-        await conn.execute(f"CREATE DATABASE {database}")
-    try:
-        # yield checkpointer
-        async with AsyncShallowPostgresSaver.from_conn_string(
-            DEFAULT_POSTGRES_URI + database
-        ) as checkpointer:
-            await checkpointer.setup()
-            yield checkpointer
-    finally:
-        # drop unique db
-        async with await AsyncConnection.connect(
-            DEFAULT_POSTGRES_URI, autocommit=True
-        ) as conn:
-            await conn.execute(f"DROP DATABASE {database}")
-
-
-@asynccontextmanager
 async def _checkpointer_postgres_aio_pipe():
     if sys.version_info < (3, 10):
         pytest.skip("Async Postgres tests require Python 3.10+")
@@ -234,12 +190,10 @@ __all__ = [
     "_checkpointer_sqlite",
     "_checkpointer_sqlite_aes",
     "_checkpointer_postgres",
-    "_checkpointer_postgres_shallow",
     "_checkpointer_postgres_pipe",
     "_checkpointer_postgres_pool",
     "_checkpointer_sqlite_aio",
     "_checkpointer_postgres_aio",
-    "_checkpointer_postgres_aio_shallow",
     "_checkpointer_postgres_aio_pipe",
     "_checkpointer_postgres_aio_pool",
 ]

@@ -54,7 +54,7 @@ def push_ui_message(
     id: Optional[str] = None,
     metadata: Optional[dict[str, Any]] = None,
     message: Optional[AnyMessage] = None,
-    state_key: str = "ui",
+    state_key: Optional[str] = "ui",
     merge: bool = False,
 ) -> UIMessage:
     """Push a new UI message to update the UI state.
@@ -111,7 +111,8 @@ def push_ui_message(
     }
 
     writer(evt)
-    config[CONF][CONFIG_KEY_SEND]([(state_key, evt)])
+    if state_key:
+        config[CONF][CONFIG_KEY_SEND]([(state_key, evt)])
 
     return evt
 
