@@ -88,7 +88,7 @@ from langgraph.pregel.draw import draw_graph
 from langgraph.pregel.io import map_input, read_channels
 from langgraph.pregel.loop import AsyncPregelLoop, StreamProtocol, SyncPregelLoop
 from langgraph.pregel.messages import StreamMessagesHandler
-from langgraph.pregel.protocol import PregelProtocol, StateT
+from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.read import DEFAULT_BOUND, PregelNode
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.runner import PregelRunner
@@ -107,6 +107,7 @@ from langgraph.types import (
     StreamChunk,
     StreamMode,
 )
+from langgraph.typing import InputT
 from langgraph.utils.config import (
     ensure_config,
     merge_configs,
@@ -297,7 +298,7 @@ class NodeBuilder:
         )
 
 
-class Pregel(PregelProtocol[StateT], Generic[StateT]):
+class Pregel(PregelProtocol[InputT], Generic[InputT]):
     """Pregel manages the runtime behavior for LangGraph applications.
 
     ## Overview
@@ -2279,7 +2280,7 @@ class Pregel(PregelProtocol[StateT], Generic[StateT]):
 
     def stream(
         self,
-        input: StateT,
+        input: InputT,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode | list[StreamMode] | None = None,
@@ -2500,7 +2501,7 @@ class Pregel(PregelProtocol[StateT], Generic[StateT]):
 
     async def astream(
         self,
-        input: StateT,
+        input: InputT,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode | list[StreamMode] | None = None,
@@ -2736,7 +2737,7 @@ class Pregel(PregelProtocol[StateT], Generic[StateT]):
 
     def invoke(
         self,
-        input: StateT,
+        input: InputT,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode = "values",
@@ -2802,7 +2803,7 @@ class Pregel(PregelProtocol[StateT], Generic[StateT]):
 
     async def ainvoke(
         self,
-        input: StateT,
+        input: InputT,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode = "values",

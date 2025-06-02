@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import inspect
 import logging
 import typing
@@ -14,6 +16,8 @@ from typing import (
     Literal,
     NamedTuple,
     Optional,
+    Protocol,
+    TypeVar,
     Union,
     cast,
     get_args,
@@ -24,7 +28,7 @@ from typing import (
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel
-from typing_extensions import Self
+from typing_extensions import Self, TypeAlias
 
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
@@ -64,7 +68,6 @@ from langgraph.managed.base import (
     is_managed_value,
 )
 from langgraph.pregel import Pregel
-from langgraph.pregel.protocol import StateT
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.write import (
     ChannelWrite,
@@ -72,10 +75,19 @@ from langgraph.pregel.write import (
     ChannelWriteTupleEntry,
 )
 from langgraph.store.base import BaseStore
-from langgraph.types import All, CachePolicy, Checkpointer, Command, RetryPolicy, Send
+from langgraph.types import (
+    All,
+    CachePolicy,
+    Checkpointer,
+    Command,
+    RetryPolicy,
+    Send,
+    StreamWriter,
+)
+from langgraph.typing import InputT, P, StateT, StateT_contra
 from langgraph.utils.fields import get_field_default, get_update_as_tuples
 from langgraph.utils.pydantic import create_model
-from langgraph.utils.runnable import RunnableLike, coerce_to_runnable
+from langgraph.utils.runnable import coerce_to_runnable
 
 logger = logging.getLogger(__name__)
 
@@ -92,17 +104,31 @@ def _warn_invalid_state_schema(schema: Union[type[Any], Any]) -> None:
     )
 
 
-def _get_node_name(node: RunnableLike) -> str:
-    if isinstance(node, Runnable):
-        return node.get_name()
-    elif callable(node):
+# TODO: expand, maybe just with kwargs, to accomodate for store and writer
+class _CallableNode(Protocol[StateT_contra]):
+    def __call__(self, state: StateT_contra) -> Any: ...
+
+
+class _CallableNodeWithConfig(Protocol[StateT_contra]):
+    def __call__(self, state: StateT_contra, config: RunnableConfig) -> Any: ...
+
+
+CallableStateNode: TypeAlias = Union[
+    _CallableNode[StateT_contra],
+    _CallableNodeWithConfig[StateT_contra],
+]
+
+
+def _get_node_name(node: CallableStateNode) -> str:
+    try:
         return getattr(node, "__name__", node.__class__.__name__)
-    else:
+    except AttributeError:
         raise TypeError(f"Unsupported node type: {type(node)}")
 
 
-class StateNodeSpec(NamedTuple):
-    runnable: Runnable
+class StateNodeSpec(NamedTuple, Generic[StateT]):
+    # TODO: rename this callable, I think it's internal
+    runnable: CallableStateNode[StateT]
     metadata: Optional[dict[str, Any]]
     input: type[Any]
     retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]]
@@ -111,7 +137,11 @@ class StateNodeSpec(NamedTuple):
     defer: bool = False
 
 
-class StateGraph(Generic[StateT]):
+class _UnsetType:
+    """Sentinel type representing an unset type variable."""
+
+
+class StateGraph(Generic[StateT, InputT]):
     """A graph whose nodes communicate by reading and writing to a shared state.
     The signature of each node is State -> Partial<State>.
 
@@ -175,7 +205,7 @@ class StateGraph(Generic[StateT]):
         state_schema: type[StateT],
         config_schema: Optional[type[Any]] = None,
         *,
-        input: Optional[type[Any]] = None,
+        input: Optional[type[InputT]] = _UnsetType,
         output: Optional[type[Any]] = None,
     ) -> None:
         input = input or state_schema
@@ -239,7 +269,7 @@ class StateGraph(Generic[StateT]):
     @overload
     def add_node(
         self,
-        node: RunnableLike,
+        node: CallableStateNode[StateT],
         *,
         defer: bool = False,
         metadata: Optional[dict[str, Any]] = None,
@@ -257,7 +287,7 @@ class StateGraph(Generic[StateT]):
     def add_node(
         self,
         node: str,
-        action: RunnableLike,
+        action: CallableStateNode[StateT],
         *,
         defer: bool = False,
         metadata: Optional[dict[str, Any]] = None,
@@ -271,8 +301,8 @@ class StateGraph(Generic[StateT]):
 
     def add_node(
         self,
-        node: Union[str, RunnableLike],
-        action: Optional[RunnableLike] = None,
+        node: Union[str, CallableStateNode[StateT]],
+        action: Optional[CallableStateNode[StateT]] = None,
         *,
         defer: bool = False,
         metadata: Optional[dict[str, Any]] = None,
@@ -417,8 +447,8 @@ class StateGraph(Generic[StateT]):
 
         if input is not None:
             self._add_schema(input)
-        self.nodes[node] = StateNodeSpec(
-            coerce_to_runnable(action, name=node, trace=False),
+        self.nodes[node] = StateNodeSpec[StateT](
+            action,
             metadata,
             input=input or self.schema,
             retry_policy=retry,
@@ -535,12 +565,14 @@ class StateGraph(Generic[StateT]):
 
     def add_sequence(
         self,
-        nodes: Sequence[Union[RunnableLike, tuple[str, RunnableLike]]],
+        nodes: Sequence[
+            Union[CallableStateNode[StateT], tuple[str, CallableStateNode[StateT]]]
+        ],
     ) -> Self:
         """Add a sequence of nodes that will be executed in the provided order.
 
         Args:
-            nodes: A sequence of RunnableLike objects (e.g. a LangChain Runnable or a callable) or (name, RunnableLike) tuples.
+            nodes: A sequence of CallableStateNode objects (e.g. a LangChain Runnable or a callable) or (name, CallableStateNode) tuples.
                 If no names are provided, the name will be inferred from the node object (e.g. a runnable or a callable name).
                 Each node will be executed in the order provided.
 
@@ -687,6 +719,34 @@ class StateGraph(Generic[StateT]):
 
         self.compiled = True
         return self
+    
+    @overload
+    def compile(
+        self: StateGraph[StateT, _UnsetType],
+        checkpointer: Checkpointer = None,
+        *,
+        cache: Optional[BaseCache] = None,
+        store: Optional[BaseStore] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
+        debug: bool = False,
+        name: Optional[str] = None,
+    ) -> CompiledStateGraph[StateT, StateT]:
+        ...
+        
+    @overload
+    def compile(
+        self: StateGraph[StateT, InputT],
+        checkpointer: Checkpointer = None,
+        *,
+        cache: Optional[BaseCache] = None,
+        store: Optional[BaseStore] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
+        debug: bool = False,
+        name: Optional[str] = None,
+    ) -> CompiledStateGraph[StateT, InputT]:
+        ...
 
     def compile(
         self,
@@ -698,7 +758,7 @@ class StateGraph(Generic[StateT]):
         interrupt_after: Optional[Union[All, list[str]]] = None,
         debug: bool = False,
         name: Optional[str] = None,
-    ) -> "CompiledStateGraph[StateT]":
+    ) -> Union[CompiledStateGraph[StateT, StateT], CompiledStateGraph[StateT, InputT]]:
         """Compiles the state graph into a `CompiledStateGraph` object.
 
         The compiled graph implements the `Runnable` interface and can be invoked,
@@ -750,7 +810,7 @@ class StateGraph(Generic[StateT]):
             ]
         )
 
-        compiled = CompiledStateGraph[StateT](
+        compiled = CompiledStateGraph[StateT, InputT](
             builder=self,
             schema_to_mapper={},
             config_type=self.config_schema,
@@ -798,8 +858,8 @@ class StateGraph(Generic[StateT]):
         return compiled.validate()
 
 
-class CompiledStateGraph(Pregel[StateT], Generic[StateT]):
-    builder: StateGraph[StateT]
+class CompiledStateGraph(Pregel[InputT], Generic[StateT, InputT]):
+    builder: StateGraph[StateT, InputT]
     schema_to_mapper: dict[type[Any], Optional[Callable[[Any], Any]]]
 
     def __init__(
