@@ -1,8 +1,6 @@
 from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Any, Literal, Optional, TypeVar, Union
-
-from langchain_core.runnables.utils import AddableDict
+from typing import Any, Literal, Optional, Union
 
 from langgraph.channels.base import BaseChannel, EmptyChannelError
 from langgraph.constants import (
@@ -99,14 +97,6 @@ def map_input(
                 logger.warning(f"Input channel {k} not found in {input_channels}")
 
 
-class AddableValuesDict(AddableDict):
-    def __add__(self, other: dict[str, Any]) -> "AddableValuesDict":
-        return self | other
-
-    def __radd__(self, other: dict[str, Any]) -> "AddableValuesDict":
-        return other | self
-
-
 def map_output_values(
     output_channels: Union[str, Sequence[str]],
     pending_writes: Union[Literal[True], Sequence[tuple[str, Any]]],
@@ -122,15 +112,7 @@ def map_output_values(
         if pending_writes is True or {
             c for c, _ in pending_writes if c in output_channels
         }:
-            yield AddableValuesDict(read_channels(channels, output_channels))
-
-
-class AddableUpdatesDict(AddableDict):
-    def __add__(self, other: dict[str, Any]) -> "AddableUpdatesDict":
-        return [self, other]
-
-    def __radd__(self, other: dict[str, Any]) -> "AddableUpdatesDict":
-        raise TypeError("AddableUpdatesDict does not support right-side addition")
+            yield read_channels(channels, output_channels)
 
 
 def map_output_updates(
@@ -179,22 +161,14 @@ def map_output_updates(
                         },
                     )
                 )
-    grouped: dict[str, list[Any]] = {t.name: [] for t, _ in output_tasks}
+    grouped: dict[str, Any] = {t.name: [] for t, _ in output_tasks}
     for node, value in updated:
         grouped[node].append(value)
     for node, value in grouped.items():
         if len(value) == 0:
-            grouped[node] = None  # type: ignore[assignment]
+            grouped[node] = None
         if len(value) == 1:
             grouped[node] = value[0]
     if cached:
-        grouped["__metadata__"] = {"cached": cached}  # type: ignore[assignment]
-    yield AddableUpdatesDict(grouped)
-
-
-T = TypeVar("T")
-
-
-def single(iter: Iterator[T]) -> Optional[T]:
-    for item in iter:
-        return item
+        grouped["__metadata__"] = {"cached": cached}
+    yield grouped

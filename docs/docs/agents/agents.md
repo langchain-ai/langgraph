@@ -15,7 +15,7 @@ This guide shows you how to set up and use LangGraph's **prebuilt**, **reusable*
 
 Before you start this tutorial, ensure you have the following:
 
-- An [Anthropic](https://console.anthropic.com/settings/admin-keys) API key 
+- An [Anthropic](https://console.anthropic.com/settings/keys) API key 
 
 ## 1. Install dependencies
 

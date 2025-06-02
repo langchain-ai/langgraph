@@ -14,7 +14,6 @@ from typing import (
     TypeVar,
     Union,
     cast,
-    get_type_hints,
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
@@ -23,11 +22,10 @@ from xxhash import xxh3_128_hexdigest
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 from langgraph.utils.cache import default_cache_key
-from langgraph.utils.fields import get_update_as_tuples
+from langgraph.utils.fields import get_cached_annotated_keys, get_update_as_tuples
 
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
-    from langgraph.store.base import BaseStore
 
 
 try:
@@ -351,8 +349,8 @@ class Command(Generic[N], ToolOutputMixin):
             for t in self.update
         ):
             return self.update
-        elif hints := get_type_hints(type(self.update)):
-            return get_update_as_tuples(self.update, tuple(hints.keys()))
+        elif keys := get_cached_annotated_keys(type(self.update)):
+            return get_update_as_tuples(self.update, keys)
         elif self.update is not None:
             return [("__root__", self.update)]
         else:
@@ -380,31 +378,10 @@ class StreamProtocol:
         self.modes = modes
 
 
-class LoopProtocol:
-    config: RunnableConfig
-    store: Optional["BaseStore"]
-    stream: Optional[StreamProtocol]
-    step: int
-    stop: int
-
-    def __init__(
-        self,
-        *,
-        step: int,
-        stop: int,
-        config: RunnableConfig,
-        store: Optional["BaseStore"] = None,
-        stream: Optional[StreamProtocol] = None,
-    ) -> None:
-        self.stream = stream
-        self.config = config
-        self.store = store
-        self.step = step
-        self.stop = stop
-
-
 @dataclasses.dataclass(**_DC_KWARGS)
 class PregelScratchpad:
+    step: int
+    stop: int
     # call
     call_counter: Callable[[], int]
     # interrupt
@@ -510,6 +487,7 @@ def interrupt(value: Any) -> Any:
     Raises:
         GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
     """
+    from langgraph.config import get_config
     from langgraph.constants import (
         CONFIG_KEY_CHECKPOINT_NS,
         CONFIG_KEY_SCRATCHPAD,
@@ -518,7 +496,6 @@ def interrupt(value: Any) -> Any:
         RESUME,
     )
     from langgraph.errors import GraphInterrupt
-    from langgraph.utils.config import get_config
 
     conf = get_config()["configurable"]
     # track interrupt index

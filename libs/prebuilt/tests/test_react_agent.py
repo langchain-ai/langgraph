@@ -55,7 +55,6 @@ from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command, Interrupt, interrupt
 from langgraph.utils.config import get_stream_writer
 from tests.any_str import AnyStr
-from tests.conftest import IS_LANGCHAIN_CORE_030_OR_GREATER
 from tests.messages import _AnyIdHumanMessage, _AnyIdToolMessage
 from tests.model import FakeToolCallingModel
 
@@ -91,7 +90,6 @@ def test_no_prompt(sync_checkpointer: BaseCheckpointSaver, version: str) -> None
     assert saved.metadata == {
         "parents": {},
         "source": "loop",
-        "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
         "step": 1,
         "thread_id": "123",
     }
@@ -119,7 +117,6 @@ async def test_no_prompt_async(async_checkpointer: BaseCheckpointSaver) -> None:
     assert saved.metadata == {
         "parents": {},
         "source": "loop",
-        "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
         "step": 1,
         "thread_id": "123",
     }
@@ -456,10 +453,6 @@ def test__infer_handled_types() -> None:
         _infer_handled_types(handler)
 
 
-@pytest.mark.skipif(
-    not IS_LANGCHAIN_CORE_030_OR_GREATER,
-    reason="Pydantic v1 is required for this test to pass in langchain-core < 0.3",
-)
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 def test_react_agent_with_structured_response(version: str) -> None:
     class WeatherResponse(BaseModel):
@@ -496,10 +489,6 @@ class CustomStatePydantic(AgentStatePydantic):
     user_name: Optional[str] = None
 
 
-@pytest.mark.skipif(
-    not IS_LANGCHAIN_CORE_030_OR_GREATER,
-    reason="Langchain core 0.3.0 or greater is required",
-)
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 @pytest.mark.parametrize("state_schema", [CustomState, CustomStatePydantic])
 def test_react_agent_update_state(
@@ -565,10 +554,6 @@ def test_react_agent_update_state(
     assert tool_message.name == "get_user_name"
 
 
-@pytest.mark.skipif(
-    not IS_LANGCHAIN_CORE_030_OR_GREATER,
-    reason="Langchain core 0.3.0 or greater is required",
-)
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 def test_react_agent_parallel_tool_calls(
     sync_checkpointer: BaseCheckpointSaver, version: str
@@ -832,10 +817,6 @@ def test_create_react_agent_inject_vars(
     assert result["foo"] == 2
 
 
-@pytest.mark.skipif(
-    not IS_LANGCHAIN_CORE_030_OR_GREATER,
-    reason="Langchain core 0.3.0 or greater is required",
-)
 def test_tool_node_inject_store() -> None:
     store = InMemoryStore()
     namespace = ("test",)
@@ -1540,3 +1521,63 @@ def test_post_model_hook_with_structured_output() -> None:
             }
         },
     ]
+
+
+@pytest.mark.parametrize(
+    "state_schema", [AgentStateExtraKey, AgentStateExtraKeyPydantic]
+)
+def test_create_react_agent_inject_vars_with_post_model_hook(
+    state_schema: StateSchemaType,
+) -> None:
+    store = InMemoryStore()
+    namespace = ("test",)
+    store.put(namespace, "test_key", {"bar": 3})
+
+    if issubclass(state_schema, AgentStatePydantic):
+
+        def tool1(
+            some_val: int,
+            state: Annotated[AgentStateExtraKeyPydantic, InjectedState],
+            store: Annotated[BaseStore, InjectedStore()],
+        ) -> str:
+            """Tool 1 docstring."""
+            store_val = store.get(namespace, "test_key").value["bar"]
+            return some_val + state.foo + store_val
+    else:
+
+        def tool1(
+            some_val: int,
+            state: Annotated[dict, InjectedState],
+            store: Annotated[BaseStore, InjectedStore()],
+        ) -> str:
+            """Tool 1 docstring."""
+            store_val = store.get(namespace, "test_key").value["bar"]
+            return some_val + state["foo"] + store_val
+
+    tool_call = {
+        "name": "tool1",
+        "args": {"some_val": 1},
+        "id": "some 0",
+        "type": "tool_call",
+    }
+
+    def post_model_hook(state: dict) -> None:
+        return
+
+    model = FakeToolCallingModel(tool_calls=[[tool_call], []])
+    agent = create_react_agent(
+        model,
+        [tool1],
+        state_schema=state_schema,
+        store=store,
+        post_model_hook=post_model_hook,
+    )
+    input_message = HumanMessage("hi")
+    result = agent.invoke({"messages": [input_message], "foo": 2})
+    assert result["messages"] == [
+        input_message,
+        AIMessage(content="hi", tool_calls=[tool_call], id="0"),
+        _AnyIdToolMessage(content="6", name="tool1", tool_call_id="some 0"),
+        AIMessage("hi-hi-6", id="1"),
+    ]
+    assert result["foo"] == 2

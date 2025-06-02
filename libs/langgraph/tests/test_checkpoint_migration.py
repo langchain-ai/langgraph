@@ -44,7 +44,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
             },
             metadata={
                 "source": "loop",
-                "writes": {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
                 "step": 4,
                 "parents": {},
                 "thread_id": "1",
@@ -75,7 +74,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
             },
             metadata={
                 "source": "loop",
-                "writes": {"retriever_one": {"docs": ["doc1", "doc2"]}},
                 "step": 3,
                 "parents": {},
                 "thread_id": "1",
@@ -134,10 +132,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
             },
             metadata={
                 "source": "loop",
-                "writes": {
-                    "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-                    "retriever_two": {"docs": ["doc3", "doc4"]},
-                },
                 "step": 2,
                 "parents": {},
                 "thread_id": "1",
@@ -175,7 +169,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
             },
             metadata={
                 "source": "loop",
-                "writes": {"rewrite_query": {"query": "query: what is weather in sf"}},
                 "step": 1,
                 "parents": {},
                 "thread_id": "1",
@@ -226,7 +219,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
             },
             metadata={
                 "source": "loop",
-                "writes": None,
                 "step": 0,
                 "parents": {},
                 "thread_id": "1",
@@ -266,7 +258,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
             },
             metadata={
                 "source": "input",
-                "writes": {"__start__": {"query": "what is weather in sf"}},
                 "step": -1,
                 "parents": {},
                 "thread_id": "1",
@@ -350,11 +341,9 @@ SAVED_CHECKPOINTS = {
                     "docs": ["doc1", "doc2", "doc3", "doc4"],
                     "answer": "doc1,doc2,doc3,doc4",
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
                 "step": 4,
                 "parents": {},
                 "thread_id": "1",
@@ -413,11 +402,9 @@ SAVED_CHECKPOINTS = {
                     "docs": ["doc1", "doc2", "doc3", "doc4"],
                     "branch:to:qa": None,
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {"retriever_one": {"docs": ["doc1", "doc2"]}},
                 "step": 3,
                 "parents": {},
                 "thread_id": "1",
@@ -491,14 +478,9 @@ SAVED_CHECKPOINTS = {
                     "branch:to:retriever_one": None,
                     "docs": ["doc3", "doc4"],
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {
-                    "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-                    "retriever_two": {"docs": ["doc3", "doc4"]},
-                },
                 "step": 2,
                 "parents": {},
                 "thread_id": "1",
@@ -548,11 +530,9 @@ SAVED_CHECKPOINTS = {
                     "branch:to:analyzer_one": None,
                     "branch:to:retriever_two": None,
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {"rewrite_query": {"query": "query: what is weather in sf"}},
                 "step": 1,
                 "parents": {},
                 "thread_id": "1",
@@ -605,11 +585,9 @@ SAVED_CHECKPOINTS = {
                     "query": "what is weather in sf",
                     "branch:to:rewrite_query": None,
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": None,
                 "step": 0,
                 "parents": {},
                 "thread_id": "1",
@@ -656,11 +634,9 @@ SAVED_CHECKPOINTS = {
                 },
                 "versions_seen": {"__input__": {}},
                 "channel_values": {"__start__": {"query": "what is weather in sf"}},
-                "pending_sends": [],
             },
             metadata={
                 "source": "input",
-                "writes": {"__start__": {"query": "what is weather in sf"}},
                 "step": -1,
                 "parents": {},
                 "thread_id": "1",
@@ -744,11 +720,9 @@ SAVED_CHECKPOINTS = {
                     "answer": "doc1,doc2,doc3,doc4",
                     "qa": "qa",
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
                 "thread_id": "1",
                 "step": 4,
                 "parents": {},
@@ -808,11 +782,9 @@ SAVED_CHECKPOINTS = {
                     "docs": ["doc1", "doc2", "doc3", "doc4"],
                     "retriever_one": "retriever_one",
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {"retriever_one": {"docs": ["doc1", "doc2"]}},
                 "thread_id": "1",
                 "step": 3,
                 "parents": {},
@@ -889,14 +861,9 @@ SAVED_CHECKPOINTS = {
                     "docs": ["doc3", "doc4"],
                     "retriever_two": "retriever_two",
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {
-                    "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-                    "retriever_two": {"docs": ["doc3", "doc4"]},
-                },
                 "thread_id": "1",
                 "step": 2,
                 "parents": {},
@@ -950,11 +917,9 @@ SAVED_CHECKPOINTS = {
                     "rewrite_query": "rewrite_query",
                     "branch:to:retriever_two": "rewrite_query",
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {"rewrite_query": {"query": "query: what is weather in sf"}},
                 "thread_id": "1",
                 "step": 1,
                 "parents": {},
@@ -1012,11 +977,9 @@ SAVED_CHECKPOINTS = {
                     "query": "what is weather in sf",
                     "start:rewrite_query": "__start__",
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": None,
                 "thread_id": "1",
                 "step": 0,
                 "parents": {},
@@ -1063,11 +1026,9 @@ SAVED_CHECKPOINTS = {
                 },
                 "versions_seen": {"__input__": {}},
                 "channel_values": {"__start__": {"query": "what is weather in sf"}},
-                "pending_sends": [],
             },
             metadata={
                 "source": "input",
-                "writes": {"__start__": {"query": "what is weather in sf"}},
                 "thread_id": "1",
                 "step": -1,
                 "parents": {},
@@ -1151,11 +1112,9 @@ SAVED_CHECKPOINTS = {
                         "retriever_one": "00000000000000000000000000000005.0.222301724202566"
                     },
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
                 "thread_id": "1",
                 "step": 4,
                 "parents": {},
@@ -1215,11 +1174,9 @@ SAVED_CHECKPOINTS = {
                         "analyzer_one": "00000000000000000000000000000004.0.2684613370070208"
                     },
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {"retriever_one": {"docs": ["doc1", "doc2"]}},
                 "thread_id": "1",
                 "step": 3,
                 "parents": {},
@@ -1296,14 +1253,9 @@ SAVED_CHECKPOINTS = {
                         "branch:rewrite_query:rewrite_query_then:retriever_two": "00000000000000000000000000000003.0.8992241767805405"
                     },
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {
-                    "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-                    "retriever_two": {"docs": ["doc3", "doc4"]},
-                },
                 "thread_id": "1",
                 "step": 2,
                 "parents": {},
@@ -1357,11 +1309,9 @@ SAVED_CHECKPOINTS = {
                         "start:rewrite_query": "00000000000000000000000000000002.0.32002588286540445"
                     },
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {"rewrite_query": {"query": "query: what is weather in sf"}},
                 "thread_id": "1",
                 "step": 1,
                 "parents": {},
@@ -1419,11 +1369,9 @@ SAVED_CHECKPOINTS = {
                         "__start__": "00000000000000000000000000000001.0.6759219622820284"
                     },
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": None,
                 "thread_id": "1",
                 "step": 0,
                 "parents": {},
@@ -1470,11 +1418,9 @@ SAVED_CHECKPOINTS = {
                     "__start__": "00000000000000000000000000000001.0.6759219622820284"
                 },
                 "versions_seen": {"__input__": {}},
-                "pending_sends": [],
             },
             metadata={
                 "source": "input",
-                "writes": {"__start__": {"query": "what is weather in sf"}},
                 "thread_id": "1",
                 "step": -1,
                 "parents": {},
@@ -1595,7 +1541,9 @@ def test_latest_checkpoint_state_graph(
     app = builder.compile(checkpointer=sync_checkpointer)
     config = {"configurable": {"thread_id": "1"}}
 
-    assert [*app.stream({"query": "what is weather in sf"}, config)] == [
+    assert [
+        *app.stream({"query": "what is weather in sf"}, config, checkpoint_during=True)
+    ] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
@@ -1611,7 +1559,7 @@ def test_latest_checkpoint_state_graph(
         },
     ]
 
-    assert [*app.stream(Command(resume=""), config)] == [
+    assert [*app.stream(Command(resume=""), config, checkpoint_during=True)] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
 
@@ -1636,7 +1584,10 @@ async def test_latest_checkpoint_state_graph_async(
     config = {"configurable": {"thread_id": "1"}}
 
     assert [
-        c async for c in app.astream({"query": "what is weather in sf"}, config)
+        c
+        async for c in app.astream(
+            {"query": "what is weather in sf"}, config, checkpoint_during=True
+        )
     ] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
@@ -1653,7 +1604,9 @@ async def test_latest_checkpoint_state_graph_async(
         },
     ]
 
-    assert [c async for c in app.astream(Command(resume=""), config)] == [
+    assert [
+        c async for c in app.astream(Command(resume=""), config, checkpoint_during=True)
+    ] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
 
