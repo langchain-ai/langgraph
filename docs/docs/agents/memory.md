@@ -88,7 +88,7 @@ ny_response = agent.invoke(
 
 When the agent is invoked the second time with the same `thread_id`, the original message history from the first conversation is automatically included, allowing the agent to infer that the user is asking specifically about the **weather** in New York.
 
-!!! Note "LangGraph Platform providers a production-ready checkpointer"
+!!! Note "LangGraph Platform provides a production-ready checkpointer"
 
     If you're using [LangGraph Platform](./deployment.md), during deployment your checkpointer will be automatically configured to use a production-ready database.
 
