@@ -86,12 +86,18 @@ function getRunMetadataFromResponse(
   };
 }
 
+export type RequestHook = (
+  url: URL,
+  init: RequestInit,
+) => Promise<RequestInit> | RequestInit;
+
 export interface ClientConfig {
   apiUrl?: string;
   apiKey?: string;
   callerOptions?: AsyncCallerParams;
   timeoutMs?: number;
   defaultHeaders?: Record<string, string | null | undefined>;
+  onRequest?: RequestHook;
 }
 
 class BaseClient {
@@ -102,6 +108,8 @@ class BaseClient {
   protected apiUrl: string;
 
   protected defaultHeaders: Record<string, string | null | undefined>;
+
+  protected onRequest?: RequestHook;
 
   constructor(config?: ClientConfig) {
     const callerOptions = {
@@ -136,6 +144,7 @@ class BaseClient {
     // Regex to remove trailing slash, if present
     this.apiUrl = config?.apiUrl?.replace(/\/$/, "") || defaultApiUrl;
     this.defaultHeaders = config?.defaultHeaders || {};
+    this.onRequest = config?.onRequest;
     const apiKey = getApiKey(config?.apiKey);
     if (apiKey) {
       this.defaultHeaders["X-Api-Key"] = apiKey;
@@ -230,9 +239,14 @@ class BaseClient {
       withResponse?: boolean;
     },
   ): Promise<T | [T, Response]> {
-    const response = await this.asyncCaller.fetch(
-      ...this.prepareFetchOptions(path, options),
-    );
+    const [url, init] = this.prepareFetchOptions(path, options);
+
+    let finalInit = init;
+    if (this.onRequest) {
+      finalInit = await this.onRequest(url, init);
+    }
+
+    const response = await this.asyncCaller.fetch(url, finalInit);
 
     const body = (() => {
       if (response.status === 202 || response.status === 204) {

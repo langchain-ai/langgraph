@@ -1,4 +1,5 @@
-export { Client } from "./client.js";
+export { Client, getApiKey } from "./client.js";
+export type { ClientConfig, RequestHook } from "./client.js";
 
 export type {
   AssistantBase,
