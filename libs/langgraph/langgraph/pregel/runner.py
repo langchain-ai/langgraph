@@ -40,6 +40,7 @@ from langgraph.types import (
     RetryPolicy,
 )
 from langgraph.utils.future import chain_future, run_coroutine_threadsafe
+from langgraph.pregel.timeout import with_timeout
 
 F = TypeVar("F", concurrent.futures.Future, asyncio.Future)
 E = TypeVar("E", threading.Event, asyncio.Event)
@@ -447,6 +448,17 @@ class PregelRunner:
             # save task writes to checkpointer
             self.put_writes()(task.id, task.writes)  # type: ignore[misc]
 
+    async def run_task(self, task: PregelExecutableTask) -> None:
+        """Run a task and handle its result."""
+        try:
+            if self.timeout is not None:
+                result = await with_timeout(self.timeout, task.proc.invoke(task.input, task.config), handle_parent_command=True)
+            else:
+                result = await task.proc.invoke(task.input, task.config)
+            self.callback(task, result)
+        except Exception as e:
+            self.callback(task, e)
+
 
 def _should_stop_others(
     done: set[F],
@@ -609,7 +621,7 @@ def _acall(
     cache_policy: Optional[CachePolicy] = None,
     callbacks: Callbacks = None,
     # injected dependencies
-    futures: weakref.ref[FuturesDict],
+    futures: weakref.ref[FuturesDict[asyncio.Future, asyncio.Event]],
     schedule_task: Callable[
         [PregelExecutableTask, int, Optional[Call]],
         Awaitable[Optional[PregelExecutableTask]],
