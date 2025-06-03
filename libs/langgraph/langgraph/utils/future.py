@@ -194,7 +194,7 @@ def run_coroutine_threadsafe(
 ) -> asyncio.Future[T]:
     """Submit a coroutine object to a given event loop.
 
-    Return a asyncio.Future to access the result.
+    Return an asyncio.Future to access the result.
     """
 
     if asyncio._get_running_loop() is loop:
