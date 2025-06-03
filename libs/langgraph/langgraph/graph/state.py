@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import inspect
 import logging
 import typing
@@ -10,9 +12,11 @@ from types import FunctionType
 from typing import (
     Any,
     Callable,
+    Generic,
     Literal,
     NamedTuple,
     Optional,
+    Protocol,
     Union,
     cast,
     get_args,
@@ -23,7 +27,7 @@ from typing import (
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel
-from typing_extensions import Self
+from typing_extensions import Self, TypeAlias
 
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
@@ -65,14 +69,23 @@ from langgraph.pregel.write import (
     ChannelWriteTupleEntry,
 )
 from langgraph.store.base import BaseStore
-from langgraph.types import All, CachePolicy, Checkpointer, Command, RetryPolicy, Send
+from langgraph.types import (
+    All,
+    CachePolicy,
+    Checkpointer,
+    Command,
+    RetryPolicy,
+    Send,
+    StreamWriter,
+)
+from langgraph.typing import InputT, StateT, StateT_contra, Unset
 from langgraph.utils.fields import (
     get_cached_annotated_keys,
     get_field_default,
     get_update_as_tuples,
 )
 from langgraph.utils.pydantic import create_model
-from langgraph.utils.runnable import RunnableLike, coerce_to_runnable
+from langgraph.utils.runnable import coerce_to_runnable
 
 logger = logging.getLogger(__name__)
 
@@ -89,17 +102,77 @@ def _warn_invalid_state_schema(schema: Union[type[Any], Any]) -> None:
     )
 
 
-def _get_node_name(node: RunnableLike) -> str:
-    if isinstance(node, Runnable):
-        return node.get_name()
-    elif callable(node):
+class _StateNode(Protocol[StateT_contra]):
+    def __call__(self, state: StateT_contra) -> Any: ...
+
+
+class _NodeWithConfig(Protocol[StateT_contra]):
+    def __call__(self, state: StateT_contra, config: RunnableConfig) -> Any: ...
+
+
+class _NodeWithWriter(Protocol[StateT_contra]):
+    def __call__(self, state: StateT_contra, *, writer: StreamWriter) -> Any: ...
+
+
+class _NodeWithStore(Protocol[StateT_contra]):
+    def __call__(self, state: StateT_contra, *, store: BaseStore) -> Any: ...
+
+
+class _NodeWithWriterStore(Protocol[StateT_contra]):
+    def __call__(
+        self, state: StateT_contra, *, writer: StreamWriter, store: BaseStore
+    ) -> Any: ...
+
+
+class _NodeWithConfigWriter(Protocol[StateT_contra]):
+    def __call__(
+        self, state: StateT_contra, *, config: RunnableConfig, writer: StreamWriter
+    ) -> Any: ...
+
+
+class _NodeWithConfigStore(Protocol[StateT_contra]):
+    def __call__(
+        self, state: StateT_contra, *, config: RunnableConfig, store: BaseStore
+    ) -> Any: ...
+
+
+class _NodeWithConfigWriterStore(Protocol[StateT_contra]):
+    def __call__(
+        self,
+        state: StateT_contra,
+        *,
+        config: RunnableConfig,
+        writer: StreamWriter,
+        store: BaseStore,
+    ) -> Any: ...
+
+
+# TODO: we probably don't want to explicitly support the config / store signatures once
+# we move to adding a context arg. Maybe what we do is we add support for kwargs with param spec
+# this is purely for typing purposes though, so can easily change in the coming weeks.
+StateNode: TypeAlias = Union[
+    _StateNode[StateT_contra],
+    _NodeWithConfig[StateT_contra],
+    _NodeWithWriter[StateT_contra],
+    _NodeWithStore[StateT_contra],
+    _NodeWithWriterStore[StateT_contra],
+    _NodeWithConfigWriter[StateT_contra],
+    _NodeWithConfigStore[StateT_contra],
+    _NodeWithConfigWriterStore[StateT_contra],
+]
+
+
+def _get_node_name(node: StateNode) -> str:
+    try:
         return getattr(node, "__name__", node.__class__.__name__)
-    else:
+    except AttributeError:
         raise TypeError(f"Unsupported node type: {type(node)}")
 
 
 class StateNodeSpec(NamedTuple):
-    runnable: Runnable
+    # TODO: rename this callable, also move away from NamedTuple so that we can use
+    # a generic StateNode, so maybe a dataclass
+    runnable: StateNode
     metadata: Optional[dict[str, Any]]
     input: type[Any]
     retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]]
@@ -108,7 +181,7 @@ class StateNodeSpec(NamedTuple):
     defer: bool = False
 
 
-class StateGraph:
+class StateGraph(Generic[StateT, InputT]):
     """A graph whose nodes communicate by reading and writing to a shared state.
     The signature of each node is State -> Partial<State>.
 
@@ -169,16 +242,14 @@ class StateGraph:
 
     def __init__(
         self,
-        state_schema: type[Any],
-        config_schema: Optional[type[Any]] = None,
+        state_schema: type[StateT],
+        config_schema: type[Any] | None = None,
         *,
-        input: Optional[type[Any]] = None,
-        output: Optional[type[Any]] = None,
+        input: type[InputT] | None = None,
+        output: type[Any] | None = None,
     ) -> None:
-        if input is None:
-            input = state_schema
-        if output is None:
-            output = state_schema
+        input = input or state_schema
+        output = output or state_schema
 
         self.nodes = {}
         self.edges = set[tuple[str, str]]()
@@ -238,7 +309,7 @@ class StateGraph:
     @overload
     def add_node(
         self,
-        node: RunnableLike,
+        node: StateNode[StateT],
         *,
         defer: bool = False,
         metadata: Optional[dict[str, Any]] = None,
@@ -256,7 +327,7 @@ class StateGraph:
     def add_node(
         self,
         node: str,
-        action: RunnableLike,
+        action: StateNode[StateT],
         *,
         defer: bool = False,
         metadata: Optional[dict[str, Any]] = None,
@@ -270,8 +341,8 @@ class StateGraph:
 
     def add_node(
         self,
-        node: Union[str, RunnableLike],
-        action: Optional[RunnableLike] = None,
+        node: Union[str, StateNode[StateT]],
+        action: Optional[StateNode[StateT]] = None,
         *,
         defer: bool = False,
         metadata: Optional[dict[str, Any]] = None,
@@ -417,7 +488,7 @@ class StateGraph:
         if input is not None:
             self._add_schema(input)
         self.nodes[node] = StateNodeSpec(
-            coerce_to_runnable(action, name=node, trace=False),
+            coerce_to_runnable(action, name=node, trace=False),  # type: ignore
             metadata,
             input=input or self.schema,
             retry_policy=retry,
@@ -531,12 +602,12 @@ class StateGraph:
 
     def add_sequence(
         self,
-        nodes: Sequence[Union[RunnableLike, tuple[str, RunnableLike]]],
+        nodes: Sequence[Union[StateNode[StateT], tuple[str, StateNode[StateT]]]],
     ) -> Self:
         """Add a sequence of nodes that will be executed in the provided order.
 
         Args:
-            nodes: A sequence of RunnableLike objects (e.g. a LangChain Runnable or a callable) or (name, RunnableLike) tuples.
+            nodes: A sequence of StateNodes (callables that accept a state arg) or (name, StateNode) tuples.
                 If no names are provided, the name will be inferred from the node object (e.g. a runnable or a callable name).
                 Each node will be executed in the order provided.
 
@@ -669,6 +740,32 @@ class StateGraph:
         self.compiled = True
         return self
 
+    @overload
+    def compile(
+        self: StateGraph[StateT, Unset],
+        checkpointer: Checkpointer = None,
+        *,
+        cache: Optional[BaseCache] = None,
+        store: Optional[BaseStore] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
+        debug: bool = False,
+        name: Optional[str] = None,
+    ) -> CompiledStateGraph[StateT, StateT]: ...
+
+    @overload
+    def compile(
+        self: StateGraph[StateT, InputT],
+        checkpointer: Checkpointer = None,
+        *,
+        cache: Optional[BaseCache] = None,
+        store: Optional[BaseStore] = None,
+        interrupt_before: Optional[Union[All, list[str]]] = None,
+        interrupt_after: Optional[Union[All, list[str]]] = None,
+        debug: bool = False,
+        name: Optional[str] = None,
+    ) -> CompiledStateGraph[StateT, InputT]: ...
+
     def compile(
         self,
         checkpointer: Checkpointer = None,
@@ -679,7 +776,7 @@ class StateGraph:
         interrupt_after: Optional[Union[All, list[str]]] = None,
         debug: bool = False,
         name: Optional[str] = None,
-    ) -> "CompiledStateGraph":
+    ) -> Union[CompiledStateGraph[StateT, StateT], CompiledStateGraph[StateT, InputT]]:
         """Compiles the state graph into a `CompiledStateGraph` object.
 
         The compiled graph implements the `Runnable` interface and can be invoked,
@@ -731,7 +828,8 @@ class StateGraph:
             ]
         )
 
-        compiled = CompiledStateGraph(
+        ResolvedInputT: Union[type[InputT], type[StateT]] = self.input or self.schema
+        compiled = CompiledStateGraph[StateT, ResolvedInputT](  # type: ignore[valid-type]
             builder=self,
             schema_to_mapper={},
             config_type=self.config_schema,
@@ -779,14 +877,14 @@ class StateGraph:
         return compiled.validate()
 
 
-class CompiledStateGraph(Pregel):
-    builder: StateGraph
+class CompiledStateGraph(Pregel[InputT], Generic[StateT, InputT]):
+    builder: StateGraph[StateT, InputT]
     schema_to_mapper: dict[type[Any], Optional[Callable[[Any], Any]]]
 
     def __init__(
         self,
         *,
-        builder: StateGraph,
+        builder: StateGraph[StateT, InputT],
         schema_to_mapper: dict[type[Any], Optional[Callable[[Any], Any]]],
         **kwargs: Any,
     ) -> None:
@@ -915,7 +1013,7 @@ class CompiledStateGraph(Pregel):
                 metadata=node.metadata,
                 retry_policy=node.retry_policy,
                 cache_policy=node.cache_policy,
-                bound=node.runnable,
+                bound=node.runnable,  # type: ignore[arg-type]
             )
         else:
             raise RuntimeError
