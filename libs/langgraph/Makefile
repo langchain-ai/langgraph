@@ -56,15 +56,22 @@ stop-dev-server:
 	fi
 
 TEST ?= .
+NO_DOCKER ?= $(sh command -v docker >/dev/null 2>&1 && echo "false" || echo "true")
 
 test:
-	make start-postgres &&\
-	make start-dev-server &&\
-	uv run pytest $(TEST); \
-	EXIT_CODE=$$?; \
-	make stop-postgres; \
-	make stop-dev-server; \
-	exit $$EXIT_CODE
+	if [ "$(NO_DOCKER)" = "false" ]; then \
+		make start-postgres &&\
+		make start-dev-server &&\
+		uv run pytest $(TEST); \
+		EXIT_CODE=$$?; \
+		make stop-postgres; \
+		make stop-dev-server; \
+		exit $$EXIT_CODE; \
+	else \
+		NO_DOCKER=true uv run pytest $(TEST) ; \
+		EXIT_CODE=$$?; \
+		exit $$EXIT_CODE; \
+	fi
 
 test_parallel:
 	make start-postgres &&\
