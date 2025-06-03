@@ -30,7 +30,7 @@ def test_typed_dict_state() -> None:
     graph = graph_builder.compile()
 
     graph.invoke({"info": ["hello", "world"]})
-    graph.invoke({"invalid": 1})  # type: ignore[arg-type]
+    graph.invoke({"invalid": "lalala"})  # type: ignore[arg-type]
 
 
 def test_dataclass_state() -> None:
@@ -54,7 +54,7 @@ def test_dataclass_state() -> None:
 
     graph.invoke(DataclassState(info=["hello", "world"]))
     graph.invoke({"invalid": 1})  # type: ignore[arg-type]
-    graph.invoke({"info": 1})  # type: ignore[arg-type]
+    graph.invoke({"info": ["hello", "world"]})  # type: ignore[arg-type]
 
 
 def test_base_model_state() -> None:
