@@ -276,14 +276,13 @@ def _is_not_empty(value: Any) -> bool:
 
 
 def ensure_config(*configs: Optional[RunnableConfig]) -> RunnableConfig:
-    """Ensure that a config is a dict with all keys present.
+    """Return a config with all keys, merging any provided configs.
 
     Args:
-        config (Optional[RunnableConfig], optional): The config to ensure.
-          Defaults to None.
+        *configs: Configs to merge before ensuring defaults.
 
     Returns:
-        RunnableConfig: The ensured config.
+        RunnableConfig: The merged and ensured config.
     """
     empty = RunnableConfig(
         tags=[],
