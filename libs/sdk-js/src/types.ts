@@ -42,7 +42,7 @@ export interface Command {
   goto?: Send | Send[] | string | string[];
 }
 
-interface RunsInvokePayload {
+export interface RunsInvokePayload {
   /**
    * Input to the run. Pass `null` to resume from the current state of the thread.
    */
