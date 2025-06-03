@@ -564,7 +564,13 @@ class PregelLoop:
                 "debug",
                 map_debug_checkpoint,
                 self.step - 1,  # printing checkpoint for previous step
-                self.checkpoint_config,
+                {
+                    **self.checkpoint_config,
+                    CONF: {
+                        **self.checkpoint_config[CONF],
+                        CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
+                    },
+                },
                 self.channels,
                 self.stream_keys,
                 self.checkpoint_metadata,
@@ -819,7 +825,6 @@ class PregelLoop:
                 **self.checkpoint_config,
                 CONF: {
                     **self.checkpoint_config[CONF],
-                    # this is guaranteed to be set by code above
                     CONFIG_KEY_CHECKPOINT_NS: self.config[CONF].get(
                         CONFIG_KEY_CHECKPOINT_NS, ""
                     ),
