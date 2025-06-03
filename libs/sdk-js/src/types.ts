@@ -1,3 +1,4 @@
+import { LangChainTracer } from "@langchain/core/tracers/tracer_langchain";
 import { Checkpoint, Config, Metadata } from "./schema.js";
 import { StreamMode } from "./types.stream.js";
 
@@ -145,10 +146,7 @@ interface RunsInvokePayload {
    * @internal
    * For LangSmith tracing purposes only. Not part of the public API.
    */
-  _langsmithTracer?: {
-    project_name: string;
-    example_id: string;
-  };
+  _langsmithTracer?: LangChainTracer;
 }
 
 export interface RunsStreamPayload<
