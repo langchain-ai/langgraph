@@ -27,7 +27,7 @@ export type {
 } from "./schema.js";
 export { overrideFetchImplementation } from "./singletons/fetch.js";
 
-export type { OnConflictBehavior, Command } from "./types.js";
+export type { OnConflictBehavior, Command, RunsInvokePayload } from "./types.js";
 export type { StreamMode } from "./types.stream.js";
 export type {
   ValuesStreamEvent,
