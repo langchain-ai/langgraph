@@ -979,6 +979,7 @@ export class RunsClient<
       after_seconds: payload?.afterSeconds,
       if_not_exists: payload?.ifNotExists,
       checkpoint_during: payload?.checkpointDuring,
+      langsmith_tracer: payload?._langsmithTracer,
     };
 
     const [run, response] = await this.fetch<Run>(`/threads/${threadId}/runs`, {
@@ -1059,6 +1060,12 @@ export class RunsClient<
       after_seconds: payload?.afterSeconds,
       if_not_exists: payload?.ifNotExists,
       checkpoint_during: payload?.checkpointDuring,
+      langsmith_tracer: payload?._langsmithTracer
+        ? {
+            project_name: payload?._langsmithTracer?.projectName,
+            example_id: payload?._langsmithTracer?.exampleId,
+          }
+        : undefined,
     };
     const endpoint =
       threadId == null ? `/runs/wait` : `/threads/${threadId}/runs/wait`;

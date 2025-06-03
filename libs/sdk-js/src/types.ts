@@ -1,3 +1,4 @@
+import { LangChainTracer } from "@langchain/core/tracers/tracer_langchain";
 import { Checkpoint, Config, Metadata } from "./schema.js";
 import { StreamMode } from "./types.stream.js";
 
@@ -41,7 +42,7 @@ export interface Command {
   goto?: Send | Send[] | string | string[];
 }
 
-interface RunsInvokePayload {
+export interface RunsInvokePayload {
   /**
    * Input to the run. Pass `null` to resume from the current state of the thread.
    */
@@ -140,6 +141,12 @@ interface RunsInvokePayload {
    * Callback when a run is created.
    */
   onRunCreated?: (params: { run_id: string; thread_id?: string }) => void;
+
+  /**
+   * @internal
+   * For LangSmith tracing purposes only. Not part of the public API.
+   */
+  _langsmithTracer?: LangChainTracer;
 }
 
 export interface RunsStreamPayload<
