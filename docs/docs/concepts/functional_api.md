@@ -186,7 +186,7 @@ When declaring an `entrypoint`, you can request access to additional parameters 
 
 | Parameter    | Description                                                                                                                                                        |
 |--------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **previous** | Access the the state associated with the previous `checkpoint` for the given thread. See [short-term-memory](#short-term-memory).                                  |
+| **previous** | Access the state associated with the previous `checkpoint` for the given thread. See [short-term-memory](#short-term-memory).                                  |
 | **store**    | An instance of [BaseStore][langgraph.store.base.BaseStore]. Useful for [long-term memory](../how-tos/use-functional-api.md#long-term-memory).                      |
 | **writer**   | Use to access the StreamWriter when working with Async Python < 3.11. See [streaming with functional API for details](../how-tos/use-functional-api.md#streaming). |
 | **config**   | For accessing run time configuration. See [RunnableConfig](https://python.langchain.com/docs/concepts/runnables/#runnableconfig) for information.                  |
