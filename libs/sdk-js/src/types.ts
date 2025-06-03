@@ -140,6 +140,15 @@ interface RunsInvokePayload {
    * Callback when a run is created.
    */
   onRunCreated?: (params: { run_id: string; thread_id?: string }) => void;
+
+  /**
+   * @internal
+   * For LangSmith tracing purposes only. Not part of the public API.
+   */
+  _langsmithTracer?: {
+    project_name: string;
+    example_id: string;
+  };
 }
 
 export interface RunsStreamPayload<
