@@ -433,7 +433,7 @@ class PostgresSaver(BasePostgresSaver):
                 Will be applied regardless of whether the PostgresSaver instance was initialized with a pipeline.
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
-        with _internal.get_connection(self.conn) as conn:
+        with self.lock, _internal.get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
                 # in multiple threads/coroutines, but only one cursor can be
@@ -449,7 +449,6 @@ class PostgresSaver(BasePostgresSaver):
                 # thread/coroutine at a time, so we acquire a lock
                 if self.supports_pipeline:
                     with (
-                        self.lock,
                         conn.pipeline(),
                         conn.cursor(binary=True, row_factory=dict_row) as cur,
                     ):
@@ -457,13 +456,12 @@ class PostgresSaver(BasePostgresSaver):
                 else:
                     # Use connection's transaction context manager when pipeline mode not supported
                     with (
-                        self.lock,
                         conn.transaction(),
                         conn.cursor(binary=True, row_factory=dict_row) as cur,
                     ):
                         yield cur
             else:
-                with self.lock, conn.cursor(binary=True, row_factory=dict_row) as cur:
+                with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
 
