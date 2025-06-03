@@ -1,3 +1,4 @@
+import os
 from collections.abc import AsyncIterator, Iterator
 from uuid import UUID
 
@@ -31,6 +32,8 @@ from tests.conftest_store import (
     _store_postgres_pool,
 )
 
+NO_DOCKER = os.getenv("NO_DOCKER", "false") == "true"
+
 
 @pytest.fixture
 def anyio_backend():
@@ -62,7 +65,9 @@ def cache(request: pytest.FixtureRequest) -> Iterator[BaseCache]:
 
 @pytest.fixture(
     scope="function",
-    params=["in_memory", "postgres", "postgres_pipe", "postgres_pool"],
+    params=["in_memory"]
+    if NO_DOCKER
+    else ["in_memory", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def sync_store(request: pytest.FixtureRequest) -> Iterator[BaseStore]:
     store_name = request.param
@@ -86,7 +91,9 @@ def sync_store(request: pytest.FixtureRequest) -> Iterator[BaseStore]:
 
 @pytest.fixture(
     scope="function",
-    params=["in_memory", "postgres_aio", "postgres_aio_pipe", "postgres_aio_pool"],
+    params=["in_memory"]
+    if NO_DOCKER
+    else ["in_memory", "postgres_aio", "postgres_aio_pipe", "postgres_aio_pool"],
 )
 async def async_store(request: pytest.FixtureRequest) -> AsyncIterator[BaseStore]:
     store_name = request.param
@@ -111,6 +118,12 @@ async def async_store(request: pytest.FixtureRequest) -> AsyncIterator[BaseStore
 @pytest.fixture(
     scope="function",
     params=[
+        "memory",
+        "sqlite",
+        "sqlite_aes",
+    ]
+    if NO_DOCKER
+    else [
         "memory",
         "sqlite",
         "sqlite_aes",
@@ -148,6 +161,11 @@ def sync_checkpointer(
 @pytest.fixture(
     scope="function",
     params=[
+        "memory",
+        "sqlite_aio",
+    ]
+    if NO_DOCKER
+    else [
         "memory",
         "sqlite_aio",
         "postgres_aio",

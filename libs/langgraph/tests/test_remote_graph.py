@@ -17,7 +17,14 @@ from langgraph.pregel import Pregel
 from langgraph.pregel.remote import RemoteGraph
 from langgraph.pregel.types import StateSnapshot
 from langgraph.types import Interrupt
+from tests.conftest import NO_DOCKER
 from tests.example_app.example_graph import app
+
+if NO_DOCKER:
+    pytest.skip(
+        "Skipping tests that require Docker. Unset NO_DOCKER to run them.",
+        allow_module_level=True,
+    )
 
 pytestmark = pytest.mark.anyio
 
