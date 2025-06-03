@@ -39,6 +39,49 @@ import { getEnvironmentVariable } from "./utils/env.js";
 import { mergeSignals } from "./utils/signals.js";
 import { BytesLineDecoder, SSEDecoder } from "./utils/sse.js";
 import { IterableReadableStream } from "./utils/stream.js";
+
+function mergeHeadersCaseInsensitive(
+  ...headerObjects: (
+    | HeadersInit
+    | Record<string, string | null | undefined>
+    | undefined
+    | null
+  )[]
+): Record<string, string> {
+  const normalize = (
+    headers:
+      | HeadersInit
+      | Record<string, string | null | undefined>
+      | undefined
+      | null,
+  ) => {
+    if (!headers) return {};
+    if (Array.isArray(headers)) return Object.fromEntries(headers);
+    if (
+      typeof headers === "object" &&
+      "forEach" in headers &&
+      typeof headers.forEach === "function"
+    ) {
+      const result: Record<string, string> = {};
+      (headers as Headers).forEach((value, key) => {
+        result[key] = value;
+      });
+      return result;
+    }
+    return headers as Record<string, string>;
+  };
+
+  return Object.fromEntries(
+    headerObjects
+      .map(normalize)
+      .flatMap(Object.entries)
+      .reduce((acc, [k, v]) => {
+        if (v != null) acc.set(k.toLowerCase(), v);
+        return acc;
+      }, new Map<string, string>()),
+  );
+}
+
 /**
  * Get the API key from the environment.
  * Precedence:
@@ -147,7 +190,7 @@ class BaseClient {
     this.onRequest = config?.onRequest;
     const apiKey = getApiKey(config?.apiKey);
     if (apiKey) {
-      this.defaultHeaders["X-Api-Key"] = apiKey;
+      this.defaultHeaders["x-api-key"] = apiKey;
     }
   }
 
@@ -162,15 +205,18 @@ class BaseClient {
   ): [url: URL, init: RequestInit] {
     const mutatedOptions = {
       ...options,
-      headers: { ...this.defaultHeaders, ...options?.headers },
+      headers: mergeHeadersCaseInsensitive(
+        this.defaultHeaders,
+        options?.headers,
+      ),
     };
 
     if (mutatedOptions.json) {
       mutatedOptions.body = JSON.stringify(mutatedOptions.json);
-      mutatedOptions.headers = {
-        ...mutatedOptions.headers,
-        "Content-Type": "application/json",
-      };
+      mutatedOptions.headers = mergeHeadersCaseInsensitive(
+        mutatedOptions.headers,
+        { "content-type": "application/json" },
+      );
       delete mutatedOptions.json;
     }
 
@@ -693,7 +739,6 @@ export class ThreadsClient<
     offset?: number;
     /**
      * Thread status to filter on.
-     * Must be one of 'idle', 'busy', 'interrupted' or 'error'.
      */
     status?: ThreadStatus;
     /**
