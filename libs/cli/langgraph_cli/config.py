@@ -466,7 +466,10 @@ RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir --no-deps -e /api
 # -- Removing pip from the final image ~<:===~~~ --
 RUN pip uninstall -y pip setuptools wheel && \
     rm -rf /usr/local/lib/python*/site-packages/pip* /usr/local/lib/python*/site-packages/setuptools* /usr/local/lib/python*/site-packages/wheel* && \
-    find /usr/local/bin -name "pip*" -delete
+    find /usr/local/bin -name "pip*" -delete || true
+# pip removal for wolfi
+RUN rm -rf /usr/lib/python*/site-packages/pip* /usr/lib/python*/site-packages/setuptools* /usr/lib/python*/site-packages/wheel* && \
+    find /usr/bin -name "pip*" -delete || true
 # -- End of pip removal --"""
 
 
@@ -1104,8 +1107,6 @@ def python_config_to_docker(
         else ""
     )
 
-    docker_tag = config.get("_INTERNAL_docker_tag") or config["python_version"]
-
     # collect dependencies
     pypi_deps = [dep for dep in config["dependencies"] if not dep.startswith(".")]
     local_deps = _assemble_local_deps(config_path, config)
@@ -1224,10 +1225,7 @@ ADD {relpath} /deps/{name}
                 "# -- End of JS dependencies install --",
             ]
         )
-    if "/langgraph-server" in base_image:
-        image_str = f"{base_image}-py{docker_tag}"
-    else:
-        image_str = f"{base_image}:{docker_tag}"
+    image_str = docker_tag(config, base_image)
     docker_file_contents = [
         f"FROM {image_str}",
         "",
@@ -1267,7 +1265,7 @@ def node_config_to_docker(
 ) -> tuple[str, dict[str, str]]:
     faux_path = f"/deps/{config_path.parent.name}"
     install_cmd = _get_node_pm_install_cmd(config_path, config)
-    docker_tag = config.get("_INTERNAL_docker_tag") or config["node_version"]
+    image_str = docker_tag(config, base_image)
 
     env_vars: list[str] = []
 
@@ -1294,7 +1292,7 @@ def node_config_to_docker(
     env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
 
     docker_file_contents = [
-        f"FROM {base_image}:{docker_tag}",
+        f"FROM {image_str}",
         "",
         os.linesep.join(config["dockerfile_lines"]),
         "",
