@@ -263,7 +263,7 @@ def get_async_callback_manager_for_config(
         # otherwise create a new manager
         return AsyncCallbackManager.configure(
             inheritable_callbacks=config.get("callbacks"),
-            inheritable_tags=config.get("tags"),
+            inheritable_tags=all_tags,
             inheritable_metadata=config.get("metadata"),
         )
 
