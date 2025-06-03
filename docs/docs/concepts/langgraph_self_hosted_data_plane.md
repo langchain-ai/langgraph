@@ -37,4 +37,4 @@ For information on how to deploy a [LangGraph Server](../concepts/langgraph_serv
 - **Amazon ECS**: Coming soon!
 
 !!! tip
-    If you would like to deploy to Kubernetes, you can use this [Helm chart](https://github.com/langchain-ai/helm/blob/main/charts/langgraph-cloud/README.md).
+    If you would like to deploy to Kubernetes, you can follow the [Self-Hosted Data Plane deployment guide](../cloud/deployment/self_hosted_data_plane.md).
