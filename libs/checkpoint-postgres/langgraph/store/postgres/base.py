@@ -321,9 +321,7 @@ class BasePostgresStore(Generic[C]):
                 )
                 params = (_namespace_to_text(namespace), *keys)
                 queries.append((query, params))
-        embedding_request: tuple[str, Sequence[tuple[str, str, str, str]]] | None = (
-            None
-        )
+        embedding_request: tuple[str, Sequence[tuple[str, str, str, str]]] | None = None
         if inserts:
             values = []
             insertion_params = []
