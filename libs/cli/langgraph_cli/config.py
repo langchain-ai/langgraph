@@ -13,6 +13,8 @@ DEFAULT_NODE_VERSION = "20"
 MIN_PYTHON_VERSION = "3.11"
 DEFAULT_PYTHON_VERSION = "3.11"
 
+DEFAULT_IMAGE_DISTRO = "debian"
+
 
 class TTLConfig(TypedDict, total=False):
     """Configuration for TTL (time-to-live) behavior in the store."""
@@ -367,6 +369,12 @@ class Config(TypedDict, total=False):
     
     Defaults to langchain/langgraph-api or langchain/langgraphjs-api."""
 
+    image_distro: Optional[str]
+    """Optional. Linux distribution for the base image.
+    
+    Must be either 'debian' or 'wolfi'. If omitted, defaults to 'debian'.
+    """
+
     pip_config_file: Optional[str]
     """Optional. Path to a pip config file (e.g., "/etc/pip.conf" or "pip.ini") for controlling
     package installation (custom indices, credentials, etc.).
@@ -458,7 +466,10 @@ RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir --no-deps -e /api
 # -- Removing pip from the final image ~<:===~~~ --
 RUN pip uninstall -y pip setuptools wheel && \
     rm -rf /usr/local/lib/python*/site-packages/pip* /usr/local/lib/python*/site-packages/setuptools* /usr/local/lib/python*/site-packages/wheel* && \
-    find /usr/local/bin -name "pip*" -delete
+    find /usr/local/bin -name "pip*" -delete || true
+# pip removal for wolfi
+RUN rm -rf /usr/lib/python*/site-packages/pip* /usr/lib/python*/site-packages/setuptools* /usr/lib/python*/site-packages/wheel* && \
+    find /usr/bin -name "pip*" -delete || true
 # -- End of pip removal --"""
 
 
@@ -517,12 +528,15 @@ def validate_config(config: Config) -> Config:
         "python_version", DEFAULT_PYTHON_VERSION if some_python else None
     )
 
+    image_distro = config.get("image_distro", DEFAULT_IMAGE_DISTRO)
+
     config = {
         "node_version": node_version,
         "python_version": python_version,
         "pip_config_file": config.get("pip_config_file"),
         "_INTERNAL_docker_tag": config.get("_INTERNAL_docker_tag"),
         "base_image": config.get("base_image"),
+        "image_distro": image_distro,
         "dependencies": config.get("dependencies", []),
         "dockerfile_lines": config.get("dockerfile_lines", []),
         "graphs": config.get("graphs", {}),
@@ -575,6 +589,14 @@ def validate_config(config: Config) -> Config:
             "No graphs found in config. "
             "Add at least one graph to 'graphs' dictionary."
         )
+
+    # Validate image_distro config
+    if image_distro := config.get("image_distro"):
+        if image_distro not in ["debian", "wolfi"]:
+            raise click.UsageError(
+                f"Invalid image_distro: '{image_distro}'. "
+                "Must be either 'debian' or 'wolfi'."
+            )
 
     # Validate auth config
     if auth_conf := config.get("auth"):
@@ -1085,8 +1107,6 @@ def python_config_to_docker(
         else ""
     )
 
-    docker_tag = config.get("_INTERNAL_docker_tag") or config["python_version"]
-
     # collect dependencies
     pypi_deps = [dep for dep in config["dependencies"] if not dep.startswith(".")]
     local_deps = _assemble_local_deps(config_path, config)
@@ -1205,10 +1225,7 @@ ADD {relpath} /deps/{name}
                 "# -- End of JS dependencies install --",
             ]
         )
-    if "/langgraph-server" in base_image:
-        image_str = f"{base_image}-py{docker_tag}"
-    else:
-        image_str = f"{base_image}:{docker_tag}"
+    image_str = docker_tag(config, base_image)
     docker_file_contents = [
         f"FROM {image_str}",
         "",
@@ -1248,7 +1265,7 @@ def node_config_to_docker(
 ) -> tuple[str, dict[str, str]]:
     faux_path = f"/deps/{config_path.parent.name}"
     install_cmd = _get_node_pm_install_cmd(config_path, config)
-    docker_tag = config.get("_INTERNAL_docker_tag") or config["node_version"]
+    image_str = docker_tag(config, base_image)
 
     env_vars: list[str] = []
 
@@ -1275,7 +1292,7 @@ def node_config_to_docker(
     env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
 
     docker_file_contents = [
-        f"FROM {base_image}:{docker_tag}",
+        f"FROM {image_str}",
         "",
         os.linesep.join(config["dockerfile_lines"]),
         "",
@@ -1306,6 +1323,10 @@ def docker_tag(
     base_image: Optional[str] = None,
 ) -> str:
     base_image = base_image or default_base_image(config)
+
+    image_distro = config.get("image_distro")
+    distro_tag = "" if image_distro == DEFAULT_IMAGE_DISTRO else f"-{image_distro}"
+
     if config.get("_INTERNAL_docker_tag"):
         return f"{base_image}:{config['_INTERNAL_docker_tag']}"
 
@@ -1313,8 +1334,8 @@ def docker_tag(
         return f"{base_image}-py{config['python_version']}"
 
     if config.get("node_version") and not config.get("python_version"):
-        return f"{base_image}:{config['node_version']}"
-    return f"{base_image}:{config['python_version']}"
+        return f"{base_image}:{config['node_version']}{distro_tag}"
+    return f"{base_image}:{config['python_version']}{distro_tag}"
 
 
 def config_to_docker(

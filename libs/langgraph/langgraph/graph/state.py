@@ -374,8 +374,6 @@ class StateGraph(Generic[StateT, InputT]):
                 If a tuple is provided, the values will be used as the target node names.
                 NOTE: this is only used for graph rendering and doesn't have any effect on the graph execution.
             retry: Deprecated. Please use `retry_policy` instead.
-        Raises:
-            ValueError: If the key is already being used as a state key.
 
         Example:
             ```python
@@ -415,8 +413,6 @@ class StateGraph(Generic[StateT, InputT]):
                 raise ValueError(
                     "Node name must be provided if action is not a function"
                 )
-        if node in self.channels:
-            raise ValueError(f"'{node}' is already being used as a state key")
         if self.compiled:
             logger.warning(
                 "Adding a node to a graph that has already been compiled. This will "

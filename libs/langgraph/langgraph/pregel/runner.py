@@ -431,7 +431,8 @@ class PregelRunner:
                         writes.extend(resumes)
                     self.put_writes()(task.id, writes)  # type: ignore[misc]
             elif isinstance(exception, GraphBubbleUp):
-                raise exception
+                # exception will be raised in _panic_or_proceed
+                pass
             else:
                 # save error to checkpointer
                 task.writes.append((ERROR, exception))

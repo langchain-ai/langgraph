@@ -383,7 +383,7 @@ def update_memory(state: MessagesState, config: RunnableConfig, *, store: BaseSt
 
 ```
 
-As we showed above, we can also access the store in any node and use the `store.search` method to get memories. Recall the the memories are returned as a list of objects that can be converted to a dictionary.
+As we showed above, we can also access the store in any node and use the `store.search` method to get memories. Recall the memories are returned as a list of objects that can be converted to a dictionary.
 
 ```python
 memories[-1].dict()
