@@ -17,6 +17,8 @@ from typing import (
     overload,
 )
 
+from typing_extensions import Unpack
+
 from langgraph.cache.base import BaseCache
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
@@ -35,6 +37,7 @@ from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
 from langgraph.types import _DC_KWARGS, CachePolicy, RetryPolicy, StreamMode
+from langgraph.typing import DeprecatedKwargs
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 
@@ -91,7 +94,7 @@ def task(
     name: Optional[str] = None,
     retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
     cache_policy: Optional[CachePolicy[Callable[P, Union[str, bytes]]]] = None,
-    retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
+    **kwargs: Unpack[DeprecatedKwargs],
 ) -> Callable[
     [Union[Callable[P, Awaitable[T]], Callable[P, T]]],
     TaskFunction[P, T],
@@ -110,8 +113,7 @@ def task(
     name: Optional[str] = None,
     retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
     cache_policy: Optional[CachePolicy[Callable[P, Union[str, bytes]]]] = None,
-    # deprecated in V1
-    retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
+    **kwargs: Unpack[DeprecatedKwargs],
 ) -> Union[
     Callable[
         [Union[Callable[P, Awaitable[T]], Callable[P, T]]],
@@ -137,7 +139,6 @@ def task(
         name: An optional name for the task. If not provided, the function name will be used.
         retry_policy: An optional retry policy (or list of policies) to use for the task in case of a failure.
         cache_policy: An optional cache policy to use for the task. This allows caching of the task results.
-        retry: Deprecated. Use `retry_policy` instead. This argument is kept for backward compatibility.
 
     Returns:
         A callable function when used as a decorator.
@@ -178,13 +179,13 @@ def task(
         await add_one.ainvoke([1, 2, 3])  # Returns [2, 3, 4]
         ```
     """
-    if retry is not None:
+    if (retry := kwargs.get("retry")) is not None:
         warnings.warn(
             "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
             category=LangGraphDeprecatedSinceV10,
         )
         if retry_policy is None:
-            retry_policy = retry
+            retry_policy = retry  # type: ignore[assignment]
 
     retry_policies: Sequence[RetryPolicy] = (
         ()
@@ -260,7 +261,6 @@ class entrypoint:
             passed to the workflow.
         cache_policy: A cache policy to use for caching the results of the workflow.
         retry_policy: A retry policy (or list of policies) to use for the workflow in case of a failure.
-        retry: Deprecated. Use `retry_policy` instead. This argument is kept for backwards compatibility.
 
     Example: Using entrypoint and tasks
         ```python
@@ -382,17 +382,16 @@ class entrypoint:
         config_schema: Optional[type[Any]] = None,
         cache_policy: Optional[CachePolicy] = None,
         retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
-        # deprecated in V1
-        retry: Union[RetryPolicy, Sequence[RetryPolicy]] = (),
+        **kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         """Initialize the entrypoint decorator."""
-        if retry != ():
+        if (retry := kwargs.get("retry")) is not None:
             warnings.warn(
                 "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
                 category=LangGraphDeprecatedSinceV10,
             )
             if retry_policy is None:
-                retry_policy = retry
+                retry_policy = retry  # type: ignore[assignment]
 
         self.checkpointer = checkpointer
         self.store = store

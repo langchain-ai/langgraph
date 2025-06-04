@@ -17,7 +17,7 @@ def test_add_node_retry_arg() -> None:
         LangGraphDeprecatedSinceV10,
         match="`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
     ):
-        builder.add_node("test_node", lambda state: state, retry=RetryPolicy())
+        builder.add_node("test_node", lambda state: state, retry=RetryPolicy())  # type: ignore[arg-type]
 
 
 def test_task_retry_arg() -> None:
@@ -26,7 +26,7 @@ def test_task_retry_arg() -> None:
         match="`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
     ):
 
-        @task(retry=RetryPolicy())
+        @task(retry=RetryPolicy())  # type: ignore[arg-type]
         def my_task(state: PlainState) -> PlainState:
             return state
 
@@ -37,6 +37,6 @@ def test_entrypoint_retry_arg() -> None:
         match="`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
     ):
 
-        @entrypoint(retry=RetryPolicy())
+        @entrypoint(retry=RetryPolicy())  # type: ignore[arg-type]
         def my_entrypoint(state: PlainState) -> PlainState:
             return state

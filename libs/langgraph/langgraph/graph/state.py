@@ -27,7 +27,7 @@ from typing import (
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel
-from typing_extensions import Self, TypeAlias
+from typing_extensions import Self, TypeAlias, Unpack
 
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
@@ -78,7 +78,7 @@ from langgraph.types import (
     Send,
     StreamWriter,
 )
-from langgraph.typing import InputT, StateT, StateT_contra, Unset
+from langgraph.typing import DeprecatedKwargs, InputT, StateT, StateT_contra, Unset
 from langgraph.utils.fields import (
     get_cached_annotated_keys,
     get_field_default,
@@ -318,7 +318,7 @@ class StateGraph(Generic[StateT, InputT]):
         retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
         cache_policy: Optional[CachePolicy] = None,
         destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
-        retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
+        **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the state graph.
         Will take the name of the function/runnable as the node name.
@@ -337,7 +337,7 @@ class StateGraph(Generic[StateT, InputT]):
         retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
         cache_policy: Optional[CachePolicy] = None,
         destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
-        retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
+        **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the state graph."""
         ...
@@ -353,8 +353,7 @@ class StateGraph(Generic[StateT, InputT]):
         retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
         cache_policy: Optional[CachePolicy] = None,
         destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
-        # deprecated in V1
-        retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
+        **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the state graph.
 
@@ -374,7 +373,6 @@ class StateGraph(Generic[StateT, InputT]):
                 If a dict is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
                 If a tuple is provided, the values will be used as the target node names.
                 NOTE: this is only used for graph rendering and doesn't have any effect on the graph execution.
-            retry: Deprecated. Please use `retry_policy` instead.
 
         Example:
             ```python
@@ -404,13 +402,13 @@ class StateGraph(Generic[StateT, InputT]):
         Returns:
             Self: The instance of the state graph, allowing for method chaining.
         """
-        if retry != ():
+        if (retry := kwargs.get("retry")) is not None:
             warnings.warn(
                 "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
                 category=LangGraphDeprecatedSinceV10,
             )
             if retry_policy is None:
-                retry_policy = retry
+                retry_policy = retry  # type: ignore[assignment]
 
         if not isinstance(node, str):
             action = node
