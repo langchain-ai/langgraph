@@ -165,7 +165,7 @@ class PregelRunner:
                         CONFIG_KEY_CALL: partial(
                             _call,
                             weakref.ref(t),
-                            retry=retry_policy,
+                            retry_policy=retry_policy,
                             futures=weakref.ref(futures),
                             schedule_task=schedule_task,
                             submit=self.submit,
@@ -206,7 +206,7 @@ class PregelRunner:
                     CONFIG_KEY_CALL: partial(
                         _call,
                         weakref.ref(t),
-                        retry=retry_policy,
+                        retry_policy=retry_policy,
                         futures=weakref.ref(futures),
                         schedule_task=schedule_task,
                         submit=self.submit,
@@ -300,7 +300,7 @@ class PregelRunner:
                             _acall,
                             weakref.ref(t),
                             stream=self.use_astream,
-                            retry=retry_policy,
+                            retry_policy=retry_policy,
                             futures=weakref.ref(futures),
                             schedule_task=schedule_task,
                             submit=self.submit,
@@ -345,7 +345,7 @@ class PregelRunner:
                         CONFIG_KEY_CALL: partial(
                             _acall,
                             weakref.ref(t),
-                            retry=retry_policy,
+                            retry_policy=retry_policy,
                             stream=self.use_astream,
                             futures=weakref.ref(futures),
                             schedule_task=schedule_task,
@@ -524,7 +524,7 @@ def _call(
     func: Callable[[Any], Union[Awaitable[Any], Any]],
     input: Any,
     *,
-    retry: Optional[Sequence[RetryPolicy]] = None,
+    retry_policy: Optional[Sequence[RetryPolicy]] = None,
     cache_policy: Optional[CachePolicy] = None,
     callbacks: Callbacks = None,
     futures: weakref.ref[FuturesDict],
@@ -543,7 +543,13 @@ def _call(
     if next_task := schedule_task(
         task(),  # type: ignore[arg-type]
         scratchpad.call_counter(),
-        Call(func, input, retry=retry, cache_policy=cache_policy, callbacks=callbacks),
+        Call(
+            func,
+            input,
+            retry_policy=retry_policy,
+            cache_policy=cache_policy,
+            callbacks=callbacks,
+        ),
     ):
         if fut := next(
             (
@@ -573,13 +579,13 @@ def _call(
             fut = submit()(  # type: ignore[misc]
                 run_with_retry,
                 next_task,
-                retry,
+                retry_policy,
                 configurable={
                     CONFIG_KEY_CALL: partial(
                         _call,
                         weakref.ref(next_task),
                         futures=futures,
-                        retry=retry,
+                        retry_policy=retry_policy,
                         callbacks=callbacks,
                         schedule_task=schedule_task,
                         submit=submit,
@@ -605,7 +611,7 @@ def _acall(
     func: Callable[[Any], Union[Awaitable[Any], Any]],
     input: Any,
     *,
-    retry: Optional[Sequence[RetryPolicy]] = None,
+    retry_policy: Optional[Sequence[RetryPolicy]] = None,
     cache_policy: Optional[CachePolicy] = None,
     callbacks: Callbacks = None,
     # injected dependencies
@@ -638,7 +644,7 @@ def _acall(
             task,
             func,
             input,
-            retry=retry,
+            retry_policy=retry_policy,
             cache_policy=cache_policy,
             callbacks=callbacks,
             futures=futures,
@@ -659,7 +665,7 @@ async def _acall_impl(
     func: Callable[[Any], Union[Awaitable[Any], Any]],
     input: Any,
     *,
-    retry: Optional[Sequence[RetryPolicy]] = None,
+    retry_policy: Optional[Sequence[RetryPolicy]] = None,
     cache_policy: Optional[CachePolicy] = None,
     callbacks: Callbacks = None,
     # injected dependencies
@@ -681,7 +687,11 @@ async def _acall_impl(
             task(),  # type: ignore[arg-type]
             scratchpad.call_counter(),
             Call(
-                func, input, retry=retry, cache_policy=cache_policy, callbacks=callbacks
+                func,
+                input,
+                retry_policy=retry_policy,
+                cache_policy=cache_policy,
+                callbacks=callbacks,
             ),
         ):
             if fut := next(
@@ -715,7 +725,7 @@ async def _acall_impl(
                     submit()(  # type: ignore[misc]
                         arun_with_retry,
                         next_task,
-                        retry,
+                        retry_policy,
                         stream=stream,
                         configurable={
                             CONFIG_KEY_CALL: partial(

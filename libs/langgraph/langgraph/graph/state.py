@@ -314,9 +314,10 @@ class StateGraph(Generic[StateT, InputT]):
         defer: bool = False,
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[type[Any]] = None,
-        retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
+        retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
         cache_policy: Optional[CachePolicy] = None,
         destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
+        retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
     ) -> Self:
         """Add a new node to the state graph.
         Will take the name of the function/runnable as the node name.
@@ -332,9 +333,10 @@ class StateGraph(Generic[StateT, InputT]):
         defer: bool = False,
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[type[Any]] = None,
-        retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
+        retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
         cache_policy: Optional[CachePolicy] = None,
         destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
+        retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
     ) -> Self:
         """Add a new node to the state graph."""
         ...
@@ -347,9 +349,11 @@ class StateGraph(Generic[StateT, InputT]):
         defer: bool = False,
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[type[Any]] = None,
-        retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
+        retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
         cache_policy: Optional[CachePolicy] = None,
         destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
+        # deprecated in V1
+        retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
     ) -> Self:
         """Add a new node to the state graph.
 
@@ -361,7 +365,7 @@ class StateGraph(Generic[StateT, InputT]):
             defer: Whether to defer the execution of the node until the run is about to end.
             metadata: The metadata associated with the node. (default: None)
             input: The input schema for the node. (default: the graph's input schema)
-            retry: The policy for retrying the node. (default: None)
+            retry_policy: The retry policy for the node. (default: None)
                 If a sequence is provided, the first matching policy will be applied.
             cache_policy: The cache policy for the node. (default: None)
             destinations: Destinations that indicate where a node can route to.
@@ -369,6 +373,7 @@ class StateGraph(Generic[StateT, InputT]):
                 If a dict is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
                 If a tuple is provided, the values will be used as the target node names.
                 NOTE: this is only used for graph rendering and doesn't have any effect on the graph execution.
+            retry: Deprecated. Please use `retry_policy` instead.
         Raises:
             ValueError: If the key is already being used as a state key.
 
@@ -491,7 +496,7 @@ class StateGraph(Generic[StateT, InputT]):
             coerce_to_runnable(action, name=node, trace=False),  # type: ignore
             metadata,
             input=input or self.schema,
-            retry_policy=retry,
+            retry_policy=retry_policy,
             cache_policy=cache_policy,
             ends=ends,
             defer=defer,
