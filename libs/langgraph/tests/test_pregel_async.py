@@ -41,7 +41,7 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, PUSH, START
-from langgraph.errors import InvalidUpdateError, NodeInterrupt
+from langgraph.errors import InvalidUpdateError, NodeInterrupt, ParentCommand
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import MessagesState, add_messages
@@ -8655,9 +8655,12 @@ async def test_imp_exception(
     ]
 
 
+@pytest.mark.parametrize("with_timeout", [False, "inner", "outer", "both"])
 @pytest.mark.parametrize("subgraph_persist", [True, False])
 async def test_parent_command_goto(
-    async_checkpointer: BaseCheckpointSaver, subgraph_persist: bool
+    async_checkpointer: BaseCheckpointSaver,
+    subgraph_persist: bool,
+    with_timeout: Literal[False, "inner", "outer", "both"],
 ) -> None:
     class State(TypedDict):
         dialog_state: Annotated[list[str], operator.add]
@@ -8678,6 +8681,8 @@ async def test_parent_command_goto(
     sub_builder.add_edge(START, "node_a_child")
     sub_builder.add_edge("node_a_child", "node_b_child")
     sub_graph = sub_builder.compile(checkpointer=subgraph_persist)
+    if with_timeout in ("inner", "both"):
+        sub_graph.step_timeout = 1
 
     async def node_b_parent(state):
         return {"dialog_state": ["node_b_parent"]}
@@ -8686,10 +8691,40 @@ async def test_parent_command_goto(
     main_builder.add_node(node_b_parent)
     main_builder.add_edge(START, "subgraph_node")
     main_builder.add_node("subgraph_node", sub_graph, destinations=("node_b_parent",))
-
     main_graph = main_builder.compile(async_checkpointer, name="parent")
+    if with_timeout in ("outer", "both"):
+        main_graph.step_timeout = 1
+
     config = {"configurable": {"thread_id": 1}}
 
     assert await main_graph.ainvoke(
         input={"dialog_state": ["init_state"]}, config=config
     ) == {"dialog_state": ["init_state", "b_child_state", "node_b_parent"]}
+
+
+@pytest.mark.parametrize("with_timeout", [True, False])
+async def test_timeout_with_parent_command(
+    async_checkpointer: BaseCheckpointSaver, with_timeout: bool
+) -> None:
+    """Test that parent commands are properly propagated during timeouts."""
+
+    class State(TypedDict):
+        value: str
+
+    async def parent_command_node(state: State) -> State:
+        await asyncio.sleep(0.1)  # Add some delay before raising
+        return Command(graph=Command.PARENT, goto="test_cmd", update={"key": "value"})
+
+    builder = StateGraph(State)
+    builder.add_node("parent_cmd", parent_command_node)
+    builder.set_entry_point("parent_cmd")
+    graph = builder.compile(checkpointer=async_checkpointer)
+    if with_timeout:
+        graph.step_timeout = 1
+
+    # Should propagate parent command, not timeout
+    thread1 = {"configurable": {"thread_id": "1"}}
+    with pytest.raises(ParentCommand) as exc_info:
+        await graph.ainvoke({"value": "start"}, thread1)
+    assert exc_info.value.args[0].goto == "test_cmd"
+    assert exc_info.value.args[0].update == {"key": "value"}
