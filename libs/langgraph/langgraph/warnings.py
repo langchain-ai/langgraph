@@ -1,5 +1,7 @@
 """LangGraph specific warnings."""
 
+from __future__ import annotations
+
 
 class LangGraphDeprecationWarning(DeprecationWarning):
     """A LangGraph specific deprecation warning.

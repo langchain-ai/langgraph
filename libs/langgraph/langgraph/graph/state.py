@@ -86,6 +86,7 @@ from langgraph.utils.fields import (
 )
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.runnable import coerce_to_runnable
+from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 logger = logging.getLogger(__name__)
 
@@ -403,6 +404,14 @@ class StateGraph(Generic[StateT, InputT]):
         Returns:
             Self: The instance of the state graph, allowing for method chaining.
         """
+        if retry != ():
+            warnings.warn(
+                "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
+                category=LangGraphDeprecatedSinceV10,
+            )
+            if retry_policy is None:
+                retry_policy = retry
+
         if not isinstance(node, str):
             action = node
             if isinstance(action, Runnable):

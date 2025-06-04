@@ -43,7 +43,7 @@ class TaskFunction(Generic[P, T]):
         self,
         func: Callable[P, T],
         *,
-        retry_policy: Optional[Sequence[RetryPolicy]] = (),
+        retry_policy: Sequence[RetryPolicy],
         cache_policy: Optional[CachePolicy[Callable[P, Union[str, bytes]]]] = None,
         name: Optional[str] = None,
     ) -> None:
@@ -183,7 +183,7 @@ def task(
             "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
             category=LangGraphDeprecatedSinceV10,
         )
-        if retry_policy is not None:
+        if retry_policy is None:
             retry_policy = retry
 
     retry_policies: Sequence[RetryPolicy] = (
@@ -381,7 +381,7 @@ class entrypoint:
         cache: Optional[BaseCache] = None,
         config_schema: Optional[type[Any]] = None,
         cache_policy: Optional[CachePolicy] = None,
-        retry_policy: Union[RetryPolicy, Sequence[RetryPolicy]] = (),
+        retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
         # deprecated in V1
         retry: Union[RetryPolicy, Sequence[RetryPolicy]] = (),
     ) -> None:
@@ -391,7 +391,7 @@ class entrypoint:
                 "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
                 category=LangGraphDeprecatedSinceV10,
             )
-            if retry_policy != ():
+            if retry_policy is None:
                 retry_policy = retry
 
         self.checkpointer = checkpointer
@@ -530,6 +530,6 @@ class entrypoint:
             store=self.store,
             cache=self.cache,
             cache_policy=self.cache_policy,
-            retry_policy=self.retry_policy,
+            retry_policy=self.retry_policy or (),
             config_type=self.config_schema,
         )
