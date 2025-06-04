@@ -9,7 +9,7 @@ from typing import (
 )
 
 from pydantic import BaseModel
-from typing_extensions import TypeAlias, TypeVar
+from typing_extensions import TypeAlias, TypedDict, TypeVar
 
 
 class _TypedDictLikeV1(Protocol):
@@ -68,3 +68,7 @@ If `input_type` is not specified, it defaults to `StateType`."""
 
 OutputT = TypeVar("OutputT", bound=Union[StateLike, Unset], default=Unset)
 """Type variable used to represent the output of a graph."""
+
+
+class DeprecatedKwargs(TypedDict):
+    """TypedDict to use for extra keyword arguments, enabling type checking warnings for deprecated arguments."""

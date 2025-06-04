@@ -874,7 +874,9 @@ def test_pending_writes_resume(
     builder = StateGraph(State)
     builder.add_node("one", one)
     builder.add_node(
-        "two", two, retry=RetryPolicy(max_attempts=2, initial_interval=0, jitter=False)
+        "two",
+        two,
+        retry_policy=RetryPolicy(max_attempts=2, initial_interval=0, jitter=False),
     )
     builder.add_edge(START, "one")
     builder.add_edge(START, "two")

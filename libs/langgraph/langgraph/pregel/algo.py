@@ -114,11 +114,11 @@ class PregelTaskWrites(NamedTuple):
 
 
 class Call:
-    __slots__ = ("func", "input", "retry", "cache_policy", "callbacks")
+    __slots__ = ("func", "input", "retry_policy", "cache_policy", "callbacks")
 
     func: Callable
     input: tuple[tuple[Any, ...], dict[str, Any]]
-    retry: Optional[Sequence[RetryPolicy]]
+    retry_policy: Optional[Sequence[RetryPolicy]]
     cache_policy: Optional[CachePolicy]
     callbacks: Callbacks
 
@@ -127,13 +127,13 @@ class Call:
         func: Callable,
         input: tuple[tuple[Any, ...], dict[str, Any]],
         *,
-        retry: Optional[Sequence[RetryPolicy]],
+        retry_policy: Optional[Sequence[RetryPolicy]],
         cache_policy: Optional[CachePolicy],
         callbacks: Callbacks,
     ) -> None:
         self.func = func
         self.input = input
-        self.retry = retry
+        self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.callbacks = callbacks
 
@@ -616,7 +616,7 @@ def prepare_single_task(
                     },
                 ),
                 triggers,
-                call.retry or retry_policy,
+                call.retry_policy or retry_policy,
                 cache_key,
                 task_id,
                 task_path,

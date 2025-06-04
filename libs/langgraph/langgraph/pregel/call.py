@@ -251,7 +251,7 @@ class SyncAsyncFuture(Generic[T], concurrent.futures.Future[T]):
 def call(
     func: Callable[P, T],
     *args: Any,
-    retry: Optional[Sequence[RetryPolicy]] = None,
+    retry_policy: Optional[Sequence[RetryPolicy]] = None,
     cache_policy: Optional[CachePolicy] = None,
     **kwargs: Any,
 ) -> SyncAsyncFuture[T]:
@@ -260,7 +260,7 @@ def call(
     fut = impl(
         func,
         (args, kwargs),
-        retry=retry,
+        retry_policy=retry_policy,
         cache_policy=cache_policy,
         callbacks=config["callbacks"],
     )

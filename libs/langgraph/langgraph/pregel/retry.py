@@ -104,7 +104,7 @@ def run_with_retry(
 
 async def arun_with_retry(
     task: PregelExecutableTask,
-    retry_policies: Optional[Sequence[RetryPolicy]],
+    retry_policy: Optional[Sequence[RetryPolicy]],
     stream: bool = False,
     match_cached_writes: Optional[
         Callable[[], Awaitable[Sequence[PregelExecutableTask]]]
@@ -112,7 +112,7 @@ async def arun_with_retry(
     configurable: Optional[dict[str, Any]] = None,
 ) -> None:
     """Run a task asynchronously with retries."""
-    retry_policies = task.retry_policy or retry_policies
+    retry_policy = task.retry_policy or retry_policy
     attempts = 0
     config = task.config
     if configurable is not None:
@@ -157,12 +157,12 @@ async def arun_with_retry(
         except Exception as exc:
             if SUPPORTS_EXC_NOTES:
                 exc.add_note(f"During task with name '{task.name}' and id '{task.id}'")
-            if not retry_policies:
+            if not retry_policy:
                 raise
 
             # Check which retry policy applies to this exception
             matching_policy = None
-            for policy in retry_policies:
+            for policy in retry_policy:
                 if _should_retry_on(policy, exc):
                     matching_policy = policy
                     break

@@ -141,8 +141,8 @@ class NodeBuilder:
         "_metadata",
         "_writes",
         "_bound",
-        "_retries",
-        "_cache",
+        "_retry_policy",
+        "_cache_policy",
     )
 
     _channels: list[str] | dict[str, str]
@@ -151,8 +151,8 @@ class NodeBuilder:
     _metadata: dict[str, Any]
     _writes: list[ChannelWriteEntry]
     _bound: Runnable
-    _retries: list[RetryPolicy]
-    _cache: CachePolicy | None
+    _retry_policy: list[RetryPolicy]
+    _cache_policy: CachePolicy | None
 
     def __init__(
         self,
@@ -163,8 +163,8 @@ class NodeBuilder:
         self._metadata = {}
         self._writes = []
         self._bound = DEFAULT_BOUND
-        self._retries = []
-        self._cache = None
+        self._retry_policy = []
+        self._cache_policy = None
 
     def subscribe_only(
         self,
@@ -274,14 +274,14 @@ class NodeBuilder:
         self._metadata.update(metadata)
         return self
 
-    def retry(self, *policies: RetryPolicy) -> Self:
+    def add_retry_policies(self, *policies: RetryPolicy) -> Self:
         """Adds retry policies to the node."""
-        self._retries.extend(policies)
+        self._retry_policy.extend(policies)
         return self
 
-    def cache(self, policy: CachePolicy) -> Self:
+    def add_cache_policy(self, policy: CachePolicy) -> Self:
         """Adds cache policies to the node."""
-        self._cache = policy
+        self._cache_policy = policy
         return self
 
     def build(self) -> PregelNode:
@@ -293,8 +293,8 @@ class NodeBuilder:
             metadata=self._metadata,
             writers=[ChannelWrite(self._writes)],
             bound=self._bound,
-            retry_policy=self._retries,
-            cache_policy=self._cache,
+            retry_policy=self._retry_policy,
+            cache_policy=self._cache_policy,
         )
 
 
