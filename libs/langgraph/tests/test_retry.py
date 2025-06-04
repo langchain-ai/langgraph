@@ -175,7 +175,7 @@ def test_graph_with_single_retry_policy():
     # Create and compile the graph
     graph = (
         StateGraph(State)
-        .add_node("failing_node", failing_node, retry=retry_policy)
+        .add_node("failing_node", failing_node, retry_policy=retry_policy)
         .add_node("other_node", other_node)
         .add_edge(START, "failing_node")
         .add_edge("failing_node", "other_node")
@@ -220,7 +220,7 @@ def test_graph_with_jitter_retry_policy():
     # Create and compile the graph
     graph = (
         StateGraph(State)
-        .add_node("failing_node", failing_node, retry=retry_policy)
+        .add_node("failing_node", failing_node, retry_policy=retry_policy)
         .add_edge(START, "failing_node")
         .compile()
     )
@@ -285,7 +285,7 @@ def test_graph_with_multiple_retry_policies():
         .add_node(
             "failing_node",
             failing_node,
-            retry=(value_error_policy, key_error_policy),
+            retry_policy=(value_error_policy, key_error_policy),
         )
         .add_edge(START, "failing_node")
         .compile()
@@ -329,7 +329,7 @@ def test_graph_with_max_attempts_exceeded():
     # Create and compile the graph
     graph = (
         StateGraph(State)
-        .add_node("always_failing", always_failing_node, retry=retry_policy)
+        .add_node("always_failing", always_failing_node, retry_policy=retry_policy)
         .add_edge(START, "always_failing")
         .compile()
     )
