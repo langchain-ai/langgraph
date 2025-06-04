@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - main
+      - v0
   pull_request:
     branches:
       - main
+      - v0
   workflow_dispatch:
 
 permissions:
@@ -82,9 +84,9 @@ jobs:
         run: make llms-text
       - name: Build site
         run: |
-          # If this is main branch, then we want to download stats. we do this 
+          # If this is v0 branch, then we want to download stats. we do this 
           # with the env variable DOWNLOAD_STATS=true
-          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+          if [ "${{ github.ref }}" == "refs/heads/v0" ]; then
             DOWNLOAD_STATS=true make build-docs
           else
             make build-docs
@@ -144,7 +146,7 @@ jobs:
           fi
 
       - name: Configure GitHub Pages
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/v0'
         uses: actions/configure-pages@v5
 
       - name: Upload Pages Artifact
@@ -154,6 +156,6 @@ jobs:
           path: ./docs/site/
 
       - name: Deploy to GitHub Pages
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/v0'
         id: deployment
         uses: actions/deploy-pages@v4
