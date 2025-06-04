@@ -56,10 +56,8 @@ Values:
 """
 
 FilterType = typing.Union[
-    typing.Dict[
-        str, typing.Union[str, typing.Dict[typing.Literal["$eq", "$contains"], str]]
-    ],
-    typing.Dict[str, str],
+    dict[str, typing.Union[str, dict[typing.Literal["$eq", "$contains"], str]]],
+    dict[str, str],
 ]
 """Response type for authorization handlers.
 
@@ -100,7 +98,7 @@ Values:
     - error: Thread encountered an error
 """
 
-MetadataInput = typing.Dict[str, typing.Any]
+MetadataInput = dict[str, typing.Any]
 """Type for arbitrary metadata attached to entities.
 
 Allows storing custom key-value pairs with any entity.
@@ -541,7 +539,7 @@ class RunsCreate(typing.TypedDict, total=False):
     after_seconds: int
     """Number of seconds to wait before creating the run."""
 
-    kwargs: typing.Dict[str, typing.Any]
+    kwargs: dict[str, typing.Any]
     """Keyword arguments to pass to the run."""
 
     action: typing.Optional[typing.Literal["interrupt", "rollback"]]
@@ -570,7 +568,7 @@ class AssistantsCreate(typing.TypedDict, total=False):
     graph_id: str
     """Graph ID to use for this assistant."""
 
-    config: typing.Optional[typing.Union[typing.Dict[str, typing.Any], typing.Any]]
+    config: typing.Optional[typing.Union[dict[str, typing.Any], typing.Any]]
     """typing.Optional configuration for the assistant."""
 
     metadata: MetadataInput
@@ -624,7 +622,7 @@ class AssistantsUpdate(typing.TypedDict, total=False):
     graph_id: typing.Optional[str]
     """typing.Optional graph ID to update."""
 
-    config: typing.Optional[typing.Union[typing.Dict[str, typing.Any], typing.Any]]
+    config: typing.Optional[typing.Union[dict[str, typing.Any], typing.Any]]
     """typing.Optional configuration to update."""
 
     metadata: MetadataInput
@@ -695,7 +693,7 @@ class CronsCreate(typing.TypedDict, total=False):
         ```
     """
 
-    payload: typing.Dict[str, typing.Any]
+    payload: dict[str, typing.Any]
     """Payload for the cron job."""
 
     schedule: str
@@ -760,7 +758,7 @@ class CronsUpdate(typing.TypedDict, total=False):
     cron_id: UUID
     """Unique identifier for the cron job."""
 
-    payload: typing.Optional[typing.Dict[str, typing.Any]]
+    payload: typing.Optional[dict[str, typing.Any]]
     """typing.Optional payload to update."""
 
     schedule: typing.Optional[str]
@@ -900,7 +898,7 @@ class on:
         ```
     """
 
-    value = typing.Dict[str, typing.Any]
+    value = dict[str, typing.Any]
 
     class threads:
         """Types for thread-related operations."""

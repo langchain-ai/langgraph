@@ -63,7 +63,7 @@ langgraph-sdk = { path = "../sdk-py", editable = true }
 
 [tool.ruff]
 lint.select = [ "E", "F", "I", "TID251", "UP" ]
-lint.ignore = [ "E501", "UP007" ]
+lint.ignore = [ "E501" ]
 line-length = 88
 indent-width = 4
 extend-include = ["*.ipynb"]

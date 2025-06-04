@@ -2,7 +2,6 @@ from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import (  # noqa: UP035
     Any,
     Generic,
-    List,
     Literal,
     NamedTuple,
     Optional,
@@ -99,7 +98,7 @@ class CheckpointTuple(NamedTuple):
     checkpoint: Checkpoint
     metadata: CheckpointMetadata
     parent_config: Optional[RunnableConfig] = None
-    pending_writes: Optional[List[PendingWrite]] = None
+    pending_writes: Optional[list[PendingWrite]] = None
 
 
 class BaseCheckpointSaver(Generic[V]):

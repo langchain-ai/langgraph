@@ -40,7 +40,7 @@ class ChannelWriteTupleEntry(NamedTuple):
     """Function to extract tuples from value."""
     value: Any = PASSTHROUGH
     """Value to write, or PASSTHROUGH to use the input."""
-    static: Optional[Sequence[tuple[str, Any, Optional[str]]]] = None
+    static: Sequence[tuple[str, Any, str | None]] | None = None
     """Optional, declared writes for static analysis."""
 
 
@@ -138,7 +138,7 @@ class ChannelWrite(RunnableCallable):
     @staticmethod
     def get_static_writes(
         runnable: Runnable,
-    ) -> Optional[Sequence[tuple[str, Any, Optional[str]]]]:
+    ) -> Sequence[tuple[str, Any, str | None]] | None:
         """Used to get conditional writes a writer declares for static analysis."""
         if isinstance(runnable, ChannelWrite):
             return [
@@ -160,9 +160,7 @@ class ChannelWrite(RunnableCallable):
     @staticmethod
     def register_writer(
         runnable: R,
-        static: Optional[
-            Sequence[tuple[Union[ChannelWriteEntry, Send], Optional[str]]]
-        ] = None,
+        static: Sequence[tuple[ChannelWriteEntry | Send, str | None]] | None = None,
     ) -> R:
         """Used to mark a runnable as a writer, so that it can be detected by is_writer.
         Instances of ChannelWrite are automatically marked as writers.
@@ -174,7 +172,7 @@ class ChannelWrite(RunnableCallable):
 
 
 def _assemble_writes(
-    writes: Sequence[Union[ChannelWriteEntry, ChannelWriteTupleEntry, Send]],
+    writes: Sequence[ChannelWriteEntry | ChannelWriteTupleEntry | Send],
 ) -> list[tuple[str, Any]]:
     """Assembles the writes into a list of tuples."""
     tuples: list[tuple[str, Any]] = []
