@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import concurrent.futures
 import functools
@@ -9,9 +11,7 @@ from typing import (
     Any,
     Callable,
     Generic,
-    Optional,
     TypeVar,
-    Union,
     get_args,
     get_origin,
     overload,
@@ -47,8 +47,8 @@ class TaskFunction(Generic[P, T]):
         func: Callable[P, T],
         *,
         retry_policy: Sequence[RetryPolicy],
-        cache_policy: Optional[CachePolicy[Callable[P, Union[str, bytes]]]] = None,
-        name: Optional[str] = None,
+        cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
+        name: str | None = None,
     ) -> None:
         if name is not None:
             if hasattr(func, "__func__"):
@@ -91,36 +91,33 @@ class TaskFunction(Generic[P, T]):
 @overload
 def task(
     *,
-    name: Optional[str] = None,
-    retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
-    cache_policy: Optional[CachePolicy[Callable[P, Union[str, bytes]]]] = None,
+    name: str | None = None,
+    retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+    cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
     **kwargs: Unpack[DeprecatedKwargs],
 ) -> Callable[
-    [Union[Callable[P, Awaitable[T]], Callable[P, T]]],
+    [Callable[P, Awaitable[T]] | Callable[P, T]],
     TaskFunction[P, T],
 ]: ...
 
 
 @overload
 def task(
-    __func_or_none__: Union[Callable[P, Awaitable[T]], Callable[P, T]],
+    __func_or_none__: Callable[P, Awaitable[T]] | Callable[P, T],
 ) -> TaskFunction[P, T]: ...
 
 
 def task(
-    __func_or_none__: Optional[Union[Callable[P, Awaitable[T]], Callable[P, T]]] = None,
+    __func_or_none__: Callable[P, Awaitable[T]] | Callable[P, T] | None = None,
     *,
-    name: Optional[str] = None,
-    retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
-    cache_policy: Optional[CachePolicy[Callable[P, Union[str, bytes]]]] = None,
+    name: str | None = None,
+    retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+    cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
     **kwargs: Unpack[DeprecatedKwargs],
-) -> Union[
-    Callable[
-        [Union[Callable[P, Awaitable[T]], Callable[P, T]]],
-        TaskFunction[P, T],
-    ],
-    TaskFunction[P, T],
-]:
+) -> (
+    Callable[[Callable[P, Awaitable[T]] | Callable[P, T]], TaskFunction[P, T]]
+    | TaskFunction[P, T]
+):
     """Define a LangGraph task using the `task` decorator.
 
     !!! important "Requires python 3.11 or higher for async functions"
@@ -196,10 +193,8 @@ def task(
     )
 
     def decorator(
-        func: Union[Callable[P, Awaitable[T]], Callable[P, T]],
-    ) -> Union[
-        Callable[P, concurrent.futures.Future[T]], Callable[P, asyncio.Future[T]]
-    ]:
+        func: Callable[P, Awaitable[T]] | Callable[P, T],
+    ) -> Callable[P, concurrent.futures.Future[T]] | Callable[P, asyncio.Future[T]]:
         return TaskFunction(
             func, retry_policy=retry_policies, cache_policy=cache_policy, name=name
         )
@@ -376,12 +371,12 @@ class entrypoint:
 
     def __init__(
         self,
-        checkpointer: Optional[BaseCheckpointSaver] = None,
-        store: Optional[BaseStore] = None,
-        cache: Optional[BaseCache] = None,
-        config_schema: Optional[type[Any]] = None,
-        cache_policy: Optional[CachePolicy] = None,
-        retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
+        checkpointer: BaseCheckpointSaver | None = None,
+        store: BaseStore | None = None,
+        cache: BaseCache | None = None,
+        config_schema: type[Any] | None = None,
+        cache_policy: CachePolicy | None = None,
+        retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         """Initialize the entrypoint decorator."""

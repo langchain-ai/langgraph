@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import concurrent.futures
 import datetime
 import logging
@@ -6,7 +8,7 @@ import threading
 from collections import defaultdict
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
-from typing import Any, Callable, Literal, NamedTuple, Optional, Union, cast
+from typing import Any, Callable, Literal, NamedTuple, cast
 
 import orjson
 import sqlite_vec  # type: ignore[import-untyped]
@@ -105,7 +107,7 @@ def _decode_ns_text(namespace: str) -> tuple[str, ...]:
     return tuple(namespace.split("."))
 
 
-def _json_loads(content: Union[bytes, str, orjson.Fragment]) -> Any:
+def _json_loads(content: bytes | str | orjson.Fragment) -> Any:
     if isinstance(content, orjson.Fragment):
         if hasattr(content, "buf"):
             content = content.buf
@@ -125,9 +127,7 @@ def _row_to_item(
     namespace: tuple[str, ...],
     row: dict[str, Any],
     *,
-    loader: Optional[
-        Callable[[Union[bytes, str, orjson.Fragment]], dict[str, Any]]
-    ] = None,
+    loader: Callable[[bytes | str | orjson.Fragment], dict[str, Any]] | None = None,
 ) -> Item:
     """Convert a row from the database into an Item."""
     val = row["value"]
@@ -149,9 +149,7 @@ def _row_to_search_item(
     namespace: tuple[str, ...],
     row: dict[str, Any],
     *,
-    loader: Optional[
-        Callable[[Union[bytes, str, orjson.Fragment]], dict[str, Any]]
-    ] = None,
+    loader: Callable[[bytes | str | orjson.Fragment], dict[str, Any]] | None = None,
 ) -> SearchItem:
     """Convert a row from the database into a SearchItem."""
     loader = loader or _json_loads
@@ -196,8 +194,8 @@ class BaseSqliteStore:
     MIGRATIONS = MIGRATIONS
     VECTOR_MIGRATIONS = VECTOR_MIGRATIONS
     supports_ttl = True
-    index_config: Optional[SqliteIndexConfig] = None
-    ttl_config: Optional[TTLConfig] = None
+    index_config: SqliteIndexConfig | None = None
+    ttl_config: TTLConfig | None = None
 
     def _get_batch_GET_ops_queries(
         self, get_ops: Sequence[tuple[int, GetOp]]
@@ -259,7 +257,7 @@ class BaseSqliteStore:
         self, put_ops: Sequence[tuple[int, PutOp]]
     ) -> tuple[
         list[tuple[str, Sequence]],
-        Optional[tuple[str, Sequence[tuple[str, str, str, str]]]],
+        tuple[str, Sequence[tuple[str, str, str, str]]] | None,
     ]:
         # Last-write wins
         dedupped_ops: dict[tuple[tuple[str, ...], str], PutOp] = {}
@@ -288,9 +286,7 @@ class BaseSqliteStore:
                 params = (_namespace_to_text(namespace), *keys)
                 queries.append((query, params))
 
-        embedding_request: Optional[tuple[str, Sequence[tuple[str, str, str, str]]]] = (
-            None
-        )
+        embedding_request: tuple[str, Sequence[tuple[str, str, str, str]]] | None = None
         if inserts:
             values = []
             insertion_params = []
@@ -358,7 +354,7 @@ class BaseSqliteStore:
     def _prepare_batch_search_queries(
         self, search_ops: Sequence[tuple[int, SearchOp]]
     ) -> tuple[
-        list[tuple[str, list[Union[None, str, list[float]]]]],  # queries, params
+        list[tuple[str, list[None | str | list[float]]]],  # queries, params
         list[tuple[int, str]],  # idx, query_text pairs to embed
     ]:
         """
@@ -785,11 +781,10 @@ class SqliteStore(BaseSqliteStore, BaseStore):
         self,
         conn: sqlite3.Connection,
         *,
-        deserializer: Optional[
-            Callable[[Union[bytes, str, orjson.Fragment]], dict[str, Any]]
-        ] = None,
-        index: Optional[SqliteIndexConfig] = None,
-        ttl: Optional[TTLConfig] = None,
+        deserializer: Callable[[bytes | str | orjson.Fragment], dict[str, Any]]
+        | None = None,
+        index: SqliteIndexConfig | None = None,
+        ttl: TTLConfig | None = None,
     ):
         super().__init__()
         self._deserializer = deserializer
@@ -802,7 +797,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
         else:
             self.embeddings = None
         self.ttl_config = ttl
-        self._ttl_sweeper_thread: Optional[threading.Thread] = None
+        self._ttl_sweeper_thread: threading.Thread | None = None
         self._ttl_stop_event = threading.Event()
 
     def _get_batch_GET_ops_queries(
@@ -956,9 +951,9 @@ class SqliteStore(BaseSqliteStore, BaseStore):
         cls,
         conn_string: str,
         *,
-        index: Optional[SqliteIndexConfig] = None,
-        ttl: Optional[TTLConfig] = None,
-    ) -> Iterator["SqliteStore"]:
+        index: SqliteIndexConfig | None = None,
+        ttl: TTLConfig | None = None,
+    ) -> Iterator[SqliteStore]:
         """Create a new SqliteStore instance from a connection string.
 
         Args:
@@ -1087,7 +1082,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
             return deleted_count
 
     def start_ttl_sweeper(
-        self, sweep_interval_minutes: Optional[int] = None
+        self, sweep_interval_minutes: int | None = None
     ) -> concurrent.futures.Future[None]:
         """Periodically delete expired store items based on TTL.
 
@@ -1144,7 +1139,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
         )
         return future
 
-    def stop_ttl_sweeper(self, timeout: Optional[float] = None) -> bool:
+    def stop_ttl_sweeper(self, timeout: float | None = None) -> bool:
         """Stop the TTL sweeper thread if it's running.
 
         Args:
@@ -1396,7 +1391,7 @@ def _ensure_index_config(
 ) -> tuple[Any, SqliteIndexConfig]:
     """Process and validate index configuration."""
     index_config = index_config.copy()
-    tokenized: list[tuple[str, Union[Literal["$"], list[str]]]] = []
+    tokenized: list[tuple[str, Literal["$"] | list[str]]] = []
     tot = 0
     text_fields = index_config.get("text_fields") or ["$"]
     if isinstance(text_fields, str):

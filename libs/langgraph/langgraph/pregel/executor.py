@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import concurrent.futures
 import time
@@ -7,7 +9,6 @@ from contextvars import copy_context
 from types import TracebackType
 from typing import (
     Callable,
-    Optional,
     Protocol,
     TypeVar,
     cast,
@@ -29,7 +30,7 @@ class Submit(Protocol[P, T]):
         self,
         fn: Callable[P, T],
         *args: P.args,
-        __name__: Optional[str] = None,
+        __name__: str | None = None,
         __cancel_on_exit__: bool = False,
         __reraise_on_exit__: bool = True,
         __next_tick__: bool = False,
@@ -55,7 +56,7 @@ class BackgroundExecutor(AbstractContextManager):
         self,
         fn: Callable[P, T],
         *args: P.args,
-        __name__: Optional[str] = None,  # currently not used in sync version
+        __name__: str | None = None,  # currently not used in sync version
         __cancel_on_exit__: bool = False,  # for sync, can cancel only if not started
         __reraise_on_exit__: bool = True,
         __next_tick__: bool = False,
@@ -92,10 +93,10 @@ class BackgroundExecutor(AbstractContextManager):
 
     def __exit__(
         self,
-        exc_type: Optional[type[BaseException]],
-        exc_value: Optional[BaseException],
-        traceback: Optional[TracebackType],
-    ) -> Optional[bool]:
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None:
         # copy the tasks as done() callback may modify the dict
         tasks = self.tasks.copy()
         # cancel all tasks that should be cancelled
@@ -133,7 +134,7 @@ class AsyncBackgroundExecutor(AbstractAsyncContextManager):
         self.sentinel = object()
         self.loop = asyncio.get_running_loop()
         if max_concurrency := config.get("max_concurrency"):
-            self.semaphore: Optional[asyncio.Semaphore] = asyncio.Semaphore(
+            self.semaphore: asyncio.Semaphore | None = asyncio.Semaphore(
                 max_concurrency
             )
         else:
@@ -143,7 +144,7 @@ class AsyncBackgroundExecutor(AbstractAsyncContextManager):
         self,
         fn: Callable[P, Awaitable[T]],
         *args: P.args,
-        __name__: Optional[str] = None,
+        __name__: str | None = None,
         __cancel_on_exit__: bool = False,
         __reraise_on_exit__: bool = True,
         __next_tick__: bool = False,  # noop in async (always True)
@@ -185,9 +186,9 @@ class AsyncBackgroundExecutor(AbstractAsyncContextManager):
 
     async def __aexit__(
         self,
-        exc_type: Optional[type[BaseException]],
-        exc_value: Optional[BaseException],
-        traceback: Optional[TracebackType],
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
     ) -> None:
         # copy the tasks as done() callback may modify the dict
         tasks = self.tasks.copy()

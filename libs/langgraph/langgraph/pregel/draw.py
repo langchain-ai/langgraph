@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from typing import Any, Optional, Union, cast
+from typing import Any, cast
 
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import Graph, Node
@@ -26,10 +28,10 @@ def draw_graph(
     config: RunnableConfig,
     *,
     nodes: dict[str, PregelNode],
-    specs: dict[str, Union[BaseChannel, ManagedValueSpec]],
-    input_channels: Union[str, Sequence[str]],
-    interrupt_after_nodes: Union[All, Sequence[str]],
-    interrupt_before_nodes: Union[All, Sequence[str]],
+    specs: dict[str, BaseChannel | ManagedValueSpec],
+    input_channels: str | Sequence[str],
+    interrupt_after_nodes: All | Sequence[str],
+    interrupt_before_nodes: All | Sequence[str],
     trigger_to_nodes: Mapping[str, Sequence[str]],
     checkpointer: Checkpointer,
     subgraphs: dict[str, Graph],
@@ -46,7 +48,7 @@ def draw_graph(
         The graph for this Pregel instance.
     """
     # (src, dest, is_conditional, label)
-    edges: set[tuple[str, str, bool, Optional[str]]] = set()
+    edges: set[tuple[str, str, bool, str | None]] = set()
 
     step = -1
     checkpoint = empty_checkpoint()
@@ -60,8 +62,8 @@ def draw_graph(
         checkpoint,
     )
     static_seen: set[Any] = set()
-    sources: dict[str, set[tuple[str, bool, Optional[str]]]] = {}
-    step_sources: dict[str, set[tuple[str, bool, Optional[str]]]] = {}
+    sources: dict[str, set[tuple[str, bool, str | None]]] = {}
+    step_sources: dict[str, set[tuple[str, bool, str | None]]] = {}
     # remove node mappers
     nodes = {
         k: v.copy(update={"mapper": None}) if v.mapper is not None else v
@@ -100,7 +102,7 @@ def draw_graph(
     for step in range(step, limit):
         if not tasks:
             break
-        conditionals: dict[tuple[str, str, Any], Optional[str]] = {}
+        conditionals: dict[tuple[str, str, Any], str | None] = {}
         # run task writers
         for task in tasks.values():
             for w in task.writers:
@@ -140,8 +142,8 @@ def draw_graph(
         }
         sources.update(step_sources)
         # invert triggers
-        trigger_to_sources: dict[str, set[tuple[str, bool, Optional[str]]]] = (
-            defaultdict(set)
+        trigger_to_sources: dict[str, set[tuple[str, bool, str | None]]] = defaultdict(
+            set
         )
         for src, triggers in sources.items():
             for trigger, cond, label in triggers:
@@ -246,7 +248,7 @@ def add_edge(
     source: str,
     target: str,
     *,
-    data: Optional[Any] = None,
+    data: Any | None = None,
     conditional: bool = False,
 ) -> None:
     """Add an edge to the graph."""

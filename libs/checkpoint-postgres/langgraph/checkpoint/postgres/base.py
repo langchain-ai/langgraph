@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import random
 from collections.abc import Sequence
 from typing import Any, Optional, cast
@@ -186,7 +188,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         checkpoint_ns: str,
         values: dict[str, Any],
         versions: ChannelVersions,
-    ) -> list[tuple[str, str, str, str, str, Optional[bytes]]]:
+    ) -> list[tuple[str, str, str, str, str, bytes | None]]:
         if not versions:
             return []
 
@@ -244,7 +246,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             for idx, (channel, value) in enumerate(writes)
         ]
 
-    def get_next_version(self, current: Optional[str]) -> str:
+    def get_next_version(self, current: str | None) -> str:
         if current is None:
             current_v = 0
         elif isinstance(current, int):
@@ -257,9 +259,9 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
 
     def _search_where(
         self,
-        config: Optional[RunnableConfig],
+        config: RunnableConfig | None,
         filter: MetadataInput,
-        before: Optional[RunnableConfig] = None,
+        before: RunnableConfig | None = None,
     ) -> tuple[str, list[Any]]:
         """Return WHERE clause predicates for alist() given config, filter, before.
 

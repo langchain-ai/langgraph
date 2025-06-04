@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import os
 import pickle
@@ -7,7 +9,7 @@ from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
 from types import TracebackType
-from typing import Any, Optional, Union
+from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 
@@ -63,9 +65,7 @@ class InMemorySaver(
     # thread ID ->  checkpoint NS -> checkpoint ID -> checkpoint mapping
     storage: defaultdict[
         str,
-        dict[
-            str, dict[str, tuple[tuple[str, bytes], tuple[str, bytes], Optional[str]]]
-        ],
+        dict[str, dict[str, tuple[tuple[str, bytes], tuple[str, bytes], str | None]]],
     ]
     # (thread ID, checkpoint NS, checkpoint ID) -> (task ID, write idx)
     writes: defaultdict[
@@ -74,7 +74,7 @@ class InMemorySaver(
     ]
     blobs: dict[
         tuple[
-            str, str, str, Union[str, int, float]
+            str, str, str, str | int | float
         ],  # thread id, checkpoint ns, channel, version
         tuple[str, bytes],
     ]
@@ -82,7 +82,7 @@ class InMemorySaver(
     def __init__(
         self,
         *,
-        serde: Optional[SerializerProtocol] = None,
+        serde: SerializerProtocol | None = None,
         factory: type[defaultdict] = defaultdict,
     ) -> None:
         super().__init__(serde=serde)
@@ -95,26 +95,26 @@ class InMemorySaver(
             self.stack.enter_context(self.writes)  # type: ignore[arg-type]
             self.stack.enter_context(self.blobs)  # type: ignore[arg-type]
 
-    def __enter__(self) -> "InMemorySaver":
+    def __enter__(self) -> InMemorySaver:
         return self.stack.__enter__()
 
     def __exit__(
         self,
-        exc_type: Optional[type[BaseException]],
-        exc_value: Optional[BaseException],
-        traceback: Optional[TracebackType],
-    ) -> Optional[bool]:
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None:
         return self.stack.__exit__(exc_type, exc_value, traceback)
 
-    async def __aenter__(self) -> "InMemorySaver":
+    async def __aenter__(self) -> InMemorySaver:
         return self.stack.__enter__()
 
     async def __aexit__(
         self,
-        __exc_type: Optional[type[BaseException]],
-        __exc_value: Optional[BaseException],
-        __traceback: Optional[TracebackType],
-    ) -> Optional[bool]:
+        __exc_type: type[BaseException] | None,
+        __exc_value: BaseException | None,
+        __traceback: TracebackType | None,
+    ) -> bool | None:
         return self.stack.__exit__(__exc_type, __exc_value, __traceback)
 
     def _load_blobs(
@@ -129,7 +129,7 @@ class InMemorySaver(
                     channel_values[k] = self.serde.loads_typed(vv)
         return channel_values
 
-    def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+    def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the in-memory storage.
 
         This method retrieves a checkpoint tuple from the in-memory storage based on the
@@ -213,11 +213,11 @@ class InMemorySaver(
 
     def list(
         self,
-        config: Optional[RunnableConfig],
+        config: RunnableConfig | None,
         *,
-        filter: Optional[dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
     ) -> Iterator[CheckpointTuple]:
         """List checkpoints from the in-memory storage.
 
@@ -422,7 +422,7 @@ class InMemorySaver(
             if k[0] == thread_id:
                 del self.blobs[k]
 
-    async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+    async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Asynchronous version of get_tuple.
 
         This method is an asynchronous wrapper around get_tuple that runs the synchronous
@@ -438,11 +438,11 @@ class InMemorySaver(
 
     async def alist(
         self,
-        config: Optional[RunnableConfig],
+        config: RunnableConfig | None,
         *,
-        filter: Optional[dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
     ) -> AsyncIterator[CheckpointTuple]:
         """Asynchronous version of list.
 
@@ -512,7 +512,7 @@ class InMemorySaver(
         """
         return self.delete_thread(thread_id)
 
-    def get_next_version(self, current: Optional[str]) -> str:
+    def get_next_version(self, current: str | None) -> str:
         if current is None:
             current_v = 0
         elif isinstance(current, int):
@@ -571,7 +571,7 @@ class PersistentDict(defaultdict):
         self.sync()
         self.clear()
 
-    def __enter__(self) -> "PersistentDict":
+    def __enter__(self) -> PersistentDict:
         return self
 
     def __exit__(self, *exc_info: Any) -> None:

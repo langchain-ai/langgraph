@@ -69,6 +69,9 @@ indent-width = 4
 extend-include = ["*.ipynb"]
 target-version = "py39"
 
+[tool.ruff.lint.per-file-ignores]
+"tests/bench/*" = ["UP006", "UP007"]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"

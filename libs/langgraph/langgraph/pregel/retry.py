@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 import random
@@ -5,7 +7,7 @@ import sys
 import time
 from collections.abc import Awaitable, Sequence
 from dataclasses import replace
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from langgraph.constants import (
     CONF,
@@ -23,8 +25,8 @@ SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
 
 def run_with_retry(
     task: PregelExecutableTask,
-    retry_policy: Optional[Sequence[RetryPolicy]],
-    configurable: Optional[dict[str, Any]] = None,
+    retry_policy: Sequence[RetryPolicy] | None,
+    configurable: dict[str, Any] | None = None,
 ) -> None:
     """Run a task with retries."""
     retry_policy = task.retry_policy or retry_policy
@@ -104,12 +106,11 @@ def run_with_retry(
 
 async def arun_with_retry(
     task: PregelExecutableTask,
-    retry_policy: Optional[Sequence[RetryPolicy]],
+    retry_policy: Sequence[RetryPolicy] | None,
     stream: bool = False,
-    match_cached_writes: Optional[
-        Callable[[], Awaitable[Sequence[PregelExecutableTask]]]
-    ] = None,
-    configurable: Optional[dict[str, Any]] = None,
+    match_cached_writes: Callable[[], Awaitable[Sequence[PregelExecutableTask]]]
+    | None = None,
+    configurable: dict[str, Any] | None = None,
 ) -> None:
     """Run a task asynchronously with retries."""
     retry_policy = task.retry_policy or retry_policy

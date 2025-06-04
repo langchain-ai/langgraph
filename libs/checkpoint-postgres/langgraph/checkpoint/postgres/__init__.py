@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import threading
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from typing import Any, Optional
+from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import Capabilities, Connection, Cursor, Pipeline
@@ -34,8 +36,8 @@ class PostgresSaver(BasePostgresSaver):
     def __init__(
         self,
         conn: _internal.Conn,
-        pipe: Optional[Pipeline] = None,
-        serde: Optional[SerializerProtocol] = None,
+        pipe: Pipeline | None = None,
+        serde: SerializerProtocol | None = None,
     ) -> None:
         super().__init__(serde=serde)
         if isinstance(conn, ConnectionPool) and pipe is not None:
@@ -52,7 +54,7 @@ class PostgresSaver(BasePostgresSaver):
     @contextmanager
     def from_conn_string(
         cls, conn_string: str, *, pipeline: bool = False
-    ) -> Iterator["PostgresSaver"]:
+    ) -> Iterator[PostgresSaver]:
         """Create a new PostgresSaver instance from a connection string.
 
         Args:
@@ -99,11 +101,11 @@ class PostgresSaver(BasePostgresSaver):
 
     def list(
         self,
-        config: Optional[RunnableConfig],
+        config: RunnableConfig | None,
         *,
-        filter: Optional[dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
     ) -> Iterator[CheckpointTuple]:
         """List checkpoints from the database.
 
@@ -200,7 +202,7 @@ class PostgresSaver(BasePostgresSaver):
                     self._load_writes(value["pending_writes"]),
                 )
 
-    def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+    def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the database.
 
         This method retrieves a checkpoint tuple from the Postgres database based on the
