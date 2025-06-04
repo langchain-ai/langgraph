@@ -7,7 +7,7 @@ export interface UIMessage<
   id: string;
   name: TName;
   props: TProps;
-  metadata: {
+  metadata?: {
     merge?: boolean;
     run_id?: string;
     name?: string;
@@ -51,9 +51,12 @@ export function uiMessageReducer(
 
     const index = state.findIndex((ui) => ui.id === event.id);
     if (index !== -1) {
-      newState[index] = event.metadata.merge
-        ? { ...event, props: { ...state[index].props, ...event.props } }
-        : event;
+      newState[index] =
+        typeof event.metadata === "object" &&
+        event.metadata != null &&
+        event.metadata.merge
+          ? { ...event, props: { ...state[index].props, ...event.props } }
+          : event;
     } else {
       newState.push(event);
     }

@@ -31,4 +31,4 @@ The [Self-Hosted Control Plane](./langgraph_self_hosted_control_plane.md) deploy
  - **Kubernetes**: The Self-Hosted Control Plane deployment option supports deploying control plane and data plane infrastructure to any Kubernetes cluster.
 
 !!! tip
-    If you would like to enable this on your LangSmith instance, please follow the [Self-Hosted Control Plane deployment guide](../deployment/self_hosted_control_plane.md).
+    If you would like to enable this on your LangSmith instance, please follow the [Self-Hosted Control Plane deployment guide](../cloud/deployment/self_hosted_control_plane.md).

@@ -391,7 +391,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 Will be applied regardless of whether the AsyncPostgresSaver instance was initialized with a pipeline.
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
-        async with _ainternal.get_connection(self.conn) as conn:
+        async with self.lock, _ainternal.get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
                 # in multiple threads/coroutines, but only one cursor can be
@@ -407,7 +407,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 # thread/coroutine at a time, so we acquire a lock
                 if self.supports_pipeline:
                     async with (
-                        self.lock,
                         conn.pipeline(),
                         conn.cursor(binary=True, row_factory=dict_row) as cur,
                     ):
@@ -415,16 +414,12 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 else:
                     # Use connection's transaction context manager when pipeline mode not supported
                     async with (
-                        self.lock,
                         conn.transaction(),
                         conn.cursor(binary=True, row_factory=dict_row) as cur,
                     ):
                         yield cur
             else:
-                async with (
-                    self.lock,
-                    conn.cursor(binary=True, row_factory=dict_row) as cur,
-                ):
+                async with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
     def list(
