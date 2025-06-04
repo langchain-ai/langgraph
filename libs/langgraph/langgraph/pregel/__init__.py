@@ -8,7 +8,7 @@ import weakref
 from collections import defaultdict, deque
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from functools import partial
-from typing import Any, Callable, Union, cast, get_type_hints
+from typing import Any, Callable, Generic, Union, cast, get_type_hints
 from uuid import UUID, uuid5
 
 from langchain_core.globals import get_debug
@@ -107,6 +107,7 @@ from langgraph.types import (
     StreamChunk,
     StreamMode,
 )
+from langgraph.typing import InputT
 from langgraph.utils.config import (
     ensure_config,
     merge_configs,
@@ -297,7 +298,7 @@ class NodeBuilder:
         )
 
 
-class Pregel(PregelProtocol):
+class Pregel(PregelProtocol[InputT], Generic[InputT]):
     """Pregel manages the runtime behavior for LangGraph applications.
 
     ## Overview
@@ -738,7 +739,8 @@ class Pregel(PregelProtocol):
         }
 
     def copy(self, update: dict[str, Any] | None = None) -> Self:
-        attrs = {**self.__dict__, **(update or {})}
+        attrs = {k: v for k, v in self.__dict__.items() if k != "__orig_class__"}
+        attrs.update(update or {})
         return self.__class__(**attrs)
 
     def with_config(self, config: RunnableConfig | None = None, **kwargs: Any) -> Self:
@@ -2279,7 +2281,7 @@ class Pregel(PregelProtocol):
 
     def stream(
         self,
-        input: dict[str, Any] | Any,
+        input: InputT,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode | list[StreamMode] | None = None,
@@ -2500,7 +2502,7 @@ class Pregel(PregelProtocol):
 
     async def astream(
         self,
-        input: dict[str, Any] | Any,
+        input: InputT,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode | list[StreamMode] | None = None,
@@ -2736,7 +2738,7 @@ class Pregel(PregelProtocol):
 
     def invoke(
         self,
-        input: dict[str, Any] | Any,
+        input: InputT,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode = "values",
@@ -2802,7 +2804,7 @@ class Pregel(PregelProtocol):
 
     async def ainvoke(
         self,
-        input: dict[str, Any] | Any,
+        input: InputT,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode = "values",

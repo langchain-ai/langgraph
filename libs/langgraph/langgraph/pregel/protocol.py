@@ -1,21 +1,19 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Sequence
-from typing import (
-    Any,
-    Optional,
-    Union,
-)
+from typing import Any, Generic, Optional, Union
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.graph import Graph as DrawableGraph
 from typing_extensions import Self
 
 from langgraph.pregel.types import All, StateSnapshot, StateUpdate, StreamMode
+from langgraph.typing import InputT
 
 
-class PregelProtocol(
-    Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]], ABC
-):
+# TODO: remove Runnable inheritance here!
+class PregelProtocol(Runnable[InputT, Any], Generic[InputT], ABC):
     @abstractmethod
     def with_config(
         self, config: Optional[RunnableConfig] = None, **kwargs: Any
@@ -100,7 +98,7 @@ class PregelProtocol(
     @abstractmethod
     def stream(
         self,
-        input: Union[dict[str, Any], Any],
+        input: InputT,
         config: Optional[RunnableConfig] = None,
         *,
         stream_mode: Optional[Union[StreamMode, list[StreamMode]]] = None,
@@ -112,7 +110,7 @@ class PregelProtocol(
     @abstractmethod
     def astream(
         self,
-        input: Union[dict[str, Any], Any],
+        input: InputT,
         config: Optional[RunnableConfig] = None,
         *,
         stream_mode: Optional[Union[StreamMode, list[StreamMode]]] = None,
@@ -124,7 +122,7 @@ class PregelProtocol(
     @abstractmethod
     def invoke(
         self,
-        input: Union[dict[str, Any], Any],
+        input: InputT,
         config: Optional[RunnableConfig] = None,
         *,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
@@ -134,7 +132,7 @@ class PregelProtocol(
     @abstractmethod
     async def ainvoke(
         self,
-        input: Union[dict[str, Any], Any],
+        input: InputT,
         config: Optional[RunnableConfig] = None,
         *,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
