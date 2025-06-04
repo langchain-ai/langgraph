@@ -532,3 +532,39 @@ def test_build_command_shows_wolfi_warning() -> None:
         assert "Wolfi Linux" in result.output
         assert "image_distro" in result.output
         assert "wolfi" in result.output
+
+def test_build_generate_proper_build_context():
+    runner = CliRunner()
+    config_content = {
+        "python_version": "3.11",
+        "graphs": {"agent": "agent.py:graph"},
+        "dependencies": [
+            ".",
+            "../../..",
+            "../.."
+        ],
+        "image_distro": "wolfi",
+    }
+
+    with temporary_config_folder(config_content) as temp_dir:
+        agent_path = temp_dir / "agent.py"
+        agent_path.touch()
+
+        # Mock docker command since we don't want to actually build
+        with runner.isolated_filesystem():
+            result = runner.invoke(
+                cli,
+                [
+                    "build",
+                    "--tag",
+                    "test-image",
+                    "--config",
+                    str(temp_dir / "config.json"),
+                ],
+                catch_exceptions=True,
+            )
+
+        build_context_pattern = re.compile(r'--build-context\s+(\w+)=([^\s]+)')
+
+        build_contexts = re.findall(build_context_pattern, result.output)
+        assert len(build_contexts) == 2, f"Expected 2 build contexts, but found {len(build_contexts)}"
