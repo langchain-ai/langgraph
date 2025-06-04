@@ -22,12 +22,14 @@ DEFAULT_DOCKER_CAPABILITIES = DockerCapabilities(
 
 
 @contextmanager
-def temporary_config_folder(config_content: dict):
+def temporary_config_folder(config_content: dict, levels: int = 0):
     # Create a temporary directory
     temp_dir = tempfile.mkdtemp()
     try:
         # Define the path for the config.json file
-        config_path = Path(temp_dir) / "config.json"
+        config_path = Path(temp_dir) / f"{'a/' * levels}config.json"
+        # Ensure the parent directory exists
+        config_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Write the provided dictionary content to config.json
         with open(config_path, "w", encoding="utf-8") as config_file:
@@ -533,20 +535,17 @@ def test_build_command_shows_wolfi_warning() -> None:
         assert "image_distro" in result.output
         assert "wolfi" in result.output
 
+
 def test_build_generate_proper_build_context():
     runner = CliRunner()
     config_content = {
         "python_version": "3.11",
         "graphs": {"agent": "agent.py:graph"},
-        "dependencies": [
-            ".",
-            "../../..",
-            "../.."
-        ],
+        "dependencies": [".", "../../..", "../.."],
         "image_distro": "wolfi",
     }
 
-    with temporary_config_folder(config_content) as temp_dir:
+    with temporary_config_folder(config_content, levels=3) as temp_dir:
         agent_path = temp_dir / "agent.py"
         agent_path.touch()
 
@@ -564,7 +563,9 @@ def test_build_generate_proper_build_context():
                 catch_exceptions=True,
             )
 
-        build_context_pattern = re.compile(r'--build-context\s+(\w+)=([^\s]+)')
+        build_context_pattern = re.compile(r"--build-context\s+(\w+)=([^\s]+)")
 
         build_contexts = re.findall(build_context_pattern, result.output)
-        assert len(build_contexts) == 2, f"Expected 2 build contexts, but found {len(build_contexts)}"
+        assert (
+            len(build_contexts) == 2
+        ), f"Expected 2 build contexts, but found {len(build_contexts)}"
