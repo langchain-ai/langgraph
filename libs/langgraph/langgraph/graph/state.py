@@ -319,12 +319,18 @@ class StateGraph(Graph):
 
         Example:
             ```python
+            from typing_extensions import TypedDict
+
+            from langchain_core.runnables import RunnableConfig
             from langgraph.graph import START, StateGraph
 
-            def my_node(state, config):
+            class State(TypedDict):
+                x: int
+
+            def my_node(state: State, config: RunnableConfig) -> State:
                 return {"x": state["x"] + 1}
 
-            builder = StateGraph(dict)
+            builder = StateGraph(State)
             builder.add_node(my_node)  # node name will be 'my_node'
             builder.add_edge(START, "my_node")
             graph = builder.compile()
@@ -334,7 +340,7 @@ class StateGraph(Graph):
 
         Example: Customize the name:
             ```python
-            builder = StateGraph(dict)
+            builder = StateGraph(State)
             builder.add_node("my_fair_node", my_node)
             builder.add_edge(START, "my_fair_node")
             graph = builder.compile()
