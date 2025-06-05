@@ -3818,6 +3818,12 @@
             "title": "Filter",
             "description": "Optional dictionary of key-value pairs to filter results."
           },
+          "query": {
+            "type": "string",
+            "additionalProperties": true,
+            "title": "Query",
+            "description": "Optional query for natural language search."
+          },
           "limit": {
             "type": "integer",
             "default": 10,
