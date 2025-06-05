@@ -46,7 +46,7 @@ lint.select = [
   "B",  # flake8-bugbear
   "I",  # isort
 ]
-lint.ignore = ["E501", "B008", "UP007", "UP006"]
+lint.ignore = ["E501", "B008"]
 
 [tool.pytest-watcher]
 now = true

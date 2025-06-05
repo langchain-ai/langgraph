@@ -197,19 +197,25 @@ In LangGraph, nodes are typically python functions (sync or async) where the **f
 Similar to `NetworkX`, you add these nodes to a graph using the [add_node][langgraph.graph.StateGraph.add_node] method:
 
 ```python
+from typing_extensions import TypedDict
+
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph
 
-builder = StateGraph(dict)
+class State(TypedDict):
+    input: str
+    results: str
+
+builder = StateGraph(State)
 
 
-def my_node(state: dict, config: RunnableConfig):
+def my_node(state: State, config: RunnableConfig):
     print("In node: ", config["configurable"]["user_id"])
     return {"results": f"Hello, {state['input']}!"}
 
 
 # The second argument is optional
-def my_other_node(state: dict):
+def my_other_node(state: State):
     return state
 
 

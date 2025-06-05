@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import ast
 import inspect
 import re
 import textwrap
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from langchain_core.runnables import RunnableLambda, RunnableSequence
 from typing_extensions import override
@@ -30,7 +32,7 @@ def get_new_channel_versions(
     return new_versions
 
 
-def find_subgraph_pregel(candidate: Runnable) -> Optional[PregelProtocol]:
+def find_subgraph_pregel(candidate: Runnable) -> PregelProtocol | None:
     from langgraph.pregel import Pregel
 
     candidates: list[Runnable] = [candidate]

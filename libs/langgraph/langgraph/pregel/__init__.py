@@ -2766,8 +2766,8 @@ class Pregel(PregelProtocol[InputT], Generic[InputT]):
         """
         output_keys = output_keys if output_keys is not None else self.output_channels
 
-        latest: Union[dict[str, Any], Any] = None
-        chunks: list[Union[dict[str, Any], Any]] = []
+        latest: dict[str, Any] | Any = None
+        chunks: list[dict[str, Any] | Any] = []
         interrupts: list[Interrupt] = []
 
         for chunk in self.stream(
@@ -2833,8 +2833,8 @@ class Pregel(PregelProtocol[InputT], Generic[InputT]):
 
         output_keys = output_keys if output_keys is not None else self.output_channels
 
-        latest: Union[dict[str, Any], Any] = None
-        chunks: list[Union[dict[str, Any], Any]] = []
+        latest: dict[str, Any] | Any = None
+        chunks: list[dict[str, Any] | Any] = []
         interrupts: list[Interrupt] = []
 
         async for chunk in self.astream(

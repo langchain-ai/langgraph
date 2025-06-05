@@ -1,10 +1,10 @@
+from __future__ import annotations
+
 from collections.abc import AsyncIterator, Iterator, Sequence
 from dataclasses import asdict
 from typing import (
     Any,
     Literal,
-    Optional,
-    Union,
     cast,
 )
 
@@ -96,20 +96,20 @@ class RemoteGraph(PregelProtocol):
     """
 
     assistant_id: str
-    name: Optional[str]
+    name: str | None
 
     def __init__(
         self,
         assistant_id: str,  # graph_id
         /,
         *,
-        url: Optional[str] = None,
-        api_key: Optional[str] = None,
-        headers: Optional[dict[str, str]] = None,
-        client: Optional[LangGraphClient] = None,
-        sync_client: Optional[SyncLangGraphClient] = None,
-        config: Optional[RunnableConfig] = None,
-        name: Optional[str] = None,
+        url: str | None = None,
+        api_key: str | None = None,
+        headers: dict[str, str] | None = None,
+        client: LangGraphClient | None = None,
+        sync_client: SyncLangGraphClient | None = None,
+        config: RunnableConfig | None = None,
+        name: str | None = None,
     ):
         """Specify `url`, `api_key`, and/or `headers` to create default sync and async clients.
 
@@ -162,9 +162,7 @@ class RemoteGraph(PregelProtocol):
         attrs = {**self.__dict__, **update}
         return self.__class__(attrs.pop("assistant_id"), **attrs)
 
-    def with_config(
-        self, config: Optional[RunnableConfig] = None, **kwargs: Any
-    ) -> Self:
+    def with_config(self, config: RunnableConfig | None = None, **kwargs: Any) -> Self:
         return self.copy(
             {"config": merge_configs(self.config, config, cast(RunnableConfig, kwargs))}
         )
@@ -195,9 +193,9 @@ class RemoteGraph(PregelProtocol):
 
     def get_graph(
         self,
-        config: Optional[RunnableConfig] = None,
+        config: RunnableConfig | None = None,
         *,
-        xray: Union[int, bool] = False,
+        xray: int | bool = False,
     ) -> DrawableGraph:
         """Get graph by graph name.
 
@@ -224,9 +222,9 @@ class RemoteGraph(PregelProtocol):
 
     async def aget_graph(
         self,
-        config: Optional[RunnableConfig] = None,
+        config: RunnableConfig | None = None,
         *,
-        xray: Union[int, bool] = False,
+        xray: int | bool = False,
     ) -> DrawableGraph:
         """Get graph by graph name.
 
@@ -309,7 +307,7 @@ class RemoteGraph(PregelProtocol):
             interrupts=tuple([i for task in tasks for i in task.interrupts]),
         )
 
-    def _get_checkpoint(self, config: Optional[RunnableConfig]) -> Optional[Checkpoint]:
+    def _get_checkpoint(self, config: RunnableConfig | None) -> Checkpoint | None:
         if config is None:
             return None
 
@@ -423,9 +421,9 @@ class RemoteGraph(PregelProtocol):
         self,
         config: RunnableConfig,
         *,
-        filter: Optional[dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
     ) -> Iterator[StateSnapshot]:
         """Get the state history of a thread.
 
@@ -458,9 +456,9 @@ class RemoteGraph(PregelProtocol):
         self,
         config: RunnableConfig,
         *,
-        filter: Optional[dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
     ) -> AsyncIterator[StateSnapshot]:
         """Get the state history of a thread.
 
@@ -492,22 +490,22 @@ class RemoteGraph(PregelProtocol):
     def bulk_update_state(
         self,
         config: RunnableConfig,
-        updates: list[tuple[Optional[dict[str, Any]], Optional[str]]],
+        updates: list[tuple[dict[str, Any] | None, str | None]],
     ) -> RunnableConfig:
         raise NotImplementedError
 
     async def abulk_update_state(
         self,
         config: RunnableConfig,
-        updates: list[tuple[Optional[dict[str, Any]], Optional[str]]],
+        updates: list[tuple[dict[str, Any] | None, str | None]],
     ) -> RunnableConfig:
         raise NotImplementedError
 
     def update_state(
         self,
         config: RunnableConfig,
-        values: Optional[Union[dict[str, Any], Any]],
-        as_node: Optional[str] = None,
+        values: dict[str, Any] | Any | None,
+        as_node: str | None = None,
     ) -> RunnableConfig:
         """Update the state of a thread.
 
@@ -536,8 +534,8 @@ class RemoteGraph(PregelProtocol):
     async def aupdate_state(
         self,
         config: RunnableConfig,
-        values: Optional[Union[dict[str, Any], Any]],
-        as_node: Optional[str] = None,
+        values: dict[str, Any] | Any | None,
+        as_node: str | None = None,
     ) -> RunnableConfig:
         """Update the state of a thread.
 
@@ -565,12 +563,10 @@ class RemoteGraph(PregelProtocol):
 
     def _get_stream_modes(
         self,
-        stream_mode: Optional[Union[StreamMode, list[StreamMode]]],
-        config: Optional[RunnableConfig],
+        stream_mode: StreamMode | list[StreamMode] | None,
+        config: RunnableConfig | None,
         default: StreamMode = "updates",
-    ) -> tuple[
-        list[StreamModeSDK], list[StreamModeSDK], bool, Optional[StreamProtocol]
-    ]:
+    ) -> tuple[list[StreamModeSDK], list[StreamModeSDK], bool, StreamProtocol | None]:
         """Return a tuple of the final list of stream modes sent to the
         remote graph and a boolean flag indicating if stream mode 'updates'
         was present in the original list of stream modes.
@@ -591,7 +587,7 @@ class RemoteGraph(PregelProtocol):
             updated_stream_modes.append(default)
         requested_stream_modes = updated_stream_modes.copy()
         # add any from parent graph
-        stream: Optional[StreamProtocol] = (
+        stream: StreamProtocol | None = (
             (config or {}).get(CONF, {}).get(CONFIG_KEY_STREAM)
         )
         if stream:
@@ -618,15 +614,15 @@ class RemoteGraph(PregelProtocol):
 
     def stream(
         self,
-        input: Union[dict[str, Any], Any],
-        config: Optional[RunnableConfig] = None,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
         *,
-        stream_mode: Optional[Union[StreamMode, list[StreamMode]]] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        stream_mode: StreamMode | list[StreamMode] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
         **kwargs: Any,
-    ) -> Iterator[Union[dict[str, Any], Any]]:
+    ) -> Iterator[dict[str, Any] | Any]:
         """Create a run and stream the results.
 
         This method calls `POST /threads/{thread_id}/runs/stream` if a `thread_id`
@@ -652,7 +648,7 @@ class RemoteGraph(PregelProtocol):
             stream_mode, config
         )
         if isinstance(input, Command):
-            command: Optional[CommandSDK] = cast(CommandSDK, asdict(input))
+            command: CommandSDK | None = cast(CommandSDK, asdict(input))
             input = None
         else:
             command = None
@@ -717,15 +713,15 @@ class RemoteGraph(PregelProtocol):
 
     async def astream(
         self,
-        input: Union[dict[str, Any], Any],
-        config: Optional[RunnableConfig] = None,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
         *,
-        stream_mode: Optional[Union[StreamMode, list[StreamMode]]] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        stream_mode: StreamMode | list[StreamMode] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
         **kwargs: Any,
-    ) -> AsyncIterator[Union[dict[str, Any], Any]]:
+    ) -> AsyncIterator[dict[str, Any] | Any]:
         """Create a run and stream the results.
 
         This method calls `POST /threads/{thread_id}/runs/stream` if a `thread_id`
@@ -751,7 +747,7 @@ class RemoteGraph(PregelProtocol):
             stream_mode, config
         )
         if isinstance(input, Command):
-            command: Optional[CommandSDK] = cast(CommandSDK, asdict(input))
+            command: CommandSDK | None = cast(CommandSDK, asdict(input))
             input = None
         else:
             command = None
@@ -817,28 +813,28 @@ class RemoteGraph(PregelProtocol):
     async def astream_events(
         self,
         input: Any,
-        config: Optional[RunnableConfig] = None,
+        config: RunnableConfig | None = None,
         *,
         version: Literal["v1", "v2"],
-        include_names: Optional[Sequence[All]] = None,
-        include_types: Optional[Sequence[All]] = None,
-        include_tags: Optional[Sequence[All]] = None,
-        exclude_names: Optional[Sequence[All]] = None,
-        exclude_types: Optional[Sequence[All]] = None,
-        exclude_tags: Optional[Sequence[All]] = None,
+        include_names: Sequence[All] | None = None,
+        include_types: Sequence[All] | None = None,
+        include_tags: Sequence[All] | None = None,
+        exclude_names: Sequence[All] | None = None,
+        exclude_types: Sequence[All] | None = None,
+        exclude_tags: Sequence[All] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[dict[str, Any]]:
         raise NotImplementedError
 
     def invoke(
         self,
-        input: Union[dict[str, Any], Any],
-        config: Optional[RunnableConfig] = None,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
         *,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
         **kwargs: Any,
-    ) -> Union[dict[str, Any], Any]:
+    ) -> dict[str, Any] | Any:
         """Create a run, wait until it finishes and return the final state.
 
         Args:
@@ -867,13 +863,13 @@ class RemoteGraph(PregelProtocol):
 
     async def ainvoke(
         self,
-        input: Union[dict[str, Any], Any],
-        config: Optional[RunnableConfig] = None,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
         *,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
         **kwargs: Any,
-    ) -> Union[dict[str, Any], Any]:
+    ) -> dict[str, Any] | Any:
         """Create a run, wait until it finishes and return the final state.
 
         Args:

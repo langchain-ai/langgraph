@@ -321,7 +321,7 @@ attempts = 0
 # The default RetryPolicy is optimized for retrying specific network errors.
 retry_policy = RetryPolicy(retry_on=ValueError)
 
-@task(retry=retry_policy) 
+@task(retry_policy=retry_policy) 
 def get_info():
     global attempts
     attempts += 1
