@@ -175,32 +175,7 @@ class PostgresSaver(BasePostgresSaver):
                             value["channel_values"],
                         )
             for value in values:
-                yield CheckpointTuple(
-                    {
-                        "configurable": {
-                            "thread_id": value["thread_id"],
-                            "checkpoint_ns": value["checkpoint_ns"],
-                            "checkpoint_id": value["checkpoint_id"],
-                        }
-                    },
-                    {
-                        **value["checkpoint"],
-                        "channel_values": self._load_blobs(value["channel_values"]),
-                    },
-                    value["metadata"],
-                    (
-                        {
-                            "configurable": {
-                                "thread_id": value["thread_id"],
-                                "checkpoint_ns": value["checkpoint_ns"],
-                                "checkpoint_id": value["parent_checkpoint_id"],
-                            }
-                        }
-                        if value["parent_checkpoint_id"]
-                        else None
-                    ),
-                    self._load_writes(value["pending_writes"]),
-                )
+                yield self._load_checkpoint_tuple(value)
 
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the database.
@@ -271,32 +246,7 @@ class PostgresSaver(BasePostgresSaver):
                         value["channel_values"],
                     )
 
-            return CheckpointTuple(
-                {
-                    "configurable": {
-                        "thread_id": thread_id,
-                        "checkpoint_ns": checkpoint_ns,
-                        "checkpoint_id": value["checkpoint_id"],
-                    }
-                },
-                {
-                    **value["checkpoint"],
-                    "channel_values": self._load_blobs(value["channel_values"]),
-                },
-                value["metadata"],
-                (
-                    {
-                        "configurable": {
-                            "thread_id": thread_id,
-                            "checkpoint_ns": checkpoint_ns,
-                            "checkpoint_id": value["parent_checkpoint_id"],
-                        }
-                    }
-                    if value["parent_checkpoint_id"]
-                    else None
-                ),
-                self._load_writes(value["pending_writes"]),
-            )
+            return self._load_checkpoint_tuple(value)
 
     def put(
         self,
@@ -465,6 +415,45 @@ class PostgresSaver(BasePostgresSaver):
             else:
                 with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
+
+    def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:
+        """
+        Convert a database row into a CheckpointTuple object.
+
+        Args:
+            value (DictRow): A row from the database containing checkpoint data.
+
+        Returns:
+            CheckpointTuple: A structured representation of the checkpoint,
+            including its configuration, metadata, parent checkpoint (if any),
+            and pending writes.
+        """
+        return CheckpointTuple(
+            {
+                "configurable": {
+                    "thread_id": value["thread_id"],
+                    "checkpoint_ns": value["checkpoint_ns"],
+                    "checkpoint_id": value["checkpoint_id"],
+                }
+            },
+            {
+                **value["checkpoint"],
+                "channel_values": self._load_blobs(value["channel_values"]),
+            },
+            value["metadata"],
+            (
+                {
+                    "configurable": {
+                        "thread_id": value["thread_id"],
+                        "checkpoint_ns": value["checkpoint_ns"],
+                        "checkpoint_id": value["parent_checkpoint_id"],
+                    }
+                }
+                if value["parent_checkpoint_id"]
+                else None
+            ),
+            self._load_writes(value["pending_writes"]),
+        )
 
 
 __all__ = ["PostgresSaver", "BasePostgresSaver", "Conn"]
