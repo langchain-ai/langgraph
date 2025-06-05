@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from typing import Annotated, Literal, TypedDict
 
 from langchain_anthropic import ChatAnthropic
-from langchain_community.tools.tavily_search import TavilySearchResults
+from langchain_tavily import TavilySearchResults
 from langchain_core.messages import BaseMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph, add_messages
