@@ -1,0 +1,53 @@
+[tool.poetry]
+name = "langgraph-checkpoint-memgraph"
+version = "1.0.0"
+description = "Library with a Memgraph (neo4j driver) implementation for LangGraph checkpoint and store."
+authors = []
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/langchain-ai/langgraph"
+packages = [{ include = "langgraph" }]
+
+[tool.poetry.dependencies]
+python = ">=3.9"
+langgraph-checkpoint = "^2.0.21"
+neo4j = "^5.10.0"  # or the current stable version recommended for Memgraph
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.6.2"
+codespell = "^2.2.0"
+pytest = "^7.2.1"
+anyio = "^4.4.0"
+pytest-asyncio = "^0.21.1"
+pytest-mock = "^3.11.1"
+mypy = "^1.10.0"
+pytest-watcher = { version = ">=0.4.3", python = "<4.0" }
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --strict-config --durations=5 -vv"
+markers = [
+    "asyncio: mark a test as an asyncio test",
+]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+lint.select = [
+  "E",
+  "F",
+  "UP",
+  "B",
+  "I",
+]
+lint.ignore = ["E501", "B008", "UP007", "UP006"]
+
+[tool.mypy]
+disallow_untyped_defs = "True"
+explicit_package_bases = "True"
+warn_no_return = "False"
+warn_unused_ignores = "True"
+warn_redundant_casts = "True"
+allow_redefinition = "True"
+disable_error_code = "typeddict-item, return-value"
