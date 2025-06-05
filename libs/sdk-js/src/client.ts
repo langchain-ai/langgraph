@@ -980,11 +980,11 @@ export class RunsClient<
       if_not_exists: payload?.ifNotExists,
       checkpoint_during: payload?.checkpointDuring,
       langsmith_tracer: payload?._langsmithTracer
-      ? {
-          project_name: payload?._langsmithTracer?.projectName,
-          example_id: payload?._langsmithTracer?.exampleId,
-        }
-      : undefined,
+        ? {
+            project_name: payload?._langsmithTracer?.projectName,
+            example_id: payload?._langsmithTracer?.exampleId,
+          }
+        : undefined,
     };
 
     const [run, response] = await this.fetch<Run>(`/threads/${threadId}/runs`, {
