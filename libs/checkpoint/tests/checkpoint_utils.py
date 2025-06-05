@@ -1,13 +1,15 @@
+from __future__ import annotations
+
 from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import Any, Optional, Protocol
+from typing import Any, Protocol
 
 from langgraph.checkpoint.base import Checkpoint, EmptyChannelError
 from langgraph.checkpoint.base.id import uuid6
 
 
 class ChannelProtocol(Protocol):
-    def checkpoint(self) -> Optional[Any]: ...
+    def checkpoint(self) -> Any | None: ...
 
 
 def empty_checkpoint() -> Checkpoint:
@@ -23,10 +25,10 @@ def empty_checkpoint() -> Checkpoint:
 
 def create_checkpoint(
     checkpoint: Checkpoint,
-    channels: Optional[Mapping[str, ChannelProtocol]],
+    channels: Mapping[str, ChannelProtocol] | None,
     step: int,
     *,
-    id: Optional[str] = None,
+    id: str | None = None,
 ) -> Checkpoint:
     """Create a checkpoint for the given channels."""
     ts = datetime.now(timezone.utc).isoformat()

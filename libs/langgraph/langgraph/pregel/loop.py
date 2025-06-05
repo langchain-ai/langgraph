@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import binascii
 import concurrent.futures
@@ -18,7 +20,6 @@ from typing import (
     Literal,
     Optional,
     TypeVar,
-    Union,
     cast,
 )
 
@@ -148,36 +149,36 @@ def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
 
 class PregelLoop:
     config: RunnableConfig
-    store: Optional["BaseStore"]
-    stream: Optional[StreamProtocol]
+    store: BaseStore | None
+    stream: StreamProtocol | None
     step: int
     stop: int
 
-    input: Optional[Any]
-    input_model: Optional[type[BaseModel]]
-    cache: Optional[BaseCache[WritesT]]
-    checkpointer: Optional[BaseCheckpointSaver]
+    input: Any | None
+    input_model: type[BaseModel] | None
+    cache: BaseCache[WritesT] | None
+    checkpointer: BaseCheckpointSaver | None
     nodes: Mapping[str, PregelNode]
-    specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]]
-    output_keys: Union[str, Sequence[str]]
-    stream_keys: Union[str, Sequence[str]]
+    specs: Mapping[str, BaseChannel | ManagedValueSpec]
+    output_keys: str | Sequence[str]
+    stream_keys: str | Sequence[str]
     skip_done_tasks: bool
     is_nested: bool
-    manager: Union[None, AsyncParentRunManager, ParentRunManager]
-    interrupt_after: Union[All, Sequence[str]]
-    interrupt_before: Union[All, Sequence[str]]
+    manager: None | AsyncParentRunManager | ParentRunManager
+    interrupt_after: All | Sequence[str]
+    interrupt_before: All | Sequence[str]
     checkpoint_during: bool
     debug: bool
     retry_policy: Sequence[RetryPolicy]
-    cache_policy: Optional[CachePolicy]
+    cache_policy: CachePolicy | None
 
     checkpointer_get_next_version: GetNextVersion
-    checkpointer_put_writes: Optional[Callable[[RunnableConfig, WritesT, str], Any]]
+    checkpointer_put_writes: Callable[[RunnableConfig, WritesT, str], Any] | None
     checkpointer_put_writes_accepts_task_path: bool
-    _checkpointer_put_after_previous: Optional[
+    _checkpointer_put_after_previous: (
         Callable[
             [
-                Optional[concurrent.futures.Future],
+                concurrent.futures.Future | None,
                 RunnableConfig,
                 Checkpoint,
                 str,
@@ -185,8 +186,9 @@ class PregelLoop:
             ],
             Any,
         ]
-    ]
-    _migrate_checkpoint: Optional[Callable[[Checkpoint], None]]
+        | None
+    )
+    _migrate_checkpoint: Callable[[Checkpoint], None] | None
     submit: Submit
     channels: Mapping[str, BaseChannel]
     managed: ManagedValueMapping
@@ -196,40 +198,40 @@ class PregelLoop:
     checkpoint_config: RunnableConfig
     checkpoint_metadata: CheckpointMetadata
     checkpoint_pending_writes: list[PendingWrite]
-    checkpoint_previous_versions: dict[str, Union[str, float, int]]
-    prev_checkpoint_config: Optional[RunnableConfig]
+    checkpoint_previous_versions: dict[str, str | float | int]
+    prev_checkpoint_config: RunnableConfig | None
 
     status: Literal[
         "pending", "done", "interrupt_before", "interrupt_after", "out_of_steps"
     ]
     tasks: dict[str, PregelExecutableTask]
     to_interrupt: list[PregelExecutableTask]
-    output: Union[None, dict[str, Any], Any] = None
+    output: None | dict[str, Any] | Any = None
 
     # public
 
     def __init__(
         self,
-        input: Optional[Any],
+        input: Any | None,
         *,
-        stream: Optional[StreamProtocol],
+        stream: StreamProtocol | None,
         config: RunnableConfig,
-        store: Optional[BaseStore],
-        cache: Optional[BaseCache],
-        checkpointer: Optional[BaseCheckpointSaver],
+        store: BaseStore | None,
+        cache: BaseCache | None,
+        checkpointer: BaseCheckpointSaver | None,
         nodes: Mapping[str, PregelNode],
-        specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
-        output_keys: Union[str, Sequence[str]],
-        stream_keys: Union[str, Sequence[str]],
+        specs: Mapping[str, BaseChannel | ManagedValueSpec],
+        output_keys: str | Sequence[str],
+        stream_keys: str | Sequence[str],
         trigger_to_nodes: Mapping[str, Sequence[str]],
-        interrupt_after: Union[All, Sequence[str]] = EMPTY_SEQ,
-        interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
-        manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
-        input_model: Optional[type[BaseModel]] = None,
+        interrupt_after: All | Sequence[str] = EMPTY_SEQ,
+        interrupt_before: All | Sequence[str] = EMPTY_SEQ,
+        manager: None | AsyncParentRunManager | ParentRunManager = None,
+        input_model: type[BaseModel] | None = None,
         debug: bool = False,
-        migrate_checkpoint: Optional[Callable[[Checkpoint], None]] = None,
+        migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
-        cache_policy: Optional[CachePolicy] = None,
+        cache_policy: CachePolicy | None = None,
         checkpoint_during: bool = True,
     ) -> None:
         self.stream = stream
@@ -261,7 +263,7 @@ class PregelLoop:
         self.debug = debug
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
-        scratchpad: Optional[PregelScratchpad] = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
+        scratchpad: PregelScratchpad | None = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
         if not self.config[CONF].get(CONFIG_KEY_DELEGATE) and isinstance(
             scratchpad, PregelScratchpad
         ):
@@ -399,8 +401,8 @@ class PregelLoop:
                 )
 
     def accept_push(
-        self, task: PregelExecutableTask, write_idx: int, call: Optional[Call] = None
-    ) -> Optional[PregelExecutableTask]:
+        self, task: PregelExecutableTask, write_idx: int, call: Call | None = None
+    ) -> PregelExecutableTask | None:
         """Accept a PUSH from a task, potentially returning a new task to start."""
         # don't start if we should interrupt *after* the original task
         if self.interrupt_after and should_interrupt(
@@ -455,7 +457,7 @@ class PregelLoop:
     def tick(
         self,
         *,
-        input_keys: Union[str, Sequence[str]],
+        input_keys: str | Sequence[str],
     ) -> bool:
         """Execute a single iteration of the Pregel loop.
 
@@ -649,7 +651,7 @@ class PregelLoop:
                 else:
                     task.writes.append((k, v))
 
-    def _first(self, *, input_keys: Union[str, Sequence[str]]) -> Optional[set[str]]:
+    def _first(self, *, input_keys: str | Sequence[str]) -> set[str] | None:
         # resuming from previous checkpoint requires
         # - finding a previous checkpoint
         # - receiving None input (outer graph) or RESUMING flag (subgraph)
@@ -667,7 +669,7 @@ class PregelLoop:
             )
         )
         # this can be set only when there are input_writes
-        updated_channels: Optional[set[str]] = None
+        updated_channels: set[str] | None = None
 
         # map command to writes
         if isinstance(self.input, Command):
@@ -861,10 +863,10 @@ class PregelLoop:
 
     def _suppress_interrupt(
         self,
-        exc_type: Optional[type[BaseException]],
-        exc_value: Optional[BaseException],
-        traceback: Optional[TracebackType],
-    ) -> Optional[bool]:
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None:
         # persist current checkpoint and writes
         if not self.checkpoint_during:
             self._put_checkpoint(self.checkpoint_metadata)
@@ -977,26 +979,26 @@ class PregelLoop:
 class SyncPregelLoop(PregelLoop, AbstractContextManager):
     def __init__(
         self,
-        input: Optional[Any],
+        input: Any | None,
         *,
-        stream: Optional[StreamProtocol],
+        stream: StreamProtocol | None,
         config: RunnableConfig,
-        store: Optional[BaseStore],
-        cache: Optional[BaseCache],
-        checkpointer: Optional[BaseCheckpointSaver],
+        store: BaseStore | None,
+        cache: BaseCache | None,
+        checkpointer: BaseCheckpointSaver | None,
         nodes: Mapping[str, PregelNode],
-        specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
+        specs: Mapping[str, BaseChannel | ManagedValueSpec],
         trigger_to_nodes: Mapping[str, Sequence[str]],
-        manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
-        interrupt_after: Union[All, Sequence[str]] = EMPTY_SEQ,
-        interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
-        output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
-        stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
-        input_model: Optional[type[BaseModel]] = None,
+        manager: None | AsyncParentRunManager | ParentRunManager = None,
+        interrupt_after: All | Sequence[str] = EMPTY_SEQ,
+        interrupt_before: All | Sequence[str] = EMPTY_SEQ,
+        output_keys: str | Sequence[str] = EMPTY_SEQ,
+        stream_keys: str | Sequence[str] = EMPTY_SEQ,
+        input_model: type[BaseModel] | None = None,
         debug: bool = False,
-        migrate_checkpoint: Optional[Callable[[Checkpoint], None]] = None,
+        migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
-        cache_policy: Optional[CachePolicy] = None,
+        cache_policy: CachePolicy | None = None,
         checkpoint_during: bool = True,
     ) -> None:
         super().__init__(
@@ -1037,7 +1039,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
 
     def _checkpointer_put_after_previous(
         self,
-        prev: Optional[concurrent.futures.Future],
+        prev: concurrent.futures.Future | None,
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
@@ -1067,8 +1069,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         return matched
 
     def accept_push(
-        self, task: PregelExecutableTask, write_idx: int, call: Optional[Call] = None
-    ) -> Optional[PregelExecutableTask]:
+        self, task: PregelExecutableTask, write_idx: int, call: Call | None = None
+    ) -> PregelExecutableTask | None:
         if pushed := super().accept_push(task, write_idx, call):
             for task in self.match_cached_writes():
                 self.output_writes(task.id, task.writes, cached=True)
@@ -1156,10 +1158,10 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
 
     def __exit__(
         self,
-        exc_type: Optional[type[BaseException]],
-        exc_value: Optional[BaseException],
-        traceback: Optional[TracebackType],
-    ) -> Optional[bool]:
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None:
         # unwind stack
         return self.stack.__exit__(exc_type, exc_value, traceback)
 
@@ -1167,26 +1169,26 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
 class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
     def __init__(
         self,
-        input: Optional[Any],
+        input: Any | None,
         *,
-        stream: Optional[StreamProtocol],
+        stream: StreamProtocol | None,
         config: RunnableConfig,
-        store: Optional[BaseStore],
-        cache: Optional[BaseCache],
-        checkpointer: Optional[BaseCheckpointSaver],
+        store: BaseStore | None,
+        cache: BaseCache | None,
+        checkpointer: BaseCheckpointSaver | None,
         nodes: Mapping[str, PregelNode],
-        specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
+        specs: Mapping[str, BaseChannel | ManagedValueSpec],
         trigger_to_nodes: Mapping[str, Sequence[str]],
-        interrupt_after: Union[All, Sequence[str]] = EMPTY_SEQ,
-        interrupt_before: Union[All, Sequence[str]] = EMPTY_SEQ,
-        manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
-        output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
-        stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
-        input_model: Optional[type[BaseModel]] = None,
+        interrupt_after: All | Sequence[str] = EMPTY_SEQ,
+        interrupt_before: All | Sequence[str] = EMPTY_SEQ,
+        manager: None | AsyncParentRunManager | ParentRunManager = None,
+        output_keys: str | Sequence[str] = EMPTY_SEQ,
+        stream_keys: str | Sequence[str] = EMPTY_SEQ,
+        input_model: type[BaseModel] | None = None,
         debug: bool = False,
-        migrate_checkpoint: Optional[Callable[[Checkpoint], None]] = None,
+        migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
-        cache_policy: Optional[CachePolicy] = None,
+        cache_policy: CachePolicy | None = None,
         checkpoint_during: bool = True,
     ) -> None:
         super().__init__(
@@ -1227,7 +1229,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
 
     async def _checkpointer_put_after_previous(
         self,
-        prev: Optional[asyncio.Task],
+        prev: asyncio.Task | None,
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
@@ -1257,8 +1259,8 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         return matched
 
     async def aaccept_push(
-        self, task: PregelExecutableTask, write_idx: int, call: Optional[Call] = None
-    ) -> Optional[PregelExecutableTask]:
+        self, task: PregelExecutableTask, write_idx: int, call: Call | None = None
+    ) -> PregelExecutableTask | None:
         if pushed := super().accept_push(task, write_idx, call):
             for task in await self.amatch_cached_writes():
                 self.output_writes(task.id, task.writes, cached=True)
@@ -1352,10 +1354,10 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
 
     async def __aexit__(
         self,
-        exc_type: Optional[type[BaseException]],
-        exc_value: Optional[BaseException],
-        traceback: Optional[TracebackType],
-    ) -> Optional[bool]:
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None:
         # unwind stack
         exit_task = asyncio.create_task(
             self.stack.__aexit__(exc_type, exc_value, traceback)

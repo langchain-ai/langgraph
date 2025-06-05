@@ -72,7 +72,7 @@ logger = logging.getLogger(__name__)
 RESERVED_HEADERS = ("x-api-key",)
 
 
-def _get_api_key(api_key: Optional[str] = None) -> Optional[str]:
+def _get_api_key(api_key: str | None = None) -> str | None:
     """Get the API key from the environment.
     Precedence:
         1. explicit argument
@@ -89,7 +89,7 @@ def _get_api_key(api_key: Optional[str] = None) -> Optional[str]:
 
 
 def _get_headers(
-    api_key: Optional[str], custom_headers: Optional[dict[str, str]]
+    api_key: str | None, custom_headers: dict[str, str] | None
 ) -> dict[str, str]:
     """Combine api_key and custom user-provided headers."""
     custom_headers = custom_headers or {}
@@ -127,7 +127,7 @@ _RUN_METADATA_PATTERN = re.compile(
 
 def _get_run_metadata_from_response(
     response: httpx.Response,
-) -> Optional[RunCreateMetadata]:
+) -> RunCreateMetadata | None:
     """Extract run metadata from the response headers."""
     if (content_location := response.headers.get("Content-Location")) and (
         match := _RUN_METADATA_PATTERN.search(content_location)
@@ -142,10 +142,10 @@ def _get_run_metadata_from_response(
 
 def get_client(
     *,
-    url: Optional[str] = None,
-    api_key: Optional[str] = None,
-    headers: Optional[dict[str, str]] = None,
-    timeout: Optional[TimeoutTypes] = None,
+    url: str | None = None,
+    api_key: str | None = None,
+    headers: dict[str, str] | None = None,
+    timeout: TimeoutTypes | None = None,
 ) -> LangGraphClient:
     """Get a LangGraphClient instance.
 
@@ -180,7 +180,7 @@ def get_client(
         ```
     """
 
-    transport: Optional[httpx.AsyncBaseTransport] = None
+    transport: httpx.AsyncBaseTransport | None = None
     if url is None:
         if os.environ.get("__LANGGRAPH_DEFER_LOOPBACK_TRANSPORT") == "true":
             transport = get_asgi_transport()(app=None, root_path="/noauth")
@@ -248,9 +248,9 @@ class HttpClient:
         self,
         path: str,
         *,
-        params: Optional[QueryParamTypes] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_response: Optional[Callable[[httpx.Response], None]] = None,
+        params: QueryParamTypes | None = None,
+        headers: dict[str, str] | None = None,
+        on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a GET request."""
         r = await self.client.get(path, params=params, headers=headers)
@@ -271,9 +271,9 @@ class HttpClient:
         self,
         path: str,
         *,
-        json: Optional[dict],
-        headers: Optional[dict[str, str]] = None,
-        on_response: Optional[Callable[[httpx.Response], None]] = None,
+        json: dict | None,
+        headers: dict[str, str] | None = None,
+        on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a POST request."""
         if json is not None:
@@ -302,8 +302,8 @@ class HttpClient:
         path: str,
         *,
         json: dict,
-        headers: Optional[dict[str, str]] = None,
-        on_response: Optional[Callable[[httpx.Response], None]] = None,
+        headers: dict[str, str] | None = None,
+        on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a PUT request."""
         request_headers, content = await _aencode_json(json)
@@ -328,8 +328,8 @@ class HttpClient:
         path: str,
         *,
         json: dict,
-        headers: Optional[dict[str, str]] = None,
-        on_response: Optional[Callable[[httpx.Response], None]] = None,
+        headers: dict[str, str] | None = None,
+        on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a PATCH request."""
         request_headers, content = await _aencode_json(json)
@@ -353,9 +353,9 @@ class HttpClient:
         self,
         path: str,
         *,
-        json: Optional[Any] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_response: Optional[Callable[[httpx.Response], None]] = None,
+        json: Any | None = None,
+        headers: dict[str, str] | None = None,
+        on_response: Callable[[httpx.Response], None] | None = None,
     ) -> None:
         """Send a DELETE request."""
         r = await self.client.request("DELETE", path, json=json, headers=headers)
@@ -376,10 +376,10 @@ class HttpClient:
         path: str,
         method: str,
         *,
-        json: Optional[dict] = None,
-        params: Optional[QueryParamTypes] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_response: Optional[Callable[[httpx.Response], None]] = None,
+        json: dict | None = None,
+        params: QueryParamTypes | None = None,
+        headers: dict[str, str] | None = None,
+        on_response: Callable[[httpx.Response], None] | None = None,
     ) -> AsyncIterator[StreamPart]:
         """Stream results using SSE."""
         request_headers, content = await _aencode_json(json)
@@ -462,7 +462,7 @@ class AssistantsClient:
         self.http = http
 
     async def get(
-        self, assistant_id: str, *, headers: Optional[dict[str, str]] = None
+        self, assistant_id: str, *, headers: dict[str, str] | None = None
     ) -> Assistant:
         """Get an assistant by ID.
 
@@ -503,8 +503,8 @@ class AssistantsClient:
         self,
         assistant_id: str,
         *,
-        xray: Union[int, bool] = False,
-        headers: Optional[dict[str, str]] = None,
+        xray: int | bool = False,
+        headers: dict[str, str] | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """Get the graph of an assistant by ID.
 
@@ -552,7 +552,7 @@ class AssistantsClient:
         )
 
     async def get_schemas(
-        self, assistant_id: str, *, headers: Optional[dict[str, str]] = None
+        self, assistant_id: str, *, headers: dict[str, str] | None = None
     ) -> GraphSchema:
         """Get the schemas of an assistant by ID.
 
@@ -670,10 +670,10 @@ class AssistantsClient:
     async def get_subgraphs(
         self,
         assistant_id: str,
-        namespace: Optional[str] = None,
+        namespace: str | None = None,
         recurse: bool = False,
         *,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> Subgraphs:
         """Get the schemas of an assistant by ID.
 
@@ -702,15 +702,15 @@ class AssistantsClient:
 
     async def create(
         self,
-        graph_id: Optional[str],
-        config: Optional[Config] = None,
+        graph_id: str | None,
+        config: Config | None = None,
         *,
         metadata: Json = None,
-        assistant_id: Optional[str] = None,
-        if_exists: Optional[OnConflictBehavior] = None,
-        name: Optional[str] = None,
-        headers: Optional[dict[str, str]] = None,
-        description: Optional[str] = None,
+        assistant_id: str | None = None,
+        if_exists: OnConflictBehavior | None = None,
+        name: str | None = None,
+        headers: dict[str, str] | None = None,
+        description: str | None = None,
     ) -> Assistant:
         """Create a new assistant.
 
@@ -766,12 +766,12 @@ class AssistantsClient:
         self,
         assistant_id: str,
         *,
-        graph_id: Optional[str] = None,
-        config: Optional[Config] = None,
+        graph_id: str | None = None,
+        config: Config | None = None,
         metadata: Json = None,
-        name: Optional[str] = None,
-        headers: Optional[dict[str, str]] = None,
-        description: Optional[str] = None,
+        name: str | None = None,
+        headers: dict[str, str] | None = None,
+        description: str | None = None,
     ) -> Assistant:
         """Update an assistant.
 
@@ -825,7 +825,7 @@ class AssistantsClient:
         self,
         assistant_id: str,
         *,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         """Delete an assistant.
 
@@ -852,12 +852,12 @@ class AssistantsClient:
         self,
         *,
         metadata: Json = None,
-        graph_id: Optional[str] = None,
+        graph_id: str | None = None,
         limit: int = 10,
         offset: int = 0,
-        sort_by: Optional[AssistantSortBy] = None,
-        sort_order: Optional[SortOrder] = None,
-        headers: Optional[dict[str, str]] = None,
+        sort_by: AssistantSortBy | None = None,
+        sort_order: SortOrder | None = None,
+        headers: dict[str, str] | None = None,
     ) -> list[Assistant]:
         """Search for assistants.
 
@@ -911,7 +911,7 @@ class AssistantsClient:
         limit: int = 10,
         offset: int = 0,
         *,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> list[AssistantVersion]:
         """List all versions of an assistant.
 
@@ -950,7 +950,7 @@ class AssistantsClient:
         assistant_id: str,
         version: int,
         *,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> Assistant:
         """Change the version of an assistant.
 
@@ -1000,7 +1000,7 @@ class ThreadsClient:
         self.http = http
 
     async def get(
-        self, thread_id: str, *, headers: Optional[dict[str, str]] = None
+        self, thread_id: str, *, headers: dict[str, str] | None = None
     ) -> Thread:
         """Get a thread by ID.
 
@@ -1040,11 +1040,11 @@ class ThreadsClient:
         self,
         *,
         metadata: Json = None,
-        thread_id: Optional[str] = None,
-        if_exists: Optional[OnConflictBehavior] = None,
-        supersteps: Optional[Sequence[dict[str, Sequence[dict[str, Any]]]]] = None,
-        graph_id: Optional[str] = None,
-        headers: Optional[dict[str, str]] = None,
+        thread_id: str | None = None,
+        if_exists: OnConflictBehavior | None = None,
+        supersteps: Sequence[dict[str, Sequence[dict[str, Any]]]] | None = None,
+        graph_id: str | None = None,
+        headers: dict[str, str] | None = None,
     ) -> Thread:
         """Create a new thread.
 
@@ -1105,7 +1105,7 @@ class ThreadsClient:
         thread_id: str,
         *,
         metadata: dict[str, Any],
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> Thread:
         """Update a thread.
 
@@ -1132,7 +1132,7 @@ class ThreadsClient:
         )
 
     async def delete(
-        self, thread_id: str, *, headers: Optional[dict[str, str]] = None
+        self, thread_id: str, *, headers: dict[str, str] | None = None
     ) -> None:
         """Delete a thread.
 
@@ -1160,12 +1160,12 @@ class ThreadsClient:
         *,
         metadata: Json = None,
         values: Json = None,
-        status: Optional[ThreadStatus] = None,
+        status: ThreadStatus | None = None,
         limit: int = 10,
         offset: int = 0,
-        sort_by: Optional[ThreadSortBy] = None,
-        sort_order: Optional[SortOrder] = None,
-        headers: Optional[dict[str, str]] = None,
+        sort_by: ThreadSortBy | None = None,
+        sort_order: SortOrder | None = None,
+        headers: dict[str, str] | None = None,
     ) -> list[Thread]:
         """Search for threads.
 
@@ -1217,7 +1217,7 @@ class ThreadsClient:
         )
 
     async def copy(
-        self, thread_id: str, *, headers: Optional[dict[str, str]] = None
+        self, thread_id: str, *, headers: dict[str, str] | None = None
     ) -> None:
         """Copy a thread.
 
@@ -1245,11 +1245,11 @@ class ThreadsClient:
     async def get_state(
         self,
         thread_id: str,
-        checkpoint: Optional[Checkpoint] = None,
-        checkpoint_id: Optional[str] = None,  # deprecated
+        checkpoint: Checkpoint | None = None,
+        checkpoint_id: str | None = None,  # deprecated
         *,
         subgraphs: bool = False,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> ThreadState:
         """Get the state of a thread.
 
@@ -1372,12 +1372,12 @@ class ThreadsClient:
     async def update_state(
         self,
         thread_id: str,
-        values: Optional[Union[dict, Sequence[dict]]],
+        values: dict | Sequence[dict] | None,
         *,
-        as_node: Optional[str] = None,
-        checkpoint: Optional[Checkpoint] = None,
-        checkpoint_id: Optional[str] = None,  # deprecated
-        headers: Optional[dict[str, str]] = None,
+        as_node: str | None = None,
+        checkpoint: Checkpoint | None = None,
+        checkpoint_id: str | None = None,  # deprecated
+        headers: dict[str, str] | None = None,
     ) -> ThreadUpdateStateResponse:
         """Update the state of a thread.
 
@@ -1435,10 +1435,10 @@ class ThreadsClient:
         thread_id: str,
         *,
         limit: int = 10,
-        before: Optional[str | Checkpoint] = None,
-        metadata: Optional[dict] = None,
-        checkpoint: Optional[Checkpoint] = None,
-        headers: Optional[dict[str, str]] = None,
+        before: str | Checkpoint | None = None,
+        metadata: dict | None = None,
+        checkpoint: Checkpoint | None = None,
+        headers: dict[str, str] | None = None,
     ) -> list[ThreadState]:
         """Get the state history of a thread.
 
@@ -1501,26 +1501,26 @@ class RunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: Optional[dict] = None,
-        command: Optional[Command] = None,
-        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
+        input: dict | None = None,
+        command: Command | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        checkpoint: Optional[Checkpoint] = None,
-        checkpoint_id: Optional[str] = None,
-        checkpoint_during: Optional[bool] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        feedback_keys: Optional[Sequence[str]] = None,
-        on_disconnect: Optional[DisconnectMode] = None,
-        webhook: Optional[str] = None,
-        multitask_strategy: Optional[MultitaskStrategy] = None,
-        if_not_exists: Optional[IfNotExists] = None,
-        after_seconds: Optional[int] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
+        metadata: dict | None = None,
+        config: Config | None = None,
+        checkpoint: Checkpoint | None = None,
+        checkpoint_id: str | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        feedback_keys: Sequence[str] | None = None,
+        on_disconnect: DisconnectMode | None = None,
+        webhook: str | None = None,
+        multitask_strategy: MultitaskStrategy | None = None,
+        if_not_exists: IfNotExists | None = None,
+        after_seconds: int | None = None,
+        headers: dict[str, str] | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> AsyncIterator[StreamPart]: ...
 
     @overload
@@ -1529,52 +1529,52 @@ class RunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: Optional[dict] = None,
-        command: Optional[Command] = None,
-        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
+        input: dict | None = None,
+        command: Command | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        checkpoint_during: Optional[bool] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        feedback_keys: Optional[Sequence[str]] = None,
-        on_disconnect: Optional[DisconnectMode] = None,
-        on_completion: Optional[OnCompletionBehavior] = None,
-        if_not_exists: Optional[IfNotExists] = None,
-        webhook: Optional[str] = None,
-        after_seconds: Optional[int] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
+        metadata: dict | None = None,
+        config: Config | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        feedback_keys: Sequence[str] | None = None,
+        on_disconnect: DisconnectMode | None = None,
+        on_completion: OnCompletionBehavior | None = None,
+        if_not_exists: IfNotExists | None = None,
+        webhook: str | None = None,
+        after_seconds: int | None = None,
+        headers: dict[str, str] | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> AsyncIterator[StreamPart]: ...
 
     def stream(
         self,
-        thread_id: Optional[str],
+        thread_id: str | None,
         assistant_id: str,
         *,
-        input: Optional[dict] = None,
-        command: Optional[Command] = None,
-        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
+        input: dict | None = None,
+        command: Command | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        checkpoint: Optional[Checkpoint] = None,
-        checkpoint_id: Optional[str] = None,
-        checkpoint_during: Optional[bool] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        feedback_keys: Optional[Sequence[str]] = None,
-        on_disconnect: Optional[DisconnectMode] = None,
-        on_completion: Optional[OnCompletionBehavior] = None,
-        webhook: Optional[str] = None,
-        multitask_strategy: Optional[MultitaskStrategy] = None,
-        if_not_exists: Optional[IfNotExists] = None,
-        after_seconds: Optional[int] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
+        metadata: dict | None = None,
+        config: Config | None = None,
+        checkpoint: Checkpoint | None = None,
+        checkpoint_id: str | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        feedback_keys: Sequence[str] | None = None,
+        on_disconnect: DisconnectMode | None = None,
+        on_completion: OnCompletionBehavior | None = None,
+        webhook: str | None = None,
+        multitask_strategy: MultitaskStrategy | None = None,
+        if_not_exists: IfNotExists | None = None,
+        after_seconds: int | None = None,
+        headers: dict[str, str] | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> AsyncIterator[StreamPart]:
         """Create a run and stream the results.
 
@@ -1692,22 +1692,22 @@ class RunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: Optional[dict] = None,
-        command: Optional[Command] = None,
-        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
+        input: dict | None = None,
+        command: Command | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: Optional[dict] = None,
-        checkpoint_during: Optional[bool] = None,
-        config: Optional[Config] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        webhook: Optional[str] = None,
-        on_completion: Optional[OnCompletionBehavior] = None,
-        if_not_exists: Optional[IfNotExists] = None,
-        after_seconds: Optional[int] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
+        metadata: dict | None = None,
+        checkpoint_during: bool | None = None,
+        config: Config | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        webhook: str | None = None,
+        on_completion: OnCompletionBehavior | None = None,
+        if_not_exists: IfNotExists | None = None,
+        after_seconds: int | None = None,
+        headers: dict[str, str] | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Run: ...
 
     @overload
@@ -1716,50 +1716,50 @@ class RunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: Optional[dict] = None,
-        command: Optional[Command] = None,
-        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
+        input: dict | None = None,
+        command: Command | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        checkpoint: Optional[Checkpoint] = None,
-        checkpoint_id: Optional[str] = None,
-        checkpoint_during: Optional[bool] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        webhook: Optional[str] = None,
-        multitask_strategy: Optional[MultitaskStrategy] = None,
-        if_not_exists: Optional[IfNotExists] = None,
-        after_seconds: Optional[int] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
+        metadata: dict | None = None,
+        config: Config | None = None,
+        checkpoint: Checkpoint | None = None,
+        checkpoint_id: str | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        webhook: str | None = None,
+        multitask_strategy: MultitaskStrategy | None = None,
+        if_not_exists: IfNotExists | None = None,
+        after_seconds: int | None = None,
+        headers: dict[str, str] | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Run: ...
 
     async def create(
         self,
-        thread_id: Optional[str],
+        thread_id: str | None,
         assistant_id: str,
         *,
-        input: Optional[dict] = None,
-        command: Optional[Command] = None,
-        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
+        input: dict | None = None,
+        command: Command | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        checkpoint: Optional[Checkpoint] = None,
-        checkpoint_id: Optional[str] = None,
-        checkpoint_during: Optional[bool] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        webhook: Optional[str] = None,
-        multitask_strategy: Optional[MultitaskStrategy] = None,
-        if_not_exists: Optional[IfNotExists] = None,
-        on_completion: Optional[OnCompletionBehavior] = None,
-        after_seconds: Optional[int] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
+        metadata: dict | None = None,
+        config: Config | None = None,
+        checkpoint: Checkpoint | None = None,
+        checkpoint_id: str | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        webhook: str | None = None,
+        multitask_strategy: MultitaskStrategy | None = None,
+        if_not_exists: IfNotExists | None = None,
+        on_completion: OnCompletionBehavior | None = None,
+        after_seconds: int | None = None,
+        headers: dict[str, str] | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Run:
         """Create a background run.
 
@@ -1914,24 +1914,24 @@ class RunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: Optional[dict] = None,
-        command: Optional[Command] = None,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        checkpoint: Optional[Checkpoint] = None,
-        checkpoint_id: Optional[str] = None,
-        checkpoint_during: Optional[bool] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        webhook: Optional[str] = None,
-        on_disconnect: Optional[DisconnectMode] = None,
-        multitask_strategy: Optional[MultitaskStrategy] = None,
-        if_not_exists: Optional[IfNotExists] = None,
-        after_seconds: Optional[int] = None,
+        input: dict | None = None,
+        command: Command | None = None,
+        metadata: dict | None = None,
+        config: Config | None = None,
+        checkpoint: Checkpoint | None = None,
+        checkpoint_id: str | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        webhook: str | None = None,
+        on_disconnect: DisconnectMode | None = None,
+        multitask_strategy: MultitaskStrategy | None = None,
+        if_not_exists: IfNotExists | None = None,
+        after_seconds: int | None = None,
         raise_error: bool = True,
-        headers: Optional[dict[str, str]] = None,
-        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
-    ) -> Union[list[dict], dict[str, Any]]: ...
+        headers: dict[str, str] | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+    ) -> list[dict] | dict[str, Any]: ...
 
     @overload
     async def wait(
@@ -1939,47 +1939,47 @@ class RunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: Optional[dict] = None,
-        command: Optional[Command] = None,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        checkpoint_during: Optional[bool] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        webhook: Optional[str] = None,
-        on_disconnect: Optional[DisconnectMode] = None,
-        on_completion: Optional[OnCompletionBehavior] = None,
-        if_not_exists: Optional[IfNotExists] = None,
-        after_seconds: Optional[int] = None,
+        input: dict | None = None,
+        command: Command | None = None,
+        metadata: dict | None = None,
+        config: Config | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        webhook: str | None = None,
+        on_disconnect: DisconnectMode | None = None,
+        on_completion: OnCompletionBehavior | None = None,
+        if_not_exists: IfNotExists | None = None,
+        after_seconds: int | None = None,
         raise_error: bool = True,
-        headers: Optional[dict[str, str]] = None,
-        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
-    ) -> Union[list[dict], dict[str, Any]]: ...
+        headers: dict[str, str] | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+    ) -> list[dict] | dict[str, Any]: ...
 
     async def wait(
         self,
-        thread_id: Optional[str],
+        thread_id: str | None,
         assistant_id: str,
         *,
-        input: Optional[dict] = None,
-        command: Optional[Command] = None,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        checkpoint: Optional[Checkpoint] = None,
-        checkpoint_id: Optional[str] = None,
-        checkpoint_during: Optional[bool] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        webhook: Optional[str] = None,
-        on_disconnect: Optional[DisconnectMode] = None,
-        on_completion: Optional[OnCompletionBehavior] = None,
-        multitask_strategy: Optional[MultitaskStrategy] = None,
-        if_not_exists: Optional[IfNotExists] = None,
-        after_seconds: Optional[int] = None,
+        input: dict | None = None,
+        command: Command | None = None,
+        metadata: dict | None = None,
+        config: Config | None = None,
+        checkpoint: Checkpoint | None = None,
+        checkpoint_id: str | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        webhook: str | None = None,
+        on_disconnect: DisconnectMode | None = None,
+        on_completion: OnCompletionBehavior | None = None,
+        multitask_strategy: MultitaskStrategy | None = None,
+        if_not_exists: IfNotExists | None = None,
+        after_seconds: int | None = None,
         raise_error: bool = True,
-        headers: Optional[dict[str, str]] = None,
-        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
-    ) -> Union[list[dict], dict[str, Any]]:
+        headers: dict[str, str] | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+    ) -> list[dict] | dict[str, Any]:
         """Create a run, wait until it finishes and return the final state.
 
         Args:
@@ -2113,8 +2113,8 @@ class RunsClient:
         *,
         limit: int = 10,
         offset: int = 0,
-        status: Optional[RunStatus] = None,
-        headers: Optional[dict[str, str]] = None,
+        status: RunStatus | None = None,
+        headers: dict[str, str] | None = None,
     ) -> list[Run]:
         """List runs.
 
@@ -2151,7 +2151,7 @@ class RunsClient:
         )
 
     async def get(
-        self, thread_id: str, run_id: str, *, headers: Optional[dict[str, str]] = None
+        self, thread_id: str, run_id: str, *, headers: dict[str, str] | None = None
     ) -> Run:
         """Get a run.
 
@@ -2186,7 +2186,7 @@ class RunsClient:
         *,
         wait: bool = False,
         action: CancelAction = "interrupt",
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         """Get a run.
 
@@ -2221,7 +2221,7 @@ class RunsClient:
         )
 
     async def join(
-        self, thread_id: str, run_id: str, *, headers: Optional[dict[str, str]] = None
+        self, thread_id: str, run_id: str, *, headers: dict[str, str] | None = None
     ) -> dict:
         """Block until a run is done. Returns the final state of the thread.
 
@@ -2254,9 +2254,9 @@ class RunsClient:
         run_id: str,
         *,
         cancel_on_disconnect: bool = False,
-        stream_mode: Optional[Union[StreamMode, Sequence[StreamMode]]] = None,
-        headers: Optional[dict[str, str]] = None,
-        last_event_id: Optional[str] = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        headers: dict[str, str] | None = None,
+        last_event_id: str | None = None,
     ) -> AsyncIterator[StreamPart]:
         """Stream output from a run in real-time, until the run is done.
         Output is not buffered, so any output produced before this call will
@@ -2302,7 +2302,7 @@ class RunsClient:
         )
 
     async def delete(
-        self, thread_id: str, run_id: str, *, headers: Optional[dict[str, str]] = None
+        self, thread_id: str, run_id: str, *, headers: dict[str, str] | None = None
     ) -> None:
         """Delete a run.
 
@@ -2361,15 +2361,15 @@ class CronClient:
         assistant_id: str,
         *,
         schedule: str,
-        input: Optional[dict] = None,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        checkpoint_during: Optional[bool] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
-        webhook: Optional[str] = None,
-        multitask_strategy: Optional[str] = None,
-        headers: Optional[dict[str, str]] = None,
+        input: dict | None = None,
+        metadata: dict | None = None,
+        config: Config | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | list[str] | None = None,
+        interrupt_after: All | list[str] | None = None,
+        webhook: str | None = None,
+        multitask_strategy: str | None = None,
+        headers: dict[str, str] | None = None,
     ) -> Run:
         """Create a cron job for a thread.
 
@@ -2435,15 +2435,15 @@ class CronClient:
         assistant_id: str,
         *,
         schedule: str,
-        input: Optional[dict] = None,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        checkpoint_during: Optional[bool] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
-        webhook: Optional[str] = None,
-        multitask_strategy: Optional[str] = None,
-        headers: Optional[dict[str, str]] = None,
+        input: dict | None = None,
+        metadata: dict | None = None,
+        config: Config | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | list[str] | None = None,
+        interrupt_after: All | list[str] | None = None,
+        webhook: str | None = None,
+        multitask_strategy: str | None = None,
+        headers: dict[str, str] | None = None,
     ) -> Run:
         """Create a cron run.
 
@@ -2502,7 +2502,7 @@ class CronClient:
     async def delete(
         self,
         cron_id: str,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         """Delete a cron.
 
@@ -2528,11 +2528,11 @@ class CronClient:
     async def search(
         self,
         *,
-        assistant_id: Optional[str] = None,
-        thread_id: Optional[str] = None,
+        assistant_id: str | None = None,
+        thread_id: str | None = None,
         limit: int = 10,
         offset: int = 0,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> list[Cron]:
         """Get a list of cron jobs.
 
@@ -2617,9 +2617,9 @@ class StoreClient:
         /,
         key: str,
         value: dict[str, Any],
-        index: Optional[Union[Literal[False], list[str]]] = None,
-        ttl: Optional[int] = None,
-        headers: Optional[dict[str, str]] = None,
+        index: Literal[False] | list[str] | None = None,
+        ttl: int | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         """Store or update an item.
 
@@ -2667,8 +2667,8 @@ class StoreClient:
         /,
         key: str,
         *,
-        refresh_ttl: Optional[bool] = None,
-        headers: Optional[dict[str, str]] = None,
+        refresh_ttl: bool | None = None,
+        headers: dict[str, str] | None = None,
     ) -> Item:
         """Retrieve a single item.
 
@@ -2719,7 +2719,7 @@ class StoreClient:
         namespace: Sequence[str],
         /,
         key: str,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         """Delete an item.
 
@@ -2751,12 +2751,12 @@ class StoreClient:
         self,
         namespace_prefix: Sequence[str],
         /,
-        filter: Optional[dict[str, Any]] = None,
+        filter: dict[str, Any] | None = None,
         limit: int = 10,
         offset: int = 0,
-        query: Optional[str] = None,
-        refresh_ttl: Optional[bool] = None,
-        headers: Optional[dict[str, str]] = None,
+        query: str | None = None,
+        refresh_ttl: bool | None = None,
+        headers: dict[str, str] | None = None,
     ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
 
@@ -2822,12 +2822,12 @@ class StoreClient:
 
     async def list_namespaces(
         self,
-        prefix: Optional[list[str]] = None,
-        suffix: Optional[list[str]] = None,
-        max_depth: Optional[int] = None,
+        prefix: list[str] | None = None,
+        suffix: list[str] | None = None,
+        max_depth: int | None = None,
         limit: int = 100,
         offset: int = 0,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> ListNamespaceResponse:
         """List namespaces with optional match conditions.
 
@@ -2879,10 +2879,10 @@ class StoreClient:
 
 def get_sync_client(
     *,
-    url: Optional[str] = None,
-    api_key: Optional[str] = None,
-    headers: Optional[dict[str, str]] = None,
-    timeout: Optional[TimeoutTypes] = None,
+    url: str | None = None,
+    api_key: str | None = None,
+    headers: dict[str, str] | None = None,
+    timeout: TimeoutTypes | None = None,
 ) -> SyncLangGraphClient:
     """Get a synchronous LangGraphClient instance.
 
@@ -2974,9 +2974,9 @@ class SyncHttpClient:
         self,
         path: str,
         *,
-        params: Optional[QueryParamTypes] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_response: Optional[Callable[[httpx.Response], None]] = None,
+        params: QueryParamTypes | None = None,
+        headers: dict[str, str] | None = None,
+        on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a GET request."""
         r = self.client.get(path, params=params, headers=headers)
@@ -2997,9 +2997,9 @@ class SyncHttpClient:
         self,
         path: str,
         *,
-        json: Optional[dict],
-        headers: Optional[dict[str, str]] = None,
-        on_response: Optional[Callable[[httpx.Response], None]] = None,
+        json: dict | None,
+        headers: dict[str, str] | None = None,
+        on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a POST request."""
         if json is not None:
@@ -3027,8 +3027,8 @@ class SyncHttpClient:
         path: str,
         *,
         json: dict,
-        headers: Optional[dict[str, str]] = None,
-        on_response: Optional[Callable[[httpx.Response], None]] = None,
+        headers: dict[str, str] | None = None,
+        on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a PUT request."""
         request_headers, content = _encode_json(json)
@@ -3054,8 +3054,8 @@ class SyncHttpClient:
         path: str,
         *,
         json: dict,
-        headers: Optional[dict[str, str]] = None,
-        on_response: Optional[Callable[[httpx.Response], None]] = None,
+        headers: dict[str, str] | None = None,
+        on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a PATCH request."""
         request_headers, content = _encode_json(json)
@@ -3079,9 +3079,9 @@ class SyncHttpClient:
         self,
         path: str,
         *,
-        json: Optional[Any] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_response: Optional[Callable[[httpx.Response], None]] = None,
+        json: Any | None = None,
+        headers: dict[str, str] | None = None,
+        on_response: Callable[[httpx.Response], None] | None = None,
     ) -> None:
         """Send a DELETE request."""
         r = self.client.request("DELETE", path, json=json, headers=headers)
@@ -3102,10 +3102,10 @@ class SyncHttpClient:
         path: str,
         method: str,
         *,
-        json: Optional[dict] = None,
-        params: Optional[QueryParamTypes] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_response: Optional[Callable[[httpx.Response], None]] = None,
+        json: dict | None = None,
+        params: QueryParamTypes | None = None,
+        headers: dict[str, str] | None = None,
+        on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Iterator[StreamPart]:
         """Stream the results of a request using SSE."""
         request_headers, content = _encode_json(json)
@@ -3180,7 +3180,7 @@ class SyncAssistantsClient:
         self,
         assistant_id: str,
         *,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> Assistant:
         """Get an assistant by ID.
 
@@ -3220,8 +3220,8 @@ class SyncAssistantsClient:
         self,
         assistant_id: str,
         *,
-        xray: Union[int, bool] = False,
-        headers: Optional[dict[str, str]] = None,
+        xray: int | bool = False,
+        headers: dict[str, str] | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """Get the graph of an assistant by ID.
 
@@ -3268,7 +3268,7 @@ class SyncAssistantsClient:
         self,
         assistant_id: str,
         *,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> GraphSchema:
         """Get the schemas of an assistant by ID.
 
@@ -3382,10 +3382,10 @@ class SyncAssistantsClient:
     def get_subgraphs(
         self,
         assistant_id: str,
-        namespace: Optional[str] = None,
+        namespace: str | None = None,
         recurse: bool = False,
         *,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> Subgraphs:
         """Get the schemas of an assistant by ID.
 
@@ -3412,15 +3412,15 @@ class SyncAssistantsClient:
 
     def create(
         self,
-        graph_id: Optional[str],
-        config: Optional[Config] = None,
+        graph_id: str | None,
+        config: Config | None = None,
         *,
         metadata: Json = None,
-        assistant_id: Optional[str] = None,
-        if_exists: Optional[OnConflictBehavior] = None,
-        name: Optional[str] = None,
-        headers: Optional[dict[str, str]] = None,
-        description: Optional[str] = None,
+        assistant_id: str | None = None,
+        if_exists: OnConflictBehavior | None = None,
+        name: str | None = None,
+        headers: dict[str, str] | None = None,
+        description: str | None = None,
     ) -> Assistant:
         """Create a new assistant.
 
@@ -3476,12 +3476,12 @@ class SyncAssistantsClient:
         self,
         assistant_id: str,
         *,
-        graph_id: Optional[str] = None,
-        config: Optional[Config] = None,
+        graph_id: str | None = None,
+        config: Config | None = None,
         metadata: Json = None,
-        name: Optional[str] = None,
-        headers: Optional[dict[str, str]] = None,
-        description: Optional[str] = None,
+        name: str | None = None,
+        headers: dict[str, str] | None = None,
+        description: str | None = None,
     ) -> Assistant:
         """Update an assistant.
 
@@ -3534,7 +3534,7 @@ class SyncAssistantsClient:
         self,
         assistant_id: str,
         *,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         """Delete an assistant.
 
@@ -3561,10 +3561,10 @@ class SyncAssistantsClient:
         self,
         *,
         metadata: Json = None,
-        graph_id: Optional[str] = None,
+        graph_id: str | None = None,
         limit: int = 10,
         offset: int = 0,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> list[Assistant]:
         """Search for assistants.
 
@@ -3612,7 +3612,7 @@ class SyncAssistantsClient:
         limit: int = 10,
         offset: int = 0,
         *,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> list[AssistantVersion]:
         """List all versions of an assistant.
 
@@ -3652,7 +3652,7 @@ class SyncAssistantsClient:
         assistant_id: str,
         version: int,
         *,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> Assistant:
         """Change the version of an assistant.
 
@@ -3704,7 +3704,7 @@ class SyncThreadsClient:
         self,
         thread_id: str,
         *,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> Thread:
         """Get a thread by ID.
 
@@ -3743,11 +3743,11 @@ class SyncThreadsClient:
         self,
         *,
         metadata: Json = None,
-        thread_id: Optional[str] = None,
-        if_exists: Optional[OnConflictBehavior] = None,
-        supersteps: Optional[Sequence[dict[str, Sequence[dict[str, Any]]]]] = None,
-        graph_id: Optional[str] = None,
-        headers: Optional[dict[str, str]] = None,
+        thread_id: str | None = None,
+        if_exists: OnConflictBehavior | None = None,
+        supersteps: Sequence[dict[str, Sequence[dict[str, Any]]]] | None = None,
+        graph_id: str | None = None,
+        headers: dict[str, str] | None = None,
     ) -> Thread:
         """Create a new thread.
 
@@ -3809,7 +3809,7 @@ class SyncThreadsClient:
         thread_id: str,
         *,
         metadata: dict[str, Any],
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> Thread:
         """Update a thread.
 
@@ -3839,7 +3839,7 @@ class SyncThreadsClient:
         self,
         thread_id: str,
         *,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         """Delete a thread.
 
@@ -3866,10 +3866,10 @@ class SyncThreadsClient:
         *,
         metadata: Json = None,
         values: Json = None,
-        status: Optional[ThreadStatus] = None,
+        status: ThreadStatus | None = None,
         limit: int = 10,
         offset: int = 0,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> list[Thread]:
         """Search for threads.
 
@@ -3913,7 +3913,7 @@ class SyncThreadsClient:
         self,
         thread_id: str,
         *,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         """Copy a thread.
 
@@ -3939,11 +3939,11 @@ class SyncThreadsClient:
     def get_state(
         self,
         thread_id: str,
-        checkpoint: Optional[Checkpoint] = None,
-        checkpoint_id: Optional[str] = None,  # deprecated
+        checkpoint: Checkpoint | None = None,
+        checkpoint_id: str | None = None,  # deprecated
         *,
         subgraphs: bool = False,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> ThreadState:
         """Get the state of a thread.
 
@@ -4066,12 +4066,12 @@ class SyncThreadsClient:
     def update_state(
         self,
         thread_id: str,
-        values: Optional[Union[dict, Sequence[dict]]],
+        values: dict | Sequence[dict] | None,
         *,
-        as_node: Optional[str] = None,
-        checkpoint: Optional[Checkpoint] = None,
-        checkpoint_id: Optional[str] = None,  # deprecated
-        headers: Optional[dict[str, str]] = None,
+        as_node: str | None = None,
+        checkpoint: Checkpoint | None = None,
+        checkpoint_id: str | None = None,  # deprecated
+        headers: dict[str, str] | None = None,
     ) -> ThreadUpdateStateResponse:
         """Update the state of a thread.
 
@@ -4127,10 +4127,10 @@ class SyncThreadsClient:
         thread_id: str,
         *,
         limit: int = 10,
-        before: Optional[str | Checkpoint] = None,
-        metadata: Optional[dict] = None,
-        checkpoint: Optional[Checkpoint] = None,
-        headers: Optional[dict[str, str]] = None,
+        before: str | Checkpoint | None = None,
+        metadata: dict | None = None,
+        checkpoint: Checkpoint | None = None,
+        headers: dict[str, str] | None = None,
     ) -> list[ThreadState]:
         """Get the state history of a thread.
 
@@ -4195,25 +4195,25 @@ class SyncRunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: Optional[dict] = None,
-        command: Optional[Command] = None,
-        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
+        input: dict | None = None,
+        command: Command | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        checkpoint: Optional[Checkpoint] = None,
-        checkpoint_id: Optional[str] = None,
-        checkpoint_during: Optional[bool] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        feedback_keys: Optional[Sequence[str]] = None,
-        on_disconnect: Optional[DisconnectMode] = None,
-        webhook: Optional[str] = None,
-        multitask_strategy: Optional[MultitaskStrategy] = None,
-        if_not_exists: Optional[IfNotExists] = None,
-        after_seconds: Optional[int] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
+        metadata: dict | None = None,
+        config: Config | None = None,
+        checkpoint: Checkpoint | None = None,
+        checkpoint_id: str | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        feedback_keys: Sequence[str] | None = None,
+        on_disconnect: DisconnectMode | None = None,
+        webhook: str | None = None,
+        multitask_strategy: MultitaskStrategy | None = None,
+        if_not_exists: IfNotExists | None = None,
+        after_seconds: int | None = None,
+        headers: dict[str, str] | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Iterator[StreamPart]: ...
 
     @overload
@@ -4222,52 +4222,52 @@ class SyncRunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: Optional[dict] = None,
-        command: Optional[Command] = None,
-        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
+        input: dict | None = None,
+        command: Command | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        checkpoint_during: Optional[bool] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        feedback_keys: Optional[Sequence[str]] = None,
-        on_disconnect: Optional[DisconnectMode] = None,
-        on_completion: Optional[OnCompletionBehavior] = None,
-        if_not_exists: Optional[IfNotExists] = None,
-        webhook: Optional[str] = None,
-        after_seconds: Optional[int] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
+        metadata: dict | None = None,
+        config: Config | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        feedback_keys: Sequence[str] | None = None,
+        on_disconnect: DisconnectMode | None = None,
+        on_completion: OnCompletionBehavior | None = None,
+        if_not_exists: IfNotExists | None = None,
+        webhook: str | None = None,
+        after_seconds: int | None = None,
+        headers: dict[str, str] | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Iterator[StreamPart]: ...
 
     def stream(
         self,
-        thread_id: Optional[str],
+        thread_id: str | None,
         assistant_id: str,
         *,
-        input: Optional[dict] = None,
-        command: Optional[Command] = None,
-        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
+        input: dict | None = None,
+        command: Command | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        checkpoint: Optional[Checkpoint] = None,
-        checkpoint_id: Optional[str] = None,
-        checkpoint_during: Optional[bool] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        feedback_keys: Optional[Sequence[str]] = None,
-        on_disconnect: Optional[DisconnectMode] = None,
-        on_completion: Optional[OnCompletionBehavior] = None,
-        webhook: Optional[str] = None,
-        multitask_strategy: Optional[MultitaskStrategy] = None,
-        if_not_exists: Optional[IfNotExists] = None,
-        after_seconds: Optional[int] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
+        metadata: dict | None = None,
+        config: Config | None = None,
+        checkpoint: Checkpoint | None = None,
+        checkpoint_id: str | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        feedback_keys: Sequence[str] | None = None,
+        on_disconnect: DisconnectMode | None = None,
+        on_completion: OnCompletionBehavior | None = None,
+        webhook: str | None = None,
+        multitask_strategy: MultitaskStrategy | None = None,
+        if_not_exists: IfNotExists | None = None,
+        after_seconds: int | None = None,
+        headers: dict[str, str] | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Iterator[StreamPart]:
         """Create a run and stream the results.
 
@@ -4383,22 +4383,22 @@ class SyncRunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: Optional[dict] = None,
-        command: Optional[Command] = None,
-        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
+        input: dict | None = None,
+        command: Command | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        checkpoint_during: Optional[bool] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        webhook: Optional[str] = None,
-        on_completion: Optional[OnCompletionBehavior] = None,
-        if_not_exists: Optional[IfNotExists] = None,
-        after_seconds: Optional[int] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
+        metadata: dict | None = None,
+        config: Config | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        webhook: str | None = None,
+        on_completion: OnCompletionBehavior | None = None,
+        if_not_exists: IfNotExists | None = None,
+        after_seconds: int | None = None,
+        headers: dict[str, str] | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Run: ...
 
     @overload
@@ -4407,50 +4407,50 @@ class SyncRunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: Optional[dict] = None,
-        command: Optional[Command] = None,
-        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
+        input: dict | None = None,
+        command: Command | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        checkpoint: Optional[Checkpoint] = None,
-        checkpoint_id: Optional[str] = None,
-        checkpoint_during: Optional[bool] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        webhook: Optional[str] = None,
-        multitask_strategy: Optional[MultitaskStrategy] = None,
-        if_not_exists: Optional[IfNotExists] = None,
-        after_seconds: Optional[int] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
+        metadata: dict | None = None,
+        config: Config | None = None,
+        checkpoint: Checkpoint | None = None,
+        checkpoint_id: str | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        webhook: str | None = None,
+        multitask_strategy: MultitaskStrategy | None = None,
+        if_not_exists: IfNotExists | None = None,
+        after_seconds: int | None = None,
+        headers: dict[str, str] | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Run: ...
 
     def create(
         self,
-        thread_id: Optional[str],
+        thread_id: str | None,
         assistant_id: str,
         *,
-        input: Optional[dict] = None,
-        command: Optional[Command] = None,
-        stream_mode: Union[StreamMode, Sequence[StreamMode]] = "values",
+        input: dict | None = None,
+        command: Command | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        checkpoint: Optional[Checkpoint] = None,
-        checkpoint_id: Optional[str] = None,
-        checkpoint_during: Optional[bool] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        webhook: Optional[str] = None,
-        multitask_strategy: Optional[MultitaskStrategy] = None,
-        on_completion: Optional[OnCompletionBehavior] = None,
-        if_not_exists: Optional[IfNotExists] = None,
-        after_seconds: Optional[int] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
+        metadata: dict | None = None,
+        config: Config | None = None,
+        checkpoint: Checkpoint | None = None,
+        checkpoint_id: str | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        webhook: str | None = None,
+        multitask_strategy: MultitaskStrategy | None = None,
+        on_completion: OnCompletionBehavior | None = None,
+        if_not_exists: IfNotExists | None = None,
+        after_seconds: int | None = None,
+        headers: dict[str, str] | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Run:
         """Create a background run.
 
@@ -4591,7 +4591,7 @@ class SyncRunsClient:
         )
 
     def create_batch(
-        self, payloads: list[RunCreate], *, headers: Optional[dict[str, str]] = None
+        self, payloads: list[RunCreate], *, headers: dict[str, str] | None = None
     ) -> list[Run]:
         """Create a batch of stateless background runs."""
 
@@ -4607,23 +4607,23 @@ class SyncRunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: Optional[dict] = None,
-        command: Optional[Command] = None,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        checkpoint: Optional[Checkpoint] = None,
-        checkpoint_id: Optional[str] = None,
-        checkpoint_during: Optional[bool] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        webhook: Optional[str] = None,
-        on_disconnect: Optional[DisconnectMode] = None,
-        multitask_strategy: Optional[MultitaskStrategy] = None,
-        if_not_exists: Optional[IfNotExists] = None,
-        after_seconds: Optional[int] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
-    ) -> Union[list[dict], dict[str, Any]]: ...
+        input: dict | None = None,
+        command: Command | None = None,
+        metadata: dict | None = None,
+        config: Config | None = None,
+        checkpoint: Checkpoint | None = None,
+        checkpoint_id: str | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        webhook: str | None = None,
+        on_disconnect: DisconnectMode | None = None,
+        multitask_strategy: MultitaskStrategy | None = None,
+        if_not_exists: IfNotExists | None = None,
+        after_seconds: int | None = None,
+        headers: dict[str, str] | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+    ) -> list[dict] | dict[str, Any]: ...
 
     @overload
     def wait(
@@ -4631,45 +4631,45 @@ class SyncRunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: Optional[dict] = None,
-        command: Optional[Command] = None,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        checkpoint_during: Optional[bool] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        webhook: Optional[str] = None,
-        on_disconnect: Optional[DisconnectMode] = None,
-        on_completion: Optional[OnCompletionBehavior] = None,
-        if_not_exists: Optional[IfNotExists] = None,
-        after_seconds: Optional[int] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
-    ) -> Union[list[dict], dict[str, Any]]: ...
+        input: dict | None = None,
+        command: Command | None = None,
+        metadata: dict | None = None,
+        config: Config | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        webhook: str | None = None,
+        on_disconnect: DisconnectMode | None = None,
+        on_completion: OnCompletionBehavior | None = None,
+        if_not_exists: IfNotExists | None = None,
+        after_seconds: int | None = None,
+        headers: dict[str, str] | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+    ) -> list[dict] | dict[str, Any]: ...
 
     def wait(
         self,
-        thread_id: Optional[str],
+        thread_id: str | None,
         assistant_id: str,
         *,
-        input: Optional[dict] = None,
-        command: Optional[Command] = None,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        checkpoint_during: Optional[bool] = None,
-        checkpoint: Optional[Checkpoint] = None,
-        checkpoint_id: Optional[str] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        webhook: Optional[str] = None,
-        on_disconnect: Optional[DisconnectMode] = None,
-        on_completion: Optional[OnCompletionBehavior] = None,
-        multitask_strategy: Optional[MultitaskStrategy] = None,
-        if_not_exists: Optional[IfNotExists] = None,
-        after_seconds: Optional[int] = None,
-        headers: Optional[dict[str, str]] = None,
-        on_run_created: Optional[Callable[[RunCreateMetadata], None]] = None,
-    ) -> Union[list[dict], dict[str, Any]]:
+        input: dict | None = None,
+        command: Command | None = None,
+        metadata: dict | None = None,
+        config: Config | None = None,
+        checkpoint_during: bool | None = None,
+        checkpoint: Checkpoint | None = None,
+        checkpoint_id: str | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        webhook: str | None = None,
+        on_disconnect: DisconnectMode | None = None,
+        on_completion: OnCompletionBehavior | None = None,
+        multitask_strategy: MultitaskStrategy | None = None,
+        if_not_exists: IfNotExists | None = None,
+        after_seconds: int | None = None,
+        headers: dict[str, str] | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+    ) -> list[dict] | dict[str, Any]:
         """Create a run, wait until it finishes and return the final state.
 
         Args:
@@ -4794,7 +4794,7 @@ class SyncRunsClient:
         *,
         limit: int = 10,
         offset: int = 0,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> list[Run]:
         """List runs.
 
@@ -4828,7 +4828,7 @@ class SyncRunsClient:
         thread_id: str,
         run_id: str,
         *,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> Run:
         """Get a run.
 
@@ -4860,7 +4860,7 @@ class SyncRunsClient:
         *,
         wait: bool = False,
         action: CancelAction = "interrupt",
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         """Get a run.
 
@@ -4899,7 +4899,7 @@ class SyncRunsClient:
         thread_id: str,
         run_id: str,
         *,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> dict:
         """Block until a run is done. Returns the final state of the thread.
 
@@ -4931,10 +4931,10 @@ class SyncRunsClient:
         thread_id: str,
         run_id: str,
         *,
-        stream_mode: Optional[Union[StreamMode, Sequence[StreamMode]]] = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
         cancel_on_disconnect: bool = False,
-        headers: Optional[dict[str, str]] = None,
-        last_event_id: Optional[str] = None,
+        headers: dict[str, str] | None = None,
+        last_event_id: str | None = None,
     ) -> Iterator[StreamPart]:
         """Stream output from a run in real-time, until the run is done.
         Output is not buffered, so any output produced before this call will
@@ -4983,7 +4983,7 @@ class SyncRunsClient:
         thread_id: str,
         run_id: str,
         *,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         """Delete a run.
 
@@ -5036,15 +5036,15 @@ class SyncCronClient:
         assistant_id: str,
         *,
         schedule: str,
-        input: Optional[dict] = None,
-        metadata: Optional[dict] = None,
-        checkpoint_during: Optional[bool] = None,
-        config: Optional[Config] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
-        webhook: Optional[str] = None,
-        multitask_strategy: Optional[str] = None,
-        headers: Optional[dict[str, str]] = None,
+        input: dict | None = None,
+        metadata: dict | None = None,
+        checkpoint_during: bool | None = None,
+        config: Config | None = None,
+        interrupt_before: All | list[str] | None = None,
+        interrupt_after: All | list[str] | None = None,
+        webhook: str | None = None,
+        multitask_strategy: str | None = None,
+        headers: dict[str, str] | None = None,
     ) -> Run:
         """Create a cron job for a thread.
 
@@ -5107,15 +5107,15 @@ class SyncCronClient:
         assistant_id: str,
         *,
         schedule: str,
-        input: Optional[dict] = None,
-        metadata: Optional[dict] = None,
-        config: Optional[Config] = None,
-        checkpoint_during: Optional[bool] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
-        webhook: Optional[str] = None,
-        multitask_strategy: Optional[str] = None,
-        headers: Optional[dict[str, str]] = None,
+        input: dict | None = None,
+        metadata: dict | None = None,
+        config: Config | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | list[str] | None = None,
+        interrupt_after: All | list[str] | None = None,
+        webhook: str | None = None,
+        multitask_strategy: str | None = None,
+        headers: dict[str, str] | None = None,
     ) -> Run:
         """Create a cron run.
 
@@ -5175,7 +5175,7 @@ class SyncCronClient:
         self,
         cron_id: str,
         *,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         """Delete a cron.
 
@@ -5201,11 +5201,11 @@ class SyncCronClient:
     def search(
         self,
         *,
-        assistant_id: Optional[str] = None,
-        thread_id: Optional[str] = None,
+        assistant_id: str | None = None,
+        thread_id: str | None = None,
         limit: int = 10,
         offset: int = 0,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> list[Cron]:
         """Get a list of cron jobs.
 
@@ -5289,9 +5289,9 @@ class SyncStoreClient:
         /,
         key: str,
         value: dict[str, Any],
-        index: Optional[Union[Literal[False], list[str]]] = None,
-        ttl: Optional[int] = None,
-        headers: Optional[dict[str, str]] = None,
+        index: Literal[False] | list[str] | None = None,
+        ttl: int | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         """Store or update an item.
 
@@ -5337,8 +5337,8 @@ class SyncStoreClient:
         /,
         key: str,
         *,
-        refresh_ttl: Optional[bool] = None,
-        headers: Optional[dict[str, str]] = None,
+        refresh_ttl: bool | None = None,
+        headers: dict[str, str] | None = None,
     ) -> Item:
         """Retrieve a single item.
 
@@ -5390,7 +5390,7 @@ class SyncStoreClient:
         namespace: Sequence[str],
         /,
         key: str,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         """Delete an item.
 
@@ -5420,12 +5420,12 @@ class SyncStoreClient:
         self,
         namespace_prefix: Sequence[str],
         /,
-        filter: Optional[dict[str, Any]] = None,
+        filter: dict[str, Any] | None = None,
         limit: int = 10,
         offset: int = 0,
-        query: Optional[str] = None,
-        refresh_ttl: Optional[bool] = None,
-        headers: Optional[dict[str, str]] = None,
+        query: str | None = None,
+        refresh_ttl: bool | None = None,
+        headers: dict[str, str] | None = None,
     ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
 
@@ -5487,12 +5487,12 @@ class SyncStoreClient:
 
     def list_namespaces(
         self,
-        prefix: Optional[list[str]] = None,
-        suffix: Optional[list[str]] = None,
-        max_depth: Optional[int] = None,
+        prefix: list[str] | None = None,
+        suffix: list[str] | None = None,
+        max_depth: int | None = None,
         limit: int = 100,
         offset: int = 0,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ) -> ListNamespaceResponse:
         """List namespaces with optional match conditions.
 
