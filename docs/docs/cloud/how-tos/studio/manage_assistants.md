@@ -2,7 +2,7 @@
 
 !!! info "Prerequisites"
 
-    - [Assistants Overview](../../concepts/assistants.md)
+    - [Assistants Overview](../../../../concepts/assistants/)
 
 LangGraph Studio lets you view, edit, and update your assistants, and allows you to run your graph using these assistant configurations.
 
