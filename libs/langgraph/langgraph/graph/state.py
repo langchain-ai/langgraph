@@ -561,7 +561,8 @@ class StateGraph(Generic[StateT, InputT]):
             raise ValueError("START cannot be an end node")
         if end_key != END and end_key not in self.nodes:
             raise ValueError(f"Need to add_node `{end_key}` first")
-
+        # make list sorted
+        start_key = sorted(start_key)
         self.waiting_edges.add((tuple(start_key), end_key))
         return self
 
