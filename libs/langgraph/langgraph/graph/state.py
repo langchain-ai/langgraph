@@ -389,7 +389,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
                 Will be used as the node function or runnable if `node` is a string (node name).
             defer: Whether to defer the execution of the node until the run is about to end.
             metadata: The metadata associated with the node. (default: None)
-            input: The input schema for the node. (default: the graph's input schema)
+            input_schema: The input schema for the node. (default: the graph's state schema)
             retry_policy: The retry policy for the node. (default: None)
                 If a sequence is provided, the first matching policy will be applied.
             cache_policy: The cache policy for the node. (default: None)
