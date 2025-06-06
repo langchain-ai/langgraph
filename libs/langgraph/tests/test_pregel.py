@@ -288,7 +288,7 @@ def test_node_schemas_custom_output() -> None:
             "now": 123,
         }
 
-    builder = StateGraph(State, output=Output)
+    builder = StateGraph(State, output_schema=Output)
     builder.add_node("a", node_a)
     builder.add_node("b", node_b)
     builder.add_node("c", node_c)
@@ -301,7 +301,7 @@ def test_node_schemas_custom_output() -> None:
         "messages": [_AnyIdHumanMessage(content="hello")],
     }
 
-    builder = StateGraph(State, output=Output)
+    builder = StateGraph(State, output_schema=Output)
     builder.add_node("a", node_a)
     builder.add_node("b", node_b)
     builder.add_node("c", node_c)
@@ -2492,7 +2492,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
         assert isinstance(data, State)
         return "retriever_two"
 
-    workflow = StateGraph(State, input=Input, output=Output)
+    workflow = StateGraph(State, input_schema=Input, output_schema=Output)
 
     workflow.add_node("rewrite_query", rewrite_query)
     workflow.add_node("analyzer_one", analyzer_one)
@@ -2621,7 +2621,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_inp
         assert isinstance(data, State)
         return "retriever_two"
 
-    workflow = StateGraph(State, input=Input, output=Output)
+    workflow = StateGraph(State, input_schema=Input, output_schema=Output)
 
     workflow.add_node("rewrite_query", rewrite_query)
     workflow.add_node("analyzer_one", analyzer_one)
@@ -6185,14 +6185,17 @@ def test_multiple_subgraphs(sync_checkpointer: BaseCheckpointSaver) -> None:
         return {"result": state["a"] + state["b"]}
 
     add_subgraph = (
-        StateGraph(State, output=Output).add_node(add).add_edge(START, "add").compile()
+        StateGraph(State, output_schema=Output)
+        .add_node(add)
+        .add_edge(START, "add")
+        .compile()
     )
 
     def multiply(state):
         return {"result": state["a"] * state["b"]}
 
     multiply_subgraph = (
-        StateGraph(State, output=Output)
+        StateGraph(State, output_schema=Output)
         .add_node(multiply)
         .add_edge(START, "multiply")
         .compile()
@@ -6205,7 +6208,7 @@ def test_multiple_subgraphs(sync_checkpointer: BaseCheckpointSaver) -> None:
         return another_result
 
     parent_call_same_subgraph = (
-        StateGraph(State, output=Output)
+        StateGraph(State, output_schema=Output)
         .add_node(call_same_subgraph)
         .add_edge(START, "call_same_subgraph")
         .compile(checkpointer=sync_checkpointer)
@@ -6227,7 +6230,7 @@ def test_multiple_subgraphs(sync_checkpointer: BaseCheckpointSaver) -> None:
         }
 
     parent_call_multiple_subgraphs = (
-        StateGraph(State, output=Output)
+        StateGraph(State, output_schema=Output)
         .add_node(call_multiple_subgraphs)
         .add_edge(START, "call_multiple_subgraphs")
         .compile(checkpointer=sync_checkpointer)
@@ -6301,14 +6304,17 @@ def test_multiple_subgraphs_mixed_entrypoint(
         return {"result": state["a"] + state["b"]}
 
     add_subgraph = (
-        StateGraph(State, output=Output).add_node(add).add_edge(START, "add").compile()
+        StateGraph(State, output_schema=Output)
+        .add_node(add)
+        .add_edge(START, "add")
+        .compile()
     )
 
     def multiply(state):
         return {"result": state["a"] * state["b"]}
 
     multiply_subgraph = (
-        StateGraph(State, output=Output)
+        StateGraph(State, output_schema=Output)
         .add_node(multiply)
         .add_edge(START, "multiply")
         .compile()
@@ -6377,7 +6383,7 @@ def test_multiple_subgraphs_mixed_state_graph(
         return {"result": another_result}
 
     parent_call_same_subgraph = (
-        StateGraph(State, output=Output)
+        StateGraph(State, output_schema=Output)
         .add_node(call_same_subgraph)
         .add_edge(START, "call_same_subgraph")
         .compile(checkpointer=sync_checkpointer)
@@ -6399,7 +6405,7 @@ def test_multiple_subgraphs_mixed_state_graph(
         }
 
     parent_call_multiple_subgraphs = (
-        StateGraph(State, output=Output)
+        StateGraph(State, output_schema=Output)
         .add_node(call_multiple_subgraphs)
         .add_edge(START, "call_multiple_subgraphs")
         .compile(checkpointer=sync_checkpointer)

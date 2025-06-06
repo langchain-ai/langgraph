@@ -591,11 +591,11 @@ def create_react_agent(
         workflow = StateGraph(state_schema, config_schema=config_schema)
         workflow.add_node(
             "agent",
-            RunnableCallable(call_model, acall_model),
-            input=input_schema,
+            RunnableCallable(call_model, acall_model),  # type: ignore[call-overload]
+            input_schema=input_schema,
         )
         if pre_model_hook is not None:
-            workflow.add_node("pre_model_hook", pre_model_hook)
+            workflow.add_node("pre_model_hook", pre_model_hook)  # type: ignore[arg-type]
             workflow.add_edge("pre_model_hook", "agent")
             entrypoint = "pre_model_hook"
         else:
@@ -604,14 +604,15 @@ def create_react_agent(
         workflow.set_entry_point(entrypoint)
 
         if post_model_hook is not None:
-            workflow.add_node("post_model_hook", post_model_hook)
+            workflow.add_node("post_model_hook", post_model_hook)  # type: ignore[arg-type]
             workflow.add_edge("agent", "post_model_hook")
 
         if response_format is not None:
             workflow.add_node(
                 "generate_structured_response",
-                RunnableCallable(
-                    generate_structured_response, agenerate_structured_response
+                RunnableCallable(  # type: ignore[call-overload]
+                    generate_structured_response,
+                    agenerate_structured_response,
                 ),
             )
             if post_model_hook is not None:
@@ -658,14 +659,16 @@ def create_react_agent(
 
     # Define the two nodes we will cycle between
     workflow.add_node(
-        "agent", RunnableCallable(call_model, acall_model), input=input_schema
+        "agent",
+        RunnableCallable(call_model, acall_model),  # type: ignore[call-overload]
+        input_schema=input_schema,
     )
-    workflow.add_node("tools", tool_node)
+    workflow.add_node("tools", tool_node)  # type: ignore[call-overload]
 
     # Optionally add a pre-model hook node that will be called
     # every time before the "agent" (LLM-calling node)
     if pre_model_hook is not None:
-        workflow.add_node("pre_model_hook", pre_model_hook)
+        workflow.add_node("pre_model_hook", pre_model_hook)  # type: ignore[arg-type]
         workflow.add_edge("pre_model_hook", "agent")
         entrypoint = "pre_model_hook"
     else:
@@ -680,7 +683,7 @@ def create_react_agent(
 
     # Add a post model hook node if post_model_hook is provided
     if post_model_hook is not None:
-        workflow.add_node("post_model_hook", post_model_hook)
+        workflow.add_node("post_model_hook", post_model_hook)  # type: ignore[arg-type]
         agent_paths.append("post_model_hook")
         workflow.add_edge("agent", "post_model_hook")
     else:
@@ -690,8 +693,9 @@ def create_react_agent(
     if response_format is not None:
         workflow.add_node(
             "generate_structured_response",
-            RunnableCallable(
-                generate_structured_response, agenerate_structured_response
+            RunnableCallable(  # type: ignore[call-overload]
+                generate_structured_response,
+                agenerate_structured_response,
             ),
         )
         if post_model_hook is not None:

@@ -96,7 +96,7 @@ def test_input_state_specified() -> None:
 
     def valid(state: State) -> Any: ...
 
-    new_builder = StateGraph(State, input=InputState)
+    new_builder = StateGraph(State, input_schema=InputState)
     new_builder.add_node("valid", valid)
     new_builder.set_entry_point("valid")
     new_graph = new_builder.compile()
