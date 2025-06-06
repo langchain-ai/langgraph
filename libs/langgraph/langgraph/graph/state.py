@@ -28,6 +28,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel
 from typing_extensions import Self, TypeAlias, Unpack
 
+from langgraph._typing import DeprecatedKwargs
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -77,7 +78,7 @@ from langgraph.types import (
     Send,
     StreamWriter,
 )
-from langgraph.typing import DeprecatedKwargs, InputT, StateT, StateT_contra, Unset
+from langgraph.typing import InputT, StateT, StateT_contra
 from langgraph.utils.fields import (
     get_cached_annotated_keys,
     get_field_default,
@@ -749,32 +750,6 @@ class StateGraph(Generic[StateT, InputT]):
         self.compiled = True
         return self
 
-    @overload
-    def compile(
-        self: StateGraph[StateT, Unset],
-        checkpointer: Checkpointer = None,
-        *,
-        cache: BaseCache | None = None,
-        store: BaseStore | None = None,
-        interrupt_before: All | list[str] | None = None,
-        interrupt_after: All | list[str] | None = None,
-        debug: bool = False,
-        name: str | None = None,
-    ) -> CompiledStateGraph[StateT, StateT]: ...
-
-    @overload
-    def compile(
-        self: StateGraph[StateT, InputT],
-        checkpointer: Checkpointer = None,
-        *,
-        cache: BaseCache | None = None,
-        store: BaseStore | None = None,
-        interrupt_before: All | list[str] | None = None,
-        interrupt_after: All | list[str] | None = None,
-        debug: bool = False,
-        name: str | None = None,
-    ) -> CompiledStateGraph[StateT, InputT]: ...
-
     def compile(
         self,
         checkpointer: Checkpointer = None,
@@ -785,7 +760,7 @@ class StateGraph(Generic[StateT, InputT]):
         interrupt_after: All | list[str] | None = None,
         debug: bool = False,
         name: str | None = None,
-    ) -> CompiledStateGraph[StateT, StateT] | CompiledStateGraph[StateT, InputT]:
+    ) -> CompiledStateGraph[StateT, InputT]:
         """Compiles the state graph into a `CompiledStateGraph` object.
 
         The compiled graph implements the `Runnable` interface and can be invoked,
@@ -837,8 +812,7 @@ class StateGraph(Generic[StateT, InputT]):
             ]
         )
 
-        ResolvedInputT: type[InputT] | type[StateT] = self.input or self.schema
-        compiled = CompiledStateGraph[StateT, ResolvedInputT](  # type: ignore[valid-type]
+        compiled = CompiledStateGraph[StateT, InputT](
             builder=self,
             schema_to_mapper={},
             config_type=self.config_schema,
@@ -886,7 +860,7 @@ class StateGraph(Generic[StateT, InputT]):
         return compiled.validate()
 
 
-class CompiledStateGraph(Pregel[InputT], Generic[StateT, InputT]):
+class CompiledStateGraph(Pregel[StateT, InputT], Generic[StateT, InputT]):
     builder: StateGraph[StateT, InputT]
     schema_to_mapper: dict[type[Any], Callable[[Any], Any] | None]
 

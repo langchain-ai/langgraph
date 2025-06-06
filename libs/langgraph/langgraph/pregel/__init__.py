@@ -107,7 +107,7 @@ from langgraph.types import (
     StreamChunk,
     StreamMode,
 )
-from langgraph.typing import InputT
+from langgraph.typing import InputT, StateT
 from langgraph.utils.config import (
     ensure_config,
     merge_configs,
@@ -298,7 +298,7 @@ class NodeBuilder:
         )
 
 
-class Pregel(PregelProtocol[InputT], Generic[InputT]):
+class Pregel(PregelProtocol[StateT, InputT], Generic[StateT, InputT]):
     """Pregel manages the runtime behavior for LangGraph applications.
 
     ## Overview

@@ -9,11 +9,11 @@ from langchain_core.runnables.graph import Graph as DrawableGraph
 from typing_extensions import Self
 
 from langgraph.pregel.types import All, StateSnapshot, StateUpdate, StreamMode
-from langgraph.typing import InputT
+from langgraph.typing import InputT, StateT
 
 
 # TODO: remove Runnable inheritance here!
-class PregelProtocol(Runnable[InputT, Any], Generic[InputT], ABC):
+class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT], ABC):
     @abstractmethod
     def with_config(
         self, config: RunnableConfig | None = None, **kwargs: Any
