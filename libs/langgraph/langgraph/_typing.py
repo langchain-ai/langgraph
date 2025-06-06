@@ -43,5 +43,12 @@ Note: we cannot use either `TypedDict` or `dataclass` directly due to limitation
 """
 
 
+class Unset:
+    """A sentinel value to represent an unset type."""
+
+
+UNSET: Unset = Unset()
+
+
 class DeprecatedKwargs(TypedDict):
     """TypedDict to use for extra keyword arguments, enabling type checking warnings for deprecated arguments."""
