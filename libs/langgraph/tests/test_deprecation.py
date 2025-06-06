@@ -40,3 +40,29 @@ def test_entrypoint_retry_arg() -> None:
         @entrypoint(retry=RetryPolicy())  # type: ignore[arg-type]
         def my_entrypoint(state: PlainState) -> PlainState:
             return state
+
+
+def test_state_graph_input_schema() -> None:
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`input` is deprecated and will be removed. Please use `input_schema` instead.",
+    ):
+        StateGraph(PlainState, input=PlainState)  # type: ignore[arg-type]
+
+
+def test_state_graph_output_schema() -> None:
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`output` is deprecated and will be removed. Please use `output_schema` instead.",
+    ):
+        StateGraph(PlainState, output=PlainState)  # type: ignore[arg-type]
+
+
+def test_add_node_input_schema() -> None:
+    builder = StateGraph(PlainState)
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`input` is deprecated and will be removed. Please use `input_schema` instead.",
+    ):
+        builder.add_node("test_node", lambda state: state, input=PlainState)  # type: ignore[arg-type]

@@ -89,7 +89,7 @@ def node_3(state: PrivateState) -> OutputState:
     # Read from PrivateState, write to OutputState
     return {"graph_output": state["bar"] + " Lance"}
 
-builder = StateGraph(OverallState,input=InputState,output=OutputState)
+builder = StateGraph(OverallState,input_schema=InputState,output_schema=OutputState)
 builder.add_node("node_1", node_1)
 builder.add_node("node_2", node_2)
 builder.add_node("node_3", node_3)
@@ -107,7 +107,7 @@ There are two subtle and important points to note here:
 
 1. We pass `state: InputState` as the input schema to `node_1`. But, we write out to `foo`, a channel in `OverallState`. How can we write out to a state channel that is not included in the input schema? This is because a node _can write to any state channel in the graph state._ The graph state is the union of the state channels defined at initialization, which includes `OverallState` and the filters `InputState` and `OutputState`.
 
-2. We initialize the graph with `StateGraph(OverallState,input=InputState,output=OutputState)`. So, how can we write to `PrivateState` in `node_2`? How does the graph gain access to this schema if it was not passed in the `StateGraph` initialization? We can do this because _nodes can also declare additional state channels_ as long as the state schema definition exists. In this case, the `PrivateState` schema is defined, so we can add `bar` as a new state channel in the graph and write to it.
+2. We initialize the graph with `StateGraph(OverallState,input_schema=InputState,output_schema=OutputState)`. So, how can we write to `PrivateState` in `node_2`? How does the graph gain access to this schema if it was not passed in the `StateGraph` initialization? We can do this because _nodes can also declare additional state channels_ as long as the state schema definition exists. In this case, the `PrivateState` schema is defined, so we can add `bar` as a new state channel in the graph and write to it.
 
 ### Reducers
 

@@ -28,6 +28,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel
 from typing_extensions import Self, TypeAlias, Unpack
 
+from langgraph._typing import UNSET, DeprecatedKwargs
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -77,7 +78,7 @@ from langgraph.types import (
     Send,
     StreamWriter,
 )
-from langgraph.typing import DeprecatedKwargs, InputT, StateT, StateT_contra, Unset
+from langgraph.typing import InputT, OutputT, StateT, StateT_contra
 from langgraph.utils.fields import (
     get_cached_annotated_keys,
     get_field_default,
@@ -174,6 +175,8 @@ class StateNodeSpec(NamedTuple):
     # a generic StateNode, so maybe a dataclass
     runnable: StateNode
     metadata: dict[str, Any] | None
+    # TODO: rename to input_schema, though we really just want to modify this structure to
+    # be a dataclass
     input: type[Any]
     retry_policy: RetryPolicy | Sequence[RetryPolicy] | None
     cache_policy: CachePolicy | None
@@ -181,7 +184,7 @@ class StateNodeSpec(NamedTuple):
     defer: bool = False
 
 
-class StateGraph(Generic[StateT, InputT]):
+class StateGraph(Generic[StateT, InputT, OutputT]):
     """A graph whose nodes communicate by reading and writing to a shared state.
     The signature of each node is State -> Partial<State>.
 
@@ -239,34 +242,57 @@ class StateGraph(Generic[StateT, InputT]):
     channels: dict[str, BaseChannel]
     managed: dict[str, ManagedValueSpec]
     schemas: dict[type[Any], dict[str, BaseChannel | ManagedValueSpec]]
+    waiting_edges: set[tuple[tuple[str, ...], str]]
+
+    compiled: bool
+    state_schema: type[StateT]
+    input_schema: type[InputT]
+    output_schema: type[OutputT]
 
     def __init__(
         self,
         state_schema: type[StateT],
         config_schema: type[Any] | None = None,
         *,
-        input: type[InputT] | None = None,
-        output: type[Any] | None = None,
+        input_schema: type[InputT] | None = None,
+        output_schema: type[OutputT] | None = None,
+        **kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
-        input = input or state_schema
-        output = output or state_schema
+        if (input_ := kwargs.get("input", UNSET)) is not UNSET:
+            warnings.warn(
+                "`input` is deprecated and will be removed. Please use `input_schema` instead.",
+                category=LangGraphDeprecatedSinceV10,
+                stacklevel=2,
+            )
+            if input_schema is None:
+                input_schema = cast(Union[type[InputT], None], input_)
+
+        if (output := kwargs.get("output", UNSET)) is not UNSET:
+            warnings.warn(
+                "`output` is deprecated and will be removed. Please use `output_schema` instead.",
+                category=LangGraphDeprecatedSinceV10,
+                stacklevel=2,
+            )
+            if output_schema is None:
+                output_schema = cast(Union[type[OutputT], None], output)
 
         self.nodes = {}
-        self.edges = set[tuple[str, str]]()
+        self.edges = set()
         self.branches = defaultdict(dict)
-        self.support_multiple_edges = False
-        self.compiled = False
         self.schemas = {}
         self.channels = {}
         self.managed = {}
-        self.schema = state_schema
-        self.input = input
-        self.output = output
-        self._add_schema(state_schema)
-        self._add_schema(input, allow_managed=False)
-        self._add_schema(output, allow_managed=False)
+        self.compiled = False
+        self.waiting_edges = set()
+
+        self.state_schema = state_schema
+        self.input_schema = cast(type[InputT], input_schema or state_schema)
+        self.output_schema = cast(type[OutputT], output_schema or state_schema)
         self.config_schema = config_schema
-        self.waiting_edges: set[tuple[tuple[str, ...], str]] = set()
+
+        self._add_schema(self.state_schema)
+        self._add_schema(self.input_schema, allow_managed=False)
+        self._add_schema(self.output_schema, allow_managed=False)
 
     @property
     def _all_edges(self) -> set[tuple[str, str]]:
@@ -313,7 +339,7 @@ class StateGraph(Generic[StateT, InputT]):
         *,
         defer: bool = False,
         metadata: dict[str, Any] | None = None,
-        input: type[Any] | None = None,
+        input_schema: type[Any] | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
@@ -332,7 +358,7 @@ class StateGraph(Generic[StateT, InputT]):
         *,
         defer: bool = False,
         metadata: dict[str, Any] | None = None,
-        input: type[Any] | None = None,
+        input_schema: type[Any] | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
@@ -348,7 +374,7 @@ class StateGraph(Generic[StateT, InputT]):
         *,
         defer: bool = False,
         metadata: dict[str, Any] | None = None,
-        input: type[Any] | None = None,
+        input_schema: type[Any] | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
@@ -363,7 +389,7 @@ class StateGraph(Generic[StateT, InputT]):
                 Will be used as the node function or runnable if `node` is a string (node name).
             defer: Whether to defer the execution of the node until the run is about to end.
             metadata: The metadata associated with the node. (default: None)
-            input: The input schema for the node. (default: the graph's input schema)
+            input_schema: The input schema for the node. (default: the graph's state schema)
             retry_policy: The retry policy for the node. (default: None)
                 If a sequence is provided, the first matching policy will be applied.
             cache_policy: The cache policy for the node. (default: None)
@@ -407,13 +433,21 @@ class StateGraph(Generic[StateT, InputT]):
         Returns:
             Self: The instance of the state graph, allowing for method chaining.
         """
-        if (retry := kwargs.get("retry")) is not None:
+        if (retry := kwargs.get("retry", UNSET)) is not UNSET:
             warnings.warn(
                 "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
                 category=LangGraphDeprecatedSinceV10,
             )
             if retry_policy is None:
                 retry_policy = retry  # type: ignore[assignment]
+
+        if (input_ := kwargs.get("input", UNSET)) is not UNSET:
+            warnings.warn(
+                "`input` is deprecated and will be removed. Please use `input_schema` instead.",
+                category=LangGraphDeprecatedSinceV10,
+            )
+            if input_schema is None:
+                input_schema = cast(Union[type[InputT], None], input_)
 
         if not isinstance(node, str):
             action = node
@@ -460,7 +494,7 @@ class StateGraph(Generic[StateT, InputT]):
                 hints := get_type_hints(getattr(action, "__call__"))
                 or get_type_hints(action)
             ):
-                if input is None:
+                if input_schema is None:
                     first_parameter_name = next(
                         iter(
                             inspect.signature(
@@ -470,7 +504,7 @@ class StateGraph(Generic[StateT, InputT]):
                     )
                     if input_hint := hints.get(first_parameter_name):
                         if isinstance(input_hint, type) and get_type_hints(input_hint):
-                            input = input_hint
+                            input_schema = input_hint
                 if rtn := hints.get("return"):
                     # Handle Union types
                     rtn_origin = get_origin(rtn)
@@ -498,12 +532,12 @@ class StateGraph(Generic[StateT, InputT]):
         if destinations is not None:
             ends = destinations
 
-        if input is not None:
-            self._add_schema(input)
+        if input_schema is not None:
+            self._add_schema(input_schema)
         self.nodes[node] = StateNodeSpec(
             coerce_to_runnable(action, name=node, trace=False),  # type: ignore
             metadata,
-            input=input or self.schema,
+            input=input_schema or self.state_schema,
             retry_policy=retry_policy,
             cache_policy=cache_policy,
             ends=ends,
@@ -749,32 +783,6 @@ class StateGraph(Generic[StateT, InputT]):
         self.compiled = True
         return self
 
-    @overload
-    def compile(
-        self: StateGraph[StateT, Unset],
-        checkpointer: Checkpointer = None,
-        *,
-        cache: BaseCache | None = None,
-        store: BaseStore | None = None,
-        interrupt_before: All | list[str] | None = None,
-        interrupt_after: All | list[str] | None = None,
-        debug: bool = False,
-        name: str | None = None,
-    ) -> CompiledStateGraph[StateT, StateT]: ...
-
-    @overload
-    def compile(
-        self: StateGraph[StateT, InputT],
-        checkpointer: Checkpointer = None,
-        *,
-        cache: BaseCache | None = None,
-        store: BaseStore | None = None,
-        interrupt_before: All | list[str] | None = None,
-        interrupt_after: All | list[str] | None = None,
-        debug: bool = False,
-        name: str | None = None,
-    ) -> CompiledStateGraph[StateT, InputT]: ...
-
     def compile(
         self,
         checkpointer: Checkpointer = None,
@@ -785,7 +793,7 @@ class StateGraph(Generic[StateT, InputT]):
         interrupt_after: All | list[str] | None = None,
         debug: bool = False,
         name: str | None = None,
-    ) -> CompiledStateGraph[StateT, StateT] | CompiledStateGraph[StateT, InputT]:
+    ) -> CompiledStateGraph[StateT, InputT]:
         """Compiles the state graph into a `CompiledStateGraph` object.
 
         The compiled graph implements the `Runnable` interface and can be invoked,
@@ -821,11 +829,11 @@ class StateGraph(Generic[StateT, InputT]):
         # prepare output channels
         output_channels = (
             "__root__"
-            if len(self.schemas[self.output]) == 1
-            and "__root__" in self.schemas[self.output]
+            if len(self.schemas[self.output_schema]) == 1
+            and "__root__" in self.schemas[self.output_schema]
             else [
                 key
-                for key, val in self.schemas[self.output].items()
+                for key, val in self.schemas[self.output_schema].items()
                 if not is_managed_value(val)
             ]
         )
@@ -837,23 +845,22 @@ class StateGraph(Generic[StateT, InputT]):
             ]
         )
 
-        ResolvedInputT: type[InputT] | type[StateT] = self.input or self.schema
-        compiled = CompiledStateGraph[StateT, ResolvedInputT](  # type: ignore[valid-type]
+        compiled = CompiledStateGraph[StateT, InputT, OutputT](
             builder=self,
             schema_to_mapper={},
             config_type=self.config_schema,
             input_model=(
-                self.input
+                self.input_schema
                 if len(self.channels) > 1
-                and isclass(self.input)
-                and issubclass(self.input, BaseModel)
+                and isclass(self.input_schema)
+                and issubclass(self.input_schema, BaseModel)
                 else None
             ),
             nodes={},
             channels={
                 **self.channels,
                 **self.managed,
-                START: EphemeralValue(self.input),
+                START: EphemeralValue(self.input_schema),
             },
             input_channels=START,
             stream_mode="updates",
@@ -886,14 +893,16 @@ class StateGraph(Generic[StateT, InputT]):
         return compiled.validate()
 
 
-class CompiledStateGraph(Pregel[InputT], Generic[StateT, InputT]):
-    builder: StateGraph[StateT, InputT]
+class CompiledStateGraph(
+    Pregel[StateT, InputT, OutputT], Generic[StateT, InputT, OutputT]
+):
+    builder: StateGraph[StateT, InputT, OutputT]
     schema_to_mapper: dict[type[Any], Callable[[Any], Any] | None]
 
     def __init__(
         self,
         *,
-        builder: StateGraph[StateT, InputT],
+        builder: StateGraph[StateT, InputT, OutputT],
         schema_to_mapper: dict[type[Any], Callable[[Any], Any] | None],
         **kwargs: Any,
     ) -> None:
@@ -903,7 +912,7 @@ class CompiledStateGraph(Pregel[InputT], Generic[StateT, InputT]):
 
     def get_input_schema(self, config: RunnableConfig | None = None) -> type[BaseModel]:
         return _get_schema(
-            typ=self.builder.input,
+            typ=self.builder.input_schema,
             schemas=self.builder.schemas,
             channels=self.builder.channels,
             name=self.get_name("Input"),
@@ -913,7 +922,7 @@ class CompiledStateGraph(Pregel[InputT], Generic[StateT, InputT]):
         self, config: RunnableConfig | None = None
     ) -> type[BaseModel]:
         return _get_schema(
-            typ=self.builder.output,
+            typ=self.builder.output_schema,
             schemas=self.builder.schemas,
             channels=self.builder.channels,
             name=self.get_name("Output"),
@@ -923,7 +932,7 @@ class CompiledStateGraph(Pregel[InputT], Generic[StateT, InputT]):
         if key == START:
             output_keys = [
                 k
-                for k, v in self.builder.schemas[self.builder.input].items()
+                for k, v in self.builder.schemas[self.builder.input_schema].items()
                 if not is_managed_value(v)
             ]
         else:
@@ -991,7 +1000,7 @@ class CompiledStateGraph(Pregel[InputT], Generic[StateT, InputT]):
                 writers=[ChannelWrite(write_entries)],
             )
         elif node is not None:
-            input_schema = node.input if node else self.builder.schema
+            input_schema = node.input if node else self.builder._state_schema
             input_values = {k: k for k in self.builder.schemas[input_schema]}
             is_single_input = len(input_values) == 1 and "__root__" in input_values
             if input_schema in self.schema_to_mapper:
@@ -1077,7 +1086,7 @@ class CompiledStateGraph(Pregel[InputT], Generic[StateT, InputT]):
             schema = branch.input_schema or (
                 self.builder.nodes[start].input
                 if start in self.builder.nodes
-                else self.builder.schema
+                else self.builder.state_schema
             )
             channels = list(self.builder.schemas[schema])
             # get mapper

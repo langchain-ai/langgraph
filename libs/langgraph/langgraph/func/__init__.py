@@ -19,6 +19,7 @@ from typing import (
 
 from typing_extensions import Unpack
 
+from langgraph._typing import UNSET, DeprecatedKwargs
 from langgraph.cache.base import BaseCache
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
@@ -37,7 +38,6 @@ from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
 from langgraph.types import _DC_KWARGS, CachePolicy, RetryPolicy, StreamMode
-from langgraph.typing import DeprecatedKwargs
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 
@@ -176,7 +176,7 @@ def task(
         await add_one.ainvoke([1, 2, 3])  # Returns [2, 3, 4]
         ```
     """
-    if (retry := kwargs.get("retry")) is not None:
+    if (retry := kwargs.get("retry", UNSET)) is not UNSET:
         warnings.warn(
             "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
             category=LangGraphDeprecatedSinceV10,
@@ -380,7 +380,7 @@ class entrypoint:
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         """Initialize the entrypoint decorator."""
-        if (retry := kwargs.get("retry")) is not None:
+        if (retry := kwargs.get("retry", UNSET)) is not UNSET:
             warnings.warn(
                 "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
                 category=LangGraphDeprecatedSinceV10,
