@@ -10,6 +10,7 @@ from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
 from types import TracebackType
 from typing import Any
+import asyncio
 
 from langchain_core.runnables import RunnableConfig
 
@@ -502,15 +503,8 @@ class InMemorySaver(
         return self.put_writes(config, writes, task_id, task_path)
 
     async def adelete_thread(self, thread_id: str) -> None:
-        """Delete all checkpoints and writes associated with a thread ID.
-
-        Args:
-            thread_id: The thread ID to delete.
-
-        Returns:
-            None
-        """
-        return self.delete_thread(thread_id)
+        """Delete all checkpoints and writes associated with a thread ID (async)."""
+        await asyncio.to_thread(self.delete_thread, thread_id)
 
     def get_next_version(self, current: str | None) -> str:
         if current is None:
