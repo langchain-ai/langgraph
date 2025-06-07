@@ -29,6 +29,7 @@ def create_checkpoint(
     step: int,
     *,
     id: str | None = None,
+    is_fork: bool = False,
 ) -> Checkpoint:
     """Create a checkpoint for the given channels."""
     ts = datetime.now(timezone.utc).isoformat()
@@ -42,10 +43,14 @@ def create_checkpoint(
             v = channels[k].checkpoint()
             if v is not MISSING:
                 values[k] = v
+    
+    # Generate new ID if is_fork=True or no ID provided
+    checkpoint_id = id if id and not is_fork else str(uuid6(clock_seq=step))
+    
     return Checkpoint(
         v=LATEST_VERSION,
         ts=ts,
-        id=id or str(uuid6(clock_seq=step)),
+        id=checkpoint_id,
         channel_values=values,
         channel_versions=checkpoint["channel_versions"],
         versions_seen=checkpoint["versions_seen"],
