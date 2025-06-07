@@ -1579,7 +1579,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         "Cannot copy checkpoint with multiple updates"
                     )
 
-                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                next_checkpoint = create_checkpoint(checkpoint, None, step, is_fork=True)
                 # copy checkpoint
                 next_config = checkpointer.put(
                     saved.parent_config or saved.config if saved else checkpoint_config,
@@ -1742,7 +1742,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 checkpointer.get_next_version,
                 self.trigger_to_nodes,
             )
-            checkpoint = create_checkpoint(checkpoint, channels, step + 1)
+            checkpoint = create_checkpoint(checkpoint, channels, step + 1, is_fork=True)
             next_config = checkpointer.put(
                 checkpoint_config,
                 checkpoint,
@@ -1999,7 +1999,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         "Cannot copy checkpoint with multiple updates"
                     )
 
-                next_checkpoint = create_checkpoint(checkpoint, None, step)
+                next_checkpoint = create_checkpoint(checkpoint, None, step, is_fork=True)
                 # copy checkpoint
                 next_config = await checkpointer.aput(
                     saved.parent_config or saved.config if saved else checkpoint_config,
@@ -2159,7 +2159,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 checkpointer.get_next_version,
                 self.trigger_to_nodes,
             )
-            checkpoint = create_checkpoint(checkpoint, channels, step + 1)
+            checkpoint = create_checkpoint(checkpoint, channels, step + 1, is_fork=True)
             # save checkpoint, after applying writes
             next_config = await checkpointer.aput(
                 checkpoint_config,
