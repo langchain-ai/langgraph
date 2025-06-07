@@ -107,3 +107,131 @@ if __name__ == "__main__":
 
 - [MCP documentation](https://modelcontextprotocol.io/introduction)
 - [MCP Transport documentation](https://modelcontextprotocol.io/docs/concepts/transports)
+
+## Integrating MCP Tools into LangGraph Graph Definitions
+
+When building LangGraph applications that will be deployed to LangGraph Server, you may want to pre-configure your graph with MCP tools rather than fetching them at runtime. Here's how to do this effectively:
+
+### Using Async Bootstrap for Graph Setup
+
+You can use an async bootstrap pattern to load MCP tools during graph initialization. Here's an example:
+
+```python title="Graph with pre-configured MCP tools"
+from typing import Annotated, Sequence, TypedDict
+from langgraph.graph import Graph, StateGraph
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_core.tools import BaseTool
+
+# Define your graph state
+class GraphState(TypedDict):
+    messages: Annotated[Sequence[dict], "The messages in the conversation"]
+    next: Annotated[str, "The next node to call"]
+
+# Async bootstrap function to load tools
+async def load_mcp_tools() -> list[BaseTool]:
+    client = MultiServerMCPClient({
+        "math": {
+            "command": "python",
+            "args": ["/path/to/math_server.py"],
+            "transport": "stdio",
+        }
+    })
+    return await client.get_tools()
+
+# Create graph with pre-loaded tools
+async def create_graph() -> Graph:
+    # Load tools during graph creation
+    tools = await load_mcp_tools()
+    
+    # Define your nodes using the pre-loaded tools
+    def tools_node(state: GraphState) -> GraphState:
+        # Your tools node implementation using the pre-loaded tools
+        return state
+    
+    # Build the graph
+    workflow = StateGraph(GraphState)
+    workflow.add_node("tools", tools_node)
+    # Add other nodes and edges...
+    
+    return workflow.compile()
+
+# Usage in your application
+async def main():
+    graph = await create_graph()
+    # Use the graph...
+```
+
+### Alternative: Using Tool Factories
+
+Another pattern is to use a tool factory that can be called during graph initialization:
+
+```python title="Using a tool factory pattern"
+from functools import partial
+from typing import Callable
+
+class MCPToolFactory:
+    def __init__(self, client_config: dict):
+        self.client_config = client_config
+        self._tools = None
+    
+    async def get_tools(self) -> list[BaseTool]:
+        if self._tools is None:
+            client = MultiServerMCPClient(self.client_config)
+            self._tools = await client.get_tools()
+        return self._tools
+
+# Create a factory instance
+tool_factory = MCPToolFactory({
+    "math": {
+        "command": "python",
+        "args": ["/path/to/math_server.py"],
+        "transport": "stdio",
+    }
+})
+
+# Use in graph definition
+async def create_graph() -> Graph:
+    tools = await tool_factory.get_tools()
+    # Build your graph with the tools...
+```
+
+### Best Practices
+
+1. **Error Handling**: Always include proper error handling when loading MCP tools:
+   ```python
+   async def load_mcp_tools() -> list[BaseTool]:
+       try:
+           client = MultiServerMCPClient(config)
+           return await client.get_tools()
+       except Exception as e:
+           # Handle connection or tool loading errors
+           logger.error(f"Failed to load MCP tools: {e}")
+           return []
+   ```
+
+2. **Caching**: Consider caching the tools after first load to avoid repeated async calls:
+   ```python
+   class CachedMCPTools:
+       def __init__(self):
+           self._tools = None
+       
+       async def get_tools(self) -> list[BaseTool]:
+           if self._tools is None:
+               self._tools = await load_mcp_tools()
+           return self._tools
+   ```
+
+3. **Configuration Management**: Store MCP server configurations in environment variables or configuration files:
+   ```python
+   import os
+   
+   MCP_CONFIG = {
+       "math": {
+           "command": os.getenv("MCP_MATH_COMMAND", "python"),
+           "args": [os.getenv("MCP_MATH_SERVER_PATH", "/path/to/math_server.py")],
+           "transport": "stdio",
+       }
+   }
+   ```
+
+These patterns allow you to create self-contained LangGraph applications that have their MCP tools pre-configured, making them easier to deploy and maintain.
