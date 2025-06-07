@@ -205,6 +205,39 @@ class TestMemorySaver:
         ]
         assert len(search_results_4) == 0
 
+    def test_delete_thread_sync(self) -> None:
+        # Save a checkpoint and get the config with checkpoint_id
+        saved_config = self.memory_saver.put(
+            self.config_1, self.chkpnt_1, self.metadata_1, self.chkpnt_1["channel_versions"]
+        )
+        # Ensure it exists
+        assert self.memory_saver.get_tuple(saved_config) is not None
+        # Delete synchronously
+        self.memory_saver.delete_thread(self.config_1["configurable"]["thread_id"])
+        # Ensure it is gone
+        assert self.memory_saver.get_tuple(saved_config) is None
+
+    @pytest.mark.asyncio
+    async def test_delete_thread_async(self) -> None:
+        saved_config = self.memory_saver.put(
+            self.config_2, self.chkpnt_2, self.metadata_2, self.chkpnt_2["channel_versions"]
+        )
+        assert self.memory_saver.get_tuple(saved_config) is not None
+        await self.memory_saver.adelete_thread(self.config_2["configurable"]["thread_id"])
+        assert self.memory_saver.get_tuple(saved_config) is None
+
+    @pytest.mark.asyncio
+    async def test_adelete_thread_is_coroutine(self) -> None:
+        saved_config = self.memory_saver.put(
+            self.config_3, self.chkpnt_3, self.metadata_3, self.chkpnt_3["channel_versions"]
+        )
+        assert self.memory_saver.get_tuple(saved_config) is not None
+        import asyncio
+        coro = self.memory_saver.adelete_thread(self.config_3["configurable"]["thread_id"])
+        assert asyncio.iscoroutine(coro)
+        await coro
+        assert self.memory_saver.get_tuple(saved_config) is None
+
 
 def test_memory_saver() -> None:
     from langgraph.checkpoint.memory import MemorySaver
