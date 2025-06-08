@@ -3,7 +3,6 @@ import json
 from typing import Annotated, Optional
 
 from langchain_community.retrievers import WikipediaRetriever
-from langchain_tavily import TavilySearchResults
 from langchain_community.vectorstores import SKLearnVectorStore
 from langchain_core.documents import Document
 from langchain_core.messages import (
@@ -18,6 +17,7 @@ from langchain_core.runnables import RunnableConfig, RunnableLambda
 from langchain_core.runnables import chain as as_runnable
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_tavily import TavilySearchResults
 from langgraph.graph import END, StateGraph
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
