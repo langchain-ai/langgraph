@@ -1,31 +1,36 @@
-# Testing local agents with remote traces
+# Debug LangSmith traces
 
-## Overview
+This guide explains how to open LangSmith traces in LangGraph Studio for interactive investigation and debugging.
 
-A common workflow when debugging production-deployed agents is to test the same thread against a local version of the same agent, which may have modifications.
+## Open deployed threads
 
-To support this, LangGraph Studio, in combination with LangSmith, allows you to clone remote threads traced in LangSmith into your locally running agent. This cloned thread can then be used to re-run specific nodes within Studio.
+1. Open the LangSmith trace, selecting the root run.
+2. Click "Run in Studio".
 
-## Requirements
+This will open LangGraph Studio connected to the associated LangGraph Platform deployment with the trace's parent thread selected.
 
-!!! info "Prerequisites"
+## Testing local agents with remote traces
+
+This section explains how to test a local agent against remote traces from LangSmith. This enables you to use production traces as input for local testing, allowing you to debug and verify agent modifications in your development environment.
+
+### Requirements
+
+- A LangSmith traced thread
+- A locally running agent. See [here](../how-tos/studio/quick_start.md#local-development-server) for setup
+  instructions.
+
+!!! info "Local agent requirements"
 
     - langgraph>=0.3.18
     - langgraph-api>=0.0.32
+    - Contains the same set of nodes present in the remote trace
 
-- A thread traced in LangSmith.
-- A locally running agent. See [here](../../how-tos/local-studio.md) for setup instructions.
-  - Note that your local agent must be using the above specified `langgraph` and `langgraph-api` versions.
-  - The nodes present in the remote trace must exist in at least one of the graphs in your local agent.
+### Cloning Thread
 
-## Cloning Thread
+1. Open the LangSmith trace, selecting the root run.
+2. Click the dropdown next to "Run in Studio".
+3. Enter your local agent's URL.
+4. Select "Clone thread locally".
+5. If multiple graphs exist, select the target graph.
 
-First navigate to the LangSmith trace. Here you should see a button to "Run in Studio".
-
-![Run in Studio](../img/run_in_studio.png){width=1200}
-
-This will prompt you to enter the url that your locally running agent is accessible at. Once provided, select "Clone thread locally". If you have multiple graphs in your agent, you will also be prompted to select a graph to clone this thread under.
-
-Once selected, a will a new thread in your local agent will be created and the thread history will be reconstruced to reflect the original trace.
-
-Alternatively, if your trace originates from an agent deployed on LangGraph Platform, you can "View original thread" to open Studio with the actual deployed thread.
+A new thread will be created in your local agent with the thread history inferred and copied from the remote thread, and you will be navigated to LangGraph Studio for your locally running application.

@@ -1,4 +1,6 @@
 # type: ignore
+from __future__ import annotations
+
 import asyncio
 import itertools
 import sys
@@ -6,7 +8,7 @@ import uuid
 from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 from langchain_core.embeddings import Embeddings
@@ -353,7 +355,7 @@ async def _create_vector_store(
     vector_type: str,
     distance_type: str,
     fake_embeddings: CharacterEmbeddings,
-    text_fields: Optional[list[str]] = None,
+    text_fields: list[str] | None = None,
 ) -> AsyncIterator[AsyncPostgresStore]:
     """Create a store with vector search enabled."""
     if sys.version_info < (3, 10):
@@ -377,7 +379,7 @@ async def _create_vector_store(
             "vector_type": vector_type,
         },
         "distance_type": distance_type,
-        "text_fields": text_fields,
+        "fields": text_fields,
     }
 
     async with await AsyncConnection.connect(

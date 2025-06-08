@@ -1,6 +1,6 @@
 # Stateless Runs
 
-Most of the time, you provide a `thread_id` to your client when you run your graph in order to keep track of prior runs through the persistent state implemented in LangGraph Cloud. However, if you don't need to persist the runs you don't need to use the built in persistent state and can create stateless runs.
+Most of the time, you provide a `thread_id` to your client when you run your graph in order to keep track of prior runs through the persistent state implemented in LangGraph Platform. However, if you don't need to persist the runs you don't need to use the built in persistent state and can create stateless runs.
 
 ## Setup
 

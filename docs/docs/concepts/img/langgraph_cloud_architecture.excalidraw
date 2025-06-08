@@ -534,11 +534,11 @@
       "locked": false,
       "fontSize": 28,
       "fontFamily": 1,
-      "text": "LangGraph Cloud Deployment",
+      "text": "LangGraph Platform Deployment",
       "textAlign": "center",
       "verticalAlign": "top",
       "containerId": null,
-      "originalText": "LangGraph Cloud Deployment",
+      "originalText": "LangGraph Platform Deployment",
       "autoResize": true,
       "lineHeight": 1.25
     },

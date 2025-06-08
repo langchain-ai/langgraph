@@ -1,18 +1,21 @@
 """Utility to convert a user provided function into a Runnable with a ChannelWrite."""
 
+from __future__ import annotations
+
 import concurrent.futures
 import functools
 import inspect
 import sys
 import types
-from typing import Any, Callable, Generator, Generic, Optional, TypeVar, cast
+from collections.abc import Generator, Sequence
+from typing import Any, Callable, Generic, TypeVar, cast
 
 from langchain_core.runnables import Runnable
 from typing_extensions import ParamSpec
 
-from langgraph.constants import CONF, CONFIG_KEY_CALL, RETURN, TAG_HIDDEN
+from langgraph.constants import CONF, CONFIG_KEY_CALL, RETURN
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
-from langgraph.types import RetryPolicy
+from langgraph.types import CachePolicy, RetryPolicy
 from langgraph.utils.config import get_config
 from langgraph.utils.runnable import (
     RunnableCallable,
@@ -27,22 +30,19 @@ from langgraph.utils.runnable import (
 
 
 def _getattribute(obj: Any, name: str) -> Any:
+    parent = None
     for subpath in name.split("."):
         if subpath == "<locals>":
-            raise AttributeError(
-                "Can't get local attribute {!r} on {!r}".format(name, obj)
-            )
+            raise AttributeError(f"Can't get local attribute {name!r} on {obj!r}")
         try:
             parent = obj
             obj = getattr(obj, subpath)
         except AttributeError:
-            raise AttributeError(
-                "Can't get attribute {!r} on {!r}".format(name, obj)
-            ) from None
+            raise AttributeError(f"Can't get attribute {name!r} on {obj!r}") from None
     return obj, parent
 
 
-def _whichmodule(obj: Any, name: str) -> Optional[str]:
+def _whichmodule(obj: Any, name: str) -> str | None:
     """Find the module an object belongs to.
 
     This function differs from ``pickle.whichmodule`` in two ways:
@@ -76,9 +76,38 @@ def _whichmodule(obj: Any, name: str) -> Optional[str]:
     return None
 
 
+def identifier(obj: Any, name: str | None = None) -> str | None:
+    """Return the module and name of an object."""
+    from langgraph.pregel.read import PregelNode
+    from langgraph.utils.runnable import RunnableCallable, RunnableSeq
+
+    if isinstance(obj, PregelNode):
+        obj = obj.bound
+    if isinstance(obj, RunnableSeq):
+        obj = obj.steps[0]
+    if isinstance(obj, RunnableCallable):
+        obj = obj.func
+    if name is None:
+        name = getattr(obj, "__qualname__", None)
+    if name is None:  # pragma: no cover
+        # This used to be needed for Python 2.7 support but is probably not
+        # needed anymore. However we keep the __name__ introspection in case
+        # users of cloudpickle rely on this old behavior for unknown reasons.
+        name = getattr(obj, "__name__", None)
+    if name is None:
+        return None
+
+    module_name = getattr(obj, "__module__", None)
+    if module_name is None:
+        # In this case, obj.__module__ is None. obj is thus treated as dynamic.
+        return None
+
+    return f"{module_name}.{name}"
+
+
 def _lookup_module_and_qualname(
-    obj: Any, name: Optional[str] = None
-) -> Optional[tuple[types.ModuleType, str]]:
+    obj: Any, name: str | None = None
+) -> tuple[types.ModuleType, str] | None:
     if name is None:
         name = getattr(obj, "__qualname__", None)
     if name is None:  # pragma: no cover
@@ -138,7 +167,7 @@ def _explode_args_trace_inputs(
     return arguments
 
 
-def get_runnable_for_entrypoint(func: Callable[..., Any]) -> RunnableSeq:
+def get_runnable_for_entrypoint(func: Callable[..., Any]) -> Runnable:
     key = (func, False)
     if key in CACHE:
         return CACHE[key]
@@ -163,7 +192,7 @@ def get_runnable_for_entrypoint(func: Callable[..., Any]) -> RunnableSeq:
         return CACHE.setdefault(key, run)
 
 
-def get_runnable_for_task(func: Callable[..., Any]) -> RunnableSeq:
+def get_runnable_for_task(func: Callable[..., Any]) -> Runnable:
     key = (func, True)
     if key in CACHE:
         return CACHE[key]
@@ -197,7 +226,7 @@ def get_runnable_for_task(func: Callable[..., Any]) -> RunnableSeq:
             )
         seq = RunnableSeq(
             run,
-            ChannelWrite([ChannelWriteEntry(RETURN)], tags=[TAG_HIDDEN]),
+            ChannelWrite([ChannelWriteEntry(RETURN)]),
             name=name,
             trace_inputs=functools.partial(
                 _explode_args_trace_inputs, inspect.signature(func)
@@ -224,10 +253,17 @@ class SyncAsyncFuture(Generic[T], concurrent.futures.Future[T]):
 def call(
     func: Callable[P, T],
     *args: Any,
-    retry: Optional[RetryPolicy] = None,
+    retry_policy: Sequence[RetryPolicy] | None = None,
+    cache_policy: CachePolicy | None = None,
     **kwargs: Any,
 ) -> SyncAsyncFuture[T]:
     config = get_config()
     impl = config[CONF][CONFIG_KEY_CALL]
-    fut = impl(func, (args, kwargs), retry=retry, callbacks=config["callbacks"])
+    fut = impl(
+        func,
+        (args, kwargs),
+        retry_policy=retry_policy,
+        cache_policy=cache_policy,
+        callbacks=config["callbacks"],
+    )
     return fut

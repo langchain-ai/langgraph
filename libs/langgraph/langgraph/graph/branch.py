@@ -1,20 +1,18 @@
-import asyncio
+from __future__ import annotations
+
+from collections.abc import Awaitable, Hashable, Sequence
 from inspect import (
     isfunction,
     ismethod,
     signature,
 )
+from itertools import zip_longest
 from types import FunctionType
 from typing import (
     Any,
-    Awaitable,
     Callable,
-    Hashable,
     Literal,
     NamedTuple,
-    Optional,
-    Sequence,
-    Type,
     Union,
     cast,
     get_args,
@@ -30,29 +28,31 @@ from langchain_core.runnables import (
 
 from langgraph.constants import END, START
 from langgraph.errors import InvalidUpdateError
-from langgraph.pregel.write import ChannelWrite
+from langgraph.pregel.write import PASSTHROUGH, ChannelWrite, ChannelWriteEntry
 from langgraph.types import Send
 from langgraph.utils.runnable import (
     RunnableCallable,
 )
 
+Writer = Callable[
+    [Sequence[Union[str, Send]], bool],
+    Sequence[Union[ChannelWriteEntry, Send]],
+]
+
 
 def _get_branch_path_input_schema(
-    path: Union[
-        Callable[..., Union[Hashable, list[Hashable]]],
-        Callable[..., Awaitable[Union[Hashable, list[Hashable]]]],
-        Runnable[Any, Union[Hashable, list[Hashable]]],
-    ],
-) -> Optional[Type[Any]]:
+    path: Callable[..., Hashable | list[Hashable]]
+    | Callable[..., Awaitable[Hashable | list[Hashable]]]
+    | Runnable[Any, Hashable | list[Hashable]],
+) -> type[Any] | None:
     input = None
     # detect input schema annotation in the branch callable
     try:
-        callable_: Optional[
-            Union[
-                Callable[..., Union[Hashable, list[Hashable]]],
-                Callable[..., Awaitable[Union[Hashable, list[Hashable]]]],
-            ]
-        ] = None
+        callable_: (
+            Callable[..., Hashable | list[Hashable]]
+            | Callable[..., Awaitable[Hashable | list[Hashable]]]
+            | None
+        ) = None
         if isinstance(path, (RunnableCallable, RunnableLambda)):
             if isfunction(path.func) or ismethod(path.func):
                 callable_ = path.func
@@ -83,21 +83,19 @@ def _get_branch_path_input_schema(
 
 
 class Branch(NamedTuple):
-    path: Runnable[Any, Union[Hashable, list[Hashable]]]
-    ends: Optional[dict[Hashable, str]]
-    then: Optional[str] = None
-    input_schema: Optional[Type[Any]] = None
+    path: Runnable[Any, Hashable | list[Hashable]]
+    ends: dict[Hashable, str] | None
+    input_schema: type[Any] | None = None
 
     @classmethod
     def from_path(
         cls,
-        path: Runnable[Any, Union[Hashable, list[Hashable]]],
-        path_map: Optional[Union[dict[Hashable, str], list[str]]],
-        then: Optional[str] = None,
+        path: Runnable[Any, Hashable | list[Hashable]],
+        path_map: dict[Hashable, str] | list[str] | None,
         infer_schema: bool = False,
-    ) -> "Branch":
+    ) -> Branch:
         # coerce path_map to a dictionary
-        path_map_: Optional[dict[Hashable, str]] = None
+        path_map_: dict[Hashable, str] | None = None
         try:
             if isinstance(path_map, dict):
                 path_map_ = path_map.copy()
@@ -105,7 +103,7 @@ class Branch(NamedTuple):
                 path_map_ = {name: name for name in path_map}
             else:
                 # find func
-                func: Optional[Callable] = None
+                func: Callable | None = None
                 if isinstance(path, (RunnableCallable, RunnableLambda)):
                     func = path.func or path.afunc
                 if func is not None:
@@ -121,14 +119,12 @@ class Branch(NamedTuple):
         # infer input schema
         input_schema = _get_branch_path_input_schema(path) if infer_schema else None
         # create branch
-        return cls(path=path, ends=path_map_, then=then, input_schema=input_schema)
+        return cls(path=path, ends=path_map_, input_schema=input_schema)
 
     def run(
         self,
-        writer: Callable[
-            [Sequence[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
-        ],
-        reader: Optional[Callable[[RunnableConfig], Any]] = None,
+        writer: Writer,
+        reader: Callable[[RunnableConfig], Any] | None = None,
     ) -> RunnableCallable:
         return ChannelWrite.register_writer(
             RunnableCallable(
@@ -139,7 +135,15 @@ class Branch(NamedTuple):
                 name=None,
                 trace=False,
                 func_accepts_config=True,
+            ),
+            list(
+                zip_longest(
+                    writer([e for e in self.ends.values()], True),
+                    [str(la) for la, e in self.ends.items()],
+                )
             )
+            if self.ends
+            else None,
         )
 
     def _route(
@@ -147,10 +151,8 @@ class Branch(NamedTuple):
         input: Any,
         config: RunnableConfig,
         *,
-        reader: Optional[Callable[[RunnableConfig], Any]],
-        writer: Callable[
-            [Sequence[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
-        ],
+        reader: Callable[[RunnableConfig], Any] | None,
+        writer: Writer,
     ) -> Runnable:
         if reader:
             value = reader(config)
@@ -172,13 +174,11 @@ class Branch(NamedTuple):
         input: Any,
         config: RunnableConfig,
         *,
-        reader: Optional[Callable[[RunnableConfig], Any]],
-        writer: Callable[
-            [Sequence[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
-        ],
+        reader: Callable[[RunnableConfig], Any] | None,
+        writer: Writer,
     ) -> Runnable:
         if reader:
-            value = await asyncio.to_thread(reader, config)
+            value = reader(config)
             # passthrough additional keys from node to branch
             # only doable when using dict states
             if (
@@ -194,17 +194,15 @@ class Branch(NamedTuple):
 
     def _finish(
         self,
-        writer: Callable[
-            [Sequence[Union[str, Send]], RunnableConfig], Optional[ChannelWrite]
-        ],
+        writer: Writer,
         input: Any,
         result: Any,
         config: RunnableConfig,
-    ) -> Union[Runnable, Any]:
+    ) -> Runnable | Any:
         if not isinstance(result, (list, tuple)):
             result = [result]
         if self.ends:
-            destinations: Sequence[Union[Send, str]] = [
+            destinations: Sequence[Send | str] = [
                 r if isinstance(r, Send) else self.ends[r] for r in result
             ]
         else:
@@ -213,4 +211,18 @@ class Branch(NamedTuple):
             raise ValueError("Branch did not return a valid destination")
         if any(p.node == END for p in destinations if isinstance(p, Send)):
             raise InvalidUpdateError("Cannot send a packet to the END node")
-        return writer(destinations, config) or input
+        entries = writer(destinations, False)
+        if not entries:
+            return input
+        else:
+            need_passthrough = False
+            for e in entries:
+                if isinstance(e, ChannelWriteEntry):
+                    if e.value is PASSTHROUGH:
+                        need_passthrough = True
+                        break
+            if need_passthrough:
+                return ChannelWrite(entries)
+            else:
+                ChannelWrite.do_write(config, entries)
+                return input

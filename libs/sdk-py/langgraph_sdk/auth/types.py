@@ -8,6 +8,8 @@ Note:
     All typing.TypedDict classes use total=False to make all fields typing.Optional by default.
 """
 
+from __future__ import annotations
+
 import functools
 import sys
 import typing
@@ -56,10 +58,8 @@ Values:
 """
 
 FilterType = typing.Union[
-    typing.Dict[
-        str, typing.Union[str, typing.Dict[typing.Literal["$eq", "$contains"], str]]
-    ],
-    typing.Dict[str, str],
+    dict[str, typing.Union[str, dict[typing.Literal["$eq", "$contains"], str]]],
+    dict[str, str],
 ]
 """Response type for authorization handlers.
 
@@ -100,7 +100,7 @@ Values:
     - error: Thread encountered an error
 """
 
-MetadataInput = typing.Dict[str, typing.Any]
+MetadataInput = dict[str, typing.Any]
 """Type for arbitrary metadata attached to entities.
 
 Allows storing custom key-value pairs with any entity.
@@ -434,7 +434,7 @@ class ThreadsRead(typing.TypedDict, total=False):
     thread_id: UUID
     """Unique identifier for the thread."""
 
-    run_id: typing.Optional[UUID]
+    run_id: UUID | None
     """Run ID to filter by. Only used when reading run information within a thread."""
 
 
@@ -451,7 +451,7 @@ class ThreadsUpdate(typing.TypedDict, total=False):
     metadata: MetadataInput
     """typing.Optional metadata to update."""
 
-    action: typing.Optional[typing.Literal["interrupt", "rollback"]]
+    action: typing.Literal["interrupt", "rollback"] | None
     """typing.Optional action to perform on the thread."""
 
 
@@ -464,7 +464,7 @@ class ThreadsDelete(typing.TypedDict, total=False):
     thread_id: UUID
     """Unique identifier for the thread."""
 
-    run_id: typing.Optional[UUID]
+    run_id: UUID | None
     """typing.Optional run ID to filter by."""
 
 
@@ -480,7 +480,7 @@ class ThreadsSearch(typing.TypedDict, total=False):
     values: MetadataInput
     """typing.Optional values to filter by."""
 
-    status: typing.Optional[ThreadStatus]
+    status: ThreadStatus | None
     """typing.Optional status to filter by."""
 
     limit: int
@@ -489,7 +489,7 @@ class ThreadsSearch(typing.TypedDict, total=False):
     offset: int
     """Offset for pagination."""
 
-    thread_id: typing.Optional[UUID]
+    thread_id: UUID | None
     """typing.Optional thread ID to filter by."""
 
 
@@ -514,16 +514,16 @@ class RunsCreate(typing.TypedDict, total=False):
         ```
     """
 
-    assistant_id: typing.Optional[UUID]
+    assistant_id: UUID | None
     """typing.Optional assistant ID to use for this run."""
 
-    thread_id: typing.Optional[UUID]
+    thread_id: UUID | None
     """typing.Optional thread ID to use for this run."""
 
-    run_id: typing.Optional[UUID]
+    run_id: UUID | None
     """typing.Optional run ID to use for this run."""
 
-    status: typing.Optional[RunStatus]
+    status: RunStatus | None
     """typing.Optional status for this run."""
 
     metadata: MetadataInput
@@ -541,10 +541,10 @@ class RunsCreate(typing.TypedDict, total=False):
     after_seconds: int
     """Number of seconds to wait before creating the run."""
 
-    kwargs: typing.Dict[str, typing.Any]
+    kwargs: dict[str, typing.Any]
     """Keyword arguments to pass to the run."""
 
-    action: typing.Optional[typing.Literal["interrupt", "rollback"]]
+    action: typing.Literal["interrupt", "rollback"] | None
     """Action to take if updating an existing run."""
 
 
@@ -570,7 +570,7 @@ class AssistantsCreate(typing.TypedDict, total=False):
     graph_id: str
     """Graph ID to use for this assistant."""
 
-    config: typing.Optional[typing.Union[typing.Dict[str, typing.Any], typing.Any]]
+    config: dict[str, typing.Any] | typing.Any | None
     """typing.Optional configuration for the assistant."""
 
     metadata: MetadataInput
@@ -621,19 +621,19 @@ class AssistantsUpdate(typing.TypedDict, total=False):
     assistant_id: UUID
     """Unique identifier for the assistant."""
 
-    graph_id: typing.Optional[str]
+    graph_id: str | None
     """typing.Optional graph ID to update."""
 
-    config: typing.Optional[typing.Union[typing.Dict[str, typing.Any], typing.Any]]
+    config: dict[str, typing.Any] | typing.Any | None
     """typing.Optional configuration to update."""
 
     metadata: MetadataInput
     """typing.Optional metadata to update."""
 
-    name: typing.Optional[str]
+    name: str | None
     """typing.Optional name to update."""
 
-    version: typing.Optional[int]
+    version: int | None
     """typing.Optional version to update."""
 
 
@@ -666,7 +666,7 @@ class AssistantsSearch(typing.TypedDict):
         ```
     """
 
-    graph_id: typing.Optional[str]
+    graph_id: str | None
     """typing.Optional graph ID to filter by."""
 
     metadata: MetadataInput
@@ -695,22 +695,22 @@ class CronsCreate(typing.TypedDict, total=False):
         ```
     """
 
-    payload: typing.Dict[str, typing.Any]
+    payload: dict[str, typing.Any]
     """Payload for the cron job."""
 
     schedule: str
     """Schedule for the cron job."""
 
-    cron_id: typing.Optional[UUID]
+    cron_id: UUID | None
     """typing.Optional unique identifier for the cron job."""
 
-    thread_id: typing.Optional[UUID]
+    thread_id: UUID | None
     """typing.Optional thread ID to use for this cron job."""
 
-    user_id: typing.Optional[str]
+    user_id: str | None
     """typing.Optional user ID to use for this cron job."""
 
-    end_time: typing.Optional[datetime]
+    end_time: datetime | None
     """typing.Optional end time for the cron job."""
 
 
@@ -760,10 +760,10 @@ class CronsUpdate(typing.TypedDict, total=False):
     cron_id: UUID
     """Unique identifier for the cron job."""
 
-    payload: typing.Optional[typing.Dict[str, typing.Any]]
+    payload: dict[str, typing.Any] | None
     """typing.Optional payload to update."""
 
-    schedule: typing.Optional[str]
+    schedule: str | None
     """typing.Optional schedule to update."""
 
 
@@ -781,10 +781,10 @@ class CronsSearch(typing.TypedDict, total=False):
         ```
     """
 
-    assistant_id: typing.Optional[UUID]
+    assistant_id: UUID | None
     """typing.Optional assistant ID to filter by."""
 
-    thread_id: typing.Optional[UUID]
+    thread_id: UUID | None
     """typing.Optional thread ID to filter by."""
 
     limit: int
@@ -810,7 +810,7 @@ class StoreSearch(typing.TypedDict):
     namespace: tuple[str, ...]
     """Prefix filter for defining the search scope."""
 
-    filter: typing.Optional[dict[str, typing.Any]]
+    filter: dict[str, typing.Any] | None
     """Key-value pairs for filtering results based on exact matches or comparison operators."""
 
     limit: int
@@ -819,20 +819,20 @@ class StoreSearch(typing.TypedDict):
     offset: int
     """Number of matching items to skip for pagination."""
 
-    query: typing.Optional[str]
+    query: str | None
     """Naturalj language search query for semantic search capabilities."""
 
 
 class StoreListNamespaces(typing.TypedDict):
     """Operation to list and filter namespaces in the store."""
 
-    namespace: typing.Optional[tuple[str, ...]]
+    namespace: tuple[str, ...] | None
     """Prefix filter namespaces."""
 
-    suffix: typing.Optional[tuple[str, ...]]
+    suffix: tuple[str, ...] | None
     """Optional conditions for filtering namespaces."""
 
-    max_depth: typing.Optional[int]
+    max_depth: int | None
     """Maximum depth of namespace hierarchy to return.
 
     Note:
@@ -855,10 +855,10 @@ class StorePut(typing.TypedDict):
     key: str
     """Unique identifier for the item within its namespace."""
 
-    value: typing.Optional[dict[str, typing.Any]]
+    value: dict[str, typing.Any] | None
     """The data to store, or None to mark the item for deletion."""
 
-    index: typing.Optional[typing.Union[typing.Literal[False], list[str]]]
+    index: typing.Literal[False] | list[str] | None
     """Optional index configuration for full-text search."""
 
 
@@ -900,7 +900,7 @@ class on:
         ```
     """
 
-    value = typing.Dict[str, typing.Any]
+    value = dict[str, typing.Any]
 
     class threads:
         """Types for thread-related operations."""

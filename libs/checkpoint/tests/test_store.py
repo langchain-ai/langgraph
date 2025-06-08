@@ -1,8 +1,9 @@
 # mypy: disable-error-code="operator"
 import asyncio
 import json
+from collections.abc import Iterable
 from datetime import datetime
-from typing import Any, Iterable
+from typing import Any
 
 import pytest
 from pytest_mock import MockerFixture
