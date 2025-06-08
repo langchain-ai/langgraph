@@ -1,6 +1,7 @@
 import json
 import os
 import pathlib
+import re
 import textwrap
 from collections import Counter
 from typing import Any, Literal, NamedTuple, Optional, TypedDict, Union
@@ -461,7 +462,7 @@ class Config(TypedDict, total=False):
 PIP_CLEANUP_LINES = """# -- Ensure user deps didn't inadvertently overwrite langgraph-api
 RUN mkdir -p /api/langgraph_api /api/langgraph_runtime /api/langgraph_license && \
     touch /api/langgraph_api/__init__.py /api/langgraph_runtime/__init__.py /api/langgraph_license/__init__.py
-RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir --no-deps -e /api
+RUN PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir --no-deps -e /api
 # -- End of ensuring user deps didn't inadvertently overwrite langgraph-api --
 # -- Removing pip from the final image ~<:===~~~ --
 RUN pip uninstall -y pip setuptools wheel && \
@@ -470,6 +471,7 @@ RUN pip uninstall -y pip setuptools wheel && \
 # pip removal for wolfi
 RUN rm -rf /usr/lib/python*/site-packages/pip* /usr/lib/python*/site-packages/setuptools* /usr/lib/python*/site-packages/wheel* && \
     find /usr/bin -name "pip*" -delete || true
+{uv_removal}
 # -- End of pip removal --"""
 
 
@@ -1089,16 +1091,36 @@ def _get_node_pm_install_cmd(config_path: pathlib.Path, config: Config) -> str:
     return install_cmd
 
 
+semver_pattern = re.compile(r":(\d+(?:\.\d+)?(?:\.\d+)?)(?:-|$)")
+
+
+def _image_supports_uv(base_image: str) -> bool:
+    match = semver_pattern.search(base_image)
+    if not match:
+        # Default image (langchain/langgraph-api) supports it.
+        return True
+
+    version_str = match.group(1)
+    version = tuple(map(int, version_str.split(".")))
+    min_uv = (0, 2, 47)
+    return version >= min_uv
+
+
 def python_config_to_docker(
     config_path: pathlib.Path,
     config: Config,
     base_image: str,
 ) -> tuple[str, dict[str, str]]:
     """Generate a Dockerfile from the configuration."""
+    if _image_supports_uv(base_image):
+        install_cmd = "uv pip install --system"
+        uv_removal = "RUN uv pip uninstall --system pip setuptools wheel && rm /usr/bin/uv /usr/bin/uvx"
+    else:
+        install_cmd = "pip install"
+        uv_removal = ""
+
     # configure pip
-    pip_install = (
-        "PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt"
-    )
+    pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
     if config.get("pip_config_file"):
         pip_install = f"PIP_CONFIG_FILE=/pipconfig.txt {pip_install}"
     pip_config_file_str = (
@@ -1151,7 +1173,10 @@ RUN set -ex && \\
                 'name = "{fullpath.name}"' \\
                 'version = "0.1"' \\
                 '[tool.setuptools.package-data]' \\
-                '"*" = ["**/*"]'; do \\
+                '"*" = ["**/*"]' \\
+                '[build-system]' \\
+                'requires = ["setuptools>=61"]' \\
+                'build-backend = "setuptools.build_meta"'; do \\
         echo "$line" >> /deps/__outer_{fullpath.name}/pyproject.toml; \\
     done
 # -- End of non-package dependency {fullpath.name} --"""
@@ -1240,7 +1265,8 @@ ADD {relpath} /deps/{name}
         "",
         js_inst_str,
         "",
-        PIP_CLEANUP_LINES,  # Add pip cleanup after all installations are complete
+        # Add pip cleanup after all installations are complete
+        PIP_CLEANUP_LINES.format(install_cmd=install_cmd, uv_removal=uv_removal),
         "",
         f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
     ]

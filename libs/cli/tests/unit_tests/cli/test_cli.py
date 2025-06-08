@@ -14,6 +14,10 @@ from langgraph_cli.config import PIP_CLEANUP_LINES, Config, validate_config
 from langgraph_cli.docker import DEFAULT_POSTGRES_URI, DockerCapabilities, Version
 from langgraph_cli.util import clean_empty_lines
 
+FORMATTED_CLEANUP_LINES = PIP_CLEANUP_LINES.format(
+    install_cmd="uv pip install --system",
+    uv_removal="RUN uv pip uninstall --system pip setuptools wheel && rm /usr/bin/uv /usr/bin/uvx",
+)
 DEFAULT_DOCKER_CAPABILITIES = DockerCapabilities(
     version_docker=Version(26, 1, 1),
     version_compose=Version(2, 27, 0),
@@ -142,10 +146,10 @@ services:
                 COPY --from=cli_1 . /deps/cli_1
                 # -- End of local package ../../.. --
                 # -- Installing all local dependencies --
-                RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
+                RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e /deps/*
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "agent.py:graph"}}'
-{textwrap.indent(textwrap.dedent(PIP_CLEANUP_LINES), "                ")}
+{textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
                 WORKDIR /deps/cli
         
         develop:
