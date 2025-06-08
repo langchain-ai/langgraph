@@ -570,7 +570,7 @@ def test_conditional_state_graph(
     workflow = StateGraph(AgentState)
 
     workflow.add_node("agent", agent)
-    workflow.add_node("tools", execute_tools, input=ToolState)
+    workflow.add_node("tools", execute_tools, input_schema=ToolState)
 
     workflow.set_entry_point("agent")
 
@@ -2620,7 +2620,7 @@ def test_dynamic_interrupt(sync_checkpointer: BaseCheckpointSaver) -> None:
         return {"my_key": answer}
 
     tool_two_graph = StateGraph(State)
-    tool_two_graph.add_node("tool_two", tool_two_node, retry=RetryPolicy())
+    tool_two_graph.add_node("tool_two", tool_two_node, retry_policy=RetryPolicy())
     tool_two_graph.add_edge(START, "tool_two")
     tool_two = tool_two_graph.compile()
 
@@ -2783,7 +2783,7 @@ def test_copy_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> None:
         return ["tool_two", Send("tool_one", state)]
 
     tool_two_graph = StateGraph(State)
-    tool_two_graph.add_node("tool_two", tool_two_node, retry=RetryPolicy())
+    tool_two_graph.add_node("tool_two", tool_two_node, retry_policy=RetryPolicy())
     tool_two_graph.add_node("tool_one", tool_one)
     tool_two_graph.set_conditional_entry_point(start)
     tool_two = tool_two_graph.compile()
@@ -2965,7 +2965,7 @@ def test_dynamic_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> N
         return {"my_key": answer}
 
     subgraph = StateGraph(SubgraphState)
-    subgraph.add_node("do", tool_two_node, retry=RetryPolicy())
+    subgraph.add_node("do", tool_two_node, retry_policy=RetryPolicy())
     subgraph.add_edge(START, "do")
 
     class State(TypedDict):

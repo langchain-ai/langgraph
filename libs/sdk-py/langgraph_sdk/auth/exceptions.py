@@ -1,7 +1,9 @@
 """Exceptions used in the auth system."""
 
+from __future__ import annotations
+
 import http
-import typing
+from collections.abc import Mapping
 
 
 class HTTPException(Exception):
@@ -37,8 +39,8 @@ class HTTPException(Exception):
     def __init__(
         self,
         status_code: int = 401,
-        detail: typing.Optional[str] = None,
-        headers: typing.Optional[typing.Mapping[str, str]] = None,
+        detail: str | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> None:
         if detail is None:
             detail = http.HTTPStatus(status_code).phrase

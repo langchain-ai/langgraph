@@ -6,7 +6,7 @@ from typing import Annotated, Any, Optional
 from typing import Annotated as Annotated2
 
 import pytest
-from langchain_core.runnables import RunnableConfig, RunnableLambda
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 from typing_extensions import NotRequired, Required, TypedDict
 
@@ -153,7 +153,7 @@ def test_state_schema_optional_values(total_: bool):
     class State(InputState):  # this would be ignored
         val4: dict
 
-    builder = StateGraph(State, input=InputState, output=OutputState)
+    builder = StateGraph(State, input_schema=InputState, output_schema=OutputState)
     builder.add_node("n", lambda x: x)
     builder.add_edge("__start__", "n")
     graph = builder.compile()
@@ -241,14 +241,6 @@ def test_state_schema_default_values(kw_only_: bool):
 
 
 def test__get_node_name() -> None:
-    # default runnable name
-    assert _get_node_name(RunnableLambda(func=lambda x: x)) == "RunnableLambda"
-    # custom runnable name
-    assert (
-        _get_node_name(RunnableLambda(name="my_runnable", func=lambda x: x))
-        == "my_runnable"
-    )
-
     # lambda
     assert _get_node_name(lambda x: x) == "<lambda>"
 

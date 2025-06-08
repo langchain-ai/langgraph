@@ -8,7 +8,7 @@ import weakref
 from collections import defaultdict, deque
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from functools import partial
-from typing import Any, Callable, Union, cast, get_type_hints
+from typing import Any, Callable, Generic, Union, cast, get_type_hints
 from uuid import UUID, uuid5
 
 from langchain_core.globals import get_debug
@@ -107,6 +107,7 @@ from langgraph.types import (
     StreamChunk,
     StreamMode,
 )
+from langgraph.typing import InputT, OutputT, StateT
 from langgraph.utils.config import (
     ensure_config,
     merge_configs,
@@ -140,8 +141,8 @@ class NodeBuilder:
         "_metadata",
         "_writes",
         "_bound",
-        "_retries",
-        "_cache",
+        "_retry_policy",
+        "_cache_policy",
     )
 
     _channels: list[str] | dict[str, str]
@@ -150,8 +151,8 @@ class NodeBuilder:
     _metadata: dict[str, Any]
     _writes: list[ChannelWriteEntry]
     _bound: Runnable
-    _retries: list[RetryPolicy]
-    _cache: CachePolicy | None
+    _retry_policy: list[RetryPolicy]
+    _cache_policy: CachePolicy | None
 
     def __init__(
         self,
@@ -162,8 +163,8 @@ class NodeBuilder:
         self._metadata = {}
         self._writes = []
         self._bound = DEFAULT_BOUND
-        self._retries = []
-        self._cache = None
+        self._retry_policy = []
+        self._cache_policy = None
 
     def subscribe_only(
         self,
@@ -273,14 +274,14 @@ class NodeBuilder:
         self._metadata.update(metadata)
         return self
 
-    def retry(self, *policies: RetryPolicy) -> Self:
+    def add_retry_policies(self, *policies: RetryPolicy) -> Self:
         """Adds retry policies to the node."""
-        self._retries.extend(policies)
+        self._retry_policy.extend(policies)
         return self
 
-    def cache(self, policy: CachePolicy) -> Self:
+    def add_cache_policy(self, policy: CachePolicy) -> Self:
         """Adds cache policies to the node."""
-        self._cache = policy
+        self._cache_policy = policy
         return self
 
     def build(self) -> PregelNode:
@@ -292,12 +293,12 @@ class NodeBuilder:
             metadata=self._metadata,
             writers=[ChannelWrite(self._writes)],
             bound=self._bound,
-            retry_policy=self._retries,
-            cache_policy=self._cache,
+            retry_policy=self._retry_policy,
+            cache_policy=self._cache_policy,
         )
 
 
-class Pregel(PregelProtocol):
+class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, OutputT]):
     """Pregel manages the runtime behavior for LangGraph applications.
 
     ## Overview
@@ -738,7 +739,8 @@ class Pregel(PregelProtocol):
         }
 
     def copy(self, update: dict[str, Any] | None = None) -> Self:
-        attrs = {**self.__dict__, **(update or {})}
+        attrs = {k: v for k, v in self.__dict__.items() if k != "__orig_class__"}
+        attrs.update(update or {})
         return self.__class__(**attrs)
 
     def with_config(self, config: RunnableConfig | None = None, **kwargs: Any) -> Self:
@@ -2279,7 +2281,7 @@ class Pregel(PregelProtocol):
 
     def stream(
         self,
-        input: dict[str, Any] | Any,
+        input: InputT,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode | list[StreamMode] | None = None,
@@ -2500,7 +2502,7 @@ class Pregel(PregelProtocol):
 
     async def astream(
         self,
-        input: dict[str, Any] | Any,
+        input: InputT,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode | list[StreamMode] | None = None,
@@ -2736,7 +2738,7 @@ class Pregel(PregelProtocol):
 
     def invoke(
         self,
-        input: dict[str, Any] | Any,
+        input: InputT,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode = "values",
@@ -2764,8 +2766,8 @@ class Pregel(PregelProtocol):
         """
         output_keys = output_keys if output_keys is not None else self.output_channels
 
-        latest: Union[dict[str, Any], Any] = None
-        chunks: list[Union[dict[str, Any], Any]] = []
+        latest: dict[str, Any] | Any = None
+        chunks: list[dict[str, Any] | Any] = []
         interrupts: list[Interrupt] = []
 
         for chunk in self.stream(
@@ -2802,7 +2804,7 @@ class Pregel(PregelProtocol):
 
     async def ainvoke(
         self,
-        input: dict[str, Any] | Any,
+        input: InputT,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode = "values",
@@ -2831,8 +2833,8 @@ class Pregel(PregelProtocol):
 
         output_keys = output_keys if output_keys is not None else self.output_channels
 
-        latest: Union[dict[str, Any], Any] = None
-        chunks: list[Union[dict[str, Any], Any]] = []
+        latest: dict[str, Any] | Any = None
+        chunks: list[dict[str, Any] | Any] = []
         interrupts: list[Interrupt] = []
 
         async for chunk in self.astream(

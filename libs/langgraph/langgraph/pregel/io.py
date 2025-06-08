@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal
 
 from langgraph.channels.base import BaseChannel, EmptyChannelError
 from langgraph.constants import (
@@ -37,10 +39,10 @@ def read_channel(
 
 def read_channels(
     channels: Mapping[str, BaseChannel],
-    select: Union[Sequence[str], str],
+    select: Sequence[str] | str,
     *,
     skip_empty: bool = True,
-) -> Union[dict[str, Any], Any]:
+) -> dict[str, Any] | Any:
     if isinstance(select, str):
         return read_channel(channels, select)
     else:
@@ -79,8 +81,8 @@ def map_command(cmd: Command) -> Iterator[tuple[str, str, Any]]:
 
 
 def map_input(
-    input_channels: Union[str, Sequence[str]],
-    chunk: Optional[Union[dict[str, Any], Any]],
+    input_channels: str | Sequence[str],
+    chunk: dict[str, Any] | Any | None,
 ) -> Iterator[tuple[str, Any]]:
     """Map input chunk to a sequence of pending writes in the form (channel, value)."""
     if chunk is None:
@@ -98,10 +100,10 @@ def map_input(
 
 
 def map_output_values(
-    output_channels: Union[str, Sequence[str]],
-    pending_writes: Union[Literal[True], Sequence[tuple[str, Any]]],
+    output_channels: str | Sequence[str],
+    pending_writes: Literal[True] | Sequence[tuple[str, Any]],
     channels: Mapping[str, BaseChannel],
-) -> Iterator[Union[dict[str, Any], Any]]:
+) -> Iterator[dict[str, Any] | Any]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     if isinstance(output_channels, str):
         if pending_writes is True or any(
@@ -116,10 +118,10 @@ def map_output_values(
 
 
 def map_output_updates(
-    output_channels: Union[str, Sequence[str]],
+    output_channels: str | Sequence[str],
     tasks: list[tuple[PregelExecutableTask, Sequence[tuple[str, Any]]]],
     cached: bool = False,
-) -> Iterator[dict[str, Union[Any, dict[str, Any]]]]:
+) -> Iterator[dict[str, Any | dict[str, Any]]]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     output_tasks = [
         (t, ww)

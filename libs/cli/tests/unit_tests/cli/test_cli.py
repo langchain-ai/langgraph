@@ -22,12 +22,14 @@ DEFAULT_DOCKER_CAPABILITIES = DockerCapabilities(
 
 
 @contextmanager
-def temporary_config_folder(config_content: dict):
+def temporary_config_folder(config_content: dict, levels: int = 0):
     # Create a temporary directory
     temp_dir = tempfile.mkdtemp()
     try:
         # Define the path for the config.json file
-        config_path = Path(temp_dir) / "config.json"
+        config_path = Path(temp_dir) / f"{'a/' * levels}config.json"
+        # Ensure the parent directory exists
+        config_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Write the provided dictionary content to config.json
         with open(config_path, "w", encoding="utf-8") as config_file:
@@ -438,3 +440,132 @@ def test_dockerfile_command_with_bad_config() -> None:
         # Assert command was successful
         assert result.exit_code == 2
         assert "conf.json' does not exist" in result.output
+
+
+def test_dockerfile_command_shows_wolfi_warning() -> None:
+    """Test the 'dockerfile' command shows warning when image_distro is not wolfi."""
+    runner = CliRunner()
+    config_content = {
+        "python_version": "3.11",
+        "graphs": {"agent": "agent.py:graph"},
+        "dependencies": ["."],
+        # No image_distro specified - should default to debian and show warning
+    }
+
+    with temporary_config_folder(config_content) as temp_dir:
+        save_path = temp_dir / "Dockerfile"
+        agent_path = temp_dir / "agent.py"
+        agent_path.touch()
+
+        result = runner.invoke(
+            cli,
+            ["dockerfile", str(save_path), "--config", str(temp_dir / "config.json")],
+        )
+
+        # Assert command was successful
+        assert result.exit_code == 0, result.output
+
+        # Check that warning is shown
+        assert "Security Recommendation" in result.output
+        assert "Wolfi Linux" in result.output
+        assert "image_distro" in result.output
+        assert "wolfi" in result.output
+
+
+def test_dockerfile_command_no_wolfi_warning_when_wolfi_set() -> None:
+    """Test the 'dockerfile' command does NOT show warning when image_distro is wolfi."""
+    runner = CliRunner()
+    config_content = {
+        "python_version": "3.11",
+        "graphs": {"agent": "agent.py:graph"},
+        "dependencies": ["."],
+        "image_distro": "wolfi",  # Explicitly set to wolfi - should not show warning
+    }
+
+    with temporary_config_folder(config_content) as temp_dir:
+        save_path = temp_dir / "Dockerfile"
+        agent_path = temp_dir / "agent.py"
+        agent_path.touch()
+
+        result = runner.invoke(
+            cli,
+            ["dockerfile", str(save_path), "--config", str(temp_dir / "config.json")],
+        )
+
+        # Assert command was successful
+        assert result.exit_code == 0, result.output
+
+        # Check that warning is NOT shown
+        assert "Security Recommendation" not in result.output
+        assert "Wolfi Linux" not in result.output
+
+
+def test_build_command_shows_wolfi_warning() -> None:
+    """Test the 'build' command shows warning when image_distro is not wolfi."""
+    runner = CliRunner()
+    config_content = {
+        "python_version": "3.11",
+        "graphs": {"agent": "agent.py:graph"},
+        "dependencies": ["."],
+        # No image_distro specified - should default to debian and show warning
+    }
+
+    with temporary_config_folder(config_content) as temp_dir:
+        agent_path = temp_dir / "agent.py"
+        agent_path.touch()
+
+        # Mock docker command since we don't want to actually build
+        with runner.isolated_filesystem():
+            result = runner.invoke(
+                cli,
+                [
+                    "build",
+                    "--tag",
+                    "test-image",
+                    "--config",
+                    str(temp_dir / "config.json"),
+                ],
+                catch_exceptions=True,
+            )
+
+        # The command will fail because docker isn't available or we're mocking,
+        # but we should still see the warning before it fails
+        assert "Security Recommendation" in result.output
+        assert "Wolfi Linux" in result.output
+        assert "image_distro" in result.output
+        assert "wolfi" in result.output
+
+
+def test_build_generate_proper_build_context():
+    runner = CliRunner()
+    config_content = {
+        "python_version": "3.11",
+        "graphs": {"agent": "agent.py:graph"},
+        "dependencies": [".", "../../..", "../.."],
+        "image_distro": "wolfi",
+    }
+
+    with temporary_config_folder(config_content, levels=3) as temp_dir:
+        agent_path = temp_dir / "agent.py"
+        agent_path.touch()
+
+        # Mock docker command since we don't want to actually build
+        with runner.isolated_filesystem():
+            result = runner.invoke(
+                cli,
+                [
+                    "build",
+                    "--tag",
+                    "test-image",
+                    "--config",
+                    str(temp_dir / "config.json"),
+                ],
+                catch_exceptions=True,
+            )
+
+        build_context_pattern = re.compile(r"--build-context\s+(\w+)=([^\s]+)")
+
+        build_contexts = re.findall(build_context_pattern, result.output)
+        assert (
+            len(build_contexts) == 2
+        ), f"Expected 2 build contexts, but found {len(build_contexts)}"

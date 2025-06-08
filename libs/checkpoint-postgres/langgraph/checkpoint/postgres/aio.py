@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import asyncio
 from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
-from typing import Any, Optional
+from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
@@ -34,8 +36,8 @@ class AsyncPostgresSaver(BasePostgresSaver):
     def __init__(
         self,
         conn: _ainternal.Conn,
-        pipe: Optional[AsyncPipeline] = None,
-        serde: Optional[SerializerProtocol] = None,
+        pipe: AsyncPipeline | None = None,
+        serde: SerializerProtocol | None = None,
     ) -> None:
         super().__init__(serde=serde)
         if isinstance(conn, AsyncConnectionPool) and pipe is not None:
@@ -56,8 +58,8 @@ class AsyncPostgresSaver(BasePostgresSaver):
         conn_string: str,
         *,
         pipeline: bool = False,
-        serde: Optional[SerializerProtocol] = None,
-    ) -> AsyncIterator["AsyncPostgresSaver"]:
+        serde: SerializerProtocol | None = None,
+    ) -> AsyncIterator[AsyncPostgresSaver]:
         """Create a new AsyncPostgresSaver instance from a connection string.
 
         Args:
@@ -104,11 +106,11 @@ class AsyncPostgresSaver(BasePostgresSaver):
 
     async def alist(
         self,
-        config: Optional[RunnableConfig],
+        config: RunnableConfig | None,
         *,
-        filter: Optional[dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
     ) -> AsyncIterator[CheckpointTuple]:
         """List checkpoints from the database asynchronously.
 
@@ -187,7 +189,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     await asyncio.to_thread(self._load_writes, value["pending_writes"]),
                 )
 
-    async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+    async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the database asynchronously.
 
         This method retrieves a checkpoint tuple from the Postgres database based on the
@@ -391,7 +393,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 Will be applied regardless of whether the AsyncPostgresSaver instance was initialized with a pipeline.
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
-        async with _ainternal.get_connection(self.conn) as conn:
+        async with self.lock, _ainternal.get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
                 # in multiple threads/coroutines, but only one cursor can be
@@ -407,7 +409,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 # thread/coroutine at a time, so we acquire a lock
                 if self.supports_pipeline:
                     async with (
-                        self.lock,
                         conn.pipeline(),
                         conn.cursor(binary=True, row_factory=dict_row) as cur,
                     ):
@@ -415,25 +416,21 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 else:
                     # Use connection's transaction context manager when pipeline mode not supported
                     async with (
-                        self.lock,
                         conn.transaction(),
                         conn.cursor(binary=True, row_factory=dict_row) as cur,
                     ):
                         yield cur
             else:
-                async with (
-                    self.lock,
-                    conn.cursor(binary=True, row_factory=dict_row) as cur,
-                ):
+                async with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
     def list(
         self,
-        config: Optional[RunnableConfig],
+        config: RunnableConfig | None,
         *,
-        filter: Optional[dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
     ) -> Iterator[CheckpointTuple]:
         """List checkpoints from the database.
 
@@ -471,7 +468,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             except StopAsyncIteration:
                 break
 
-    def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+    def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the database.
 
         This method retrieves a checkpoint tuple from the Postgres database based on the

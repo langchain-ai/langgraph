@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import binascii
 import itertools
 import sys
@@ -14,7 +16,6 @@ from typing import (
     NamedTuple,
     Optional,
     Protocol,
-    Union,
     cast,
     overload,
 )
@@ -91,7 +92,7 @@ class WritesProtocol(Protocol):
     Implemented by PregelTaskWrites and PregelExecutableTask."""
 
     @property
-    def path(self) -> tuple[Union[str, int, tuple], ...]: ...
+    def path(self) -> tuple[str | int | tuple, ...]: ...
 
     @property
     def name(self) -> str: ...
@@ -107,19 +108,19 @@ class PregelTaskWrites(NamedTuple):
     """Simplest implementation of WritesProtocol, for usage with writes that
     don't originate from a runnable task, eg. graph input, update_state, etc."""
 
-    path: tuple[Union[str, int, tuple], ...]
+    path: tuple[str | int | tuple, ...]
     name: str
     writes: Sequence[tuple[str, Any]]
     triggers: Sequence[str]
 
 
 class Call:
-    __slots__ = ("func", "input", "retry", "cache_policy", "callbacks")
+    __slots__ = ("func", "input", "retry_policy", "cache_policy", "callbacks")
 
     func: Callable
     input: tuple[tuple[Any, ...], dict[str, Any]]
-    retry: Optional[Sequence[RetryPolicy]]
-    cache_policy: Optional[CachePolicy]
+    retry_policy: Sequence[RetryPolicy] | None
+    cache_policy: CachePolicy | None
     callbacks: Callbacks
 
     def __init__(
@@ -127,20 +128,20 @@ class Call:
         func: Callable,
         input: tuple[tuple[Any, ...], dict[str, Any]],
         *,
-        retry: Optional[Sequence[RetryPolicy]],
-        cache_policy: Optional[CachePolicy],
+        retry_policy: Sequence[RetryPolicy] | None,
+        cache_policy: CachePolicy | None,
         callbacks: Callbacks,
     ) -> None:
         self.func = func
         self.input = input
-        self.retry = retry
+        self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.callbacks = callbacks
 
 
 def should_interrupt(
     checkpoint: Checkpoint,
-    interrupt_nodes: Union[All, Sequence[str]],
+    interrupt_nodes: All | Sequence[str],
     tasks: Iterable[PregelExecutableTask],
 ) -> list[PregelExecutableTask]:
     """Check if the graph should be interrupted based on current state."""
@@ -176,9 +177,9 @@ def local_read(
     channels: Mapping[str, BaseChannel],
     managed: ManagedValueMapping,
     task: WritesProtocol,
-    select: Union[list[str], str],
+    select: list[str] | str,
     fresh: bool = False,
-) -> Union[dict[str, Any], Any]:
+) -> dict[str, Any] | Any:
     """Function injected under CONFIG_KEY_READ in task config, to read current state.
     Used by conditional edges to read a copy of the state with reflecting the writes
     from that node only."""
@@ -213,7 +214,7 @@ def local_read(
     return values
 
 
-def increment(current: Optional[int]) -> int:
+def increment(current: int | None) -> int:
     """Default channel versioning function, increments the current int version."""
     return current + 1 if current is not None else 1
 
@@ -222,7 +223,7 @@ def apply_writes(
     checkpoint: Checkpoint,
     channels: Mapping[str, BaseChannel],
     tasks: Iterable[WritesProtocol],
-    get_next_version: Optional[GetNextVersion],
+    get_next_version: GetNextVersion | None,
     trigger_to_nodes: Mapping[str, Sequence[str]],
 ) -> set[str]:
     """Apply writes from a set of tasks (usually the tasks from a Pregel step)
@@ -338,8 +339,8 @@ def prepare_next_tasks(
     store: Literal[None] = None,
     checkpointer: Literal[None] = None,
     manager: Literal[None] = None,
-    trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
-    updated_channels: Optional[set[str]] = None,
+    trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
+    updated_channels: set[str] | None = None,
     retry_policy: Sequence[RetryPolicy] = (),
     cache_policy: Literal[None] = None,
 ) -> dict[str, PregelTask]: ...
@@ -357,13 +358,13 @@ def prepare_next_tasks(
     stop: int,
     *,
     for_execution: Literal[True],
-    store: Optional[BaseStore],
-    checkpointer: Optional[BaseCheckpointSaver],
-    manager: Union[None, ParentRunManager, AsyncParentRunManager],
-    trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
-    updated_channels: Optional[set[str]] = None,
+    store: BaseStore | None,
+    checkpointer: BaseCheckpointSaver | None,
+    manager: None | ParentRunManager | AsyncParentRunManager,
+    trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
+    updated_channels: set[str] | None = None,
     retry_policy: Sequence[RetryPolicy] = (),
-    cache_policy: Optional[CachePolicy] = None,
+    cache_policy: CachePolicy | None = None,
 ) -> dict[str, PregelExecutableTask]: ...
 
 
@@ -378,14 +379,14 @@ def prepare_next_tasks(
     stop: int,
     *,
     for_execution: bool,
-    store: Optional[BaseStore] = None,
-    checkpointer: Optional[BaseCheckpointSaver] = None,
-    manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
-    trigger_to_nodes: Optional[Mapping[str, Sequence[str]]] = None,
-    updated_channels: Optional[set[str]] = None,
+    store: BaseStore | None = None,
+    checkpointer: BaseCheckpointSaver | None = None,
+    manager: None | ParentRunManager | AsyncParentRunManager = None,
+    trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
+    updated_channels: set[str] | None = None,
     retry_policy: Sequence[RetryPolicy] = (),
-    cache_policy: Optional[CachePolicy] = None,
-) -> Union[dict[str, PregelTask], dict[str, PregelExecutableTask]]:
+    cache_policy: CachePolicy | None = None,
+) -> dict[str, PregelTask] | dict[str, PregelExecutableTask]:
     """Prepare the set of tasks that will make up the next Pregel step.
 
     Args:
@@ -415,7 +416,7 @@ def prepare_next_tasks(
     input_cache: dict[INPUT_CACHE_KEY_TYPE, Any] = {}
     checkpoint_id_bytes = binascii.unhexlify(checkpoint["id"].replace("-", ""))
     null_version = checkpoint_null_version(checkpoint)
-    tasks: list[Union[PregelTask, PregelExecutableTask]] = []
+    tasks: list[PregelTask | PregelExecutableTask] = []
     # Consume pending tasks
     tasks_channel = cast(Optional[Topic[Send]], channels.get(TASKS))
     if tasks_channel and tasks_channel.is_available():
@@ -496,11 +497,11 @@ PUSH_TRIGGER = (PUSH,)
 
 def prepare_single_task(
     task_path: tuple[Any, ...],
-    task_id_checksum: Optional[str],
+    task_id_checksum: str | None,
     *,
     checkpoint: Checkpoint,
     checkpoint_id_bytes: bytes,
-    checkpoint_null_version: Optional[V],
+    checkpoint_null_version: V | None,
     pending_writes: list[PendingWrite],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
@@ -509,13 +510,13 @@ def prepare_single_task(
     step: int,
     stop: int,
     for_execution: bool,
-    store: Optional[BaseStore] = None,
-    checkpointer: Optional[BaseCheckpointSaver] = None,
-    manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
-    input_cache: Optional[dict[INPUT_CACHE_KEY_TYPE, Any]] = None,
-    cache_policy: Optional[CachePolicy] = None,
+    store: BaseStore | None = None,
+    checkpointer: BaseCheckpointSaver | None = None,
+    manager: None | ParentRunManager | AsyncParentRunManager = None,
+    input_cache: dict[INPUT_CACHE_KEY_TYPE, Any] | None = None,
+    cache_policy: CachePolicy | None = None,
     retry_policy: Sequence[RetryPolicy] = (),
-) -> Union[None, PregelTask, PregelExecutableTask]:
+) -> None | PregelTask | PregelExecutableTask:
     """Prepares a single task for the next Pregel step, given a task path, which
     uniquely identifies a PUSH or PULL task within the graph."""
     configurable = config.get(CONF, {})
@@ -560,7 +561,7 @@ def prepare_single_task(
             cache_policy = call.cache_policy or cache_policy
             if cache_policy:
                 args_key = cache_policy.key_func(*call.input[0], **call.input[1])
-                cache_key: Optional[CacheKey] = CacheKey(
+                cache_key: CacheKey | None = CacheKey(
                     (
                         CACHE_NS_WRITES,
                         (identifier(call.func) or "__dynamic__"),
@@ -616,7 +617,7 @@ def prepare_single_task(
                     },
                 ),
                 triggers,
-                call.retry or retry_policy,
+                call.retry_policy or retry_policy,
                 cache_key,
                 task_id,
                 task_path,
@@ -908,7 +909,7 @@ def prepare_single_task(
 
 def checkpoint_null_version(
     checkpoint: Checkpoint,
-) -> Optional[V]:
+) -> V | None:
     """Get the null version for the checkpoint, if available."""
     for version in checkpoint["channel_versions"].values():
         return type(version)()
@@ -918,7 +919,7 @@ def checkpoint_null_version(
 def _triggers(
     channels: Mapping[str, BaseChannel],
     versions: ChannelVersions,
-    seen: Optional[ChannelVersions],
+    seen: ChannelVersions | None,
     null_version: V,
     proc: PregelNode,
 ) -> Sequence[str]:
@@ -936,11 +937,11 @@ def _triggers(
 
 
 def _scratchpad(
-    parent_scratchpad: Optional[PregelScratchpad],
+    parent_scratchpad: PregelScratchpad | None,
     pending_writes: list[PendingWrite],
     task_id: str,
     namespace_hash: str,
-    resume_map: Optional[dict[str, Any]],
+    resume_map: dict[str, Any] | None,
     step: int,
     stop: int,
 ) -> PregelScratchpad:
@@ -1010,7 +1011,7 @@ def _proc_input(
     *,
     for_execution: bool,
     scratchpad: PregelScratchpad,
-    input_cache: Optional[dict[INPUT_CACHE_KEY_TYPE, Any]],
+    input_cache: dict[INPUT_CACHE_KEY_TYPE, Any] | None,
 ) -> Any:
     """Prepare input for a PULL task, based on the process's channels and triggers."""
     # if in cache return shallow copy
@@ -1053,7 +1054,7 @@ def _proc_input(
     return val
 
 
-def _uuid5_str(namespace: bytes, *parts: Union[str, bytes]) -> str:
+def _uuid5_str(namespace: bytes, *parts: str | bytes) -> str:
     """Generate a UUID from the SHA-1 hash of a namespace and str parts."""
 
     sha = sha1(namespace, usedforsecurity=False)
@@ -1062,7 +1063,7 @@ def _uuid5_str(namespace: bytes, *parts: Union[str, bytes]) -> str:
     return f"{hex[:8]}-{hex[8:12]}-{hex[12:16]}-{hex[16:20]}-{hex[20:32]}"
 
 
-def _xxhash_str(namespace: bytes, *parts: Union[str, bytes]) -> str:
+def _xxhash_str(namespace: bytes, *parts: str | bytes) -> str:
     """Generate a UUID from the XXH3 hash of a namespace and str parts."""
     hex = xxh3_128_hexdigest(
         namespace + b"".join(p.encode() if isinstance(p, str) else p for p in parts)
@@ -1070,7 +1071,7 @@ def _xxhash_str(namespace: bytes, *parts: Union[str, bytes]) -> str:
     return f"{hex[:8]}-{hex[8:12]}-{hex[12:16]}-{hex[16:20]}-{hex[20:32]}"
 
 
-def task_path_str(tup: Union[str, int, tuple]) -> str:
+def task_path_str(tup: str | int | tuple) -> str:
     """Generate a string representation of the task path."""
     return (
         f"~{', '.join(task_path_str(x) for x in tup)}"
@@ -1087,7 +1088,7 @@ LAZY_ATOMIC_COUNTER_LOCK = threading.Lock()
 class LazyAtomicCounter:
     __slots__ = ("_counter",)
 
-    _counter: Optional[Callable[[], int]]
+    _counter: Callable[[], int] | None
 
     def __init__(self) -> None:
         self._counter = None

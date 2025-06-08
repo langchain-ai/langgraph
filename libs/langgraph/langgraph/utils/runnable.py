@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import enum
 import inspect
@@ -63,7 +65,7 @@ except ImportError:
 
 def _set_config_context(
     config: RunnableConfig, run: Any = None
-) -> Token[Optional[RunnableConfig]]:
+) -> Token[RunnableConfig | None]:
     """Set the child Runnable config + tracing context.
 
     Args:
@@ -77,9 +79,7 @@ def _set_config_context(
     return config_token
 
 
-def _unset_config_context(
-    token: Token[Optional[RunnableConfig]], run: Any = None
-) -> None:
+def _unset_config_context(token: Token[RunnableConfig | None], run: Any = None) -> None:
     """Set the child Runnable config + tracing context.
 
     Args:
@@ -242,15 +242,15 @@ class RunnableCallable(Runnable):
 
     def __init__(
         self,
-        func: Optional[Callable[..., Union[Any, Runnable]]],
-        afunc: Optional[Callable[..., Awaitable[Union[Any, Runnable]]]] = None,
+        func: Callable[..., Any | Runnable] | None,
+        afunc: Callable[..., Awaitable[Any | Runnable]] | None = None,
         *,
-        name: Optional[str] = None,
-        tags: Optional[Sequence[str]] = None,
+        name: str | None = None,
+        tags: Sequence[str] | None = None,
         trace: bool = True,
         recurse: bool = True,
         explode_args: bool = False,
-        func_accepts_config: Optional[bool] = None,
+        func_accepts_config: bool | None = None,
         **kwargs: Any,
     ) -> None:
         self.name = name
@@ -312,7 +312,7 @@ class RunnableCallable(Runnable):
         return f"{self.get_name()}({', '.join(f'{k}={v!r}' for k, v in repr_args.items())})"
 
     def invoke(
-        self, input: Any, config: Optional[RunnableConfig] = None, **kwargs: Any
+        self, input: Any, config: RunnableConfig | None = None, **kwargs: Any
     ) -> Any:
         if self.func is None:
             raise TypeError(
@@ -380,7 +380,7 @@ class RunnableCallable(Runnable):
         return ret
 
     async def ainvoke(
-        self, input: Any, config: Optional[RunnableConfig] = None, **kwargs: Any
+        self, input: Any, config: RunnableConfig | None = None, **kwargs: Any
     ) -> Any:
         if not self.afunc:
             return self.invoke(input, config)
@@ -466,7 +466,7 @@ def is_async_generator(
 
 
 def coerce_to_runnable(
-    thing: RunnableLike, *, name: Optional[str], trace: bool
+    thing: RunnableLike, *, name: str | None, trace: bool
 ) -> Runnable:
     """Coerce a runnable-like object into a Runnable.
 
@@ -509,8 +509,8 @@ class RunnableSeq(Runnable):
     def __init__(
         self,
         *steps: RunnableLike,
-        name: Optional[str] = None,
-        trace_inputs: Optional[Callable[[Any], Any]] = None,
+        name: str | None = None,
+        trace_inputs: Callable[[Any], Any] | None = None,
     ) -> None:
         """Create a new RunnableSeq.
 
@@ -588,7 +588,7 @@ class RunnableSeq(Runnable):
             )
 
     def invoke(
-        self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
+        self, input: Input, config: RunnableConfig | None = None, **kwargs: Any
     ) -> Any:
         if config is None:
             config = ensure_config()
@@ -634,8 +634,8 @@ class RunnableSeq(Runnable):
     async def ainvoke(
         self,
         input: Input,
-        config: Optional[RunnableConfig] = None,
-        **kwargs: Optional[Any],
+        config: RunnableConfig | None = None,
+        **kwargs: Any | None,
     ) -> Any:
         if config is None:
             config = ensure_config()
@@ -687,8 +687,8 @@ class RunnableSeq(Runnable):
     def stream(
         self,
         input: Input,
-        config: Optional[RunnableConfig] = None,
-        **kwargs: Optional[Any],
+        config: RunnableConfig | None = None,
+        **kwargs: Any | None,
     ) -> Iterator[Any]:
         if config is None:
             config = ensure_config()
@@ -747,8 +747,8 @@ class RunnableSeq(Runnable):
     async def astream(
         self,
         input: Input,
-        config: Optional[RunnableConfig] = None,
-        **kwargs: Optional[Any],
+        config: RunnableConfig | None = None,
+        **kwargs: Any | None,
     ) -> AsyncIterator[Any]:
         if config is None:
             config = ensure_config()
