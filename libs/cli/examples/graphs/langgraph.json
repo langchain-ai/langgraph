@@ -2,7 +2,7 @@
   "python_version": "3.12",
   "dependencies": [
     "langchain_community",
-    "langchain_tavily",
+    "langchain_tavily; python_version < '4.0'",
     "langchain_anthropic",
     "langchain_openai",
     "wikipedia",
