@@ -6,10 +6,13 @@ with LangChain-compatible tools while maintaining support for both synchronous a
 asynchronous operations.
 """
 
+from __future__ import annotations
+
 import asyncio
 import functools
 import json
-from typing import Any, Awaitable, Callable, Optional, Sequence, Union
+from collections.abc import Awaitable, Sequence
+from typing import Any, Callable
 
 from langchain_core.embeddings import Embeddings
 
@@ -29,7 +32,7 @@ Similar to EmbeddingsFunc, but returns an awaitable that resolves to the embeddi
 
 
 def ensure_embeddings(
-    embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc, str, None],
+    embed: Embeddings | EmbeddingsFunc | AEmbeddingsFunc | str | None,
 ) -> Embeddings:
     """Ensure that an embedding function conforms to LangChain's Embeddings interface.
 
@@ -140,7 +143,7 @@ class EmbeddingsLambda(Embeddings):
 
     def __init__(
         self,
-        func: Union[EmbeddingsFunc, AEmbeddingsFunc],
+        func: EmbeddingsFunc | AEmbeddingsFunc,
     ) -> None:
         if func is None:
             raise ValueError("func must be provided")
@@ -220,7 +223,7 @@ class EmbeddingsLambda(Embeddings):
         return (await afunc([text]))[0]
 
 
-def get_text_at_path(obj: Any, path: Union[str, list[str]]) -> list[str]:
+def get_text_at_path(obj: Any, path: str | list[str]) -> list[str]:
     """Extract text from an object using a path expression or pre-tokenized path.
 
     Args:
@@ -278,7 +281,7 @@ def get_text_at_path(obj: Any, path: Union[str, list[str]]) -> list[str]:
             for field in fields:
                 nested_tokens = tokenize_path(field)
                 if nested_tokens:
-                    current_obj: Optional[dict] = obj
+                    current_obj: dict | None = obj
                     for nested_token in nested_tokens:
                         if (
                             isinstance(current_obj, dict)
@@ -403,7 +406,7 @@ def _is_async_callable(
 
 
 @functools.lru_cache
-def _get_init_embeddings() -> Optional[Callable[[str], Embeddings]]:
+def _get_init_embeddings() -> Callable[[str], Embeddings] | None:
     try:
         from langchain.embeddings import init_embeddings  # type: ignore
 

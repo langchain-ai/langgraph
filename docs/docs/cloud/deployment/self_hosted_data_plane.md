@@ -2,9 +2,12 @@
 
 Before deploying, review the [conceptual guide for the Self-Hosted Data Plane](../../concepts/langgraph_self_hosted_data_plane.md) deployment option.
 
+!!! info "Important"
+    The Self-Hosted Data Plane deployment option is currently in beta stage and requires an [Enterprise](../../concepts/plans.md) plan.
+
 ## Prerequisites
 
-1. Use the [LangGraph CLI](../../concepts/langgraph_cli.md) to [test your application locally](./test_locally.md).
+1. Use the [LangGraph CLI](../../concepts/langgraph_cli.md) to [test your application locally](../../tutorials/langgraph-platform/local-server.md).
 1. Use the [LangGraph CLI](../../concepts/langgraph_cli.md) to build a Docker image (i.e. `langgraph build`) and push it to a registry your Kubernetes cluster or Amazon ECS cluster has access to.
 
 ## Kubernetes
@@ -15,7 +18,7 @@ Before deploying, review the [conceptual guide for the Self-Hosted Data Plane](.
         helm repo add kedacore https://kedacore.github.io/charts 
         helm install keda kedacore/keda --namespace keda --create-namespace
 
-1. A valid `Ingress` controller is install on your cluster.
+1. A valid `Ingress` controller is installed on your cluster.
 1. You have slack space in your cluster for multiple deployments. `Cluster-Autoscaler` is recommended to automatically provision new nodes.
 
 ### Setup
@@ -46,7 +49,7 @@ Before deploying, review the [conceptual guide for the Self-Hosted Data Plane](.
         langgraph-dataplane-listener-7fccd788-wn2dx   0/1     Running             0          9s
         langgraph-dataplane-redis-0                   0/1     ContainerCreating   0          9s
 
-1. You create a deployment from the [Control Plane UI](../../concepts/langgraph_control_plane.md#control-plane-ui).
+1. You create a deployment from the [control plane UI](../../concepts/langgraph_control_plane.md#control-plane-ui).
 
 ## Amazon ECS
 

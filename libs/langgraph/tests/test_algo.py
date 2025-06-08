@@ -1,46 +1,47 @@
-from langgraph.checkpoint.base import empty_checkpoint
 from langgraph.constants import PULL, PUSH
 from langgraph.pregel.algo import prepare_next_tasks, task_path_str
-from langgraph.pregel.manager import ChannelsManager
+from langgraph.pregel.checkpoint import channels_from_checkpoint, empty_checkpoint
 
 
 def test_prepare_next_tasks() -> None:
     config = {}
     processes = {}
     checkpoint = empty_checkpoint()
+    channels, managed = channels_from_checkpoint({}, checkpoint)
 
-    with ChannelsManager({}, checkpoint, config) as (channels, managed):
-        assert (
-            prepare_next_tasks(
-                checkpoint,
-                {},
-                processes,
-                channels,
-                managed,
-                config,
-                0,
-                for_execution=False,
-            )
-            == {}
+    assert (
+        prepare_next_tasks(
+            checkpoint,
+            {},
+            processes,
+            channels,
+            managed,
+            config,
+            0,
+            -1,
+            for_execution=False,
         )
-        assert (
-            prepare_next_tasks(
-                checkpoint,
-                {},
-                processes,
-                channels,
-                managed,
-                config,
-                0,
-                for_execution=True,
-                checkpointer=None,
-                store=None,
-                manager=None,
-            )
-            == {}
+        == {}
+    )
+    assert (
+        prepare_next_tasks(
+            checkpoint,
+            {},
+            processes,
+            channels,
+            managed,
+            config,
+            0,
+            -1,
+            for_execution=True,
+            checkpointer=None,
+            store=None,
+            manager=None,
         )
+        == {}
+    )
 
-        # TODO: add more tests
+    # TODO: add more tests
 
 
 def test_tuple_str() -> None:

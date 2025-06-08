@@ -1,4 +1,9 @@
-# LangGraph's Runtime (Pregel)
+---
+search:
+  boost: 2
+---
+
+# LangGraph runtime
 
 [Pregel][langgraph.pregel.Pregel] implements LangGraph's runtime, managing the execution of LangGraph applications.
 
@@ -20,27 +25,21 @@ Each step consists of three phases:
 
 Repeat until no **actors** are selected for execution, or a maximum number of steps is reached.
 
-## Actors 
+## Actors
 
-An **actor** is a [PregelNode][langgraph.pregel.read.PregelNode]. It subscribes to channels, reads data from them, and writes data to them. It can be thought of as an **actor** in the Pregel algorithm. [PregelNodes][langgraph.pregel.read.PregelNode] implement LangChain's Runnable interface.
+An **actor** is a `PregelNode`. It subscribes to channels, reads data from them, and writes data to them. It can be thought of as an **actor** in the Pregel algorithm. `PregelNodes` implement LangChain's Runnable interface.
 
 ## Channels
 
 Channels are used to communicate between actors (PregelNodes). Each channel has a value type, an update type, and an update function – which takes a sequence of updates and modifies the stored value. Channels can be used to send data from one chain to another, or to send data from a chain to itself in a future step. LangGraph provides a number of built-in channels:
 
-### Basic channels: LastValue and Topic
-
 - [LastValue][langgraph.channels.LastValue]: The default channel, stores the last value sent to the channel, useful for input and output values, or for sending data from one step to the next.
 - [Topic][langgraph.channels.Topic]: A configurable PubSub Topic, useful for sending multiple values between **actors**, or for accumulating output. Can be configured to deduplicate values or to accumulate values over the course of multiple steps.
-
-### Advanced channels: Context and BinaryOperatorAggregate
-
-- `Context`: exposes the value of a context manager, managing its lifecycle. Useful for accessing external resources that require setup and/or teardown; e.g., `client = Context(httpx.Client)`.
 - [BinaryOperatorAggregate][langgraph.channels.BinaryOperatorAggregate]: stores a persistent value, updated by applying a binary operator to the current value and each update sent to the channel, useful for computing aggregates over multiple steps; e.g.,`total = BinaryOperatorAggregate(int, operator.add)`
 
 ## Examples
 
-While most users will interact with Pregel through the [StateGraph][langgraph.graph.StateGraph] API or 
+While most users will interact with Pregel through the [StateGraph][langgraph.graph.StateGraph] API or
 the [entrypoint][langgraph.func.entrypoint] decorator, it is possible to interact with Pregel directly.
 
 Below are a few different examples to give you a sense of the Pregel API.
@@ -50,12 +49,12 @@ Below are a few different examples to give you a sense of the Pregel API.
     ```python
 
     from langgraph.channels import EphemeralValue
-    from langgraph.pregel import Pregel, Channel 
+    from langgraph.pregel import Pregel, NodeBuilder
 
     node1 = (
-        Channel.subscribe_to("a")
-        | (lambda x: x + x)
-        | Channel.write_to("b")
+        NodeBuilder().subscribe_only("a")
+        .do(lambda x: x + x)
+        .write_to("b")
     )
 
     app = Pregel(
@@ -79,18 +78,18 @@ Below are a few different examples to give you a sense of the Pregel API.
 
     ```python
     from langgraph.channels import LastValue, EphemeralValue
-    from langgraph.pregel import Pregel, Channel 
+    from langgraph.pregel import Pregel, NodeBuilder
 
     node1 = (
-        Channel.subscribe_to("a")
-        | (lambda x: x + x)
-        | Channel.write_to("b")
+        NodeBuilder().subscribe_only("a")
+        .do(lambda x: x + x)
+        .write_to("b")
     )
 
     node2 = (
-        Channel.subscribe_to("b")
-        | (lambda x: x + x)
-        | Channel.write_to("c")
+        NodeBuilder().subscribe_only("b")
+        .do(lambda x: x + x)
+        .write_to("c")
     )
 
 
@@ -116,23 +115,18 @@ Below are a few different examples to give you a sense of the Pregel API.
 
     ```python
     from langgraph.channels import EphemeralValue, Topic
-    from langgraph.pregel import Pregel, Channel 
+    from langgraph.pregel import Pregel, NodeBuilder
 
     node1 = (
-        Channel.subscribe_to("a")
-        | (lambda x: x + x)
-        | {
-            "b": Channel.write_to("b"),
-            "c": Channel.write_to("c")
-        }
+        NodeBuilder().subscribe_only("a")
+        .do(lambda x: x + x)
+        .write_to("b", "c")
     )
 
     node2 = (
-        Channel.subscribe_to("b")
-        | (lambda x: x + x)
-        | {
-            "c": Channel.write_to("c"),
-        }
+        NodeBuilder().subscribe_to("b")
+        .do(lambda x: x["b"] + x["b"])
+        .write_to("c")
     )
 
     app = Pregel(
@@ -159,29 +153,24 @@ Below are a few different examples to give you a sense of the Pregel API.
 
     ```python
     from langgraph.channels import EphemeralValue, BinaryOperatorAggregate
-    from langgraph.pregel import Pregel, Channel
+    from langgraph.pregel import Pregel, NodeBuilder
 
 
     node1 = (
-        Channel.subscribe_to("a")
-        | (lambda x: x + x)
-        | {
-            "b": Channel.write_to("b"),
-            "c": Channel.write_to("c")
-        }
+        NodeBuilder().subscribe_only("a")
+        .do(lambda x: x + x)
+        .write_to("b", "c")
     )
 
     node2 = (
-        Channel.subscribe_to("b")
-        | (lambda x: x + x)
-        | {
-            "c": Channel.write_to("c"),
-        }
+        NodeBuilder().subscribe_only("b")
+        .do(lambda x: x + x)
+        .write_to("c")
     )
 
     def reducer(current, update):
         if current:
-            return current + " | " + "update"
+            return current + " | " + update
         else:
             return update
 
@@ -198,8 +187,7 @@ Below are a few different examples to give you a sense of the Pregel API.
 
     app.invoke({"a": "foo"})
     ```
-    
-    
+
 === "Cycle"
 
     This example demonstrates how to introduce a cycle in the graph, by having
@@ -208,12 +196,12 @@ Below are a few different examples to give you a sense of the Pregel API.
 
     ```python
     from langgraph.channels import EphemeralValue
-    from langgraph.pregel import Pregel, Channel, ChannelWrite, ChannelWriteEntry
+    from langgraph.pregel import Pregel, NodeBuilder, ChannelWriteEntry
 
     example_node = (
-        Channel.subscribe_to("value")
-        | (lambda x: x + x if len(x) < 10 else None)
-        | ChannelWrite(writes=[ChannelWriteEntry(channel="value", skip_none=True)])
+        NodeBuilder().subscribe_only("value")
+        .do(lambda x: x + x if len(x) < 10 else None)
+        .write_to(ChannelWriteEntry("value", skip_none=True))
     )
 
     app = Pregel(
@@ -235,7 +223,6 @@ Below are a few different examples to give you a sense of the Pregel API.
 ## High-level API
 
 LangGraph provides two high-level APIs for creating a Pregel application: the [StateGraph (Graph API)](./low_level.md) and the [Functional API](functional_api.md).
-
 
 === "StateGraph (Graph API)"
 
@@ -267,7 +254,7 @@ LangGraph provides two high-level APIs for creating a Pregel application: the [S
     builder.add_node(score_essay)
     builder.add_edge(START, "write_essay")
 
-    # Compile the graph. 
+    # Compile the graph.
     # This will return a Pregel instance.
     graph = builder.compile()
     ```
@@ -280,7 +267,7 @@ LangGraph provides two high-level APIs for creating a Pregel application: the [S
 
     You will see something like this:
 
-    ```pycon 
+    ```pycon
     {'__start__': <langgraph.pregel.read.PregelNode at 0x7d05e3ba1810>,
      'write_essay': <langgraph.pregel.read.PregelNode at 0x7d05e3ba14d0>,
      'score_essay': <langgraph.pregel.read.PregelNode at 0x7d05e3ba1710>}
@@ -311,7 +298,7 @@ LangGraph provides two high-level APIs for creating a Pregel application: the [S
 === "Functional API"
 
     In the [Functional API](functional_api.md), you can use an [`entrypoint`][langgraph.func.entrypoint] to create
-    a Pregel application. The `entrypoint` decorator allows you to define a function that takes input and returns output. 
+    a Pregel application. The `entrypoint` decorator allows you to define a function that takes input and returns output.
 
     ```python
     from typing import TypedDict, Optional
@@ -340,8 +327,8 @@ LangGraph provides two high-level APIs for creating a Pregel application: the [S
     ```
 
     ```pycon
-    Nodes: 
+    Nodes:
     {'write_essay': <langgraph.pregel.read.PregelNode object at 0x7d05e2f9aad0>}
-    Channels: 
+    Channels:
     {'__start__': <langgraph.channels.ephemeral_value.EphemeralValue object at 0x7d05e2c906c0>, '__end__': <langgraph.channels.last_value.LastValue object at 0x7d05e2c90c40>, '__previous__': <langgraph.channels.last_value.LastValue object at 0x7d05e1007280>}
     ```

@@ -1,7 +1,8 @@
 import operator
+from collections.abc import Sequence
 from functools import partial
 from random import choice
-from typing import Annotated, Optional, Sequence
+from typing import Annotated, Optional
 
 from typing_extensions import TypedDict
 

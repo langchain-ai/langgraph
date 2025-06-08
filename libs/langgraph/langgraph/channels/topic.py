@@ -1,4 +1,7 @@
-from typing import Any, Generic, Iterator, Sequence, Type, Union
+from __future__ import annotations
+
+from collections.abc import Iterator, Sequence
+from typing import Any, Generic, Union
 
 from typing_extensions import Self
 
@@ -7,7 +10,7 @@ from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError
 
 
-def flatten(values: Sequence[Union[Value, list[Value]]]) -> Iterator[Value]:
+def flatten(values: Sequence[Value | list[Value]]) -> Iterator[Value]:
     for value in values:
         if isinstance(value, list):
             yield from value
@@ -28,7 +31,7 @@ class Topic(
 
     __slots__ = ("values", "accumulate")
 
-    def __init__(self, typ: Type[Value], accumulate: bool = False) -> None:
+    def __init__(self, typ: type[Value], accumulate: bool = False) -> None:
         super().__init__(typ)
         # attrs
         self.accumulate = accumulate
@@ -69,13 +72,15 @@ class Topic(
                 empty.values = checkpoint
         return empty
 
-    def update(self, values: Sequence[Union[Value, list[Value]]]) -> bool:
-        current = list(self.values)
+    def update(self, values: Sequence[Value | list[Value]]) -> bool:
+        updated = False
         if not self.accumulate:
+            updated = bool(self.values)
             self.values = list[Value]()
-        if flat_values := flatten(values):
+        if flat_values := tuple(flatten(values)):
+            updated = True
             self.values.extend(flat_values)
-        return self.values != current
+        return updated
 
     def get(self) -> Sequence[Value]:
         if self.values:

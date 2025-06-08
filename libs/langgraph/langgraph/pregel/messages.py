@@ -1,25 +1,27 @@
+from __future__ import annotations
+
+from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import (
     Any,
-    AsyncIterator,
     Callable,
-    Dict,
-    Iterator,
-    List,
-    Optional,
-    Sequence,
-    Union,
+    TypeVar,
     cast,
 )
 from uuid import UUID, uuid4
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import BaseMessage
-from langchain_core.outputs import ChatGenerationChunk, LLMResult
-from langchain_core.tracers._streaming import T, _StreamingCallbackHandler
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
 
-from langgraph.constants import NS_SEP, TAG_HIDDEN, TAG_NOSTREAM
-from langgraph.types import StreamChunk
+from langgraph.constants import NS_SEP, TAG_HIDDEN, TAG_NOSTREAM, TAG_NOSTREAM_ALT
+from langgraph.types import Command, StreamChunk
 
+try:
+    from langchain_core.tracers._streaming import _StreamingCallbackHandler
+except ImportError:
+    _StreamingCallbackHandler = object  # type: ignore
+
+T = TypeVar("T")
 Meta = tuple[tuple[str, ...], dict[str, Any]]
 
 
@@ -30,10 +32,11 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
     run_inline = True
     """We want this callback to run in the main thread, to avoid order/locking issues."""
 
-    def __init__(self, stream: Callable[[StreamChunk], None]):
+    def __init__(self, stream: Callable[[StreamChunk], None], subgraphs: bool):
         self.stream = stream
+        self.subgraphs = subgraphs
         self.metadata: dict[UUID, Meta] = {}
-        self.seen: set[Union[int, str]] = set()
+        self.seen: set[int | str] = set()
 
     def _emit(self, meta: Meta, message: BaseMessage, *, dedupe: bool = False) -> None:
         if dedupe and message.id in self.seen:
@@ -43,6 +46,34 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
                 message.id = str(uuid4())
             self.seen.add(message.id)
             self.stream((meta[0], "messages", (message, meta[1])))
+
+    def _find_and_emit_messages(self, meta: Meta, response: Any) -> None:
+        if isinstance(response, BaseMessage):
+            self._emit(meta, response, dedupe=True)
+        elif isinstance(response, Sequence):
+            for value in response:
+                if isinstance(value, BaseMessage):
+                    self._emit(meta, value, dedupe=True)
+        elif isinstance(response, dict):
+            for value in response.values():
+                if isinstance(value, BaseMessage):
+                    self._emit(meta, value, dedupe=True)
+                elif isinstance(value, Sequence):
+                    for item in value:
+                        if isinstance(item, BaseMessage):
+                            self._emit(meta, item, dedupe=True)
+        elif hasattr(response, "__dir__") and callable(response.__dir__):
+            for key in dir(response):
+                try:
+                    value = getattr(response, key)
+                    if isinstance(value, BaseMessage):
+                        self._emit(meta, value, dedupe=True)
+                    elif isinstance(value, Sequence):
+                        for item in value:
+                            if isinstance(item, BaseMessage):
+                                self._emit(meta, item, dedupe=True)
+                except AttributeError:
+                    pass
 
     def tap_output_aiter(
         self, run_id: UUID, output: AsyncIterator[T]
@@ -58,33 +89,37 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         messages: list[list[BaseMessage]],
         *,
         run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
-        tags: Optional[list[str]] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        parent_run_id: UUID | None = None,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> Any:
-        if metadata and (not tags or TAG_NOSTREAM not in tags):
-            self.metadata[run_id] = (
-                tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP)),
-                metadata,
-            )
+        if metadata and (
+            not tags or (TAG_NOSTREAM not in tags and TAG_NOSTREAM_ALT not in tags)
+        ):
+            ns = tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP))[
+                :-1
+            ]
+            if not self.subgraphs and len(ns) > 0:
+                return
+            if tags:
+                if filtered_tags := [t for t in tags if not t.startswith("seq:step")]:
+                    metadata["tags"] = filtered_tags
+            self.metadata[run_id] = (ns, metadata)
 
     def on_llm_new_token(
         self,
         token: str,
         *,
-        chunk: Optional[ChatGenerationChunk] = None,
+        chunk: ChatGenerationChunk | None = None,
         run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
-        tags: Optional[list[str]] = None,
+        parent_run_id: UUID | None = None,
+        tags: list[str] | None = None,
         **kwargs: Any,
     ) -> Any:
         if not isinstance(chunk, ChatGenerationChunk):
             return
         if meta := self.metadata.get(run_id):
-            filtered_tags = [t for t in (tags or []) if not t.startswith("seq:step")]
-            if filtered_tags:
-                meta[1]["tags"] = filtered_tags
             self._emit(meta, chunk.message)
 
     def on_llm_end(
@@ -92,9 +127,14 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         response: LLMResult,
         *,
         run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
+        parent_run_id: UUID | None = None,
         **kwargs: Any,
     ) -> Any:
+        if meta := self.metadata.get(run_id):
+            if response.generations and response.generations[0]:
+                gen = response.generations[0][0]
+                if isinstance(gen, ChatGeneration):
+                    self._emit(meta, gen.message, dedupe=True)
         self.metadata.pop(run_id, None)
 
     def on_llm_error(
@@ -102,20 +142,20 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         error: BaseException,
         *,
         run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
+        parent_run_id: UUID | None = None,
         **kwargs: Any,
     ) -> Any:
         self.metadata.pop(run_id, None)
 
     def on_chain_start(
         self,
-        serialized: Dict[str, Any],
-        inputs: Dict[str, Any],
+        serialized: dict[str, Any],
+        inputs: dict[str, Any],
         *,
         run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
-        tags: Optional[List[str]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        parent_run_id: UUID | None = None,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> Any:
         if (
@@ -123,10 +163,12 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             and kwargs.get("name") == metadata.get("langgraph_node")
             and (not tags or TAG_HIDDEN not in tags)
         ):
-            self.metadata[run_id] = (
-                tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP)),
-                metadata,
-            )
+            ns = tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP))[
+                :-1
+            ]
+            if not self.subgraphs and len(ns) > 0:
+                return
+            self.metadata[run_id] = (ns, metadata)
             if isinstance(inputs, dict):
                 for key, value in inputs.items():
                     if isinstance(value, BaseMessage):
@@ -143,43 +185,32 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         response: Any,
         *,
         run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
+        parent_run_id: UUID | None = None,
         **kwargs: Any,
     ) -> Any:
         if meta := self.metadata.pop(run_id, None):
-            if isinstance(response, BaseMessage):
-                self._emit(meta, response, dedupe=True)
-            elif isinstance(response, Sequence):
+            # Handle Command node updates
+            if isinstance(response, Command):
+                self._find_and_emit_messages(meta, response.update)
+            # Handle list of Command updates
+            elif isinstance(response, Sequence) and any(
+                isinstance(value, Command) for value in response
+            ):
                 for value in response:
-                    if isinstance(value, BaseMessage):
-                        self._emit(meta, value, dedupe=True)
-            elif isinstance(response, dict):
-                for value in response.values():
-                    if isinstance(value, BaseMessage):
-                        self._emit(meta, value, dedupe=True)
-                    elif isinstance(value, Sequence):
-                        for item in value:
-                            if isinstance(item, BaseMessage):
-                                self._emit(meta, item, dedupe=True)
-            elif hasattr(response, "__dir__") and callable(response.__dir__):
-                for key in dir(response):
-                    try:
-                        value = getattr(response, key)
-                        if isinstance(value, BaseMessage):
-                            self._emit(meta, value, dedupe=True)
-                        elif isinstance(value, Sequence):
-                            for item in value:
-                                if isinstance(item, BaseMessage):
-                                    self._emit(meta, item, dedupe=True)
-                    except AttributeError:
-                        pass
+                    if isinstance(value, Command):
+                        self._find_and_emit_messages(meta, value.update)
+                    else:
+                        self._find_and_emit_messages(meta, value)
+            # Handle basic updates / streaming
+            else:
+                self._find_and_emit_messages(meta, response)
 
     def on_chain_error(
         self,
         error: BaseException,
         *,
         run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
+        parent_run_id: UUID | None = None,
         **kwargs: Any,
     ) -> Any:
         self.metadata.pop(run_id, None)

@@ -12,13 +12,11 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from pydantic import BaseModel
-from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import TypedDict
 
 from langgraph.graph import add_messages
-from langgraph.graph.message import REMOVE_ALL_MESSAGES, MessagesState
+from langgraph.graph.message import REMOVE_ALL_MESSAGES, MessagesState, push_message
 from langgraph.graph.state import END, START, StateGraph
-from tests.conftest import IS_LANGCHAIN_CORE_030_OR_GREATER
 from tests.messages import _AnyIdHumanMessage
 
 _, CORE_MINOR, CORE_PATCH = (int(v) for v in langchain_core.__version__.split("."))
@@ -175,19 +173,11 @@ def test_delete_all():
     assert result == expected_result
 
 
-MESSAGES_STATE_SCHEMAS = [MessagesState]
-if IS_LANGCHAIN_CORE_030_OR_GREATER:
+class MessagesStatePydantic(BaseModel):
+    messages: Annotated[list[AnyMessage], add_messages]
 
-    class MessagesStatePydantic(BaseModel):
-        messages: Annotated[list[AnyMessage], add_messages]
 
-    MESSAGES_STATE_SCHEMAS.append(MessagesStatePydantic)
-else:
-
-    class MessagesStatePydanticV1(BaseModelV1):
-        messages: Annotated[list[AnyMessage], add_messages]
-
-    MESSAGES_STATE_SCHEMAS.append(MessagesStatePydanticV1)
+MESSAGES_STATE_SCHEMAS = [MessagesState, MessagesStatePydantic]
 
 
 @pytest.mark.parametrize("state_schema", MESSAGES_STATE_SCHEMAS)
@@ -342,3 +332,34 @@ def test_remove_all_messages():
     assert result == [
         _AnyIdHumanMessage(content="Updated hi there"),
     ]
+
+
+def test_push_messages_in_graph():
+    class MessagesState(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages]
+
+    def chat(_: MessagesState) -> MessagesState:
+        with pytest.raises(ValueError, match="Message ID is required"):
+            push_message(AIMessage(content="No ID"))
+
+        push_message(AIMessage(content="First", id="1"))
+        push_message(HumanMessage(content="Second", id="2"))
+        push_message(AIMessage(content="Third", id="3"))
+
+    builder = StateGraph(MessagesState)
+    builder.add_node(chat)
+    builder.add_edge(START, "chat")
+
+    graph = builder.compile()
+
+    messages, values = [], None
+    for event, chunk in graph.stream(
+        {"messages": []}, stream_mode=["messages", "values"]
+    ):
+        if event == "values":
+            values = chunk
+        elif event == "messages":
+            message, _ = chunk
+            messages.append(message)
+
+    assert values["messages"] == messages

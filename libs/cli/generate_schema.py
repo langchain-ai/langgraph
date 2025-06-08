@@ -17,6 +17,7 @@ from langgraph_cli.config import (
     AuthConfig,
     CheckpointerConfig,
     Config,
+    ConfigurableHeaderConfig,
     CorsConfig,
     HttpConfig,
     IndexConfig,
@@ -112,6 +113,7 @@ def add_descriptions_to_schema(schema, cls):
                 ThreadTTLConfig,
                 CheckpointerConfig,
                 TTLConfig,
+                ConfigurableHeaderConfig,
             ]:
                 if potential_cls.__name__ == def_name:
                     add_descriptions_to_schema(def_schema, potential_cls)
@@ -163,6 +165,13 @@ def generate_schema():
     if "python_version" in python_schema["properties"]:
         python_schema["properties"]["python_version"]["enum"] = ["3.11", "3.12"]
 
+    # Add enum constraint for image_distro
+    if "image_distro" in python_schema["properties"]:
+        python_schema["properties"]["image_distro"]["anyOf"] = [
+            {"type": "string", "enum": ["debian", "wolfi"]},
+            {"type": "null"},
+        ]
+
     # Create Node.js schema with node_version
     node_schema = {
         "type": "object",
@@ -179,6 +188,13 @@ def generate_schema():
     if "node_version" in node_schema["properties"]:
         node_schema["properties"]["node_version"]["anyOf"] = [
             {"type": "string", "enum": ["20"]},
+            {"type": "null"},
+        ]
+
+    # Add enum constraint for image_distro
+    if "image_distro" in node_schema["properties"]:
+        node_schema["properties"]["image_distro"]["anyOf"] = [
+            {"type": "string", "enum": ["debian", "wolfi"]},
             {"type": "null"},
         ]
 
