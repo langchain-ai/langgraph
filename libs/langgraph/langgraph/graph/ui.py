@@ -1,4 +1,6 @@
-from typing import Any, Literal, Optional, Union, cast
+from __future__ import annotations
+
+from typing import Any, Literal, Union, cast
 from uuid import uuid4
 
 from langchain_core.messages import AnyMessage
@@ -51,10 +53,10 @@ def push_ui_message(
     name: str,
     props: dict[str, Any],
     *,
-    id: Optional[str] = None,
-    metadata: Optional[dict[str, Any]] = None,
-    message: Optional[AnyMessage] = None,
-    state_key: str = "ui",
+    id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    message: AnyMessage | None = None,
+    state_key: str | None = "ui",
     merge: bool = False,
 ) -> UIMessage:
     """Push a new UI message to update the UI state.
@@ -111,7 +113,8 @@ def push_ui_message(
     }
 
     writer(evt)
-    config[CONF][CONFIG_KEY_SEND]([(state_key, evt)])
+    if state_key:
+        config[CONF][CONFIG_KEY_SEND]([(state_key, evt)])
 
     return evt
 
@@ -148,8 +151,8 @@ def delete_ui_message(id: str, *, state_key: str = "ui") -> RemoveUIMessage:
 
 
 def ui_message_reducer(
-    left: Union[list[AnyUIMessage], AnyUIMessage],
-    right: Union[list[AnyUIMessage], AnyUIMessage],
+    left: list[AnyUIMessage] | AnyUIMessage,
+    right: list[AnyUIMessage] | AnyUIMessage,
 ) -> list[AnyUIMessage]:
     """Merge two lists of UI messages, supporting removing UI messages.
 

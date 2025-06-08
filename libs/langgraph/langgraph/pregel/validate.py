@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from collections.abc import Mapping, Sequence
-from typing import Any, Optional, Union
+from typing import Any
 
 from langgraph.channels.base import BaseChannel
 from langgraph.constants import RESERVED
@@ -10,11 +12,11 @@ from langgraph.types import All
 def validate_graph(
     nodes: Mapping[str, PregelNode],
     channels: dict[str, BaseChannel],
-    input_channels: Union[str, Sequence[str]],
-    output_channels: Union[str, Sequence[str]],
-    stream_channels: Optional[Union[str, Sequence[str]]],
-    interrupt_after_nodes: Union[All, Sequence[str]],
-    interrupt_before_nodes: Union[All, Sequence[str]],
+    input_channels: str | Sequence[str],
+    output_channels: str | Sequence[str],
+    stream_channels: str | Sequence[str] | None,
+    interrupt_after_nodes: All | Sequence[str],
+    interrupt_before_nodes: All | Sequence[str],
 ) -> None:
     for chan in channels:
         if chan in RESERVED:
@@ -28,7 +30,7 @@ def validate_graph(
             subscribed_channels.update(node.triggers)
         else:
             raise TypeError(
-                f"Invalid node type {type(node)}, expected Channel.subscribe_to()"
+                f"Invalid node type {type(node)}, expected PregelNode or NodeBuilder"
             )
 
     for chan in subscribed_channels:
@@ -88,7 +90,7 @@ def validate_graph(
 
 
 def validate_keys(
-    keys: Optional[Union[str, Sequence[str]]],
+    keys: str | Sequence[str] | None,
     channels: Mapping[str, Any],
 ) -> None:
     if isinstance(keys, str):

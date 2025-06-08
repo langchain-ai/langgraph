@@ -25,7 +25,7 @@ When a graceful shutdown request is received (SIGINT) an instance enters shutdow
 - gives any in-progress runs a limited number of seconds to finish (if not finished it will be put back in the queue)
 - stops the instance from picking up more runs from the queue
 
-If a hard shutdown occurs due to a server crash or an infrastructure failure, any runs that were in progress will be picked up by a internal sweeper task that looks for in-progress runs that have breached their heartbeat window. The sweeper runs every 2 minutes and will put the runs back in the queue for another instance to pick them up.
+If a hard shutdown occurs due to a server crash or an infrastructure failure, any runs that were in progress will be picked up by an internal sweeper task that looks for in-progress runs that have breached their heartbeat window. The sweeper runs every 2 minutes and will put the runs back in the queue for another instance to pick them up.
 
 ## Postgres resilience
 

@@ -321,7 +321,7 @@ attempts = 0
 # The default RetryPolicy is optimized for retrying specific network errors.
 retry_policy = RetryPolicy(retry_on=ValueError)
 
-@task(retry=retry_policy) 
+@task(retry_policy=retry_policy) 
 def get_info():
     global attempts
     attempts += 1
@@ -348,6 +348,38 @@ main.invoke({'any_input': 'foobar'}, config=config)
 ```pycon
 'OK'
 ```
+
+## Caching Tasks
+
+```python
+import time
+from langgraph.cache.memory import InMemoryCache
+from langgraph.func import entrypoint, task
+from langgraph.types import CachePolicy
+
+
+@task(cache_policy=CachePolicy(ttl=120))  # (1)!
+def slow_add(x: int) -> int:
+    time.sleep(1)
+    return x * 2
+
+
+@entrypoint(cache=InMemoryCache())
+def main(inputs: dict) -> dict[str, int]:
+    result1 = slow_add(inputs["x"]).result()
+    result2 = slow_add(inputs["x"]).result()
+    return {"result1": result1, "result2": result2}
+
+
+for chunk in main.stream({"x": 5}, stream_mode="updates"):
+    print(chunk)
+
+#> {'slow_add': 10}
+#> {'slow_add': 10, '__metadata__': {'cached': True}}
+#> {'main': {'result1': 10, 'result2': 10}}
+```
+
+1. `ttl` is specified in seconds. The cache will be invalidated after this time.
 
 ## Resuming after an error
 

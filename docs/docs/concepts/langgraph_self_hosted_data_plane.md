@@ -7,8 +7,8 @@ search:
 
 There are two versions of the self-hosted deployment: [Self-Hosted Data Plane](./deployment_options.md#self-hosted-data-plane) and [Self-Hosted Control Plane](./deployment_options.md#self-hosted-control-plane).
 
-!!! important "Beta"
-    The Self-Hosted Data Plane deployment option is currently in beta stage.
+!!! info "Important"
+    The Self-Hosted Data Plane deployment option is currently in beta stage and requires an [Enterprise](../../concepts/plans.md) plan.
 
 ## Requirements
 
@@ -37,4 +37,4 @@ For information on how to deploy a [LangGraph Server](../concepts/langgraph_serv
 - **Amazon ECS**: Coming soon!
 
 !!! tip
-    If you would like to deploy to Kubernetes, you can use this [Helm chart](https://github.com/langchain-ai/helm/blob/main/charts/langgraph-cloud/README.md).
+    If you would like to deploy to Kubernetes, you can follow the [Self-Hosted Data Plane deployment guide](../cloud/deployment/self_hosted_data_plane.md).

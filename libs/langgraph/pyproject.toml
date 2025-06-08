@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph"
-version = "0.4.5"
+version = "0.4.7"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 requires-python = ">=3.9"
@@ -15,7 +15,7 @@ dependencies = [
     "langchain-core>=0.1",
     "langgraph-checkpoint>=2.0.26",
     "langgraph-sdk>=0.1.42",
-    "langgraph-prebuilt>=0.1.8",
+    "langgraph-prebuilt>=0.2.0",
     "xxhash>=3.5.0",
     "pydantic>=2.7.4",
 ]
@@ -63,11 +63,14 @@ langgraph-sdk = { path = "../sdk-py", editable = true }
 
 [tool.ruff]
 lint.select = [ "E", "F", "I", "TID251", "UP" ]
-lint.ignore = [ "E501", "UP007" ]
+lint.ignore = [ "E501" ]
 line-length = 88
 indent-width = 4
 extend-include = ["*.ipynb"]
 target-version = "py39"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/bench/*" = ["UP006", "UP007"]
 
 [tool.ruff.format]
 quote-style = "double"

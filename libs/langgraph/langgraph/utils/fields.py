@@ -1,4 +1,8 @@
+from __future__ import annotations
+
 import dataclasses
+import types
+import weakref
 from collections.abc import Generator, Sequence
 from typing import Annotated, Any, Optional, Union, get_type_hints
 
@@ -29,7 +33,7 @@ def _is_optional_type(type_: Any) -> bool:
     return type_ is None
 
 
-def _is_required_type(type_: Any) -> Optional[bool]:
+def _is_required_type(type_: Any) -> bool | None:
     """Check if an annotation is marked as Required/NotRequired.
 
     Returns:
@@ -116,7 +120,7 @@ def get_field_default(name: str, type_: Any, schema: type[Any]) -> Any:
 
 def get_enhanced_type_hints(
     type: type[Any],
-) -> Generator[tuple[str, Any, Any, Optional[str]], None, None]:
+) -> Generator[tuple[str, Any, Any, str | None], None, None]:
     """Attempt to extract default values and descriptions from provided type, used for config schema."""
     for name, typ in get_type_hints(type).items():
         default = None
@@ -178,3 +182,24 @@ def get_update_as_tuples(input: Any, keys: Sequence[str]) -> list[tuple[str, Any
             or (keep is not None and k in keep)
         )
     ]
+
+
+ANNOTATED_KEYS_CACHE: weakref.WeakKeyDictionary[type[Any], tuple[str, ...]] = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def get_cached_annotated_keys(obj: type[Any]) -> tuple[str, ...]:
+    """Return cached annotated keys for a Python class."""
+    if obj in ANNOTATED_KEYS_CACHE:
+        return ANNOTATED_KEYS_CACHE[obj]
+    if isinstance(obj, type):
+        keys: list[str] = []
+        for base in reversed(obj.__mro__):
+            ann = base.__dict__.get("__annotations__")
+            if ann is None or isinstance(ann, types.GetSetDescriptorType):
+                continue
+            keys.extend(ann.keys())
+        return ANNOTATED_KEYS_CACHE.setdefault(obj, tuple(keys))
+    else:
+        raise TypeError(f"Expected a type, got {type(obj)}. ")

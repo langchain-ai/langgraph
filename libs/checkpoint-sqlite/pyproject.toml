@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-checkpoint-sqlite"
-version = "2.0.8"
+version = "2.0.10"
 description = "Library with a SQLite implementation of LangGraph checkpoint saver."
 authors = []
 requires-python = ">=3.9"
@@ -54,7 +54,7 @@ lint.select = [
   "B",  # flake8-bugbear
   "I",  # isort
 ]
-lint.ignore = ["E501", "B008", "UP007", "UP006"]
+lint.ignore = ["E501", "B008"]
 
 [tool.pytest-watcher]
 now = true

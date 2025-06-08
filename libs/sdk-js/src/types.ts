@@ -1,3 +1,4 @@
+import { LangChainTracer } from "@langchain/core/tracers/tracer_langchain";
 import { Checkpoint, Config, Metadata } from "./schema.js";
 import { StreamMode } from "./types.stream.js";
 
@@ -41,7 +42,7 @@ export interface Command {
   goto?: Send | Send[] | string | string[];
 }
 
-interface RunsInvokePayload {
+export interface RunsInvokePayload {
   /**
    * Input to the run. Pass `null` to resume from the current state of the thread.
    */
@@ -140,6 +141,12 @@ interface RunsInvokePayload {
    * Callback when a run is created.
    */
   onRunCreated?: (params: { run_id: string; thread_id?: string }) => void;
+
+  /**
+   * @internal
+   * For LangSmith tracing purposes only. Not part of the public API.
+   */
+  _langsmithTracer?: LangChainTracer;
 }
 
 export interface RunsStreamPayload<
@@ -155,6 +162,12 @@ export interface RunsStreamPayload<
    * Stream output from subgraphs. By default, streams only the top graph.
    */
   streamSubgraphs?: TSubgraphs;
+
+  /**
+   * Whether the stream is considered resumable.
+   * If true, the stream can be resumed and replayed in its entirety even after disconnection.
+   */
+  streamResumable?: boolean;
 
   /**
    * Pass one or more feedbackKeys if you want to request short-lived signed URLs
@@ -173,6 +186,12 @@ export interface RunsCreatePayload extends RunsInvokePayload {
    * Stream output from subgraphs. By default, streams only the top graph.
    */
   streamSubgraphs?: boolean;
+
+  /**
+   * Whether the stream is considered resumable.
+   * If true, the stream can be resumed and replayed in its entirety even after disconnection.
+   */
+  streamResumable?: boolean;
 }
 
 export interface CronsCreatePayload extends RunsCreatePayload {

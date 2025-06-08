@@ -1,11 +1,8 @@
+import os
 from collections.abc import AsyncIterator, Iterator
-from contextlib import asynccontextmanager
-from typing import Optional
 from uuid import UUID
 
 import pytest
-from langchain_core import __version__ as core_version
-from packaging import version
 from pytest_mock import MockerFixture
 
 from langgraph.cache.base import BaseCache
@@ -19,10 +16,8 @@ from tests.conftest_checkpointer import (
     _checkpointer_postgres_aio,
     _checkpointer_postgres_aio_pipe,
     _checkpointer_postgres_aio_pool,
-    _checkpointer_postgres_aio_shallow,
     _checkpointer_postgres_pipe,
     _checkpointer_postgres_pool,
-    _checkpointer_postgres_shallow,
     _checkpointer_sqlite,
     _checkpointer_sqlite_aes,
     _checkpointer_sqlite_aio,
@@ -37,13 +32,7 @@ from tests.conftest_store import (
     _store_postgres_pool,
 )
 
-pytest.register_assert_rewrite("tests.memory_assert")
-
-# TODO: fix this once core is released
-IS_LANGCHAIN_CORE_030_OR_GREATER = version.parse(core_version) >= version.parse(
-    "0.3.0.dev0"
-)
-SHOULD_CHECK_SNAPSHOTS = IS_LANGCHAIN_CORE_030_OR_GREATER
+NO_DOCKER = os.getenv("NO_DOCKER", "false") == "true"
 
 
 @pytest.fixture
@@ -64,82 +53,6 @@ def checkpoint_during(request: pytest.FixtureRequest) -> bool:
     return request.param
 
 
-# --- start of deprecated fixtures ---
-
-
-@pytest.fixture(scope="function")
-def checkpointer_memory():
-    with _checkpointer_memory() as checkpointer:
-        yield checkpointer
-
-
-@pytest.fixture(scope="function")
-def checkpointer_sqlite():
-    with _checkpointer_sqlite() as checkpointer:
-        yield checkpointer
-
-
-@pytest.fixture(scope="function")
-def checkpointer_sqlite_aes():
-    with _checkpointer_sqlite_aes() as checkpointer:
-        yield checkpointer
-
-
-@pytest.fixture(scope="function")
-def checkpointer_postgres():
-    with _checkpointer_postgres() as checkpointer:
-        yield checkpointer
-
-
-@pytest.fixture(scope="function")
-def checkpointer_postgres_shallow():
-    with _checkpointer_postgres_shallow() as checkpointer:
-        yield checkpointer
-
-
-@pytest.fixture(scope="function")
-def checkpointer_postgres_pipe():
-    with _checkpointer_postgres_pipe() as checkpointer:
-        yield checkpointer
-
-
-@pytest.fixture(scope="function")
-def checkpointer_postgres_pool():
-    with _checkpointer_postgres_pool() as checkpointer:
-        yield checkpointer
-
-
-@asynccontextmanager
-async def awith_checkpointer(
-    checkpointer_name: Optional[str],
-) -> AsyncIterator[BaseCheckpointSaver]:
-    if checkpointer_name is None:
-        yield None
-    elif checkpointer_name == "memory":
-        with _checkpointer_memory() as checkpointer:
-            yield checkpointer
-    elif checkpointer_name == "sqlite_aio":
-        async with _checkpointer_sqlite_aio() as checkpointer:
-            yield checkpointer
-    elif checkpointer_name == "postgres_aio":
-        async with _checkpointer_postgres_aio() as checkpointer:
-            yield checkpointer
-    elif checkpointer_name == "postgres_aio_shallow":
-        async with _checkpointer_postgres_aio_shallow() as checkpointer:
-            yield checkpointer
-    elif checkpointer_name == "postgres_aio_pipe":
-        async with _checkpointer_postgres_aio_pipe() as checkpointer:
-            yield checkpointer
-    elif checkpointer_name == "postgres_aio_pool":
-        async with _checkpointer_postgres_aio_pool() as checkpointer:
-            yield checkpointer
-    else:
-        raise NotImplementedError(f"Unknown checkpointer: {checkpointer_name}")
-
-
-# --- end of deprecated fixtures ---
-
-
 @pytest.fixture(scope="function", params=["sqlite", "memory"])
 def cache(request: pytest.FixtureRequest) -> Iterator[BaseCache]:
     if request.param == "sqlite":
@@ -152,7 +65,9 @@ def cache(request: pytest.FixtureRequest) -> Iterator[BaseCache]:
 
 @pytest.fixture(
     scope="function",
-    params=["in_memory", "postgres", "postgres_pipe", "postgres_pool"],
+    params=["in_memory"]
+    if NO_DOCKER
+    else ["in_memory", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def sync_store(request: pytest.FixtureRequest) -> Iterator[BaseStore]:
     store_name = request.param
@@ -176,7 +91,9 @@ def sync_store(request: pytest.FixtureRequest) -> Iterator[BaseStore]:
 
 @pytest.fixture(
     scope="function",
-    params=["in_memory", "postgres_aio", "postgres_aio_pipe", "postgres_aio_pool"],
+    params=["in_memory"]
+    if NO_DOCKER
+    else ["in_memory", "postgres_aio", "postgres_aio_pipe", "postgres_aio_pool"],
 )
 async def async_store(request: pytest.FixtureRequest) -> AsyncIterator[BaseStore]:
     store_name = request.param
@@ -201,6 +118,12 @@ async def async_store(request: pytest.FixtureRequest) -> AsyncIterator[BaseStore
 @pytest.fixture(
     scope="function",
     params=[
+        "memory",
+        "sqlite",
+        "sqlite_aes",
+    ]
+    if NO_DOCKER
+    else [
         "memory",
         "sqlite",
         "sqlite_aes",
@@ -240,6 +163,11 @@ def sync_checkpointer(
     params=[
         "memory",
         "sqlite_aio",
+    ]
+    if NO_DOCKER
+    else [
+        "memory",
+        "sqlite_aio",
         "postgres_aio",
         "postgres_aio_pipe",
         "postgres_aio_pool",
@@ -266,22 +194,3 @@ async def async_checkpointer(
             yield checkpointer
     else:
         raise NotImplementedError(f"Unknown checkpointer: {checkpointer_name}")
-
-
-ALL_CHECKPOINTERS_SYNC = [
-    "memory",
-    "sqlite",
-    "sqlite_aes",
-    "postgres",
-    "postgres_pipe",
-    "postgres_pool",
-    "postgres_shallow",
-]
-ALL_CHECKPOINTERS_ASYNC = [
-    "memory",
-    "sqlite_aio",
-    "postgres_aio",
-    "postgres_aio_pipe",
-    "postgres_aio_pool",
-    "postgres_aio_shallow",
-]

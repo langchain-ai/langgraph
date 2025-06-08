@@ -1,21 +1,25 @@
+from __future__ import annotations
+
 import asyncio
 import concurrent.futures
 import functools
 import inspect
+import warnings
 from collections.abc import Awaitable, Sequence
 from dataclasses import dataclass
 from typing import (
     Any,
     Callable,
     Generic,
-    Optional,
     TypeVar,
-    Union,
     get_args,
     get_origin,
     overload,
 )
 
+from typing_extensions import Unpack
+
+from langgraph._typing import UNSET, DeprecatedKwargs
 from langgraph.cache.base import BaseCache
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
@@ -34,6 +38,7 @@ from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
 from langgraph.types import _DC_KWARGS, CachePolicy, RetryPolicy, StreamMode
+from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 
 class TaskFunction(Generic[P, T]):
@@ -41,9 +46,9 @@ class TaskFunction(Generic[P, T]):
         self,
         func: Callable[P, T],
         *,
-        retry: Optional[Sequence[RetryPolicy]] = (),
-        cache_policy: Optional[CachePolicy[Callable[P, Union[str, bytes]]]] = None,
-        name: Optional[str] = None,
+        retry_policy: Sequence[RetryPolicy],
+        cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
+        name: str | None = None,
     ) -> None:
         if name is not None:
             if hasattr(func, "__func__"):
@@ -57,13 +62,17 @@ class TaskFunction(Generic[P, T]):
                 # handle regular functions / partials / callable classes, etc.
                 func.__name__ = name
         self.func = func
-        self.retry = retry
+        self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         functools.update_wrapper(self, func)
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> SyncAsyncFuture[T]:
         return call(
-            self.func, retry=self.retry, cache_policy=self.cache_policy, *args, **kwargs
+            self.func,
+            retry_policy=self.retry_policy,
+            cache_policy=self.cache_policy,
+            *args,
+            **kwargs,
         )
 
     def clear_cache(self, cache: BaseCache) -> None:
@@ -82,34 +91,33 @@ class TaskFunction(Generic[P, T]):
 @overload
 def task(
     *,
-    name: Optional[str] = None,
-    retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
-    cache_policy: Optional[CachePolicy[Callable[P, Union[str, bytes]]]] = None,
+    name: str | None = None,
+    retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+    cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
+    **kwargs: Unpack[DeprecatedKwargs],
 ) -> Callable[
-    [Union[Callable[P, Awaitable[T]], Callable[P, T]]],
+    [Callable[P, Awaitable[T]] | Callable[P, T]],
     TaskFunction[P, T],
 ]: ...
 
 
 @overload
 def task(
-    __func_or_none__: Union[Callable[P, Awaitable[T]], Callable[P, T]],
+    __func_or_none__: Callable[P, Awaitable[T]] | Callable[P, T],
 ) -> TaskFunction[P, T]: ...
 
 
 def task(
-    __func_or_none__: Optional[Union[Callable[P, Awaitable[T]], Callable[P, T]]] = None,
+    __func_or_none__: Callable[P, Awaitable[T]] | Callable[P, T] | None = None,
     *,
-    name: Optional[str] = None,
-    retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
-    cache_policy: Optional[CachePolicy[Callable[P, Union[str, bytes]]]] = None,
-) -> Union[
-    Callable[
-        [Union[Callable[P, Awaitable[T]], Callable[P, T]]],
-        TaskFunction[P, T],
-    ],
-    TaskFunction[P, T],
-]:
+    name: str | None = None,
+    retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+    cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
+    **kwargs: Unpack[DeprecatedKwargs],
+) -> (
+    Callable[[Callable[P, Awaitable[T]] | Callable[P, T]], TaskFunction[P, T]]
+    | TaskFunction[P, T]
+):
     """Define a LangGraph task using the `task` decorator.
 
     !!! important "Requires python 3.11 or higher for async functions"
@@ -125,7 +133,9 @@ def task(
     - Calling the function produces a future. This makes it easy to parallelize tasks.
 
     Args:
-        retry: An optional retry policy to use for the task in case of a failure.
+        name: An optional name for the task. If not provided, the function name will be used.
+        retry_policy: An optional retry policy (or list of policies) to use for the task in case of a failure.
+        cache_policy: An optional cache policy to use for the task. This allows caching of the task results.
 
     Returns:
         A callable function when used as a decorator.
@@ -166,18 +176,27 @@ def task(
         await add_one.ainvoke([1, 2, 3])  # Returns [2, 3, 4]
         ```
     """
-    if isinstance(retry, RetryPolicy):
-        retry_policies: Optional[Sequence[RetryPolicy]] = (retry,)
-    else:
-        retry_policies = retry
+    if (retry := kwargs.get("retry", UNSET)) is not UNSET:
+        warnings.warn(
+            "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
+            category=LangGraphDeprecatedSinceV10,
+        )
+        if retry_policy is None:
+            retry_policy = retry  # type: ignore[assignment]
+
+    retry_policies: Sequence[RetryPolicy] = (
+        ()
+        if retry_policy is None
+        else (retry_policy,)
+        if isinstance(retry_policy, RetryPolicy)
+        else retry_policy
+    )
 
     def decorator(
-        func: Union[Callable[P, Awaitable[T]], Callable[P, T]],
-    ) -> Union[
-        Callable[P, concurrent.futures.Future[T]], Callable[P, asyncio.Future[T]]
-    ]:
+        func: Callable[P, Awaitable[T]] | Callable[P, T],
+    ) -> Callable[P, concurrent.futures.Future[T]] | Callable[P, asyncio.Future[T]]:
         return TaskFunction(
-            func, retry=retry_policies, cache_policy=cache_policy, name=name
+            func, retry_policy=retry_policies, cache_policy=cache_policy, name=name
         )
 
     if __func_or_none__ is not None:
@@ -232,8 +251,11 @@ class entrypoint:
             its state across runs.
         store: A generalized key-value store. Some implementations may support
             semantic search capabilities through an optional `index` configuration.
+        cache: A cache to use for caching the results of the workflow.
         config_schema: Specifies the schema for the configuration object that will be
             passed to the workflow.
+        cache_policy: A cache policy to use for caching the results of the workflow.
+        retry_policy: A retry policy (or list of policies) to use for the workflow in case of a failure.
 
     Example: Using entrypoint and tasks
         ```python
@@ -349,19 +371,28 @@ class entrypoint:
 
     def __init__(
         self,
-        checkpointer: Optional[BaseCheckpointSaver] = None,
-        store: Optional[BaseStore] = None,
-        cache: Optional[BaseCache] = None,
-        config_schema: Optional[type[Any]] = None,
-        cache_policy: Optional[CachePolicy] = None,
-        retry: Union[RetryPolicy, Sequence[RetryPolicy]] = (),
+        checkpointer: BaseCheckpointSaver | None = None,
+        store: BaseStore | None = None,
+        cache: BaseCache | None = None,
+        config_schema: type[Any] | None = None,
+        cache_policy: CachePolicy | None = None,
+        retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+        **kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         """Initialize the entrypoint decorator."""
+        if (retry := kwargs.get("retry", UNSET)) is not UNSET:
+            warnings.warn(
+                "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
+                category=LangGraphDeprecatedSinceV10,
+            )
+            if retry_policy is None:
+                retry_policy = retry  # type: ignore[assignment]
+
         self.checkpointer = checkpointer
         self.store = store
         self.cache = cache
         self.cache_policy = cache_policy
-        self.retry = retry
+        self.retry_policy = retry_policy
         self.config_schema = config_schema
 
     @dataclass(**_DC_KWARGS)
@@ -493,6 +524,6 @@ class entrypoint:
             store=self.store,
             cache=self.cache,
             cache_policy=self.cache_policy,
-            retry_policy=self.retry,
+            retry_policy=self.retry_policy or (),
             config_type=self.config_schema,
         )

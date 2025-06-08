@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 from collections import defaultdict
 from collections.abc import AsyncIterator, Iterable, Sequence
 from contextlib import asynccontextmanager
 from types import TracebackType
-from typing import Any, Callable, Optional, Union, cast
+from typing import Any, Callable, cast
 
 import aiosqlite
 import orjson
@@ -88,11 +90,10 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
         self,
         conn: aiosqlite.Connection,
         *,
-        deserializer: Optional[
-            Callable[[Union[bytes, str, orjson.Fragment]], dict[str, Any]]
-        ] = None,
-        index: Optional[SqliteIndexConfig] = None,
-        ttl: Optional[TTLConfig] = None,
+        deserializer: Callable[[bytes | str | orjson.Fragment], dict[str, Any]]
+        | None = None,
+        index: SqliteIndexConfig | None = None,
+        ttl: TTLConfig | None = None,
     ):
         """Initialize the async SQLite store.
 
@@ -114,7 +115,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
         else:
             self.embeddings = None
         self.ttl_config = ttl
-        self._ttl_sweeper_task: Optional[asyncio.Task[None]] = None
+        self._ttl_sweeper_task: asyncio.Task[None] | None = None
         self._ttl_stop_event = asyncio.Event()
 
     @classmethod
@@ -123,9 +124,9 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
         cls,
         conn_string: str,
         *,
-        index: Optional[SqliteIndexConfig] = None,
-        ttl: Optional[TTLConfig] = None,
-    ) -> AsyncIterator["AsyncSqliteStore"]:
+        index: SqliteIndexConfig | None = None,
+        ttl: TTLConfig | None = None,
+    ) -> AsyncIterator[AsyncSqliteStore]:
         """Create a new AsyncSqliteStore instance from a connection string.
 
         Args:
@@ -253,7 +254,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
             return deleted_count
 
     async def start_ttl_sweeper(
-        self, sweep_interval_minutes: Optional[int] = None
+        self, sweep_interval_minutes: int | None = None
     ) -> asyncio.Task[None]:
         """Periodically delete expired store items based on TTL.
 
@@ -298,7 +299,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
         self._ttl_sweeper_task = task
         return task
 
-    async def stop_ttl_sweeper(self, timeout: Optional[float] = None) -> bool:
+    async def stop_ttl_sweeper(self, timeout: float | None = None) -> bool:
         """Stop the TTL sweeper task if it's running.
 
         Args:
@@ -333,14 +334,14 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
 
         return success
 
-    async def __aenter__(self) -> "AsyncSqliteStore":
+    async def __aenter__(self) -> AsyncSqliteStore:
         return self
 
     async def __aexit__(
         self,
-        exc_type: Optional[type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional["TracebackType"],
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
     ) -> None:
         # Ensure the TTL sweeper task is stopped when exiting the context
         if hasattr(self, "_ttl_sweeper_task") and self._ttl_sweeper_task is not None:
@@ -511,12 +512,10 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
 
         # Setup dot_product function if it doesn't exist
         if embedding_requests and self.embeddings:
-            # Generate embeddings for search queries
             vectors = await self.embeddings.aembed_documents(
                 [query for _, query in embedding_requests]
             )
 
-            # Replace placeholders with actual embeddings
             for (idx, _), embedding in zip(embedding_requests, vectors):
                 _params_list: list = queries[idx][1]
                 for i, param in enumerate(_params_list):
@@ -527,7 +526,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
             await cur.execute(query, params)
             rows = await cur.fetchall()
 
-            if "score" in query:  # Vector search query
+            if "score" in query:
                 items = [
                     _row_to_search_item(
                         _decode_ns_text(row[0]),
@@ -579,5 +578,6 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
         queries = self._get_batch_list_namespaces_queries(list_ops)
         for (query, params), (idx, _) in zip(queries, list_ops):
             await cur.execute(query, params)
+
             rows = await cur.fetchall()
             results[idx] = [_decode_ns_text(row[0]) for row in rows]

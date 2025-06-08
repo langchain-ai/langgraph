@@ -19,7 +19,6 @@ theme:
     - content.tabs.link
     - content.action.edit
     - content.tooltips
-    - header.autohide
     - navigation.indexes
     - navigation.footer
     - navigation.instant
@@ -28,7 +27,6 @@ theme:
     - navigation.instant.progress
     - navigation.path
     - navigation.tabs
-    - navigation.tabs.sticky
     - navigation.top
     - navigation.prune
     - navigation.tracking
@@ -255,6 +253,7 @@ nav:
       - Pregel: reference/pregel.md
       - Checkpointing: reference/checkpoints.md
       - Storage: reference/store.md
+      - Caching: reference/cache.md
       - Types: reference/types.md
       - Config: reference/config.md
       - Errors: reference/errors.md
@@ -417,3 +416,5 @@ extra_css:
   - stylesheets/version_admonitions.css
   - stylesheets/logos.css
   - stylesheets/sticky_navigation.css
+  - stylesheets/agent_graph_widget.css
+

@@ -35,7 +35,6 @@ jobs:
               - 'libs/checkpoint/**'
               - 'libs/checkpoint-sqlite/**'
               - 'libs/checkpoint-postgres/**'
-              - 'libs/scheduler-kafka/**'
               - 'libs/prebuilt/**'
             sdk-js:
               - 'libs/sdk-js/**'
@@ -53,7 +52,7 @@ jobs:
             "libs/checkpoint",
             "libs/checkpoint-sqlite",
             "libs/checkpoint-postgres",
-            "libs/scheduler-kafka",
+
             "libs/prebuilt",
           ]
     if: needs.changes.outputs.python == 'true'
@@ -87,14 +86,6 @@ jobs:
     if: needs.changes.outputs.python == 'true'
     name: "cd libs/langgraph"
     uses: ./.github/workflows/_test_langgraph.yml
-    secrets: inherit
-
-  # NOTE: we're testing scheduler-kafka separately because it requires a different matrix
-  test-scheduler-kafka:
-    needs: changes
-    if: needs.changes.outputs.python == 'true'
-    name: "cd libs/scheduler-kafka"
-    uses: ./.github/workflows/_test_scheduler_kafka.yml
     secrets: inherit
 
   check-sdk-methods:
@@ -166,9 +157,9 @@ jobs:
       run:
         working-directory: ${{ matrix.working-directory }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Setup Node.js (LTS)
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "yarn"
@@ -192,9 +183,9 @@ jobs:
       run:
         working-directory: ${{ matrix.working-directory }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Setup Node.js (LTS)
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "yarn"
@@ -212,7 +203,6 @@ jobs:
         lint-js,
         test,
         test-langgraph,
-        test-scheduler-kafka,
         check-sdk-methods,
         check-schema,
         integration-test,

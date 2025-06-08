@@ -20,6 +20,7 @@ from langgraph_cli.docker import DockerCapabilities
 from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.progress import Progress
 from langgraph_cli.templates import TEMPLATE_HELP_STRING, create_new
+from langgraph_cli.util import warn_non_wolfi_distro
 from langgraph_cli.version import __version__
 
 OPT_DOCKER_COMPOSE = click.option(
@@ -317,10 +318,8 @@ def _build(
     )
     # add additional_contexts
     if additional_contexts:
-        additional_contexts_str = ",".join(
-            f"{k}={v}" for k, v in additional_contexts.items()
-        )
-        args.extend(["--build-context", additional_contexts_str])
+        for k, v in additional_contexts.items():
+            args.extend(["--build-context", f"{k}={v}"])
     # run docker build
     runner.run(
         subp_exec(
@@ -375,6 +374,7 @@ def build(
         if shutil.which("docker") is None:
             raise click.UsageError("Docker not installed") from None
         config_json = langgraph_cli.config.validate_config_file(config)
+        warn_non_wolfi_distro(config_json)
         _build(
             runner, set, config, config_json, base_image, pull, tag, docker_build_args
         )
@@ -466,6 +466,7 @@ def dockerfile(
     save_path = pathlib.Path(save_path).absolute()
     secho(f"🔍 Validating configuration at path: {config}", fg="yellow")
     config_json = langgraph_cli.config.validate_config_file(config)
+    warn_non_wolfi_distro(config_json)
     secho("✅ Configuration validated!", fg="green")
 
     secho(f"📝 Generating Dockerfile at {save_path}", fg="yellow")
@@ -791,6 +792,7 @@ def prepare(
 ) -> tuple[list[str], str]:
     """Prepare the arguments and stdin for running the LangGraph API server."""
     config_json = langgraph_cli.config.validate_config_file(config_path)
+    warn_non_wolfi_distro(config_json)
     # pull latest images
     if pull:
         runner.run(

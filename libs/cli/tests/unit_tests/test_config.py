@@ -11,6 +11,7 @@ from langgraph_cli.config import (
     PIP_CLEANUP_LINES,
     config_to_compose,
     config_to_docker,
+    docker_tag,
     validate_config,
     validate_config_file,
 )
@@ -34,6 +35,7 @@ def test_validate_config():
         "python_version": "3.11",
         "node_version": None,
         "pip_config_file": None,
+        "image_distro": "debian",
         "dockerfile_lines": [],
         "env": {},
         "store": None,
@@ -54,6 +56,7 @@ def test_validate_config():
         "python_version": "3.12",
         "node_version": None,
         "pip_config_file": "pipconfig.txt",
+        "image_distro": "debian",
         "dockerfile_lines": ["ARG meow"],
         "dependencies": [".", "langchain"],
         "graphs": {
@@ -120,10 +123,7 @@ def test_validate_config():
         }
     )
     assert config["python_version"] == "3.12-slim"
-    with pytest.raises(
-        ValueError,
-        match="Invalid http.app format",
-    ):
+    with pytest.raises(ValueError, match="Invalid http.app format"):
         validate_config(
             {
                 "python_version": "3.12",
@@ -132,6 +132,83 @@ def test_validate_config():
                 "http": {"app": "../../examples/my_app.py"},
             }
         )
+
+
+def test_validate_config_image_distro():
+    """Test validation of image_distro field."""
+    # Valid image_distro values should work
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "image_distro": "debian",
+        }
+    )
+    assert config["image_distro"] == "debian"
+
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "image_distro": "wolfi",
+        }
+    )
+    assert config["image_distro"] == "wolfi"
+
+    # Missing image_distro should default to 'debian'
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+        }
+    )
+    assert config["image_distro"] == "debian"
+
+    # Invalid image_distro values should raise error
+    with pytest.raises(click.UsageError) as exc_info:
+        validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+                "image_distro": "ubuntu",
+            }
+        )
+    assert "Invalid image_distro: 'ubuntu'" in str(exc_info.value)
+    assert "Must be either 'debian' or 'wolfi'" in str(exc_info.value)
+
+    with pytest.raises(click.UsageError) as exc_info:
+        validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+                "image_distro": "alpine",
+            }
+        )
+    assert "Invalid image_distro: 'alpine'" in str(exc_info.value)
+
+    # Test base Node.js config with image distro
+    config = validate_config(
+        {
+            "node_version": "20",
+            "graphs": {"agent": "./agent.js:graph"},
+            "image_distro": "wolfi",
+        }
+    )
+    assert config["image_distro"] == "wolfi"
+
+    # Test Node.js config with no distro specified
+    config = validate_config(
+        {
+            "node_version": "20",
+            "graphs": {"agent": "./agent.js:graph"},
+        }
+    )
+    assert config["image_distro"] == "debian"
 
 
 def test_validate_config_file():
@@ -891,3 +968,148 @@ def test_config_to_compose_end_to_end():
         watch=True,
     )
     assert clean_empty_lines(actual_compose_stdin) == expected_compose_stdin
+
+
+def test_docker_tag_image_distro():
+    """Test docker_tag function with different image_distro configurations."""
+
+    # Test 1: Default distro (debian) - no suffix
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+        }
+    )
+    tag = docker_tag(config)
+    assert tag == "langchain/langgraph-api:3.11"
+
+    # Test 2: Explicit debian distro - no suffix (same as default)
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "image_distro": "debian",
+        }
+    )
+    tag = docker_tag(config)
+    assert tag == "langchain/langgraph-api:3.11"
+
+    # Test 3: Wolfi distro - should add suffix
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "image_distro": "wolfi",
+        }
+    )
+    tag = docker_tag(config)
+    assert tag == "langchain/langgraph-api:3.11-wolfi"
+
+    # Test 4: Node.js with default distro
+    config = validate_config(
+        {
+            "node_version": "20",
+            "graphs": {"agent": "./agent.js:graph"},
+        }
+    )
+    tag = docker_tag(config)
+    assert tag == "langchain/langgraphjs-api:20"
+
+    # Test 5: Node.js with wolfi distro
+    config = validate_config(
+        {
+            "node_version": "20",
+            "graphs": {"agent": "./agent.js:graph"},
+            "image_distro": "wolfi",
+        }
+    )
+    tag = docker_tag(config)
+    assert tag == "langchain/langgraphjs-api:20-wolfi"
+
+    # Test 6: Custom base image with wolfi
+    config = validate_config(
+        {
+            "python_version": "3.12",
+            "dependencies": ["."],
+            "graphs": {"agent": "./agent.py:graph"},
+            "image_distro": "wolfi",
+            "base_image": "my-registry/custom-image",
+        }
+    )
+    tag = docker_tag(config, base_image="my-registry/custom-image")
+    assert tag == "my-registry/custom-image:3.12-wolfi"
+
+
+def test_docker_tag_multiplatform_with_distro():
+    """Test docker_tag with multiplatform configs and image_distro."""
+
+    # Test 1: Multiplatform (Python + Node) with wolfi
+    config = validate_config(
+        {
+            "python_version": "3.11",
+            "node_version": "20",
+            "dependencies": ["."],
+            "graphs": {"python": "./agent.py:graph", "js": "./agent.js:graph"},
+            "image_distro": "wolfi",
+        }
+    )
+    tag = docker_tag(config)
+    # Should default to Python when both are present
+    assert tag == "langchain/langgraph-api:3.11-wolfi"
+
+    # Test 2: Node-only multiplatform with wolfi
+    config = validate_config(
+        {
+            "node_version": "20",
+            "graphs": {"js": "./agent.js:graph"},
+            "image_distro": "wolfi",
+        }
+    )
+    tag = docker_tag(config)
+    assert tag == "langchain/langgraphjs-api:20-wolfi"
+
+
+def test_docker_tag_different_python_versions_with_distro():
+    """Test docker_tag with different Python versions and distros."""
+
+    versions_and_expected = [
+        ("3.11", "langchain/langgraph-api:3.11-wolfi"),
+        ("3.12", "langchain/langgraph-api:3.12-wolfi"),
+        ("3.13", "langchain/langgraph-api:3.13-wolfi"),
+    ]
+
+    for python_version, expected_tag in versions_and_expected:
+        config = validate_config(
+            {
+                "python_version": python_version,
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+                "image_distro": "wolfi",
+            }
+        )
+        tag = docker_tag(config)
+        assert tag == expected_tag, f"Failed for Python {python_version}"
+
+
+def test_docker_tag_different_node_versions_with_distro():
+    """Test docker_tag with different Node.js versions and distros."""
+
+    versions_and_expected = [
+        ("20", "langchain/langgraphjs-api:20-wolfi"),
+        ("21", "langchain/langgraphjs-api:21-wolfi"),
+        ("22", "langchain/langgraphjs-api:22-wolfi"),
+    ]
+
+    for node_version, expected_tag in versions_and_expected:
+        config = validate_config(
+            {
+                "node_version": node_version,
+                "graphs": {"agent": "./agent.js:graph"},
+                "image_distro": "wolfi",
+            }
+        )
+        tag = docker_tag(config)
+        assert tag == expected_tag, f"Failed for Node.js {node_version}"

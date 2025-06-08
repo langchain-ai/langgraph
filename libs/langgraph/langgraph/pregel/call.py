@@ -1,12 +1,14 @@
 """Utility to convert a user provided function into a Runnable with a ChannelWrite."""
 
+from __future__ import annotations
+
 import concurrent.futures
 import functools
 import inspect
 import sys
 import types
 from collections.abc import Generator, Sequence
-from typing import Any, Callable, Generic, Optional, TypeVar, cast
+from typing import Any, Callable, Generic, TypeVar, cast
 
 from langchain_core.runnables import Runnable
 from typing_extensions import ParamSpec
@@ -40,7 +42,7 @@ def _getattribute(obj: Any, name: str) -> Any:
     return obj, parent
 
 
-def _whichmodule(obj: Any, name: str) -> Optional[str]:
+def _whichmodule(obj: Any, name: str) -> str | None:
     """Find the module an object belongs to.
 
     This function differs from ``pickle.whichmodule`` in two ways:
@@ -74,7 +76,7 @@ def _whichmodule(obj: Any, name: str) -> Optional[str]:
     return None
 
 
-def identifier(obj: Any, name: Optional[str] = None) -> Optional[str]:
+def identifier(obj: Any, name: str | None = None) -> str | None:
     """Return the module and name of an object."""
     from langgraph.pregel.read import PregelNode
     from langgraph.utils.runnable import RunnableCallable, RunnableSeq
@@ -104,8 +106,8 @@ def identifier(obj: Any, name: Optional[str] = None) -> Optional[str]:
 
 
 def _lookup_module_and_qualname(
-    obj: Any, name: Optional[str] = None
-) -> Optional[tuple[types.ModuleType, str]]:
+    obj: Any, name: str | None = None
+) -> tuple[types.ModuleType, str] | None:
     if name is None:
         name = getattr(obj, "__qualname__", None)
     if name is None:  # pragma: no cover
@@ -251,8 +253,8 @@ class SyncAsyncFuture(Generic[T], concurrent.futures.Future[T]):
 def call(
     func: Callable[P, T],
     *args: Any,
-    retry: Optional[Sequence[RetryPolicy]] = None,
-    cache_policy: Optional[CachePolicy] = None,
+    retry_policy: Sequence[RetryPolicy] | None = None,
+    cache_policy: CachePolicy | None = None,
     **kwargs: Any,
 ) -> SyncAsyncFuture[T]:
     config = get_config()
@@ -260,7 +262,7 @@ def call(
     fut = impl(
         func,
         (args, kwargs),
-        retry=retry,
+        retry_policy=retry_policy,
         cache_policy=cache_policy,
         callbacks=config["callbacks"],
     )

@@ -89,7 +89,7 @@ def node_3(state: PrivateState) -> OutputState:
     # Read from PrivateState, write to OutputState
     return {"graph_output": state["bar"] + " Lance"}
 
-builder = StateGraph(OverallState,input=InputState,output=OutputState)
+builder = StateGraph(OverallState,input_schema=InputState,output_schema=OutputState)
 builder.add_node("node_1", node_1)
 builder.add_node("node_2", node_2)
 builder.add_node("node_3", node_3)
@@ -105,9 +105,9 @@ graph.invoke({"user_input":"My"})
 
 There are two subtle and important points to note here:
 
-1. We pass `state: InputState` as the input schema to `node_1`. But, we write out to `foo`, a channel in `OverallState`. How can we write out to a state channel that is not included in the input schema? This is because a node _can write to any state channel in the graph state._ The graph state is the union of of the state channels defined at initialization, which includes `OverallState` and the filters `InputState` and `OutputState`.
+1. We pass `state: InputState` as the input schema to `node_1`. But, we write out to `foo`, a channel in `OverallState`. How can we write out to a state channel that is not included in the input schema? This is because a node _can write to any state channel in the graph state._ The graph state is the union of the state channels defined at initialization, which includes `OverallState` and the filters `InputState` and `OutputState`.
 
-2. We initialize the graph with `StateGraph(OverallState,input=InputState,output=OutputState)`. So, how can we write to `PrivateState` in `node_2`? How does the graph gain access to this schema if it was not passed in the `StateGraph` initialization? We can do this because _nodes can also declare additional state channels_ as long as the state schema definition exists. In this case, the `PrivateState` schema is defined, so we can add `bar` as a new state channel in the graph and write to it.
+2. We initialize the graph with `StateGraph(OverallState,input_schema=InputState,output_schema=OutputState)`. So, how can we write to `PrivateState` in `node_2`? How does the graph gain access to this schema if it was not passed in the `StateGraph` initialization? We can do this because _nodes can also declare additional state channels_ as long as the state schema definition exists. In this case, the `PrivateState` schema is defined, so we can add `bar` as a new state channel in the graph and write to it.
 
 ### Reducers
 
@@ -167,7 +167,7 @@ In addition to keeping track of message IDs, the `add_messages` function will al
 {"messages": [{"type": "human", "content": "message"}]}
 ```
 
-Since the state updates are always deserialized into LangChain `Messages` when using `add_messages`, you should use dot notation to access message attributes, like `state["messages"][-1].content`. Below is an example of a graph that uses `add_messages` as it's reducer function.
+Since the state updates are always deserialized into LangChain `Messages` when using `add_messages`, you should use dot notation to access message attributes, like `state["messages"][-1].content`. Below is an example of a graph that uses `add_messages` as its reducer function.
 
 ```python
 from langchain_core.messages import AnyMessage
@@ -197,19 +197,25 @@ In LangGraph, nodes are typically python functions (sync or async) where the **f
 Similar to `NetworkX`, you add these nodes to a graph using the [add_node][langgraph.graph.StateGraph.add_node] method:
 
 ```python
+from typing_extensions import TypedDict
+
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph
 
-builder = StateGraph(dict)
+class State(TypedDict):
+    input: str
+    results: str
+
+builder = StateGraph(State)
 
 
-def my_node(state: dict, config: RunnableConfig):
+def my_node(state: State, config: RunnableConfig):
     print("In node: ", config["configurable"]["user_id"])
     return {"results": f"Hello, {state['input']}!"}
 
 
 # The second argument is optional
-def my_other_node(state: dict):
+def my_other_node(state: State):
     return state
 
 
@@ -246,6 +252,54 @@ from langgraph.graph import END
 
 graph.add_edge("node_a", END)
 ```
+
+### Node Caching
+
+LangGraph supports caching of tasks/nodes based on the input to the node. To use caching:
+
+* Specify a cache when compiling a graph (or specifying an entrypoint)
+* Specify a cache policy for nodes. Each cache policy supports:
+    * `key_func` used to generate a cache key based on the input to a node, which defaults to a `hash` of the input with pickle.
+    * `ttl`, the time to live for the cache in seconds. If not specified, the cache will never expire.
+
+For example:
+
+```py
+import time
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph
+from langgraph.cache.memory import InMemoryCache
+from langgraph.types import CachePolicy
+
+
+class State(TypedDict):
+    x: int
+    result: int
+
+
+builder = StateGraph(State)
+
+
+def expensive_node(state: State) -> dict[str, int]:
+    # expensive computation
+    time.sleep(2)
+    return {"result": state["x"] * 2}
+
+
+builder.add_node("expensive_node", expensive_node, cache_policy=CachePolicy(ttl=3))
+builder.set_entry_point("expensive_node")
+builder.set_finish_point("expensive_node")
+
+graph = builder.compile(cache=InMemoryCache())
+
+print(graph.invoke({"x": 5}, stream_mode='updates'))  # (1)!
+[{'expensive_node': {'result': 10}}]
+print(graph.invoke({"x": 5}, stream_mode='updates'))  # (2)!
+[{'expensive_node': {'result': 10}, '__metadata__': {'cached': True}}]
+```
+
+1. First run takes the full second to run (due to mocked expensive computation).
+2. Second run utilizes cache and returns quickly.
 
 ## Edges
 

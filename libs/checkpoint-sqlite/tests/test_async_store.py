@@ -2,6 +2,7 @@
 import asyncio
 import os
 import tempfile
+import uuid
 from collections.abc import AsyncIterator, Generator, Iterable
 from contextlib import asynccontextmanager
 from typing import Optional, Union, cast
@@ -492,3 +493,227 @@ async def test_embed_with_path(
         assert len(results) == 2
         assert results[0].score < 0.9
         assert results[1].score < 0.9
+
+
+async def test_basic_store_ops(
+    fake_embeddings: CharacterEmbeddings,
+) -> None:
+    """Test vector search with specific text fields in SQLite store."""
+    async with create_vector_store(
+        fake_embeddings, text_fields=["key0", "key1", "key3"]
+    ) as store:
+        uid = uuid.uuid4().hex
+        namespace = (uid, "test", "documents")
+        item_id = "doc1"
+        item_value = {"title": "Test Document", "content": "Hello, World!"}
+        results = await store.asearch((uid,))
+        assert len(results) == 0
+
+        await store.aput(namespace, item_id, item_value)
+        item = await store.aget(namespace, item_id)
+
+        assert item is not None
+        assert item.namespace == namespace
+        assert item.key == item_id
+        assert item.value == item_value
+        assert item.created_at is not None
+        assert item.updated_at is not None
+
+        updated_value = {
+            "title": "Updated Test Document",
+            "content": "Hello, LangGraph!",
+        }
+        await asyncio.sleep(1.01)
+        await store.aput(namespace, item_id, updated_value)
+        updated_item = await store.aget(namespace, item_id)
+        assert updated_item is not None
+
+        assert updated_item.value == updated_value
+        assert updated_item.updated_at > item.updated_at
+        different_namespace = (uid, "test", "other_documents")
+        item_in_different_namespace = await store.aget(different_namespace, item_id)
+        assert item_in_different_namespace is None
+
+        new_item_id = "doc2"
+        new_item_value = {"title": "Another Document", "content": "Greetings!"}
+        await store.aput(namespace, new_item_id, new_item_value)
+
+        items = await store.asearch((uid, "test"), limit=10)
+        assert len(items) == 2
+        assert any(item.key == item_id for item in items)
+        assert any(item.key == new_item_id for item in items)
+
+        namespaces = await store.alist_namespaces(prefix=(uid, "test"))
+        assert (uid, "test", "documents") in namespaces
+
+        await store.adelete(namespace, item_id)
+        await store.adelete(namespace, new_item_id)
+        deleted_item = await store.aget(namespace, item_id)
+        assert deleted_item is None
+
+        deleted_item = await store.aget(namespace, new_item_id)
+        assert deleted_item is None
+
+        empty_search_results = await store.asearch((uid, "test"), limit=10)
+        assert len(empty_search_results) == 0
+
+
+async def test_list_namespaces(
+    fake_embeddings: CharacterEmbeddings,
+) -> None:
+    """Test list namespaces functionality with various filters."""
+    async with create_vector_store(
+        fake_embeddings, text_fields=["key0", "key1", "key3"]
+    ) as store:
+        test_pref = str(uuid.uuid4())
+        test_namespaces = [
+            (test_pref, "test", "documents", "public", test_pref),
+            (test_pref, "test", "documents", "private", test_pref),
+            (test_pref, "test", "images", "public", test_pref),
+            (test_pref, "test", "images", "private", test_pref),
+            (test_pref, "prod", "documents", "public", test_pref),
+            (test_pref, "prod", "documents", "some", "nesting", "public", test_pref),
+            (test_pref, "prod", "documents", "private", test_pref),
+        ]
+
+        # Add test data
+        for namespace in test_namespaces:
+            await store.aput(namespace, "dummy", {"content": "dummy"})
+
+        # Test prefix filtering
+        prefix_result = await store.alist_namespaces(prefix=(test_pref, "test"))
+        assert len(prefix_result) == 4
+        assert all(ns[1] == "test" for ns in prefix_result)
+
+        # Test specific prefix
+        specific_prefix_result = await store.alist_namespaces(
+            prefix=(test_pref, "test", "documents")
+        )
+        assert len(specific_prefix_result) == 2
+        assert all(ns[1:3] == ("test", "documents") for ns in specific_prefix_result)
+
+        # Test suffix filtering
+        suffix_result = await store.alist_namespaces(suffix=("public", test_pref))
+        assert len(suffix_result) == 4
+        assert all(ns[-2] == "public" for ns in suffix_result)
+
+        # Test combined prefix and suffix
+        prefix_suffix_result = await store.alist_namespaces(
+            prefix=(test_pref, "test"), suffix=("public", test_pref)
+        )
+        assert len(prefix_suffix_result) == 2
+        assert all(
+            ns[1] == "test" and ns[-2] == "public" for ns in prefix_suffix_result
+        )
+
+        # Test wildcard in prefix
+        wildcard_prefix_result = await store.alist_namespaces(
+            prefix=(test_pref, "*", "documents")
+        )
+        assert len(wildcard_prefix_result) == 5
+        assert all(ns[2] == "documents" for ns in wildcard_prefix_result)
+
+        # Test wildcard in suffix
+        wildcard_suffix_result = await store.alist_namespaces(
+            suffix=("*", "public", test_pref)
+        )
+        assert len(wildcard_suffix_result) == 4
+        assert all(ns[-2] == "public" for ns in wildcard_suffix_result)
+
+        wildcard_single = await store.alist_namespaces(
+            suffix=("some", "*", "public", test_pref)
+        )
+        assert len(wildcard_single) == 1
+        assert wildcard_single[0] == (
+            test_pref,
+            "prod",
+            "documents",
+            "some",
+            "nesting",
+            "public",
+            test_pref,
+        )
+
+        # Test max depth
+        max_depth_result = await store.alist_namespaces(max_depth=3)
+        assert all(len(ns) <= 3 for ns in max_depth_result)
+
+        max_depth_result = await store.alist_namespaces(
+            max_depth=4, prefix=(test_pref, "*", "documents")
+        )
+        assert len(set(res for res in max_depth_result)) == len(max_depth_result) == 5
+
+        # Test pagination
+        limit_result = await store.alist_namespaces(prefix=(test_pref,), limit=3)
+        assert len(limit_result) == 3
+
+        offset_result = await store.alist_namespaces(prefix=(test_pref,), offset=3)
+        assert len(offset_result) == len(test_namespaces) - 3
+
+        empty_prefix_result = await store.alist_namespaces(prefix=(test_pref,))
+        assert len(empty_prefix_result) == len(test_namespaces)
+        assert set(empty_prefix_result) == set(test_namespaces)
+
+        # Clean up
+        for namespace in test_namespaces:
+            await store.adelete(namespace, "dummy")
+
+
+async def test_search_items(
+    fake_embeddings: CharacterEmbeddings,
+) -> None:
+    """Test search_items functionality by calling store methods directly."""
+    base = "test_search_items"
+    test_namespaces = [
+        (base, "documents", "user1"),
+        (base, "documents", "user2"),
+        (base, "reports", "department1"),
+        (base, "reports", "department2"),
+    ]
+    test_items = [
+        {"title": "Doc 1", "author": "John Doe", "tags": ["important"]},
+        {"title": "Doc 2", "author": "Jane Smith", "tags": ["draft"]},
+        {"title": "Report A", "author": "John Doe", "tags": ["final"]},
+        {"title": "Report B", "author": "Alice Johnson", "tags": ["draft"]},
+    ]
+
+    async with create_vector_store(
+        fake_embeddings, text_fields=["key0", "key1", "key3"]
+    ) as store:
+        # Insert test data
+        for ns, item in zip(test_namespaces, test_items):
+            key = f"item_{ns[-1]}"
+            await store.aput(ns, key, item)
+
+        # 1. Search documents
+        docs = await store.asearch((base, "documents"))
+        assert len(docs) == 2
+        assert all(item.namespace[1] == "documents" for item in docs)
+
+        # 2. Search reports
+        reports = await store.asearch((base, "reports"))
+        assert len(reports) == 2
+        assert all(item.namespace[1] == "reports" for item in reports)
+
+        # 3. Pagination
+        first_page = await store.asearch((base,), limit=2, offset=0)
+        second_page = await store.asearch((base,), limit=2, offset=2)
+        assert len(first_page) == 2
+        assert len(second_page) == 2
+        keys_page1 = {item.key for item in first_page}
+        keys_page2 = {item.key for item in second_page}
+        assert keys_page1.isdisjoint(keys_page2)
+        all_items = await store.asearch((base,))
+        assert len(all_items) == 4
+
+        john_items = await store.asearch((base,), filter={"author": "John Doe"})
+        assert len(john_items) == 2
+        assert all(item.value["author"] == "John Doe" for item in john_items)
+
+        draft_items = await store.asearch((base,), filter={"tags": ["draft"]})
+        assert len(draft_items) == 2
+        assert all("draft" in item.value["tags"] for item in draft_items)
+
+        for ns in test_namespaces:
+            key = f"item_{ns[-1]}"
+            await store.adelete(ns, key)

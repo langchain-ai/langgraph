@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sys
 import typing
 import warnings
@@ -6,8 +8,6 @@ from dataclasses import is_dataclass
 from functools import lru_cache
 from typing import (
     Any,
-    Optional,
-    Union,
     cast,
     overload,
 )
@@ -39,14 +39,14 @@ def get_fields(model: BaseModel) -> dict[str, FieldInfo]: ...
 
 
 def get_fields(
-    model: Union[type[BaseModel], BaseModel],
+    model: type[BaseModel] | BaseModel,
 ) -> dict[str, FieldInfo]:
     """Get the field names of a Pydantic model."""
     if hasattr(model, "model_fields"):
         return model.model_fields
 
     if hasattr(model, "__fields__"):
-        return model.__fields__  # type: ignore[return-value]
+        return model.__fields__
     msg = f"Expected a Pydantic model. Got {type(model)}"
     raise TypeError(msg)
 
@@ -61,7 +61,7 @@ NO_DEFAULT = object()
 def _create_root_model(
     name: str,
     type_: Any,
-    module_name: Optional[str] = None,
+    module_name: str | None = None,
     default_: object = NO_DEFAULT,
 ) -> type[BaseModel]:
     """Create a base class."""
@@ -115,7 +115,7 @@ def _create_root_model_cached(
     model_name: str,
     type_: Any,
     *,
-    module_name: Optional[str] = None,
+    module_name: str | None = None,
     default_: object = NO_DEFAULT,
 ) -> type[BaseModel]:
     return _create_root_model(
@@ -181,8 +181,8 @@ def _remap_field_definitions(field_definitions: dict[str, Any]) -> dict[str, Any
 def create_model(
     model_name: str,
     *,
-    field_definitions: Optional[dict[str, Any]] = None,
-    root: Optional[Any] = None,
+    field_definitions: dict[str, Any] | None = None,
+    root: Any | None = None,
 ) -> type[BaseModel]:
     """Create a pydantic model with the given field definitions.
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import os
 import pickle
@@ -7,7 +9,7 @@ from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
 from types import TracebackType
-from typing import Any, Optional, Union
+from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 
@@ -22,7 +24,6 @@ from langgraph.checkpoint.base import (
     get_checkpoint_id,
     get_checkpoint_metadata,
 )
-from langgraph.checkpoint.serde.types import TASKS, ChannelProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -64,9 +65,7 @@ class InMemorySaver(
     # thread ID ->  checkpoint NS -> checkpoint ID -> checkpoint mapping
     storage: defaultdict[
         str,
-        dict[
-            str, dict[str, tuple[tuple[str, bytes], tuple[str, bytes], Optional[str]]]
-        ],
+        dict[str, dict[str, tuple[tuple[str, bytes], tuple[str, bytes], str | None]]],
     ]
     # (thread ID, checkpoint NS, checkpoint ID) -> (task ID, write idx)
     writes: defaultdict[
@@ -75,7 +74,7 @@ class InMemorySaver(
     ]
     blobs: dict[
         tuple[
-            str, str, str, Union[str, int, float]
+            str, str, str, str | int | float
         ],  # thread id, checkpoint ns, channel, version
         tuple[str, bytes],
     ]
@@ -83,7 +82,7 @@ class InMemorySaver(
     def __init__(
         self,
         *,
-        serde: Optional[SerializerProtocol] = None,
+        serde: SerializerProtocol | None = None,
         factory: type[defaultdict] = defaultdict,
     ) -> None:
         super().__init__(serde=serde)
@@ -96,26 +95,26 @@ class InMemorySaver(
             self.stack.enter_context(self.writes)  # type: ignore[arg-type]
             self.stack.enter_context(self.blobs)  # type: ignore[arg-type]
 
-    def __enter__(self) -> "InMemorySaver":
+    def __enter__(self) -> InMemorySaver:
         return self.stack.__enter__()
 
     def __exit__(
         self,
-        exc_type: Optional[type[BaseException]],
-        exc_value: Optional[BaseException],
-        traceback: Optional[TracebackType],
-    ) -> Optional[bool]:
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None:
         return self.stack.__exit__(exc_type, exc_value, traceback)
 
-    async def __aenter__(self) -> "InMemorySaver":
+    async def __aenter__(self) -> InMemorySaver:
         return self.stack.__enter__()
 
     async def __aexit__(
         self,
-        __exc_type: Optional[type[BaseException]],
-        __exc_value: Optional[BaseException],
-        __traceback: Optional[TracebackType],
-    ) -> Optional[bool]:
+        __exc_type: type[BaseException] | None,
+        __exc_value: BaseException | None,
+        __traceback: TracebackType | None,
+    ) -> bool | None:
         return self.stack.__exit__(__exc_type, __exc_value, __traceback)
 
     def _load_blobs(
@@ -130,7 +129,7 @@ class InMemorySaver(
                     channel_values[k] = self.serde.loads_typed(vv)
         return channel_values
 
-    def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+    def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the in-memory storage.
 
         This method retrieves a checkpoint tuple from the in-memory storage based on the
@@ -150,19 +149,6 @@ class InMemorySaver(
             if saved := self.storage[thread_id][checkpoint_ns].get(checkpoint_id):
                 checkpoint, metadata, parent_checkpoint_id = saved
                 writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
-                if parent_checkpoint_id:
-                    sends = sorted(
-                        (
-                            (*w, k[1])
-                            for k, w in self.writes[
-                                (thread_id, checkpoint_ns, parent_checkpoint_id)
-                            ].items()
-                            if w[1] == TASKS
-                        ),
-                        key=lambda w: (w[3], w[0], w[4]),
-                    )
-                else:
-                    sends = []
                 checkpoint_: Checkpoint = self.serde.loads_typed(checkpoint)
                 return CheckpointTuple(
                     config=config,
@@ -171,7 +157,6 @@ class InMemorySaver(
                         "channel_values": self._load_blobs(
                             thread_id, checkpoint_ns, checkpoint_["channel_versions"]
                         ),
-                        "pending_sends": [self.serde.loads_typed(s[2]) for s in sends],
                     },
                     metadata=self.serde.loads_typed(metadata),
                     pending_writes=[
@@ -194,22 +179,7 @@ class InMemorySaver(
                 checkpoint_id = max(checkpoints.keys())
                 checkpoint, metadata, parent_checkpoint_id = checkpoints[checkpoint_id]
                 writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
-                if parent_checkpoint_id:
-                    sends = sorted(
-                        (
-                            (*w, k[1])
-                            for k, w in self.writes[
-                                (thread_id, checkpoint_ns, parent_checkpoint_id)
-                            ].items()
-                            if w[1] == TASKS
-                        ),
-                        key=lambda w: (w[3], w[0], w[4]),
-                    )
-                else:
-                    sends = []
-
                 checkpoint_ = self.serde.loads_typed(checkpoint)
-
                 return CheckpointTuple(
                     config={
                         "configurable": {
@@ -223,7 +193,6 @@ class InMemorySaver(
                         "channel_values": self._load_blobs(
                             thread_id, checkpoint_ns, checkpoint_["channel_versions"]
                         ),
-                        "pending_sends": [self.serde.loads_typed(s[2]) for s in sends],
                     },
                     metadata=self.serde.loads_typed(metadata),
                     pending_writes=[
@@ -244,11 +213,11 @@ class InMemorySaver(
 
     def list(
         self,
-        config: Optional[RunnableConfig],
+        config: RunnableConfig | None,
         *,
-        filter: Optional[dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
     ) -> Iterator[CheckpointTuple]:
         """List checkpoints from the in-memory storage.
 
@@ -316,20 +285,6 @@ class InMemorySaver(
                         (thread_id, checkpoint_ns, checkpoint_id)
                     ].values()
 
-                    if parent_checkpoint_id:
-                        sends = sorted(
-                            (
-                                (*w, k[1])
-                                for k, w in self.writes[
-                                    (thread_id, checkpoint_ns, parent_checkpoint_id)
-                                ].items()
-                                if w[1] == TASKS
-                            ),
-                            key=lambda w: (w[3], w[0], w[4]),
-                        )
-                    else:
-                        sends = []
-
                     checkpoint_: Checkpoint = self.serde.loads_typed(checkpoint)
 
                     yield CheckpointTuple(
@@ -347,9 +302,6 @@ class InMemorySaver(
                                 checkpoint_ns,
                                 checkpoint_["channel_versions"],
                             ),
-                            "pending_sends": [
-                                self.serde.loads_typed(s[2]) for s in sends
-                            ],
                         },
                         metadata=metadata,
                         parent_config=(
@@ -390,7 +342,6 @@ class InMemorySaver(
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
         """
         c = checkpoint.copy()
-        c.pop("pending_sends")  # type: ignore[misc]
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         values: dict[str, Any] = c.pop("channel_values")  # type: ignore[misc]
@@ -471,7 +422,7 @@ class InMemorySaver(
             if k[0] == thread_id:
                 del self.blobs[k]
 
-    async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+    async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Asynchronous version of get_tuple.
 
         This method is an asynchronous wrapper around get_tuple that runs the synchronous
@@ -487,11 +438,11 @@ class InMemorySaver(
 
     async def alist(
         self,
-        config: Optional[RunnableConfig],
+        config: RunnableConfig | None,
         *,
-        filter: Optional[dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
     ) -> AsyncIterator[CheckpointTuple]:
         """Asynchronous version of list.
 
@@ -561,7 +512,7 @@ class InMemorySaver(
         """
         return self.delete_thread(thread_id)
 
-    def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
+    def get_next_version(self, current: str | None) -> str:
         if current is None:
             current_v = 0
         elif isinstance(current, int):
@@ -620,7 +571,7 @@ class PersistentDict(defaultdict):
         self.sync()
         self.clear()
 
-    def __enter__(self) -> "PersistentDict":
+    def __enter__(self) -> PersistentDict:
         return self
 
     def __exit__(self, *exc_info: Any) -> None:

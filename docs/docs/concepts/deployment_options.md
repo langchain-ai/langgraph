@@ -40,8 +40,8 @@ For more information, please see:
 
 ## Self-Hosted Data Plane
 
-!!! important "Beta"
-    The Self-Hosted Data Plane deployment option is currently in beta stage.
+!!! info "Important"
+    The Self-Hosted Data Plane deployment option is currently in beta stage and requires an [Enterprise](../concepts/plans.md) plan.
 
 The [Self-Hosted Data Plane](./langgraph_self_hosted_data_plane.md) deployment option is a "hybrid" model for deployment where we manage the [control plane](./langgraph_control_plane.md) in our cloud and you manage the [data plane](./langgraph_data_plane.md) in your cloud. This option provides a way to securely manage your data plane infrastructure, while offloading control plane management to us.
 
@@ -56,10 +56,10 @@ For more information, please see:
 
 ## Self-Hosted Control Plane
 
-!!! important "Beta"
-    The Self-Hosted Control Plane deployment option is currently in beta stage.
+!!! info "Important"
+    The Self-Hosted Control Plane deployment option is currently in beta stage and requires an [Enterprise](../concepts/plans.md) plan.
 
-The [Self-Hosted Control Plane](./langgraph_self_hosted_control_plane.md) deployment option is a fully self-hosted model for deployment where you manage the [control plane](./langgraph_control_plane.md) and [data plane](./langgraph_data_plane.md) in your cloud. This option give you full control and responsibility of the control plane and data plane infrastructure.
+The [Self-Hosted Control Plane](./langgraph_self_hosted_control_plane.md) deployment option is a fully self-hosted model for deployment where you manage the [control plane](./langgraph_control_plane.md) and [data plane](./langgraph_data_plane.md) in your cloud. This option gives you full control and responsibility of the control plane and data plane infrastructure.
 
 Build a Docker image using the [LangGraph CLI](./langgraph_cli.md) and deploy your LangGraph Server from the [control plane UI](./langgraph_control_plane.md#control-plane-ui).
 
