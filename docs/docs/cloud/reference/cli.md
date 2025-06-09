@@ -43,6 +43,7 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
     | <span style="white-space: nowrap;">`graphs`</span>           | **Required**. Mapping from graph ID to path where the compiled graph or a function that makes a graph is defined. Example: <ul><li>`./your_package/your_file.py:variable`, where `variable` is an instance of `langgraph.graph.state.CompiledStateGraph`</li><li>`./your_package/your_file.py:make_graph`, where `make_graph` is a function that takes a config dictionary (`langchain_core.runnables.RunnableConfig`) and returns an instance of `langgraph.graph.state.StateGraph` or `langgraph.graph.state.CompiledStateGraph`. See [how to rebuild a graph at runtime](../../cloud/deployment/graph_rebuild.md) for more details.</li></ul>                                    |
     | <span style="white-space: nowrap;">`auth`</span>             | _(Added in v0.0.11)_ Auth configuration containing the path to your authentication handler. Example: `./your_package/auth.py:auth`, where `auth` is an instance of `langgraph_sdk.Auth`. See [authentication guide](../../concepts/auth.md) for details.                                                                                                                                                                                                                                                                                                                        |
     | <span style="white-space: nowrap;">`base_image`</span>       | Optional. Base image to use for the LangGraph API server. Defaults to `langchain/langgraph-api` or `langchain/langgraphjs-api`. Use this to pin your builds to a particular version of the langgraph API, such as `"langchain/langgraph-server:0.2"`. See https://hub.docker.com/r/langchain/langgraph-server/tags for more details. (added in `langgraph-cli==0.2.8`) |
+    | <span style="white-space: nowrap;">`image_distro`</span>     | Optional. Linux distribution for the base image. Must be either `"debian"` or `"wolfi"`. If omitted, defaults to `"debian"`. Available in `langgraph-cli>=0.2.11`.|
     | <span style="white-space: nowrap;">`env`</span>              | Path to `.env` file or a mapping from environment variable to its value.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
     | <span style="white-space: nowrap;">`store`</span>            | Configuration for adding semantic search and/or time-to-live (TTL) to the BaseStore. Contains the following fields: <ul><li>`index` (optional): Configuration for semantic search indexing with fields `embed`, `dims`, and optional `fields`.</li><li>`ttl` (optional): Configuration for item expiration. An object with optional fields: `refresh_on_read` (boolean, defaults to `true`), `default_ttl` (float, lifespan in **minutes**, defaults to no expiration), and `sweep_interval_minutes` (integer, how often to check for expired items, defaults to no sweeping).</li></ul> |
     | <span style="white-space: nowrap;">`ui`</span>               | Optional. Named definitions of UI components emitted by the agent, each pointing to a JS/TS file. (added in `langgraph-cli==0.1.84`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
@@ -76,6 +77,20 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
       "graphs": {
         "chat": "./chat/graph.py:graph"
       }
+    }
+    ```
+
+    #### Using Wolfi Base Images
+
+    You can specify the Linux distribution for your base image using the `image_distro` field. Valid options are `debian` or `wolfi`. Wolfi is the recommended option as it provides smaller and more secure images. This is available in `langgraph-cli>=0.2.11`.
+
+    ```json
+    {
+      "dependencies": ["."],
+      "graphs": {
+        "chat": "./chat/graph.py:graph"
+      },
+      "image_distro": "wolfi"
     }
     ```
 

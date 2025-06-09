@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import json
 from collections.abc import Sequence
-from typing import Any, Optional
+from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 
@@ -52,9 +54,9 @@ def _metadata_predicate(
 
 
 def search_where(
-    config: Optional[RunnableConfig],
-    filter: Optional[dict[str, Any]],
-    before: Optional[RunnableConfig] = None,
+    config: RunnableConfig | None,
+    filter: dict[str, Any] | None,
+    before: RunnableConfig | None = None,
 ) -> tuple[str, Sequence[Any]]:
     """Return WHERE clause predicates for (a)search() given metadata filter
     and `before` config.

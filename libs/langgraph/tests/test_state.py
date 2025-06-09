@@ -153,7 +153,7 @@ def test_state_schema_optional_values(total_: bool):
     class State(InputState):  # this would be ignored
         val4: dict
 
-    builder = StateGraph(State, input=InputState, output=OutputState)
+    builder = StateGraph(State, input_schema=InputState, output_schema=OutputState)
     builder.add_node("n", lambda x: x)
     builder.add_edge("__start__", "n")
     graph = builder.compile()

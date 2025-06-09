@@ -4310,7 +4310,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
         assert isinstance(data, State)
         return "retriever_two"
 
-    workflow = StateGraph(State, input=Input, output=Output)
+    workflow = StateGraph(State, input_schema=Input, output_schema=Output)
 
     workflow.add_node("rewrite_query", rewrite_query)
     workflow.add_node("analyzer_one", analyzer_one)

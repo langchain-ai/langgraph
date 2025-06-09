@@ -1,10 +1,10 @@
+from __future__ import annotations
+
 from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import (
     Any,
     Callable,
-    Optional,
     TypeVar,
-    Union,
     cast,
 )
 from uuid import UUID, uuid4
@@ -36,7 +36,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         self.stream = stream
         self.subgraphs = subgraphs
         self.metadata: dict[UUID, Meta] = {}
-        self.seen: set[Union[int, str]] = set()
+        self.seen: set[int | str] = set()
 
     def _emit(self, meta: Meta, message: BaseMessage, *, dedupe: bool = False) -> None:
         if dedupe and message.id in self.seen:
@@ -89,9 +89,9 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         messages: list[list[BaseMessage]],
         *,
         run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
-        tags: Optional[list[str]] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        parent_run_id: UUID | None = None,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> Any:
         if metadata and (
@@ -111,10 +111,10 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         self,
         token: str,
         *,
-        chunk: Optional[ChatGenerationChunk] = None,
+        chunk: ChatGenerationChunk | None = None,
         run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
-        tags: Optional[list[str]] = None,
+        parent_run_id: UUID | None = None,
+        tags: list[str] | None = None,
         **kwargs: Any,
     ) -> Any:
         if not isinstance(chunk, ChatGenerationChunk):
@@ -127,7 +127,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         response: LLMResult,
         *,
         run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
+        parent_run_id: UUID | None = None,
         **kwargs: Any,
     ) -> Any:
         if meta := self.metadata.get(run_id):
@@ -142,7 +142,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         error: BaseException,
         *,
         run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
+        parent_run_id: UUID | None = None,
         **kwargs: Any,
     ) -> Any:
         self.metadata.pop(run_id, None)
@@ -153,9 +153,9 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         inputs: dict[str, Any],
         *,
         run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
-        tags: Optional[list[str]] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        parent_run_id: UUID | None = None,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> Any:
         if (
@@ -185,7 +185,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         response: Any,
         *,
         run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
+        parent_run_id: UUID | None = None,
         **kwargs: Any,
     ) -> Any:
         if meta := self.metadata.pop(run_id, None):
@@ -210,7 +210,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         error: BaseException,
         *,
         run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
+        parent_run_id: UUID | None = None,
         **kwargs: Any,
     ) -> Any:
         self.metadata.pop(run_id, None)

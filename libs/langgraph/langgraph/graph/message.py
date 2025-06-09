@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import uuid
 import warnings
 from collections.abc import Sequence
@@ -7,7 +9,6 @@ from typing import (
     Any,
     Callable,
     Literal,
-    Optional,
     Union,
     cast,
 )
@@ -32,8 +33,8 @@ REMOVE_ALL_MESSAGES = "__remove_all__"
 
 def _add_messages_wrapper(func: Callable) -> Callable[[Messages, Messages], Messages]:
     def _add_messages(
-        left: Optional[Messages] = None, right: Optional[Messages] = None, **kwargs: Any
-    ) -> Union[Messages, Callable[[Messages, Messages], Messages]]:
+        left: Messages | None = None, right: Messages | None = None, **kwargs: Any
+    ) -> Messages | Callable[[Messages, Messages], Messages]:
         if left is not None and right is not None:
             return func(left, right, **kwargs)
         elif left is not None or right is not None:
@@ -54,7 +55,7 @@ def add_messages(
     left: Messages,
     right: Messages,
     *,
-    format: Optional[Literal["langchain-openai"]] = None,
+    format: Literal["langchain-openai"] | None = None,
 ) -> Messages:
     """Merges two lists of messages, updating existing messages by ID.
 
@@ -246,9 +247,9 @@ def _format_messages(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
 
 
 def push_message(
-    message: Union[MessageLikeRepresentation, BaseMessageChunk],
+    message: MessageLikeRepresentation | BaseMessageChunk,
     *,
-    state_key: Optional[str] = "messages",
+    state_key: str | None = "messages",
 ) -> AnyMessage:
     """Write a message manually to the `messages` / `messages-tuple` stream mode.
 

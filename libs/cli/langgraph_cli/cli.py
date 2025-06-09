@@ -318,10 +318,8 @@ def _build(
     )
     # add additional_contexts
     if additional_contexts:
-        additional_contexts_str = ",".join(
-            f"{k}={v}" for k, v in additional_contexts.items()
-        )
-        args.extend(["--build-context", additional_contexts_str])
+        for k, v in additional_contexts.items():
+            args.extend(["--build-context", f"{k}={v}"])
     # run docker build
     runner.run(
         subp_exec(

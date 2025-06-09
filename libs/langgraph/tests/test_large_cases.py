@@ -570,7 +570,7 @@ def test_conditional_state_graph(
     workflow = StateGraph(AgentState)
 
     workflow.add_node("agent", agent)
-    workflow.add_node("tools", execute_tools, input=ToolState)
+    workflow.add_node("tools", execute_tools, input_schema=ToolState)
 
     workflow.set_entry_point("agent")
 
