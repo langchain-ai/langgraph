@@ -1095,6 +1095,8 @@ semver_pattern = re.compile(r":(\d+(?:\.\d+)?(?:\.\d+)?)(?:-|$)")
 
 
 def _image_supports_uv(base_image: str) -> bool:
+    if base_image == "langchain/langgraph-trial":
+        return False
     match = semver_pattern.search(base_image)
     if not match:
         # Default image (langchain/langgraph-api) supports it.
