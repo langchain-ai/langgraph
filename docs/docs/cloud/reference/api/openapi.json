@@ -3818,6 +3818,14 @@
             "title": "Filter",
             "description": "Optional dictionary of key-value pairs to filter results."
           },
+          "query": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "title": "Query",
+            "description": "Query string for semantic/vector search."
+          },
           "limit": {
             "type": "integer",
             "default": 10,
