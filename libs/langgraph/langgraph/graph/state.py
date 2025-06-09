@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import inspect
 import logging
 import typing
@@ -10,9 +12,10 @@ from types import FunctionType
 from typing import (
     Any,
     Callable,
+    Generic,
     Literal,
     NamedTuple,
-    Optional,
+    Protocol,
     Union,
     cast,
     get_args,
@@ -23,17 +26,12 @@ from typing import (
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel
-from typing_extensions import Self
+from typing_extensions import Self, TypeAlias, Unpack
 
-from langgraph._api.deprecation import LangGraphDeprecationWarning
+from langgraph._typing import UNSET, DeprecatedKwargs
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
-from langgraph.channels.dynamic_barrier_value import (
-    DynamicBarrierValue,
-    DynamicBarrierValueAfterFinish,
-    WaitForNames,
-)
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue, LastValueAfterFinish
 from langgraph.channels.named_barrier_value import (
@@ -43,10 +41,12 @@ from langgraph.channels.named_barrier_value import (
 from langgraph.checkpoint.base import Checkpoint
 from langgraph.constants import (
     EMPTY_SEQ,
+    END,
     INTERRUPT,
     MISSING,
     NS_END,
     NS_SEP,
+    START,
     TAG_HIDDEN,
     TASKS,
 )
@@ -57,22 +57,11 @@ from langgraph.errors import (
     create_error_message,
 )
 from langgraph.graph.branch import Branch
-from langgraph.graph.graph import (
-    END,
-    START,
-    CompiledGraph,
-    Graph,
-    Send,
-)
-from langgraph.graph.schema_utils import SchemaCoercionMapper
 from langgraph.managed.base import (
-    ChannelKeyPlaceholder,
-    ChannelTypePlaceholder,
-    ConfiguredManagedValue,
     ManagedValueSpec,
     is_managed_value,
-    is_writable_managed_value,
 )
+from langgraph.pregel import Pregel
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.write import (
     ChannelWrite,
@@ -80,15 +69,29 @@ from langgraph.pregel.write import (
     ChannelWriteTupleEntry,
 )
 from langgraph.store.base import BaseStore
-from langgraph.types import All, CachePolicy, Checkpointer, Command, RetryPolicy
-from langgraph.utils.fields import get_field_default, get_update_as_tuples
+from langgraph.types import (
+    All,
+    CachePolicy,
+    Checkpointer,
+    Command,
+    RetryPolicy,
+    Send,
+    StreamWriter,
+)
+from langgraph.typing import InputT, OutputT, StateT, StateT_contra
+from langgraph.utils.fields import (
+    get_cached_annotated_keys,
+    get_field_default,
+    get_update_as_tuples,
+)
 from langgraph.utils.pydantic import create_model
-from langgraph.utils.runnable import RunnableLike, coerce_to_runnable
+from langgraph.utils.runnable import coerce_to_runnable
+from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 logger = logging.getLogger(__name__)
 
 
-def _warn_invalid_state_schema(schema: Union[type[Any], Any]) -> None:
+def _warn_invalid_state_schema(schema: type[Any] | Any) -> None:
     if isinstance(schema, type):
         return
     if typing.get_args(schema):
@@ -100,26 +103,88 @@ def _warn_invalid_state_schema(schema: Union[type[Any], Any]) -> None:
     )
 
 
-def _get_node_name(node: RunnableLike) -> str:
-    if isinstance(node, Runnable):
-        return node.get_name()
-    elif callable(node):
+class _StateNode(Protocol[StateT_contra]):
+    def __call__(self, state: StateT_contra) -> Any: ...
+
+
+class _NodeWithConfig(Protocol[StateT_contra]):
+    def __call__(self, state: StateT_contra, config: RunnableConfig) -> Any: ...
+
+
+class _NodeWithWriter(Protocol[StateT_contra]):
+    def __call__(self, state: StateT_contra, *, writer: StreamWriter) -> Any: ...
+
+
+class _NodeWithStore(Protocol[StateT_contra]):
+    def __call__(self, state: StateT_contra, *, store: BaseStore) -> Any: ...
+
+
+class _NodeWithWriterStore(Protocol[StateT_contra]):
+    def __call__(
+        self, state: StateT_contra, *, writer: StreamWriter, store: BaseStore
+    ) -> Any: ...
+
+
+class _NodeWithConfigWriter(Protocol[StateT_contra]):
+    def __call__(
+        self, state: StateT_contra, *, config: RunnableConfig, writer: StreamWriter
+    ) -> Any: ...
+
+
+class _NodeWithConfigStore(Protocol[StateT_contra]):
+    def __call__(
+        self, state: StateT_contra, *, config: RunnableConfig, store: BaseStore
+    ) -> Any: ...
+
+
+class _NodeWithConfigWriterStore(Protocol[StateT_contra]):
+    def __call__(
+        self,
+        state: StateT_contra,
+        *,
+        config: RunnableConfig,
+        writer: StreamWriter,
+        store: BaseStore,
+    ) -> Any: ...
+
+
+# TODO: we probably don't want to explicitly support the config / store signatures once
+# we move to adding a context arg. Maybe what we do is we add support for kwargs with param spec
+# this is purely for typing purposes though, so can easily change in the coming weeks.
+StateNode: TypeAlias = Union[
+    _StateNode[StateT_contra],
+    _NodeWithConfig[StateT_contra],
+    _NodeWithWriter[StateT_contra],
+    _NodeWithStore[StateT_contra],
+    _NodeWithWriterStore[StateT_contra],
+    _NodeWithConfigWriter[StateT_contra],
+    _NodeWithConfigStore[StateT_contra],
+    _NodeWithConfigWriterStore[StateT_contra],
+]
+
+
+def _get_node_name(node: StateNode) -> str:
+    try:
         return getattr(node, "__name__", node.__class__.__name__)
-    else:
+    except AttributeError:
         raise TypeError(f"Unsupported node type: {type(node)}")
 
 
 class StateNodeSpec(NamedTuple):
-    runnable: Runnable
-    metadata: Optional[dict[str, Any]]
+    # TODO: rename this callable, also move away from NamedTuple so that we can use
+    # a generic StateNode, so maybe a dataclass
+    runnable: StateNode
+    metadata: dict[str, Any] | None
+    # TODO: rename to input_schema, though we really just want to modify this structure to
+    # be a dataclass
     input: type[Any]
-    retry_policy: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]]
-    cache_policy: Optional[CachePolicy]
-    ends: Optional[Union[tuple[str, ...], dict[str, str]]] = EMPTY_SEQ
+    retry_policy: RetryPolicy | Sequence[RetryPolicy] | None
+    cache_policy: CachePolicy | None
+    ends: tuple[str, ...] | dict[str, str] | None = EMPTY_SEQ
     defer: bool = False
 
 
-class StateGraph(Graph):
+class StateGraph(Generic[StateT, InputT, OutputT]):
     """A graph whose nodes communicate by reading and writing to a shared state.
     The signature of each node is State -> Partial<State>.
 
@@ -171,47 +236,63 @@ class StateGraph(Graph):
         ```
     """
 
-    nodes: dict[str, StateNodeSpec]  # type: ignore[assignment]
+    edges: set[tuple[str, str]]
+    nodes: dict[str, StateNodeSpec]
+    branches: defaultdict[str, dict[str, Branch]]
     channels: dict[str, BaseChannel]
     managed: dict[str, ManagedValueSpec]
-    schemas: dict[type[Any], dict[str, Union[BaseChannel, ManagedValueSpec]]]
+    schemas: dict[type[Any], dict[str, BaseChannel | ManagedValueSpec]]
+    waiting_edges: set[tuple[tuple[str, ...], str]]
+
+    compiled: bool
+    state_schema: type[StateT]
+    input_schema: type[InputT]
+    output_schema: type[OutputT]
 
     def __init__(
         self,
-        state_schema: Optional[type[Any]] = None,
-        config_schema: Optional[type[Any]] = None,
+        state_schema: type[StateT],
+        config_schema: type[Any] | None = None,
         *,
-        input: Optional[type[Any]] = None,
-        output: Optional[type[Any]] = None,
+        input_schema: type[InputT] | None = None,
+        output_schema: type[OutputT] | None = None,
+        **kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
-        super().__init__()
-        if state_schema is None:
-            if input is None or output is None:
-                raise ValueError("Must provide state_schema or input and output")
-            state_schema = input
+        if (input_ := kwargs.get("input", UNSET)) is not UNSET:
             warnings.warn(
-                "Initializing StateGraph without state_schema is deprecated. "
-                "Please pass in an explicit state_schema instead of just an input and output schema.",
-                LangGraphDeprecationWarning,
+                "`input` is deprecated and will be removed. Please use `input_schema` instead.",
+                category=LangGraphDeprecatedSinceV10,
                 stacklevel=2,
             )
-        else:
-            if input is None:
-                input = state_schema
-            if output is None:
-                output = state_schema
+            if input_schema is None:
+                input_schema = cast(Union[type[InputT], None], input_)
+
+        if (output := kwargs.get("output", UNSET)) is not UNSET:
+            warnings.warn(
+                "`output` is deprecated and will be removed. Please use `output_schema` instead.",
+                category=LangGraphDeprecatedSinceV10,
+                stacklevel=2,
+            )
+            if output_schema is None:
+                output_schema = cast(Union[type[OutputT], None], output)
+
+        self.nodes = {}
+        self.edges = set()
+        self.branches = defaultdict(dict)
         self.schemas = {}
         self.channels = {}
         self.managed = {}
-        self.type_hints: dict[type[Any], dict[str, Any]] = {}
-        self.schema = state_schema
-        self.input = input
-        self.output = output
-        self._add_schema(state_schema)
-        self._add_schema(input, allow_managed=False)
-        self._add_schema(output, allow_managed=False)
+        self.compiled = False
+        self.waiting_edges = set()
+
+        self.state_schema = state_schema
+        self.input_schema = cast(type[InputT], input_schema or state_schema)
+        self.output_schema = cast(type[OutputT], output_schema or state_schema)
         self.config_schema = config_schema
-        self.waiting_edges: set[tuple[tuple[str, ...], str]] = set()
+
+        self._add_schema(self.state_schema)
+        self._add_schema(self.input_schema, allow_managed=False)
+        self._add_schema(self.output_schema, allow_managed=False)
 
     @property
     def _all_edges(self) -> set[tuple[str, str]]:
@@ -231,7 +312,6 @@ class StateGraph(Graph):
                     " Managed channels are not permitted in Input/Output schema."
                 )
             self.schemas[schema] = {**channels, **managed}
-            self.type_hints[schema] = type_hints
             for key, channel in channels.items():
                 if key in self.channels:
                     if self.channels[key] != channel:
@@ -255,14 +335,15 @@ class StateGraph(Graph):
     @overload
     def add_node(
         self,
-        node: RunnableLike,
+        node: StateNode[StateT],
         *,
         defer: bool = False,
-        metadata: Optional[dict[str, Any]] = None,
-        input: Optional[type[Any]] = None,
-        retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
-        cache_policy: Optional[CachePolicy] = None,
-        destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
+        metadata: dict[str, Any] | None = None,
+        input_schema: type[Any] | None = None,
+        retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+        cache_policy: CachePolicy | None = None,
+        destinations: dict[str, str] | tuple[str, ...] | None = None,
+        **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the state graph.
         Will take the name of the function/runnable as the node name.
@@ -273,29 +354,31 @@ class StateGraph(Graph):
     def add_node(
         self,
         node: str,
-        action: RunnableLike,
+        action: StateNode[StateT],
         *,
         defer: bool = False,
-        metadata: Optional[dict[str, Any]] = None,
-        input: Optional[type[Any]] = None,
-        retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
-        cache_policy: Optional[CachePolicy] = None,
-        destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
+        metadata: dict[str, Any] | None = None,
+        input_schema: type[Any] | None = None,
+        retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+        cache_policy: CachePolicy | None = None,
+        destinations: dict[str, str] | tuple[str, ...] | None = None,
+        **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the state graph."""
         ...
 
     def add_node(
         self,
-        node: Union[str, RunnableLike],
-        action: Optional[RunnableLike] = None,
+        node: str | StateNode[StateT],
+        action: StateNode[StateT] | None = None,
         *,
         defer: bool = False,
-        metadata: Optional[dict[str, Any]] = None,
-        input: Optional[type[Any]] = None,
-        retry: Optional[Union[RetryPolicy, Sequence[RetryPolicy]]] = None,
-        cache_policy: Optional[CachePolicy] = None,
-        destinations: Optional[Union[dict[str, str], tuple[str, ...]]] = None,
+        metadata: dict[str, Any] | None = None,
+        input_schema: type[Any] | None = None,
+        retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+        cache_policy: CachePolicy | None = None,
+        destinations: dict[str, str] | tuple[str, ...] | None = None,
+        **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the state graph.
 
@@ -306,8 +389,8 @@ class StateGraph(Graph):
                 Will be used as the node function or runnable if `node` is a string (node name).
             defer: Whether to defer the execution of the node until the run is about to end.
             metadata: The metadata associated with the node. (default: None)
-            input: The input schema for the node. (default: the graph's input schema)
-            retry: The policy for retrying the node. (default: None)
+            input_schema: The input schema for the node. (default: the graph's state schema)
+            retry_policy: The retry policy for the node. (default: None)
                 If a sequence is provided, the first matching policy will be applied.
             cache_policy: The cache policy for the node. (default: None)
             destinations: Destinations that indicate where a node can route to.
@@ -315,17 +398,21 @@ class StateGraph(Graph):
                 If a dict is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
                 If a tuple is provided, the values will be used as the target node names.
                 NOTE: this is only used for graph rendering and doesn't have any effect on the graph execution.
-        Raises:
-            ValueError: If the key is already being used as a state key.
 
         Example:
             ```python
+            from typing_extensions import TypedDict
+
+            from langchain_core.runnables import RunnableConfig
             from langgraph.graph import START, StateGraph
 
-            def my_node(state, config):
+            class State(TypedDict):
+                x: int
+
+            def my_node(state: State, config: RunnableConfig) -> State:
                 return {"x": state["x"] + 1}
 
-            builder = StateGraph(dict)
+            builder = StateGraph(State)
             builder.add_node(my_node)  # node name will be 'my_node'
             builder.add_edge(START, "my_node")
             graph = builder.compile()
@@ -335,7 +422,7 @@ class StateGraph(Graph):
 
         Example: Customize the name:
             ```python
-            builder = StateGraph(dict)
+            builder = StateGraph(State)
             builder.add_node("my_fair_node", my_node)
             builder.add_edge(START, "my_fair_node")
             graph = builder.compile()
@@ -346,6 +433,22 @@ class StateGraph(Graph):
         Returns:
             Self: The instance of the state graph, allowing for method chaining.
         """
+        if (retry := kwargs.get("retry", UNSET)) is not UNSET:
+            warnings.warn(
+                "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
+                category=LangGraphDeprecatedSinceV10,
+            )
+            if retry_policy is None:
+                retry_policy = retry  # type: ignore[assignment]
+
+        if (input_ := kwargs.get("input", UNSET)) is not UNSET:
+            warnings.warn(
+                "`input` is deprecated and will be removed. Please use `input_schema` instead.",
+                category=LangGraphDeprecatedSinceV10,
+            )
+            if input_schema is None:
+                input_schema = cast(Union[type[InputT], None], input_)
+
         if not isinstance(node, str):
             action = node
             if isinstance(action, Runnable):
@@ -356,8 +459,6 @@ class StateGraph(Graph):
                 raise ValueError(
                     "Node name must be provided if action is not a function"
                 )
-        if node in self.channels:
-            raise ValueError(f"'{node}' is already being used as a state key")
         if self.compiled:
             logger.warning(
                 "Adding a node to a graph that has already been compiled. This will "
@@ -378,12 +479,12 @@ class StateGraph(Graph):
             raise ValueError(f"Node `{node}` is reserved.")
 
         for character in (NS_SEP, NS_END):
-            if character in cast(str, node):
+            if character in node:
                 raise ValueError(
                     f"'{character}' is a reserved character and is not allowed in the node names."
                 )
 
-        ends: Union[tuple[str, ...], dict[str, str]] = EMPTY_SEQ
+        ends: tuple[str, ...] | dict[str, str] = EMPTY_SEQ
         try:
             if (
                 isfunction(action)
@@ -393,7 +494,7 @@ class StateGraph(Graph):
                 hints := get_type_hints(getattr(action, "__call__"))
                 or get_type_hints(action)
             ):
-                if input is None:
+                if input_schema is None:
                     first_parameter_name = next(
                         iter(
                             inspect.signature(
@@ -403,7 +504,7 @@ class StateGraph(Graph):
                     )
                     if input_hint := hints.get(first_parameter_name):
                         if isinstance(input_hint, type) and get_type_hints(input_hint):
-                            input = input_hint
+                            input_schema = input_hint
                 if rtn := hints.get("return"):
                     # Handle Union types
                     rtn_origin = get_origin(rtn)
@@ -431,20 +532,20 @@ class StateGraph(Graph):
         if destinations is not None:
             ends = destinations
 
-        if input is not None:
-            self._add_schema(input)
-        self.nodes[cast(str, node)] = StateNodeSpec(
-            coerce_to_runnable(action, name=cast(str, node), trace=False),
+        if input_schema is not None:
+            self._add_schema(input_schema)
+        self.nodes[node] = StateNodeSpec(
+            coerce_to_runnable(action, name=node, trace=False),  # type: ignore
             metadata,
-            input=input or self.schema,
-            retry_policy=retry,
+            input=input_schema or self.state_schema,
+            retry_policy=retry_policy,
             cache_policy=cache_policy,
             ends=ends,
             defer=defer,
         )
         return self
 
-    def add_edge(self, start_key: Union[str, list[str]], end_key: str) -> Self:
+    def add_edge(self, start_key: str | list[str], end_key: str) -> Self:
         """Add a directed edge from the start node (or list of start nodes) to the end node.
 
         When a single start node is provided, the graph will wait for that node to complete
@@ -461,14 +562,30 @@ class StateGraph(Graph):
         Returns:
             Self: The instance of the state graph, allowing for method chaining.
         """
-        if isinstance(start_key, str):
-            return super().add_edge(start_key, end_key)
-
         if self.compiled:
             logger.warning(
                 "Adding an edge to a graph that has already been compiled. This will "
                 "not be reflected in the compiled graph."
             )
+
+        if isinstance(start_key, str):
+            if start_key == END:
+                raise ValueError("END cannot be a start node")
+            if end_key == START:
+                raise ValueError("START cannot be an end node")
+
+            # run this validation only for non-StateGraph graphs
+            if not hasattr(self, "channels") and start_key in set(
+                start for start, _ in self.edges
+            ):
+                raise ValueError(
+                    f"Already found path for node '{start_key}'.\n"
+                    "For multiple edges, use StateGraph with an Annotated state key."
+                )
+
+            self.edges.add((start_key, end_key))
+            return self
+
         for start in start_key:
             if start == END:
                 raise ValueError("END cannot be a start node")
@@ -485,13 +602,10 @@ class StateGraph(Graph):
     def add_conditional_edges(
         self,
         source: str,
-        path: Union[
-            Callable[..., Union[Hashable, list[Hashable]]],
-            Callable[..., Awaitable[Union[Hashable, list[Hashable]]]],
-            Runnable[Any, Union[Hashable, list[Hashable]]],
-        ],
-        path_map: Optional[Union[dict[Hashable, str], list[str]]] = None,
-        then: Optional[str] = None,
+        path: Callable[..., Hashable | list[Hashable]]
+        | Callable[..., Awaitable[Hashable | list[Hashable]]]
+        | Runnable[Any, Hashable | list[Hashable]],
+        path_map: dict[Hashable, str] | list[str] | None = None,
     ) -> Self:
         """Add a conditional edge from the starting node to any number of destination nodes.
 
@@ -503,8 +617,6 @@ class StateGraph(Graph):
                 more nodes. If it returns END, the graph will stop execution.
             path_map: Optional mapping of paths to node
                 names. If omitted the paths returned by `path` should be node names.
-            then: The name of a node to execute after the nodes
-                selected by `path`.
 
         Returns:
             Self: The instance of the graph, allowing for method chaining.
@@ -528,19 +640,19 @@ class StateGraph(Graph):
                 f"Branch with name `{path.name}` already exists for node `{source}`"
             )
         # save it
-        self.branches[source][name] = Branch.from_path(path, path_map, then, True)
+        self.branches[source][name] = Branch.from_path(path, path_map, True)
         if schema := self.branches[source][name].input_schema:
             self._add_schema(schema)
         return self
 
     def add_sequence(
         self,
-        nodes: Sequence[Union[RunnableLike, tuple[str, RunnableLike]]],
+        nodes: Sequence[StateNode[StateT] | tuple[str, StateNode[StateT]]],
     ) -> Self:
         """Add a sequence of nodes that will be executed in the provided order.
 
         Args:
-            nodes: A sequence of RunnableLike objects (e.g. a LangChain Runnable or a callable) or (name, RunnableLike) tuples.
+            nodes: A sequence of StateNodes (callables that accept a state arg) or (name, StateNode) tuples.
                 If no names are provided, the name will be inferred from the node object (e.g. a runnable or a callable name).
                 Each node will be executed in the order provided.
 
@@ -554,7 +666,7 @@ class StateGraph(Graph):
         if len(nodes) < 1:
             raise ValueError("Sequence requires at least one node.")
 
-        previous_name: Optional[str] = None
+        previous_name: str | None = None
         for node in nodes:
             if isinstance(node, tuple) and len(node) == 2:
                 name, node = node
@@ -575,17 +687,113 @@ class StateGraph(Graph):
 
         return self
 
+    def set_entry_point(self, key: str) -> Self:
+        """Specifies the first node to be called in the graph.
+
+        Equivalent to calling `add_edge(START, key)`.
+
+        Parameters:
+            key (str): The key of the node to set as the entry point.
+
+        Returns:
+            Self: The instance of the graph, allowing for method chaining.
+        """
+        return self.add_edge(START, key)
+
+    def set_conditional_entry_point(
+        self,
+        path: Callable[..., Hashable | list[Hashable]]
+        | Callable[..., Awaitable[Hashable | list[Hashable]]]
+        | Runnable[Any, Hashable | list[Hashable]],
+        path_map: dict[Hashable, str] | list[str] | None = None,
+    ) -> Self:
+        """Sets a conditional entry point in the graph.
+
+        Args:
+            path: The callable that determines the next
+                node or nodes. If not specifying `path_map` it should return one or
+                more nodes. If it returns END, the graph will stop execution.
+            path_map: Optional mapping of paths to node
+                names. If omitted the paths returned by `path` should be node names.
+
+        Returns:
+            Self: The instance of the graph, allowing for method chaining.
+        """
+        return self.add_conditional_edges(START, path, path_map)
+
+    def set_finish_point(self, key: str) -> Self:
+        """Marks a node as a finish point of the graph.
+
+        If the graph reaches this node, it will cease execution.
+
+        Parameters:
+            key (str): The key of the node to set as the finish point.
+
+        Returns:
+            Self: The instance of the graph, allowing for method chaining.
+        """
+        return self.add_edge(key, END)
+
+    def validate(self, interrupt: Sequence[str] | None = None) -> Self:
+        # assemble sources
+        all_sources = {src for src, _ in self._all_edges}
+        for start, branches in self.branches.items():
+            all_sources.add(start)
+        for name, spec in self.nodes.items():
+            if spec.ends:
+                all_sources.add(name)
+        # validate sources
+        for source in all_sources:
+            if source not in self.nodes and source != START:
+                raise ValueError(f"Found edge starting at unknown node '{source}'")
+
+        if START not in all_sources:
+            raise ValueError(
+                "Graph must have an entrypoint: add at least one edge from START to another node"
+            )
+
+        # assemble targets
+        all_targets = {end for _, end in self._all_edges}
+        for start, branches in self.branches.items():
+            for cond, branch in branches.items():
+                if branch.ends is not None:
+                    for end in branch.ends.values():
+                        if end not in self.nodes and end != END:
+                            raise ValueError(
+                                f"At '{start}' node, '{cond}' branch found unknown target '{end}'"
+                            )
+                        all_targets.add(end)
+                else:
+                    all_targets.add(END)
+                    for node in self.nodes:
+                        if node != start:
+                            all_targets.add(node)
+        for name, spec in self.nodes.items():
+            if spec.ends:
+                all_targets.update(spec.ends)
+        for target in all_targets:
+            if target not in self.nodes and target != END:
+                raise ValueError(f"Found edge ending at unknown node `{target}`")
+        # validate interrupts
+        if interrupt:
+            for node in interrupt:
+                if node not in self.nodes:
+                    raise ValueError(f"Interrupt node `{node}` not found")
+
+        self.compiled = True
+        return self
+
     def compile(
         self,
         checkpointer: Checkpointer = None,
         *,
-        cache: Optional[BaseCache] = None,
-        store: Optional[BaseStore] = None,
-        interrupt_before: Optional[Union[All, list[str]]] = None,
-        interrupt_after: Optional[Union[All, list[str]]] = None,
+        cache: BaseCache | None = None,
+        store: BaseStore | None = None,
+        interrupt_before: All | list[str] | None = None,
+        interrupt_after: All | list[str] | None = None,
         debug: bool = False,
-        name: Optional[str] = None,
-    ) -> "CompiledStateGraph":
+        name: str | None = None,
+    ) -> CompiledStateGraph[StateT, InputT]:
         """Compiles the state graph into a `CompiledStateGraph` object.
 
         The compiled graph implements the `Runnable` interface and can be invoked,
@@ -621,11 +829,11 @@ class StateGraph(Graph):
         # prepare output channels
         output_channels = (
             "__root__"
-            if len(self.schemas[self.output]) == 1
-            and "__root__" in self.schemas[self.output]
+            if len(self.schemas[self.output_schema]) == 1
+            and "__root__" in self.schemas[self.output_schema]
             else [
                 key
-                for key, val in self.schemas[self.output].items()
+                for key, val in self.schemas[self.output_schema].items()
                 if not is_managed_value(val)
             ]
         )
@@ -637,22 +845,22 @@ class StateGraph(Graph):
             ]
         )
 
-        compiled = CompiledStateGraph(
+        compiled = CompiledStateGraph[StateT, InputT, OutputT](
             builder=self,
             schema_to_mapper={},
             config_type=self.config_schema,
             input_model=(
-                self.input
+                self.input_schema
                 if len(self.channels) > 1
-                and isclass(self.input)
-                and issubclass(self.input, BaseModel)
+                and isclass(self.input_schema)
+                and issubclass(self.input_schema, BaseModel)
                 else None
             ),
             nodes={},
             channels={
                 **self.channels,
                 **self.managed,
-                START: EphemeralValue(self.input),
+                START: EphemeralValue(self.input_schema),
             },
             input_channels=START,
             stream_mode="updates",
@@ -685,56 +893,56 @@ class StateGraph(Graph):
         return compiled.validate()
 
 
-class CompiledStateGraph(CompiledGraph):
-    builder: StateGraph
-    schema_to_mapper: dict[type[Any], Optional[Callable[[Any], Any]]]
+class CompiledStateGraph(
+    Pregel[StateT, InputT, OutputT], Generic[StateT, InputT, OutputT]
+):
+    builder: StateGraph[StateT, InputT, OutputT]
+    schema_to_mapper: dict[type[Any], Callable[[Any], Any] | None]
 
     def __init__(
         self,
         *,
-        schema_to_mapper: dict[type[Any], Optional[Callable[[Any], Any]]],
+        builder: StateGraph[StateT, InputT, OutputT],
+        schema_to_mapper: dict[type[Any], Callable[[Any], Any] | None],
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
+        self.builder = builder
         self.schema_to_mapper = schema_to_mapper
 
-    def get_input_schema(
-        self, config: Optional[RunnableConfig] = None
-    ) -> type[BaseModel]:
+    def get_input_schema(self, config: RunnableConfig | None = None) -> type[BaseModel]:
         return _get_schema(
-            typ=self.builder.input,
+            typ=self.builder.input_schema,
             schemas=self.builder.schemas,
             channels=self.builder.channels,
             name=self.get_name("Input"),
         )
 
     def get_output_schema(
-        self, config: Optional[RunnableConfig] = None
+        self, config: RunnableConfig | None = None
     ) -> type[BaseModel]:
         return _get_schema(
-            typ=self.builder.output,
+            typ=self.builder.output_schema,
             schemas=self.builder.schemas,
             channels=self.builder.channels,
             name=self.get_name("Output"),
         )
 
-    def attach_node(self, key: str, node: Optional[StateNodeSpec]) -> None:
+    def attach_node(self, key: str, node: StateNodeSpec | None) -> None:
         if key == START:
             output_keys = [
                 k
-                for k, v in self.builder.schemas[self.builder.input].items()
+                for k, v in self.builder.schemas[self.builder.input_schema].items()
                 if not is_managed_value(v)
             ]
         else:
             output_keys = list(self.builder.channels) + [
-                k
-                for k, v in self.builder.managed.items()
-                if is_writable_managed_value(v)
+                k for k, v in self.builder.managed.items()
             ]
 
         def _get_updates(
-            input: Union[None, dict, Any],
-        ) -> Optional[Sequence[tuple[str, Any]]]:
+            input: None | dict | Any,
+        ) -> Sequence[tuple[str, Any]] | None:
             if input is None:
                 return None
             elif isinstance(input, dict):
@@ -761,7 +969,7 @@ class CompiledStateGraph(CompiledGraph):
                     else:
                         updates.extend(_get_updates(i) or ())
                 return updates
-            elif (t := type(input)) and get_type_hints(t):
+            elif (t := type(input)) and get_cached_annotated_keys(t):
                 return get_update_as_tuples(input, output_keys)
             else:
                 msg = create_error_message(
@@ -771,7 +979,7 @@ class CompiledStateGraph(CompiledGraph):
                 raise InvalidUpdateError(msg)
 
         # state updaters
-        write_entries: tuple[Union[ChannelWriteEntry, ChannelWriteTupleEntry], ...] = (
+        write_entries: tuple[ChannelWriteEntry | ChannelWriteTupleEntry, ...] = (
             ChannelWriteTupleEntry(
                 mapper=_get_root if output_keys == ["__root__"] else _get_updates
             ),
@@ -792,7 +1000,7 @@ class CompiledStateGraph(CompiledGraph):
                 writers=[ChannelWrite(write_entries)],
             )
         elif node is not None:
-            input_schema = node.input if node else self.builder.schema
+            input_schema = node.input if node else self.builder._state_schema
             input_values = {k: k for k in self.builder.schemas[input_schema]}
             is_single_input = len(input_values) == 1 and "__root__" in input_values
             if input_schema in self.schema_to_mapper:
@@ -801,7 +1009,6 @@ class CompiledStateGraph(CompiledGraph):
                 mapper = _pick_mapper(
                     list(input_values),
                     input_schema,
-                    self.builder.type_hints[input_schema],
                 )
                 self.schema_to_mapper[input_schema] = mapper
 
@@ -822,12 +1029,12 @@ class CompiledStateGraph(CompiledGraph):
                 metadata=node.metadata,
                 retry_policy=node.retry_policy,
                 cache_policy=node.cache_policy,
-                bound=node.runnable,
+                bound=node.runnable,  # type: ignore[arg-type]
             )
         else:
             raise RuntimeError
 
-    def attach_edge(self, starts: Union[str, Sequence[str]], end: str) -> None:
+    def attach_edge(self, starts: str | Sequence[str], end: str) -> None:
         if isinstance(starts, str):
             # subscribe to start channel
             if end != END:
@@ -857,8 +1064,8 @@ class CompiledStateGraph(CompiledGraph):
         self, start: str, name: str, branch: Branch, *, with_reader: bool = True
     ) -> None:
         def get_writes(
-            packets: Sequence[Union[str, Send]], static: bool = False
-        ) -> Sequence[Union[ChannelWriteEntry, Send]]:
+            packets: Sequence[str | Send], static: bool = False
+        ) -> Sequence[ChannelWriteEntry | Send]:
             writes = [
                 (
                     ChannelWriteEntry(
@@ -872,17 +1079,6 @@ class CompiledStateGraph(CompiledGraph):
             ]
             if not writes:
                 return []
-            if branch.then and branch.then != END:
-                writes.append(
-                    ChannelWriteEntry(
-                        f"branch:{start}:{name}::then",
-                        WaitForNames(
-                            frozenset(
-                                p.node if isinstance(p, Send) else p for p in packets
-                            )
-                        ),
-                    )
-                )
             return writes
 
         if with_reader:
@@ -890,17 +1086,17 @@ class CompiledStateGraph(CompiledGraph):
             schema = branch.input_schema or (
                 self.builder.nodes[start].input
                 if start in self.builder.nodes
-                else self.builder.schema
+                else self.builder.state_schema
             )
             channels = list(self.builder.schemas[schema])
             # get mapper
             if schema in self.schema_to_mapper:
                 mapper = self.schema_to_mapper[schema]
             else:
-                mapper = _pick_mapper(channels, schema, self.builder.type_hints[schema])
+                mapper = _pick_mapper(channels, schema)
                 self.schema_to_mapper[schema] = mapper
             # create reader
-            reader: Optional[Callable[[RunnableConfig], Any]] = partial(
+            reader: Callable[[RunnableConfig], Any] | None = partial(
                 ChannelRead.do_read,
                 select=channels[0] if channels == ["__root__"] else channels,
                 fresh=True,
@@ -912,25 +1108,6 @@ class CompiledStateGraph(CompiledGraph):
 
         # attach branch publisher
         self.nodes[start].writers.append(branch.run(get_writes, reader))
-
-        # attach then subscriber
-        if branch.then and branch.then != END:
-            ends = (
-                branch.ends.values()
-                if branch.ends
-                else [node for node in self.builder.nodes if node != branch.then]
-            )
-            channel_name = f"branch:{start}:{name}::then"
-            if self.builder.nodes[branch.then].defer:
-                self.channels[channel_name] = DynamicBarrierValueAfterFinish(str)
-            else:
-                self.channels[channel_name] = DynamicBarrierValue(str)
-            self.nodes[branch.then].triggers.append(channel_name)
-            for end in ends:
-                if end != END:
-                    self.nodes[end].writers.append(
-                        ChannelWrite((ChannelWriteEntry(channel_name, end),))
-                    )
 
     def _migrate_checkpoint(self, checkpoint: Checkpoint) -> None:
         """Migrate a checkpoint to new channel layout."""
@@ -1038,15 +1215,12 @@ class CompiledStateGraph(CompiledGraph):
 
 
 def _pick_mapper(
-    state_keys: Sequence[str], schema: type[Any], type_hints: Optional[dict[str, Any]]
-) -> Optional[Callable[[Any], Any]]:
+    state_keys: Sequence[str], schema: type[Any]
+) -> Callable[[Any], Any] | None:
     if state_keys == ["__root__"]:
         return None
-    if isclass(schema):
-        if issubclass(schema, dict):
-            return None
-        if issubclass(schema, BaseModel):
-            return SchemaCoercionMapper(schema, type_hints=type_hints)
+    if isclass(schema) and issubclass(schema, dict):
+        return None
     return partial(_coerce_state, schema)
 
 
@@ -1083,8 +1257,8 @@ def _control_branch(value: Any) -> Sequence[tuple[str, Any]]:
 
 
 def _control_static(
-    ends: Union[tuple[str, ...], dict[str, str]],
-) -> Sequence[tuple[str, Any, Optional[str]]]:
+    ends: tuple[str, ...] | dict[str, str],
+) -> Sequence[tuple[str, Any, str | None]]:
     if isinstance(ends, dict):
         return [
             (k if k == END else CHANNEL_BRANCH_TO.format(k), None, label)
@@ -1096,7 +1270,7 @@ def _control_static(
         ]
 
 
-def _get_root(input: Any) -> Optional[Sequence[tuple[str, Any]]]:
+def _get_root(input: Any) -> Sequence[tuple[str, Any]] | None:
     if isinstance(input, Command):
         if input.graph == Command.PARENT:
             return ()
@@ -1151,12 +1325,12 @@ def _get_channel(
 @overload
 def _get_channel(
     name: str, annotation: Any, *, allow_managed: Literal[True] = True
-) -> Union[BaseChannel, ManagedValueSpec]: ...
+) -> BaseChannel | ManagedValueSpec: ...
 
 
 def _get_channel(
     name: str, annotation: Any, *, allow_managed: bool = True
-) -> Union[BaseChannel, ManagedValueSpec]:
+) -> BaseChannel | ManagedValueSpec:
     if manager := _is_field_managed_value(name, annotation):
         if allow_managed:
             return manager
@@ -1174,7 +1348,7 @@ def _get_channel(
     return fallback
 
 
-def _is_field_channel(typ: type[Any]) -> Optional[BaseChannel]:
+def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
         if len(meta) >= 1 and isinstance(meta[-1], BaseChannel):
@@ -1184,7 +1358,7 @@ def _is_field_channel(typ: type[Any]) -> Optional[BaseChannel]:
     return None
 
 
-def _is_field_binop(typ: type[Any]) -> Optional[BinaryOperatorAggregate]:
+def _is_field_binop(typ: type[Any]) -> BinaryOperatorAggregate | None:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
         if len(meta) >= 1 and callable(meta[-1]):
@@ -1205,18 +1379,12 @@ def _is_field_binop(typ: type[Any]) -> Optional[BinaryOperatorAggregate]:
     return None
 
 
-def _is_field_managed_value(name: str, typ: type[Any]) -> Optional[ManagedValueSpec]:
+def _is_field_managed_value(name: str, typ: type[Any]) -> ManagedValueSpec | None:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
         if len(meta) >= 1:
             decoration = get_origin(meta[-1]) or meta[-1]
             if is_managed_value(decoration):
-                if isinstance(decoration, ConfiguredManagedValue):
-                    for k, v in decoration.kwargs.items():
-                        if v is ChannelKeyPlaceholder:
-                            decoration.kwargs[k] = name
-                        if v is ChannelTypePlaceholder:
-                            decoration.kwargs[k] = typ.__origin__
                 return decoration
 
     return None

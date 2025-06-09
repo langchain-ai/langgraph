@@ -6,7 +6,7 @@ In this tutorial, you will build a basic chatbot. This chatbot is the basis for 
 
 Before you start this tutorial, ensure you have access to a LLM that supports
 tool-calling features, such as [OpenAI](https://platform.openai.com/api-keys),
-[Anthropic](https://console.anthropic.com/settings/admin-keys), or
+[Anthropic](https://console.anthropic.com/settings/keys), or
 [Google Gemini](https://ai.google.dev/gemini-api/docs/api-key).
 
 ## 1. Install packages
@@ -32,7 +32,7 @@ from typing import Annotated
 
 from typing_extensions import TypedDict
 
-from langgraph.graph import StateGraph, START
+from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 
 
@@ -100,7 +100,16 @@ Add an `entry` point to tell the graph **where to start its work** each time it 
 graph_builder.add_edge(START, "chatbot")
 ```
 
-## 5. Compile the graph
+## 5. Add an `exit` point
+
+Add an `exit` point to indicate **where the graph should finish execution**. This is helpful for more complex flows, but even in a simple graph like this, adding an end node improves clarity.
+
+```python
+graph_builder.add_edge("chatbot", END)
+```
+This tells the graph to terminate after running the chatbot node.
+
+## 6. Compile the graph
 
 Before running the graph, we'll need to compile it. We can do so by calling `compile()`
 on the graph builder. This creates a `CompiledGraph` we can invoke on our state.
@@ -109,7 +118,7 @@ on the graph builder. This creates a `CompiledGraph` we can invoke on our state.
 graph = graph_builder.compile()
 ```
 
-## 6. Visualize the graph (optional)
+## 7. Visualize the graph (optional)
 
 You can visualize the graph using the `get_graph` method and one of the "draw" methods, like `draw_ascii` or `draw_png`. The `draw` methods each require additional dependencies.
 
@@ -126,7 +135,7 @@ except Exception:
 ![basic chatbot diagram](basic-chatbot.png)
 
 
-## 7. Run the chatbot
+## 8. Run the chatbot
 
 Now run the chatbot! 
 
@@ -171,7 +180,7 @@ from typing import Annotated
 from langchain.chat_models import init_chat_model
 from typing_extensions import TypedDict
 
-from langgraph.graph import StateGraph, START
+from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 
 
@@ -194,6 +203,7 @@ def chatbot(state: State):
 # the node is used.
 graph_builder.add_node("chatbot", chatbot)
 graph_builder.add_edge(START, "chatbot")
+graph_builder.add_edge("chatbot", END)
 graph = graph_builder.compile()
 ```
 

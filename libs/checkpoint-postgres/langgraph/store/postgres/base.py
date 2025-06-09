@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import concurrent.futures
 import json
@@ -14,7 +16,6 @@ from typing import (
     Generic,
     Literal,
     NamedTuple,
-    Optional,
     TypeVar,
     Union,
     cast,
@@ -56,8 +57,8 @@ class Migration(NamedTuple):
     """A database migration with optional conditions and parameters."""
 
     sql: str
-    params: Optional[dict[str, Any]] = None
-    condition: Optional[Callable[["BasePostgresStore"], bool]] = None
+    params: dict[str, Any] | None = None
+    condition: Callable[[BasePostgresStore], bool] | None = None
 
 
 MIGRATIONS: Sequence[str] = [
@@ -155,7 +156,7 @@ class PoolConfig(TypedDict, total=False):
     min_size: int
     """Minimum number of connections maintained in the pool. Defaults to 1."""
 
-    max_size: Optional[int]
+    max_size: int | None
     """Maximum number of connections allowed in the pool. None means unlimited."""
 
     kwargs: dict
@@ -230,8 +231,8 @@ class BasePostgresStore(Generic[C]):
     MIGRATIONS = MIGRATIONS
     VECTOR_MIGRATIONS = VECTOR_MIGRATIONS
     conn: C
-    _deserializer: Optional[Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]]
-    index_config: Optional[PostgresIndexConfig]
+    _deserializer: Callable[[bytes | orjson.Fragment], dict[str, Any]] | None
+    index_config: PostgresIndexConfig | None
 
     def _get_batch_GET_ops_queries(
         self,
@@ -293,7 +294,7 @@ class BasePostgresStore(Generic[C]):
         put_ops: Sequence[tuple[int, PutOp]],
     ) -> tuple[
         list[tuple[str, Sequence]],
-        Optional[tuple[str, Sequence[tuple[str, str, str, str]]]],
+        tuple[str, Sequence[tuple[str, str, str, str]]] | None,
     ]:
         dedupped_ops: dict[tuple[tuple[str, ...], str], PutOp] = {}
         for _, op in put_ops:
@@ -320,9 +321,7 @@ class BasePostgresStore(Generic[C]):
                 )
                 params = (_namespace_to_text(namespace), *keys)
                 queries.append((query, params))
-        embedding_request: Optional[tuple[str, Sequence[tuple[str, str, str, str]]]] = (
-            None
-        )
+        embedding_request: tuple[str, Sequence[tuple[str, str, str, str]]] | None = None
         if inserts:
             values = []
             insertion_params = []
@@ -403,7 +402,7 @@ class BasePostgresStore(Generic[C]):
         self,
         search_ops: Sequence[tuple[int, SearchOp]],
     ) -> tuple[
-        list[tuple[str, list[Union[None, str, list[float]]]]],  # queries, params
+        list[tuple[str, list[None | str | list[float]]]],  # queries, params
         list[tuple[int, str]],  # idx, query_text pairs to embed
     ]:
         """
@@ -432,7 +431,7 @@ class BasePostgresStore(Generic[C]):
                         filter_params.extend([key, orjson.dumps(value).decode("utf-8")])
 
             ns_condition = "TRUE"
-            ns_param: Optional[Sequence[Union[str]]] = None
+            ns_param: Sequence[str] | None = None
             if op.namespace_prefix:
                 ns_condition = "store.prefix LIKE %s"
                 ns_param = (f"{_namespace_to_text(op.namespace_prefix)}%",)
@@ -719,12 +718,10 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         self,
         conn: _pg_internal.Conn,
         *,
-        pipe: Optional[Pipeline] = None,
-        deserializer: Optional[
-            Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]
-        ] = None,
-        index: Optional[PostgresIndexConfig] = None,
-        ttl: Optional[TTLConfig] = None,
+        pipe: Pipeline | None = None,
+        deserializer: Callable[[bytes | orjson.Fragment], dict[str, Any]] | None = None,
+        index: PostgresIndexConfig | None = None,
+        ttl: TTLConfig | None = None,
     ) -> None:
         super().__init__()
         self._deserializer = deserializer
@@ -738,7 +735,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         else:
             self.embeddings = None
         self.ttl_config = ttl
-        self._ttl_sweeper_thread: Optional[threading.Thread] = None
+        self._ttl_sweeper_thread: threading.Thread | None = None
         self._ttl_stop_event = threading.Event()
 
     @classmethod
@@ -748,10 +745,10 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         conn_string: str,
         *,
         pipeline: bool = False,
-        pool_config: Optional[PoolConfig] = None,
-        index: Optional[PostgresIndexConfig] = None,
-        ttl: Optional[TTLConfig] = None,
-    ) -> Iterator["PostgresStore"]:
+        pool_config: PoolConfig | None = None,
+        index: PostgresIndexConfig | None = None,
+        ttl: TTLConfig | None = None,
+    ) -> Iterator[PostgresStore]:
         """Create a new PostgresStore instance from a connection string.
 
         Args:
@@ -810,7 +807,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
             return deleted_count
 
     def start_ttl_sweeper(
-        self, sweep_interval_minutes: Optional[int] = None
+        self, sweep_interval_minutes: int | None = None
     ) -> concurrent.futures.Future[None]:
         """Periodically delete expired store items based on TTL.
 
@@ -867,7 +864,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         )
         return future
 
-    def stop_ttl_sweeper(self, timeout: Optional[float] = None) -> bool:
+    def stop_ttl_sweeper(self, timeout: float | None = None) -> bool:
         """Stop the TTL sweeper thread if it's running.
 
         Args:
@@ -1196,7 +1193,7 @@ def _row_to_item(
     namespace: tuple[str, ...],
     row: Row,
     *,
-    loader: Optional[Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]] = None,
+    loader: Callable[[bytes | orjson.Fragment], dict[str, Any]] | None = None,
 ) -> Item:
     """Convert a row from the database into an Item.
 
@@ -1224,7 +1221,7 @@ def _row_to_search_item(
     namespace: tuple[str, ...],
     row: Row,
     *,
-    loader: Optional[Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]] = None,
+    loader: Callable[[bytes | orjson.Fragment], dict[str, Any]] | None = None,
 ) -> SearchItem:
     """Convert a row from the database into an Item."""
     loader = loader or _json_loads
@@ -1255,7 +1252,7 @@ def _group_ops(ops: Iterable[Op]) -> tuple[dict[type, list[tuple[int, Op]]], int
     return grouped_ops, tot
 
 
-def _json_loads(content: Union[bytes, orjson.Fragment]) -> Any:
+def _json_loads(content: bytes | orjson.Fragment) -> Any:
     if isinstance(content, orjson.Fragment):
         if hasattr(content, "buf"):
             content = content.buf
@@ -1267,7 +1264,7 @@ def _json_loads(content: Union[bytes, orjson.Fragment]) -> Any:
     return orjson.loads(cast(bytes, content))
 
 
-def _decode_ns_bytes(namespace: Union[str, bytes, list]) -> tuple[str, ...]:
+def _decode_ns_bytes(namespace: str | bytes | list) -> tuple[str, ...]:
     if isinstance(namespace, list):
         return tuple(namespace)
     if isinstance(namespace, bytes):
@@ -1316,9 +1313,9 @@ def get_distance_operator(store: Any) -> tuple[str, str]:
 
 def _ensure_index_config(
     index_config: PostgresIndexConfig,
-) -> tuple[Optional["Embeddings"], PostgresIndexConfig]:
+) -> tuple[Embeddings | None, PostgresIndexConfig]:
     index_config = index_config.copy()
-    tokenized: list[tuple[str, Union[Literal["$"], list[str]]]] = []
+    tokenized: list[tuple[str, Literal["$"] | list[str]]] = []
     tot = 0
     text_fields = index_config.get("fields") or ["$"]
     if isinstance(text_fields, str):

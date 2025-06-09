@@ -94,7 +94,7 @@ def answer_node(state: InputState):
     return {"answer": "bye", "question": state["question"]}
 
 # Build the graph with explicit schemas
-builder = StateGraph(OverallState, input=InputState, output=OutputState)
+builder = StateGraph(OverallState, input_schema=InputState, output_schema=OutputState)
 builder.add_node(answer_node)
 builder.add_edge(START, "answer_node")
 builder.add_edge("answer_node", END)

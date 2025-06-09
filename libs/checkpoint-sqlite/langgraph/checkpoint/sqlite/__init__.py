@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import random
 import sqlite3
 import threading
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import closing, contextmanager
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
 
@@ -19,7 +21,6 @@ from langgraph.checkpoint.base import (
     get_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
-from langgraph.checkpoint.serde.types import ChannelProtocol
 from langgraph.checkpoint.sqlite.utils import search_where
 
 _AIO_ERROR_MSG = (
@@ -77,7 +78,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         self,
         conn: sqlite3.Connection,
         *,
-        serde: Optional[SerializerProtocol] = None,
+        serde: SerializerProtocol | None = None,
     ) -> None:
         super().__init__(serde=serde)
         self.jsonplus_serde = JsonPlusSerializer()
@@ -87,7 +88,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
 
     @classmethod
     @contextmanager
-    def from_conn_string(cls, conn_string: str) -> Iterator["SqliteSaver"]:
+    def from_conn_string(cls, conn_string: str) -> Iterator[SqliteSaver]:
         """Create a new SqliteSaver instance from a connection string.
 
         Args:
@@ -179,7 +180,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                     self.conn.commit()
                 cur.close()
 
-    def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+    def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the database.
 
         This method retrieves a checkpoint tuple from the SQLite database based on the
@@ -287,11 +288,11 @@ class SqliteSaver(BaseCheckpointSaver[str]):
 
     def list(
         self,
-        config: Optional[RunnableConfig],
+        config: RunnableConfig | None,
         *,
-        filter: Optional[dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
     ) -> Iterator[CheckpointTuple]:
         """List checkpoints from the database.
 
@@ -494,7 +495,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                 (str(thread_id),),
             )
 
-    async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+    async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the database asynchronously.
 
         Note:
@@ -505,11 +506,11 @@ class SqliteSaver(BaseCheckpointSaver[str]):
 
     async def alist(
         self,
-        config: Optional[RunnableConfig],
+        config: RunnableConfig | None,
         *,
-        filter: Optional[dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
     ) -> AsyncIterator[CheckpointTuple]:
         """List checkpoints from the database asynchronously.
 
@@ -535,14 +536,13 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
 
-    def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
+    def get_next_version(self, current: str | None) -> str:
         """Generate the next version ID for a channel.
 
         This method creates a new version identifier for a channel based on its current version.
 
         Args:
             current (Optional[str]): The current version identifier of the channel.
-            channel (BaseChannel): The channel being versioned.
 
         Returns:
             str: The next version identifier, which is guaranteed to be monotonically increasing.

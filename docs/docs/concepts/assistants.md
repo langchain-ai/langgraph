@@ -26,4 +26,4 @@ Once you've created an assistant, subsequent edits to that assistant will create
 
 ## Learn more
 
-* The LangGraph Cloud API provides several endpoints for creating and managing assistants their versions. See the [API reference](../cloud/reference/api/api_ref.html#tag/assistants) for more details.
+* The LangGraph Cloud API provides several endpoints for creating and managing assistants and their versions. See the [API reference](../cloud/reference/api/api_ref.html#tag/assistants) for more details.

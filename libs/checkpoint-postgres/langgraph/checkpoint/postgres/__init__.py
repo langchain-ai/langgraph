@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import threading
+from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from typing import Any, Optional
+from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import Capabilities, Connection, Cursor, Pipeline
@@ -20,7 +23,6 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.postgres import _internal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
-from langgraph.checkpoint.postgres.shallow import ShallowPostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
 Conn = _internal.Conn  # For backward compatibility
@@ -34,8 +36,8 @@ class PostgresSaver(BasePostgresSaver):
     def __init__(
         self,
         conn: _internal.Conn,
-        pipe: Optional[Pipeline] = None,
-        serde: Optional[SerializerProtocol] = None,
+        pipe: Pipeline | None = None,
+        serde: SerializerProtocol | None = None,
     ) -> None:
         super().__init__(serde=serde)
         if isinstance(conn, ConnectionPool) and pipe is not None:
@@ -52,7 +54,7 @@ class PostgresSaver(BasePostgresSaver):
     @contextmanager
     def from_conn_string(
         cls, conn_string: str, *, pipeline: bool = False
-    ) -> Iterator["PostgresSaver"]:
+    ) -> Iterator[PostgresSaver]:
         """Create a new PostgresSaver instance from a connection string.
 
         Args:
@@ -99,11 +101,11 @@ class PostgresSaver(BasePostgresSaver):
 
     def list(
         self,
-        config: Optional[RunnableConfig],
+        config: RunnableConfig | None,
         *,
-        filter: Optional[dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
     ) -> Iterator[CheckpointTuple]:
         """List checkpoints from the database.
 
@@ -143,8 +145,36 @@ class PostgresSaver(BasePostgresSaver):
             query += f" LIMIT {limit}"
         # if we change this to use .stream() we need to make sure to close the cursor
         with self._cursor() as cur:
-            cur.execute(query, args, binary=True)
-            for value in cur:
+            cur.execute(query, args)
+            values = cur.fetchall()
+            if not values:
+                return
+            # migrate pending sends if necessary
+            if to_migrate := [
+                v
+                for v in values
+                if v["checkpoint"]["v"] < 4 and v["parent_checkpoint_id"]
+            ]:
+                cur.execute(
+                    self.SELECT_PENDING_SENDS_SQL,
+                    (
+                        values[0]["thread_id"],
+                        [v["parent_checkpoint_id"] for v in to_migrate],
+                    ),
+                )
+                grouped_by_parent = defaultdict(list)
+                for value in to_migrate:
+                    grouped_by_parent[value["parent_checkpoint_id"]].append(value)
+                for sends in cur:
+                    for value in grouped_by_parent[sends["checkpoint_id"]]:
+                        if value["channel_values"] is None:
+                            value["channel_values"] = []
+                        self._migrate_pending_sends(
+                            sends["sends"],
+                            value["checkpoint"],
+                            value["channel_values"],
+                        )
+            for value in values:
                 yield CheckpointTuple(
                     {
                         "configurable": {
@@ -153,12 +183,11 @@ class PostgresSaver(BasePostgresSaver):
                             "checkpoint_id": value["checkpoint_id"],
                         }
                     },
-                    self._load_checkpoint(
-                        value["checkpoint"],
-                        value["channel_values"],
-                        value["pending_sends"],
-                    ),
-                    self._load_metadata(value["metadata"]),
+                    {
+                        **value["checkpoint"],
+                        "channel_values": self._load_blobs(value["channel_values"]),
+                    },
+                    value["metadata"],
                     (
                         {
                             "configurable": {
@@ -173,7 +202,7 @@ class PostgresSaver(BasePostgresSaver):
                     self._load_writes(value["pending_writes"]),
                 )
 
-    def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+    def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the database.
 
         This method retrieves a checkpoint tuple from the Postgres database based on the
@@ -222,37 +251,52 @@ class PostgresSaver(BasePostgresSaver):
             cur.execute(
                 self.SELECT_SQL + where,
                 args,
-                binary=True,
             )
+            value = cur.fetchone()
+            if value is None:
+                return None
 
-            for value in cur:
-                return CheckpointTuple(
+            # migrate pending sends if necessary
+            if value["checkpoint"]["v"] < 4 and value["parent_checkpoint_id"]:
+                cur.execute(
+                    self.SELECT_PENDING_SENDS_SQL,
+                    (thread_id, [value["parent_checkpoint_id"]]),
+                )
+                if sends := cur.fetchone():
+                    if value["channel_values"] is None:
+                        value["channel_values"] = []
+                    self._migrate_pending_sends(
+                        sends["sends"],
+                        value["checkpoint"],
+                        value["channel_values"],
+                    )
+
+            return CheckpointTuple(
+                {
+                    "configurable": {
+                        "thread_id": thread_id,
+                        "checkpoint_ns": checkpoint_ns,
+                        "checkpoint_id": value["checkpoint_id"],
+                    }
+                },
+                {
+                    **value["checkpoint"],
+                    "channel_values": self._load_blobs(value["channel_values"]),
+                },
+                value["metadata"],
+                (
                     {
                         "configurable": {
                             "thread_id": thread_id,
                             "checkpoint_ns": checkpoint_ns,
-                            "checkpoint_id": value["checkpoint_id"],
+                            "checkpoint_id": value["parent_checkpoint_id"],
                         }
-                    },
-                    self._load_checkpoint(
-                        value["checkpoint"],
-                        value["channel_values"],
-                        value["pending_sends"],
-                    ),
-                    self._load_metadata(value["metadata"]),
-                    (
-                        {
-                            "configurable": {
-                                "thread_id": thread_id,
-                                "checkpoint_ns": checkpoint_ns,
-                                "checkpoint_id": value["parent_checkpoint_id"],
-                            }
-                        }
-                        if value["parent_checkpoint_id"]
-                        else None
-                    ),
-                    self._load_writes(value["pending_writes"]),
-                )
+                    }
+                    if value["parent_checkpoint_id"]
+                    else None
+                ),
+                self._load_writes(value["pending_writes"]),
+            )
 
     def put(
         self,
@@ -319,8 +363,8 @@ class PostgresSaver(BasePostgresSaver):
                     checkpoint_ns,
                     checkpoint["id"],
                     checkpoint_id,
-                    Jsonb(self._dump_checkpoint(copy)),
-                    self._dump_metadata(get_checkpoint_metadata(config, metadata)),
+                    Jsonb(copy),
+                    Jsonb(get_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config
@@ -391,7 +435,7 @@ class PostgresSaver(BasePostgresSaver):
                 Will be applied regardless of whether the PostgresSaver instance was initialized with a pipeline.
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
-        with _internal.get_connection(self.conn) as conn:
+        with self.lock, _internal.get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
                 # in multiple threads/coroutines, but only one cursor can be
@@ -407,7 +451,6 @@ class PostgresSaver(BasePostgresSaver):
                 # thread/coroutine at a time, so we acquire a lock
                 if self.supports_pipeline:
                     with (
-                        self.lock,
                         conn.pipeline(),
                         conn.cursor(binary=True, row_factory=dict_row) as cur,
                     ):
@@ -415,14 +458,13 @@ class PostgresSaver(BasePostgresSaver):
                 else:
                     # Use connection's transaction context manager when pipeline mode not supported
                     with (
-                        self.lock,
                         conn.transaction(),
                         conn.cursor(binary=True, row_factory=dict_row) as cur,
                     ):
                         yield cur
             else:
-                with self.lock, conn.cursor(binary=True, row_factory=dict_row) as cur:
+                with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
 
-__all__ = ["PostgresSaver", "BasePostgresSaver", "ShallowPostgresSaver", "Conn"]
+__all__ = ["PostgresSaver", "BasePostgresSaver", "Conn"]

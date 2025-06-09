@@ -122,7 +122,6 @@ RESERVED = {
     ERROR,
     NO_WRITES,
     SCHEDULED,
-    TASKS,
     # reserved config.configurable keys
     CONFIG_KEY_SEND,
     CONFIG_KEY_READ,

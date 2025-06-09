@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import dataclasses
 import decimal
 import importlib
@@ -18,7 +20,7 @@ from ipaddress import (
     IPv6Interface,
     IPv6Network,
 )
-from typing import Any, Callable, Optional, Union, cast
+from typing import Any, Callable, cast
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -41,7 +43,7 @@ class JsonPlusSerializer(SerializerProtocol):
         self,
         *,
         pickle_fallback: bool = False,
-        __unpack_ext_hook__: Optional[Callable[[int, bytes], Any]] = None,
+        __unpack_ext_hook__: Callable[[int, bytes], Any] | None = None,
     ) -> None:
         self.pickle_fallback = pickle_fallback
         self._unpack_ext_hook = (
@@ -52,11 +54,11 @@ class JsonPlusSerializer(SerializerProtocol):
 
     def _encode_constructor_args(
         self,
-        constructor: Union[Callable, type[Any]],
+        constructor: Callable | type[Any],
         *,
-        method: Union[None, str, Sequence[Union[None, str]]] = None,
-        args: Optional[Sequence[Any]] = None,
-        kwargs: Optional[dict[str, Any]] = None,
+        method: None | str | Sequence[None | str] = None,
+        args: Sequence[Any] | None = None,
+        kwargs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         out = {
             "lc": 2,
@@ -71,7 +73,7 @@ class JsonPlusSerializer(SerializerProtocol):
             out["kwargs"] = kwargs
         return out
 
-    def _default(self, obj: Any) -> Union[str, dict[str, Any]]:
+    def _default(self, obj: Any) -> str | dict[str, Any]:
         if isinstance(obj, Serializable):
             return cast(dict[str, Any], obj.to_json())
         elif hasattr(obj, "model_dump") and callable(obj.model_dump):
@@ -251,7 +253,7 @@ EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 
 
-def _msgpack_default(obj: Any) -> Union[str, ormsgpack.Ext]:
+def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
     if hasattr(obj, "model_dump") and callable(obj.model_dump):  # pydantic v2
         return ormsgpack.Ext(
             EXT_PYDANTIC_V2,

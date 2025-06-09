@@ -36,8 +36,8 @@ from typing_extensions import Annotated, TypedDict
 
 from langgraph.errors import ErrorCode, create_error_message
 from langgraph.graph import END, StateGraph
-from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.managed import IsLastStep, RemainingSteps
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.store.base import BaseStore
@@ -257,7 +257,7 @@ def create_react_agent(
     debug: bool = False,
     version: Literal["v1", "v2"] = "v2",
     name: Optional[str] = None,
-) -> CompiledGraph:
+) -> CompiledStateGraph:
     """Creates an agent graph that calls tools in a loop until a stopping condition is met.
 
     For more details on using `create_react_agent`, visit [Agents](https://langchain-ai.github.io/langgraph/agents/overview/) documentation.
@@ -591,11 +591,11 @@ def create_react_agent(
         workflow = StateGraph(state_schema, config_schema=config_schema)
         workflow.add_node(
             "agent",
-            RunnableCallable(call_model, acall_model),
-            input=input_schema,
+            RunnableCallable(call_model, acall_model),  # type: ignore[call-overload]
+            input_schema=input_schema,
         )
         if pre_model_hook is not None:
-            workflow.add_node("pre_model_hook", pre_model_hook)
+            workflow.add_node("pre_model_hook", pre_model_hook)  # type: ignore[arg-type]
             workflow.add_edge("pre_model_hook", "agent")
             entrypoint = "pre_model_hook"
         else:
@@ -604,14 +604,15 @@ def create_react_agent(
         workflow.set_entry_point(entrypoint)
 
         if post_model_hook is not None:
-            workflow.add_node("post_model_hook", post_model_hook)
+            workflow.add_node("post_model_hook", post_model_hook)  # type: ignore[arg-type]
             workflow.add_edge("agent", "post_model_hook")
 
         if response_format is not None:
             workflow.add_node(
                 "generate_structured_response",
-                RunnableCallable(
-                    generate_structured_response, agenerate_structured_response
+                RunnableCallable(  # type: ignore[call-overload]
+                    generate_structured_response,
+                    agenerate_structured_response,
                 ),
             )
             if post_model_hook is not None:
@@ -658,14 +659,16 @@ def create_react_agent(
 
     # Define the two nodes we will cycle between
     workflow.add_node(
-        "agent", RunnableCallable(call_model, acall_model), input=input_schema
+        "agent",
+        RunnableCallable(call_model, acall_model),  # type: ignore[call-overload]
+        input_schema=input_schema,
     )
-    workflow.add_node("tools", tool_node)
+    workflow.add_node("tools", tool_node)  # type: ignore[call-overload]
 
     # Optionally add a pre-model hook node that will be called
     # every time before the "agent" (LLM-calling node)
     if pre_model_hook is not None:
-        workflow.add_node("pre_model_hook", pre_model_hook)
+        workflow.add_node("pre_model_hook", pre_model_hook)  # type: ignore[arg-type]
         workflow.add_edge("pre_model_hook", "agent")
         entrypoint = "pre_model_hook"
     else:
@@ -680,7 +683,7 @@ def create_react_agent(
 
     # Add a post model hook node if post_model_hook is provided
     if post_model_hook is not None:
-        workflow.add_node("post_model_hook", post_model_hook)
+        workflow.add_node("post_model_hook", post_model_hook)  # type: ignore[arg-type]
         agent_paths.append("post_model_hook")
         workflow.add_edge("agent", "post_model_hook")
     else:
@@ -690,8 +693,9 @@ def create_react_agent(
     if response_format is not None:
         workflow.add_node(
             "generate_structured_response",
-            RunnableCallable(
-                generate_structured_response, agenerate_structured_response
+            RunnableCallable(  # type: ignore[call-overload]
+                generate_structured_response,
+                agenerate_structured_response,
             ),
         )
         if post_model_hook is not None:
@@ -727,6 +731,10 @@ def create_react_agent(
             ]
 
             if pending_tool_calls:
+                pending_tool_calls = [
+                    tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
+                    for call in pending_tool_calls
+                ]
                 return [Send("tools", [tool_call]) for tool_call in pending_tool_calls]
             elif isinstance(messages[-1], ToolMessage):
                 return entrypoint

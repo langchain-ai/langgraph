@@ -22,7 +22,7 @@ Welcome to the LangGraph reference docs! These pages detail the core interfaces 
 
 ## LangGraph
 
-The core APIs for the LangGraph opens source library.
+The core APIs for the LangGraph open source library.
 
 - [Graphs](graphs.md): Main graph abstraction and usage.
 - [Functional API](func.md): Functional programming interface for graphs.

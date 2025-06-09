@@ -44,9 +44,8 @@ stop-postgres:
 	docker compose -f tests/compose-postgres.yml down -v
 
 start-dev-server:
-	uv run langgraph dev --config tests/example_app/langgraph.json --no-browser &
+	LOG_LEVEL=warning uv run langgraph dev --config tests/example_app/langgraph.json --no-browser & echo "$$!" > .devserver.pid
 	@echo "Dev server started."
-	@echo "Dev server PID: $$!" > .devserver.pid
 
 stop-dev-server:
 	@if [ -f .devserver.pid ]; then \
@@ -57,15 +56,22 @@ stop-dev-server:
 	fi
 
 TEST ?= .
+NO_DOCKER ?= $(sh command -v docker >/dev/null 2>&1 && echo "false" || echo "true")
 
 test:
-	make start-postgres &&\
-	make start-dev-server &&\
-	uv run pytest $(TEST); \
-	EXIT_CODE=$$?; \
-	make stop-postgres; \
-	make stop-dev-server; \
-	exit $$EXIT_CODE
+	if [ "$(NO_DOCKER)" = "false" ]; then \
+		make start-postgres &&\
+		make start-dev-server &&\
+		uv run pytest $(TEST); \
+		EXIT_CODE=$$?; \
+		make stop-postgres; \
+		make stop-dev-server; \
+		exit $$EXIT_CODE; \
+	else \
+		NO_DOCKER=true uv run pytest $(TEST) ; \
+		EXIT_CODE=$$?; \
+		exit $$EXIT_CODE; \
+	fi
 
 test_parallel:
 	make start-postgres &&\

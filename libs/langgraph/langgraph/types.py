@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import dataclasses
 import sys
 from collections import deque
@@ -10,11 +12,9 @@ from typing import (
     Generic,
     Literal,
     NamedTuple,
-    Optional,
     TypeVar,
     Union,
     cast,
-    get_type_hints,
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
@@ -23,11 +23,10 @@ from xxhash import xxh3_128_hexdigest
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 from langgraph.utils.cache import default_cache_key
-from langgraph.utils.fields import get_update_as_tuples
+from langgraph.utils.fields import get_cached_annotated_keys, get_update_as_tuples
 
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
-    from langgraph.store.base import BaseStore
 
 
 try:
@@ -117,9 +116,9 @@ class RetryPolicy(NamedTuple):
     """Maximum number of attempts to make before giving up, including the first."""
     jitter: bool = True
     """Whether to add random jitter to the interval between retries."""
-    retry_on: Union[
-        type[Exception], Sequence[type[Exception]], Callable[[Exception], bool]
-    ] = default_retry_on
+    retry_on: (
+        type[Exception] | Sequence[type[Exception]] | Callable[[Exception], bool]
+    ) = default_retry_on
     """List of exception classes that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
 
 
@@ -134,7 +133,7 @@ class CachePolicy(Generic[KeyFuncT]):
     """Function to generate a cache key from the node's input.
     Defaults to hashing the input with pickle."""
 
-    ttl: Optional[int] = None
+    ttl: int | None = None
     """Time to live for the cache entry in seconds. If None, the entry never expires."""
 
 
@@ -147,7 +146,7 @@ class Interrupt:
 
     value: Any
     resumable: bool = False
-    ns: Optional[Sequence[str]] = None
+    ns: Sequence[str] | None = None
     when: Literal["during"] = dataclasses.field(default="during", repr=False)
 
     @property
@@ -159,8 +158,8 @@ class Interrupt:
 
 
 class StateUpdate(NamedTuple):
-    values: Optional[dict[str, Any]]
-    as_node: Optional[str] = None
+    values: dict[str, Any] | None
+    as_node: str | None = None
 
 
 class PregelTask(NamedTuple):
@@ -168,11 +167,11 @@ class PregelTask(NamedTuple):
 
     id: str
     name: str
-    path: tuple[Union[str, int, tuple], ...]
-    error: Optional[Exception] = None
+    path: tuple[str | int | tuple, ...]
+    error: Exception | None = None
     interrupts: tuple[Interrupt, ...] = ()
-    state: Union[None, RunnableConfig, "StateSnapshot"] = None
-    result: Optional[Any] = None
+    state: None | RunnableConfig | StateSnapshot = None
+    result: Any | None = None
 
 
 if sys.version_info > (3, 11):
@@ -188,7 +187,7 @@ class CacheKey(NamedTuple):
     """Namespace for the cache entry."""
     key: str
     """Key for the cache entry."""
-    ttl: Optional[int]
+    ttl: int | None
     """Time to live for the cache entry in seconds."""
 
 
@@ -201,28 +200,28 @@ class PregelExecutableTask:
     config: RunnableConfig
     triggers: Sequence[str]
     retry_policy: Sequence[RetryPolicy]
-    cache_key: Optional[CacheKey]
+    cache_key: CacheKey | None
     id: str
-    path: tuple[Union[str, int, tuple], ...]
+    path: tuple[str | int | tuple, ...]
     scheduled: bool = False
     writers: Sequence[Runnable] = ()
-    subgraphs: Sequence["PregelProtocol"] = ()
+    subgraphs: Sequence[PregelProtocol] = ()
 
 
 class StateSnapshot(NamedTuple):
     """Snapshot of the state of the graph at the beginning of a step."""
 
-    values: Union[dict[str, Any], Any]
+    values: dict[str, Any] | Any
     """Current values of channels."""
     next: tuple[str, ...]
     """The name of the node to execute in each task for this step."""
     config: RunnableConfig
     """Config used to fetch this snapshot."""
-    metadata: Optional[CheckpointMetadata]
+    metadata: CheckpointMetadata | None
     """Metadata associated with this snapshot."""
-    created_at: Optional[str]
+    created_at: str | None
     """Timestamp of snapshot creation."""
-    parent_config: Optional[RunnableConfig]
+    parent_config: RunnableConfig | None
     """Config used to fetch the parent snapshot, if any."""
     tasks: tuple[PregelTask, ...]
     """Tasks to execute in this step. If already attempted, may contain an error."""
@@ -329,10 +328,10 @@ class Command(Generic[N], ToolOutputMixin):
             - sequence of `Send` objects
     """
 
-    graph: Optional[str] = None
-    update: Optional[Any] = None
-    resume: Optional[Union[dict[str, Any], Any]] = None
-    goto: Union[Send, Sequence[Union[Send, N]], N] = ()
+    graph: str | None = None
+    update: Any | None = None
+    resume: dict[str, Any] | Any | None = None
+    goto: Send | Sequence[Send | N] | N = ()
 
     def __repr__(self) -> str:
         # get all non-None values
@@ -351,8 +350,8 @@ class Command(Generic[N], ToolOutputMixin):
             for t in self.update
         ):
             return self.update
-        elif hints := get_type_hints(type(self.update)):
-            return get_update_as_tuples(self.update, tuple(hints.keys()))
+        elif keys := get_cached_annotated_keys(type(self.update)):
+            return get_update_as_tuples(self.update, keys)
         elif self.update is not None:
             return [("__root__", self.update)]
         else:
@@ -380,31 +379,10 @@ class StreamProtocol:
         self.modes = modes
 
 
-class LoopProtocol:
-    config: RunnableConfig
-    store: Optional["BaseStore"]
-    stream: Optional[StreamProtocol]
-    step: int
-    stop: int
-
-    def __init__(
-        self,
-        *,
-        step: int,
-        stop: int,
-        config: RunnableConfig,
-        store: Optional["BaseStore"] = None,
-        stream: Optional[StreamProtocol] = None,
-    ) -> None:
-        self.stream = stream
-        self.config = config
-        self.store = store
-        self.step = step
-        self.stop = stop
-
-
 @dataclasses.dataclass(**_DC_KWARGS)
 class PregelScratchpad:
+    step: int
+    stop: int
     # call
     call_counter: Callable[[], int]
     # interrupt
@@ -510,6 +488,7 @@ def interrupt(value: Any) -> Any:
     Raises:
         GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
     """
+    from langgraph.config import get_config
     from langgraph.constants import (
         CONFIG_KEY_CHECKPOINT_NS,
         CONFIG_KEY_SCRATCHPAD,
@@ -518,7 +497,6 @@ def interrupt(value: Any) -> Any:
         RESUME,
     )
     from langgraph.errors import GraphInterrupt
-    from langgraph.utils.config import get_config
 
     conf = get_config()["configurable"]
     # track interrupt index

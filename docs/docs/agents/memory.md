@@ -82,13 +82,13 @@ ny_response = agent.invoke(
 ```
 
 1. The `InMemorySaver` is a checkpointer that stores the agent's state in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [checkpointer documentation](../reference/checkpoints.md) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready checkpointer for you.
-2. The `checkpointer` is passed to the agent. This enables the agent to persist its state across invocations. Please note that 
+2. The `checkpointer` is passed to the agent. This enables the agent to persist its state across invocations.
 3. A unique `thread_id` is provided in the config. This ID is used to identify the conversation session. The value is controlled by the user and can be any string.
 4. The agent will continue the conversation using the same `thread_id`. This will allow the agent to infer that the user is asking specifically about the **weather** in New York. 
 
 When the agent is invoked the second time with the same `thread_id`, the original message history from the first conversation is automatically included, allowing the agent to infer that the user is asking specifically about the **weather** in New York.
 
-!!! Note "LangGraph Platform providers a production-ready checkpointer"
+!!! Note "LangGraph Platform provides a production-ready checkpointer"
 
     If you're using [LangGraph Platform](./deployment.md), during deployment your checkpointer will be automatically configured to use a production-ready database.
 

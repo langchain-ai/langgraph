@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import concurrent.futures
 import threading
@@ -56,16 +58,14 @@ EXCLUDED_FRAME_FNAMES = (
     "concurrent/futures/_base.py",
 )
 
-SKIP_RERAISE_SET: weakref.WeakSet[Union[concurrent.futures.Future, asyncio.Future]] = (
+SKIP_RERAISE_SET: weakref.WeakSet[concurrent.futures.Future | asyncio.Future] = (
     weakref.WeakSet()
 )
 
 
 class FuturesDict(Generic[F, E], dict[F, Optional[PregelExecutableTask]]):
     event: E
-    callback: weakref.ref[
-        Callable[[PregelExecutableTask, Optional[BaseException]], None]
-    ]
+    callback: weakref.ref[Callable[[PregelExecutableTask, BaseException | None], None]]
     counter: int
     done: set[F]
     lock: threading.Lock
@@ -74,7 +74,7 @@ class FuturesDict(Generic[F, E], dict[F, Optional[PregelExecutableTask]]):
         self,
         event: E,
         callback: weakref.ref[
-            Callable[[PregelExecutableTask, Optional[BaseException]], None]
+            Callable[[PregelExecutableTask, BaseException | None], None]
         ],
         future_type: type[F],
         # used for generic typing, newer py supports FutureDict[...](...)
@@ -89,7 +89,7 @@ class FuturesDict(Generic[F, E], dict[F, Optional[PregelExecutableTask]]):
     def __setitem__(
         self,
         key: F,
-        value: Optional[PregelExecutableTask],
+        value: PregelExecutableTask | None,
     ) -> None:
         super().__setitem__(key, value)  # type: ignore[index]
         if value is not None:
@@ -124,7 +124,7 @@ class PregelRunner:
         submit: weakref.ref[Submit],
         put_writes: weakref.ref[Callable[[str, Sequence[tuple[str, Any]]], None]],
         use_astream: bool = False,
-        node_finished: Optional[Callable[[str], None]] = None,
+        node_finished: Callable[[str], None] | None = None,
     ) -> None:
         self.submit = submit
         self.put_writes = put_writes
@@ -136,12 +136,12 @@ class PregelRunner:
         tasks: Iterable[PregelExecutableTask],
         *,
         reraise: bool = True,
-        timeout: Optional[float] = None,
-        retry_policy: Optional[Sequence[RetryPolicy]] = None,
-        get_waiter: Optional[Callable[[], concurrent.futures.Future[None]]] = None,
+        timeout: float | None = None,
+        retry_policy: Sequence[RetryPolicy] | None = None,
+        get_waiter: Callable[[], concurrent.futures.Future[None]] | None = None,
         schedule_task: Callable[
-            [PregelExecutableTask, int, Optional[Call]],
-            Optional[PregelExecutableTask],
+            [PregelExecutableTask, int, Call | None],
+            PregelExecutableTask | None,
         ],
     ) -> Iterator[None]:
         tasks = tuple(tasks)
@@ -165,7 +165,7 @@ class PregelRunner:
                         CONFIG_KEY_CALL: partial(
                             _call,
                             weakref.ref(t),
-                            retry=retry_policy,
+                            retry_policy=retry_policy,
                             futures=weakref.ref(futures),
                             schedule_task=schedule_task,
                             submit=self.submit,
@@ -206,7 +206,7 @@ class PregelRunner:
                     CONFIG_KEY_CALL: partial(
                         _call,
                         weakref.ref(t),
-                        retry=retry_policy,
+                        retry_policy=retry_policy,
                         futures=weakref.ref(futures),
                         schedule_task=schedule_task,
                         submit=self.submit,
@@ -268,12 +268,12 @@ class PregelRunner:
         tasks: Iterable[PregelExecutableTask],
         *,
         reraise: bool = True,
-        timeout: Optional[float] = None,
-        retry_policy: Optional[Sequence[RetryPolicy]] = None,
-        get_waiter: Optional[Callable[[], asyncio.Future[None]]] = None,
+        timeout: float | None = None,
+        retry_policy: Sequence[RetryPolicy] | None = None,
+        get_waiter: Callable[[], asyncio.Future[None]] | None = None,
         schedule_task: Callable[
-            [PregelExecutableTask, int, Optional[Call]],
-            Awaitable[Optional[PregelExecutableTask]],
+            [PregelExecutableTask, int, Call | None],
+            Awaitable[PregelExecutableTask | None],
         ],
     ) -> AsyncIterator[None]:
         loop = asyncio.get_event_loop()
@@ -300,7 +300,7 @@ class PregelRunner:
                             _acall,
                             weakref.ref(t),
                             stream=self.use_astream,
-                            retry=retry_policy,
+                            retry_policy=retry_policy,
                             futures=weakref.ref(futures),
                             schedule_task=schedule_task,
                             submit=self.submit,
@@ -345,7 +345,7 @@ class PregelRunner:
                         CONFIG_KEY_CALL: partial(
                             _acall,
                             weakref.ref(t),
-                            retry=retry_policy,
+                            retry_policy=retry_policy,
                             stream=self.use_astream,
                             futures=weakref.ref(futures),
                             schedule_task=schedule_task,
@@ -415,7 +415,7 @@ class PregelRunner:
     def commit(
         self,
         task: PregelExecutableTask,
-        exception: Optional[BaseException],
+        exception: BaseException | None,
     ) -> None:
         if isinstance(exception, asyncio.CancelledError):
             # for cancelled tasks, also save error in task,
@@ -431,7 +431,8 @@ class PregelRunner:
                         writes.extend(resumes)
                     self.put_writes()(task.id, writes)  # type: ignore[misc]
             elif isinstance(exception, GraphBubbleUp):
-                raise exception
+                # exception will be raised in _panic_or_proceed
+                pass
             else:
                 # save error to checkpointer
                 task.writes.append((ERROR, exception))
@@ -464,8 +465,8 @@ def _should_stop_others(
 
 
 def _exception(
-    fut: Union[concurrent.futures.Future[Any], asyncio.Future[Any]],
-) -> Optional[BaseException]:
+    fut: concurrent.futures.Future[Any] | asyncio.Future[Any],
+) -> BaseException | None:
     """Return the exception from a future, without raising CancelledError."""
     if fut.cancelled():
         if isinstance(fut, asyncio.Future):
@@ -477,14 +478,14 @@ def _exception(
 
 
 def _panic_or_proceed(
-    futs: Union[set[concurrent.futures.Future], set[asyncio.Future]],
+    futs: set[concurrent.futures.Future] | set[asyncio.Future],
     *,
     timeout_exc_cls: type[Exception] = TimeoutError,
     panic: bool = True,
 ) -> None:
     """Cancel remaining tasks if any failed, re-raise exception if panic is True."""
-    done: set[Union[concurrent.futures.Future[Any], asyncio.Future[Any]]] = set()
-    inflight: set[Union[concurrent.futures.Future[Any], asyncio.Future[Any]]] = set()
+    done: set[concurrent.futures.Future[Any] | asyncio.Future[Any]] = set()
+    inflight: set[concurrent.futures.Future[Any] | asyncio.Future[Any]] = set()
     for fut in futs:
         if fut.cancelled():
             continue
@@ -521,29 +522,35 @@ def _panic_or_proceed(
 
 def _call(
     task: weakref.ref[PregelExecutableTask],
-    func: Callable[[Any], Union[Awaitable[Any], Any]],
+    func: Callable[[Any], Awaitable[Any] | Any],
     input: Any,
     *,
-    retry: Optional[Sequence[RetryPolicy]] = None,
-    cache_policy: Optional[CachePolicy] = None,
+    retry_policy: Sequence[RetryPolicy] | None = None,
+    cache_policy: CachePolicy | None = None,
     callbacks: Callbacks = None,
     futures: weakref.ref[FuturesDict],
     schedule_task: Callable[
-        [PregelExecutableTask, int, Optional[Call]], Optional[PregelExecutableTask]
+        [PregelExecutableTask, int, Call | None], PregelExecutableTask | None
     ],
     submit: weakref.ref[Submit],
 ) -> concurrent.futures.Future[Any]:
     if asyncio.iscoroutinefunction(func):
         raise RuntimeError("In an sync context async tasks cannot be called")
 
-    fut: Optional[concurrent.futures.Future] = None
+    fut: concurrent.futures.Future | None = None
     # schedule PUSH tasks, collect futures
     scratchpad: PregelScratchpad = task().config[CONF][CONFIG_KEY_SCRATCHPAD]  # type: ignore[union-attr]
     # schedule the next task, if the callback returns one
     if next_task := schedule_task(
         task(),  # type: ignore[arg-type]
         scratchpad.call_counter(),
-        Call(func, input, retry=retry, cache_policy=cache_policy, callbacks=callbacks),
+        Call(
+            func,
+            input,
+            retry_policy=retry_policy,
+            cache_policy=cache_policy,
+            callbacks=callbacks,
+        ),
     ):
         if fut := next(
             (
@@ -573,13 +580,13 @@ def _call(
             fut = submit()(  # type: ignore[misc]
                 run_with_retry,
                 next_task,
-                retry,
+                retry_policy,
                 configurable={
                     CONFIG_KEY_CALL: partial(
                         _call,
                         weakref.ref(next_task),
                         futures=futures,
-                        retry=retry,
+                        retry_policy=retry_policy,
                         callbacks=callbacks,
                         schedule_task=schedule_task,
                         submit=submit,
@@ -602,22 +609,22 @@ def _call(
 
 def _acall(
     task: weakref.ref[PregelExecutableTask],
-    func: Callable[[Any], Union[Awaitable[Any], Any]],
+    func: Callable[[Any], Awaitable[Any] | Any],
     input: Any,
     *,
-    retry: Optional[Sequence[RetryPolicy]] = None,
-    cache_policy: Optional[CachePolicy] = None,
+    retry_policy: Sequence[RetryPolicy] | None = None,
+    cache_policy: CachePolicy | None = None,
     callbacks: Callbacks = None,
     # injected dependencies
     futures: weakref.ref[FuturesDict],
     schedule_task: Callable[
-        [PregelExecutableTask, int, Optional[Call]],
-        Awaitable[Optional[PregelExecutableTask]],
+        [PregelExecutableTask, int, Call | None],
+        Awaitable[PregelExecutableTask | None],
     ],
     submit: weakref.ref[Submit],
     loop: asyncio.AbstractEventLoop,
     stream: bool = False,
-) -> Union[asyncio.Future[Any], concurrent.futures.Future[Any]]:
+) -> asyncio.Future[Any] | concurrent.futures.Future[Any]:
     # return a chained future to ensure commit() callback is called
     # before the returned future is resolved, to ensure stream order etc
     try:
@@ -626,8 +633,8 @@ def _acall(
         in_async = False
     # if in async context return an async future, otherwise return a sync future
     if in_async:
-        fut: Union[asyncio.Future[Any], concurrent.futures.Future[Any]] = (
-            asyncio.Future(loop=loop)
+        fut: asyncio.Future[Any] | concurrent.futures.Future[Any] = asyncio.Future(
+            loop=loop
         )
     else:
         fut = concurrent.futures.Future()
@@ -638,7 +645,7 @@ def _acall(
             task,
             func,
             input,
-            retry=retry,
+            retry_policy=retry_policy,
             cache_policy=cache_policy,
             callbacks=callbacks,
             futures=futures,
@@ -654,26 +661,26 @@ def _acall(
 
 
 async def _acall_impl(
-    destination: Union[asyncio.Future[Any], concurrent.futures.Future[Any]],
+    destination: asyncio.Future[Any] | concurrent.futures.Future[Any],
     task: weakref.ref[PregelExecutableTask],
-    func: Callable[[Any], Union[Awaitable[Any], Any]],
+    func: Callable[[Any], Awaitable[Any] | Any],
     input: Any,
     *,
-    retry: Optional[Sequence[RetryPolicy]] = None,
-    cache_policy: Optional[CachePolicy] = None,
+    retry_policy: Sequence[RetryPolicy] | None = None,
+    cache_policy: CachePolicy | None = None,
     callbacks: Callbacks = None,
     # injected dependencies
     futures: weakref.ref[FuturesDict[asyncio.Future, asyncio.Event]],
     schedule_task: Callable[
-        [PregelExecutableTask, int, Optional[Call]],
-        Awaitable[Optional[PregelExecutableTask]],
+        [PregelExecutableTask, int, Call | None],
+        Awaitable[PregelExecutableTask | None],
     ],
     submit: weakref.ref[Submit],
     loop: asyncio.AbstractEventLoop,
     stream: bool = False,
 ) -> None:
     try:
-        fut: Optional[asyncio.Future] = None
+        fut: asyncio.Future | None = None
         # schedule PUSH tasks, collect futures
         scratchpad: PregelScratchpad = task().config[CONF][CONFIG_KEY_SCRATCHPAD]  # type: ignore[union-attr]
         # schedule the next task, if the callback returns one
@@ -681,7 +688,11 @@ async def _acall_impl(
             task(),  # type: ignore[arg-type]
             scratchpad.call_counter(),
             Call(
-                func, input, retry=retry, cache_policy=cache_policy, callbacks=callbacks
+                func,
+                input,
+                retry_policy=retry_policy,
+                cache_policy=cache_policy,
+                callbacks=callbacks,
             ),
         ):
             if fut := next(
@@ -715,7 +726,7 @@ async def _acall_impl(
                     submit()(  # type: ignore[misc]
                         arun_with_retry,
                         next_task,
-                        retry,
+                        retry_policy,
                         stream=stream,
                         configurable={
                             CONFIG_KEY_CALL: partial(
