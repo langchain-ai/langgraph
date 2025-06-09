@@ -1,4 +1,5 @@
-# Rollback
+# How to use the Rollback option
+
 
 This guide assumes knowledge of what double-texting is, which you can learn about in the [double-texting conceptual guide](../../concepts/double_texting.md).
 

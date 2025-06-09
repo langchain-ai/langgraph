@@ -1,6 +1,9 @@
 """Adapted from httpx_sse to split lines on \n, \r, \r\n per the SSE spec."""
 
-from typing import AsyncIterator, Iterator, Optional, Union
+from __future__ import annotations
+
+from collections.abc import AsyncIterator, Iterator
+from typing import Union
 
 import httpx
 import orjson
@@ -76,9 +79,9 @@ class SSEDecoder:
         self._event = ""
         self._data = bytearray()
         self._last_event_id = ""
-        self._retry: Optional[int] = None
+        self._retry: int | None = None
 
-    def decode(self, line: bytes) -> Optional[StreamPart]:
+    def decode(self, line: bytes) -> StreamPart | None:
         # See: https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation  # noqa: E501
 
         if not line:

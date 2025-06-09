@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import random
 from collections.abc import Sequence
 from typing import Any, Optional, cast
@@ -9,12 +11,9 @@ from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
-    Checkpoint,
-    CheckpointMetadata,
     get_checkpoint_id,
 )
-from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
-from langgraph.checkpoint.serde.types import TASKS, ChannelProtocol
+from langgraph.checkpoint.serde.types import TASKS
 
 MetadataInput = Optional[dict[str, Any]]
 
@@ -72,7 +71,7 @@ MIGRATIONS = [
     """ALTER TABLE checkpoint_writes ADD COLUMN task_path TEXT NOT NULL DEFAULT '';""",
 ]
 
-SELECT_SQL = f"""
+SELECT_SQL = """
 select
     thread_id,
     checkpoint,
@@ -96,16 +95,19 @@ select
         where cw.thread_id = checkpoints.thread_id
             and cw.checkpoint_ns = checkpoints.checkpoint_ns
             and cw.checkpoint_id = checkpoints.checkpoint_id
-    ) as pending_writes,
-    (
-        select array_agg(array[cw.type::bytea, cw.blob] order by cw.task_path, cw.task_id, cw.idx)
-        from checkpoint_writes cw
-        where cw.thread_id = checkpoints.thread_id
-            and cw.checkpoint_ns = checkpoints.checkpoint_ns
-            and cw.checkpoint_id = checkpoints.parent_checkpoint_id
-            and cw.channel = '{TASKS}'
-    ) as pending_sends
+    ) as pending_writes
 from checkpoints """
+
+SELECT_PENDING_SENDS_SQL = f"""
+select
+    checkpoint_id,
+    array_agg(array[type::bytea, blob] order by task_path, task_id, idx) as sends
+from checkpoint_writes
+where thread_id = %s
+    and checkpoint_id = any(%s)
+    and channel = '{TASKS}'
+group by checkpoint_id
+"""
 
 UPSERT_CHECKPOINT_BLOBS_SQL = """
     INSERT INTO checkpoint_blobs (thread_id, checkpoint_ns, channel, version, type, blob)
@@ -140,31 +142,34 @@ INSERT_CHECKPOINT_WRITES_SQL = """
 
 class BasePostgresSaver(BaseCheckpointSaver[str]):
     SELECT_SQL = SELECT_SQL
+    SELECT_PENDING_SENDS_SQL = SELECT_PENDING_SENDS_SQL
     MIGRATIONS = MIGRATIONS
     UPSERT_CHECKPOINT_BLOBS_SQL = UPSERT_CHECKPOINT_BLOBS_SQL
     UPSERT_CHECKPOINTS_SQL = UPSERT_CHECKPOINTS_SQL
     UPSERT_CHECKPOINT_WRITES_SQL = UPSERT_CHECKPOINT_WRITES_SQL
     INSERT_CHECKPOINT_WRITES_SQL = INSERT_CHECKPOINT_WRITES_SQL
 
-    jsonplus_serde = JsonPlusSerializer()
     supports_pipeline: bool
 
-    def _load_checkpoint(
+    def _migrate_pending_sends(
         self,
+        pending_sends: list[tuple[bytes, bytes]],
         checkpoint: dict[str, Any],
         channel_values: list[tuple[bytes, bytes, bytes]],
-        pending_sends: list[tuple[bytes, bytes]],
-    ) -> Checkpoint:
-        return {
-            **checkpoint,
-            "pending_sends": [
-                self.serde.loads_typed((c.decode(), b)) for c, b in pending_sends or []
-            ],
-            "channel_values": self._load_blobs(channel_values),
-        }
-
-    def _dump_checkpoint(self, checkpoint: Checkpoint) -> dict[str, Any]:
-        return {**checkpoint, "pending_sends": []}
+    ) -> None:
+        if not pending_sends:
+            return
+        # add to values
+        enc, blob = self.serde.dumps_typed(
+            [self.serde.loads_typed((c.decode(), b)) for c, b in pending_sends],
+        )
+        channel_values.append((TASKS.encode(), enc.encode(), blob))
+        # add to versions
+        checkpoint["channel_versions"][TASKS] = (
+            max(checkpoint["channel_versions"].values())
+            if checkpoint["channel_versions"]
+            else self.get_next_version(None)
+        )
 
     def _load_blobs(
         self, blob_values: list[tuple[bytes, bytes, bytes]]
@@ -183,7 +188,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
         checkpoint_ns: str,
         values: dict[str, Any],
         versions: ChannelVersions,
-    ) -> list[tuple[str, str, str, str, str, Optional[bytes]]]:
+    ) -> list[tuple[str, str, str, str, str, bytes | None]]:
         if not versions:
             return []
 
@@ -241,15 +246,7 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             for idx, (channel, value) in enumerate(writes)
         ]
 
-    def _load_metadata(self, metadata: dict[str, Any]) -> CheckpointMetadata:
-        return self.jsonplus_serde.loads(self.jsonplus_serde.dumps(metadata))
-
-    def _dump_metadata(self, metadata: CheckpointMetadata) -> str:
-        serialized_metadata = self.jsonplus_serde.dumps(metadata)
-        # NOTE: we're using JSON serializer (not msgpack), so we need to remove null characters before writing
-        return serialized_metadata.decode().replace("\\u0000", "")
-
-    def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
+    def get_next_version(self, current: str | None) -> str:
         if current is None:
             current_v = 0
         elif isinstance(current, int):
@@ -262,9 +259,9 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
 
     def _search_where(
         self,
-        config: Optional[RunnableConfig],
+        config: RunnableConfig | None,
         filter: MetadataInput,
-        before: Optional[RunnableConfig] = None,
+        before: RunnableConfig | None = None,
     ) -> tuple[str, list[Any]]:
         """Return WHERE clause predicates for alist() given config, filter, before.
 

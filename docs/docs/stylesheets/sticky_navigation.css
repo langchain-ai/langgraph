@@ -1,0 +1,23 @@
+@media screen and (min-width: 76.25em) {
+  .md-nav__toggle ~ .md-nav > .md-nav__list {
+    overflow: clip;
+  }
+
+  .md-nav__link {
+    margin: 0;
+    padding: 0.325em 0;
+  }
+
+  .md-nav__link:has(+ .md-nav[aria-expanded="true"]) {
+    position: sticky;
+    top: 2em;
+
+    z-index: 1;
+    background-color: var(--md-default-bg-color);
+  }
+
+  .md-nav__link.md-nav__container {
+    z-index: 2 !important;
+    box-shadow: none !important;
+  }
+}

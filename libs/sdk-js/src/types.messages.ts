@@ -70,6 +70,15 @@ export type ToolMessage = {
   tool_call_id: string;
   additional_kwargs?: MessageAdditionalKwargs | undefined;
   response_metadata?: Record<string, unknown> | undefined;
+  /**
+   * Artifact of the Tool execution which is not meant to be sent to the model.
+   *
+   * Should only be specified if it is different from the message content, e.g. if only
+   * a subset of the full tool output is being passed as message content but the full
+   * output is needed in other parts of the code.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  artifact?: any;
 };
 
 export type SystemMessage = {

@@ -1,7 +1,17 @@
-import dataclasses
-from typing import Any, Generator, Optional, Type, Union, get_type_hints
+from __future__ import annotations
 
-from typing_extensions import Annotated, NotRequired, ReadOnly, Required, get_origin
+import dataclasses
+import types
+import weakref
+from collections.abc import Generator, Sequence
+from typing import Annotated, Any, Optional, Union, get_type_hints
+
+from pydantic import BaseModel
+from typing_extensions import NotRequired, ReadOnly, Required, get_origin
+
+# NOTE: this is redefined here separately from langgraph.constants
+# to avoid a circular import
+MISSING = object()
 
 
 def _is_optional_type(type_: Any) -> bool:
@@ -23,7 +33,7 @@ def _is_optional_type(type_: Any) -> bool:
     return type_ is None
 
 
-def _is_required_type(type_: Any) -> Optional[bool]:
+def _is_required_type(type_: Any) -> bool | None:
     """Check if an annotation is marked as Required/NotRequired.
 
     Returns:
@@ -62,7 +72,7 @@ def _is_readonly_type(type_: Any) -> bool:
 _DEFAULT_KEYS: frozenset[str] = frozenset()
 
 
-def get_field_default(name: str, type_: Any, schema: Type[Any]) -> Any:
+def get_field_default(name: str, type_: Any, schema: type[Any]) -> Any:
     """Determine the default value for a field in a state schema.
 
     This is based on:
@@ -109,8 +119,8 @@ def get_field_default(name: str, type_: Any, schema: Type[Any]) -> Any:
 
 
 def get_enhanced_type_hints(
-    type: Type[Any],
-) -> Generator[tuple[str, Any, Any, Optional[str]], None, None]:
+    type: type[Any],
+) -> Generator[tuple[str, Any, Any, str | None], None, None]:
     """Attempt to extract default values and descriptions from provided type, used for config schema."""
     for name, typ in get_type_hints(type).items():
         default = None
@@ -147,3 +157,49 @@ def get_enhanced_type_hints(
             pass
 
         yield name, typ, default, description
+
+
+def get_update_as_tuples(input: Any, keys: Sequence[str]) -> list[tuple[str, Any]]:
+    """Get Pydantic state update as a list of (key, value) tuples."""
+    if isinstance(input, BaseModel):
+        keep = input.model_fields_set
+        defaults = {k: v.default for k, v in input.model_fields.items()}
+    else:
+        keep = None
+        defaults = {}
+
+    # NOTE: This behavior for Pydantic is somewhat inelegant,
+    # but we keep around for backwards compatibility
+    # if input is a Pydantic model, only update values
+    # that are different from the default values or in the keep set
+    return [
+        (k, value)
+        for k in keys
+        if (value := getattr(input, k, MISSING)) is not MISSING
+        and (
+            value is not None
+            or defaults.get(k, MISSING) is not None
+            or (keep is not None and k in keep)
+        )
+    ]
+
+
+ANNOTATED_KEYS_CACHE: weakref.WeakKeyDictionary[type[Any], tuple[str, ...]] = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def get_cached_annotated_keys(obj: type[Any]) -> tuple[str, ...]:
+    """Return cached annotated keys for a Python class."""
+    if obj in ANNOTATED_KEYS_CACHE:
+        return ANNOTATED_KEYS_CACHE[obj]
+    if isinstance(obj, type):
+        keys: list[str] = []
+        for base in reversed(obj.__mro__):
+            ann = base.__dict__.get("__annotations__")
+            if ann is None or isinstance(ann, types.GetSetDescriptorType):
+                continue
+            keys.extend(ann.keys())
+        return ANNOTATED_KEYS_CACHE.setdefault(obj, tuple(keys))
+    else:
+        raise TypeError(f"Expected a type, got {type(obj)}. ")

@@ -13,6 +13,20 @@ By default `langgraph-checkpoint-postgres` installs `psycopg` (Psycopg 3) withou
 
 > [!IMPORTANT]
 > When manually creating Postgres connections and passing them to `PostgresSaver` or `AsyncPostgresSaver`, make sure to include `autocommit=True` and `row_factory=dict_row` (`from psycopg.rows import dict_row`). See a full example in this [how-to guide](https://langchain-ai.github.io/langgraph/how-tos/persistence_postgres/).
+>
+> **Why these parameters are required:**
+> - `autocommit=True`: Required for the `.setup()` method to properly commit the checkpoint tables to the database. Without this, table creation may not be persisted.
+> - `row_factory=dict_row`: Required because the PostgresSaver implementation accesses database rows using dictionary-style syntax (e.g., `row["column_name"]`). The default `tuple_row` factory returns tuples that only support index-based access (e.g., `row[0]`), which will cause `TypeError` exceptions when the checkpointer tries to access columns by name.
+>
+> **Example of incorrect usage:**
+> ```python
+> # ❌ This will fail with TypeError during checkpointer operations
+> with psycopg.connect(DB_URI) as conn:  # Missing autocommit=True and row_factory=dict_row
+>     checkpointer = PostgresSaver(conn)
+>     checkpointer.setup()  # May not persist tables properly
+>     # Any operation that reads from database will fail with:
+>     # TypeError: tuple indices must be integers or slices, not str
+> ```
 
 ```python
 from langgraph.checkpoint.postgres import PostgresSaver
@@ -25,7 +39,7 @@ with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
     # call .setup() the first time you're using the checkpointer
     checkpointer.setup()
     checkpoint = {
-        "v": 2,
+        "v": 4,
         "ts": "2024-07-31T20:14:19.804150+00:00",
         "id": "1ef4f797-8335-6428-8001-8a1503f9b875",
         "channel_values": {
@@ -47,7 +61,6 @@ with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
             "start:node": 2
             }
         },
-        "pending_sends": [],
     }
 
     # store checkpoint
@@ -67,7 +80,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 async with AsyncPostgresSaver.from_conn_string(DB_URI) as checkpointer:
     checkpoint = {
-        "v": 2,
+        "v": 4,
         "ts": "2024-07-31T20:14:19.804150+00:00",
         "id": "1ef4f797-8335-6428-8001-8a1503f9b875",
         "channel_values": {
@@ -89,7 +102,6 @@ async with AsyncPostgresSaver.from_conn_string(DB_URI) as checkpointer:
             "start:node": 2
             }
         },
-        "pending_sends": [],
     }
 
     # store checkpoint

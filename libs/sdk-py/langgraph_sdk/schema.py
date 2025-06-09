@@ -1,25 +1,25 @@
 """Data models for interacting with the LangGraph API."""
 
+from __future__ import annotations
+
+from collections.abc import Sequence
 from datetime import datetime
 from typing import (
     Any,
-    Dict,
     Literal,
     NamedTuple,
     Optional,
-    Sequence,
-    Tuple,
     TypedDict,
-    Union,
 )
 
 Json = Optional[dict[str, Any]]
 """Represents a JSON-like structure, which can be None or a dictionary with string keys and any values."""
 
-RunStatus = Literal["pending", "error", "success", "timeout", "interrupted"]
+RunStatus = Literal["pending", "running", "error", "success", "timeout", "interrupted"]
 """
 Represents the status of a run:
 - "pending": The run is waiting to start.
+- "running": The run is currently executing.
 - "error": The run encountered an error and stopped.
 - "success": The run completed successfully.
 - "timeout": The run exceeded its time limit.
@@ -95,6 +95,23 @@ Action to take when cancelling the run.
 - "rollback": Cancel the run. Then delete the run and associated checkpoints.
 """
 
+AssistantSortBy = Literal[
+    "assistant_id", "graph_id", "name", "created_at", "updated_at"
+]
+"""
+The field to sort by.
+"""
+
+ThreadSortBy = Literal["thread_id", "status", "created_at", "updated_at"]
+"""
+The field to sort by.
+"""
+
+SortOrder = Literal["asc", "desc"]
+"""
+The order to sort by.
+"""
+
 
 class Config(TypedDict, total=False):
     """Configuration options for a call."""
@@ -125,10 +142,10 @@ class Checkpoint(TypedDict):
     thread_id: str
     """Unique identifier for the thread associated with this checkpoint."""
     checkpoint_ns: str
-    """Namespace for the checkpoint, used for organization and retrieval."""
-    checkpoint_id: Optional[str]
+    """Namespace for the checkpoint; used internally to manage subgraph state."""
+    checkpoint_id: str | None
     """Optional unique identifier for the checkpoint itself."""
-    checkpoint_map: Optional[dict[str, Any]]
+    checkpoint_map: dict[str, Any] | None
     """Optional dictionary containing checkpoint-specific data."""
 
 
@@ -137,16 +154,16 @@ class GraphSchema(TypedDict):
 
     graph_id: str
     """The ID of the graph."""
-    input_schema: Optional[dict]
+    input_schema: dict | None
     """The schema for the graph input.
     Missing if unable to generate JSON schema from graph."""
-    output_schema: Optional[dict]
+    output_schema: dict | None
     """The schema for the graph output.
     Missing if unable to generate JSON schema from graph."""
-    state_schema: Optional[dict]
+    state_schema: dict | None
     """The schema for the graph state.
     Missing if unable to generate JSON schema from graph."""
-    config_schema: Optional[dict]
+    config_schema: dict | None
     """The schema for the graph config.
     Missing if unable to generate JSON schema from graph."""
 
@@ -171,6 +188,8 @@ class AssistantBase(TypedDict):
     """The version of the assistant"""
     name: str
     """The name of the assistant"""
+    description: str | None
+    """The description of the assistant"""
 
 
 class AssistantVersion(AssistantBase):
@@ -195,7 +214,7 @@ class Interrupt(TypedDict, total=False):
     """When the interrupt occurred."""
     resumable: bool
     """Whether the interrupt can be resumed."""
-    ns: Optional[list[str]]
+    ns: list[str] | None
     """Optional namespace for the interrupt."""
 
 
@@ -214,7 +233,7 @@ class Thread(TypedDict):
     """The status of the thread, one of 'idle', 'busy', 'interrupted'."""
     values: Json
     """The current state of the thread."""
-    interrupts: Dict[str, list[Interrupt]]
+    interrupts: dict[str, list[Interrupt]]
     """Interrupts which were thrown in this thread"""
 
 
@@ -223,17 +242,17 @@ class ThreadTask(TypedDict):
 
     id: str
     name: str
-    error: Optional[str]
+    error: str | None
     interrupts: list[Interrupt]
-    checkpoint: Optional[Checkpoint]
-    state: Optional["ThreadState"]
-    result: Optional[dict[str, Any]]
+    checkpoint: Checkpoint | None
+    state: ThreadState | None
+    result: dict[str, Any] | None
 
 
 class ThreadState(TypedDict):
     """Represents the state of a thread."""
 
-    values: Union[list[dict], dict[str, Any]]
+    values: list[dict] | dict[str, Any]
     """The state values."""
     next: Sequence[str]
     """The next nodes to execute. If empty, the thread is done until new input is 
@@ -242,9 +261,9 @@ class ThreadState(TypedDict):
     """The ID of the checkpoint."""
     metadata: Json
     """Metadata for this state"""
-    created_at: Optional[str]
+    created_at: str | None
     """Timestamp of state creation"""
-    parent_checkpoint: Optional[Checkpoint]
+    parent_checkpoint: Checkpoint | None
     """The ID of the parent checkpoint. If missing, this is the root checkpoint."""
     tasks: Sequence[ThreadTask]
     """Tasks to execute in this step. If already attempted, may contain an error."""
@@ -283,9 +302,9 @@ class Cron(TypedDict):
 
     cron_id: str
     """The ID of the cron."""
-    thread_id: Optional[str]
+    thread_id: str | None
     """The ID of the thread."""
-    end_time: Optional[datetime]
+    end_time: datetime | None
     """The end date to stop running the cron."""
     schedule: str
     """The schedule to run, cron format."""
@@ -300,25 +319,25 @@ class Cron(TypedDict):
 class RunCreate(TypedDict):
     """Defines the parameters for initiating a background run."""
 
-    thread_id: Optional[str]
+    thread_id: str | None
     """The identifier of the thread to run. If not provided, the run is stateless."""
     assistant_id: str
     """The identifier of the assistant to use for this run."""
-    input: Optional[dict]
+    input: dict | None
     """Initial input data for the run."""
-    metadata: Optional[dict]
+    metadata: dict | None
     """Additional metadata to associate with the run."""
-    config: Optional[Config]
+    config: Config | None
     """Configuration options for the run."""
-    checkpoint_id: Optional[str]
+    checkpoint_id: str | None
     """The identifier of a checkpoint to resume from."""
-    interrupt_before: Optional[list[str]]
+    interrupt_before: list[str] | None
     """List of node names to interrupt execution before."""
-    interrupt_after: Optional[list[str]]
+    interrupt_after: list[str] | None
     """List of node names to interrupt execution after."""
-    webhook: Optional[str]
+    webhook: str | None
     """URL to send webhook notifications about the run's progress."""
-    multitask_strategy: Optional[MultitaskStrategy]
+    multitask_strategy: MultitaskStrategy | None
     """Strategy for handling concurrent runs on the same thread."""
 
 
@@ -358,7 +377,7 @@ class SearchItem(Item, total=False):
             searching a compatible store with a natural language query.
     """
 
-    score: Optional[float]
+    score: float | None
 
 
 class SearchItemsResponse(TypedDict):
@@ -386,7 +405,7 @@ class Send(TypedDict):
 
     node: str
     """The name of the target node to send the message to."""
-    input: Optional[dict[str, Any]]
+    input: dict[str, Any] | None
     """Optional dictionary containing the input data to be passed to the node.
 
     If None, the node will be called with no input."""
@@ -400,14 +419,14 @@ class Command(TypedDict, total=False):
     and resume from interruptions.
     """
 
-    goto: Union[Send, str, Sequence[Union[Send, str]]]
+    goto: Send | str | Sequence[Send | str]
     """Specifies where execution should continue. Can be:
 
         - A string node name to navigate to
         - A Send object to execute a node with specific input
         - A sequence of node names or Send objects to execute in order
     """
-    update: Union[dict[str, Any], Sequence[Tuple[str, Any]]]
+    update: dict[str, Any] | Sequence[tuple[str, Any]]
     """Updates to apply to the graph's state. Can be:
 
         - A dictionary of state updates to merge
@@ -417,3 +436,13 @@ class Command(TypedDict, total=False):
     """Value to resume execution with after an interruption.
        Used in conjunction with interrupt() to implement control flow.
     """
+
+
+class RunCreateMetadata(TypedDict):
+    """Metadata for a run creation request."""
+
+    run_id: str
+    """The ID of the run."""
+
+    thread_id: str | None
+    """The ID of the thread."""

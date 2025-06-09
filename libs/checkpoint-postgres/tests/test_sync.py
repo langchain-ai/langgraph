@@ -15,10 +15,10 @@ from langgraph.checkpoint.base import (
     EXCLUDED_METADATA_KEYS,
     Checkpoint,
     CheckpointMetadata,
-    create_checkpoint,
-    empty_checkpoint,
 )
-from langgraph.checkpoint.postgres import PostgresSaver, ShallowPostgresSaver
+from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.serde.types import TASKS
+from tests.checkpoint_utils import create_checkpoint, empty_checkpoint
 from tests.conftest import DEFAULT_POSTGRES_URI
 
 
@@ -98,35 +98,9 @@ def _base_saver():
 
 
 @contextmanager
-def _shallow_saver():
-    """Fixture for regular connection mode testing with a shallow checkpointer."""
-    database = f"test_{uuid4().hex[:16]}"
-    # create unique db
-    with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-        conn.execute(f"CREATE DATABASE {database}")
-    try:
-        with Connection.connect(
-            DEFAULT_POSTGRES_URI + database,
-            autocommit=True,
-            prepare_threshold=0,
-            row_factory=dict_row,
-        ) as conn:
-            checkpointer = ShallowPostgresSaver(conn)
-            checkpointer.setup()
-            yield checkpointer
-    finally:
-        # drop unique db
-        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
-            conn.execute(f"DROP DATABASE {database}")
-
-
-@contextmanager
 def _saver(name: str):
     if name == "base":
         with _base_saver() as saver:
-            yield saver
-    elif name == "shallow":
-        with _shallow_saver() as saver:
             yield saver
     elif name == "pool":
         with _pool_saver() as saver:
@@ -187,7 +161,7 @@ def test_data():
     }
 
 
-@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
 def test_combined_metadata(saver_name: str, test_data) -> None:
     with _saver(saver_name) as saver:
         config = {
@@ -214,7 +188,7 @@ def test_combined_metadata(saver_name: str, test_data) -> None:
         }
 
 
-@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
 def test_search(saver_name: str, test_data) -> None:
     with _saver(saver_name) as saver:
         configs = test_data["configs"]
@@ -263,7 +237,7 @@ def test_search(saver_name: str, test_data) -> None:
         } == {"", "inner"}
 
 
-@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
 def test_null_chars(saver_name: str, test_data) -> None:
     with _saver(saver_name) as saver:
         config = saver.put(
@@ -284,3 +258,52 @@ def test_nonnull_migrations() -> None:
     for migration in PostgresSaver.MIGRATIONS:
         statement = _leading_comment_remover.sub("", migration).split()[0]
         assert statement.strip()
+
+
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
+def test_pending_sends_migration(saver_name: str) -> None:
+    with _saver(saver_name) as saver:
+        config = {
+            "configurable": {
+                "thread_id": "thread-1",
+                "checkpoint_ns": "",
+            }
+        }
+
+        # create the first checkpoint
+        # and put some pending sends
+        checkpoint_0 = empty_checkpoint()
+        config = saver.put(config, checkpoint_0, {}, {})
+        saver.put_writes(
+            config, [(TASKS, "send-1"), (TASKS, "send-2")], task_id="task-1"
+        )
+        saver.put_writes(config, [(TASKS, "send-3")], task_id="task-2")
+
+        # check that fetching checkpoint_0 doesn't attach pending sends
+        # (they should be attached to the next checkpoint)
+        tuple_0 = saver.get_tuple(config)
+        assert tuple_0.checkpoint["channel_values"] == {}
+        assert tuple_0.checkpoint["channel_versions"] == {}
+
+        # create the second checkpoint
+        checkpoint_1 = create_checkpoint(checkpoint_0, {}, 1)
+        config = saver.put(config, checkpoint_1, {}, {})
+
+        # check that pending sends are attached to checkpoint_1
+        checkpoint_1 = saver.get_tuple(config)
+        assert checkpoint_1.checkpoint["channel_values"] == {
+            TASKS: ["send-1", "send-2", "send-3"]
+        }
+        assert TASKS in checkpoint_1.checkpoint["channel_versions"]
+
+        # check that list also applies the migration
+        search_results = [
+            c for c in saver.list({"configurable": {"thread_id": "thread-1"}})
+        ]
+        assert len(search_results) == 2
+        assert search_results[-1].checkpoint["channel_values"] == {}
+        assert search_results[-1].checkpoint["channel_versions"] == {}
+        assert search_results[0].checkpoint["channel_values"] == {
+            TASKS: ["send-1", "send-2", "send-3"]
+        }
+        assert TASKS in search_results[0].checkpoint["channel_versions"]

@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import dataclasses
 import decimal
 import importlib
 import json
 import pathlib
+import pickle
 import re
 from collections import deque
 from collections.abc import Sequence
@@ -17,25 +20,32 @@ from ipaddress import (
     IPv6Interface,
     IPv6Network,
 )
-from typing import Any, Callable, Optional, Union, cast
+from typing import Any, Callable, cast
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import ormsgpack
 from langchain_core.load.load import Reviver
 from langchain_core.load.serializable import Serializable
-from zoneinfo import ZoneInfo
 
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.types import SendProtocol
 from langgraph.store.base import Item
 
 LC_REVIVER = Reviver()
+EMPTY_BYTES = b""
 
 
 class JsonPlusSerializer(SerializerProtocol):
+    """Serializer that uses ormsgpack, with a fallback to extended JSON serializer."""
+
     def __init__(
-        self, *, __unpack_ext_hook__: Optional[Callable[[int, bytes], Any]] = None
+        self,
+        *,
+        pickle_fallback: bool = False,
+        __unpack_ext_hook__: Callable[[int, bytes], Any] | None = None,
     ) -> None:
+        self.pickle_fallback = pickle_fallback
         self._unpack_ext_hook = (
             __unpack_ext_hook__
             if __unpack_ext_hook__ is not None
@@ -44,11 +54,11 @@ class JsonPlusSerializer(SerializerProtocol):
 
     def _encode_constructor_args(
         self,
-        constructor: Union[Callable, type[Any]],
+        constructor: Callable | type[Any],
         *,
-        method: Union[None, str, Sequence[Union[None, str]]] = None,
-        args: Optional[Sequence[Any]] = None,
-        kwargs: Optional[dict[str, Any]] = None,
+        method: None | str | Sequence[None | str] = None,
+        args: Sequence[Any] | None = None,
+        kwargs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         out = {
             "lc": 2,
@@ -63,7 +73,7 @@ class JsonPlusSerializer(SerializerProtocol):
             out["kwargs"] = kwargs
         return out
 
-    def _default(self, obj: Any) -> Union[str, dict[str, Any]]:
+    def _default(self, obj: Any) -> str | dict[str, Any]:
         if isinstance(obj, Serializable):
             return cast(dict[str, Any], obj.to_json())
         elif hasattr(obj, "model_dump") and callable(obj.model_dump):
@@ -194,7 +204,9 @@ class JsonPlusSerializer(SerializerProtocol):
         )
 
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
-        if isinstance(obj, bytes):
+        if obj is None:
+            return "null", EMPTY_BYTES
+        elif isinstance(obj, bytes):
             return "bytes", obj
         elif isinstance(obj, bytearray):
             return "bytearray", obj
@@ -204,6 +216,8 @@ class JsonPlusSerializer(SerializerProtocol):
             except ormsgpack.MsgpackEncodeError as exc:
                 if "valid UTF-8" in str(exc):
                     return "json", self.dumps(obj)
+                elif self.pickle_fallback:
+                    return "pickle", pickle.dumps(obj)
                 raise exc
 
     def loads(self, data: bytes) -> Any:
@@ -211,7 +225,9 @@ class JsonPlusSerializer(SerializerProtocol):
 
     def loads_typed(self, data: tuple[str, bytes]) -> Any:
         type_, data_ = data
-        if type_ == "bytes":
+        if type_ == "null":
+            return None
+        elif type_ == "bytes":
             return data_
         elif type_ == "bytearray":
             return bytearray(data_)
@@ -221,6 +237,8 @@ class JsonPlusSerializer(SerializerProtocol):
             return ormsgpack.unpackb(
                 data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
+        elif self.pickle_fallback and type_ == "pickle":
+            return pickle.loads(data_)
         else:
             raise NotImplementedError(f"Unknown serialization type: {type_}")
 
@@ -235,7 +253,7 @@ EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 
 
-def _msgpack_default(obj: Any) -> Union[str, ormsgpack.Ext]:
+def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
     if hasattr(obj, "model_dump") and callable(obj.model_dump):  # pydantic v2
         return ormsgpack.Ext(
             EXT_PYDANTIC_V2,

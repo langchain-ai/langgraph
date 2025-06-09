@@ -1,15 +1,13 @@
+from __future__ import annotations
+
 from collections import defaultdict
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pprint import pformat
 from typing import (
     Any,
-    Iterable,
-    Iterator,
     Literal,
-    Mapping,
-    Optional,
-    Sequence,
     Union,
 )
 from uuid import UUID
@@ -46,7 +44,7 @@ class TaskPayload(TypedDict):
 class TaskResultPayload(TypedDict):
     id: str
     name: str
-    error: Optional[str]
+    error: str | None
     interrupts: list[dict]
     result: list[tuple[str, Any]]
 
@@ -54,17 +52,17 @@ class TaskResultPayload(TypedDict):
 class CheckpointTask(TypedDict):
     id: str
     name: str
-    error: Optional[str]
+    error: str | None
     interrupts: list[dict]
-    state: Optional[RunnableConfig]
+    state: RunnableConfig | None
 
 
 class CheckpointPayload(TypedDict):
-    config: Optional[RunnableConfig]
+    config: RunnableConfig | None
     metadata: CheckpointMetadata
     values: dict[str, Any]
     next: list[str]
-    parent_config: Optional[RunnableConfig]
+    parent_config: RunnableConfig | None
     tasks: list[CheckpointTask]
 
 
@@ -119,7 +117,7 @@ def map_debug_tasks(
 def map_debug_task_results(
     step: int,
     task_tup: tuple[PregelExecutableTask, Sequence[tuple[str, Any]]],
-    stream_keys: Union[str, Sequence[str]],
+    stream_keys: str | Sequence[str],
 ) -> Iterator[DebugOutputTaskResult]:
     """Produce "task_result" events for stream_mode=debug."""
     stream_channels_list = (
@@ -147,22 +145,35 @@ def map_debug_task_results(
     }
 
 
+def rm_pregel_keys(config: RunnableConfig | None) -> RunnableConfig | None:
+    """Remove pregel-specific keys from the config."""
+    if config is None:
+        return config
+    return {
+        "configurable": {
+            k: v
+            for k, v in config.get("configurable", {}).items()
+            if not k.startswith("__pregel_")
+        }
+    }
+
+
 def map_debug_checkpoint(
     step: int,
     config: RunnableConfig,
     channels: Mapping[str, BaseChannel],
-    stream_channels: Union[str, Sequence[str]],
+    stream_channels: str | Sequence[str],
     metadata: CheckpointMetadata,
     checkpoint: Checkpoint,
     tasks: Iterable[PregelExecutableTask],
     pending_writes: list[PendingWrite],
-    parent_config: Optional[RunnableConfig],
-    output_keys: Union[str, Sequence[str]],
+    parent_config: RunnableConfig | None,
+    output_keys: str | Sequence[str],
 ) -> Iterator[DebugOutputCheckpoint]:
     """Produce "checkpoint" events for stream_mode=debug."""
 
     parent_ns = config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
-    task_states: dict[str, Union[RunnableConfig, StateSnapshot]] = {}
+    task_states: dict[str, RunnableConfig | StateSnapshot] = {}
 
     for task in tasks:
         if not task.subgraphs:
@@ -186,8 +197,10 @@ def map_debug_checkpoint(
         "timestamp": checkpoint["ts"],
         "step": step,
         "payload": {
-            "config": patch_checkpoint_map(config, metadata),
-            "parent_config": patch_checkpoint_map(parent_config, metadata),
+            "config": rm_pregel_keys(patch_checkpoint_map(config, metadata)),
+            "parent_config": rm_pregel_keys(
+                patch_checkpoint_map(parent_config, metadata)
+            ),
             "values": read_channels(channels, stream_channels),
             "metadata": metadata,
             "next": [t.name for t in tasks],
@@ -266,10 +279,10 @@ def print_step_checkpoint(
 
 
 def tasks_w_writes(
-    tasks: Iterable[Union[PregelTask, PregelExecutableTask]],
-    pending_writes: Optional[list[PendingWrite]],
-    states: Optional[dict[str, Union[RunnableConfig, StateSnapshot]]],
-    output_keys: Union[str, Sequence[str]],
+    tasks: Iterable[PregelTask | PregelExecutableTask],
+    pending_writes: list[PendingWrite] | None,
+    states: dict[str, RunnableConfig | StateSnapshot] | None,
+    output_keys: str | Sequence[str],
 ) -> tuple[PregelTask, ...]:
     """Apply writes / subgraph states to tasks to be returned in a StateSnapshot."""
     pending_writes = pending_writes or []

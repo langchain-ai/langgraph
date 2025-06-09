@@ -1,51 +1,76 @@
-[tool.poetry]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
 name = "langgraph"
-version = "0.3.21"
+version = "0.4.7"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
-license = "MIT"
+requires-python = ">=3.9"
 readme = "README.md"
-repository = "https://www.github.com/langchain-ai/langgraph"
+license = "MIT"
+license-files = ['LICENSE']
+dependencies = [
+    "langchain-core>=0.1",
+    "langgraph-checkpoint>=2.0.26",
+    "langgraph-sdk>=0.1.42",
+    "langgraph-prebuilt>=0.2.0",
+    "xxhash>=3.5.0",
+    "pydantic>=2.7.4",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.9.0,<4.0"
-langchain-core = ">=0.1,<0.4"
-langgraph-checkpoint = "^2.0.10"
-langgraph-sdk = "^0.1.42"
-langgraph-prebuilt = ">=0.1.1,<0.2"
-xxhash = "^3.5.0"
+[project.urls]
+Repository = "https://www.github.com/langchain-ai/langgraph"
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.3.2"
-pytest-cov = "^4.0.0"
-pytest-dotenv = "^0.5.2"
-pytest-mock  = "^3.10.0"
-syrupy = "^4.0.2"
-httpx = "^0.26.0"
-pytest-watcher = "^0.4.1"
-mypy = "^1.6.0"
-ruff = "^0.6.2"
-jupyter = "^1.0.0"
-pytest-xdist = {extras = ["psutil"], version = "^3.6.1"}
-pytest-repeat = "^0.9.3"
-langgraph-prebuilt = {path = "../prebuilt", develop = true}
-langgraph-checkpoint = {path = "../checkpoint", develop = true}
-langgraph-checkpoint-sqlite = {path = "../checkpoint-sqlite", develop = true}
-langgraph-checkpoint-postgres = {path = "../checkpoint-postgres", develop = true}
-langgraph-sdk = {path = "../sdk-py", develop = true}
-psycopg = {extras = ["binary"], version = ">=3.0.0", python = ">=3.10"}
-uvloop = "0.21.0beta1"
-pyperf = "^2.7.0"
-py-spy = "^0.3.14"
-types-requests = "^2.32.0.20240914"
-pycryptodome = "^3.21.0"
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pytest-dotenv",
+    "pytest-mock",
+    "syrupy",
+    "httpx",
+    "pytest-watcher",
+    "mypy",
+    "ruff",
+    "jupyter",
+    "pytest-xdist[psutil]",
+    "pytest-repeat",
+    "langgraph-prebuilt",
+    "langgraph-checkpoint",
+    "langgraph-checkpoint-sqlite",
+    "langgraph-checkpoint-postgres",
+    "langgraph-sdk",
+    "psycopg[binary]",
+    "uvloop==0.21.0beta1",
+    "pyperf",
+    "py-spy",
+    "types-requests",
+    "pycryptodome",
+    "langgraph-cli[inmem]",
+]
+
+[tool.uv]
+default-groups = ['dev']
+
+[tool.uv.sources]
+langgraph-prebuilt = { path = "../prebuilt", editable = true }
+langgraph-checkpoint = { path = "../checkpoint", editable = true }
+langgraph-checkpoint-sqlite = { path = "../checkpoint-sqlite", editable = true }
+langgraph-checkpoint-postgres = { path = "../checkpoint-postgres", editable = true }
+langgraph-sdk = { path = "../sdk-py", editable = true }
 
 [tool.ruff]
-lint.select = [ "E", "F", "I", "TID251" ]
+lint.select = [ "E", "F", "I", "TID251", "UP" ]
 lint.ignore = [ "E501" ]
 line-length = 88
 indent-width = 4
 extend-include = ["*.ipynb"]
+target-version = "py39"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/bench/*" = ["UP006", "UP007"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -76,20 +101,8 @@ now = true
 delay = 0.1
 patterns = ["*.py"]
 
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+[tool.hatch.build.targets.wheel]
+packages = ["langgraph"]
 
 [tool.pytest.ini_options]
-# --strict-markers will raise errors on unknown marks.
-# https://docs.pytest.org/en/7.1.x/how-to/mark.html#raising-errors-on-unknown-marks
-#
-# https://docs.pytest.org/en/7.1.x/reference/reference.html
-# --strict-config       any warnings encountered while parsing the `pytest`
-#                       section of the configuration file raise errors.
-#
-# https://github.com/tophat/syrupy
-# --snapshot-warn-unused    Prints a warning on unused snapshots rather than fail the test suite.
 addopts = "--full-trace --strict-markers --strict-config --durations=5 --snapshot-warn-unused"
-# Registering custom markers.
-# https://docs.pytest.org/en/7.1.x/example/markers.html#registering-markers

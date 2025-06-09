@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     import uvloop
 
-    graph = create_sequential(2000).compile()
+    graph = create_sequential(3000).compile()
     input = {"messages": []}  # Empty list of messages
     config = {"recursion_limit": 20000000000}
 

@@ -6,10 +6,9 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
-    create_checkpoint,
-    empty_checkpoint,
 )
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from tests.checkpoint_utils import create_checkpoint, empty_checkpoint
 
 
 class TestAsyncSqliteSaver:
@@ -59,7 +58,7 @@ class TestAsyncSqliteSaver:
 
     async def test_combined_metadata(self) -> None:
         async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
-            config = {
+            config: RunnableConfig = {
                 "configurable": {
                     "thread_id": "thread-2",
                     "checkpoint_ns": "",
@@ -69,7 +68,7 @@ class TestAsyncSqliteSaver:
             }
             await saver.aput(config, self.chkpnt_2, self.metadata_2, {})
             checkpoint = await saver.aget_tuple(config)
-            assert checkpoint.metadata == {
+            assert checkpoint is not None and checkpoint.metadata == {
                 **self.metadata_2,
                 "thread_id": "thread-2",
                 "run_id": "my_run_id",

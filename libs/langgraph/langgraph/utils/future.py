@@ -1,10 +1,13 @@
+from __future__ import annotations
+
 import asyncio
 import concurrent.futures
 import contextvars
 import inspect
 import sys
 import types
-from typing import Awaitable, Coroutine, Generator, Optional, TypeVar, Union, cast
+from collections.abc import Awaitable, Coroutine, Generator
+from typing import TypeVar, Union, cast
 
 T = TypeVar("T")
 AnyFuture = Union[asyncio.Future, concurrent.futures.Future]
@@ -138,11 +141,11 @@ def chain_future(source: AnyFuture, destination: AnyFuture) -> AnyFuture:
 
 
 def _ensure_future(
-    coro_or_future: Union[Coroutine[None, None, T], Awaitable[T]],
+    coro_or_future: Coroutine[None, None, T] | Awaitable[T],
     *,
     loop: asyncio.AbstractEventLoop,
-    name: Optional[str] = None,
-    context: Optional[contextvars.Context] = None,
+    name: str | None = None,
+    context: contextvars.Context | None = None,
     lazy: bool = True,
 ) -> asyncio.Task[T]:
     called_wrap_awaitable = False
@@ -188,12 +191,12 @@ def run_coroutine_threadsafe(
     loop: asyncio.AbstractEventLoop,
     *,
     lazy: bool,
-    name: Optional[str] = None,
-    context: Optional[contextvars.Context] = None,
+    name: str | None = None,
+    context: contextvars.Context | None = None,
 ) -> asyncio.Future[T]:
     """Submit a coroutine object to a given event loop.
 
-    Return a asyncio.Future to access the result.
+    Return an asyncio.Future to access the result.
     """
 
     if asyncio._get_running_loop() is loop:

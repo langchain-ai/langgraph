@@ -16,9 +16,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  POETRY_VERSION: "1.7.1"
-
 jobs:
   changes:
     runs-on: ubuntu-latest
@@ -38,7 +35,6 @@ jobs:
               - 'libs/checkpoint/**'
               - 'libs/checkpoint-sqlite/**'
               - 'libs/checkpoint-postgres/**'
-              - 'libs/scheduler-kafka/**'
               - 'libs/prebuilt/**'
             sdk-js:
               - 'libs/sdk-js/**'
@@ -56,7 +52,7 @@ jobs:
             "libs/checkpoint",
             "libs/checkpoint-sqlite",
             "libs/checkpoint-postgres",
-            "libs/scheduler-kafka",
+
             "libs/prebuilt",
           ]
     if: needs.changes.outputs.python == 'true'
@@ -92,14 +88,6 @@ jobs:
     uses: ./.github/workflows/_test_langgraph.yml
     secrets: inherit
 
-  # NOTE: we're testing scheduler-kafka separately because it requires a different matrix
-  test-scheduler-kafka:
-    needs: changes
-    if: needs.changes.outputs.python == 'true'
-    name: "cd libs/scheduler-kafka"
-    uses: ./.github/workflows/_test_scheduler_kafka.yml
-    secrets: inherit
-
   check-sdk-methods:
     needs: changes
     if: needs.changes.outputs.python == 'true'
@@ -125,26 +113,26 @@ jobs:
           - "3.11"
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
-        uses: "./.github/actions/poetry_setup"
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.11"
-          poetry-version: ${{ env.POETRY_VERSION }}
-          cache-key: schema-check-cli
+          enable-cache: true
+          cache-suffix: "schema-check-cli"
       - name: Install CLI dependencies
         run: |
           cd libs/cli
-          poetry install
+          uv sync
       - name: Generate schema and check for changes
         run: |
           cd libs/cli
           # Create a temporary copy of the current schema
           cp schemas/schema.json schemas/schema.current.json
           # Generate new schema
-          poetry run python generate_schema.py
+          uv run python generate_schema.py
           # Compare the new schema with the original
           if ! diff -q schemas/schema.json schemas/schema.current.json > /dev/null; then
-            echo "Error: Langgraph.json configuration schema has changed. Please run 'poetry run python generate_schema.py' in the libs/cli directory and commit the changes."
+            echo "Error: Langgraph.json configuration schema has changed. Please run 'uv run python generate_schema.py' in the libs/cli directory and commit the changes."
             diff schemas/schema.json schemas/schema.current.json
             exit 1
           fi
@@ -169,9 +157,9 @@ jobs:
       run:
         working-directory: ${{ matrix.working-directory }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Setup Node.js (LTS)
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "yarn"
@@ -195,9 +183,9 @@ jobs:
       run:
         working-directory: ${{ matrix.working-directory }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Setup Node.js (LTS)
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "yarn"
@@ -215,7 +203,6 @@ jobs:
         lint-js,
         test,
         test-langgraph,
-        test-scheduler-kafka,
         check-sdk-methods,
         check-schema,
         integration-test,

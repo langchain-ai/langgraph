@@ -113,6 +113,9 @@ export interface AssistantBase {
 
   /** The name of the assistant */
   name: string;
+
+  /** The description of the assistant */
+  description?: string;
 }
 
 export interface AssistantVersion extends AssistantBase {}
@@ -298,3 +301,14 @@ export interface CronCreateForThreadResponse
   extends Omit<CronCreateResponse, "thread_id"> {
   thread_id: string;
 }
+
+export type AssistantSortBy =
+  | "assistant_id"
+  | "graph_id"
+  | "name"
+  | "created_at"
+  | "updated_at";
+
+export type ThreadSortBy = "thread_id" | "status" | "created_at" | "updated_at";
+
+export type SortOrder = "asc" | "desc";

@@ -1,42 +1,44 @@
 import {
   Assistant,
   AssistantGraph,
+  AssistantSortBy,
+  AssistantVersion,
   CancelAction,
+  Checkpoint,
   Config,
+  Cron,
+  CronCreateForThreadResponse,
+  CronCreateResponse,
   DefaultValues,
   GraphSchema,
+  Item,
+  ListNamespaceResponse,
   Metadata,
   Run,
   RunStatus,
-  Thread,
-  ThreadState,
-  Cron,
-  AssistantVersion,
-  Subgraphs,
-  Checkpoint,
   SearchItemsResponse,
-  ListNamespaceResponse,
-  Item,
+  SortOrder,
+  Subgraphs,
+  Thread,
+  ThreadSortBy,
+  ThreadState,
   ThreadStatus,
-  CronCreateResponse,
-  CronCreateForThreadResponse,
 } from "./schema.js";
-import { AsyncCaller, AsyncCallerParams } from "./utils/async_caller.js";
-import { IterableReadableStream } from "./utils/stream.js";
 import type {
+  Command,
+  CronsCreatePayload,
+  OnConflictBehavior,
   RunsCreatePayload,
   RunsStreamPayload,
   RunsWaitPayload,
   StreamEvent,
-  CronsCreatePayload,
-  OnConflictBehavior,
-  Command,
 } from "./types.js";
-import { mergeSignals } from "./utils/signals.js";
+import type { StreamMode, TypedAsyncGenerator } from "./types.stream.js";
+import { AsyncCaller, AsyncCallerParams } from "./utils/async_caller.js";
 import { getEnvironmentVariable } from "./utils/env.js";
-import { _getFetchImplementation } from "./singletons/fetch.js";
-import type { TypedAsyncGenerator, StreamMode } from "./types.stream.js";
+import { mergeSignals } from "./utils/signals.js";
 import { BytesLineDecoder, SSEDecoder } from "./utils/sse.js";
+import { IterableReadableStream } from "./utils/stream.js";
 /**
  * Get the API key from the environment.
  * Precedence:
@@ -66,12 +68,36 @@ export function getApiKey(apiKey?: string): string | undefined {
   return undefined;
 }
 
+const REGEX_RUN_METADATA =
+  /(\/threads\/(?<thread_id>.+))?\/runs\/(?<run_id>.+)/;
+
+function getRunMetadataFromResponse(
+  response: Response,
+): { run_id: string; thread_id?: string } | undefined {
+  const contentLocation = response.headers.get("Content-Location");
+  if (!contentLocation) return undefined;
+
+  const match = REGEX_RUN_METADATA.exec(contentLocation);
+
+  if (!match?.groups?.run_id) return undefined;
+  return {
+    run_id: match.groups.run_id,
+    thread_id: match.groups.thread_id || undefined,
+  };
+}
+
+export type RequestHook = (
+  url: URL,
+  init: RequestInit,
+) => Promise<RequestInit> | RequestInit;
+
 export interface ClientConfig {
   apiUrl?: string;
   apiKey?: string;
   callerOptions?: AsyncCallerParams;
   timeoutMs?: number;
   defaultHeaders?: Record<string, string | null | undefined>;
+  onRequest?: RequestHook;
 }
 
 class BaseClient {
@@ -83,20 +109,42 @@ class BaseClient {
 
   protected defaultHeaders: Record<string, string | null | undefined>;
 
+  protected onRequest?: RequestHook;
+
   constructor(config?: ClientConfig) {
-    this.asyncCaller = new AsyncCaller({
+    const callerOptions = {
       maxRetries: 4,
       maxConcurrency: 4,
       ...config?.callerOptions,
-    });
+    };
 
+    let defaultApiUrl = "http://localhost:8123";
+    if (
+      !config?.apiUrl &&
+      typeof globalThis === "object" &&
+      globalThis != null
+    ) {
+      const fetchSmb = Symbol.for("langgraph_api:fetch");
+      const urlSmb = Symbol.for("langgraph_api:url");
+
+      const global = globalThis as unknown as {
+        [fetchSmb]?: typeof fetch;
+        [urlSmb]?: string;
+      };
+
+      if (global[fetchSmb]) callerOptions.fetch ??= global[fetchSmb];
+      if (global[urlSmb]) defaultApiUrl = global[urlSmb];
+    }
+
+    this.asyncCaller = new AsyncCaller(callerOptions);
     this.timeoutMs = config?.timeoutMs;
 
     // default limit being capped by Chrome
     // https://github.com/nodejs/undici/issues/1373
     // Regex to remove trailing slash, if present
-    this.apiUrl = config?.apiUrl?.replace(/\/$/, "") || "http://localhost:8123";
+    this.apiUrl = config?.apiUrl?.replace(/\/$/, "") || defaultApiUrl;
     this.defaultHeaders = config?.defaultHeaders || {};
+    this.onRequest = config?.onRequest;
     const apiKey = getApiKey(config?.apiKey);
     if (apiKey) {
       this.defaultHeaders["X-Api-Key"] = apiKey;
@@ -109,6 +157,7 @@ class BaseClient {
       json?: unknown;
       params?: Record<string, unknown>;
       timeoutMs?: number | null;
+      withResponse?: boolean;
     },
   ): [url: URL, init: RequestInit] {
     const mutatedOptions = {
@@ -123,6 +172,10 @@ class BaseClient {
         "Content-Type": "application/json",
       };
       delete mutatedOptions.json;
+    }
+
+    if (mutatedOptions.withResponse) {
+      delete mutatedOptions.withResponse;
     }
 
     let timeoutSignal: AbortSignal | null = null;
@@ -156,20 +209,57 @@ class BaseClient {
 
   protected async fetch<T>(
     path: string,
+    options: RequestInit & {
+      json?: unknown;
+      params?: Record<string, unknown>;
+      timeoutMs?: number | null;
+      signal?: AbortSignal;
+      withResponse: true;
+    },
+  ): Promise<[T, Response]>;
+
+  protected async fetch<T>(
+    path: string,
     options?: RequestInit & {
       json?: unknown;
       params?: Record<string, unknown>;
       timeoutMs?: number | null;
       signal?: AbortSignal;
+      withResponse?: false;
     },
-  ): Promise<T> {
-    const response = await this.asyncCaller.fetch(
-      ...this.prepareFetchOptions(path, options),
-    );
-    if (response.status === 202 || response.status === 204) {
-      return undefined as T;
+  ): Promise<T>;
+
+  protected async fetch<T>(
+    path: string,
+    options?: RequestInit & {
+      json?: unknown;
+      params?: Record<string, unknown>;
+      timeoutMs?: number | null;
+      signal?: AbortSignal;
+      withResponse?: boolean;
+    },
+  ): Promise<T | [T, Response]> {
+    const [url, init] = this.prepareFetchOptions(path, options);
+
+    let finalInit = init;
+    if (this.onRequest) {
+      finalInit = await this.onRequest(url, init);
     }
-    return response.json() as T;
+
+    const response = await this.asyncCaller.fetch(url, finalInit);
+
+    const body = (() => {
+      if (response.status === 202 || response.status === 204) {
+        return undefined as T;
+      }
+      return response.json() as Promise<T>;
+    })();
+
+    if (options?.withResponse) {
+      return [await body, response];
+    }
+
+    return body;
   }
 }
 
@@ -197,6 +287,7 @@ export class CronsClient extends BaseClient {
       webhook: payload?.webhook,
       multitask_strategy: payload?.multitaskStrategy,
       if_not_exists: payload?.ifNotExists,
+      checkpoint_during: payload?.checkpointDuring,
     };
     return this.fetch<CronCreateForThreadResponse>(
       `/threads/${threadId}/runs/crons`,
@@ -228,6 +319,7 @@ export class CronsClient extends BaseClient {
       webhook: payload?.webhook,
       multitask_strategy: payload?.multitaskStrategy,
       if_not_exists: payload?.ifNotExists,
+      checkpoint_during: payload?.checkpointDuring,
     };
     return this.fetch<CronCreateResponse>(`/runs/crons`, {
       method: "POST",
@@ -340,6 +432,7 @@ export class AssistantsClient extends BaseClient {
     assistantId?: string;
     ifExists?: OnConflictBehavior;
     name?: string;
+    description?: string;
   }): Promise<Assistant> {
     return this.fetch<Assistant>("/assistants", {
       method: "POST",
@@ -350,6 +443,7 @@ export class AssistantsClient extends BaseClient {
         assistant_id: payload.assistantId,
         if_exists: payload.ifExists,
         name: payload.name,
+        description: payload.description,
       },
     });
   }
@@ -367,6 +461,7 @@ export class AssistantsClient extends BaseClient {
       config?: Config;
       metadata?: Metadata;
       name?: string;
+      description?: string;
     },
   ): Promise<Assistant> {
     return this.fetch<Assistant>(`/assistants/${assistantId}`, {
@@ -376,6 +471,7 @@ export class AssistantsClient extends BaseClient {
         config: payload.config,
         metadata: payload.metadata,
         name: payload.name,
+        description: payload.description,
       },
     });
   }
@@ -401,6 +497,8 @@ export class AssistantsClient extends BaseClient {
     metadata?: Metadata;
     limit?: number;
     offset?: number;
+    sortBy?: AssistantSortBy;
+    sortOrder?: SortOrder;
   }): Promise<Assistant[]> {
     return this.fetch<Assistant[]>("/assistants/search", {
       method: "POST",
@@ -409,6 +507,8 @@ export class AssistantsClient extends BaseClient {
         metadata: query?.metadata ?? undefined,
         limit: query?.limit ?? 10,
         offset: query?.offset ?? 0,
+        sort_by: query?.sortBy ?? undefined,
+        sort_order: query?.sortOrder ?? undefined,
       },
     });
   }
@@ -596,6 +696,15 @@ export class ThreadsClient<
      * Must be one of 'idle', 'busy', 'interrupted' or 'error'.
      */
     status?: ThreadStatus;
+    /**
+     * Sort by.
+     */
+    sortBy?: ThreadSortBy;
+    /**
+     * Sort order.
+     * Must be one of 'asc' or 'desc'.
+     */
+    sortOrder?: SortOrder;
   }): Promise<Thread<ValuesType>[]> {
     return this.fetch<Thread<ValuesType>[]>("/threads/search", {
       method: "POST",
@@ -604,6 +713,8 @@ export class ThreadsClient<
         limit: query?.limit ?? 10,
         offset: query?.offset ?? 0,
         status: query?.status,
+        sort_by: query?.sortBy,
+        sort_order: query?.sortOrder,
       },
     });
   }
@@ -797,6 +908,7 @@ export class RunsClient<
       metadata: payload?.metadata,
       stream_mode: payload?.streamMode,
       stream_subgraphs: payload?.streamSubgraphs,
+      stream_resumable: payload?.streamResumable,
       feedback_keys: payload?.feedbackKeys,
       assistant_id: assistantId,
       interrupt_before: payload?.interruptBefore,
@@ -809,10 +921,12 @@ export class RunsClient<
       on_disconnect: payload?.onDisconnect,
       after_seconds: payload?.afterSeconds,
       if_not_exists: payload?.ifNotExists,
+      checkpoint_during: payload?.checkpointDuring,
     };
 
     const endpoint =
       threadId == null ? `/runs/stream` : `/threads/${threadId}/runs/stream`;
+
     const response = await this.asyncCaller.fetch(
       ...this.prepareFetchOptions(endpoint, {
         method: "POST",
@@ -821,6 +935,9 @@ export class RunsClient<
         signal: payload?.signal,
       }),
     );
+
+    const runMetadata = getRunMetadataFromResponse(response);
+    if (runMetadata) payload?.onRunCreated?.(runMetadata);
 
     const stream: ReadableStream<{ event: any; data: any }> = (
       response.body || new ReadableStream({ start: (ctrl) => ctrl.close() })
@@ -851,6 +968,7 @@ export class RunsClient<
       metadata: payload?.metadata,
       stream_mode: payload?.streamMode,
       stream_subgraphs: payload?.streamSubgraphs,
+      stream_resumable: payload?.streamResumable,
       assistant_id: assistantId,
       interrupt_before: payload?.interruptBefore,
       interrupt_after: payload?.interruptAfter,
@@ -860,12 +978,26 @@ export class RunsClient<
       multitask_strategy: payload?.multitaskStrategy,
       after_seconds: payload?.afterSeconds,
       if_not_exists: payload?.ifNotExists,
+      checkpoint_during: payload?.checkpointDuring,
+      langsmith_tracer: payload?._langsmithTracer
+        ? {
+            project_name: payload?._langsmithTracer?.projectName,
+            example_id: payload?._langsmithTracer?.exampleId,
+          }
+        : undefined,
     };
-    return this.fetch<Run>(`/threads/${threadId}/runs`, {
+
+    const [run, response] = await this.fetch<Run>(`/threads/${threadId}/runs`, {
       method: "POST",
       json,
       signal: payload?.signal,
+      withResponse: true,
     });
+
+    const runMetadata = getRunMetadataFromResponse(response);
+    if (runMetadata) payload?.onRunCreated?.(runMetadata);
+
+    return run;
   }
 
   /**
@@ -932,30 +1064,40 @@ export class RunsClient<
       on_disconnect: payload?.onDisconnect,
       after_seconds: payload?.afterSeconds,
       if_not_exists: payload?.ifNotExists,
+      checkpoint_during: payload?.checkpointDuring,
+      langsmith_tracer: payload?._langsmithTracer
+        ? {
+            project_name: payload?._langsmithTracer?.projectName,
+            example_id: payload?._langsmithTracer?.exampleId,
+          }
+        : undefined,
     };
     const endpoint =
       threadId == null ? `/runs/wait` : `/threads/${threadId}/runs/wait`;
-    const response = await this.fetch<ThreadState["values"]>(endpoint, {
+    const [run, response] = await this.fetch<ThreadState["values"]>(endpoint, {
       method: "POST",
       json,
       timeoutMs: null,
       signal: payload?.signal,
+      withResponse: true,
     });
+
+    const runMetadata = getRunMetadataFromResponse(response);
+    if (runMetadata) payload?.onRunCreated?.(runMetadata);
+
     const raiseError =
       payload?.raiseError !== undefined ? payload.raiseError : true;
     if (
       raiseError &&
-      "__error__" in response &&
-      typeof response.__error__ === "object" &&
-      response.__error__ &&
-      "error" in response.__error__ &&
-      "message" in response.__error__
+      "__error__" in run &&
+      typeof run.__error__ === "object" &&
+      run.__error__ &&
+      "error" in run.__error__ &&
+      "message" in run.__error__
     ) {
-      throw new Error(
-        `${response.__error__?.error}: ${response.__error__?.message}`,
-      );
+      throw new Error(`${run.__error__?.error}: ${run.__error__?.message}`);
     }
-    return response;
+    return run;
   }
 
   /**
@@ -1050,13 +1192,12 @@ export class RunsClient<
 
   /**
    * Stream output from a run in real-time, until the run is done.
-   * Output is not buffered, so any output produced before this call will
-   * not be received here.
    *
-   * @param threadId The ID of the thread.
+   * @param threadId The ID of the thread. Can be set to `null` | `undefined` for stateless runs.
    * @param runId The ID of the run.
    * @param options Additional options for controlling the stream behavior:
    *   - signal: An AbortSignal that can be used to cancel the stream request
+   *   - lastEventId: The ID of the last event received. Can be used to reconnect to a stream without losing events.
    *   - cancelOnDisconnect: When true, automatically cancels the run if the client disconnects from the stream
    *   - streamMode: Controls what types of events to receive from the stream (can be a single mode or array of modes)
    *        Must be a subset of the stream modes passed when creating the run. Background runs default to having the union of all
@@ -1064,16 +1205,17 @@ export class RunsClient<
    * @returns An async generator yielding stream parts.
    */
   async *joinStream(
-    threadId: string,
+    threadId: string | undefined | null,
     runId: string,
     options?:
       | {
           signal?: AbortSignal;
           cancelOnDisconnect?: boolean;
+          lastEventId?: string;
           streamMode?: StreamMode | StreamMode[];
         }
       | AbortSignal,
-  ): AsyncGenerator<{ event: StreamEvent; data: any }> {
+  ): AsyncGenerator<{ id?: string; event: StreamEvent; data: any }> {
     const opts =
       typeof options === "object" &&
       options != null &&
@@ -1082,15 +1224,23 @@ export class RunsClient<
         : options;
 
     const response = await this.asyncCaller.fetch(
-      ...this.prepareFetchOptions(`/threads/${threadId}/runs/${runId}/stream`, {
-        method: "GET",
-        timeoutMs: null,
-        signal: opts?.signal,
-        params: {
-          cancel_on_disconnect: opts?.cancelOnDisconnect ? "1" : "0",
-          stream_mode: opts?.streamMode,
+      ...this.prepareFetchOptions(
+        threadId != null
+          ? `/threads/${threadId}/runs/${runId}/stream`
+          : `/runs/${runId}/stream`,
+        {
+          method: "GET",
+          timeoutMs: null,
+          signal: opts?.signal,
+          headers: opts?.lastEventId
+            ? { "Last-Event-ID": opts.lastEventId }
+            : undefined,
+          params: {
+            cancel_on_disconnect: opts?.cancelOnDisconnect ? "1" : "0",
+            stream_mode: opts?.streamMode,
+          },
         },
-      }),
+      ),
     );
 
     const stream: ReadableStream<{ event: string; data: any }> = (

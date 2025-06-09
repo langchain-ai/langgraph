@@ -4,13 +4,12 @@ on:
   push:
     branches:
       - main
+      - v0
   pull_request:
     branches:
       - main
+      - v0
   workflow_dispatch:
-
-env:
-  POETRY_VERSION: "1.7.1"
 
 permissions:
   contents: read
@@ -38,12 +37,13 @@ jobs:
         with:
           filter: "docs/docs/**"
 
-  run-changed-notebooks:
-    needs: get-changed-files
-    uses: ./.github/workflows/run_notebooks.yml
-    secrets: inherit
-    with:
-      changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
+  # TODO: Uncomment this to run on PRs
+  # run-changed-notebooks:
+  #   needs: get-changed-files
+  #   uses: ./.github/workflows/run_notebooks.yml
+  #   secrets: inherit
+  #   with:
+  #     changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
 
   deploy:
     # needs: run-changed-notebooks
@@ -56,21 +56,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
-        uses: "./.github/actions/poetry_setup"
+      - name: Set up Python
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
-          poetry-version: ${{ env.POETRY_VERSION }}
-          cache-key: docs
+          enable-cache: true
+          cache-suffix: "docs"
 
       - name: Install dependencies
         run: |
           yarn
-          poetry install --with test --with docs --no-root
+          uv sync --all-groups
           # we run this installation only for internal PRs
           # as GITHUB_TOKEN is not available for PRs from outside contributors
           if [ -n "${GITHUB_TOKEN}" ]; then
-            poetry run pip install "git+https://${GITHUB_TOKEN}@github.com/langchain-ai/mkdocs-material-insiders.git"
+            uv run pip install "git+https://${GITHUB_TOKEN}@github.com/langchain-ai/mkdocs-material-insiders.git"
           fi
 
       - name: Run unit tests
@@ -84,9 +84,9 @@ jobs:
         run: make llms-text
       - name: Build site
         run: |
-          # If this is main branch, then we want to download stats. we do this 
+          # If this is v0 branch, then we want to download stats. we do this 
           # with the env variable DOWNLOAD_STATS=true
-          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+          if [ "${{ github.ref }}" == "refs/heads/v0" ]; then
             DOWNLOAD_STATS=true make build-docs
           else
             make build-docs
@@ -98,10 +98,11 @@ jobs:
       - name: Check links in notebooks
         env:
           LANGCHAIN_API_KEY: test
+        if: github.event_name == 'schedule'
         run: |
           if [ "${{ github.event_name }}" == "schedule" ]; then
             echo "Running link check on all HTML files matching notebooks in docs directory..."
-            poetry run pytest -v \
+            uv run pytest -v \
               --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
               --check-links-ignore "https://academy\.langchain\.com/.*" \
               --check-links-ignore "https://x.com/.*" \
@@ -126,7 +127,7 @@ jobs:
             echo "Changed files: ${CHANGED_FILES}"
             if [ -n "${CHANGED_FILES}" ]; then
               echo "Running link check on HTML files matching changed notebook files..."
-              poetry run pytest -v \
+              uv run pytest -v \
                 --check-links-ignore "https://(api|web|docs)\.smith\.langchain\.com/.*" \
                 --check-links-ignore "https://academy\.langchain\.com/.*" \
                 --check-links-ignore "http://localhost:8123/.*" \
@@ -145,8 +146,8 @@ jobs:
           fi
 
       - name: Configure GitHub Pages
-        if: github.ref == 'refs/heads/main'
-        uses: actions/configure-pages@v4
+        if: github.ref == 'refs/heads/v0'
+        uses: actions/configure-pages@v5
 
       - name: Upload Pages Artifact
         # if: github.ref == 'refs/heads/main'
@@ -155,6 +156,6 @@ jobs:
           path: ./docs/site/
 
       - name: Deploy to GitHub Pages
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/v0'
         id: deployment
         uses: actions/deploy-pages@v4

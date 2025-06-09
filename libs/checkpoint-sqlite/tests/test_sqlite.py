@@ -6,11 +6,10 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
-    create_checkpoint,
-    empty_checkpoint,
 )
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.utils import _metadata_predicate, search_where
+from tests.checkpoint_utils import create_checkpoint, empty_checkpoint
 
 
 class TestSqliteSaver:
@@ -60,7 +59,7 @@ class TestSqliteSaver:
 
     def test_combined_metadata(self) -> None:
         with SqliteSaver.from_conn_string(":memory:") as saver:
-            config = {
+            config: RunnableConfig = {
                 "configurable": {
                     "thread_id": "thread-2",
                     "checkpoint_ns": "",
@@ -70,7 +69,7 @@ class TestSqliteSaver:
             }
             saver.put(config, self.chkpnt_2, self.metadata_2, {})
             checkpoint = saver.get_tuple(config)
-            assert checkpoint.metadata == {
+            assert checkpoint is not None and checkpoint.metadata == {
                 **self.metadata_2,
                 "thread_id": "thread-2",
                 "run_id": "my_run_id",
