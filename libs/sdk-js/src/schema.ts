@@ -149,6 +149,7 @@ export interface Interrupt<TValue = unknown> {
   when: "during" | (string & {});
   resumable?: boolean;
   ns?: string[];
+  response_schema?: Record<string, any> | null;
 }
 
 export interface Thread<ValuesType = DefaultValues> {

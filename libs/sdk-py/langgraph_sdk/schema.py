@@ -216,6 +216,8 @@ class Interrupt(TypedDict, total=False):
     """Whether the interrupt can be resumed."""
     ns: list[str] | None
     """Optional namespace for the interrupt."""
+    response_schema: dict | None
+    """Optional JSON schema to validate the resume value when execution resumes."""
 
 
 class Thread(TypedDict):

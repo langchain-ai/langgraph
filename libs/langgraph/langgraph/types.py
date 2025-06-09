@@ -18,6 +18,7 @@ from typing import (
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
+from pydantic import BaseModel
 from typing_extensions import Self
 from xxhash import xxh3_128_hexdigest
 
@@ -148,6 +149,8 @@ class Interrupt:
     resumable: bool = False
     ns: Sequence[str] | None = None
     when: Literal["during"] = dataclasses.field(default="during", repr=False)
+    response_schema: dict | None = None
+    """Optional JSON schema of the Pydantic model to validate the resume value."""
 
     @property
     def interrupt_id(self) -> str:
@@ -393,7 +396,7 @@ class PregelScratchpad:
     subgraph_counter: Callable[[], int]
 
 
-def interrupt(value: Any) -> Any:
+def interrupt(value: Any, *, response_schema: type[BaseModel] | None = None) -> Any:
     """Interrupt the graph with a resumable exception from within a node.
 
     The `interrupt` function enables human-in-the-loop workflows by pausing graph
@@ -481,12 +484,17 @@ def interrupt(value: Any) -> Any:
 
     Args:
         value: The value to surface to the client when the graph is interrupted.
+        response_schema: Optional Pydantic model to validate the resume value against when execution is resumed.
+            If provided, the resume value will be validated using this schema and converted to an instance of the model.
+            If validation fails, a new interrupt will be raised with the validation error.
 
     Returns:
-        Any: On subsequent invocations within the same node (same task to be precise), returns the value provided during the first invocation
+        Any: On subsequent invocations within the same node (same task to be precise), returns the value provided during the first invocation.
+            If a response_schema is specified, returns a validated instance of that model.
 
     Raises:
         GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
+            Also raised if resume value validation fails when a response_schema is provided.
     """
     from langgraph.config import get_config
     from langgraph.constants import (
@@ -505,11 +513,47 @@ def interrupt(value: Any) -> Any:
     # find previous resume values
     if scratchpad.resume:
         if idx < len(scratchpad.resume):
-            return scratchpad.resume[idx]
+            prev_value = scratchpad.resume[idx]
+            # validate previous resume value against response schema if provided
+            if response_schema is not None:
+                try:
+                    prev_value = response_schema.model_validate(prev_value)
+                except Exception as e:
+                    raise GraphInterrupt(
+                        (
+                            Interrupt(
+                                value=f"Validation error for previous resume value: {e}",
+                                resumable=True,
+                                ns=cast(str, conf[CONFIG_KEY_CHECKPOINT_NS]).split(
+                                    NS_SEP
+                                ),
+                                response_schema=response_schema.model_json_schema()
+                                if response_schema
+                                else None,
+                            ),
+                        )
+                    )
+            return prev_value
     # find current resume value
     v = scratchpad.get_null_resume(True)
     if v is not None:
         assert len(scratchpad.resume) == idx, (scratchpad.resume, idx)
+        if response_schema is not None:
+            try:
+                v = response_schema.model_validate(v)
+            except Exception as e:
+                raise GraphInterrupt(
+                    (
+                        Interrupt(
+                            value=f"Validation error for resume value: {e}",
+                            resumable=True,
+                            ns=cast(str, conf[CONFIG_KEY_CHECKPOINT_NS]).split(NS_SEP),
+                            response_schema=response_schema.model_json_schema()
+                            if response_schema
+                            else None,
+                        ),
+                    )
+                )
         scratchpad.resume.append(v)
         conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
         return v
@@ -520,6 +564,9 @@ def interrupt(value: Any) -> Any:
                 value=value,
                 resumable=True,
                 ns=cast(str, conf[CONFIG_KEY_CHECKPOINT_NS]).split(NS_SEP),
+                response_schema=response_schema.model_json_schema()
+                if response_schema
+                else None,
             ),
         )
     )
