@@ -22,10 +22,10 @@ from langgraph.graph import END, StateGraph
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
-fast_llm = ChatOpenAI(model="gpt-3.5-turbo")
+fast_llm = ChatOpenAI(model="gpt-4o-mini")
 # Uncomment for a Fireworks model
 # fast_llm = ChatFireworks(model="accounts/fireworks/models/firefunction-v1", max_tokens=32_000)
-long_context_llm = ChatOpenAI(model="gpt-4-turbo-preview")
+long_context_llm = ChatOpenAI(model="gpt-4o")
 
 
 direct_gen_outline_prompt = ChatPromptTemplate.from_messages(
@@ -144,7 +144,7 @@ gen_perspectives_prompt = ChatPromptTemplate.from_messages(
 )
 
 gen_perspectives_chain = gen_perspectives_prompt | ChatOpenAI(
-    model="gpt-3.5-turbo"
+    model="gpt-4o-mini"
 ).with_structured_output(Perspectives)
 
 
@@ -270,7 +270,7 @@ gen_queries_prompt = ChatPromptTemplate.from_messages(
     ]
 )
 gen_queries_chain = gen_queries_prompt | ChatOpenAI(
-    model="gpt-3.5-turbo"
+    model="gpt-4o-mini"
 ).with_structured_output(Queries, include_raw=True)
 
 
