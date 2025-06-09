@@ -1317,12 +1317,12 @@ def _ensure_index_config(
     index_config = index_config.copy()
     tokenized: list[tuple[str, Literal["$"] | list[str]]] = []
     tot = 0
-    text_fields = index_config.get("fields") or ["$"]
-    if isinstance(text_fields, str):
-        text_fields = [text_fields]
-    if not isinstance(text_fields, list):
-        raise ValueError(f"Text fields must be a list or a string. Got {text_fields}")
-    for p in text_fields:
+    fields = index_config.get("fields") or ["$"]
+    if isinstance(fields, str):
+        fields = [fields]
+    if not isinstance(fields, list):
+        raise ValueError(f"Text fields must be a list or a string. Got {fields}")
+    for p in fields:
         if p == "$":
             tokenized.append((p, "$"))
             tot += 1
