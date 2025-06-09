@@ -3819,10 +3819,12 @@
             "description": "Optional dictionary of key-value pairs to filter results."
           },
           "query": {
-            "type": "string",
-            "additionalProperties": true,
+            "type": [
+              "string",
+              "null"
+            ],
             "title": "Query",
-            "description": "Optional query for natural language search."
+            "description": "Query string for semantic/vector search."
           },
           "limit": {
             "type": "integer",
