@@ -421,7 +421,7 @@ class PostgresSaver(BasePostgresSaver):
         Convert a database row into a CheckpointTuple object.
 
         Args:
-            value (DictRow): A row from the database containing checkpoint data.
+            value: A row from the database containing checkpoint data.
 
         Returns:
             CheckpointTuple: A structured representation of the checkpoint,
