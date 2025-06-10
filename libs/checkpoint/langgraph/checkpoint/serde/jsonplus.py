@@ -253,7 +253,7 @@ EXT_METHOD_SINGLE_ARG = 3
 EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
-EXT_PANDAS_DF = 7
+EXT_PANDAS_VIA_PYARROW = 7
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
@@ -480,19 +480,15 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
         obj, (pd_mod.DataFrame, pd_mod.Series)
     ):
         try:
-            import pyarrow as pa_mod  # type: ignore[import-not-found]
-        except Exception:
-            raise ormsgpack.MsgpackEncodeError(
-                "pyarrow not available for pandas serialization"
-            ) from None
+            import pyarrow as pa_mod  # type: ignore[import-untyped]
+        except ImportError as exc:
+            raise ImportError(
+                "pyarrow is required for pandas DataFrame/Series serialization, install it with `pip install pyarrow`"
+            ) from exc
 
         is_series = isinstance(obj, pd_mod.Series)
-        if is_series:
-            df = obj.to_frame(name=obj.name)
-            col_name = str(obj.name) if obj.name is not None else ""
-        else:
-            df = obj
-            col_name = ""
+        name = str(obj.name) if is_series and obj.name is not None else ""
+        df = obj.to_frame(name=name) if is_series else obj
 
         # Use a shallow copy to keep memory usage low. We only replace
         # columns instead of mutating them in place, so the original
@@ -508,9 +504,9 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
                     _msgpack_enc(serde.dumps_typed(v)) for v in series.tolist()
                 ]
 
-        buf = pa_mod.ipc.serialize_pandas(df_conv).to_buffer()
-        meta_df = (is_series, col_name, custom_cols, memoryview(buf))
-        return ormsgpack.Ext(EXT_PANDAS_DF, _msgpack_enc(meta_df))
+        buf = pa_mod.ipc.serialize_pandas(df_conv)
+        meta_df = (is_series, name, custom_cols, memoryview(buf))
+        return ormsgpack.Ext(EXT_PANDAS_VIA_PYARROW, _msgpack_enc(meta_df))
     elif isinstance(obj, BaseException):
         return repr(obj)
     else:
@@ -603,7 +599,7 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             return arr.reshape(shape, order=order)
         except Exception:
             return
-    elif code == EXT_PANDAS_DF:
+    elif code == EXT_PANDAS_VIA_PYARROW:
         try:
             import pyarrow as _pa
 
@@ -710,7 +706,7 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             return tup[2]
         except Exception:
             return
-    elif code == EXT_PANDAS_DF:
+    elif code == EXT_PANDAS_VIA_PYARROW:
         try:
             import pyarrow as _pa
 

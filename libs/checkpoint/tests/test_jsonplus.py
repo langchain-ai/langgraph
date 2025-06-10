@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 import dataclasses_json
 import numpy as np
+import pandas as pd
 import pytest
 from pydantic import BaseModel, SecretStr
 from pydantic.v1 import BaseModel as BaseModelV1
@@ -350,12 +351,86 @@ def test_loads_cannot_find() -> None:
     assert serde.loads_typed(dumped) is None, "Should return None if cannot find module"
 
 
-def test_serde_jsonplus_pandas_dataframe() -> None:
-    pd = pytest.importorskip("pandas")
-    pytest.importorskip("pyarrow")
-
-    df = pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.1, 6.2]})
-
+@pytest.mark.parametrize(
+    "df",
+    [
+        pd.DataFrame(),
+        pd.DataFrame({"int_col": [1, 2, 3]}),
+        pd.DataFrame({"float_col": [1.1, 2.2, 3.3]}),
+        pd.DataFrame({"str_col": ["a", "b", "c"]}),
+        pd.DataFrame({"bool_col": [True, False, True]}),
+        pd.DataFrame(
+            {
+                "datetime_col": [
+                    datetime(2024, 1, 1),
+                    datetime(2024, 1, 2),
+                    datetime(2024, 1, 3),
+                ]
+            }
+        ),
+        pd.DataFrame(
+            {
+                "int_col": [1, 2, 3],
+                "float_col": [1.1, 2.2, 3.3],
+                "str_col": ["a", "b", "c"],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "int_col": [1, 2, None],
+                "float_col": [1.1, None, 3.3],
+                "str_col": ["a", None, "c"],
+            }
+        ),
+        pd.DataFrame({"cat_col": pd.Categorical(["a", "b", "a", "c"])}),
+        pd.DataFrame(
+            {
+                "int8": pd.array([1, 2, 3], dtype="int8"),
+                "int16": pd.array([10, 20, 30], dtype="int16"),
+                "int32": pd.array([100, 200, 300], dtype="int32"),
+                "int64": pd.array([1000, 2000, 3000], dtype="int64"),
+                "float32": pd.array([1.1, 2.2, 3.3], dtype="float32"),
+                "float64": pd.array([10.1, 20.2, 30.3], dtype="float64"),
+            }
+        ),
+        pd.DataFrame({"value": [1, 2, 3]}, index=["x", "y", "z"]),
+        pd.DataFrame(
+            [[1, 2, 3, 4]],
+            columns=pd.MultiIndex.from_tuples(
+                [("A", "X"), ("A", "Y"), ("B", "X"), ("B", "Y")]
+            ),
+        ),
+        pd.DataFrame(
+            {"value": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3, freq="D")
+        ),
+        pd.DataFrame(
+            {
+                "col1": range(1000),
+                "col2": [f"str_{i}" for i in range(1000)],
+                "col3": np.random.rand(1000),
+            }
+        ),
+        pd.DataFrame(
+            {"tz_datetime": pd.date_range("2024-01-01", periods=3, freq="D", tz="UTC")}
+        ),
+        pd.DataFrame({"timedelta": pd.to_timedelta([1, 2, 3], unit="D")}),
+        pd.DataFrame({"period": pd.period_range("2024-01", periods=3, freq="M")}),
+        pd.DataFrame({"interval": pd.interval_range(start=0, end=3, periods=3)}),
+        pd.DataFrame({"unicode": ["Hello 🌍", "Python 🐍", "Data 📊"]}),
+        pd.DataFrame({"mixed": [1, "string", [1, 2, 3], {"key": "value"}]}),
+        pd.DataFrame({"a": [1], "b": ["test"], "c": [3.14]}),
+        pd.DataFrame({"single": [42]}),
+        pd.DataFrame(
+            {
+                "small": [sys.float_info.min, 0, sys.float_info.max],
+                "large_int": [-(2**63), 0, 2**63 - 1],
+            }
+        ),
+        pd.DataFrame({"special_strings": ["", "null", "None", "NaN", "inf", "-inf"]}),
+        pd.DataFrame({"bytes_col": [b"hello", b"world", b"\x00\x01\x02"]}),
+    ],
+)
+def test_serde_jsonplus_pandas_dataframe(df: pd.DataFrame) -> None:
     serde = JsonPlusSerializer()
 
     dumped = serde.dumps_typed(df)
@@ -364,35 +439,47 @@ def test_serde_jsonplus_pandas_dataframe() -> None:
     assert result.equals(df)
 
 
-def test_serde_jsonplus_pandas_custom_column() -> None:
-    pd = pytest.importorskip("pandas")
-    pytest.importorskip("pyarrow")
-
-    class Custom:
-        def __init__(self, x: int) -> None:
-            self.x = x
-
-        def __eq__(self, other: object) -> bool:
-            return isinstance(other, Custom) and other.x == self.x
-
-    df = pd.DataFrame({"a": [1, 2], "b": [Custom(1), Custom(2)]})
-
-    serde = JsonPlusSerializer()
-    dumped = serde.dumps_typed(df)
-
-    assert dumped[0] == "msgpack"
-    result = serde.loads_typed(dumped)
-
-    assert list(result["a"]) == [1, 2]
-    assert [obj.x for obj in result["b"]] == [1, 2]
-
-
-def test_serde_jsonplus_pandas_series() -> None:
-    pd = pytest.importorskip("pandas")
-    pytest.importorskip("pyarrow")
-
-    series = pd.Series([1, 2, 3], name="foo")
-
+@pytest.mark.parametrize(
+    "series",
+    [
+        pd.Series([]),
+        pd.Series([1, 2, 3]),
+        pd.Series([1.1, 2.2, 3.3]),
+        pd.Series(["a", "b", "c"]),
+        pd.Series([True, False, True]),
+        pd.Series([datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]),
+        pd.Series([1, 2, None]),
+        pd.Series([1.1, None, 3.3]),
+        pd.Series(["a", None, "c"]),
+        pd.Series(pd.Categorical(["a", "b", "a", "c"])),
+        pd.Series([1, 2, 3], dtype="int8"),
+        pd.Series([10, 20, 30], dtype="int16"),
+        pd.Series([100, 200, 300], dtype="int32"),
+        pd.Series([1000, 2000, 3000], dtype="int64"),
+        pd.Series([1.1, 2.2, 3.3], dtype="float32"),
+        pd.Series([10.1, 20.2, 30.3], dtype="float64"),
+        pd.Series([1, 2, 3], index=["x", "y", "z"]),
+        pd.Series([1, 2, 3], index=pd.date_range("2024-01-01", periods=3, freq="D")),
+        pd.Series(range(1000)),
+        pd.Series(pd.date_range("2024-01-01", periods=3, freq="D", tz="UTC")),
+        pd.Series(pd.to_timedelta([1, 2, 3], unit="D")),
+        pd.Series(pd.period_range("2024-01", periods=3, freq="M")),
+        pd.Series(pd.interval_range(start=0, end=3, periods=3)),
+        pd.Series(["Hello 🌍", "Python 🐍", "Data 📊"]),
+        pd.Series([1, "string", [1, 2, 3], {"key": "value"}]),
+        pd.Series([42], name="single"),
+        pd.Series([sys.float_info.min, 0, sys.float_info.max]),
+        pd.Series([-(2**63), 0, 2**63 - 1]),
+        pd.Series(["", "null", "None", "NaN", "inf", "-inf"]),
+        pd.Series([b"hello", b"world", b"\x00\x01\x02"]),
+        pd.Series([1, 2, 3], name="named_series"),
+        pd.Series(
+            [10, 20],
+            index=pd.MultiIndex.from_tuples([("a", 1), ("b", 2)], names=["x", "y"]),
+        ),
+    ],
+)
+def test_serde_jsonplus_pandas_series(series: pd.Series) -> None:
     serde = JsonPlusSerializer()
     dumped = serde.dumps_typed(series)
 
@@ -400,19 +487,3 @@ def test_serde_jsonplus_pandas_series() -> None:
     result = serde.loads_typed(dumped)
 
     assert result.equals(series)
-
-
-def test_serde_jsonplus_pandas_multiindex() -> None:
-    pd = pytest.importorskip("pandas")
-    pytest.importorskip("pyarrow")
-
-    index = pd.MultiIndex.from_tuples([("a", 1), ("b", 2)], names=["x", "y"])
-    df = pd.DataFrame({"val": [10, 20]}, index=index)
-
-    serde = JsonPlusSerializer()
-    dumped = serde.dumps_typed(df)
-
-    assert dumped[0] == "msgpack"
-    result = serde.loads_typed(dumped)
-
-    assert result.equals(df)
