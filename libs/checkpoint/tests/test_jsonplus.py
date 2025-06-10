@@ -11,6 +11,8 @@ from ipaddress import IPv4Address
 from zoneinfo import ZoneInfo
 
 import dataclasses_json
+import numpy as np
+import pytest
 from pydantic import BaseModel, SecretStr
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import SecretStr as SecretStrV1
@@ -293,6 +295,41 @@ def test_serde_jsonplus_bytearray() -> None:
 
     assert dumped == ("bytearray", some_bytearray)
     assert serde.loads_typed(dumped) == some_bytearray
+
+
+@pytest.mark.parametrize(
+    "arr",
+    [
+        np.arange(9, dtype=np.int32).reshape(3, 3),
+        np.asfortranarray(np.arange(9, dtype=np.float64).reshape(3, 3)),
+        np.arange(12, dtype=np.int16)[::2].reshape(3, 2),
+    ],
+)
+def test_serde_jsonplus_numpy_array(arr: np.ndarray) -> None:
+    serde = JsonPlusSerializer()
+
+    dumped = serde.dumps_typed(arr)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, np.ndarray)
+    assert result.dtype == arr.dtype
+    assert np.array_equal(result, arr)
+
+
+@pytest.mark.parametrize(
+    "arr",
+    [
+        np.arange(6, dtype=np.float32).reshape(2, 3),
+        np.asfortranarray(np.arange(4, dtype=np.complex128).reshape(2, 2)),
+    ],
+)
+def test_serde_jsonplus_numpy_array_json_hook(arr: np.ndarray) -> None:
+    serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
+    dumped = serde.dumps_typed(arr)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, list)
+    assert result == arr.tolist()
 
 
 def test_loads_cannot_find() -> None:
