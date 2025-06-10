@@ -320,13 +320,6 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
                 (obj.__class__.__module__, obj.__class__.__name__, obj.hex),
             ),
         )
-    elif isinstance(obj, bytearray):
-        return ormsgpack.Ext(
-            EXT_CONSTRUCTOR_SINGLE_ARG,
-            _msgpack_enc(
-                (obj.__class__.__module__, obj.__class__.__name__, bytes(obj)),
-            ),
-        )
     elif isinstance(obj, decimal.Decimal):
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,

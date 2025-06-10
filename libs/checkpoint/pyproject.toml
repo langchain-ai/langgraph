@@ -13,7 +13,7 @@ license = "MIT"
 license-files = ['LICENSE']
 dependencies = [
     "langchain-core>=0.2.38",
-    "ormsgpack>=1.8.0",
+    "ormsgpack>=1.10.0",
 ]
 
 [project.urls]
