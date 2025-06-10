@@ -897,7 +897,7 @@ export function useStream<
         if (event === "values") {
           if ("__interrupt__" in data) {
             // don't update values on interrupt values event
-            return;
+            continue;
           }
           setStreamValues(data);
         }
