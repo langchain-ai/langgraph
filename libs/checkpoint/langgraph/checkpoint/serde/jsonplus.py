@@ -253,6 +253,7 @@ EXT_METHOD_SINGLE_ARG = 3
 EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
+EXT_PANDAS_DF = 7
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
@@ -475,6 +476,41 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             buf = obj.tobytes(order="A")
             meta = (obj.dtype.str, obj.shape, order, buf)
             return ormsgpack.Ext(EXT_NUMPY_ARRAY, _msgpack_enc(meta))
+    elif (pd_mod := sys.modules.get("pandas")) is not None and isinstance(
+        obj, (pd_mod.DataFrame, pd_mod.Series)
+    ):
+        try:
+            import pyarrow as pa_mod  # type: ignore[import-not-found]
+        except Exception:
+            raise ormsgpack.MsgpackEncodeError(
+                "pyarrow not available for pandas serialization"
+            ) from None
+
+        is_series = isinstance(obj, pd_mod.Series)
+        if is_series:
+            df = obj.to_frame(name=obj.name)
+            col_name = str(obj.name) if obj.name is not None else ""
+        else:
+            df = obj
+            col_name = ""
+
+        # Use a shallow copy to keep memory usage low. We only replace
+        # columns instead of mutating them in place, so the original
+        # DataFrame stays unchanged with or without pandas copy-on-write.
+        df_conv = df.copy(deep=False)
+        custom_cols: list[str] = []
+        serde = JsonPlusSerializer()
+        for col in df.columns:
+            series = df[col]
+            if str(series.dtype) == "object":
+                custom_cols.append(str(col))
+                df_conv[col] = [
+                    _msgpack_enc(serde.dumps_typed(v)) for v in series.tolist()
+                ]
+
+        buf = pa_mod.ipc.serialize_pandas(df_conv).to_buffer()
+        meta_df = (is_series, col_name, custom_cols, memoryview(buf))
+        return ormsgpack.Ext(EXT_PANDAS_DF, _msgpack_enc(meta_df))
     elif isinstance(obj, BaseException):
         return repr(obj)
     else:
@@ -567,6 +603,33 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             return arr.reshape(shape, order=order)
         except Exception:
             return
+    elif code == EXT_PANDAS_DF:
+        try:
+            import pyarrow as _pa
+
+            is_series, col_name, custom_cols, buf = ormsgpack.unpackb(
+                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+            )
+            df = _pa.ipc.deserialize_pandas(buf)
+            serde = JsonPlusSerializer()
+            for col in custom_cols:
+                df[col] = [
+                    serde.loads_typed(
+                        ormsgpack.unpackb(
+                            val,
+                            ext_hook=_msgpack_ext_hook,
+                            option=ormsgpack.OPT_NON_STR_KEYS,
+                        )
+                    )
+                    for val in df[col].tolist()
+                ]
+            if is_series:
+                series = df.iloc[:, 0]
+                series.name = col_name if col_name else None
+                return series
+            return df
+        except Exception:
+            return
 
 
 def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
@@ -645,6 +708,34 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             )
             # module, name, kwargs, method
             return tup[2]
+        except Exception:
+            return
+    elif code == EXT_PANDAS_DF:
+        try:
+            import pyarrow as _pa
+
+            is_series, col_name, custom_cols, buf = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            df = _pa.ipc.deserialize_pandas(buf)
+            serde = JsonPlusSerializer()
+            for col in custom_cols:
+                df[col] = [
+                    serde.loads_typed(
+                        ormsgpack.unpackb(
+                            val,
+                            ext_hook=_msgpack_ext_hook_to_json,
+                            option=ormsgpack.OPT_NON_STR_KEYS,
+                        )
+                    )
+                    for val in df[col].tolist()
+                ]
+            if is_series:
+                series = df.iloc[:, 0].tolist()
+                return series
+            return df.to_dict(orient="list")
         except Exception:
             return
     elif code == EXT_NUMPY_ARRAY:

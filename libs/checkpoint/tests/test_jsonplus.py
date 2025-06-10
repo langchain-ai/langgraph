@@ -348,3 +348,71 @@ def test_loads_cannot_find() -> None:
     )
 
     assert serde.loads_typed(dumped) is None, "Should return None if cannot find module"
+
+
+def test_serde_jsonplus_pandas_dataframe() -> None:
+    pd = pytest.importorskip("pandas")
+    pytest.importorskip("pyarrow")
+
+    df = pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.1, 6.2]})
+
+    serde = JsonPlusSerializer()
+
+    dumped = serde.dumps_typed(df)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert result.equals(df)
+
+
+def test_serde_jsonplus_pandas_custom_column() -> None:
+    pd = pytest.importorskip("pandas")
+    pytest.importorskip("pyarrow")
+
+    class Custom:
+        def __init__(self, x: int) -> None:
+            self.x = x
+
+        def __eq__(self, other: object) -> bool:
+            return isinstance(other, Custom) and other.x == self.x
+
+    df = pd.DataFrame({"a": [1, 2], "b": [Custom(1), Custom(2)]})
+
+    serde = JsonPlusSerializer()
+    dumped = serde.dumps_typed(df)
+
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+
+    assert list(result["a"]) == [1, 2]
+    assert [obj.x for obj in result["b"]] == [1, 2]
+
+
+def test_serde_jsonplus_pandas_series() -> None:
+    pd = pytest.importorskip("pandas")
+    pytest.importorskip("pyarrow")
+
+    series = pd.Series([1, 2, 3], name="foo")
+
+    serde = JsonPlusSerializer()
+    dumped = serde.dumps_typed(series)
+
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+
+    assert result.equals(series)
+
+
+def test_serde_jsonplus_pandas_multiindex() -> None:
+    pd = pytest.importorskip("pandas")
+    pytest.importorskip("pyarrow")
+
+    index = pd.MultiIndex.from_tuples([("a", 1), ("b", 2)], names=["x", "y"])
+    df = pd.DataFrame({"val": [10, 20]}, index=index)
+
+    serde = JsonPlusSerializer()
+    dumped = serde.dumps_typed(df)
+
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+
+    assert result.equals(df)
