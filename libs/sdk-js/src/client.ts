@@ -88,7 +88,7 @@ function* iterateHeaders(
 function mergeHeaders(
   ...headerObjects: (
     | HeadersInit
-    | Record<string, string | null | undefined>
+    | Record<string, HeaderValue>
     | undefined
     | null
   )[]
@@ -165,7 +165,7 @@ export interface ClientConfig {
   apiKey?: string;
   callerOptions?: AsyncCallerParams;
   timeoutMs?: number;
-  defaultHeaders?: Record<string, string | null | undefined>;
+  defaultHeaders?: Record<string, HeaderValue>;
   onRequest?: RequestHook;
 }
 
@@ -176,7 +176,7 @@ class BaseClient {
 
   protected apiUrl: string;
 
-  protected defaultHeaders: Record<string, string | null | undefined>;
+  protected defaultHeaders: Record<string, HeaderValue>;
 
   protected onRequest?: RequestHook;
 
