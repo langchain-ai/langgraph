@@ -12,11 +12,17 @@
     options:
       members:
         - SerializerProtocol
+        - CipherProtocol
 
 ::: langgraph.checkpoint.serde.jsonplus
     options:
       members:
         - JsonPlusSerializer
+
+::: langgraph.checkpoint.serde.encrypted
+    options:
+      members:
+        - EncryptedSerializer
 
 ::: langgraph.checkpoint.memory
 
