@@ -253,6 +253,8 @@ EXT_METHOD_SINGLE_ARG = 3
 EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
+EXT_PANDAS_DATAFRAME = 7
+EXT_PANDAS_SERIES = 8
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
@@ -475,6 +477,38 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             buf = obj.tobytes(order="A")
             meta = (obj.dtype.str, obj.shape, order, buf)
             return ormsgpack.Ext(EXT_NUMPY_ARRAY, _msgpack_enc(meta))
+    elif (pd_mod := sys.modules.get("pandas")) is not None:
+        if isinstance(obj, pd_mod.DataFrame):
+            return ormsgpack.Ext(
+                EXT_PANDAS_DATAFRAME,
+                _msgpack_enc(
+                    (
+                        obj.__class__.__module__,
+                        obj.__class__.__name__,
+                        {
+                            "data": obj.values.tolist(),
+                            "index": obj.index.tolist(),
+                            "columns": obj.columns.tolist(),
+                        },
+                    ),
+                ),
+            )
+        elif isinstance(obj, pd_mod.Series):
+            return ormsgpack.Ext(
+                EXT_PANDAS_SERIES,
+                _msgpack_enc(
+                    (
+                        obj.__class__.__module__,
+                        obj.__class__.__name__,
+                        {
+                            "data": obj.tolist(),
+                            "index": obj.index.tolist(),
+                            "name": obj.name,
+                        },
+                    ),
+                ),
+            )
+
     elif isinstance(obj, BaseException):
         return repr(obj)
     else:
@@ -565,6 +599,24 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             )
             arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
             return arr.reshape(shape, order=order)
+        except Exception:
+            return
+    elif code == EXT_PANDAS_DATAFRAME:
+        try:
+            tup = ormsgpack.unpackb(
+                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+            )
+            cls = getattr(importlib.import_module(tup[0]), tup[1])
+            return cls(**tup[2])
+        except Exception:
+            return
+    elif code == EXT_PANDAS_SERIES:
+        try:
+            tup = ormsgpack.unpackb(
+                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+            )
+            cls = getattr(importlib.import_module(tup[0]), tup[1])
+            return cls(**tup[2])
         except Exception:
             return
 
@@ -658,6 +710,30 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             )
             arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
             return arr.reshape(shape, order=order).tolist()
+        except Exception:
+            return
+    elif code == EXT_PANDAS_DATAFRAME:
+        try:
+            tup = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            cls = getattr(importlib.import_module(tup[0]), tup[1])
+            df = cls(**tup[2])
+            return df.to_dict(orient="records")
+        except Exception:
+            return
+    elif code == EXT_PANDAS_SERIES:
+        try:
+            tup = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            cls = getattr(importlib.import_module(tup[0]), tup[1])
+            series = cls(**tup[2])
+            return series.to_dict()
         except Exception:
             return
 

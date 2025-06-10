@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 import dataclasses_json
 import numpy as np
+import pandas as pd
 import pytest
 from pydantic import BaseModel, SecretStr
 from pydantic.v1 import BaseModel as BaseModelV1
@@ -330,6 +331,81 @@ def test_serde_jsonplus_numpy_array_json_hook(arr: np.ndarray) -> None:
     result = serde.loads_typed(dumped)
     assert isinstance(result, list)
     assert result == arr.tolist()
+
+
+@pytest.mark.parametrize(
+    "df",
+    [
+        pd.DataFrame(
+            {
+                "int_col": [1, 2, 3],
+                "float_col": [1.1, 2.2, 3.3],
+                "str_col": ["a", "b", "c"],
+                "bool_col": [True, False, True],
+            }
+        ),
+        pd.DataFrame({"values": [10, 20, 30]}, index=["x", "y", "z"]),
+    ],
+)
+def test_serde_jsonplus_pandas_dataframe(df: pd.DataFrame) -> None:
+    serde = JsonPlusSerializer()
+
+    dumped = serde.dumps_typed(df)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, pd.DataFrame)
+    pd.testing.assert_frame_equal(result, df)
+
+
+def test_serde_jsonplus_pandas_dataframe_json_hook() -> None:
+    serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
+
+    df = pd.DataFrame(
+        {
+            "int_col": [1, 2, 3],
+            "float_col": [1.1, 2.2, 3.3],
+            "str_col": ["a", "b", "c"],
+            "bool_col": [True, False, True],
+        }
+    )
+
+    dumped = serde.dumps_typed(df)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, list)
+    pd.testing.assert_frame_equal(pd.DataFrame(result), df)
+
+
+@pytest.mark.parametrize(
+    "s",
+    [
+        pd.Series([1, 2, 3], name="numbers"),
+        pd.Series(["a", "b", "c"], name="letters"),
+        pd.Series([1.1, 2.2, 3.3], name="floats"),
+        pd.Series([True, False, True], name="bools"),
+        pd.Series(pd.date_range("2024-01-01", periods=3), name="dates"),
+    ],
+)
+def test_serde_jsonplus_pandas_series(s: pd.Series) -> None:
+    serde = JsonPlusSerializer()
+
+    dumped = serde.dumps_typed(s)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, pd.Series)
+    pd.testing.assert_series_equal(result, s)
+
+
+def test_serde_jsonplus_pandas_series_json_hook() -> None:
+    serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
+
+    s = pd.Series([1, 2, 3], name="numbers")
+
+    dumped = serde.dumps_typed(s)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, dict)
+    pd.testing.assert_series_equal(pd.Series(result, name=s.name), s)
 
 
 def test_loads_cannot_find() -> None:

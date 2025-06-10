@@ -30,6 +30,7 @@ dev = [
   "mypy",
   "dataclasses-json",
   "numpy",
+  "pandas",
 ]
 
 [tool.hatch.build.targets.wheel]
