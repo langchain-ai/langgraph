@@ -565,8 +565,6 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             )
             arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
             return arr.reshape(shape, order=order)
-        except ModuleNotFoundError:
-            return None
         except Exception:
             return
 
