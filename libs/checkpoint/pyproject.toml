@@ -29,6 +29,7 @@ dev = [
   "pytest-watcher",
   "mypy",
   "dataclasses-json",
+  "numpy",
 ]
 
 [tool.hatch.build.targets.wheel]
