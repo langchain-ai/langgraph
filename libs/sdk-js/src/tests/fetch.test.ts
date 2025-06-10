@@ -74,5 +74,128 @@ describe.each([["global"], ["mocked"]])(
         expect(unexpectedFetchMock).not.toHaveBeenCalled();
       });
     });
+
+    describe("header coalescing", () => {
+      it("should properly merge headers with conflicting name casing", async () => {
+        const client = new Client({ apiKey: "test-api-key" });
+        await (client.threads as any).fetch("/test", {
+          headers: { "X-Api-Key": "custom-value" },
+        });
+        expect(expectedFetchMock).toHaveBeenCalledWith(
+          expect.any(URL),
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              "x-api-key": "custom-value",
+            }),
+          }),
+        );
+      });
+
+      it("should properly merge headers from multiple sources", async () => {
+        const client = new Client({
+          apiKey: "test-api-key",
+          defaultHeaders: {
+            "x-default": "default-value",
+            "x-override": "default-value",
+          },
+        });
+
+        await (client.threads as any).fetch("/test", {
+          headers: {
+            "x-custom": "custom-value",
+            "x-override": "custom-value",
+          },
+        });
+
+        expect(expectedFetchMock).toHaveBeenCalledWith(
+          expect.any(URL),
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              "x-api-key": "test-api-key",
+              "x-default": "default-value",
+              "x-custom": "custom-value",
+              "x-override": "custom-value",
+            }),
+          }),
+        );
+
+        vi.clearAllMocks();
+
+        // Test with null/undefined values
+        await (client.threads as any).fetch("/test", {
+          headers: {
+            "x-null": null,
+            "x-undefined": undefined,
+            "x-empty": "",
+          },
+        });
+
+        expect(expectedFetchMock).toHaveBeenCalledWith(
+          expect.any(URL),
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              "x-api-key": "test-api-key",
+              "x-default": "default-value",
+            }),
+          }),
+        );
+        expect(expectedFetchMock).not.toHaveBeenCalledWith(
+          expect.any(URL),
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              "x-null": null,
+              "x-undefined": undefined,
+            }),
+          }),
+        );
+      });
+
+      it("should handle Headers object input", async () => {
+        const client = new Client({ apiKey: "test-api-key" });
+        const headers = new Headers();
+        headers.append("x-custom", "custom-value");
+        headers.append("x-multi", "value1");
+        headers.append("x-multi", "value2");
+
+        await (client.threads as any).fetch("/test", { headers });
+
+        expect(expectedFetchMock).toHaveBeenCalledWith(
+          expect.any(URL),
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              "x-api-key": "test-api-key",
+              "x-custom": "custom-value",
+              "x-multi": "value1, value2",
+            }),
+          }),
+        );
+      });
+
+      it("should handle array of header tuples", async () => {
+        const client = new Client({
+          apiKey: "test-api-key",
+          defaultHeaders: {
+            "x-custom": "custom-value",
+          },
+        });
+        const headers = [
+          ["x-multi", "value1"],
+          ["x-multi", "value2"],
+        ];
+
+        await (client.threads as any).fetch("/test", { headers });
+
+        expect(expectedFetchMock).toHaveBeenCalledWith(
+          expect.any(URL),
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              "x-api-key": "test-api-key",
+              "x-custom": "custom-value",
+              "x-multi": "value1, value2",
+            }),
+          }),
+        );
+      });
+    });
   },
 );

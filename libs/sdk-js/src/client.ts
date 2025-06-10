@@ -39,6 +39,75 @@ import { getEnvironmentVariable } from "./utils/env.js";
 import { mergeSignals } from "./utils/signals.js";
 import { BytesLineDecoder, SSEDecoder } from "./utils/sse.js";
 import { IterableReadableStream } from "./utils/stream.js";
+
+type HeaderValue = string | undefined | null;
+
+function* iterateHeaders(
+  headers: HeadersInit | Record<string, HeaderValue>,
+): IterableIterator<[string, string | null]> {
+  let iter: Iterable<(HeaderValue | HeaderValue | null[])[]>;
+  let shouldClear = false;
+
+  if (headers instanceof Headers) {
+    const entries: [string, string][] = [];
+    headers.forEach((value, name) => {
+      entries.push([name, value]);
+    });
+    iter = entries;
+  } else if (Array.isArray(headers)) {
+    iter = headers;
+  } else {
+    shouldClear = true;
+    iter = Object.entries(headers ?? {});
+  }
+
+  for (let item of iter) {
+    const name = item[0];
+    if (typeof name !== "string")
+      throw new TypeError(
+        `Expected header name to be a string, got ${typeof name}`,
+      );
+    const values = Array.isArray(item[1]) ? item[1] : [item[1]];
+    let didClear = false;
+
+    for (const value of values) {
+      if (value === undefined) continue;
+
+      // New object keys should always overwrite older headers
+      // Yield a null to clear the header in the headers object
+      // before adding the new value
+      if (shouldClear && !didClear) {
+        didClear = true;
+        yield [name, null];
+      }
+      yield [name, value];
+    }
+  }
+}
+
+function mergeHeaders(
+  ...headerObjects: (
+    | HeadersInit
+    | Record<string, HeaderValue>
+    | undefined
+    | null
+  )[]
+) {
+  const outputHeaders = new Headers();
+  for (const headers of headerObjects) {
+    if (!headers) continue;
+    for (const [name, value] of iterateHeaders(headers)) {
+      if (value === null) outputHeaders.delete(name);
+      else outputHeaders.append(name, value);
+    }
+  }
+  const headerEntries: [string, string][] = [];
+  outputHeaders.forEach((value, name) => {
+    headerEntries.push([name, value]);
+  });
+  return Object.fromEntries(headerEntries);
+}
+
 /**
  * Get the API key from the environment.
  * Precedence:
@@ -96,7 +165,7 @@ export interface ClientConfig {
   apiKey?: string;
   callerOptions?: AsyncCallerParams;
   timeoutMs?: number;
-  defaultHeaders?: Record<string, string | null | undefined>;
+  defaultHeaders?: Record<string, HeaderValue>;
   onRequest?: RequestHook;
 }
 
@@ -107,7 +176,7 @@ class BaseClient {
 
   protected apiUrl: string;
 
-  protected defaultHeaders: Record<string, string | null | undefined>;
+  protected defaultHeaders: Record<string, HeaderValue>;
 
   protected onRequest?: RequestHook;
 
@@ -147,7 +216,7 @@ class BaseClient {
     this.onRequest = config?.onRequest;
     const apiKey = getApiKey(config?.apiKey);
     if (apiKey) {
-      this.defaultHeaders["X-Api-Key"] = apiKey;
+      this.defaultHeaders["x-api-key"] = apiKey;
     }
   }
 
@@ -162,15 +231,14 @@ class BaseClient {
   ): [url: URL, init: RequestInit] {
     const mutatedOptions = {
       ...options,
-      headers: { ...this.defaultHeaders, ...options?.headers },
+      headers: mergeHeaders(this.defaultHeaders, options?.headers),
     };
 
     if (mutatedOptions.json) {
       mutatedOptions.body = JSON.stringify(mutatedOptions.json);
-      mutatedOptions.headers = {
-        ...mutatedOptions.headers,
-        "Content-Type": "application/json",
-      };
+      mutatedOptions.headers = mergeHeaders(mutatedOptions.headers, {
+        "content-type": "application/json",
+      });
       delete mutatedOptions.json;
     }
 
@@ -693,7 +761,6 @@ export class ThreadsClient<
     offset?: number;
     /**
      * Thread status to filter on.
-     * Must be one of 'idle', 'busy', 'interrupted' or 'error'.
      */
     status?: ThreadStatus;
     /**
