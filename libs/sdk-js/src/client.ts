@@ -40,46 +40,72 @@ import { mergeSignals } from "./utils/signals.js";
 import { BytesLineDecoder, SSEDecoder } from "./utils/sse.js";
 import { IterableReadableStream } from "./utils/stream.js";
 
-function mergeHeadersCaseInsensitive(
+type HeaderValue = string | undefined | null;
+
+function* iterateHeaders(
+  headers: HeadersInit | Record<string, HeaderValue>,
+): IterableIterator<[string, string | null]> {
+  let iter: Iterable<(HeaderValue | HeaderValue | null[])[]>;
+  let shouldClear = false;
+
+  if (headers instanceof Headers) {
+    const entries: [string, string][] = [];
+    headers.forEach((value, name) => {
+      entries.push([name, value]);
+    });
+    iter = entries;
+  } else if (Array.isArray(headers)) {
+    iter = headers;
+  } else {
+    shouldClear = true;
+    iter = Object.entries(headers ?? {});
+  }
+
+  for (let item of iter) {
+    const name = item[0];
+    if (typeof name !== "string")
+      throw new TypeError(
+        `Expected header name to be a string, got ${typeof name}`,
+      );
+    const values = Array.isArray(item[1]) ? item[1] : [item[1]];
+    let didClear = false;
+
+    for (const value of values) {
+      if (value === undefined) continue;
+
+      // New object keys should always overwrite older headers
+      // Yield a null to clear the header in the headers object
+      // before adding the new value
+      if (shouldClear && !didClear) {
+        didClear = true;
+        yield [name, null];
+      }
+      yield [name, value];
+    }
+  }
+}
+
+function mergeHeaders(
   ...headerObjects: (
     | HeadersInit
     | Record<string, string | null | undefined>
     | undefined
     | null
   )[]
-): Record<string, string> {
-  const normalize = (
-    headers:
-      | HeadersInit
-      | Record<string, string | null | undefined>
-      | undefined
-      | null,
-  ) => {
-    if (!headers) return {};
-    if (Array.isArray(headers)) return Object.fromEntries(headers);
-    if (
-      typeof headers === "object" &&
-      "forEach" in headers &&
-      typeof headers.forEach === "function"
-    ) {
-      const result: Record<string, string> = {};
-      (headers as Headers).forEach((value, key) => {
-        result[key] = value;
-      });
-      return result;
+) {
+  const outputHeaders = new Headers();
+  for (const headers of headerObjects) {
+    if (!headers) continue;
+    for (const [name, value] of iterateHeaders(headers)) {
+      if (value === null) outputHeaders.delete(name);
+      else outputHeaders.append(name, value);
     }
-    return headers as Record<string, string>;
-  };
-
-  return Object.fromEntries(
-    headerObjects
-      .map(normalize)
-      .flatMap(Object.entries)
-      .reduce((acc, [k, v]) => {
-        if (v != null) acc.set(k.toLowerCase(), v);
-        return acc;
-      }, new Map<string, string>()),
-  );
+  }
+  const headerEntries: [string, string][] = [];
+  outputHeaders.forEach((value, name) => {
+    headerEntries.push([name, value]);
+  });
+  return Object.fromEntries(headerEntries);
 }
 
 /**
@@ -205,18 +231,14 @@ class BaseClient {
   ): [url: URL, init: RequestInit] {
     const mutatedOptions = {
       ...options,
-      headers: mergeHeadersCaseInsensitive(
-        this.defaultHeaders,
-        options?.headers,
-      ),
+      headers: mergeHeaders(this.defaultHeaders, options?.headers),
     };
 
     if (mutatedOptions.json) {
       mutatedOptions.body = JSON.stringify(mutatedOptions.json);
-      mutatedOptions.headers = mergeHeadersCaseInsensitive(
-        mutatedOptions.headers,
-        { "content-type": "application/json" },
-      );
+      mutatedOptions.headers = mergeHeaders(mutatedOptions.headers, {
+        "content-type": "application/json",
+      });
       delete mutatedOptions.json;
     }
 
