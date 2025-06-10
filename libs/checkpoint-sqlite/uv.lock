@@ -338,6 +338,7 @@ dev = [
     { name = "codespell" },
     { name = "dataclasses-json" },
     { name = "mypy" },
+    { name = "numpy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
