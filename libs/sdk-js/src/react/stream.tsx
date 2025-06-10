@@ -894,7 +894,13 @@ export function useStream<
         if (event === "events") options.onLangChainEvent?.(data);
         if (event === "debug") options.onDebugEvent?.(data);
 
-        if (event === "values") setStreamValues(data);
+        if (event === "values") {
+          if ("__interrupt__" in data) {
+            // don't update values on interrupt values event
+            return;
+          }
+          setStreamValues(data);
+        }
         if (event === "messages") {
           const [serialized] = data;
 
