@@ -127,6 +127,7 @@ Defaults to `False`.
 ## `MOUNT_PREFIX`
 
 !!! info "Only Allowed in Self-Hosted Deployments"
+    The `MOUNT_PREFIX` environment variable is only allowed in Self-Hosted Deployment models, LangGraph Platform SaaS will not allow this environment variable.
 
 Set `MOUNT_PREFIX` to serve the LangGraph Server under a specific path prefix. This is useful for deployments where the server is behind a reverse proxy or load balancer that requires a specific path prefix.
 
