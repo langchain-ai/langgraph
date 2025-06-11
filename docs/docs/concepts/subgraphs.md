@@ -61,7 +61,7 @@ The main question when adding subgraphs is how the parent graph and subgraph com
 
     subgraph_builder = StateGraph(SubgraphMessagesState)
     subgraph_builder.add_node("call_model_from_subgraph", call_model)
-    subgraph_builder.add_edge(START,"call_model_from_subgraph")
+    subgraph_builder.add_edge(START, "call_model_from_subgraph")
     ...
     # highlight-next-line
     subgraph = subgraph_builder.compile()
