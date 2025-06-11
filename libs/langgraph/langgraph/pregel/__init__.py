@@ -145,7 +145,7 @@ class NodeBuilder:
         "_cache_policy",
     )
 
-    _channels: list[str] | dict[str, str]
+    _channels: str | list[str]
     _triggers: list[str]
     _tags: list[str]
     _metadata: dict[str, Any]
@@ -157,7 +157,7 @@ class NodeBuilder:
     def __init__(
         self,
     ) -> None:
-        self._channels = {}
+        self._channels = []
         self._triggers = []
         self._tags = []
         self._metadata = {}
@@ -171,10 +171,8 @@ class NodeBuilder:
         channel: str,
     ) -> Self:
         """Subscribe to a single channel."""
-        if isinstance(self._channels, list):
-            self._channels.append(channel)
-        elif not self._channels:
-            self._channels = [channel]
+        if not self._channels:
+            self._channels = channel
         else:
             raise ValueError(
                 "Cannot subscribe to single channels when other channels are already subscribed to"
@@ -200,15 +198,15 @@ class NodeBuilder:
         Returns:
             Self for chaining
         """
-        if isinstance(self._channels, list):
+        if isinstance(self._channels, str):
             raise ValueError(
                 "Cannot subscribe to channels when subscribed to a single channel"
             )
         if read:
             if not self._channels:
-                self._channels = {chan: chan for chan in channels}
+                self._channels = list(channels)
             else:
-                self._channels.update({chan: chan for chan in channels})
+                self._channels.extend(channels)
 
         if isinstance(channels, str):
             self._triggers.append(channels)
@@ -222,11 +220,10 @@ class NodeBuilder:
         *channels: str,
     ) -> Self:
         """Adds the specified channels to read from, without subscribing to them."""
-        assert self._channels, "Channels must be specified first"
-        assert isinstance(self._channels, dict), (
+        assert isinstance(self._channels, list), (
             "Cannot read additional channels when subscribed to single channels"
         )
-        self._channels.update({c: c for c in channels})
+        self._channels.extend(channels)
         return self
 
     def do(
