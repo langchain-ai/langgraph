@@ -101,11 +101,10 @@ class PregelNode(Runnable):
     itself, but instead acts as a container for the components necessary to make
     a PregelExecutableTask for a node."""
 
-    channels: list[str] | Mapping[str, str]
+    channels: str | list[str]
     """The channels that will be passed as input to `bound`.
-    If a list, the node will be invoked with the first of that isn't empty.
-    If a dict, the keys are the names of the channels, and the values are the keys
-    to use in the input to `bound`."""
+    If a str, the node will be invoked with its value if it isn't empty.
+    If a list, the node will be invoked with a dict of those channels' values."""
 
     triggers: list[str]
     """If any of these channels is written to, this node will be triggered in
@@ -140,7 +139,7 @@ class PregelNode(Runnable):
     def __init__(
         self,
         *,
-        channels: list[str] | Mapping[str, str],
+        channels: str | list[str],
         triggers: Sequence[str],
         mapper: Callable[[Any], Any] | None = None,
         writers: list[Runnable] | None = None,
@@ -223,25 +222,9 @@ class PregelNode(Runnable):
         This is used to avoid calculating the same input multiple times."""
         return (
             self.mapper,
-            tuple(f"{key}:{value}" for key, value in self.channels.items())
-            if isinstance(self.channels, dict)
-            else tuple(self.channels),
-        )
-
-    def join(self, channels: Sequence[str]) -> PregelNode:
-        assert isinstance(channels, list) or isinstance(channels, tuple), (
-            "channels must be a list or tuple"
-        )
-        assert isinstance(self.channels, dict), (
-            "all channels must be named when using .join()"
-        )
-        return self.copy(
-            update=dict(
-                channels={
-                    **self.channels,
-                    **{chan: chan for chan in channels},
-                }
-            ),
+            tuple(self.channels)
+            if isinstance(self.channels, list)
+            else (self.channels,),
         )
 
     def __or__(
