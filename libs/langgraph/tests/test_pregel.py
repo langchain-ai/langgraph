@@ -3276,6 +3276,57 @@ def test_subgraph_checkpoint_true(
         ),
     ]
 
+    checkpoints = list(app.get_state_history(config))
+    if checkpoint_during:
+        assert len(checkpoints) == 4
+    else:
+        assert len(checkpoints) == 1
+
+
+def test_subgraph_checkpoint_during_false_inherited() -> None:
+    sync_checkpointer = InMemorySaver()
+
+    class InnerState(TypedDict):
+        my_key: Annotated[str, operator.add]
+        my_other_key: str
+
+    def inner_1(state: InnerState):
+        return {"my_key": " got here", "my_other_key": state["my_key"]}
+
+    def inner_2(state: InnerState):
+        return {"my_key": " and there"}
+
+    inner = StateGraph(InnerState)
+    inner.add_node("inner_1", inner_1)
+    inner.add_node("inner_2", inner_2)
+    inner.add_edge("inner_1", "inner_2")
+    inner.set_entry_point("inner_1")
+    inner.set_finish_point("inner_2")
+
+    class State(TypedDict):
+        my_key: str
+
+    inner_app = inner.compile(checkpointer=sync_checkpointer)
+    graph = StateGraph(State)
+    graph.add_node("inner", inner_app)
+    graph.add_edge(START, "inner")
+    graph.add_conditional_edges(
+        "inner", lambda s: "inner" if s["my_key"].count("there") < 2 else END
+    )
+    app = graph.compile(checkpointer=sync_checkpointer)
+    for checkpoint_during in [True, False]:
+        thread_id = str(uuid.uuid4())
+        config = {"configurable": {"thread_id": thread_id}}
+        app.invoke(
+            {"my_key": ""}, config, subgraphs=True, checkpoint_during=checkpoint_during
+        )
+        if checkpoint_during:
+            checkpoints = list(sync_checkpointer.list(config))
+            assert len(checkpoints) == 12
+        else:
+            checkpoints = list(sync_checkpointer.list(config))
+            assert len(checkpoints) == 1
+
 
 def test_subgraph_checkpoint_true_interrupt(
     sync_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
