@@ -253,8 +253,6 @@ EXT_METHOD_SINGLE_ARG = 3
 EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
-EXT_PANDAS_DATAFRAME = 7
-EXT_PANDAS_SERIES = 8
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
@@ -477,63 +475,6 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             buf = obj.tobytes(order="A")
             meta = (obj.dtype.str, obj.shape, order, buf)
             return ormsgpack.Ext(EXT_NUMPY_ARRAY, _msgpack_enc(meta))
-    elif (pd_mod := sys.modules.get("pandas")) is not None:
-        if isinstance(obj.index, pd_mod.MultiIndex):
-            index = {
-                "type": "MultiIndex",
-                "names": obj.index.names,
-                "values": obj.index.values.tolist(),
-            }
-        else:
-            index = {
-                "type": "Index",
-                "name": obj.index.name,
-                "values": obj.index.values.tolist(),
-            }
-
-        if isinstance(obj, pd_mod.DataFrame):
-            if isinstance(obj.columns, pd_mod.MultiIndex):
-                columns = {
-                    "type": "MultiIndex",
-                    "names": obj.columns.names,
-                    "values": obj.columns.values.tolist(),
-                }
-            else:
-                columns = {
-                    "type": "Index",
-                    "name": obj.columns.name,
-                    "values": obj.columns.tolist(),
-                }
-
-            return ormsgpack.Ext(
-                EXT_PANDAS_DATAFRAME,
-                _msgpack_enc(
-                    (
-                        {
-                            "data": obj.to_dict(orient="records"),
-                            "index": index,
-                            "columns": columns,
-                            "dtypes": {
-                                col: str(dtype) for col, dtype in obj.dtypes.items()
-                            },
-                        },
-                    ),
-                ),
-            )
-        elif isinstance(obj, pd_mod.Series):
-            return ormsgpack.Ext(
-                EXT_PANDAS_SERIES,
-                _msgpack_enc(
-                    (
-                        {
-                            "data": obj.tolist(),
-                            "index": index,
-                            "name": obj.name,
-                            "dtype": str(obj.dtype),
-                        },
-                    ),
-                ),
-            )
 
     elif isinstance(obj, BaseException):
         return repr(obj)
@@ -627,64 +568,6 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             return arr.reshape(shape, order=order)
         except Exception:
             return
-    elif code in (EXT_PANDAS_DATAFRAME, EXT_PANDAS_SERIES):
-        try:
-            import pandas as _pd
-
-            tup = ormsgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
-            )
-
-            index_data = tup[0]["index"]
-            if index_data["type"] == "MultiIndex":
-                reconstructed_index = _pd.MultiIndex.from_tuples(
-                    [tuple(x) for x in index_data["values"]], names=index_data["names"]
-                )
-            else:
-                reconstructed_index = _pd.Index(
-                    index_data["values"], name=index_data["name"]
-                )
-
-            if code == EXT_PANDAS_DATAFRAME:
-                column_data = tup[0]["columns"]
-                if column_data["type"] == "MultiIndex":
-                    reconstructed_columns = _pd.MultiIndex.from_tuples(
-                        [tuple(x) for x in column_data["values"]],
-                        names=column_data["names"],
-                    )
-                else:
-                    reconstructed_columns = _pd.Index(
-                        column_data["values"], name=column_data["name"]
-                    )
-
-                df = _pd.DataFrame(
-                    data=tup[0]["data"],
-                    index=reconstructed_index,
-                    columns=reconstructed_columns,
-                )
-
-                for col, dtype in tup[0]["dtypes"].items():
-                    df[col] = df[col].astype(dtype)
-                return df
-
-            series = _pd.Series(
-                data=tup[0]["data"],
-                index=reconstructed_index,
-                name=tup[0]["name"],
-                dtype=tup[0]["dtype"],
-            )
-            return series
-        except Exception:
-            return
-    elif code == EXT_PANDAS_SERIES:
-        try:
-            tup = ormsgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
-            )
-            cls = getattr(importlib.import_module(tup[0]), tup[1])
-            return cls(**tup[2])
-        except Exception:
-            return
 
 
 def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
@@ -776,34 +659,6 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             )
             arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
             return arr.reshape(shape, order=order).tolist()
-        except Exception:
-            return
-    elif code == EXT_PANDAS_DATAFRAME:
-        try:
-            tup = ormsgpack.unpackb(
-                data,
-                ext_hook=_msgpack_ext_hook_to_json,
-                option=ormsgpack.OPT_NON_STR_KEYS,
-            )
-            cls = getattr(importlib.import_module(tup[0]), tup[1])
-            df = cls(
-                data=tup[2]["data"], index=tup[2]["index"], columns=tup[2]["columns"]
-            )
-            for col, dtype in tup[2]["dtypes"].items():
-                df[col] = df[col].astype(dtype)
-            return df.to_dict(orient="records")
-        except Exception:
-            return
-    elif code == EXT_PANDAS_SERIES:
-        try:
-            tup = ormsgpack.unpackb(
-                data,
-                ext_hook=_msgpack_ext_hook_to_json,
-                option=ormsgpack.OPT_NON_STR_KEYS,
-            )
-            cls = getattr(importlib.import_module(tup[0]), tup[1])
-            series = cls(**tup[2])
-            return series.to_dict()
         except Exception:
             return
 
