@@ -5,6 +5,7 @@ from typing import Any
 
 from langgraph.channels.base import BaseChannel
 from langgraph.constants import RESERVED
+from langgraph.managed.base import ManagedValueMapping
 from langgraph.pregel.read import PregelNode
 from langgraph.types import All
 
@@ -12,6 +13,7 @@ from langgraph.types import All
 def validate_graph(
     nodes: Mapping[str, PregelNode],
     channels: dict[str, BaseChannel],
+    managed: ManagedValueMapping,
     input_channels: str | Sequence[str],
     output_channels: str | Sequence[str],
     stream_channels: str | Sequence[str] | None,
@@ -20,14 +22,30 @@ def validate_graph(
 ) -> None:
     for chan in channels:
         if chan in RESERVED:
-            raise ValueError(f"Channel names {chan} are reserved")
+            raise ValueError(f"Channel name '{chan}' is reserved")
+    for name in managed:
+        if name in RESERVED:
+            raise ValueError(f"Managed name '{name}' is reserved")
 
     subscribed_channels = set[str]()
     for name, node in nodes.items():
         if name in RESERVED:
-            raise ValueError(f"Node names {RESERVED} are reserved")
+            raise ValueError(f"Node name '{name}' is reserved")
         if isinstance(node, PregelNode):
             subscribed_channels.update(node.triggers)
+            if isinstance(node.channels, str):
+                if node.channels not in channels:
+                    raise ValueError(
+                        f"Node {name} reads channel '{node.channels}' "
+                        f"not in known channels: '{repr(sorted(channels))[:100]}'"
+                    )
+            else:
+                for chan in node.channels:
+                    if chan not in channels and chan not in managed:
+                        raise ValueError(
+                            f"Node {name} reads channel '{chan}' "
+                            f"not in known channels: '{repr(sorted(channels))[:100]}'"
+                        )
         else:
             raise TypeError(
                 f"Invalid node type {type(node)}, expected PregelNode or NodeBuilder"
