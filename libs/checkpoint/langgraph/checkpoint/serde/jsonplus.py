@@ -475,6 +475,7 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             buf = obj.tobytes(order="A")
             meta = (obj.dtype.str, obj.shape, order, buf)
             return ormsgpack.Ext(EXT_NUMPY_ARRAY, _msgpack_enc(meta))
+
     elif isinstance(obj, BaseException):
         return repr(obj)
     else:

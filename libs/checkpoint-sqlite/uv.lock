@@ -339,6 +339,7 @@ dev = [
     { name = "dataclasses-json" },
     { name = "mypy" },
     { name = "numpy" },
+    { name = "pandas" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
