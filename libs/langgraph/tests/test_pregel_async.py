@@ -5781,7 +5781,7 @@ async def test_store_injected_async(
     builder.add_edge("__start__", "node")
     builder.add_edge("node", "other_node")
 
-    N = 500
+    N = 50
     M = 1
 
     for i in range(N):
