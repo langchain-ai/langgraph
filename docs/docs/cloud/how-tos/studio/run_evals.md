@@ -1,37 +1,72 @@
-# Run experiments over a dataset
+# Run Experiments Over a Dataset
 
-LangGraph Studio supports evaluations by allowing you to run your assistant over a pre-defined LangSmith dataset. This enables you to understand how your application performs over a variety of inputs, compare the results to reference outputs, and score the results using evaluators.
+LangGraph Studio supports evaluations by allowing you to run your graph over a pre-defined LangSmith dataset. This enables you to understand how your application performs over a variety of inputs, compare the results to reference outputs, and score the results using automated evaluators.
 
-This guide shows you how to run an experiment in Studio.
+This guide shows you how to run an experiment end-to-end directly from the Studio interface.
+
+A key requirement is that the **input and output schema of your dataset must match the schemas of your LangGraph graph**.
+
+---
+
+## Prerequisites
+
+Before running an experiment, ensure you have the following:
+
+1.  **A LangSmith Dataset**: Your dataset should contain the inputs you want to test and, optionally, reference outputs for comparison. The schema for the inputs and outputs must match what your graph expects and produces.
+    * For more on creating datasets, see [How to Manage Datasets](https://docs.smith.langchain.com/evaluation/how_to_guides/manage_datasets_in_application#set-up-your-dataset).
+
+2.  **(Optional) Evaluators**: You can attach evaluators (e.g., LLM-as-a-Judge, heuristics, or custom functions) to your dataset in LangSmith. These will run automatically after the graph has processed all inputs.
+    * To learn more, read about [Evaluation Concepts](https://docs.smith.langchain.com/evaluation/concepts#evaluators).
+
+3.  **A Running Application**: The experiment can be run against:
+    * An application deployed on LangGraph Platform.
+    * A locally running Python application started via the `langgraph-cli`.
 
 !!! info "Note"
-
     This feature is supported for all applications deployed on LangGraph Platform, or locally running Python applications. Support for the local JS server is coming soon.
 
-1. To start, ensure you have an existing LangSmith dataset. For information on how to create a dataset, see [here](https://docs.smith.langchain.com/evaluation/how_to_guides/manage_datasets_in_application#set-up-your-dataset).
+---
 
-2. You can additionally choose to attach evaluators to the created dataset. Evaluators are functions that score how well your application performs on a given example. They get triggered at the end of the experiment and run against the experiment results. For more information on evaluators, see [here](https://docs.smith.langchain.com/evaluation/concepts#evaluators).
+## Step-by-Step Guide
 
-3. Click "Run experiment" in the top right corner of the Studio page.
+### 1. Launch the Experiment
 
-4. Select the desired dataset (or dataset split) and click start.
+Click the **Run experiment** button in the top right corner of the Studio page.
 
-5. All of the inputs in the dataset will now be run against the active graph and assistant.
+![Screenshot of the 'Run experiment' button in the LangGraph Studio UI](../img/studio_evals_experiment_button.png)
 
-6. Monitor the experiment progress in the top right corner. Click the arrow icon button at any time to view the experiment results.
+### 2. Select Your Dataset
+
+In the modal window that appears, select the dataset (or a specific dataset split) you wish to use for the experiment and click **Start**.
+
+![Screenshot of the dataset selection window](../img/studio_evals_dataset.png)
+
+### 3. Monitor the Progress
+
+All of the inputs in the dataset will now be run against your active graph. You can monitor the experiment's progress in real-time from the notification in the top right corner.
+
+![Screenshot of the experiment progress bar](../img/studio_evals_experiments.png)
+
+You can continue to work in Studio while the experiment runs in the background. Click the arrow icon button at any time to navigate to LangSmith and view the detailed experiment results.
+
+---
 
 ## Troubleshooting
 
-### Run experiment button disabled
+### "Run experiment" button is disabled
 
-#### Deployed application
+If the "Run experiment" button is grayed out, check the following:
 
-If your application is deployed on LangGraph Platform, make a new revision to enable this feature.
+* **Deployed Application**: If your application is deployed on LangGraph Platform, you may need to create a new revision to enable this feature.
+* **Local Development Server**: If you are running your application locally, make sure you have upgraded to the latest version of the `langgraph-cli` (`pip install -U langgraph-cli`). Additionally, ensure you have tracing enabled by setting the `LANGSMITH_API_KEY` in your project's `.env` file.
 
-#### Local development server
+### Evaluator results are missing
 
-If you are running your application using the local server, make sure you upgrade to the latest version of the `langgraph-cli`. Additionally, you have tracing enabled via the `LANGSMITH_API_KEY` in your project's `.env` file. For local servers, this is not yet supported in JavaScript.
+When you run an experiment, any attached evaluators are scheduled for execution in a queue. If you don't see results immediately, it likely means they are still pending. Please allow a few minutes and then check the experiment results page again.
 
-### Evaluator results missing
+### Input/Output schema mismatch
 
-When you run your experiment, the evaluators get scheduled for execution in a queue. If you don't see evaluator results for the experiment, it likely means that these are still in the queue. Continue to check the experiment for updated results.
+If the experiment fails or produces errors, it is often due to a mismatch between the dataset's schema and the graph's expected input/output schema. To fix this, you have two options:
+
+1.  **Modify the Dataset**: Adjust the field names and structure of your dataset's examples in LangSmith to match the graph's interface.
+2.  **Modify the Graph**: Add a pre-processing node at the beginning of your graph to transform the incoming data from the dataset's format into the format the rest of your graph expects.
