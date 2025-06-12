@@ -39,8 +39,6 @@ ERROR = sys.intern("__error__")
 # for errors raised by nodes
 NO_WRITES = sys.intern("__no_writes__")
 # marker to signal node didn't write anything
-SCHEDULED = sys.intern("__scheduled__")
-# marker to signal node was scheduled (in distributed mode)
 TASKS = sys.intern("__pregel_tasks")
 # for Send objects returned by nodes/edges, corresponds to PUSH below
 RETURN = sys.intern("__return__")
@@ -71,13 +69,6 @@ CONFIG_KEY_RESUMING = sys.intern("__pregel_resuming")
 # holds a boolean indicating if subgraphs should resume from a previous checkpoint
 CONFIG_KEY_TASK_ID = sys.intern("__pregel_task_id")
 # holds the task ID for the current task
-CONFIG_KEY_DEDUPE_TASKS = sys.intern("__pregel_dedupe_tasks")
-# holds a boolean indicating if tasks should be deduplicated (for distributed mode)
-CONFIG_KEY_ENSURE_LATEST = sys.intern("__pregel_ensure_latest")
-# holds a boolean indicating whether to assert the requested checkpoint is the latest
-# (for distributed mode)
-CONFIG_KEY_DELEGATE = sys.intern("__pregel_delegate")
-# holds a boolean indicating whether to delegate subgraphs (for distributed mode)
 CONFIG_KEY_THREAD_ID = sys.intern("thread_id")
 # holds the thread ID for the current invocation
 CONFIG_KEY_CHECKPOINT_MAP = sys.intern("checkpoint_map")
@@ -121,7 +112,6 @@ RESERVED = {
     RESUME,
     ERROR,
     NO_WRITES,
-    SCHEDULED,
     # reserved config.configurable keys
     CONFIG_KEY_SEND,
     CONFIG_KEY_READ,
@@ -132,9 +122,6 @@ RESERVED = {
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_TASK_ID,
-    CONFIG_KEY_DEDUPE_TASKS,
-    CONFIG_KEY_ENSURE_LATEST,
-    CONFIG_KEY_DELEGATE,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_NS,
