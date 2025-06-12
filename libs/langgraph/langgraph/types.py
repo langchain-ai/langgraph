@@ -203,7 +203,6 @@ class PregelExecutableTask:
     cache_key: CacheKey | None
     id: str
     path: tuple[str | int | tuple, ...]
-    scheduled: bool = False
     writers: Sequence[Runnable] = ()
     subgraphs: Sequence[PregelProtocol] = ()
 

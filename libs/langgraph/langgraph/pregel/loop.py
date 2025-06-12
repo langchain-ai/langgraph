@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import binascii
 import concurrent.futures
-import dataclasses
 from collections import defaultdict, deque
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import (
@@ -46,9 +45,6 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
-    CONFIG_KEY_DEDUPE_TASKS,
-    CONFIG_KEY_DELEGATE,
-    CONFIG_KEY_ENSURE_LATEST,
     CONFIG_KEY_RESUME_MAP,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SCRATCHPAD,
@@ -65,13 +61,10 @@ from langgraph.constants import (
     NULL_TASK_ID,
     PUSH,
     RESUME,
-    SCHEDULED,
     TAG_HIDDEN,
 )
 from langgraph.errors import (
-    CheckpointNotLatest,
     EmptyInputError,
-    GraphDelegate,
     GraphInterrupt,
 )
 from langgraph.managed.base import (
@@ -252,10 +245,7 @@ class PregelLoop:
         self.interrupt_before = interrupt_before
         self.manager = manager
         self.is_nested = CONFIG_KEY_TASK_ID in self.config.get(CONF, {})
-        self.skip_done_tasks = (
-            CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
-            or CONFIG_KEY_DEDUPE_TASKS in config[CONF]
-        )
+        self.skip_done_tasks = CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
         self._migrate_checkpoint = migrate_checkpoint
         self.trigger_to_nodes = trigger_to_nodes
         self.retry_policy = retry_policy
@@ -265,9 +255,7 @@ class PregelLoop:
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
         scratchpad: PregelScratchpad | None = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
-        if not self.config[CONF].get(CONFIG_KEY_DELEGATE) and isinstance(
-            scratchpad, PregelScratchpad
-        ):
+        if isinstance(scratchpad, PregelScratchpad):
             # if count is > 0, append to checkpoint_ns
             # if count is 0, leave as is
             if cnt := scratchpad.subgraph_counter():
@@ -589,18 +577,6 @@ class PregelLoop:
             self.status = "done"
             return False
 
-        # check if we should delegate (used by subgraphs in distributed mode)
-        if self.config[CONF].get(CONFIG_KEY_DELEGATE):
-            assert self.input is INPUT_RESUMING
-            raise GraphDelegate(
-                {
-                    "config": patch_configurable(
-                        self.config, {CONFIG_KEY_DELEGATE: False}
-                    ),
-                    "input": None,
-                }
-            )
-
         # if there are pending writes from a previous loop, apply them
         if self.skip_done_tasks and self.checkpoint_pending_writes:
             self._match_writes(self.tasks)
@@ -643,14 +619,7 @@ class PregelLoop:
             if k in (ERROR, INTERRUPT, RESUME):
                 continue
             if task := tasks.get(tid):
-                if k == SCHEDULED:
-                    if v == max(
-                        self.checkpoint["versions_seen"].get(INTERRUPT, {}).values(),
-                        default=None,
-                    ):
-                        self.tasks[tid] = dataclasses.replace(task, scheduled=True)
-                else:
-                    task.writes.append((k, v))
+                task.writes.append((k, v))
 
     def _first(self, *, input_keys: str | Sequence[str]) -> set[str] | None:
         # resuming from previous checkpoint requires
@@ -720,17 +689,6 @@ class PregelLoop:
             self.input = INPUT_RESUMING
         # map inputs to channel updates
         elif input_writes := deque(map_input(input_keys, self.input)):
-            # TODO shouldn't these writes be passed to put_writes too?
-            # check if we should delegate (used by subgraphs in distributed mode)
-            if self.config[CONF].get(CONFIG_KEY_DELEGATE):
-                raise GraphDelegate(
-                    {
-                        "config": patch_configurable(
-                            self.config, {CONFIG_KEY_DELEGATE: False}
-                        ),
-                        "input": self.input,
-                    }
-                )
             # discard any unfinished tasks from previous checkpoint
             discard_tasks = prepare_next_tasks(
                 self.checkpoint,
@@ -1105,25 +1063,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
     # context manager
 
     def __enter__(self) -> Self:
-        if self.config.get(CONF, {}).get(
-            CONFIG_KEY_ENSURE_LATEST
-        ) and self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
-            if self.checkpointer is None:
-                raise RuntimeError(
-                    "Cannot ensure latest checkpoint without checkpointer"
-                )
-            saved = self.checkpointer.get_tuple(
-                patch_configurable(
-                    self.checkpoint_config, {CONFIG_KEY_CHECKPOINT_ID: None}
-                )
-            )
-            if (
-                saved is None
-                or saved.checkpoint["id"]
-                != self.checkpoint_config[CONF][CONFIG_KEY_CHECKPOINT_ID]
-            ):
-                raise CheckpointNotLatest
-        elif self.checkpointer:
+        if self.checkpointer:
             saved = self.checkpointer.get_tuple(self.checkpoint_config)
         else:
             saved = None
@@ -1298,25 +1238,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
     # context manager
 
     async def __aenter__(self) -> Self:
-        if self.config.get(CONF, {}).get(
-            CONFIG_KEY_ENSURE_LATEST
-        ) and self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
-            if self.checkpointer is None:
-                raise RuntimeError(
-                    "Cannot ensure latest checkpoint without checkpointer"
-                )
-            saved = await self.checkpointer.aget_tuple(
-                patch_configurable(
-                    self.checkpoint_config, {CONFIG_KEY_CHECKPOINT_ID: None}
-                )
-            )
-            if (
-                saved is None
-                or saved.checkpoint["id"]
-                != self.checkpoint_config[CONF][CONFIG_KEY_CHECKPOINT_ID]
-            ):
-                raise CheckpointNotLatest
-        elif self.checkpointer:
+        if self.checkpointer:
             saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
         else:
             saved = None

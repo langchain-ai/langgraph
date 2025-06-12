@@ -60,7 +60,6 @@ from langgraph.constants import (
     NS_SEP,
     NULL_TASK_ID,
     PUSH,
-    SCHEDULED,
     TASKS,
 )
 from langgraph.errors import (
@@ -1008,7 +1007,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
             )
         if apply_pending_writes and saved.pending_writes:
             for tid, k, v in saved.pending_writes:
-                if k in (ERROR, INTERRUPT, SCHEDULED):
+                if k in (ERROR, INTERRUPT):
                     continue
                 if tid not in next_tasks:
                     continue
@@ -1127,7 +1126,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
             )
         if apply_pending_writes and saved.pending_writes:
             for tid, k, v in saved.pending_writes:
-                if k in (ERROR, INTERRUPT, SCHEDULED):
+                if k in (ERROR, INTERRUPT):
                     continue
                 if tid not in next_tasks:
                     continue
@@ -1466,7 +1465,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         )
                     # apply writes from tasks that already ran
                     for tid, k, v in saved.pending_writes or []:
-                        if k in (ERROR, INTERRUPT, SCHEDULED):
+                        if k in (ERROR, INTERRUPT):
                             continue
                         if tid not in next_tasks:
                             continue
@@ -1630,7 +1629,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     )
                 # apply writes
                 for tid, k, v in saved.pending_writes:
-                    if k in (ERROR, INTERRUPT, SCHEDULED):
+                    if k in (ERROR, INTERRUPT):
                         continue
                     if tid not in next_tasks:
                         continue
@@ -1886,7 +1885,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         )
                     # apply writes from tasks that already ran
                     for tid, k, v in saved.pending_writes or []:
-                        if k in (ERROR, INTERRUPT, SCHEDULED):
+                        if k in (ERROR, INTERRUPT):
                             continue
                         if tid not in next_tasks:
                             continue
@@ -2049,7 +2048,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         self.trigger_to_nodes,
                     )
                 for tid, k, v in saved.pending_writes:
-                    if k in (ERROR, INTERRUPT, SCHEDULED):
+                    if k in (ERROR, INTERRUPT):
                         continue
                     if tid not in next_tasks:
                         continue
