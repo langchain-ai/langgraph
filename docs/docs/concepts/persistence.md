@@ -477,7 +477,8 @@ When checkpointers save the graph state, they need to serialize the channel valu
 
 The default serializer, [`JsonPlusSerializer`][langgraph.checkpoint.serde.jsonplus.JsonPlusSerializer], uses ormsgpack and JSON under the hood, which is not suitable for all types of objects.
 
-If you prefer to serialize objects with `pickle`, you can use the `pickle_fallback` argument of the `JsonPlusSerializer`:
+If you want to fallback to pickle for objects not currently supported by our msgpack encoder (such as Pandas dataframes),
+you can use the `pickle_fallback` argument of the `JsonPlusSerializer`:
 
 ```python
 from langgraph.checkpoint.memory import MemorySaver
