@@ -849,13 +849,6 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
             builder=self,
             schema_to_mapper={},
             config_type=self.config_schema,
-            input_model=(
-                self.input_schema
-                if len(self.channels) > 1
-                and isclass(self.input_schema)
-                and issubclass(self.input_schema, BaseModel)
-                else None
-            ),
             nodes={},
             channels={
                 **self.channels,
@@ -1006,10 +999,7 @@ class CompiledStateGraph(
             if input_schema in self.schema_to_mapper:
                 mapper = self.schema_to_mapper[input_schema]
             else:
-                mapper = _pick_mapper(
-                    input_channels,
-                    input_schema,
-                )
+                mapper = _pick_mapper(input_channels, input_schema)
                 self.schema_to_mapper[input_schema] = mapper
 
             branch_channel = CHANNEL_BRANCH_TO.format(key)
