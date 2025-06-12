@@ -517,6 +517,13 @@ export interface UseStreamOptions<
   threadId?: string | null;
 
   /**
+   * The ID to use when creating a new thread. When provided, this ID will be used
+   * for thread creation when threadId is null. This enables optimistic UI updates
+   * where you know the thread ID before the thread is actually created.
+   */
+  newThreadId?: string;
+
+  /**
    * Callback that is called when the thread ID is updated (ie when a new thread is created).
    */
   onThreadId?: (threadId: string) => void;
@@ -1013,7 +1020,9 @@ export function useStream<
 
       let usableThreadId = threadId;
       if (!usableThreadId) {
-        const thread = await client.threads.create();
+        const thread = await client.threads.create({
+          threadId: options.newThreadId,
+        });
         onThreadId(thread.thread_id);
         usableThreadId = thread.thread_id;
       }
