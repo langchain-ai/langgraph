@@ -745,6 +745,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         validate_graph(
             self.nodes,
             {k: v for k, v in self.channels.items() if isinstance(v, BaseChannel)},
+            {k: v for k, v in self.channels.items() if not isinstance(v, BaseChannel)},
             self.input_channels,
             self.output_channels,
             self.stream_channels,

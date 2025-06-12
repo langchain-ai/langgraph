@@ -1034,7 +1034,7 @@ def _proc_input(
             else:
                 return MISSING
         else:
-            val = managed[proc.channels].get(scratchpad)
+            return MISSING
     else:
         raise RuntimeError(
             f"Invalid channels type, expected list or dict, got {proc.channels}"
