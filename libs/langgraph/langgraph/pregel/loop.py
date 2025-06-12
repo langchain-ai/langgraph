@@ -60,6 +60,7 @@ from langgraph.constants import (
     INPUT,
     INTERRUPT,
     MISSING,
+    NS_END,
     NS_SEP,
     NULL_TASK_ID,
     PUSH,
@@ -868,7 +869,14 @@ class PregelLoop:
         traceback: TracebackType | None,
     ) -> bool | None:
         # persist current checkpoint and writes
-        if not self.checkpoint_during:
+        if not self.checkpoint_during and (
+            # if it's a top graph
+            not self.is_nested
+            # or a nested graph with error or interrupt
+            or exc_value is not None
+            # or a nested graph with checkpointer=True
+            or all(NS_END not in part for part in self.checkpoint_ns)
+        ):
             self._put_checkpoint(self.checkpoint_metadata)
             self._put_pending_writes()
         # suppress interrupt

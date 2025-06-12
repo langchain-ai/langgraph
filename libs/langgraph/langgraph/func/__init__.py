@@ -499,7 +499,7 @@ class entrypoint:
                 func.__name__: PregelNode(
                     bound=bound,
                     triggers=[START],
-                    channels=[START],
+                    channels=START,
                     writers=[
                         ChannelWrite(
                             [

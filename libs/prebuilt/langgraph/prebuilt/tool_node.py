@@ -850,7 +850,7 @@ def _get_store_arg(tool: BaseTool) -> Optional[str]:
             if _is_injection(type_arg, InjectedStore)
         ]
         if len(injections) > 1:
-            ValueError(
+            raise ValueError(
                 "A tool argument should not be annotated with InjectedStore more than "
                 f"once. Received arg {name} with annotations {injections}."
             )

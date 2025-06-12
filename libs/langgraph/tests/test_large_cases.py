@@ -4214,44 +4214,6 @@ def test_doubly_nested_graph_state(
     child_history = list(app.get_state_history(outer_history[1].tasks[0].state))
     assert child_history == [
         StateSnapshot(
-            values={"my_key": "hi my value here and there"},
-            next=(),
-            config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": AnyStr("child:"),
-                    "checkpoint_id": AnyStr(),
-                    "checkpoint_map": AnyDict(
-                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
-                    ),
-                }
-            },
-            metadata={
-                "source": "loop",
-                "step": 1,
-                "parents": {"": AnyStr()},
-                "thread_id": "1",
-                "langgraph_node": "child",
-                "langgraph_path": [PULL, AnyStr("child")],
-                "langgraph_step": 2,
-                "langgraph_triggers": ["branch:to:child"],
-                "langgraph_checkpoint_ns": AnyStr("child:"),
-            },
-            created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": AnyStr("child:"),
-                    "checkpoint_id": AnyStr(),
-                    "checkpoint_map": AnyDict(
-                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
-                    ),
-                }
-            },
-            tasks=(),
-            interrupts=(),
-        ),
-        StateSnapshot(
             values={"my_key": "hi my value"},
             next=("child_1",),
             config={
@@ -4295,62 +4257,8 @@ def test_doubly_nested_graph_state(
         ),
     ]
     # get grandchild graph history
-    grandchild_history = list(app.get_state_history(child_history[1].tasks[0].state))
+    grandchild_history = list(app.get_state_history(child_history[0].tasks[0].state))
     assert grandchild_history == [
-        StateSnapshot(
-            values={"my_key": "hi my value here and there"},
-            next=(),
-            config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": AnyStr(),
-                    "checkpoint_id": AnyStr(),
-                    "checkpoint_map": AnyDict(
-                        {
-                            "": AnyStr(),
-                            AnyStr("child:"): AnyStr(),
-                            AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
-                        }
-                    ),
-                }
-            },
-            metadata={
-                "source": "loop",
-                "step": 2,
-                "parents": AnyDict(
-                    {
-                        "": AnyStr(),
-                        AnyStr("child:"): AnyStr(),
-                    }
-                ),
-                "thread_id": "1",
-                "langgraph_checkpoint_ns": AnyStr("child:"),
-                "langgraph_node": "child_1",
-                "langgraph_path": [
-                    PULL,
-                    AnyStr("child_1"),
-                ],
-                "langgraph_step": 1,
-                "langgraph_triggers": ["branch:to:child_1"],
-            },
-            created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": AnyStr(),
-                    "checkpoint_id": AnyStr(),
-                    "checkpoint_map": AnyDict(
-                        {
-                            "": AnyStr(),
-                            AnyStr("child:"): AnyStr(),
-                            AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
-                        }
-                    ),
-                }
-            },
-            tasks=(),
-            interrupts=(),
-        ),
         StateSnapshot(
             values={"my_key": "hi my value here"},
             next=("grandchild_2",),

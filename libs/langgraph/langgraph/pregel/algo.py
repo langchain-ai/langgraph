@@ -922,18 +922,18 @@ def _triggers(
     seen: ChannelVersions | None,
     null_version: V,
     proc: PregelNode,
-) -> Sequence[str]:
+) -> bool:
     if seen is None:
         for chan in proc.triggers:
             if channels[chan].is_available():
-                return (chan,)
+                return True
     else:
         for chan in proc.triggers:
             if channels[chan].is_available() and versions.get(  # type: ignore[operator]
                 chan, null_version
             ) > seen.get(chan, null_version):
-                return (chan,)
-    return EMPTY_SEQ
+                return True
+    return False
 
 
 def _scratchpad(
@@ -1019,25 +1019,22 @@ def _proc_input(
         return copy(input_cache[proc.input_cache_key])
     # If all trigger channels subscribed by this process are not empty
     # then invoke the process with the values of all non-empty channels
-    if isinstance(proc.channels, dict):
+    if isinstance(proc.channels, list):
         val: dict[str, Any] = {}
-        for k, chan in proc.channels.items():
-            if chan in channels:
-                if channels[chan].is_available():
-                    val[k] = channels[chan].get()
-            else:
-                val[k] = managed[k].get(scratchpad)
-    elif isinstance(proc.channels, list):
         for chan in proc.channels:
             if chan in channels:
                 if channels[chan].is_available():
-                    val = channels[chan].get()
-                    break
+                    val[chan] = channels[chan].get()
             else:
-                val = managed[chan].get(scratchpad)
-                break
+                val[chan] = managed[chan].get(scratchpad)
+    elif isinstance(proc.channels, str):
+        if proc.channels in channels:
+            if channels[proc.channels].is_available():
+                val = channels[proc.channels].get()
+            else:
+                return MISSING
         else:
-            return MISSING
+            val = managed[proc.channels].get(scratchpad)
     else:
         raise RuntimeError(
             f"Invalid channels type, expected list or dict, got {proc.channels}"

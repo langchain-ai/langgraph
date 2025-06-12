@@ -996,18 +996,18 @@ class CompiledStateGraph(
             self.nodes[key] = PregelNode(
                 tags=[TAG_HIDDEN],
                 triggers=[START],
-                channels=[START],
+                channels=START,
                 writers=[ChannelWrite(write_entries)],
             )
         elif node is not None:
             input_schema = node.input if node else self.builder._state_schema
-            input_values = {k: k for k in self.builder.schemas[input_schema]}
-            is_single_input = len(input_values) == 1 and "__root__" in input_values
+            input_channels = list(self.builder.schemas[input_schema])
+            is_single_input = len(input_channels) == 1 and "__root__" in input_channels
             if input_schema in self.schema_to_mapper:
                 mapper = self.schema_to_mapper[input_schema]
             else:
                 mapper = _pick_mapper(
-                    list(input_values),
+                    input_channels,
                     input_schema,
                 )
                 self.schema_to_mapper[input_schema] = mapper
@@ -1021,7 +1021,7 @@ class CompiledStateGraph(
             self.nodes[key] = PregelNode(
                 triggers=[branch_channel],
                 # read state keys and managed values
-                channels=(list(input_values) if is_single_input else input_values),
+                channels=("__root__" if is_single_input else input_channels),
                 # coerce state dict to schema class (eg. pydantic model)
                 mapper=mapper,
                 # publish to state keys
