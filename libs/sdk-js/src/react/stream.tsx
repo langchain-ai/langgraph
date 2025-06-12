@@ -530,6 +530,17 @@ export interface UseStreamOptions<
 
   /** Will reconnect the stream on mount */
   reconnectOnMount?: boolean | (() => RunMetadataStorage);
+
+  /**
+   * Initial values to display immediately when loading a thread.
+   * Useful for displaying cached thread data while official history loads.
+   * These values will be replaced when official thread data is fetched.
+   * 
+   * Note: UI components from initialValues will render immediately if they're 
+   * predefined in LoadExternalComponent's components prop, providing instant
+   * cached UI display without server fetches.
+   */
+  initialValues?: Partial<StateType> | null;
 }
 
 interface RunMetadataStorage {
@@ -925,7 +936,8 @@ export function useStream<
           }
 
           setStreamValues((streamValues) => {
-            const values = { ...historyValues, ...streamValues };
+            const baseValues = options.initialValues ? { ...historyValues, ...options.initialValues } : historyValues;
+            const values = { ...baseValues, ...streamValues };
 
             // Assumption: we're concatenating the message
             const messages = getMessages(values).slice();
@@ -1004,18 +1016,18 @@ export function useStream<
       // Assumption: we're setting the initial value
       // Used for instant feedback
       setStreamValues(() => {
-        const values = { ...historyValues };
+        const baseValues = options.initialValues ? { ...historyValues, ...options.initialValues } : historyValues;
 
         if (submitOptions?.optimisticValues != null) {
           return {
-            ...values,
+            ...baseValues,
             ...(typeof submitOptions.optimisticValues === "function"
-              ? submitOptions.optimisticValues(values)
+              ? submitOptions.optimisticValues(baseValues)
               : submitOptions.optimisticValues),
           };
         }
 
-        return values;
+        return baseValues;
       });
 
       let usableThreadId = threadId;
@@ -1116,7 +1128,7 @@ export function useStream<
   }, [reconnectKey]);
 
   const error = streamError ?? historyError;
-  const values = streamValues ?? historyValues;
+  const values = streamValues ?? (options.initialValues ? { ...historyValues, ...options.initialValues } : historyValues);
 
   return {
     get values() {
