@@ -30,7 +30,7 @@ pip install langgraph-supervisor
 
 ```python
 from langchain_openai import ChatOpenAI
-from langgraph.prebuilt import create_react_agent
+from langchain.agents.react.agent import create_react_agent
 # highlight-next-line
 from langgraph_supervisor import create_supervisor
 
@@ -93,7 +93,7 @@ pip install langgraph-swarm
 ```
 
 ```python
-from langgraph.prebuilt import create_react_agent
+from langchain.agents.react.agent import create_react_agent
 # highlight-next-line
 from langgraph_swarm import create_swarm, create_handoff_tool
 
