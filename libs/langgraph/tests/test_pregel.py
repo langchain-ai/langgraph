@@ -46,7 +46,7 @@ from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, START
 from langgraph.errors import InvalidUpdateError, ParentCommand
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, StateGraph
-from langgraph.graph.message import MessagesState, add_messages
+from langgraph.graph.message import MessageGraph, MessagesState, add_messages
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import (
     GraphRecursionError,
@@ -3994,14 +3994,9 @@ def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:
 def test_remove_message_via_state_update(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    from langchain_core.messages import (
-        AIMessage,
-        AnyMessage,
-        HumanMessage,
-        RemoveMessage,
-    )
+    from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
-    workflow = StateGraph(Annotated[list[AnyMessage], add_messages])
+    workflow = MessageGraph()
     workflow.add_node(
         "chatbot",
         lambda state: [
@@ -4032,14 +4027,9 @@ def test_remove_message_via_state_update(
 
 
 def test_remove_message_from_node():
-    from langchain_core.messages import (
-        AIMessage,
-        AnyMessage,
-        HumanMessage,
-        RemoveMessage,
-    )
+    from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
-    workflow = StateGraph(Annotated[list[AnyMessage], add_messages])
+    workflow = MessageGraph()
     workflow.add_node(
         "chatbot",
         lambda state: [
