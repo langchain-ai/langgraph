@@ -3145,7 +3145,7 @@ async def test_send_to_nested_graphs(async_checkpointer: BaseCheckpointSaver) ->
         return {"subject": f"{subject} - hohoho"}
 
     # subgraph
-    subgraph = StateGraph(JokeState, output=OverallState)
+    subgraph = StateGraph(JokeState, output_schema=OverallState)
     subgraph.add_node("edit", edit)
     subgraph.add_node(
         "generate", lambda state: {"jokes": [f"Joke about {state['subject']}"]}
