@@ -129,11 +129,11 @@ format format_diff:
 	uv run ruff format $(PYTHON_FILES)
 	uv run ruff check --select I --fix $(PYTHON_FILES)
 
-spell_check:
-	uv run codespell --toml pyproject.toml
+codespell:
+	uv run codespell .
 
 spell_fix:
-	uv run codespell --toml pyproject.toml -w
+	uv run codespell . -w
 
 
 ######################
