@@ -53,7 +53,7 @@ be completely production-ready, it should be useful and practically satisfy the 
 
 To quote the Diataxis website:
 
-> A tutorial serves the user’s *acquisition* of skills and knowledge - their study. Its purpose is not to help the user get something done, but to help them learn.
+> A tutorial serves the user's *acquisition* of skills and knowledge - their study. Its purpose is not to help the user get something done, but to help them learn.
 
 In LangGraph, these are often higher level guides that show off end-to-end use cases.
 
@@ -250,11 +250,18 @@ make serve-docs
 
 #### Linting
 
-The documentation is linted from the **monorepo root**. To lint it, run the following from there:
+We use several tools to ensure code quality:
 
-```bash
-make spellcheck
-```
+1. **Codespell**: Checks for common typos in code and documentation. Run with:
+   ```bash
+   make codespell
+   ```
+   This will check all files in the repository for typos, excluding binary files and common false positives.
+
+2. **Pre-commit hooks**: We use pre-commit hooks to automatically run codespell before each commit. The configuration is in `.pre-commit-config.yaml`. To install the hooks:
+   ```bash
+   pre-commit install
+   ```
 
 ### ️In-code Documentation
 
