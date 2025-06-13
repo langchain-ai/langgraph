@@ -544,7 +544,7 @@ def validate_config(config: Config) -> Config:
         "node_version": node_version,
         "python_version": python_version,
         "pip_config_file": config.get("pip_config_file"),
-        "pip_installer": config.get("pip_installer"),
+        "pip_installer": config.get("pip_installer", "auto"),
         "_INTERNAL_docker_tag": config.get("_INTERNAL_docker_tag"),
         "base_image": config.get("base_image"),
         "image_distro": image_distro,
@@ -609,7 +609,6 @@ def validate_config(config: Config) -> Config:
                 "Must be either 'debian' or 'wolfi'."
             )
 
-    # Validate pip_installer config
     if pip_installer := config.get("pip_installer"):
         if pip_installer not in ["auto", "pip", "uv"]:
             raise click.UsageError(
@@ -1132,22 +1131,14 @@ def python_config_to_docker(
 ) -> tuple[str, dict[str, str]]:
     """Generate a Dockerfile from the configuration."""
     pip_installer = config.get("pip_installer", "auto")
-    
+
     if pip_installer == "uv":
         install_cmd = "uv pip install --system"
         uv_removal = "RUN uv pip uninstall --system pip setuptools wheel && rm /usr/bin/uv /usr/bin/uvx"
     elif pip_installer == "pip":
         install_cmd = "pip install"
         uv_removal = ""
-    elif pip_installer == "auto":
-        if _image_supports_uv(base_image):
-            install_cmd = "uv pip install --system"
-            uv_removal = "RUN uv pip uninstall --system pip setuptools wheel && rm /usr/bin/uv /usr/bin/uvx"
-        else:
-            install_cmd = "pip install"
-            uv_removal = ""
     else:
-        # This should be caught by validation, but fallback to auto behavior
         if _image_supports_uv(base_image):
             install_cmd = "uv pip install --system"
             uv_removal = "RUN uv pip uninstall --system pip setuptools wheel && rm /usr/bin/uv /usr/bin/uvx"

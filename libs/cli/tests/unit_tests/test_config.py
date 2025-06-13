@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import pathlib
@@ -40,6 +41,7 @@ def test_validate_config():
         "python_version": "3.11",
         "node_version": None,
         "pip_config_file": None,
+        "pip_installer": "auto",
         "image_distro": "debian",
         "dockerfile_lines": [],
         "env": {},
@@ -61,6 +63,7 @@ def test_validate_config():
         "python_version": "3.12",
         "node_version": None,
         "pip_config_file": "pipconfig.txt",
+        "pip_installer": "auto",
         "image_distro": "debian",
         "dockerfile_lines": ["ARG meow"],
         "dependencies": [".", "langchain"],
@@ -249,7 +252,7 @@ def test_validate_config_pip_installer():
     )
     assert config["pip_installer"] == "uv"
 
-    # Missing pip_installer should default to None
+    # Missing pip_installer should default to "auto"
     config = validate_config(
         {
             "python_version": "3.11",
@@ -257,7 +260,7 @@ def test_validate_config_pip_installer():
             "graphs": {"agent": "./agent.py:graph"},
         }
     )
-    assert config["pip_installer"] is None
+    assert config["pip_installer"] == "auto"
 
     # Invalid pip_installer values should raise error
     with pytest.raises(click.UsageError) as exc_info:
@@ -869,41 +872,56 @@ WORKDIR /deps/__outer_unit_tests/unit_tests"""
 
 def test_config_to_docker_pip_installer():
     """Test that pip_installer setting affects the generated Dockerfile."""
+    graphs = {"agent": "./graphs/agent.py:graph"}
     base_config = {
         "python_version": "3.11",
         "dependencies": ["."],
-        "graphs": {"agent": "./agent.py:graph"},
+        "graphs": graphs,
     }
-    
+
     # Test default (auto) behavior with UV-supporting image
-    config_auto = validate_config({**base_config, "pip_installer": "auto"})
-    docker_auto, _ = config_to_docker(PATH_TO_CONFIG, config_auto, "langchain/langgraph-api:0.2.47")
+    config_auto = validate_config(
+        {**copy.deepcopy(base_config), "pip_installer": "auto"}
+    )
+    docker_auto, _ = config_to_docker(
+        PATH_TO_CONFIG, config_auto, "langchain/langgraph-api:0.2.47"
+    )
     assert "uv pip install --system" in docker_auto
     assert "rm /usr/bin/uv /usr/bin/uvx" in docker_auto
-    
+
     # Test explicit pip setting
-    config_pip = validate_config({**base_config, "pip_installer": "pip"})
-    docker_pip, _ = config_to_docker(PATH_TO_CONFIG, config_pip, "langchain/langgraph-api:0.2.47")
+    config_pip = validate_config({**copy.deepcopy(base_config), "pip_installer": "pip"})
+    docker_pip, _ = config_to_docker(
+        PATH_TO_CONFIG, config_pip, "langchain/langgraph-api:0.2.47"
+    )
     assert "uv pip install --system" not in docker_pip
     assert "pip install" in docker_pip
     assert "rm /usr/bin/uv" not in docker_pip
-    
+
     # Test explicit uv setting
-    config_uv = validate_config({**base_config, "pip_installer": "uv"})
-    docker_uv, _ = config_to_docker(PATH_TO_CONFIG, config_uv, "langchain/langgraph-api:0.2.47")
+    config_uv = validate_config({**copy.deepcopy(base_config), "pip_installer": "uv"})
+    docker_uv, _ = config_to_docker(
+        PATH_TO_CONFIG, config_uv, "langchain/langgraph-api:0.2.47"
+    )
     assert "uv pip install --system" in docker_uv
     assert "rm /usr/bin/uv /usr/bin/uvx" in docker_uv
-    
+
     # Test auto behavior with older image (should use pip)
-    config_auto_old = validate_config({**base_config, "pip_installer": "auto"})
-    docker_auto_old, _ = config_to_docker(PATH_TO_CONFIG, config_auto_old, "langchain/langgraph-api:0.2.46")
+    config_auto_old = validate_config(
+        {**copy.deepcopy(base_config), "pip_installer": "auto"}
+    )
+    docker_auto_old, _ = config_to_docker(
+        PATH_TO_CONFIG, config_auto_old, "langchain/langgraph-api:0.2.46"
+    )
     assert "uv pip install --system" not in docker_auto_old
     assert "pip install" in docker_auto_old
     assert "rm /usr/bin/uv" not in docker_auto_old
-    
+
     # Test that missing pip_installer defaults to auto behavior
-    config_default = validate_config(base_config)
-    docker_default, _ = config_to_docker(PATH_TO_CONFIG, config_default, "langchain/langgraph-api:0.2.47")
+    config_default = validate_config(copy.deepcopy(base_config))
+    docker_default, _ = config_to_docker(
+        PATH_TO_CONFIG, config_default, "langchain/langgraph-api:0.2.47"
+    )
     assert "uv pip install --system" in docker_default
 
 
