@@ -11,8 +11,8 @@ from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 from typing_extensions import TypedDict
 
-from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
+from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.constants import END, PULL, PUSH, START
@@ -502,7 +502,7 @@ def test_conditional_state_graph(
     from langchain_core.tools import tool
 
     class AgentState(TypedDict, total=False):
-        input: Annotated[str, EphemeralValue]
+        input: Annotated[str, UntrackedValue]
         agent_outcome: Optional[Union[AgentAction, AgentFinish]]
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
 
@@ -590,6 +590,7 @@ def test_conditional_state_graph(
         assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
+        "input": "what is weather in sf",
         "intermediate_steps": [
             [
                 AgentAction(
@@ -1022,7 +1023,6 @@ def test_conditional_state_graph(
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
-            "input": "what is weather in sf",
             "intermediate_steps": [],
         },
         tasks=(PregelTask(AnyStr(), "agent", (PULL, "agent")),),

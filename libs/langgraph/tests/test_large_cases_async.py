@@ -16,8 +16,8 @@ from langchain_core.runnables import RunnableConfig, RunnablePick
 from pytest_mock import MockerFixture
 from typing_extensions import TypedDict
 
-from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
+from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import END, PULL, PUSH, START
 from langgraph.graph.message import MessageGraph, add_messages
@@ -500,7 +500,7 @@ async def test_conditional_graph_state(async_checkpointer: BaseCheckpointSaver) 
     from langchain_core.tools import tool
 
     class AgentState(TypedDict):
-        input: Annotated[str, EphemeralValue]
+        input: Annotated[str, UntrackedValue]
         agent_outcome: Optional[Union[AgentAction, AgentFinish]]
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
 
@@ -575,6 +575,7 @@ async def test_conditional_graph_state(async_checkpointer: BaseCheckpointSaver) 
     app = workflow.compile()
 
     assert await app.ainvoke({"input": "what is weather in sf"}) == {
+        "input": "what is weather in sf",
         "intermediate_steps": [
             [
                 AgentAction(
