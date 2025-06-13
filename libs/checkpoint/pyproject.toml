@@ -31,6 +31,7 @@ dev = [
   "dataclasses-json",
   "numpy",
   "pandas",
+  "pandas-stubs>=2.2.2.240807",
 ]
 
 [tool.hatch.build.targets.wheel]

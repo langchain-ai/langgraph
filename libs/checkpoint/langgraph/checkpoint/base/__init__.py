@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator, Sequence
+from inspect import signature
 from typing import (  # noqa: UP035
     Any,
+    ClassVar,
     Generic,
     Literal,
     NamedTuple,
@@ -116,7 +118,18 @@ class BaseCheckpointSaver(Generic[V]):
         versions to avoid blocking the main thread.
     """
 
+    _get_next_version_legacy: ClassVar[bool] = False
+    """Flag indicating if get_next_version method is legacy (takes two parameters)."""
+
     serde: SerializerProtocol = JsonPlusSerializer()
+
+    def __init_subclass__(cls) -> None:
+        cls._get_next_version_legacy = (
+            len(signature(cls.get_next_version).parameters) > 2  # self + current
+            if hasattr(cls, "get_next_version")
+            else False
+        )
+        return super().__init_subclass__()
 
     def __init__(
         self,

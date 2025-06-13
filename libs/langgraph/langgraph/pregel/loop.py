@@ -28,6 +28,7 @@ from typing_extensions import ParamSpec, Self
 
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import (
     EXCLUDED_METADATA_KEYS,
     WRITES_IDX_MAP,
@@ -941,7 +942,13 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         )
         self.stack = ExitStack()
         if checkpointer:
-            self.checkpointer_get_next_version = checkpointer.get_next_version
+            if checkpointer._get_next_version_legacy:
+                empty_channel: LastValue[Any] = LastValue(Any)
+                self.checkpointer_get_next_version = (
+                    lambda c: checkpointer.get_next_version(c, empty_channel)  # type: ignore[call-arg]
+                )
+            else:
+                self.checkpointer_get_next_version = checkpointer.get_next_version
             self.checkpointer_put_writes = checkpointer.put_writes
             self.checkpointer_put_writes_accepts_task_path = (
                 signature(checkpointer.put_writes).parameters.get("task_path")
@@ -1114,7 +1121,13 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         )
         self.stack = AsyncExitStack()
         if checkpointer:
-            self.checkpointer_get_next_version = checkpointer.get_next_version
+            if checkpointer._get_next_version_legacy:
+                empty_channel: LastValue[Any] = LastValue(Any)
+                self.checkpointer_get_next_version = (
+                    lambda c: checkpointer.get_next_version(c, empty_channel)  # type: ignore[call-arg]
+                )
+            else:
+                self.checkpointer_get_next_version = checkpointer.get_next_version
             self.checkpointer_put_writes = checkpointer.aput_writes
             self.checkpointer_put_writes_accepts_task_path = (
                 signature(checkpointer.aput_writes).parameters.get("task_path")
