@@ -34,7 +34,7 @@ def read_root():
 
 ## Configure `langgraph.json`
 
-Add the following to your `langgraph.json` configuration file. Make sure the path points to the `app.py` file you created above.
+Add the following to your `langgraph.json` configuration file. Make sure the path points to the FastAPI application instance `app` in the `webapp.py` file you created above.
 
 ```json
 {
