@@ -7,6 +7,7 @@ from typing import Any, Optional
 from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
@@ -14,6 +15,7 @@ from langgraph.checkpoint.base import (
     SerializerProtocol,
 )
 from langgraph.checkpoint.memory import InMemorySaver, PersistentDict
+from langgraph.constants import TASKS
 
 
 class NoopSerializer(SerializerProtocol):
@@ -22,6 +24,28 @@ class NoopSerializer(SerializerProtocol):
 
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
         return "type", obj
+
+
+class MemorySaverNeedsPendingSendsMigration(BaseCheckpointSaver):
+    def __init__(self) -> None:
+        self.saver = InMemorySaver()
+
+    def __getattribute__(self, name):
+        if name in ("saver", "__class__", "get_tuple"):
+            return object.__getattribute__(self, name)
+        return getattr(self.saver, name)
+
+    def get_tuple(self, config):
+        if tup := self.saver.get_tuple(config):
+            if tup.checkpoint["v"] == 4 and tup.checkpoint["channel_values"].get(TASKS):
+                tup.checkpoint["v"] = 3
+                tup.checkpoint["pending_sends"] = tup.checkpoint["channel_values"].pop(
+                    TASKS
+                )
+                tup.checkpoint["channel_versions"].pop(TASKS)
+                for seen in tup.checkpoint["versions_seen"].values():
+                    seen.pop(TASKS, None)
+        return tup
 
 
 class MemorySaverAssertImmutable(InMemorySaver):
