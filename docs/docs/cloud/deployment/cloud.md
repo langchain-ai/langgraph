@@ -62,6 +62,15 @@ Starting from the `LangGraph Platform` view...
 1. In the panel, select the `Server` tab to view server logs for the revision. Server logs are only available after a revision has been deployed.
 1. Within the `Server` tab, adjust the date/time range picker as needed. By default, the date/time range picker is set to the `Last 7 days`.
 
+## View Deployment Metrics
+
+Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>...
+
+1. In the left-hand navigation panel, select `LangGraph Platform`. The `LangGraph Platform` view contains a list of existing LangGraph Platform deployments.
+1. Select an existing deployment to monitor.
+1. Select the `Monitoring` tab to view the deployment metrics. See a list of [all available metrics](../../concepts/langgraph_control_plane.md#monitoring).
+1. Within the `Monitoring` tab, use the date/time range picker as needed. By default, the date/time range picker is set to the `Last 15 minutes`.
+
 ## Interrupt Revision
 
 Interrupting a revision will stop deployment of the revision.
