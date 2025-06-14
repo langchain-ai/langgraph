@@ -247,5 +247,7 @@ Verify that the original, interrupted run was interrupted
 
 Output:
 
+    ```
     'interrupted'
+    ```
 
