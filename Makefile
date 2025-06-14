@@ -3,7 +3,7 @@ LIBS_DIRS := $(wildcard libs/*)
 
 # Default target
 .PHONY: all
-all: lint format lock test
+all: lint format lock test codespell
 
 # Install dependencies for all projects
 .PHONY: install
@@ -56,3 +56,13 @@ test:
 			$(MAKE) -C $$dir test; \
 		fi; \
 	done
+
+# Run codespell on all projects
+.PHONY: codespell
+codespell:
+	@echo "Running codespell in libs/langgraph"
+	@$(MAKE) -C libs/langgraph codespell
+	@echo "Running codespell in libs/prebuilt"
+	@$(MAKE) -C libs/prebuilt codespell
+	@echo "Running codespell in docs"
+	@$(MAKE) -C docs codespell
