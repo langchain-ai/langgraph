@@ -1101,6 +1101,7 @@ class CompiledStateGraph(
 
     def _migrate_checkpoint(self, checkpoint: Checkpoint) -> None:
         """Migrate a checkpoint to new channel layout."""
+        super()._migrate_checkpoint(checkpoint)
 
         values = checkpoint["channel_values"]
         versions = checkpoint["channel_versions"]

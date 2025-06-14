@@ -908,7 +908,12 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
 
     def _migrate_checkpoint(self, checkpoint: Checkpoint) -> None:
         """Migrate a saved checkpoint to new channel layout."""
-        pass
+        if checkpoint["v"] < 4 and checkpoint.get("pending_sends"):
+            pending_sends: list[Send] = checkpoint.pop("pending_sends")
+            checkpoint["channel_values"][TASKS] = pending_sends
+            checkpoint["channel_versions"][TASKS] = max(
+                checkpoint["channel_versions"].values()
+            )
 
     def _prepare_state_snapshot(
         self,
