@@ -503,6 +503,82 @@ const handleSubmit = (text: string) => {
 };
 ```
 
+### Cached Thread Display
+
+Use the `initialValues` option to display cached thread data immediately while the official history is being loaded from the server. This improves user experience by showing cached data instantly when navigating to existing threads.
+
+```tsx
+import { useStream } from "@langchain/langgraph-sdk/react";
+
+const CachedThreadExample = ({ threadId, cachedThreadData }) => {
+  const stream = useStream({
+    apiUrl: "http://localhost:2024",
+    assistantId: "agent",
+    threadId,
+    // Show cached data immediately while history loads
+    initialValues: cachedThreadData?.values,
+    messagesKey: "messages",
+  });
+
+  return (
+    <div>
+      {stream.messages.map((message) => (
+        <div key={message.id}>{message.content as string}</div>
+      ))}
+    </div>
+  );
+};
+```
+
+The values flow follows this priority:
+1. **Initial load**: Shows `initialValues` while history loads
+2. **During submit**: `optimisticValues` take precedence  
+3. **After server response**: Official history replaces all
+
+### Optimistic Thread Creation
+
+Use the `newThreadId` option to enable optimistic UI patterns where you need to know the thread ID before the thread is actually created. Namely, when the `threadId` is left `null`, `useStream` will under the hood create a thread using the `newThreadId`.
+
+```tsx
+import { useState } from "react";
+import { useStream } from "@langchain/langgraph-sdk/react";
+
+const OptimisticThreadExample = () => {
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [optimisticThreadId] = useState(() => crypto.randomUUID());
+
+  const stream = useStream({
+    apiUrl: "http://localhost:2024", 
+    assistantId: "agent",
+    threadId, // null initially
+    newThreadId: optimisticThreadId, // predetermined ID for new thread
+    onThreadId: setThreadId, // update threadId after creation
+    messagesKey: "messages",
+  });
+
+  const handleSubmit = (text: string) => {
+    // Can immediately navigate to /threads/optimisticThreadId 
+    // without waiting for thread creation
+    window.history.pushState({}, "", `/threads/${optimisticThreadId}`);
+    
+    stream.submit({ messages: [{ type: "human", content: text }] });
+  };
+
+  return (
+    <div>
+      <p>Thread ID: {threadId || optimisticThreadId} (optimistic)</p>
+      {/* Rest of component */}
+    </div>
+  );
+};
+```
+
+**Usage pattern:**
+- Set `threadId: null` and `newThreadId: "predetermined-id"`
+- Submit message to create thread with the specified ID
+- Use `onThreadId` callback to update `threadId` after creation
+- Navigate optimistically to routes using the predetermined ID
+
 ### TypeScript
 
 The `useStream()` hook is friendly for apps written in TypeScript and you can specify types for the state to get better type safety and IDE support.
