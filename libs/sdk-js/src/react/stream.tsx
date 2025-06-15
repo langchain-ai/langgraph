@@ -512,12 +512,30 @@ export interface UseStreamOptions<
   threadId?: string | null;
 
   /**
+   * The ID to use when creating a new thread. When provided, this ID will be used
+   * for thread creation when threadId is null. This enables optimistic UI updates
+   * where you know the thread ID before the thread is actually created.
+   */
+  newThreadId?: string;
+
+  /**
    * Callback that is called when the thread ID is updated (ie when a new thread is created).
    */
   onThreadId?: (threadId: string) => void;
 
   /** Will reconnect the stream on mount */
   reconnectOnMount?: boolean | (() => RunMetadataStorage);
+
+  /**
+   * Initial values to display immediately when loading a thread.
+   * Useful for displaying cached thread data while official history loads.
+   * These values will be replaced when official thread data is fetched.
+   * 
+   * Note: UI components from initialValues will render immediately if they're 
+   * predefined in LoadExternalComponent's components prop, providing instant
+   * cached UI display without server fetches.
+   */
+  initialValues?: Partial<StateType> | null;
 }
 
 interface RunMetadataStorage {
@@ -907,7 +925,8 @@ export function useStream<
           }
 
           setStreamValues((streamValues) => {
-            const values = { ...historyValues, ...streamValues };
+            const baseValues = options.initialValues ? { ...historyValues, ...options.initialValues } : historyValues;
+            const values = { ...baseValues, ...streamValues };
 
             // Assumption: we're concatenating the message
             const messages = getMessages(values).slice();
@@ -986,23 +1005,25 @@ export function useStream<
       // Assumption: we're setting the initial value
       // Used for instant feedback
       setStreamValues(() => {
-        const values = { ...historyValues };
+        const baseValues = options.initialValues ? { ...historyValues, ...options.initialValues } : historyValues;
 
         if (submitOptions?.optimisticValues != null) {
           return {
-            ...values,
+            ...baseValues,
             ...(typeof submitOptions.optimisticValues === "function"
-              ? submitOptions.optimisticValues(values)
+              ? submitOptions.optimisticValues(baseValues)
               : submitOptions.optimisticValues),
           };
         }
 
-        return values;
+        return baseValues;
       });
 
       let usableThreadId = threadId;
       if (!usableThreadId) {
-        const thread = await client.threads.create();
+        const thread = await client.threads.create({
+          threadId: options.newThreadId,
+        });
         onThreadId(thread.thread_id);
         usableThreadId = thread.thread_id;
       }
@@ -1096,7 +1117,7 @@ export function useStream<
   }, [reconnectKey]);
 
   const error = streamError ?? historyError;
-  const values = streamValues ?? historyValues;
+  const values = streamValues ?? (options.initialValues ? { ...historyValues, ...options.initialValues } : historyValues);
 
   return {
     get values() {
