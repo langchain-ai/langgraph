@@ -32,7 +32,6 @@ from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
     CheckpointTuple,
-    copy_checkpoint,
 )
 from langgraph.config import get_config
 from langgraph.constants import (
@@ -79,6 +78,7 @@ from langgraph.pregel.algo import (
 from langgraph.pregel.call import identifier
 from langgraph.pregel.checkpoint import (
     channels_from_checkpoint,
+    copy_checkpoint,
     create_checkpoint,
     empty_checkpoint,
 )

@@ -15,10 +15,11 @@ from langgraph.checkpoint.base import (
     EXCLUDED_METADATA_KEYS,
     Checkpoint,
     CheckpointMetadata,
+    create_checkpoint,
+    empty_checkpoint,
 )
 from langgraph.checkpoint.postgres import PostgresSaver, ShallowPostgresSaver
 from langgraph.checkpoint.serde.types import TASKS
-from tests.checkpoint_utils import create_checkpoint, empty_checkpoint
 from tests.conftest import DEFAULT_POSTGRES_URI
 
 
