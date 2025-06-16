@@ -46,7 +46,7 @@ Checkpointer = Union[None, bool, BaseCheckpointSaver]
 - False disables checkpointing, even if the parent graph has a checkpointer.
 - None inherits checkpointer from the parent graph."""
 
-StreamMode = Literal["values", "updates", "debug", "messages", "custom"]
+StreamMode = Literal["values", "updates", "checkpoints", "tasks", "messages", "custom"]
 """How the stream method should emit outputs.
 
 - `"values"`: Emit all values in the state after each step, including interrupts.
@@ -55,7 +55,8 @@ StreamMode = Literal["values", "updates", "debug", "messages", "custom"]
     If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
 - `"custom"`: Emit custom data using from inside nodes or tasks using `StreamWriter`.
 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
-- `"debug"`: Emit debug events with as much information as possible for each step.
+- `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by get_state().
+- `"tasks"`: Emit events when tasks start and finish, including their results and errors.
 """
 
 StreamWriter = Callable[[Any], None]

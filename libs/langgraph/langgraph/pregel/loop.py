@@ -119,6 +119,7 @@ from langgraph.types import (
     PregelScratchpad,
     RetryPolicy,
     StreamChunk,
+    StreamMode,
     StreamProtocol,
 )
 from langgraph.utils.config import patch_configurable
@@ -422,7 +423,7 @@ class PregelLoop:
             ),
         ):
             # produce debug output
-            self._emit("debug", map_debug_tasks, self.step, [pushed])
+            self._emit("tasks", map_debug_tasks, self.step, [pushed])
             # debug flag
             if self.debug:
                 print_step_tasks(self.step, [pushed])
@@ -472,7 +473,7 @@ class PregelLoop:
         # produce debug output
         if self._checkpointer_put_after_previous is not None:
             self._emit(
-                "debug",
+                "checkpoints",
                 map_debug_checkpoint,
                 self.step - 1,  # printing checkpoint for previous step
                 {
@@ -509,7 +510,7 @@ class PregelLoop:
             raise GraphInterrupt()
 
         # produce debug output
-        self._emit("debug", map_debug_tasks, self.step, self.tasks.values())
+        self._emit("tasks", map_debug_tasks, self.step, self.tasks.values())
 
         # debug flag
         if self.debug:
@@ -834,7 +835,7 @@ class PregelLoop:
 
     def _emit(
         self,
-        mode: str,
+        mode: StreamMode,
         values: Callable[P, Iterator[Any]],
         *args: P.args,
         **kwargs: P.kwargs,
@@ -885,7 +886,7 @@ class PregelLoop:
                 )
             if not cached:
                 self._emit(
-                    "debug",
+                    "tasks",
                     map_debug_task_results,
                     self.step,
                     (task, writes),
