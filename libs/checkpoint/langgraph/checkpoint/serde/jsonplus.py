@@ -672,5 +672,15 @@ _option = (
 )
 
 
+def message_to_dict(msg):
+    # Handles HumanMessage, AIMessage, ToolMessage, etc.
+    if hasattr(msg, "to_dict"):
+        return msg.to_dict()
+    elif isinstance(msg, dict):
+        return msg
+    else:
+        # Fallback: try to extract content and role
+        return {"role": getattr(msg, "role", "user"), "content": str(getattr(msg, "content", msg))}
+    
 def _msgpack_enc(data: Any) -> bytes:
-    return ormsgpack.packb(data, default=_msgpack_default, option=_option)
+    return ormsgpack.packb(message_to_dict(data), default=_msgpack_default, option=_option)
