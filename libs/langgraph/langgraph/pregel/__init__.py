@@ -2236,8 +2236,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
             stream_mode = ["values"]
         elif stream_mode is None:
             stream_mode = self.stream_mode
-        elif stream_mode == "debug":
-            stream_mode = ["checkpoints", "tasks"]
         if not isinstance(stream_mode, list):
             stream_mode = [stream_mode]
         if self.checkpointer is False:
