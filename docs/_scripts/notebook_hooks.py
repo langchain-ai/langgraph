@@ -16,6 +16,7 @@ from mkdocs.structure.pages import Page
 
 from _scripts.generate_api_reference_links import update_markdown_with_imports
 from _scripts.notebook_convert import convert_notebook
+from _scripts.link_map import JS_LINK_MAP
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
@@ -158,6 +159,33 @@ def _add_path_to_code_blocks(markdown: str, page: Page) -> str:
     return code_block_pattern.sub(replace_code_block_header, markdown)
 
 
+def _resolve_cross_references(md_text: str, link_map: dict[str, str]) -> str:
+    """Replace [title][identifier] with [title](url) using language-specific link_map.
+
+    Args:
+        md_text: The markdown text to process.
+        link_map: mapping of identifier to URL.
+
+    Returns:
+        The processed markdown text with cross-references resolved.
+    """
+    # Pattern to match [title][identifier]
+    pattern = re.compile(r"\[([^\]]+)\]\[([^\]]+)\]")
+
+    def replace_reference(match: re.Match) -> str:
+        """Replace the matched reference with the corresponding URL."""
+        title, identifier = match.group(1), match.group(2)
+        url = link_map.get(identifier)
+
+        if url:
+            return f"[{title}]({url})"
+        else:
+            # Leave it unchanged if not found
+            return match.group(0)
+
+    return pattern.sub(replace_reference, md_text)
+
+
 def _apply_conditional_rendering(md_text: str, target_language: str) -> str:
     if target_language not in {"python", "js"}:
         raise ValueError("target_language must be 'python' or 'js'")
@@ -289,6 +317,16 @@ def _on_page_markdown_with_config(
     # Apply conditional rendering for code blocks
     target_language = kwargs.get("target_language", "js")
     markdown = _apply_conditional_rendering(markdown, target_language)
+    if target_language == "js":
+        markdown = _resolve_cross_references(markdown, JS_LINK_MAP)
+    elif target_language == "python":
+        # Via a dedicated plugin
+        pass
+    else:
+        raise ValueError(
+            f"Unsupported target language: {target_language}. "
+            "Supported languages are 'python' and 'js'."
+        )
 
     # Add file path as an attribute to code blocks that are executable.
     # This file path is used to associate fixtures with the executable code
