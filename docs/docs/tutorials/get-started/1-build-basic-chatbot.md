@@ -1,3 +1,4 @@
+:::python
 # Build a basic chatbot
 
 In this tutorial, you will build a basic chatbot. This chatbot is the basis for the following series of tutorials where you will progressively add more sophisticated capabilities, and be introduced to key LangGraph concepts along the way. Let’s dive in! 🌟
@@ -211,4 +212,209 @@ graph = graph_builder.compile()
 
 You may have noticed that the bot's knowledge is limited to what's in its training data. In the next part, we'll [add a web search tool](./2-add-tools.md) to expand the bot's knowledge and make it more capable.
 
+:::
 
+:::js
+# Build a basic chatbot
+
+In this tutorial, you will build a basic chatbot. This chatbot is the basis for the following series of tutorials where you will progressively add more sophisticated capabilities, and be introduced to key LangGraph concepts along the way. Let's dive in! 🌟
+
+## Prerequisites
+
+Before you start this tutorial, ensure you have access to a LLM that supports
+tool-calling features, such as [OpenAI](https://platform.openai.com/api-keys),
+[Anthropic](https://console.anthropic.com/settings/keys), or
+[Google Gemini](https://ai.google.dev/gemini-api/docs/api-key).
+
+## 1. Install packages
+
+Install the required packages:
+
+```bash
+npm install @langchain/langgraph @langchain/core langsmith
+```
+
+!!! tip
+
+    Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM apps built with LangGraph. For more information on how to get started, see [LangSmith docs](https://docs.smith.langchain.com). 
+
+## 2. Create a `StateGraph`
+
+Now you can create a basic chatbot using LangGraph. This chatbot will respond directly to user messages.
+
+Start by creating a `StateGraph`. A `StateGraph` object defines the structure of our chatbot as a "state machine". We'll add `nodes` to represent the llm and functions our chatbot can call and `edges` to specify how the bot should transition between these functions.
+
+```typescript
+import { Annotation } from "@langchain/langgraph";
+import { BaseMessage } from "@langchain/core/messages";
+import { StateGraph, START, END } from "@langchain/langgraph";
+
+const StateAnnotation = Annotation.Root({
+  // Messages have the type "BaseMessage[]". The messagesStateReducer function
+  // defines how this state key should be updated
+  // (in this case, it appends messages to the list, rather than overwriting them)
+  messages: Annotation<BaseMessage[]>({
+    reducer: (x, y) => x.concat(y),
+  }),
+});
+
+const graphBuilder = new StateGraph(StateAnnotation);
+```
+
+Our graph can now handle two key tasks:
+
+1. Each `node` can receive the current `State` as input and output an update to the state.
+2. Updates to `messages` will be appended to the existing list rather than overwriting it, thanks to the reducer function.
+
+------
+
+!!! tip "Concept"
+
+    When defining a graph, the first step is to define its `State`. The `State` includes the graph's schema and [reducer functions](https://langchain-ai.github.io/langgraph/concepts/low_level/#reducers) that handle state updates. In our example, `StateAnnotation` defines a state with one key: `messages`. The reducer function is used to append new messages to the list instead of overwriting it. Keys without a reducer annotation will overwrite previous values. To learn more about state, reducers, and related concepts, see [LangGraph reference docs](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.message.add_messages).
+
+## 3. Add a node
+
+Next, add a "`chatbot`" node. **Nodes** represent units of work and are typically regular functions.
+
+Let's first select a chat model:
+
+```typescript
+import { ChatAnthropic } from "@langchain/anthropic";
+
+const llm = new ChatAnthropic({
+  model: "claude-3-5-sonnet-latest",
+});
+```
+
+We can now incorporate the chat model into a simple node:
+
+```typescript
+const chatbot = async (state: typeof StateAnnotation.State) => {
+  return { messages: [await llm.invoke(state.messages)] };
+};
+
+// The first argument is the unique node name
+// The second argument is the function or object that will be called whenever
+// the node is used.
+graphBuilder.addNode("chatbot", chatbot);
+```
+
+**Notice** how the `chatbot` node function takes the current `State` as input and returns a dictionary containing an updated `messages` list under the key "messages". This is the basic pattern for all LangGraph node functions.
+
+The reducer function in our `StateAnnotation` will append the LLM's response messages to whatever messages are already in the state.
+
+## 4. Add an `entry` point
+
+Add an `entry` point to tell the graph **where to start its work** each time it is run:
+
+```typescript
+graphBuilder.addEdge(START, "chatbot");
+```
+
+## 5. Add an `exit` point
+
+Add an `exit` point to indicate **where the graph should finish execution**. This is helpful for more complex flows, but even in a simple graph like this, adding an end node improves clarity.
+
+```typescript
+graphBuilder.addEdge("chatbot", END);
+```
+This tells the graph to terminate after running the chatbot node.
+
+## 6. Compile the graph
+
+Before running the graph, we'll need to compile it. We can do so by calling `compile()`
+on the graph builder. This creates a `CompiledGraph` we can invoke on our state.
+
+```typescript
+const graph = graphBuilder.compile();
+```
+
+## 7. Visualize the graph (optional)
+
+You can visualize the graph using the `getGraph` method and one of the "draw" methods, like `drawMermaidPng`. The `draw` methods each require additional dependencies.
+
+```typescript
+import * as tslab from "tslab";
+
+try {
+  const drawableGraph = graph.getGraph();
+  const image = await drawableGraph.drawMermaidPng();
+  const arrayBuffer = await image.arrayBuffer();
+  await tslab.display.png(new Uint8Array(arrayBuffer));
+} catch (error) {
+  // This requires some extra dependencies and is optional
+  console.log("Graph visualization not available");
+}
+```
+
+![basic chatbot diagram](basic-chatbot.png)
+
+## 8. Run the chatbot
+
+Now run the chatbot! 
+
+```typescript
+import { HumanMessage } from "@langchain/core/messages";
+
+async function streamGraphUpdates(userInput: string) {
+  const stream = await graph.stream({
+    messages: [new HumanMessage(userInput)]
+  });
+  
+  for await (const event of stream) {
+    for (const value of Object.values(event)) {
+      console.log("Assistant:", value.messages[value.messages.length - 1].content);
+    }
+  }
+}
+
+// Example usage
+const userInput = "What do you know about LangGraph?";
+console.log("User:", userInput);
+await streamGraphUpdates(userInput);
+```
+
+```
+User: What do you know about LangGraph?
+Assistant: LangGraph is a library designed to help build stateful multi-agent applications using language models. It provides tools for creating workflows and state machines to coordinate multiple AI agents or language model interactions. LangGraph is built on top of LangChain, leveraging its components while adding graph-based coordination capabilities. It's particularly useful for developing more complex, stateful AI applications that go beyond simple query-response interactions.
+```
+
+**Congratulations!** You've built your first chatbot using LangGraph. This bot can engage in basic conversation by taking user input and generating responses using an LLM. You can inspect a [LangSmith Trace](https://smith.langchain.com/public/7527e308-9502-4894-b347-f34385740d5a/r) for the call above.
+
+Below is the full code for this tutorial:
+
+```typescript
+import { Annotation } from "@langchain/langgraph";
+import { BaseMessage, HumanMessage } from "@langchain/core/messages";
+import { StateGraph, START, END } from "@langchain/langgraph";
+import { ChatAnthropic } from "@langchain/anthropic";
+
+const StateAnnotation = Annotation.Root({
+  messages: Annotation<BaseMessage[]>({
+    reducer: (x, y) => x.concat(y),
+  }),
+});
+
+const graphBuilder = new StateGraph(StateAnnotation);
+
+const llm = new ChatAnthropic({
+  model: "claude-3-5-sonnet-latest",
+});
+
+const chatbot = async (state: typeof StateAnnotation.State) => {
+  return { messages: [await llm.invoke(state.messages)] };
+};
+
+// The first argument is the unique node name
+// The second argument is the function or object that will be called whenever
+// the node is used.
+graphBuilder.addNode("chatbot", chatbot);
+graphBuilder.addEdge(START, "chatbot");
+graphBuilder.addEdge("chatbot", END);
+const graph = graphBuilder.compile();
+```
+
+## Next steps
+
+You may have noticed that the bot's knowledge is limited to what's in its training data. In the next part, we'll [add a web search tool](./2-add-tools.md) to expand the bot's knowledge and make it more capable.
+:::
