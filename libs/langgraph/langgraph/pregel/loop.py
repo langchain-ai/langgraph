@@ -11,6 +11,7 @@ from contextlib import (
     AsyncExitStack,
     ExitStack,
 )
+from datetime import datetime, timezone
 from inspect import signature
 from types import TracebackType
 from typing import (
@@ -119,6 +120,7 @@ from langgraph.types import (
     PregelScratchpad,
     RetryPolicy,
     StreamChunk,
+    StreamMode,
     StreamProtocol,
 )
 from langgraph.utils.config import patch_configurable
@@ -422,7 +424,7 @@ class PregelLoop:
             ),
         ):
             # produce debug output
-            self._emit("debug", map_debug_tasks, self.step, [pushed])
+            self._emit("tasks", map_debug_tasks, [pushed])
             # debug flag
             if self.debug:
                 print_step_tasks(self.step, [pushed])
@@ -472,9 +474,8 @@ class PregelLoop:
         # produce debug output
         if self._checkpointer_put_after_previous is not None:
             self._emit(
-                "debug",
+                "checkpoints",
                 map_debug_checkpoint,
-                self.step - 1,  # printing checkpoint for previous step
                 {
                     **self.checkpoint_config,
                     CONF: {
@@ -485,7 +486,6 @@ class PregelLoop:
                 self.channels,
                 self.stream_keys,
                 self.checkpoint_metadata,
-                self.checkpoint,
                 self.tasks.values(),
                 self.checkpoint_pending_writes,
                 self.prev_checkpoint_config,
@@ -509,7 +509,7 @@ class PregelLoop:
             raise GraphInterrupt()
 
         # produce debug output
-        self._emit("debug", map_debug_tasks, self.step, self.tasks.values())
+        self._emit("tasks", map_debug_tasks, self.tasks.values())
 
         # debug flag
         if self.debug:
@@ -834,17 +834,39 @@ class PregelLoop:
 
     def _emit(
         self,
-        mode: str,
+        mode: StreamMode,
         values: Callable[P, Iterator[Any]],
         *args: P.args,
         **kwargs: P.kwargs,
     ) -> None:
         if self.stream is None:
             return
-        if mode not in self.stream.modes:
+        debug_remap = mode in ("checkpoints", "tasks") and "debug" in self.stream.modes
+        if mode not in self.stream.modes and not debug_remap:
             return
         for v in values(*args, **kwargs):
-            self.stream((self.checkpoint_ns, mode, v))
+            if mode in self.stream.modes:
+                self.stream((self.checkpoint_ns, mode, v))
+            # "debug" mode is "checkpoints" or "tasks" with a wrapper dict
+            if debug_remap:
+                self.stream(
+                    (
+                        self.checkpoint_ns,
+                        "debug",
+                        {
+                            "step": self.step - 1
+                            if mode == "checkpoints"
+                            else self.step,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "type": "checkpoint"
+                            if mode == "checkpoints"
+                            else "task_result"
+                            if "result" in v
+                            else "task",
+                            "payload": v,
+                        },
+                    )
+                )
 
     def output_writes(
         self, task_id: str, writes: WritesT, *, cached: bool = False
@@ -885,9 +907,8 @@ class PregelLoop:
                 )
             if not cached:
                 self._emit(
-                    "debug",
+                    "tasks",
                     map_debug_task_results,
-                    self.step,
                     (task, writes),
                     self.stream_keys,
                 )
