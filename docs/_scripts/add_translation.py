@@ -10,7 +10,7 @@ response = requests.get(URL)
 response.raise_for_status()
 reference_snippets = response.text
 
-model = ChatAnthropic(model="claude-3-5-sonnet-latest")
+model = ChatAnthropic(model="claude-sonnet-4-0", max_tokens=64_000)
 
 
 def main(file_path: str) -> None:
@@ -44,6 +44,7 @@ def main(file_path: str) -> None:
                     "Here are the reference TypeScript snippets:\n\n"
                     f"{reference_snippets}\n\n"
                 ),
+                "cache_control": {"type": "ephemeral"},
             },
             {"role": "user", "content": markdown_content},
         ]
