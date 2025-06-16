@@ -43,6 +43,8 @@ when you have values that don't change mid-run.
 Specify configuration using a key called **"configurable"** which is reserved
 for this purpose:
 
+
+:::python
 ```python
 agent.invoke(
     {"messages": [{"role": "user", "content": "hi!"}]},
@@ -50,11 +52,23 @@ agent.invoke(
     config={"configurable": {"user_id": "user_123"}}
 )
 ```
+:::
+
+:::js
+```ts
+await agent.invoke(
+  { messages: "hi!" },
+  // highlight-next-line
+  { configurable: { userId: "user_123" } }
+)
+```
+:::
 
 ### State (mutable context)
 
 State acts as short-term memory during a run. It holds dynamic data that can evolve during execution, such as values derived from tools or LLM outputs.
 
+:::python
 ```python
 class CustomState(AgentState):
     # highlight-next-line
@@ -71,6 +85,29 @@ agent.invoke({
     "user_name": "Jane"
 })
 ```
+:::
+
+:::js
+```ts
+const CustomState = Annotation.Root({
+    ...MessagesAnnotation.spec,
+    userName: Annotation<string>,
+});
+
+const agent = createReactAgent({
+    // Other agent parameters...
+    // highlight-next-line
+    stateSchema: CustomState,
+})
+
+await agent.invoke(
+    // highlight-next-line
+    { messages: "hi!", userName: "Jane" }
+)
+```
+:::
+
+
 
 !!! tip "Turning on memory"
 
@@ -92,6 +129,8 @@ Common use cases:
 - Personalization
 - Role or goal customization
 - Conditional behavior (e.g., user is admin)
+
+:::python
 
 === "Using config"
 
@@ -162,8 +201,90 @@ Common use cases:
     })
     ```
 
+:::
+
+:::js
+=== "Using config"
+
+    ```ts
+    import { BaseMessageLike } from "@langchain/core/messages";
+    import { RunnableConfig } from "@langchain/core/runnables";
+    import { initChatModel } from "langchain/chat_models/universal";
+    import { MessagesAnnotation } from "@langchain/langgraph";
+    import { createReactAgent } from "@langchain/langgraph/prebuilt";
+
+    const prompt = (
+      state: typeof MessagesAnnotation.State,
+      // highlight-next-line
+      config: RunnableConfig
+    ): BaseMessageLike[] => {
+      // highlight-next-line
+      const userName = config.configurable?.userName;
+      const systemMsg = `You are a helpful assistant. Address the user as ${userName}.`;
+      return [{ role: "system", content: systemMsg }, ...state.messages];
+    };
+
+    const llm = await initChatModel("anthropic:claude-3-7-sonnet-latest");
+    const agent = createReactAgent({
+      llm,
+      tools: [getWeather],
+      // highlight-next-line
+      prompt
+    });
+
+    await agent.invoke(
+      { messages: "hi!" },
+      // highlight-next-line
+      { configurable: { userName: "John Smith" } }
+    );
+    ```
+
+=== "Using state"
+
+    ```ts
+    import { BaseMessageLike } from "@langchain/core/messages";
+    import { RunnableConfig } from "@langchain/core/runnables";
+    import { initChatModel } from "langchain/chat_models/universal";
+    import { Annotation, MessagesAnnotation } from "@langchain/langgraph";
+    import { createReactAgent } from "@langchain/langgraph/prebuilt";
+
+    const CustomState = Annotation.Root({
+      ...MessagesAnnotation.spec,
+      // highlight-next-line
+      userName: Annotation<string>,
+    });
+
+    const prompt = (
+      // highlight-next-line
+      state: typeof CustomState.State,
+    ): BaseMessageLike[] => {
+      // highlight-next-line
+      const userName = state.userName;
+      const systemMsg = `You are a helpful assistant. Address the user as ${userName}.`;
+      return [{ role: "system", content: systemMsg }, ...state.messages];
+    };
+
+    const llm = await initChatModel("anthropic:claude-3-7-sonnet-latest");
+    const agent = createReactAgent({
+      llm,
+      tools: [getWeather],
+      // highlight-next-line
+      prompt,
+      // highlight-next-line
+      stateSchema: CustomState,
+    });
+
+    await agent.invoke(
+      // highlight-next-line
+      { messages: "hi!", userName: "John Smith" },
+    );
+    ```
+:::
+
+
 ## Accessing Context in Tools { #tools }
 
+:::python
 Tools can access context through special parameter **annotations**.
 
 * Use `RunnableConfig` for config access
@@ -230,7 +351,169 @@ Tools can access context through special parameter **annotations**.
         "user_id": "user_123"
     })
     ```
+:::
+
+:::js
+Tools can access context through:
+
+* Use `RunnableConfig` for config access
+* Use `getCurrentTaskInput()` for agent state
+
+=== "Using config"
+
+    ```ts
+    import { RunnableConfig } from "@langchain/core/runnables";
+    import { initChatModel } from "langchain/chat_models/universal";
+    import { createReactAgent } from "@langchain/langgraph/prebuilt";
+    import { tool } from "@langchain/core/tools";
+    import { z } from "zod";
+
+    const getUserInfo = tool(
+      async (input: Record<string, any>, config: RunnableConfig) => {
+        // highlight-next-line
+        const userId = config.configurable?.userId;
+        return userId === "user_123" ? "User is John Smith" : "Unknown user";
+      },
+      {
+        name: "get_user_info",
+        description: "Look up user info.",
+        schema: z.object({}),
+      }
+    );
+
+    const llm = await initChatModel("anthropic:claude-3-7-sonnet-latest");
+    const agent = createReactAgent({
+      llm,
+      tools: [getUserInfo],
+    });
+
+    await agent.invoke(
+      { messages: "look up user information" },
+      // highlight-next-line
+      { configurable: { userId: "user_123" } }
+    );
+    ```
+
+=== "Using state"
+
+    ```ts
+    import { initChatModel } from "langchain/chat_models/universal";
+    import { createReactAgent } from "@langchain/langgraph/prebuilt";
+    import { Annotation, MessagesAnnotation, getCurrentTaskInput } from "@langchain/langgraph";
+    import { tool } from "@langchain/core/tools";
+    import { z } from "zod";
+
+    const CustomState = Annotation.Root({
+      ...MessagesAnnotation.spec,
+      // highlight-next-line
+      userId: Annotation<string>(),
+    });
+
+    const getUserInfo = tool(
+      async (
+        input: Record<string, any>,
+      ) => {
+        // highlight-next-line
+        const state = getCurrentTaskInput() as typeof CustomState.State;
+        // highlight-next-line
+        const userId = state.userId;
+        return userId === "user_123" ? "User is John Smith" : "Unknown user";
+      },
+      {
+        name: "get_user_info",
+        description: "Look up user info.",
+        schema: z.object({})
+      }
+    );
+
+    const llm = await initChatModel("anthropic:claude-3-7-sonnet-latest");
+    const agent = createReactAgent({
+      llm,
+      tools: [getUserInfo],
+      // highlight-next-line
+      stateSchema: CustomState,
+    });
+
+    await agent.invoke(
+      // highlight-next-line
+      { messages: "look up user information", userId: "user_123" }
+    );
+    ```
+:::
 
 ### Update Context from Tools
 
+:::python
 Tools can update agent's context (state and long-term memory) during execution. This is useful for persisting intermediate results or making information accessible to subsequent tools or prompts. See [Memory](./memory.md#read-short-term) guide for more information.
+:::
+
+:::js
+Tools can modify the agent's state during execution. This is useful for persisting intermediate results or making information accessible to subsequent tools or prompts.
+
+```ts
+import { Annotation, MessagesAnnotation, LangGraphRunnableConfig, Command } from "@langchain/langgraph";
+import { tool } from "@langchain/core/tools";
+import { z } from "zod";
+import { ToolMessage } from "@langchain/core/messages";
+import { initChatModel } from "langchain/chat_models/universal";
+import { createReactAgent } from "@langchain/langgraph/prebuilt";
+
+const CustomState = Annotation.Root({
+  ...MessagesAnnotation.spec,
+  // highlight-next-line
+  userName: Annotation<string>(), // Will be updated by the tool
+});
+
+const getUserInfo = tool(
+  async (
+    _input: Record<string, never>,
+    config: LangGraphRunnableConfig
+  ): Promise<Command> => {
+    const userId = config.configurable?.userId;
+    if (!userId) {
+      throw new Error("Please provide a user id in config.configurable");
+    }
+
+    const toolCallId = config.toolCall?.id;
+
+    const name = userId === "user_123" ? "John Smith" : "Unknown user";
+    // Return command to update state
+    return new Command({
+      update: {
+        // highlight-next-line
+        userName: name,
+        // Update the message history
+        // highlight-next-line
+        messages: [
+          new ToolMessage({
+            content: "Successfully looked up user information",
+            tool_call_id: toolCallId,
+          }),
+        ],
+      },
+    });
+  },
+  {
+    name: "get_user_info",
+    description: "Look up user information.",
+    schema: z.object({}),
+  }
+);
+
+const llm = await initChatModel("anthropic:claude-3-7-sonnet-latest");
+const agent = createReactAgent({
+  llm,
+  tools: [getUserInfo],
+  // highlight-next-line
+  stateSchema: CustomState,
+});
+
+await agent.invoke(
+  { messages: "look up user information" },
+  // highlight-next-line
+  { configurable: { userId: "user_123" } }
+);
+```
+
+For more details, see [how to update state from tools](../how-tos/update-state-from-tools.ipynb).
+:::
