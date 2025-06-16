@@ -11,13 +11,7 @@ hide:
 
 # Human-in-the-loop
 
-:::python
 To review, edit and approve tool calls in an agent you can use LangGraph's built-in [Human-In-the-Loop (HIL)](../concepts/human_in_the_loop.md) features, specifically the [`interrupt()`][langgraph.types.interrupt] primitive.
-:::
-
-:::js
-To review, edit and approve tool calls in an agent you can use LangGraph's built-in [human-in-the-loop](../concepts/human_in_the_loop.md) features, specifically the [`interrupt()`](/langgraphjs/reference/functions/langgraph.interrupt-1.html) primitive.
-:::
 
 LangGraph allows you to pause execution **indefinitely** — for minutes, hours, or even days—until human input is received.
 
