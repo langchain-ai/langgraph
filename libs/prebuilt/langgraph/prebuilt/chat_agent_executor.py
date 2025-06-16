@@ -591,7 +591,7 @@ def create_react_agent(
         workflow = StateGraph(state_schema, config_schema=config_schema)
         workflow.add_node(
             "agent",
-            RunnableCallable(call_model, acall_model),  # type: ignore[call-overload]
+            RunnableCallable(call_model, acall_model),
             input_schema=input_schema,
         )
         if pre_model_hook is not None:
@@ -610,7 +610,7 @@ def create_react_agent(
         if response_format is not None:
             workflow.add_node(
                 "generate_structured_response",
-                RunnableCallable(  # type: ignore[call-overload]
+                RunnableCallable(
                     generate_structured_response,
                     agenerate_structured_response,
                 ),
@@ -660,10 +660,10 @@ def create_react_agent(
     # Define the two nodes we will cycle between
     workflow.add_node(
         "agent",
-        RunnableCallable(call_model, acall_model),  # type: ignore[call-overload]
+        RunnableCallable(call_model, acall_model),
         input_schema=input_schema,
     )
-    workflow.add_node("tools", tool_node)  # type: ignore[call-overload]
+    workflow.add_node("tools", tool_node)
 
     # Optionally add a pre-model hook node that will be called
     # every time before the "agent" (LLM-calling node)
@@ -693,7 +693,7 @@ def create_react_agent(
     if response_format is not None:
         workflow.add_node(
             "generate_structured_response",
-            RunnableCallable(  # type: ignore[call-overload]
+            RunnableCallable(
                 generate_structured_response,
                 agenerate_structured_response,
             ),
