@@ -158,6 +158,35 @@ def _add_path_to_code_blocks(markdown: str, page: Page) -> str:
     return code_block_pattern.sub(replace_code_block_header, markdown)
 
 
+def _apply_conditional_rendering(md_text: str, target_language: str) -> str:
+    if target_language not in {"python", "js"}:
+        raise ValueError("target_language must be 'python' or 'js'")
+
+    pattern = re.compile(
+        r"(?P<indent>[ \t]*):::(?P<language>\w+)\s*\n"
+        r"(?P<content>((?:.*\n)*?))"  # Capture the content inside the block
+        r"(?P=indent):::"  # Match closing with the same indentation
+    )
+
+    def replace_conditional_blocks(match: re.Match) -> str:
+        """Keep active conditionals."""
+        language = match.group("language")
+        content = match.group("content")
+
+        if language not in {"python", "js"}:
+            # If the language is not supported, return the original block
+            return match.group(0)
+
+        if language == target_language:
+            return content
+
+        # If the language does not match, return an empty string
+        return ""
+
+    processed = pattern.sub(replace_conditional_blocks, md_text)
+    return processed
+
+
 def _highlight_code_blocks(markdown: str) -> str:
     """Find code blocks with highlight comments and add hl_lines attribute.
 
@@ -256,6 +285,10 @@ def _on_page_markdown_with_config(
         markdown = update_markdown_with_imports(markdown, page.file.abs_src_path)
     # Apply highlight comments to code blocks
     markdown = _highlight_code_blocks(markdown)
+
+    # Apply conditional rendering for code blocks
+    target_language = kwargs.get("target_language", "js")
+    markdown = _apply_conditional_rendering(markdown, target_language)
 
     # Add file path as an attribute to code blocks that are executable.
     # This file path is used to associate fixtures with the executable code
