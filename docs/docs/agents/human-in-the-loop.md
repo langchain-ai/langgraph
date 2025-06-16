@@ -294,7 +294,7 @@ const agent = createReactAgent({
 });
 ```
 
-1. The [`interrupt` function](/langgraphjs/reference/functions/langgraph.interrupt-1.html) pauses the agent graph at a specific node. In this case, we call `interrupt()` at the beginning of the tool function, which pauses the graph at the node that executes the tool. The information inside `interrupt()` (e.g., tool calls) can be presented to a human, and the graph can be resumed with the user input (tool call approval, edit or feedback).
+1. The [`interrupt` function][langgraph.types.interrupt] pauses the agent graph at a specific node. In this case, we call `interrupt()` at the beginning of the tool function, which pauses the graph at the node that executes the tool. The information inside `interrupt()` (e.g., tool calls) can be presented to a human, and the graph can be resumed with the user input (tool call approval, edit or feedback).
 2. The `InMemorySaver` is used to store the agent state at every step in the tool calling loop. This enables [short-term memory](./memory.md#short-term-memory) and [human-in-the-loop](./human-in-the-loop.md) capabilities. In this example, we use `InMemorySaver` to store the agent state in memory. In a production application, the agent state will be stored in a database.
 3. Initialize the agent with the `checkpointer`.
 
@@ -336,7 +336,7 @@ for await (const chunk of await agent.stream(
 };
 ```
 
-1. The [`interrupt` function](/langgraphjs/reference/functions/langgraph.interrupt-1.html) is used in conjunction with the [`Command`](/langgraphjs/reference/classes/langgraph.Command.html) object to resume the graph with a value provided by the human.
+1. The [`interrupt` function][langgraph.types.interrupt] is used in conjunction with the [`Command`][langgraph.types.Command] object to resume the graph with a value provided by the human.
 
 :::
 

@@ -514,6 +514,4 @@ await agent.invoke(
   { configurable: { userId: "user_123" } }
 );
 ```
-
-For more details, see [how to update state from tools](../how-tos/update-state-from-tools.ipynb).
 :::

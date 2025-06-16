@@ -251,7 +251,7 @@ npm install langchain @langchain/langgraph @langchain/anthropic
 
 ## 2. Create an agent
 
-Use [`createReactAgent`](/langgraphjs/reference/functions/langgraph_prebuilt.createReactAgent.html) to instantiate an agent:
+Use [`createReactAgent`][create_react_agent] to instantiate an agent:
 
 ```ts
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
