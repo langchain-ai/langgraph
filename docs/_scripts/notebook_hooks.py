@@ -107,6 +107,7 @@ REDIRECT_MAP = {
     # deployment redirects
     "how-tos/deploy-self-hosted.md": "cloud/deployment/self_hosted_data_plane.md",
     "concepts/self_hosted.md": "concepts/langgraph_self_hosted_data_plane.md",
+    "tutorials/deployment.md": "concepts/deployment_options.md",
     # assistant redirects
     "cloud/how-tos/assistant_versioning.md": "cloud/how-tos/configuration_cloud.md",
 }
