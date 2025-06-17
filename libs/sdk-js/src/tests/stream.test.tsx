@@ -7,7 +7,7 @@ import { useStream } from "../react/stream.js";
 import "@testing-library/jest-dom/vitest";
 
 function TestChatComponent() {
-  const { messages, isLoading, error, submit, stop, values } = useStream({
+  const { messages, isLoading, error, submit, stop } = useStream({
     assistantId: "test-assistant",
     apiKey: "test-api-key",
   });
