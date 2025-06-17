@@ -398,4 +398,6 @@ extra_css:
   - stylesheets/logos.css
   - stylesheets/sticky_navigation.css
   - stylesheets/agent_graph_widget.css
-
+  - language-switcher.css
+extra_javascript:
+  - language-switcher.js
