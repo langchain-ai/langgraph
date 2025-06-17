@@ -55,7 +55,7 @@ You can continue to work in Studio while the experiment runs in the background. 
 
 ### "Run experiment" button is disabled
 
-If the "Run experiment" button is grayed out, check the following:
+If the "Run experiment" button is disabled, check the following:
 
 * **Deployed Application**: If your application is deployed on LangGraph Platform, you may need to create a new revision to enable this feature.
 * **Local Development Server**: If you are running your application locally, make sure you have upgraded to the latest version of the `langgraph-cli` (`pip install -U langgraph-cli`). Additionally, ensure you have tracing enabled by setting the `LANGSMITH_API_KEY` in your project's `.env` file.
