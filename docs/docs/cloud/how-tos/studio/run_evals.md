@@ -43,7 +43,7 @@ In the modal window that appears, select the dataset (or a specific dataset spli
 
 ### 3. Monitor the Progress
 
-All of the inputs in the dataset will now be run against your active graph. You can monitor the experiment's progress in real-time from the notification in the top right corner.
+All of the inputs in the dataset will now be run against the active assistant. Monitor the experiment's progress via the badge in the top right corner.
 
 ![Screenshot of the experiment progress bar](../img/studio_evals_experiments.png)
 
