@@ -179,6 +179,7 @@ nav:
           - cloud/how-tos/studio/manage_assistants.md
           - cloud/how-tos/threads_studio.md
           - cloud/how-tos/iterate_graph_studio.md
+          - cloud/how-tos/studio/run_evals.md
           - cloud/how-tos/clone_traces_studio.md
           - cloud/how-tos/datasets_studio.md
         - LangGraph SDK: concepts/sdk.md
