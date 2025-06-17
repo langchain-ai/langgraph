@@ -512,6 +512,31 @@ export interface UseStreamOptions<
   onDebugEvent?: (data: DebugStreamEvent["data"]) => void;
 
   /**
+   * Callback that is called when the stream is stopped by the user.
+   * Provides a mutate function to update the stream state immediately
+   * without requiring a server roundtrip.
+   * 
+   * @example
+   * ```typescript
+   * onStop: ({ mutate }) => {
+   *   mutate((prev) => ({
+   *     ...prev,
+   *     ui: prev.ui?.map(component => 
+   *       component.props.isLoading
+   *         ? { ...component, props: { ...component.props, stopped: true, isLoading: false }}
+   *         : component
+   *     )
+   *   }));
+   * }
+   * ```
+   */
+  onStop?: (options: {
+    mutate: (
+      update: Partial<StateType> | ((prev: StateType) => Partial<StateType>),
+    ) => void;
+  }) => void;
+
+  /**
    * The ID of the thread to fetch history and current values from.
    */
   threadId?: string | null;
@@ -862,6 +887,21 @@ export function useStream<
     );
   })();
 
+  // Create a reusable mutate function for both onCustomEvent and onStop callbacks
+  const mutateStreamValues = useCallback(
+    (update: Partial<StateType> | ((prev: StateType) => Partial<StateType>)) => {
+      setStreamValues((prev) => {
+        // should not happen
+        if (prev == null) return prev;
+        return {
+          ...prev,
+          ...(typeof update === "function" ? update(prev) : update),
+        };
+      });
+    },
+    [],
+  );
+
   const stop = () => {
     if (abortRef.current != null) abortRef.current.abort();
     abortRef.current = null;
@@ -870,6 +910,11 @@ export function useStream<
       const runId = runMetadataStorage.getItem(`lg:stream:${threadId}`);
       if (runId) client.runs.cancel(threadId, runId);
       runMetadataStorage.removeItem(`lg:stream:${threadId}`);
+    }
+
+    // Call onStop callback with mutate function
+    if (options.onStop) {
+      options.onStop({ mutate: mutateStreamValues });
     }
   };
 
@@ -903,15 +948,7 @@ export function useStream<
         if (event === "updates") options.onUpdateEvent?.(data);
         if (event === "custom")
           options.onCustomEvent?.(data, {
-            mutate: (update) =>
-              setStreamValues((prev) => {
-                // should not happen
-                if (prev == null) return prev;
-                return {
-                  ...prev,
-                  ...(typeof update === "function" ? update(prev) : update),
-                };
-              }),
+            mutate: mutateStreamValues,
           });
         if (event === "metadata") options.onMetadataEvent?.(data);
         if (event === "events") options.onLangChainEvent?.(data);
