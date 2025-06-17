@@ -86,6 +86,8 @@ REDIRECT_MAP = {
     "cloud/how-tos/stream_events.md": "cloud/how-tos/streaming.md#stream-events",
     "cloud/how-tos/stream_debug.md": "cloud/how-tos/streaming.md#debug",
     "cloud/how-tos/stream_multiple.md": "cloud/how-tos/streaming.md#stream-multiple-modes",
+    "cloud/concepts/streaming.md": "concepts/streaming.md",
+    "agents/streaming.md": "how-tos/streaming.md",
     # prebuit redirects
     "how-tos/create-react-agent.ipynb": "agents/agents.md#basic-configuration",
     "how-tos/create-react-agent-memory.ipynb": "agents/memory.md",

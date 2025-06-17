@@ -1,10 +1,207 @@
 # Stream outputs
 
-## Streaming API
+You can [stream outputs](../concepts/streaming.md) from a LangGraph agent or workflow.
+
+## Stream from an agent
+
+### Agent progress
+
+To stream agent progress, use the [`stream()`][langgraph.graph.state.CompiledStateGraph.stream] or [`astream()`][langgraph.graph.state.CompiledStateGraph.astream] methods with [`stream_mode="updates"`](https://langchain-ai.github.io/langgraph/how-tos/streaming/#updates). This emits an event after every agent step.
+
+For example, if you have an agent that calls a tool once, you should see the following updates:
+
+* **LLM node**: AI message with tool call requests
+* **Tool node**: Tool message with execution result
+* **LLM node**: Final AI response
+
+=== "Sync"
+
+    ```python
+    agent = create_react_agent(
+        model="anthropic:claude-3-7-sonnet-latest",
+        tools=[get_weather],
+    )
+    # highlight-next-line
+    for chunk in agent.stream(
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
+        # highlight-next-line
+        stream_mode="updates"
+    ):
+        print(chunk)
+        print("\n")
+    ```
+
+=== "Async"
+
+    ```python
+    agent = create_react_agent(
+        model="anthropic:claude-3-7-sonnet-latest",
+        tools=[get_weather],
+    )
+    # highlight-next-line
+    async for chunk in agent.astream(
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
+        # highlight-next-line
+        stream_mode="updates"
+    ):
+        print(chunk)
+        print("\n")
+    ```
+
+### LLM tokens
+
+To stream tokens as they are produced by the LLM, use `stream_mode="messages"`:
+
+=== "Sync"
+
+    ```python
+    agent = create_react_agent(
+        model="anthropic:claude-3-7-sonnet-latest",
+        tools=[get_weather],
+    )
+    # highlight-next-line
+    for token, metadata in agent.stream(
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
+        # highlight-next-line
+        stream_mode="messages"
+    ):
+        print("Token", token)
+        print("Metadata", metadata)
+        print("\n")
+    ```
+
+=== "Async"
+
+    ```python
+    agent = create_react_agent(
+        model="anthropic:claude-3-7-sonnet-latest",
+        tools=[get_weather],
+    )
+    # highlight-next-line
+    async for token, metadata in agent.astream(
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
+        # highlight-next-line
+        stream_mode="messages"
+    ):
+        print("Token", token)
+        print("Metadata", metadata)
+        print("\n")
+    ```
+
+### Tool updates
+
+To stream updates from tools as they are executed, you can use [get_stream_writer][langgraph.config.get_stream_writer].
+
+=== "Sync"
+
+    ```python
+    # highlight-next-line
+    from langgraph.config import get_stream_writer
+
+    def get_weather(city: str) -> str:
+        """Get weather for a given city."""
+        # highlight-next-line
+        writer = get_stream_writer()
+        # stream any arbitrary data
+        # highlight-next-line
+        writer(f"Looking up data for city: {city}")
+        return f"It's always sunny in {city}!"
+
+    agent = create_react_agent(
+        model="anthropic:claude-3-7-sonnet-latest",
+        tools=[get_weather],
+    )
+
+    for chunk in agent.stream(
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
+        # highlight-next-line
+        stream_mode="custom"
+    ):
+        print(chunk)
+        print("\n")
+    ```
+
+=== "Async"
+
+    ```python
+    # highlight-next-line
+    from langgraph.config import get_stream_writer
+
+    def get_weather(city: str) -> str:
+        """Get weather for a given city."""
+        # highlight-next-line
+        writer = get_stream_writer()
+        # stream any arbitrary data
+        # highlight-next-line
+        writer(f"Looking up data for city: {city}")
+        return f"It's always sunny in {city}!"
+
+    agent = create_react_agent(
+        model="anthropic:claude-3-7-sonnet-latest",
+        tools=[get_weather],
+    )
+
+    async for chunk in agent.astream(
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
+        # highlight-next-line
+        stream_mode="custom"
+    ):
+        print(chunk)
+        print("\n")
+    ```
+
+!!! Note
+    If you add `get_stream_writer` inside your tool, you won't be able to invoke the tool outside of a LangGraph execution context. 
+
+### Stream multiple modes
+
+You can specify multiple streaming modes by passing stream mode as a list: `stream_mode=["updates", "messages", "custom"]`:
+
+=== "Sync"
+
+    ```python
+    agent = create_react_agent(
+        model="anthropic:claude-3-7-sonnet-latest",
+        tools=[get_weather],
+    )
+
+    for stream_mode, chunk in agent.stream(
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
+        # highlight-next-line
+        stream_mode=["updates", "messages", "custom"]
+    ):
+        print(chunk)
+        print("\n")
+    ```
+
+=== "Async"
+
+    ```python
+    agent = create_react_agent(
+        model="anthropic:claude-3-7-sonnet-latest",
+        tools=[get_weather],
+    )
+
+    async for stream_mode, chunk in agent.astream(
+        {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
+        # highlight-next-line
+        stream_mode=["updates", "messages", "custom"]
+    ):
+        print(chunk)
+        print("\n")
+    ```
+
+### Disable streaming
+
+In some applications you might need to disable streaming of individual tokens for a given model. This is useful in [multi-agent](./multi-agent.md) systems to control which agents stream their output.
+
+See the [Models](./models.md#disable-streaming) guide to learn how to disable streaming.
+
+## Stream from a workflow 
+
+### Basic usage example
 
 LangGraph graphs expose the [`.stream()`][langgraph.pregel.Pregel.stream] (sync) and [`.astream()`][langgraph.pregel.Pregel.astream] (async) methods to yield streamed outputs as iterators.
-
-Basic usage example:
 
 === "Sync"
 
@@ -94,7 +291,7 @@ The streamed outputs will be tuples of `(mode, chunk)` where `mode` is the name 
         print(chunk)
     ```
 
-## Stream graph state
+### Stream graph state
 
 Use the stream modes `updates` and `values` to stream the state of the graph as it executes.
 
@@ -157,7 +354,7 @@ graph = (
     ```
 
 
-## Subgraphs
+### Stream subgraph outputs
 
 To include outputs from [subgraphs](../concepts/subgraphs.md) in the streamed outputs, you can set `subgraphs=True` in the `.stream()` method of the parent graph. This will stream outputs from both the parent graph and any subgraphs.
 
@@ -233,7 +430,7 @@ for chunk in graph.stream(
 
       **Note** that we are receiving not just the node updates, but we also the namespaces which tell us what graph (or subgraph) we are streaming from.
 
-## Debugging {#debug}
+### Debugging {#debug}
 
 Use the `debug` streaming mode to stream as much information as possible throughout the execution of the graph. The streamed outputs include the name of the node as well as the full state.
 
@@ -247,7 +444,7 @@ for chunk in graph.stream(
 ```
 
 
-## LLM tokens {#messages}
+### LLM tokens {#messages}
 
 Use the `messages` streaming mode to stream Large Language Model (LLM) outputs **token by token** from any part of your graph, including nodes, tools, subgraphs, or tasks.
 
@@ -307,7 +504,7 @@ for message_chunk, metadata in graph.stream( # (2)!
 2. The "messages" stream mode returns an iterator of tuples `(message_chunk, metadata)` where `message_chunk` is the token streamed by the LLM and `metadata` is a dictionary with information about the graph node where the LLM was called and other information.
 
 
-### Filter by LLM invocation
+#### Filter by LLM invocation
 
 You can associate `tags` with LLM invocations to filter the streamed tokens by LLM invocation.
 
@@ -391,7 +588,7 @@ async for msg, metadata in graph.astream(  # (3)!
       4. The `stream_mode` is set to "messages" to stream LLM tokens. The `metadata` contains information about the LLM invocation, including the tags.
 
 
-### Filter by node
+#### Filter by node
 
 To stream tokens only from specific nodes, use `stream_mode="messages"` and filter the outputs by the `langgraph_node` field in the streamed metadata:
 
@@ -464,7 +661,7 @@ for msg, metadata in graph.stream( # (1)!
       1. The "messages" stream mode returns a tuple of `(message_chunk, metadata)` where `message_chunk` is the token streamed by the LLM and `metadata` is a dictionary with information about the graph node where the LLM was called and other information.
       2. Filter the streamed tokens by the `langgraph_node` field in the metadata to only include the tokens from the `write_poem` node.
 
-## Stream custom data
+### Stream custom data
 
 To send **custom user-defined data** from inside a LangGraph node or tool, follow these steps:
 
@@ -541,7 +738,7 @@ To send **custom user-defined data** from inside a LangGraph node or tool, follo
       3. Emit another custom key-value pair.
       4. Set `stream_mode="custom"` to receive the custom data in the stream.
 
-## Use with any LLM
+### Use with any LLM
 
 You can use `stream_mode="custom"` to stream data from **any LLM API**  — even if that API does **not** implement the LangChain chat model interface.
 
@@ -701,7 +898,7 @@ for chunk in graph.stream(
       ```
 
 
-## Disable streaming for specific chat models
+### Disable streaming for specific chat models
 
 If your application mixes models that support streaming with those that do not, you may need to explicitly disable streaming for 
 models that do not support it.
@@ -733,7 +930,7 @@ Set `disable_streaming=True` when initializing the model.
       1. Set `disable_streaming=True` to disable streaming for the chat model.
 
 
-## Async with Python < 3.11 { #async }
+### Async with Python < 3.11 { #async }
 
 In Python versions < 3.11, [asyncio tasks](https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task) do not support the `context` parameter.  
 This limits LangGraph ability to automatically propagate context, and affects LangGraph’s streaming mechanisms in two key ways:

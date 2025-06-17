@@ -117,9 +117,7 @@ nav:
         - Application structure: concepts/application_structure.md
         - Scalability & resilience: concepts/scalability_and_resilience.md
     - Core capabilities:
-      - Streaming:
-        - concepts/streaming.md
-        - cloud/concepts/streaming.md
+      - Streaming: concepts/streaming.md
       - Persistence: concepts/persistence.md
       - Durable execution: concepts/durable_execution.md
       - Memory: concepts/memory.md
@@ -130,7 +128,7 @@ nav:
       - Multi-agent: concepts/multi_agent.md
     - Platform capabilities:
       - Authentication & access control: concepts/auth.md
-      - Assistants:
+      - Assistants: #COMBINE
         - Overview: concepts/assistants.md
         - Threads: cloud/concepts/threads.md
         - Runs: cloud/concepts/runs.md
@@ -147,7 +145,6 @@ nav:
           - Self-Hosted Control Plane: concepts/langgraph_self_hosted_control_plane.md
           - Standalone Container: concepts/langgraph_standalone_container.md
     
-  
   - Guides:
     - Prebuilt agents:
       - agents/run_agents.md
@@ -157,9 +154,8 @@ nav:
     - Models:
       - Basic implementation: agents/models.md
     - Streaming:
-      - Basic implementation: agents/streaming.md
-      - Custom implementation: how-tos/streaming.md
-      - Production-ready implementation: cloud/how-tos/streaming.md
+      - Stream outputs: how-tos/streaming.md
+      - Use Server API: cloud/how-tos/streaming.md
     - Persistence: how-tos/persistence.ipynb
     - Context:
       - Basic implementation: agents/context.md
