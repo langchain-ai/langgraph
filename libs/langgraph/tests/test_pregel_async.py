@@ -103,7 +103,7 @@ async def test_checkpoint_errors() -> None:
             raise ValueError("Faulty put_writes")
 
     class FaultyVersionCheckpointer(InMemorySaver):
-        def get_next_version(self, current: Optional[int]) -> int:
+        def get_next_version(self, current: Optional[int], channel: None) -> int:
             raise ValueError("Faulty get_next_version")
 
     def logic(inp: str) -> str:

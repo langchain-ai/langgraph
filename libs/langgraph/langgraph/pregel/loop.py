@@ -11,6 +11,7 @@ from contextlib import (
     AsyncExitStack,
     ExitStack,
 )
+from datetime import datetime, timezone
 from inspect import signature
 from types import TracebackType
 from typing import (
@@ -28,7 +29,6 @@ from typing_extensions import ParamSpec, Self
 
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
-from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import (
     EXCLUDED_METADATA_KEYS,
     WRITES_IDX_MAP,
@@ -38,7 +38,6 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
     PendingWrite,
-    copy_checkpoint,
 )
 from langgraph.constants import (
     CONF,
@@ -85,6 +84,7 @@ from langgraph.pregel.algo import (
 )
 from langgraph.pregel.checkpoint import (
     channels_from_checkpoint,
+    copy_checkpoint,
     create_checkpoint,
     empty_checkpoint,
 )
@@ -119,6 +119,7 @@ from langgraph.types import (
     PregelScratchpad,
     RetryPolicy,
     StreamChunk,
+    StreamMode,
     StreamProtocol,
 )
 from langgraph.utils.config import patch_configurable
@@ -422,7 +423,7 @@ class PregelLoop:
             ),
         ):
             # produce debug output
-            self._emit("debug", map_debug_tasks, self.step, [pushed])
+            self._emit("tasks", map_debug_tasks, [pushed])
             # debug flag
             if self.debug:
                 print_step_tasks(self.step, [pushed])
@@ -472,9 +473,8 @@ class PregelLoop:
         # produce debug output
         if self._checkpointer_put_after_previous is not None:
             self._emit(
-                "debug",
+                "checkpoints",
                 map_debug_checkpoint,
-                self.step - 1,  # printing checkpoint for previous step
                 {
                     **self.checkpoint_config,
                     CONF: {
@@ -485,7 +485,6 @@ class PregelLoop:
                 self.channels,
                 self.stream_keys,
                 self.checkpoint_metadata,
-                self.checkpoint,
                 self.tasks.values(),
                 self.checkpoint_pending_writes,
                 self.prev_checkpoint_config,
@@ -509,7 +508,7 @@ class PregelLoop:
             raise GraphInterrupt()
 
         # produce debug output
-        self._emit("debug", map_debug_tasks, self.step, self.tasks.values())
+        self._emit("tasks", map_debug_tasks, self.tasks.values())
 
         # debug flag
         if self.debug:
@@ -834,17 +833,39 @@ class PregelLoop:
 
     def _emit(
         self,
-        mode: str,
+        mode: StreamMode,
         values: Callable[P, Iterator[Any]],
         *args: P.args,
         **kwargs: P.kwargs,
     ) -> None:
         if self.stream is None:
             return
-        if mode not in self.stream.modes:
+        debug_remap = mode in ("checkpoints", "tasks") and "debug" in self.stream.modes
+        if mode not in self.stream.modes and not debug_remap:
             return
         for v in values(*args, **kwargs):
-            self.stream((self.checkpoint_ns, mode, v))
+            if mode in self.stream.modes:
+                self.stream((self.checkpoint_ns, mode, v))
+            # "debug" mode is "checkpoints" or "tasks" with a wrapper dict
+            if debug_remap:
+                self.stream(
+                    (
+                        self.checkpoint_ns,
+                        "debug",
+                        {
+                            "step": self.step - 1
+                            if mode == "checkpoints"
+                            else self.step,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "type": "checkpoint"
+                            if mode == "checkpoints"
+                            else "task_result"
+                            if "result" in v
+                            else "task",
+                            "payload": v,
+                        },
+                    )
+                )
 
     def output_writes(
         self, task_id: str, writes: WritesT, *, cached: bool = False
@@ -885,9 +906,8 @@ class PregelLoop:
                 )
             if not cached:
                 self._emit(
-                    "debug",
+                    "tasks",
                     map_debug_task_results,
-                    self.step,
                     (task, writes),
                     self.stream_keys,
                 )
@@ -942,13 +962,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         )
         self.stack = ExitStack()
         if checkpointer:
-            if checkpointer._get_next_version_legacy:
-                empty_channel: LastValue[Any] = LastValue(Any)
-                self.checkpointer_get_next_version = (
-                    lambda c: checkpointer.get_next_version(c, empty_channel)  # type: ignore[call-arg]
-                )
-            else:
-                self.checkpointer_get_next_version = checkpointer.get_next_version
+            self.checkpointer_get_next_version = checkpointer.get_next_version
             self.checkpointer_put_writes = checkpointer.put_writes
             self.checkpointer_put_writes_accepts_task_path = (
                 signature(checkpointer.put_writes).parameters.get("task_path")
@@ -1121,13 +1135,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         )
         self.stack = AsyncExitStack()
         if checkpointer:
-            if checkpointer._get_next_version_legacy:
-                empty_channel: LastValue[Any] = LastValue(Any)
-                self.checkpointer_get_next_version = (
-                    lambda c: checkpointer.get_next_version(c, empty_channel)  # type: ignore[call-arg]
-                )
-            else:
-                self.checkpointer_get_next_version = checkpointer.get_next_version
+            self.checkpointer_get_next_version = checkpointer.get_next_version
             self.checkpointer_put_writes = checkpointer.aput_writes
             self.checkpointer_put_writes_accepts_task_path = (
                 signature(checkpointer.aput_writes).parameters.get("task_path")
