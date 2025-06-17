@@ -33,19 +33,13 @@ Before running an experiment, ensure you have the following:
 
 Click the **Run experiment** button in the top right corner of the Studio page.
 
-![Screenshot of the 'Run experiment' button in the LangGraph Studio UI](../img/studio_evals_experiment_button.png)
-
 ### 2. Select your dataset
 
 In the modal that appears, select the dataset (or a specific dataset split) to use for the experiment and click **Start**.
 
-![Screenshot of the dataset selection window](../img/studio_evals_dataset.png)
-
 ### 3. Monitor the progress
 
 All of the inputs in the dataset will now be run against the active assistant. Monitor the experiment's progress via the badge in the top right corner.
-
-![Screenshot of the experiment progress bar](../img/studio_evals_experiments.png)
 
 You can continue to work in Studio while the experiment runs in the background. Click the arrow icon button at any time to navigate to LangSmith and view the detailed experiment results.
 
