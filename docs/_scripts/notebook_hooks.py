@@ -315,7 +315,7 @@ def _on_page_markdown_with_config(
     markdown = _highlight_code_blocks(markdown)
 
     # Apply conditional rendering for code blocks
-    target_language = kwargs.get("target_language", "js")
+    target_language = kwargs.get("target_language", "python")
     markdown = _apply_conditional_rendering(markdown, target_language)
     if target_language == "js":
         markdown = _resolve_cross_references(markdown, JS_LINK_MAP)
