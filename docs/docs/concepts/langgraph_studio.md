@@ -24,6 +24,7 @@ Key features of LangGraph Studio:
 - [Manage assistants](../cloud/how-tos/studio/manage_assistants.md.md)
 - [Manage threads](../cloud/how-tos/threads_studio.md)
 - [Iterate on prompts](../cloud/how-tos/iterate_graph_studio.md)
+- [Run experiments over a dataset](../cloud/how-tos/studio/run_evals.md)
 - Manage [long term memory](memory.md)
 - Debug agent state via [time travel](time-travel.md)
 
