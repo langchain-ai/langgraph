@@ -37,7 +37,7 @@ Click the **Run experiment** button in the top right corner of the Studio page.
 
 ### 2. Select your dataset
 
-In the modal window that appears, select the dataset (or a specific dataset split) you wish to use for the experiment and click **Start**.
+In the modal that appears, select the dataset (or a specific dataset split) to use for the experiment and click **Start**.
 
 ![Screenshot of the dataset selection window](../img/studio_evals_dataset.png)
 
