@@ -15,8 +15,8 @@ from mkdocs.structure.files import Files, File
 from mkdocs.structure.pages import Page
 
 from _scripts.generate_api_reference_links import update_markdown_with_imports
-from _scripts.notebook_convert import convert_notebook
 from _scripts.link_map import JS_LINK_MAP
+from _scripts.notebook_convert import convert_notebook
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
@@ -187,7 +187,7 @@ def _resolve_cross_references(md_text: str, link_map: dict[str, str]) -> str:
 
 
 def _apply_conditional_rendering(md_text: str, target_language: str) -> str:
-    if target_language not in {"python", "js"}:
+    if target_language not in {"python", "js", "switcher"}:
         raise ValueError("target_language must be 'python' or 'js'")
 
     pattern = re.compile(
@@ -201,9 +201,14 @@ def _apply_conditional_rendering(md_text: str, target_language: str) -> str:
         language = match.group("language")
         content = match.group("content")
 
-        if language not in {"python", "js"}:
+        if language not in {"python", "js", "switcher"}:
             # If the language is not supported, return the original block
             return match.group(0)
+
+        if target_language == "switcher":
+            # Both Python and JavaScript blocks are wrapped in a tag that
+            # allows the user to switch between them.
+            return f'<div class="lang-{language}">\n' + content + "\n</div>"
 
         if language == target_language:
             return content
@@ -316,7 +321,7 @@ def _on_page_markdown_with_config(
 
     # Apply conditional rendering for code blocks
     target_language = kwargs.get("target_language", "js")
-    markdown = _apply_conditional_rendering(markdown, target_language)
+    markdown = _apply_conditional_rendering(markdown, "switcher")
     if target_language == "js":
         markdown = _resolve_cross_references(markdown, JS_LINK_MAP)
     elif target_language == "python":
