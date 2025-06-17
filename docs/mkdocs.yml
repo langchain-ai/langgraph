@@ -95,11 +95,6 @@ nav:
       - Agent: agents/agents.md
       - Local server: tutorials/langgraph-platform/local-server.md
       - Deployment: cloud/quick_start.md
-    - Set up your application:
-        - Use requirements.txt: cloud/deployment/setup.md
-        - Use pyproject.toml: cloud/deployment/setup_pyproject.md
-        - Use JavaScript: cloud/deployment/setup_javascript.md
-        - Use custom Docker: cloud/deployment/custom_docker.md
     - Key concepts:
       - Common patterns:
         - Agent architectures: concepts/agentic_concepts.md
@@ -110,7 +105,18 @@ nav:
         - Subgraphs: concepts/subgraphs.md
         - Runtime: concepts/pregel.md
         - Functional API: concepts/functional_api.md
-    - General capabilities:
+      - LangGraph Platform:
+        - Overview: concepts/langgraph_platform.md
+        - Components:
+          - Overview: concepts/langgraph_components.md
+          - LangGraph Server: concepts/langgraph_server.md
+          - LangGraph CLI: concepts/langgraph_cli.md
+          - LangGraph Studio: concepts/langgraph_studio.md
+          - LangGraph SDK: concepts/sdk.md
+        - Plans & pricing: concepts/plans.md
+        - Application structure: concepts/application_structure.md
+        - Scalability & resilience: concepts/scalability_and_resilience.md
+    - Core capabilities:
       - Streaming:
         - concepts/streaming.md
         - cloud/concepts/streaming.md
@@ -122,7 +128,7 @@ nav:
       - Breakpoints: concepts/breakpoints.md
       - Time travel: concepts/time-travel.md
       - Multi-agent: concepts/multi_agent.md
-    - Commercial-only capabilities:
+    - Platform capabilities:
       - Authentication & access control: concepts/auth.md
       - Assistants:
         - Overview: concepts/assistants.md
@@ -140,17 +146,7 @@ nav:
           - Self-Hosted Data Plane: concepts/langgraph_self_hosted_data_plane.md
           - Self-Hosted Control Plane: concepts/langgraph_self_hosted_control_plane.md
           - Standalone Container: concepts/langgraph_standalone_container.md
-    - LangGraph Platform:
-      - Overview: concepts/langgraph_platform.md
-      - Components:
-        - Overview: concepts/langgraph_components.md
-        - LangGraph Server: concepts/langgraph_server.md
-        - LangGraph CLI: concepts/langgraph_cli.md
-        - LangGraph Studio: concepts/langgraph_studio.md
-        - LangGraph SDK: concepts/sdk.md
-      - Plans & pricing: concepts/plans.md
-      - Application structure: concepts/application_structure.md
-      - Scalability & resilience: concepts/scalability_and_resilience.md
+    
   
   - Guides:
     - Prebuilt agents:
@@ -191,6 +187,11 @@ nav:
       - Production-ready implementation: concepts/server-mcp.md
     - Deployment:
       - Basic deployment: agents/deployment.md
+      - Set up your application:
+        - Use requirements.txt: cloud/deployment/setup.md
+        - Use pyproject.toml: cloud/deployment/setup_pyproject.md
+        - Use JavaScript: cloud/deployment/setup_javascript.md
+        - Use custom Docker: cloud/deployment/custom_docker.md
       - Deploy to production:
          - Cloud SaaS: cloud/deployment/cloud.md
          - Self-Hosted Data Plane: cloud/deployment/self_hosted_data_plane.md
