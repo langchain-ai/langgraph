@@ -208,7 +208,8 @@ def _apply_conditional_rendering(md_text: str, target_language: str) -> str:
         if target_language == "switcher":
             # Both Python and JavaScript blocks are wrapped in a tag that
             # allows the user to switch between them.
-            return f'<div class="lang-{language}">\n' + content + "\n</div>"
+            standardized_language = "javascript" if language == "js" else "python"
+            return f'<div class="lang-{standardized_language}">\n' + content + "\n</div>"
 
         if language == target_language:
             return content
