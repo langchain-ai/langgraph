@@ -32,7 +32,6 @@ from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
     CheckpointTuple,
-    copy_checkpoint,
 )
 from langgraph.config import get_config
 from langgraph.constants import (
@@ -79,6 +78,7 @@ from langgraph.pregel.algo import (
 from langgraph.pregel.call import identifier
 from langgraph.pregel.checkpoint import (
     channels_from_checkpoint,
+    copy_checkpoint,
     create_checkpoint,
     empty_checkpoint,
 )
@@ -908,7 +908,12 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
 
     def _migrate_checkpoint(self, checkpoint: Checkpoint) -> None:
         """Migrate a saved checkpoint to new channel layout."""
-        pass
+        if checkpoint["v"] < 4 and checkpoint.get("pending_sends"):
+            pending_sends: list[Send] = checkpoint.pop("pending_sends")
+            checkpoint["channel_values"][TASKS] = pending_sends
+            checkpoint["channel_versions"][TASKS] = max(
+                checkpoint["channel_versions"].values()
+            )
 
     def _prepare_state_snapshot(
         self,
@@ -2298,7 +2303,8 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
                 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
                     Will be emitted as 2-tuples `(LLM token, metadata)`.
-                - `"debug"`: Emit debug events with as much information as possible for each step.
+                - `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by get_state().
+                - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
 
                 You can pass a list as the `stream_mode` parameter to stream multiple modes at once.
                 The streamed outputs will be tuples of `(mode, data)`.

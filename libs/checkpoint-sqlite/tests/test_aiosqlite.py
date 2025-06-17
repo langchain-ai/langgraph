@@ -6,9 +6,10 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
+    create_checkpoint,
+    empty_checkpoint,
 )
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-from tests.checkpoint_utils import create_checkpoint, empty_checkpoint
 
 
 class TestAsyncSqliteSaver:

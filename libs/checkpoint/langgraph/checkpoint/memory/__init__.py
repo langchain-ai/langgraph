@@ -512,7 +512,7 @@ class InMemorySaver(
         """
         return self.delete_thread(thread_id)
 
-    def get_next_version(self, current: str | None) -> str:
+    def get_next_version(self, current: str | None, channel: None) -> str:
         if current is None:
             current_v = 0
         elif isinstance(current, int):

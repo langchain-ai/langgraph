@@ -19,6 +19,7 @@ From the control plane UI, you can:
 - Update a deployment.
 - Update environment variables for a deployment.
 - View build and server logs of a deployment.
+- View deployment metrics like CPU and memory usage.
 - Delete a deployment.
 
 The Control Plane UI is embedded in [LangSmith](https://docs.smith.langchain.com/langgraph_cloud).
@@ -87,6 +88,15 @@ Infrastructure for deployments and revisions are provisioned and deployed asynch
 - The deployment process for each revision contains a build step, which can take up to a few minutes.
 
 The control plane and [LangGraph Data Plane](./langgraph_data_plane.md) "listener" application coordinate to achieve asynchronous deployments.
+
+### Monitoring
+
+After a deployment is ready, the control plane monitors the deployment and records various metrics, such as:
+
+- CPU and memory usage of the deployment.
+- Number of container restarts.
+
+These metrics are displayed as charts in the Control Plane UI.
 
 ### LangSmith Integration
 

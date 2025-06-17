@@ -38,7 +38,7 @@ from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
 from langgraph.types import _DC_KWARGS, CachePolicy, RetryPolicy, StreamMode
-from langgraph.warnings import LangGraphDeprecatedSinceV10
+from langgraph.warnings import LangGraphDeprecatedSinceV05
 
 
 class TaskFunction(Generic[P, T]):
@@ -179,7 +179,7 @@ def task(
     if (retry := kwargs.get("retry", UNSET)) is not UNSET:
         warnings.warn(
             "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
-            category=LangGraphDeprecatedSinceV10,
+            category=LangGraphDeprecatedSinceV05,
         )
         if retry_policy is None:
             retry_policy = retry  # type: ignore[assignment]
@@ -383,7 +383,7 @@ class entrypoint:
         if (retry := kwargs.get("retry", UNSET)) is not UNSET:
             warnings.warn(
                 "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
-                category=LangGraphDeprecatedSinceV10,
+                category=LangGraphDeprecatedSinceV05,
             )
             if retry_policy is None:
                 retry_policy = retry  # type: ignore[assignment]

@@ -41,8 +41,8 @@ class LangGraphDeprecationWarning(DeprecationWarning):
         return message
 
 
-class LangGraphDeprecatedSinceV10(LangGraphDeprecationWarning):
-    """A specific `LangGraphDeprecationWarning` subclass defining functionality deprecated since LangGraph v1.0.0"""
+class LangGraphDeprecatedSinceV05(LangGraphDeprecationWarning):
+    """A specific `LangGraphDeprecationWarning` subclass defining functionality deprecated since LangGraph v0.5.0"""
 
     def __init__(self, message: str, *args: object) -> None:
-        super().__init__(message, *args, since=(1, 0), expected_removal=(2, 0))
+        super().__init__(message, *args, since=(0, 5), expected_removal=(2, 0))

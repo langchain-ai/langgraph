@@ -36,7 +36,15 @@ Represents the status of a thread:
 """
 
 StreamMode = Literal[
-    "values", "messages", "updates", "events", "debug", "custom", "messages-tuple"
+    "values",
+    "messages",
+    "updates",
+    "events",
+    "tasks",
+    "checkpoints",
+    "debug",
+    "custom",
+    "messages-tuple",
 ]
 """
 Defines the mode of streaming:
@@ -44,6 +52,8 @@ Defines the mode of streaming:
 - "messages": Stream complete messages.
 - "updates": Stream updates to the state.
 - "events": Stream events occurring during execution.
+- "checkpoints": Stream checkpoints as they are created.
+- "tasks": Stream task start and finish events.
 - "debug": Stream detailed debug information.
 - "custom": Stream custom events.
 """

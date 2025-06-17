@@ -71,3 +71,14 @@ def channels_from_checkpoint(
         },
         managed_specs,
     )
+
+
+def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
+    return Checkpoint(
+        v=checkpoint["v"],
+        ts=checkpoint["ts"],
+        id=checkpoint["id"],
+        channel_values=checkpoint["channel_values"].copy(),
+        channel_versions=checkpoint["channel_versions"].copy(),
+        versions_seen={k: v.copy() for k, v in checkpoint["versions_seen"].items()},
+    )

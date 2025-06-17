@@ -3,13 +3,8 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import asdict
-from datetime import datetime, timezone
 from pprint import pformat
-from typing import (
-    Any,
-    Literal,
-    Union,
-)
+from typing import Any
 from uuid import UUID
 
 from langchain_core.runnables.config import RunnableConfig
@@ -17,7 +12,7 @@ from langchain_core.utils.input import get_bolded_text, get_colored_text
 from typing_extensions import TypedDict
 
 from langgraph.channels.base import BaseChannel
-from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, PendingWrite
+from langgraph.checkpoint.base import CheckpointMetadata, PendingWrite
 from langgraph.constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
@@ -66,82 +61,43 @@ class CheckpointPayload(TypedDict):
     tasks: list[CheckpointTask]
 
 
-class DebugOutputBase(TypedDict):
-    timestamp: str
-    step: int
-
-
-class DebugOutputTask(DebugOutputBase):
-    type: Literal["task"]
-    payload: TaskPayload
-
-
-class DebugOutputTaskResult(DebugOutputBase):
-    type: Literal["task_result"]
-    payload: TaskResultPayload
-
-
-class DebugOutputCheckpoint(DebugOutputBase):
-    type: Literal["checkpoint"]
-    payload: CheckpointPayload
-
-
-DebugOutput = Union[DebugOutputTask, DebugOutputTaskResult, DebugOutputCheckpoint]
-
-
 TASK_NAMESPACE = UUID("6ba7b831-9dad-11d1-80b4-00c04fd430c8")
 
 
-def map_debug_tasks(
-    step: int, tasks: Iterable[PregelExecutableTask]
-) -> Iterator[DebugOutputTask]:
+def map_debug_tasks(tasks: Iterable[PregelExecutableTask]) -> Iterator[TaskPayload]:
     """Produce "task" events for stream_mode=debug."""
-    ts = datetime.now(timezone.utc).isoformat()
     for task in tasks:
         if task.config is not None and TAG_HIDDEN in task.config.get("tags", []):
             continue
 
         yield {
-            "type": "task",
-            "timestamp": ts,
-            "step": step,
-            "payload": {
-                "id": task.id,
-                "name": task.name,
-                "input": task.input,
-                "triggers": task.triggers,
-            },
+            "id": task.id,
+            "name": task.name,
+            "input": task.input,
+            "triggers": task.triggers,
         }
 
 
 def map_debug_task_results(
-    step: int,
     task_tup: tuple[PregelExecutableTask, Sequence[tuple[str, Any]]],
     stream_keys: str | Sequence[str],
-) -> Iterator[DebugOutputTaskResult]:
+) -> Iterator[TaskResultPayload]:
     """Produce "task_result" events for stream_mode=debug."""
     stream_channels_list = (
         [stream_keys] if isinstance(stream_keys, str) else stream_keys
     )
     task, writes = task_tup
     yield {
-        "type": "task_result",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "step": step,
-        "payload": {
-            "id": task.id,
-            "name": task.name,
-            "error": next((w[1] for w in writes if w[0] == ERROR), None),
-            "result": [
-                w for w in writes if w[0] in stream_channels_list or w[0] == RETURN
-            ],
-            "interrupts": [
-                asdict(v)
-                for w in writes
-                if w[0] == INTERRUPT
-                for v in (w[1] if isinstance(w[1], Sequence) else [w[1]])
-            ],
-        },
+        "id": task.id,
+        "name": task.name,
+        "error": next((w[1] for w in writes if w[0] == ERROR), None),
+        "result": [w for w in writes if w[0] in stream_channels_list or w[0] == RETURN],
+        "interrupts": [
+            asdict(v)
+            for w in writes
+            if w[0] == INTERRUPT
+            for v in (w[1] if isinstance(w[1], Sequence) else [w[1]])
+        ],
     }
 
 
@@ -159,17 +115,15 @@ def rm_pregel_keys(config: RunnableConfig | None) -> RunnableConfig | None:
 
 
 def map_debug_checkpoint(
-    step: int,
     config: RunnableConfig,
     channels: Mapping[str, BaseChannel],
     stream_channels: str | Sequence[str],
     metadata: CheckpointMetadata,
-    checkpoint: Checkpoint,
     tasks: Iterable[PregelExecutableTask],
     pending_writes: list[PendingWrite],
     parent_config: RunnableConfig | None,
     output_keys: str | Sequence[str],
-) -> Iterator[DebugOutputCheckpoint]:
+) -> Iterator[CheckpointPayload]:
     """Produce "checkpoint" events for stream_mode=debug."""
 
     parent_ns = config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
@@ -193,42 +147,35 @@ def map_debug_checkpoint(
         }
 
     yield {
-        "type": "checkpoint",
-        "timestamp": checkpoint["ts"],
-        "step": step,
-        "payload": {
-            "config": rm_pregel_keys(patch_checkpoint_map(config, metadata)),
-            "parent_config": rm_pregel_keys(
-                patch_checkpoint_map(parent_config, metadata)
-            ),
-            "values": read_channels(channels, stream_channels),
-            "metadata": metadata,
-            "next": [t.name for t in tasks],
-            "tasks": [
-                {
-                    "id": t.id,
-                    "name": t.name,
-                    "error": t.error,
-                    "state": t.state,
-                }
-                if t.error
-                else {
-                    "id": t.id,
-                    "name": t.name,
-                    "result": t.result,
-                    "interrupts": tuple(asdict(i) for i in t.interrupts),
-                    "state": t.state,
-                }
-                if t.result
-                else {
-                    "id": t.id,
-                    "name": t.name,
-                    "interrupts": tuple(asdict(i) for i in t.interrupts),
-                    "state": t.state,
-                }
-                for t in tasks_w_writes(tasks, pending_writes, task_states, output_keys)
-            ],
-        },
+        "config": rm_pregel_keys(patch_checkpoint_map(config, metadata)),
+        "parent_config": rm_pregel_keys(patch_checkpoint_map(parent_config, metadata)),
+        "values": read_channels(channels, stream_channels),
+        "metadata": metadata,
+        "next": [t.name for t in tasks],
+        "tasks": [
+            {
+                "id": t.id,
+                "name": t.name,
+                "error": t.error,
+                "state": t.state,
+            }
+            if t.error
+            else {
+                "id": t.id,
+                "name": t.name,
+                "result": t.result,
+                "interrupts": tuple(asdict(i) for i in t.interrupts),
+                "state": t.state,
+            }
+            if t.result
+            else {
+                "id": t.id,
+                "name": t.name,
+                "interrupts": tuple(asdict(i) for i in t.interrupts),
+                "state": t.state,
+            }
+            for t in tasks_w_writes(tasks, pending_writes, task_states, output_keys)
+        ],
     }
 
 
