@@ -152,35 +152,35 @@ nav:
       - Use the Graph API: how-tos/graph-api.ipynb
       - Use the Functional API: how-tos/use-functional-api.md
     - Models:
-      - Basic implementation: agents/models.md
+      - Use in agent: agents/models.md
     - Streaming:
       - Stream outputs: how-tos/streaming.md
       - Use Server API: cloud/how-tos/streaming.md
-    - Persistence: how-tos/persistence.ipynb
     - Context:
-      - Basic implementation: agents/context.md
+      - Use in agent: agents/context.md
     - Memory:
       - Basic implementation: agents/memory.md
+      - Persistence: how-tos/persistence.ipynb # MERGE
       - Custom implementation: how-tos/memory.ipynb
     - Human-in-the-loop:
-      - Basic implementation: agents/human-in-the-loop.md
-      - Custom implementation: how-tos/human_in_the_loop/add-human-in-the-loop.md
-      - Production-ready implementation:
+      - Add to agent: agents/human-in-the-loop.md
+      - Add to workflow: how-tos/human_in_the_loop/add-human-in-the-loop.md
+      - User Server API:
         - cloud/how-tos/add-human-in-the-loop.md
         - cloud/how-tos/human_in_the_loop_time_travel.md
     - Breakpoints:
-      - Custom implementation: how-tos/human_in_the_loop/breakpoints.ipynb
-      - Production-ready implementation: cloud/how-tos/human_in_the_loop_breakpoint.md
+      - Add to agent: how-tos/human_in_the_loop/breakpoints.ipynb
+      - Add to workflow: cloud/how-tos/human_in_the_loop_breakpoint.md
     - Tools:
-      - Basic implementation: agents/tools.md
-      - Custom implementation: how-tos/tool-calling.ipynb
+      - Use in agent: agents/tools.md
+      - Use in workflow: how-tos/tool-calling.ipynb
     - Subgraphs: how-tos/subgraph.ipynb
     - Multi-agent:
-      - Basic implementation: agents/multi-agent.md
+      - Prebuilt implementation: agents/multi-agent.md
       - Custom implementation: how-tos/multi_agent.ipynb
     - MCP:
-      - Basic implementation: agents/mcp.md
-      - Production-ready implementation: concepts/server-mcp.md
+      - Use in agent: agents/mcp.md
+      - Expose Agent as MCP: concepts/server-mcp.md
     - Deployment:
       - Basic deployment: agents/deployment.md
       - Set up your application:
