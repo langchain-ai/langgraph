@@ -12,7 +12,7 @@ Before running an experiment, ensure you have the following:
 
 1.  **A LangSmith dataset**: Your dataset should contain the inputs you want to test and optionally, reference outputs for comparison.
 
-    - The schema for the inputs must match the required input schema for the assistant. For more information on schemas, see [here](../../../../concepts/low_level/#schema).
+    - The schema for the inputs must match the required input schema for the assistant. For more information on schemas, see [here](../../../concepts/low_level.md#schema).
     - For more on creating datasets, see [How to Manage Datasets](https://docs.smith.langchain.com/evaluation/how_to_guides/manage_datasets_in_application#set-up-your-dataset).
 
 2.  **(Optional) Evaluators**: You can attach evaluators (e.g., LLM-as-a-Judge, heuristics, or custom functions) to your dataset in LangSmith. These will run automatically after the graph has processed all inputs.
