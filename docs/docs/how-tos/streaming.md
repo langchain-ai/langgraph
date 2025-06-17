@@ -2,11 +2,23 @@
 
 You can [stream outputs](../concepts/streaming.md) from a LangGraph agent or workflow.
 
+## Supported stream modes
+
+Pass one or more of the following stream modes as a list to the [`stream()`][langgraph.graph.state.CompiledStateGraph.stream] or [`astream()`][langgraph.graph.state.CompiledStateGraph.astream] methods:
+
+| Mode | Description |
+|------|-------------|
+| `values` | Streams the full value of the state after each step of the graph. |
+| `updates` | Streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g., multiple nodes are run), those updates are streamed separately. |
+| `custom` | Streams custom data from inside your graph nodes. |
+| `messages` | Streams 2-tuples (LLM token, metadata) from any graph nodes where an LLM is invoked. |
+| `debug` | Streams as much information as possible throughout the execution of the graph.   
+
 ## Stream from an agent
 
 ### Agent progress
 
-To stream agent progress, use the [`stream()`][langgraph.graph.state.CompiledStateGraph.stream] or [`astream()`][langgraph.graph.state.CompiledStateGraph.astream] methods with [`stream_mode="updates"`](https://langchain-ai.github.io/langgraph/how-tos/streaming/#updates). This emits an event after every agent step.
+To stream agent progress, use the [`stream()`][langgraph.graph.state.CompiledStateGraph.stream] or [`astream()`][langgraph.graph.state.CompiledStateGraph.astream] methods with `stream_mode="updates"`. This emits an event after every agent step.
 
 For example, if you have an agent that calls a tool once, you should see the following updates:
 
@@ -258,18 +270,7 @@ LangGraph graphs expose the [`.stream()`][langgraph.pregel.Pregel.stream] (sync)
       ```output
       {'refine_topic': {'topic': 'ice cream and cats'}}
       {'generate_joke': {'joke': 'This is a joke about ice cream and cats'}}
-      ```
-
-
-### Supported stream modes
-
-| Mode                             | Description                                                                                                                                                                         |
-|----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [`values`](#stream-graph-state)  | Streams the full value of the state after each step of the graph.                                                                                                                   |
-| [`updates`](#stream-graph-state) | Streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g., multiple nodes are run), those updates are streamed separately. |
-| [`custom`](#stream-custom-data)  | Streams custom data from inside your graph nodes.                                                                                                                                   |
-| [`messages`](#messages)          | Streams 2-tuples (LLM token, metadata) from any graph nodes where an LLM is invoked.                                                                                                        |
-| [`debug`](#debug)                | Streams as much information as possible throughout the execution of the graph.                                                                                                      |
+      ```                                                                                                   |
 
 ### Stream multiple modes
 
