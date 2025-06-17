@@ -2,7 +2,7 @@
 
 LangGraph Studio supports evaluations by allowing you to run your graph over a pre-defined LangSmith dataset. This enables you to understand how your application performs over a variety of inputs, compare the results to reference outputs, and score the results using automated evaluators.
 
-This guide shows you how to run an experiment end-to-end directly from the Studio interface.
+This guide shows you how to run an experiment end-to-end from Studio.
 
 A key requirement is that the **input and output schema of your dataset must match the schemas of your LangGraph graph**.
 
