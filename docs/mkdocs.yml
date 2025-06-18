@@ -120,7 +120,10 @@ nav:
           - Overview: concepts/langgraph_platform.md
           - Components:
             - Overview: concepts/langgraph_components.md
-            - LangGraph Server: concepts/langgraph_server.md
+            - LangGraph Server:
+              - Overview: concepts/langgraph_server.md
+              - Data plane: concepts/langgraph_data_plane.md
+              - Control plane: concepts/langgraph_control_plane.md
             - LangGraph CLI: concepts/langgraph_cli.md
             - LangGraph Studio: concepts/langgraph_studio.md
             - LangGraph SDK: concepts/sdk.md
@@ -128,17 +131,12 @@ nav:
           - Application structure: concepts/application_structure.md
           - Scalability & resilience: concepts/scalability_and_resilience.md
       - Authentication & access control: concepts/auth.md
-      - Assistants: #COMBINE
-        - Overview: concepts/assistants.md
-        - Threads: cloud/concepts/threads.md
-        - Runs: cloud/concepts/runs.md
+      - Assistants: concepts/assistants.md
       - Double-texting: concepts/double_texting.md
       - Webhooks: cloud/concepts/webhooks.md
       - Cron jobs: cloud/concepts/cron_jobs.md
       - Deployment:
         - Overview: concepts/deployment_options.md
-        - Data plane: concepts/langgraph_data_plane.md
-        - Control plane: concepts/langgraph_control_plane.md
         - Deployment options:
           - Cloud SaaS: concepts/langgraph_cloud.md
           - Self-Hosted Data Plane: concepts/langgraph_self_hosted_data_plane.md
@@ -146,8 +144,6 @@ nav:
           - Standalone Container: concepts/langgraph_standalone_container.md
     
   - Guides:
-    - Prebuilt agents:
-      - agents/run_agents.md
     - LangGraph APIs:
       - Use the Graph API: how-tos/graph-api.ipynb
       - Use the Functional API: how-tos/use-functional-api.md
@@ -261,6 +257,7 @@ nav:
       - Environment variables: cloud/reference/env_var.md
 
   - Examples:
+    - agents/run_agents.md
     - LangGraph basics:
       -  concepts/why-langgraph.md
       -  Build a basic chatbot: tutorials/get-started/1-build-basic-chatbot.md

@@ -61,6 +61,7 @@ REDIRECT_MAP = {
     "how-tos/subgraph-persistence.ipynb": "how-tos/persistence.ipynb#use-with-subgraphs",
     "how-tos/cross-thread-persistence.ipynb": "how-tos/persistence.ipynb#add-long-term-memory",
     "cloud/how-tos/copy_threads": "cloud/how-tos/use_threads",
+    "cloud/concepts/threads.md": "concepts/persistence.md#threads",
     # tool calling how-tos
     "how-tos/tool-calling-errors.ipynb": "how-tos/tool-calling.ipynb#handle-errors",
     "how-tos/pass-config-to-tools.ipynb": "how-tos/tool-calling.ipynb#access-config",
@@ -112,6 +113,7 @@ REDIRECT_MAP = {
     "tutorials/deployment.md": "concepts/deployment_options.md",
     # assistant redirects
     "cloud/how-tos/assistant_versioning.md": "cloud/how-tos/configuration_cloud.md",
+    "cloud/concepts/runs.md": "concepts/assistants.md#execution",
 }
 
 
