@@ -1,0 +1,15 @@
+services:
+  sqlserver-test:
+    image: "mcr.microsoft.com/mssql/server:2022-latest"
+    ports:
+      - 1433:1433
+    environment:
+      SA_PASSWORD: "sqlserver123!"
+      ACCEPT_EULA: "Y"
+    healthcheck:
+      test: "/opt/mssql-tools18/bin/sqlcmd -No -S localhost -U sa -P sqlserver123! -Q \"SELECT 1\" || exit 1"
+      start_period: 10s
+      timeout: 1s
+      retries: 5
+      interval: 60s
+      start_interval: 1s
