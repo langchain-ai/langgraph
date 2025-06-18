@@ -18,7 +18,6 @@ class BasePostgresCache(BaseCache[ValueT]):
 );""",
     ]
 
-    # cache 操作 SQL
     SELECT_SQL = """
     SELECT c.ns, c.key, c.expiry, c.encoding, c.val
       FROM cache c
