@@ -30,7 +30,6 @@ from typing_extensions import ParamSpec, Self
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import (
-    EXCLUDED_METADATA_KEYS,
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
@@ -721,11 +720,6 @@ class PregelLoop:
         )
         # bail if no checkpointer
         if do_checkpoint and self._checkpointer_put_after_previous is not None:
-            for k, v in self.config["metadata"].items():
-                if k in EXCLUDED_METADATA_KEYS:
-                    continue
-                metadata.setdefault(k, v)  # type: ignore
-
             self.prev_checkpoint_config = (
                 self.checkpoint_config
                 if CONFIG_KEY_CHECKPOINT_ID in self.checkpoint_config[CONF]
