@@ -17,6 +17,8 @@ from langgraph.checkpoint.serde.base import SerializerProtocol
 
 
 class AsyncPostgresCache(BasePostgresCache):
+    """File-based cache using Postgres."""
+
     def __init__(
         self,
         conn: _ainternal.Conn,
@@ -54,6 +56,7 @@ class AsyncPostgresCache(BasePostgresCache):
                 yield cls(conn=conn, serde=serde)
 
     async def setup(self) -> None:
+        """Run Setup for cache."""
         async with self._cursor() as cur:
             await cur.execute(self.MIGRATIONS[0])
             results = await cur.execute(
@@ -75,9 +78,11 @@ class AsyncPostgresCache(BasePostgresCache):
             await self.pipe.sync()
 
     def get(self, keys: Sequence[FullKey]) -> dict[FullKey, ValueT]:
-        raise NotImplementedError
+        """Use PostgresCache Instead."""
+        raise NotImplementedError("Please Use PostgresCache Instead.")
 
     async def aget(self, keys: Sequence[FullKey]) -> dict[FullKey, ValueT]:
+        """Asynchronously get the cached values for the given keys."""
         now = datetime.datetime.now(datetime.timezone.utc)
         out: dict[FullKey, ValueT] = {}
         if not keys:
@@ -100,9 +105,11 @@ class AsyncPostgresCache(BasePostgresCache):
         return out
 
     def set(self, pairs: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
-        raise NotImplementedError
+        """Use PostgresCache Instead."""
+        raise NotImplementedError("Please Use PostgresCache Instead.")
 
     async def aset(self, pairs: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
+        """Asynchronously set the cached values for the given keys and TTLs."""
         items = []
         for (ns, key), (val, ttl) in pairs.items():
             expiry = (
@@ -117,9 +124,12 @@ class AsyncPostgresCache(BasePostgresCache):
             await cur.executemany(self.UPSERT_SQL, items)
 
     def clear(self, namespaces: Sequence[tuple[str, ...]] | None = None) -> None:
-        raise NotImplementedError
+        """Use PostgresCache Instead."""
+        raise NotImplementedError("Please Use PostgresCache Instead.")
 
     async def aclear(self, namespaces: Sequence[tuple[str, ...]] | None = None) -> None:
+        """Asynchronously delete the cached values for the given namespaces.
+        If no namespaces are provided, clear all cached values."""
         async with self._cursor() as cur:
             if namespaces is None:
                 await cur.execute(self.CLEAR_ALL_SQL)
@@ -131,6 +141,7 @@ class AsyncPostgresCache(BasePostgresCache):
     async def _cursor(
         self, *, pipeline: bool = False
     ) -> AsyncIterator[AsyncCursor[DictRow]]:
+        """Create a database cursor as a context manager."""
         async with self.lock, _ainternal.get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently

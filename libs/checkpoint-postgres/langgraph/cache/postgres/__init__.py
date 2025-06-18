@@ -17,6 +17,8 @@ from langgraph.checkpoint.serde.base import SerializerProtocol
 
 
 class PostgresCache(BasePostgresCache):
+    """File-based cache using Postgres."""
+
     def __init__(
         self,
         conn: _internal.Conn,
@@ -49,21 +51,28 @@ class PostgresCache(BasePostgresCache):
                 yield cls(conn)
 
     def setup(self) -> None:
-        """Run migrations for cache."""
+        """Run Setup for cache."""
         with self._cursor() as cur:
-            # 确保 migrations 表存在并读取当前版本
             cur.execute(self.MIGRATIONS[0])
-            cur.execute("SELECT v FROM cache_migrations ORDER BY v DESC LIMIT 1")
-            row = cur.fetchone()
-            version = row["v"] if row else -1
-            # 应用后续 migrations
-            for v, sql in enumerate(self.MIGRATIONS[version + 1 :], start=version + 1):
-                cur.execute(sql)
-                cur.execute("INSERT INTO cache_migrations (v) VALUES (%s)", (v,))
+            results = cur.execute(
+                "SELECT v FROM cache_migrations ORDER BY v DESC LIMIT 1"
+            )
+            row = results.fetchone()
+            if row is None:
+                version = -1
+            else:
+                version = row["v"]
+            for v, migration in zip(
+                range(version + 1, len(self.MIGRATIONS)),
+                self.MIGRATIONS[version + 1 :],
+            ):
+                cur.execute(migration)
+                cur.execute(f"INSERT INTO cache_migrations (v) VALUES ({v})")
         if self.pipe:
             self.pipe.sync()
 
     def get(self, keys: Sequence[FullKey]) -> dict[FullKey, ValueT]:
+        """Get the cached values for the given keys."""
         now = datetime.datetime.now(datetime.timezone.utc)
         out: dict[FullKey, ValueT] = {}
         if not keys:
@@ -86,9 +95,11 @@ class PostgresCache(BasePostgresCache):
         return out
 
     async def aget(self, keys: Sequence[FullKey]) -> dict[FullKey, ValueT]:
-        raise NotImplementedError
+        """Use AsyncPostgresCache Instead."""
+        raise NotImplementedError("Please Use AsyncPostgresCache Instead.")
 
     def set(self, pairs: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
+        """Set the cached values for the given keys and TTLs."""
         items = []
         for (ns, key), (val, ttl) in pairs.items():
             expiry = (
@@ -103,9 +114,12 @@ class PostgresCache(BasePostgresCache):
             cur.executemany(self.UPSERT_SQL, items)
 
     async def aset(self, pairs: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
-        raise NotImplementedError
+        """Use AsyncPostgresCache Instead."""
+        raise NotImplementedError("Please Use AsyncPostgresCache Instead.")
 
     def clear(self, namespaces: Sequence[tuple[str, ...]] | None = None) -> None:
+        """Delete the cached values for the given namespaces.
+        If no namespaces are provided, clear all cached values."""
         with self._cursor() as cur:
             if namespaces is None:
                 cur.execute(self.CLEAR_ALL_SQL)
@@ -114,11 +128,12 @@ class PostgresCache(BasePostgresCache):
                 cur.execute(self.CLEAR_NS_SQL, (ns_list,))
 
     async def aclear(self, namespaces: Sequence[tuple[str, ...]] | None = None) -> None:
-        raise NotImplementedError
-        return {}
+        """Use AsyncPostgresCache Instead."""
+        raise NotImplementedError("Please Use AsyncPostgresCache Instead.")
 
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
+        """Create a database cursor as a context manager."""
         with self.lock, _internal.get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
