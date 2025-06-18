@@ -105,17 +105,6 @@ nav:
         - Subgraphs: concepts/subgraphs.md
         - Runtime: concepts/pregel.md
         - Functional API: concepts/functional_api.md
-      - LangGraph Platform:
-        - Overview: concepts/langgraph_platform.md
-        - Components:
-          - Overview: concepts/langgraph_components.md
-          - LangGraph Server: concepts/langgraph_server.md
-          - LangGraph CLI: concepts/langgraph_cli.md
-          - LangGraph Studio: concepts/langgraph_studio.md
-          - LangGraph SDK: concepts/sdk.md
-        - Plans & pricing: concepts/plans.md
-        - Application structure: concepts/application_structure.md
-        - Scalability & resilience: concepts/scalability_and_resilience.md
     - Core capabilities:
       - Streaming: concepts/streaming.md
       - Persistence: concepts/persistence.md
@@ -127,6 +116,17 @@ nav:
       - Time travel: concepts/time-travel.md
       - Multi-agent: concepts/multi_agent.md
     - Platform capabilities:
+      - LangGraph Platform:
+          - Overview: concepts/langgraph_platform.md
+          - Components:
+            - Overview: concepts/langgraph_components.md
+            - LangGraph Server: concepts/langgraph_server.md
+            - LangGraph CLI: concepts/langgraph_cli.md
+            - LangGraph Studio: concepts/langgraph_studio.md
+            - LangGraph SDK: concepts/sdk.md
+          - Plans & pricing: concepts/plans.md
+          - Application structure: concepts/application_structure.md
+          - Scalability & resilience: concepts/scalability_and_resilience.md
       - Authentication & access control: concepts/auth.md
       - Assistants: #COMBINE
         - Overview: concepts/assistants.md
