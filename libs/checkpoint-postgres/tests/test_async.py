@@ -228,7 +228,6 @@ async def test_combined_metadata(saver_name: str, test_data) -> None:
         checkpoint = await saver.aget_tuple(config)
         assert checkpoint.metadata == {
             **metadata,
-            "thread_id": "thread-2",
             "run_id": "my_run_id",
         }
 

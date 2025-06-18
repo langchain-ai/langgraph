@@ -104,7 +104,8 @@ class FuturesDict(Generic[F, E], dict[F, Optional[PregelExecutableTask]]):
         fut: F,
     ) -> None:
         try:
-            self.callback()(task, _exception(fut))  # type: ignore[misc]
+            if cb := self.callback():
+                cb(task, _exception(fut))
         finally:
             with self.lock:
                 self.done.add(fut)

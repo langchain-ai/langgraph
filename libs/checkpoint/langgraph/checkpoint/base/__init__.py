@@ -392,11 +392,10 @@ def get_checkpoint_metadata(
     for obj in (config.get("metadata"), config.get("configurable")):
         if not obj:
             continue
-        for key in obj:
+        for key, v in obj.items():
             if key in metadata or key in EXCLUDED_METADATA_KEYS or key.startswith("__"):
                 continue
-            v = obj[key]
-            if isinstance(v, str):
+            elif isinstance(v, str):
                 metadata[key] = v.replace("\u0000", "")
             elif isinstance(v, (int, bool, float)):
                 metadata[key] = v
@@ -413,9 +412,16 @@ Each Checkpointer implementation should use this mapping in put_writes.
 WRITES_IDX_MAP = {ERROR: -1, SCHEDULED: -2, INTERRUPT: -3, RESUME: -4}
 
 EXCLUDED_METADATA_KEYS = {
+    "thread_id",
+    "thread_ts",
     "checkpoint_id",
     "checkpoint_ns",
     "checkpoint_map",
+    "langgraph_step",
+    "langgraph_node",
+    "langgraph_triggers",
+    "langgraph_path",
+    "langgraph_checkpoint_ns",
 }
 
 # --- below are deprecated utilities used by past versions of LangGraph ---

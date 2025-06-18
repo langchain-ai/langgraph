@@ -43,7 +43,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                 "source": "loop",
                 "step": 4,
                 "parents": {},
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -73,7 +72,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                 "source": "loop",
                 "step": 3,
                 "parents": {},
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -131,7 +129,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                 "source": "loop",
                 "step": 2,
                 "parents": {},
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -168,7 +165,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                 "source": "loop",
                 "step": 1,
                 "parents": {},
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -218,7 +214,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                 "source": "loop",
                 "step": 0,
                 "parents": {},
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -257,7 +252,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                 "source": "input",
                 "step": -1,
                 "parents": {},
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -343,7 +337,6 @@ SAVED_CHECKPOINTS = {
                 "source": "loop",
                 "step": 4,
                 "parents": {},
-                "thread_id": "1",
             },
             parent_config={
                 "configurable": {
@@ -404,7 +397,6 @@ SAVED_CHECKPOINTS = {
                 "source": "loop",
                 "step": 3,
                 "parents": {},
-                "thread_id": "1",
             },
             parent_config={
                 "configurable": {
@@ -480,7 +472,6 @@ SAVED_CHECKPOINTS = {
                 "source": "loop",
                 "step": 2,
                 "parents": {},
-                "thread_id": "1",
             },
             parent_config={
                 "configurable": {
@@ -532,7 +523,6 @@ SAVED_CHECKPOINTS = {
                 "source": "loop",
                 "step": 1,
                 "parents": {},
-                "thread_id": "1",
             },
             parent_config={
                 "configurable": {
@@ -587,7 +577,6 @@ SAVED_CHECKPOINTS = {
                 "source": "loop",
                 "step": 0,
                 "parents": {},
-                "thread_id": "1",
             },
             parent_config={
                 "configurable": {
@@ -636,7 +625,6 @@ SAVED_CHECKPOINTS = {
                 "source": "input",
                 "step": -1,
                 "parents": {},
-                "thread_id": "1",
             },
             parent_config=None,
             pending_writes=[
@@ -720,7 +708,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 4,
                 "parents": {},
             },
@@ -782,7 +769,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 3,
                 "parents": {},
             },
@@ -861,7 +847,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 2,
                 "parents": {},
             },
@@ -917,7 +902,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 1,
                 "parents": {},
             },
@@ -977,7 +961,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 0,
                 "parents": {},
             },
@@ -1026,7 +1009,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "input",
-                "thread_id": "1",
                 "step": -1,
                 "parents": {},
             },
@@ -1112,7 +1094,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 4,
                 "parents": {},
             },
@@ -1174,7 +1155,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 3,
                 "parents": {},
             },
@@ -1253,7 +1233,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 2,
                 "parents": {},
             },
@@ -1309,7 +1288,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 1,
                 "parents": {},
             },
@@ -1369,7 +1347,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 0,
                 "parents": {},
             },
@@ -1418,7 +1395,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "input",
-                "thread_id": "1",
                 "step": -1,
                 "parents": {},
             },
