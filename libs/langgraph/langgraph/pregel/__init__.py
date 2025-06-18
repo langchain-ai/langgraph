@@ -32,7 +32,6 @@ from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
     CheckpointTuple,
-    copy_checkpoint,
 )
 from langgraph.config import get_config
 from langgraph.constants import (
@@ -79,6 +78,7 @@ from langgraph.pregel.algo import (
 from langgraph.pregel.call import identifier
 from langgraph.pregel.checkpoint import (
     channels_from_checkpoint,
+    copy_checkpoint,
     create_checkpoint,
     empty_checkpoint,
 )
@@ -908,7 +908,12 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
 
     def _migrate_checkpoint(self, checkpoint: Checkpoint) -> None:
         """Migrate a saved checkpoint to new channel layout."""
-        pass
+        if checkpoint["v"] < 4 and checkpoint.get("pending_sends"):
+            pending_sends: list[Send] = checkpoint.pop("pending_sends")
+            checkpoint["channel_values"][TASKS] = pending_sends
+            checkpoint["channel_versions"][TASKS] = max(
+                checkpoint["channel_versions"].values()
+            )
 
     def _prepare_state_snapshot(
         self,
@@ -1410,10 +1415,8 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     )
                 },
             )
-            checkpoint_metadata = config["metadata"]
             if saved:
                 checkpoint_config = patch_configurable(config, saved.config[CONF])
-                checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}
             channels, managed = channels_from_checkpoint(
                 self.channels,
                 checkpoint,
@@ -1478,7 +1481,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     checkpoint_config,
                     create_checkpoint(checkpoint, None, step),
                     {
-                        **checkpoint_metadata,
                         "source": "update",
                         "step": step + 1,
                         "parents": saved.metadata.get("parents", {}) if saved else {},
@@ -1501,7 +1503,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     checkpoint_config,
                     next_checkpoint,
                     {
-                        **checkpoint_metadata,
                         "source": "update",
                         "step": step + 1,
                         "parents": saved.metadata.get("parents", {}) if saved else {},
@@ -1538,9 +1539,11 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         checkpoint_config,
                         create_checkpoint(checkpoint, channels, next_step),
                         {
-                            **checkpoint_metadata,
                             "source": "input",
                             "step": next_step,
+                            "parents": saved.metadata.get("parents", {})
+                            if saved
+                            else {},
                         },
                         get_new_channel_versions(
                             checkpoint_previous_versions,
@@ -1576,7 +1579,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     saved.parent_config or saved.config if saved else checkpoint_config,
                     next_checkpoint,
                     {
-                        **checkpoint_metadata,
                         "source": "fork",
                         "step": step + 1,
                         "parents": saved.metadata.get("parents", {}) if saved else {},
@@ -1738,7 +1740,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 checkpoint_config,
                 checkpoint,
                 {
-                    **checkpoint_metadata,
                     "source": "update",
                     "step": step + 1,
                     "parents": saved.metadata.get("parents", {}) if saved else {},
@@ -1832,10 +1833,8 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     )
                 },
             )
-            checkpoint_metadata = config["metadata"]
             if saved:
                 checkpoint_config = patch_configurable(config, saved.config[CONF])
-                checkpoint_metadata = {**saved.metadata, **checkpoint_metadata}
             channels, managed = channels_from_checkpoint(
                 self.channels,
                 checkpoint,
@@ -1898,7 +1897,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     checkpoint_config,
                     create_checkpoint(checkpoint, None, step),
                     {
-                        **checkpoint_metadata,
                         "source": "update",
                         "step": step + 1,
                         "parents": saved.metadata.get("parents", {}) if saved else {},
@@ -1921,7 +1919,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     checkpoint_config,
                     next_checkpoint,
                     {
-                        **checkpoint_metadata,
                         "source": "update",
                         "step": step + 1,
                         "parents": saved.metadata.get("parents", {}) if saved else {},
@@ -1958,9 +1955,11 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         checkpoint_config,
                         create_checkpoint(checkpoint, channels, next_step),
                         {
-                            **checkpoint_metadata,
                             "source": "input",
                             "step": next_step,
+                            "parents": saved.metadata.get("parents", {})
+                            if saved
+                            else {},
                         },
                         get_new_channel_versions(
                             checkpoint_previous_versions,
@@ -1996,7 +1995,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     saved.parent_config or saved.config if saved else checkpoint_config,
                     next_checkpoint,
                     {
-                        **checkpoint_metadata,
                         "source": "fork",
                         "step": step + 1,
                         "parents": saved.metadata.get("parents", {}) if saved else {},
@@ -2156,7 +2154,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 checkpoint_config,
                 checkpoint,
                 {
-                    **checkpoint_metadata,
                     "source": "update",
                     "step": step + 1,
                     "parents": saved.metadata.get("parents", {}) if saved else {},
@@ -2298,7 +2295,8 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
                 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
                     Will be emitted as 2-tuples `(LLM token, metadata)`.
-                - `"debug"`: Emit debug events with as much information as possible for each step.
+                - `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by get_state().
+                - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
 
                 You can pass a list as the `stream_mode` parameter to stream multiple modes at once.
                 The streamed outputs will be tuples of `(mode, data)`.
