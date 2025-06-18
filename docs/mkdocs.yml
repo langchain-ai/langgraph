@@ -152,7 +152,7 @@ nav:
       - Use the Graph API: how-tos/graph-api.ipynb
       - Use the Functional API: how-tos/use-functional-api.md
     - Models:
-      - Use in agent: agents/models.md
+      - Configure model: agents/models.md
     - Streaming:
       - Stream outputs: how-tos/streaming.md
       - Use Server API: cloud/how-tos/streaming.md
@@ -165,22 +165,23 @@ nav:
     - Human-in-the-loop:
       - Add to agent: agents/human-in-the-loop.md
       - Add to workflow: how-tos/human_in_the_loop/add-human-in-the-loop.md
-      - User Server API:
-        - cloud/how-tos/add-human-in-the-loop.md
-        - cloud/how-tos/human_in_the_loop_time_travel.md
+      - Use Server API: cloud/how-tos/add-human-in-the-loop.md
+    - Time travel:
+      - Use Server API: cloud/how-tos/human_in_the_loop_time_travel.md
     - Breakpoints:
-      - Add to agent: how-tos/human_in_the_loop/breakpoints.ipynb
-      - Add to workflow: cloud/how-tos/human_in_the_loop_breakpoint.md
+      - Set breakpoints: how-tos/human_in_the_loop/breakpoints.ipynb
+      - Use Server API: cloud/how-tos/human_in_the_loop_breakpoint.md
     - Tools:
-      - Use in agent: agents/tools.md
-      - Use in workflow: how-tos/tool-calling.ipynb
-    - Subgraphs: how-tos/subgraph.ipynb
+      - Use tools: agents/tools.md
+      - Customize tools: how-tos/tool-calling.ipynb
+    - Subgraphs:
+      - Use subgraphs: how-tos/subgraph.ipynb
     - Multi-agent:
       - Prebuilt implementation: agents/multi-agent.md
       - Custom implementation: how-tos/multi_agent.ipynb
     - MCP:
-      - Use in agent: agents/mcp.md
-      - Expose Agent as MCP: concepts/server-mcp.md
+      - Use MCP tools: agents/mcp.md
+      - Server deployment via MCP: concepts/server-mcp.md
     - Deployment:
       - Basic deployment: agents/deployment.md
       - Set up your application:
