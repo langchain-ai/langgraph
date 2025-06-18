@@ -12,18 +12,35 @@ You can create these types of experiences using LangGraph's built-in **time trav
 
 ## 1. Rewind your graph
 
+:::python
 Rewind your graph by fetching a checkpoint using the graph's `get_state_history` method. You can then resume execution at this previous point in time.
+:::
+
+:::js
+Rewind your graph by fetching a checkpoint using the graph's `getStateHistory` method. You can then resume execution at this previous point in time.
+:::
 
 {!snippets/chat_model_tabs.md!}
 
 <!---
+:::python
 ```python
 from langchain.chat_models import init_chat_model
 
 llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
 ```
+:::
+
+:::js
+```typescript
+import { initChatModel } from "langchain/chat_models/init";
+
+const llm = initChatModel("anthropic:claude-3-5-sonnet-latest");
+```
+:::
 -->
 
+:::python
 ```python
 from typing import Annotated
 
@@ -63,11 +80,62 @@ graph_builder.add_edge(START, "chatbot")
 memory = MemorySaver()
 graph = graph_builder.compile(checkpointer=memory)
 ```
+:::
+
+:::js
+```typescript
+import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
+import { ChatAnthropic } from "@langchain/anthropic";
+import { BaseMessage } from "@langchain/core/messages";
+import { Annotation, StateGraph, START, END } from "@langchain/langgraph";
+import { MemorySaver } from "@langchain/langgraph";
+import { ToolNode } from "@langchain/langgraph/prebuilt";
+import { messagesStateReducer } from "@langchain/langgraph";
+
+const StateAnnotation = Annotation.Root({
+  messages: Annotation<BaseMessage[]>({
+    reducer: messagesStateReducer,
+  }),
+});
+
+const graphBuilder = new StateGraph(StateAnnotation);
+
+const tool = new TavilySearchResults({ maxResults: 2 });
+const tools = [tool];
+const llm = new ChatAnthropic({ model: "claude-3-5-sonnet-latest" });
+const llmWithTools = llm.bindTools(tools);
+
+const chatbot = async (state: typeof StateAnnotation.State) => {
+  return { messages: [await llmWithTools.invoke(state.messages)] };
+};
+
+graphBuilder.addNode("chatbot", chatbot);
+
+const toolNode = new ToolNode(tools);
+graphBuilder.addNode("tools", toolNode);
+
+const toolsCondition = (state: typeof StateAnnotation.State) => {
+  const lastMessage = state.messages[state.messages.length - 1];
+  if ("tool_calls" in lastMessage && lastMessage.tool_calls?.length) {
+    return "tools";
+  }
+  return END;
+};
+
+graphBuilder.addConditionalEdges("chatbot", toolsCondition);
+graphBuilder.addEdge("tools", "chatbot");
+graphBuilder.addEdge(START, "chatbot");
+
+const memory = new MemorySaver();
+const graph = graphBuilder.compile({ checkpointer: memory });
+```
+:::
 
 ## 2. Add steps
 
 Add steps to your graph. Every step will be checkpointed in its state history:
 
+:::python
 ``` python
 config = {"configurable": {"thread_id": "1"}}
 events = graph.stream(
@@ -89,6 +157,42 @@ for event in events:
     if "messages" in event:
         event["messages"][-1].pretty_print()
 ```
+:::
+
+:::js
+```typescript
+const config = { configurable: { thread_id: "1" } };
+const events = await graph.stream(
+  {
+    messages: [
+      {
+        role: "user",
+        content: (
+          "I'm learning LangGraph. " +
+          "Could you do some research on it for me?"
+        ),
+      },
+    ],
+  },
+  { ...config, streamMode: "values" }
+);
+
+for await (const event of events) {
+  if ("messages" in event) {
+    const lastMessage = event.messages[event.messages.length - 1];
+    console.log(`================================ ${lastMessage._getType()} Message =================================`);
+    console.log(lastMessage.content);
+    if ("tool_calls" in lastMessage && lastMessage.tool_calls?.length) {
+      console.log("Tool Calls:");
+      for (const toolCall of lastMessage.tool_calls) {
+        console.log(`  ${toolCall.name} (${toolCall.id})`);
+        console.log(`  Args: ${JSON.stringify(toolCall.args)}`);
+      }
+    }
+  }
+}
+```
+:::
 
 ```
 ================================ Human Message =================================
@@ -123,6 +227,7 @@ Is there any specific aspect of LangGraph you'd like to know more about? I'd be 
 Output is truncated. View as a scrollable element or open in a text editor. Adjust cell output settings...
 ```
 
+:::python
 ```python
 events = graph.stream(
     {
@@ -143,6 +248,41 @@ for event in events:
     if "messages" in event:
         event["messages"][-1].pretty_print()
 ```
+:::
+
+:::js
+```typescript
+const events2 = await graph.stream(
+  {
+    messages: [
+      {
+        role: "user",
+        content: (
+          "Ya that's helpful. Maybe I'll " +
+          "build an autonomous agent with it!"
+        ),
+      },
+    ],
+  },
+  { ...config, streamMode: "values" }
+);
+
+for await (const event of events2) {
+  if ("messages" in event) {
+    const lastMessage = event.messages[event.messages.length - 1];
+    console.log(`================================ ${lastMessage._getType()} Message =================================`);
+    console.log(lastMessage.content);
+    if ("tool_calls" in lastMessage && lastMessage.tool_calls?.length) {
+      console.log("Tool Calls:");
+      for (const toolCall of lastMessage.tool_calls) {
+        console.log(`  ${toolCall.name} (${toolCall.id})`);
+        console.log(`  Args: ${JSON.stringify(toolCall.args)}`);
+      }
+    }
+  }
+}
+```
+:::
 
 ```
 ================================ Human Message =================================
@@ -159,7 +299,7 @@ Tool Calls:
 ================================= Tool Message =================================
 Name: tavily_search_results_json
 
-[{"url": "https://towardsdatascience.com/building-autonomous-multi-tool-agents-with-gemini-2-0-and-langgraph-ad3d7bd5e79d", "content": "Building Autonomous Multi-Tool Agents with Gemini 2.0 and LangGraph | by Youness Mansar | Jan, 2025 | Towards Data Science Building Autonomous Multi-Tool Agents with Gemini 2.0 and LangGraph A practical tutorial with full code examples for building and running multi-tool agents Towards Data Science LLMs are remarkable — they can memorize vast amounts of information, answer general knowledge questions, write code, generate stories, and even fix your grammar. In this tutorial, we are going to build a simple LLM agent that is equipped with four tools that it can use to answer a user’s question. This Agent will have the following specifications: Follow Published in Towards Data Science --------------------------------- Your home for data science and AI. Follow Follow Follow"}, {"url": "https://github.com/anmolaman20/Tools_and_Agents", "content": "GitHub - anmolaman20/Tools_and_Agents: This repository provides resources for building AI agents using Langchain and Langgraph. This repository provides resources for building AI agents using Langchain and Langgraph. This repository provides resources for building AI agents using Langchain and Langgraph. This repository serves as a comprehensive guide for building AI-powered agents using Langchain and Langgraph. It provides hands-on examples, practical tutorials, and resources for developers and AI enthusiasts to master building intelligent systems and workflows. AI Agent Development: Gain insights into creating intelligent systems that think, reason, and adapt in real time. This repository is ideal for AI practitioners, developers exploring language models, or anyone interested in building intelligent systems. This repository provides resources for building AI agents using Langchain and Langgraph."}]
+[{"url": "https://towardsdatascience.com/building-autonomous-multi-tool-agents-with-gemini-2-0-and-langgraph-ad3d7bd5e79d", "content": "Building Autonomous Multi-Tool Agents with Gemini 2.0 and LangGraph | by Youness Mansar | Jan, 2025 | Towards Data Science Building Autonomous Multi-Tool Agents with Gemini 2.0 and LangGraph A practical tutorial with full code examples for building and running multi-tool agents Towards Data Science LLMs are remarkable — they can memorize vast amounts of information, answer general knowledge questions, write code, generate stories, and even fix your grammar. In this tutorial, we are going to build a simple LLM agent that is equipped with four tools that it can use to answer a user's question. This Agent will have the following specifications: Follow Published in Towards Data Science --------------------------------- Your home for data science and AI. Follow Follow Follow"}, {"url": "https://github.com/anmolaman20/Tools_and_Agents", "content": "GitHub - anmolaman20/Tools_and_Agents: This repository provides resources for building AI agents using Langchain and Langgraph. This repository provides resources for building AI agents using Langchain and Langgraph. This repository provides resources for building AI agents using Langchain and Langgraph. This repository serves as a comprehensive guide for building AI-powered agents using Langchain and Langgraph. It provides hands-on examples, practical tutorials, and resources for developers and AI enthusiasts to master building intelligent systems and workflows. AI Agent Development: Gain insights into creating intelligent systems that think, reason, and adapt in real time. This repository is ideal for AI practitioners, developers exploring language models, or anyone interested in building intelligent systems. This repository provides resources for building AI agents using Langchain and Langgraph."}]
 ================================== Ai Message ==================================
 
 Great idea! Building an autonomous agent with LangGraph is definitely an exciting project. Based on the latest information I've found, here are some insights and tips for building autonomous agents with LangGraph:
@@ -181,6 +321,7 @@ Output is truncated. View as a scrollable element or open in a text editor. Adju
 
 Now that you have added steps to the chatbot, you can `replay` the full state history to see everything that occurred.
 
+:::python
 ``` python
 to_replay = None
 for state in graph.get_state_history(config):
@@ -190,7 +331,24 @@ for state in graph.get_state_history(config):
         # We are somewhat arbitrarily selecting a specific state based on the number of chat messages in the state.
         to_replay = state
 ```
+:::
 
+:::js
+```typescript
+let toReplay = null;
+const stateHistory = await graph.getStateHistory(config);
+for await (const state of stateHistory) {
+  console.log("Num Messages: ", state.values.messages.length, "Next: ", state.next);
+  console.log("-".repeat(80));
+  if (state.values.messages.length === 6) {
+    // We are somewhat arbitrarily selecting a specific state based on the number of chat messages in the state.
+    toReplay = state;
+  }
+}
+```
+:::
+
+:::python
 ```
 Num Messages:  8 Next:  ()
 --------------------------------------------------------------------------------
@@ -213,6 +371,32 @@ Num Messages:  1 Next:  ('chatbot',)
 Num Messages:  0 Next:  ('__start__',)
 --------------------------------------------------------------------------------
 ```
+:::
+
+:::js
+```
+Num Messages:  8 Next:  []
+--------------------------------------------------------------------------------
+Num Messages:  7 Next:  ["chatbot"]
+--------------------------------------------------------------------------------
+Num Messages:  6 Next:  ["tools"]
+--------------------------------------------------------------------------------
+Num Messages:  5 Next:  ["chatbot"]
+--------------------------------------------------------------------------------
+Num Messages:  4 Next:  ["__start__"]
+--------------------------------------------------------------------------------
+Num Messages:  4 Next:  []
+--------------------------------------------------------------------------------
+Num Messages:  3 Next:  ["chatbot"]
+--------------------------------------------------------------------------------
+Num Messages:  2 Next:  ["tools"]
+--------------------------------------------------------------------------------
+Num Messages:  1 Next:  ["chatbot"]
+--------------------------------------------------------------------------------
+Num Messages:  0 Next:  ["__start__"]
+--------------------------------------------------------------------------------
+```
+:::
 
 Checkpoints are saved for every step of the graph. This __spans invocations__ so you can rewind across a full thread's history.
 
@@ -220,27 +404,74 @@ Checkpoints are saved for every step of the graph. This __spans invocations__ so
 
 Resume from the `to_replay` state, which is after the `chatbot` node in the second graph invocation. Resuming from this point will call the **action** node next.
 
+:::python
 ```python
 print(to_replay.next)
 print(to_replay.config)
 ```
+:::
 
+:::js
+```typescript
+console.log(toReplay.next);
+console.log(toReplay.config);
+```
+:::
+
+:::python
 ```
 ('tools',)
 {'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1efd43e3-0c1f-6c4e-8006-891877d65740'}}
 ```
+:::
+
+:::js
+```
+["tools"]
+{
+  "configurable": {
+    "thread_id": "1",
+    "checkpoint_ns": "",
+    "checkpoint_id": "1efd43e3-0c1f-6c4e-8006-891877d65740"
+  }
+}
+```
+:::
 
 ## 4. Load a state from a moment-in-time
 
 The checkpoint's `to_replay.config` contains a `checkpoint_id` timestamp. Providing this `checkpoint_id` value tells LangGraph's checkpointer to **load** the state from that moment in time.
 
-
+:::python
 ``` python
 # The `checkpoint_id` in the `to_replay.config` corresponds to a state we've persisted to our checkpointer.
 for event in graph.stream(None, to_replay.config, stream_mode="values"):
     if "messages" in event:
         event["messages"][-1].pretty_print()
 ```
+:::
+
+:::js
+```typescript
+// The `checkpoint_id` in the `toReplay.config` corresponds to a state we've persisted to our checkpointer.
+const timeTravel = await graph.stream(null, { ...toReplay.config, streamMode: "values" });
+
+for await (const event of timeTravel) {
+  if ("messages" in event) {
+    const lastMessage = event.messages[event.messages.length - 1];
+    console.log(`================================ ${lastMessage._getType()} Message =================================`);
+    console.log(lastMessage.content);
+    if ("tool_calls" in lastMessage && lastMessage.tool_calls?.length) {
+      console.log("Tool Calls:");
+      for (const toolCall of lastMessage.tool_calls) {
+        console.log(`  ${toolCall.name} (${toolCall.id})`);
+        console.log(`  Args: ${JSON.stringify(toolCall.args)}`);
+      }
+    }
+  }
+}
+```
+:::
 
 ```
 ================================== Ai Message ==================================
@@ -254,7 +485,7 @@ Tool Calls:
 ================================= Tool Message =================================
 Name: tavily_search_results_json
 
-[{"url": "https://towardsdatascience.com/building-autonomous-multi-tool-agents-with-gemini-2-0-and-langgraph-ad3d7bd5e79d", "content": "Building Autonomous Multi-Tool Agents with Gemini 2.0 and LangGraph | by Youness Mansar | Jan, 2025 | Towards Data Science Building Autonomous Multi-Tool Agents with Gemini 2.0 and LangGraph A practical tutorial with full code examples for building and running multi-tool agents Towards Data Science LLMs are remarkable — they can memorize vast amounts of information, answer general knowledge questions, write code, generate stories, and even fix your grammar. In this tutorial, we are going to build a simple LLM agent that is equipped with four tools that it can use to answer a user’s question. This Agent will have the following specifications: Follow Published in Towards Data Science --------------------------------- Your home for data science and AI. Follow Follow Follow"}, {"url": "https://github.com/anmolaman20/Tools_and_Agents", "content": "GitHub - anmolaman20/Tools_and_Agents: This repository provides resources for building AI agents using Langchain and Langgraph. This repository provides resources for building AI agents using Langchain and Langgraph. This repository provides resources for building AI agents using Langchain and Langgraph. This repository serves as a comprehensive guide for building AI-powered agents using Langchain and Langgraph. It provides hands-on examples, practical tutorials, and resources for developers and AI enthusiasts to master building intelligent systems and workflows. AI Agent Development: Gain insights into creating intelligent systems that think, reason, and adapt in real time. This repository is ideal for AI practitioners, developers exploring language models, or anyone interested in building intelligent systems. This repository provides resources for building AI agents using Langchain and Langgraph."}]
+[{"url": "https://towardsdatascience.com/building-autonomous-multi-tool-agents-with-gemini-2-0-and-langgraph-ad3d7bd5e79d", "content": "Building Autonomous Multi-Tool Agents with Gemini 2.0 and LangGraph | by Youness Mansar | Jan, 2025 | Towards Data Science Building Autonomous Multi-Tool Agents with Gemini 2.0 and LangGraph A practical tutorial with full code examples for building and running multi-tool agents Towards Data Science LLMs are remarkable — they can memorize vast amounts of information, answer general knowledge questions, write code, generate stories, and even fix your grammar. In this tutorial, we are going to build a simple LLM agent that is equipped with four tools that it can use to answer a user's question. This Agent will have the following specifications: Follow Published in Towards Data Science --------------------------------- Your home for data science and AI. Follow Follow Follow"}, {"url": "https://github.com/anmolaman20/Tools_and_Agents", "content": "GitHub - anmolaman20/Tools_and_Agents: This repository provides resources for building AI agents using Langchain and Langgraph. This repository provides resources for building AI agents using Langchain and Langgraph. This repository provides resources for building AI agents using Langchain and Langgraph. This repository serves as a comprehensive guide for building AI-powered agents using Langchain and Langgraph. It provides hands-on examples, practical tutorials, and resources for developers and AI enthusiasts to master building intelligent systems and workflows. AI Agent Development: Gain insights into creating intelligent systems that think, reason, and adapt in real time. This repository is ideal for AI practitioners, developers exploring language models, or anyone interested in building intelligent systems. This repository provides resources for building AI agents using Langchain and Langgraph."}]
 ================================== Ai Message ==================================
 
 Great idea! Building an autonomous agent with LangGraph is indeed an excellent way to apply and deepen your understanding of the technology. Based on the search results, I can provide you with some insights and resources to help you get started:

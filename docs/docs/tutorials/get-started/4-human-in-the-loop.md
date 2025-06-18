@@ -14,6 +14,7 @@ Starting with the existing code from the [Add memory to the chatbot](./3-add-mem
 
 Let's first select a chat model:
 
+:::python
 {!snippets/chat_model_tabs.md!}
 
 <!---
@@ -23,9 +24,21 @@ from langchain.chat_models import init_chat_model
 llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
 ```
 -->
+:::
+
+:::js
+```typescript
+import { ChatAnthropic } from "@langchain/anthropic";
+
+const llm = new ChatAnthropic({
+  model: "claude-3-5-sonnet-latest",
+});
+```
+:::
 
 We can now incorporate it into our `StateGraph` with an additional tool:
 
+:::python
 ``` python hl_lines="12 19 20 21 22 23"
 from typing import Annotated
 
@@ -75,6 +88,60 @@ graph_builder.add_conditional_edges(
 graph_builder.add_edge("tools", "chatbot")
 graph_builder.add_edge(START, "chatbot")
 ```
+:::
+
+:::js
+```typescript hl_lines="12 19 20 21 22 23"
+import { tool } from "@langchain/core/tools";
+import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
+import { z } from "zod";
+
+import { MemorySaver } from "@langchain/langgraph";
+import { StateGraph, START, END, MessagesAnnotation } from "@langchain/langgraph";
+import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
+
+import { interrupt, Command } from "@langchain/langgraph";
+
+const humanAssistance = tool(async ({ query }) => {
+  const humanResponse = interrupt({ query });
+  return humanResponse.data;
+}, {
+  name: "human_assistance",
+  description: "Request assistance from a human.",
+  schema: z.object({
+    query: z.string().describe("Human readable question for the human")
+  })
+});
+
+const searchTool = new TavilySearchResults({ maxResults: 2 });
+const tools = [searchTool, humanAssistance];
+const llmWithTools = llm.bindTools(tools);
+
+const chatbot = async (state: typeof MessagesAnnotation.State) => {
+  const message = await llmWithTools.invoke(state.messages);
+  // Because we will be interrupting during tool execution,
+  // we disable parallel tool calling to avoid repeating any
+  // tool invocations when we resume.
+  if (message.tool_calls && message.tool_calls.length > 1) {
+    throw new Error("Multiple tool calls not supported for this example");
+  }
+  return { messages: [message] };
+};
+
+const graphBuilder = new StateGraph(MessagesAnnotation)
+  .addNode("chatbot", chatbot);
+
+const toolNode = new ToolNode(tools);
+graphBuilder.addNode("tools", toolNode);
+
+graphBuilder.addConditionalEdges(
+  "chatbot",
+  toolsCondition,
+);
+graphBuilder.addEdge("tools", "chatbot");
+graphBuilder.addEdge(START, "chatbot");
+```
+:::
 
 !!! tip
 
@@ -84,16 +151,27 @@ graph_builder.add_edge(START, "chatbot")
 
 We compile the graph with a checkpointer, as before:
 
+:::python
 ```python
 memory = MemorySaver()
 
 graph = graph_builder.compile(checkpointer=memory)
 ```
+:::
+
+:::js
+```typescript
+const memory = new MemorySaver();
+
+const graph = graphBuilder.compile({ checkpointer: memory });
+```
+:::
 
 ## 3. Visualize the graph (optional)
 
 Visualizing the graph, you get the same layout as before – just with the added tool!
 
+:::python
 ``` python
 from IPython.display import Image, display
 
@@ -103,6 +181,19 @@ except Exception:
     # This requires some extra dependencies and is optional
     pass
 ```
+:::
+
+:::js
+```typescript
+import * as tslab from "tslab";
+
+const drawableGraph = graph.getGraph();
+const image = await drawableGraph.drawMermaidPng();
+const arrayBuffer = await image.arrayBuffer();
+
+await tslab.display.png(new Uint8Array(arrayBuffer));
+```
+:::
 
 ![chatbot-with-tools-diagram](chatbot-with-tools.png)
 
@@ -110,6 +201,7 @@ except Exception:
 
 Now, prompt the chatbot with a question that will engage the new `human_assistance` tool:
 
+:::python
 ```python
 user_input = "I need some expert guidance for building an AI agent. Could you request assistance for me?"
 config = {"configurable": {"thread_id": "1"}}
@@ -137,9 +229,49 @@ Tool Calls:
   Args:
     query: A user is requesting expert guidance for building an AI agent. Could you please provide some expert advice or resources on this topic?
 ```
+:::
+
+:::js
+```typescript
+const userInput = "I need some expert guidance for building an AI agent. Could you request assistance for me?";
+const config = { configurable: { thread_id: "1" }, streamMode: "values" as const };
+
+const events = graph.stream(
+  { messages: [{ role: "user", content: userInput }] },
+  config,
+);
+
+for await (const event of events) {
+  if (event.messages) {
+    const lastMessage = event.messages[event.messages.length - 1];
+    console.log(`================================ ${lastMessage.getType()} Message =================================`);
+    console.log(lastMessage.content);
+    if (lastMessage.tool_calls?.length) {
+      console.log("Tool Calls:");
+      lastMessage.tool_calls.forEach((call) => {
+        console.log(`  ${call.name} (${call.id})`);
+        console.log(`  Args: ${JSON.stringify(call.args)}`);
+      });
+    }
+  }
+}
+```
+
+```
+================================ Human Message =================================
+I need some expert guidance for building an AI agent. Could you request assistance for me?
+================================== Ai Message ==================================
+I'd be happy to request expert assistance for you regarding building an AI agent. Let me use the human assistance function to get you some expert guidance.
+
+Tool Calls:
+  human_assistance (toolu_01ABUqneqnuHNuo1vhfDFQCW)
+  Args: {"query":"A user is requesting expert guidance for building an AI agent. Could you please provide some expert advice or resources on this topic?"}
+```
+:::
 
 The chatbot generated a tool call, but then execution has been interrupted. If you inspect the graph state, you see that it stopped at the tools node:
 
+:::python
 ```python
 snapshot = graph.get_state(config)
 snapshot.next
@@ -148,7 +280,20 @@ snapshot.next
 ```
 ('tools',)
 ```
+:::
 
+:::js
+```typescript
+const snapshot = await graph.getState(config);
+console.log(snapshot.next);
+```
+
+```
+['tools']
+```
+:::
+
+:::python
 !!! info Additional information
 
     Take a closer look at the `human_assistance` tool:
@@ -162,11 +307,34 @@ snapshot.next
     ```
 
     Similar to Python's built-in `input()` function, calling `interrupt` inside the tool will pause execution. Progress is persisted based on the [checkpointer](../../concepts/persistence.md#checkpointer-libraries); so if it is persisting with Postgres, it can resume at any time as long as the database is alive. In this example, it is persisting with the in-memory checkpointer and can resume any time if the Python kernel is running.
+:::
+
+:::js
+!!! info Additional information
+
+    Take a closer look at the `human_assistance` tool:
+
+    ```typescript
+    const humanAssistance = tool(async ({ query }) => {
+      const humanResponse = interrupt({ query });
+      return humanResponse.data;
+    }, {
+      name: "human_assistance",
+      description: "Request assistance from a human.",
+      schema: z.object({
+        query: z.string().describe("Human readable question for the human")
+      })
+    });
+    ```
+
+    Similar to Python's built-in `input()` function, calling `interrupt` inside the tool will pause execution. Progress is persisted based on the [checkpointer](../../concepts/persistence.md#checkpointer-libraries); so if it is persisting with Postgres, it can resume at any time as long as the database is alive. In this example, it is persisting with the in-memory checkpointer and can resume any time if the JavaScript runtime is running.
+:::
 
 ## 5. Resume execution
 
 To resume execution, pass a [`Command`](../../concepts/low_level.md#command) object containing data expected by the tool. The format of this data can be customized based on needs. For this example, use a dict with a key `"data"`:
 
+:::python
 ``` python
 human_response = (
     "We, the experts are here to help! We'd recommend you check out LangGraph to build your agent."
@@ -214,6 +382,47 @@ LangGraph is likely a framework or library designed specifically for creating AI
 If you'd like more specific information about LangGraph or have any questions about this recommendation, please feel free to ask, and I can request further assistance from the experts.
 Output is truncated. View as a scrollable element or open in a text editor. Adjust cell output settings...
 ```
+:::
+
+:::js
+```typescript
+const humanResponse = 
+  "We, the experts are here to help! We'd recommend you check out LangGraph to build your agent." +
+  " It's much more reliable and extensible than simple autonomous agents.";
+
+const humanCommand = new Command({ resume: { data: humanResponse } });
+
+const resumeEvents = graph.stream(humanCommand, config);
+
+for await (const event of resumeEvents) {
+  if (event.messages) {
+    const lastMessage = event.messages[event.messages.length - 1];
+    console.log(`================================ ${lastMessage.getType()} Message =================================`);
+    console.log(lastMessage.content);
+  }
+}
+```
+
+```
+================================== Ai Message ==================================
+I'd be happy to request expert assistance for you regarding building an AI agent. Let me use the human assistance function to get you some expert guidance.
+================================= Tool Message =================================
+We, the experts are here to help! We'd recommend you check out LangGraph to build your agent. It's much more reliable and extensible than simple autonomous agents.
+================================== Ai Message ==================================
+Thank you for your patience. I've received some expert advice regarding your request for guidance on building an AI agent. Here's what the experts have suggested:
+
+The experts recommend that you look into LangGraph for building your AI agent. They mention that LangGraph is a more reliable and extensible option compared to simple autonomous agents.
+
+LangGraph is likely a framework or library designed specifically for creating AI agents with advanced capabilities. Here are a few points to consider based on this recommendation:
+
+1. Reliability: The experts emphasize that LangGraph is more reliable than simpler autonomous agent approaches. This could mean it has better stability, error handling, or consistent performance.
+
+2. Extensibility: LangGraph is described as more extensible, which suggests that it probably offers a flexible architecture that allows you to easily add new features or modify existing ones as your agent's requirements evolve.
+
+3. Advanced capabilities: Given that it's recommended over "simple autonomous agents," LangGraph likely provides more sophisticated tools and techniques for building complex AI agents.
+...
+```
+:::
 
 The input has been received and processed as a tool message. Review this call's [LangSmith trace](https://smith.langchain.com/public/9f0f87e3-56a7-4dde-9c76-b71675624e91/r) to see the exact work that was done in the above call. Notice that the state is loaded in the first step so that our chatbot can continue where it left off.
 
@@ -221,6 +430,7 @@ The input has been received and processed as a tool message. Review this call's 
 
 Check out the code snippet below to review the graph from this tutorial:
 
+:::python
 {!snippets/chat_model_tabs.md!}
 
 ```python
@@ -271,6 +481,64 @@ graph_builder.add_edge(START, "chatbot")
 memory = MemorySaver()
 graph = graph_builder.compile(checkpointer=memory)
 ```
+:::
+
+:::js
+```typescript
+import { tool } from "@langchain/core/tools";
+import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
+import { z } from "zod";
+import { ChatAnthropic } from "@langchain/anthropic";
+
+import { MemorySaver } from "@langchain/langgraph";
+import { StateGraph, START, END, MessagesAnnotation } from "@langchain/langgraph";
+import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
+import { interrupt, Command } from "@langchain/langgraph";
+
+const llm = new ChatAnthropic({
+  model: "claude-3-5-sonnet-latest",
+});
+
+const humanAssistance = tool(async ({ query }) => {
+  const humanResponse = interrupt({ query });
+  return humanResponse.data;
+}, {
+  name: "human_assistance",
+  description: "Request assistance from a human.",
+  schema: z.object({
+    query: z.string().describe("Human readable question for the human")
+  })
+});
+
+const searchTool = new TavilySearchResults({ maxResults: 2 });
+const tools = [searchTool, humanAssistance];
+const llmWithTools = llm.bindTools(tools);
+
+const chatbot = async (state: typeof MessagesAnnotation.State) => {
+  const message = await llmWithTools.invoke(state.messages);
+  if (message.tool_calls && message.tool_calls.length > 1) {
+    throw new Error("Multiple tool calls not supported for this example");
+  }
+  return { messages: [message] };
+};
+
+const graphBuilder = new StateGraph(MessagesAnnotation)
+  .addNode("chatbot", chatbot);
+
+const toolNode = new ToolNode(tools);
+graphBuilder.addNode("tools", toolNode);
+
+graphBuilder.addConditionalEdges(
+  "chatbot",
+  toolsCondition,
+);
+graphBuilder.addEdge("tools", "chatbot");
+graphBuilder.addEdge(START, "chatbot");
+
+const memory = new MemorySaver();
+const graph = graphBuilder.compile({ checkpointer: memory });
+```
+:::
 
 ## Next steps
 
