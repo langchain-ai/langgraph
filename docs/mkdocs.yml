@@ -95,7 +95,7 @@ nav:
       - Agent: agents/agents.md
       - Local server: tutorials/langgraph-platform/local-server.md
       - Deployment: cloud/quick_start.md
-    - Key concepts:
+    - General concepts:
       - Common patterns:
         - Agent architectures: concepts/agentic_concepts.md
         - Workflows & agents: tutorials/workflows.md
