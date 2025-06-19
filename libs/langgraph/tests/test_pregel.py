@@ -46,7 +46,7 @@ from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, START
 from langgraph.errors import InvalidUpdateError, ParentCommand
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, StateGraph
-from langgraph.graph.message import MessagesState, add_messages
+from langgraph.graph.message import MessageGraph, MessagesState, add_messages
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import (
     GraphRecursionError,
@@ -159,7 +159,7 @@ def test_checkpoint_errors() -> None:
             raise ValueError("Faulty put_writes")
 
     class FaultyVersionCheckpointer(InMemorySaver):
-        def get_next_version(self, current: Optional[int]) -> int:
+        def get_next_version(self, current: Optional[int], channel: None) -> int:
             raise ValueError("Faulty get_next_version")
 
     def logic(inp: str) -> str:
@@ -904,7 +904,6 @@ def test_pending_writes_resume(
         "parents": {},
         "source": "loop",
         "step": 0,
-        "thread_id": "1",
     }
     # get_state with checkpoint_id should not apply any pending writes
     state = graph.get_state(state.config)
@@ -994,7 +993,6 @@ def test_pending_writes_resume(
             "parents": {},
             "step": 1,
             "source": "loop",
-            "thread_id": "1",
         },
         parent_config={
             "configurable": {
@@ -1042,7 +1040,6 @@ def test_pending_writes_resume(
             "parents": {},
             "step": 0,
             "source": "loop",
-            "thread_id": "1",
         },
         parent_config={
             "configurable": {
@@ -1094,7 +1091,6 @@ def test_pending_writes_resume(
             "parents": {},
             "step": -1,
             "source": "input",
-            "thread_id": "1",
         },
         parent_config=None,
         pending_writes=UnsortedSequence(
@@ -2058,7 +2054,6 @@ def test_in_one_fan_out_state_graph_waiting_edge(
             "parents": {},
             "source": "update",
             "step": 4,
-            "thread_id": "2",
         },
         parent_config=expected_parent_config,
         interrupts=(),
@@ -2328,7 +2323,6 @@ def test_in_one_fan_out_state_graph_defer_node(
             "parents": {},
             "source": "update",
             "step": 4,
-            "thread_id": "2",
         },
         parent_config=expected_parent_config,
         interrupts=(),
@@ -3276,6 +3270,57 @@ def test_subgraph_checkpoint_true(
         ),
     ]
 
+    checkpoints = list(app.get_state_history(config))
+    if checkpoint_during:
+        assert len(checkpoints) == 4
+    else:
+        assert len(checkpoints) == 1
+
+
+def test_subgraph_checkpoint_during_false_inherited() -> None:
+    sync_checkpointer = InMemorySaver()
+
+    class InnerState(TypedDict):
+        my_key: Annotated[str, operator.add]
+        my_other_key: str
+
+    def inner_1(state: InnerState):
+        return {"my_key": " got here", "my_other_key": state["my_key"]}
+
+    def inner_2(state: InnerState):
+        return {"my_key": " and there"}
+
+    inner = StateGraph(InnerState)
+    inner.add_node("inner_1", inner_1)
+    inner.add_node("inner_2", inner_2)
+    inner.add_edge("inner_1", "inner_2")
+    inner.set_entry_point("inner_1")
+    inner.set_finish_point("inner_2")
+
+    class State(TypedDict):
+        my_key: str
+
+    inner_app = inner.compile(checkpointer=sync_checkpointer)
+    graph = StateGraph(State)
+    graph.add_node("inner", inner_app)
+    graph.add_edge(START, "inner")
+    graph.add_conditional_edges(
+        "inner", lambda s: "inner" if s["my_key"].count("there") < 2 else END
+    )
+    app = graph.compile(checkpointer=sync_checkpointer)
+    for checkpoint_during in [True, False]:
+        thread_id = str(uuid.uuid4())
+        config = {"configurable": {"thread_id": thread_id}}
+        app.invoke(
+            {"my_key": ""}, config, subgraphs=True, checkpoint_during=checkpoint_during
+        )
+        if checkpoint_during:
+            checkpoints = list(sync_checkpointer.list(config))
+            assert len(checkpoints) == 12
+        else:
+            checkpoints = list(sync_checkpointer.list(config))
+            assert len(checkpoints) == 1
+
 
 def test_subgraph_checkpoint_true_interrupt(
     sync_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
@@ -3879,7 +3924,6 @@ def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:
 
     # assert that checkpoint metadata contains the run's configurable fields
     chkpnt_metadata_1 = sync_checkpointer.get_tuple(config).metadata
-    assert chkpnt_metadata_1["thread_id"] == "1"
     assert chkpnt_metadata_1["test_config_1"] == "foo"
     assert chkpnt_metadata_1["test_config_2"] == "bar"
 
@@ -3888,7 +3932,6 @@ def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:
     # on how the graph is constructed.
     chkpnt_tuples_1 = sync_checkpointer.list(config)
     for chkpnt_tuple in chkpnt_tuples_1:
-        assert chkpnt_tuple.metadata["thread_id"] == "1"
         assert chkpnt_tuple.metadata["test_config_1"] == "foo"
         assert chkpnt_tuple.metadata["test_config_2"] == "bar"
 
@@ -3908,7 +3951,6 @@ def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:
 
     # assert that checkpoint metadata contains the run's configurable fields
     chkpnt_metadata_2 = sync_checkpointer.get_tuple(config).metadata
-    assert chkpnt_metadata_2["thread_id"] == "2"
     assert chkpnt_metadata_2["test_config_3"] == "foo"
     assert chkpnt_metadata_2["test_config_4"] == "bar"
 
@@ -3926,7 +3968,6 @@ def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:
 
     # assert that checkpoint metadata contains the run's configurable fields
     chkpnt_metadata_3 = sync_checkpointer.get_tuple(config).metadata
-    assert chkpnt_metadata_3["thread_id"] == "2"
     assert chkpnt_metadata_3["test_config_3"] == "foo"
     assert chkpnt_metadata_3["test_config_4"] == "bar"
 
@@ -3935,7 +3976,6 @@ def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:
     # on how the graph is constructed.
     chkpnt_tuples_2 = sync_checkpointer.list(config)
     for chkpnt_tuple in chkpnt_tuples_2:
-        assert chkpnt_tuple.metadata["thread_id"] == "2"
         assert chkpnt_tuple.metadata["test_config_3"] == "foo"
         assert chkpnt_tuple.metadata["test_config_4"] == "bar"
 
@@ -3943,14 +3983,9 @@ def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:
 def test_remove_message_via_state_update(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    from langchain_core.messages import (
-        AIMessage,
-        AnyMessage,
-        HumanMessage,
-        RemoveMessage,
-    )
+    from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
-    workflow = StateGraph(Annotated[list[AnyMessage], add_messages])
+    workflow = MessageGraph()
     workflow.add_node(
         "chatbot",
         lambda state: [
@@ -3981,14 +4016,9 @@ def test_remove_message_via_state_update(
 
 
 def test_remove_message_from_node():
-    from langchain_core.messages import (
-        AIMessage,
-        AnyMessage,
-        HumanMessage,
-        RemoveMessage,
-    )
+    from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
-    workflow = StateGraph(Annotated[list[AnyMessage], add_messages])
+    workflow = MessageGraph()
     workflow.add_node(
         "chatbot",
         lambda state: [
@@ -4300,7 +4330,7 @@ def test_store_injected(
     builder = StateGraph(State)
     builder.add_node("node", Node())
     builder.add_edge("__start__", "node")
-    N = 500
+    N = 50
     M = 1
 
     for i in range(N):
@@ -4575,11 +4605,14 @@ def test_debug_nested_subgraphs(
 
         return clean_config
 
-    for checkpoint_events, checkpoint_history in zip(
-        stream_ns.values(), history_ns.values()
+    for checkpoint_events, checkpoint_history, ns in zip(
+        stream_ns.values(), history_ns.values(), stream_ns.keys()
     ):
         if not checkpoint_during:
             checkpoint_events = checkpoint_events[-1:]
+            if ns:  # Save no checkpoints for subgraphs when checkpoint_during=False
+                assert not checkpoint_history
+                continue
         assert len(checkpoint_events) == len(checkpoint_history)
         for stream, history in zip(checkpoint_events, checkpoint_history):
             assert stream["values"] == history.values
@@ -4805,7 +4838,6 @@ def test_parent_command(
         },
         metadata={
             "source": "loop",
-            "thread_id": "1",
             "step": 1,
             "parents": {},
         },
@@ -5618,7 +5650,6 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                     "parents": {},
                     "source": "input",
                     "step": -1,
-                    "thread_id": AnyStr(),
                 },
                 "next": [
                     "graph",

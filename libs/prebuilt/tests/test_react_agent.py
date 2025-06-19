@@ -91,7 +91,6 @@ def test_no_prompt(sync_checkpointer: BaseCheckpointSaver, version: str) -> None
         "parents": {},
         "source": "loop",
         "step": 1,
-        "thread_id": "123",
     }
     assert saved.pending_writes == []
 
@@ -118,7 +117,6 @@ async def test_no_prompt_async(async_checkpointer: BaseCheckpointSaver) -> None:
         "parents": {},
         "source": "loop",
         "step": 1,
-        "thread_id": "123",
     }
     assert saved.pending_writes == []
 
@@ -1089,14 +1087,17 @@ def test_react_with_subgraph_tools(
         return {"result": state["a"] + state["b"]}
 
     add_subgraph = (
-        StateGraph(State, output=Output).add_node(add).add_edge(START, "add").compile()
+        StateGraph(State, output_schema=Output)
+        .add_node(add)
+        .add_edge(START, "add")
+        .compile()
     )
 
     def multiply(state):
         return {"result": state["a"] * state["b"]}
 
     multiply_subgraph = (
-        StateGraph(State, output=Output)
+        StateGraph(State, output_schema=Output)
         .add_node(multiply)
         .add_edge(START, "multiply")
         .compile()

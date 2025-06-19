@@ -473,6 +473,23 @@ If the checkpointer is used with asynchronous graph execution (i.e. executing th
 When checkpointers save the graph state, they need to serialize the channel values in the state. This is done using serializer objects.
 `langgraph_checkpoint` defines [protocol][langgraph.checkpoint.serde.base.SerializerProtocol] for implementing serializers provides a default implementation ([JsonPlusSerializer][langgraph.checkpoint.serde.jsonplus.JsonPlusSerializer]) that handles a wide variety of types, including LangChain and LangGraph primitives, datetimes, enums and more.
 
+#### Serialization with `pickle`
+
+The default serializer, [`JsonPlusSerializer`][langgraph.checkpoint.serde.jsonplus.JsonPlusSerializer], uses ormsgpack and JSON under the hood, which is not suitable for all types of objects.
+
+If you want to fallback to pickle for objects not currently supported by our msgpack encoder (such as Pandas dataframes),
+you can use the `pickle_fallback` argument of the `JsonPlusSerializer`:
+
+```python
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+
+# ... Define the graph ...
+graph.compile(
+    checkpointer=MemorySaver(serde=JsonPlusSerializer(pickle_fallback=True))
+)
+```
+
 #### Encryption
 
 Checkpointers can optionally encrypt all persisted state. To enable this, pass an instance of [`EncryptedSerializer`][langgraph.checkpoint.serde.encrypted.EncryptedSerializer] to the `serde` argument of any `BaseCheckpointSaver` implementation. The easiest way to create an encrypted serializer is via [`from_pycryptodome_aes`][langgraph.checkpoint.serde.encrypted.EncryptedSerializer.from_pycryptodome_aes], which reads the AES key from the `LANGGRAPH_AES_KEY` environment variable (or accepts a `key` argument):

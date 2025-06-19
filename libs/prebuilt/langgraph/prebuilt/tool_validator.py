@@ -2,7 +2,7 @@
 in a langchain graph. It applies a pydantic schema to tool_calls in the models' outputs,
 and returns a ToolMessage with the validated content. If the schema is not valid, it
 returns a ToolMessage with the error message. The ValidationNode can be used in a
-StateGraph with a "messages" key. If multiple tool calls are
+StateGraph with a "messages" key or in a MessageGraph. If multiple tool calls are
 requested, they will be run in parallel.
 """
 
@@ -49,7 +49,7 @@ def _default_format_error(
 class ValidationNode(RunnableCallable):
     """A node that validates all tools requests from the last AIMessage.
 
-    It can be used in StateGraph with a "messages" key.
+    It can be used either in StateGraph with a "messages" key or in MessageGraph.
 
     !!! note
 

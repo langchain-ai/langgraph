@@ -320,7 +320,7 @@ wheels = [
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.0.26"
+version = "2.1.0"
 source = { editable = "../checkpoint" }
 dependencies = [
     { name = "langchain-core" },
@@ -339,6 +339,8 @@ dev = [
     { name = "dataclasses-json" },
     { name = "mypy" },
     { name = "numpy" },
+    { name = "pandas" },
+    { name = "pandas-stubs", specifier = ">=2.2.2.240807" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },

@@ -83,7 +83,7 @@ from langgraph.types import (
 )
 from langgraph.utils.config import merge_configs, patch_config
 
-GetNextVersion = Callable[[Optional[V]], V]
+GetNextVersion = Callable[[Optional[V], None], V]
 SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
 
 
@@ -214,7 +214,7 @@ def local_read(
     return values
 
 
-def increment(current: int | None) -> int:
+def increment(current: int | None, channel: None) -> int:
     """Default channel versioning function, increments the current int version."""
     return current + 1 if current is not None else 1
 
@@ -265,7 +265,8 @@ def apply_writes(
         next_version = get_next_version(
             max(checkpoint["channel_versions"].values())
             if checkpoint["channel_versions"]
-            else None
+            else None,
+            None,
         )
 
     # Consume all channels that were read
@@ -1034,7 +1035,7 @@ def _proc_input(
             else:
                 return MISSING
         else:
-            val = managed[proc.channels].get(scratchpad)
+            return MISSING
     else:
         raise RuntimeError(
             f"Invalid channels type, expected list or dict, got {proc.channels}"

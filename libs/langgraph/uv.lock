@@ -1201,7 +1201,7 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "0.4.7"
+version = "0.5.0rc1"
 source = { editable = "." }
 dependencies = [
     { name = "langchain-core" },
@@ -1310,7 +1310,7 @@ wheels = [
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.0.26"
+version = "2.1.0"
 source = { editable = "../checkpoint" }
 dependencies = [
     { name = "langchain-core" },
@@ -1329,6 +1329,8 @@ dev = [
     { name = "dataclasses-json" },
     { name = "mypy" },
     { name = "numpy" },
+    { name = "pandas" },
+    { name = "pandas-stubs", specifier = ">=2.2.2.240807" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
@@ -1421,7 +1423,7 @@ inmem = [
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "0.2.2"
+version = "0.5.0rc0"
 source = { editable = "../prebuilt" }
 dependencies = [
     { name = "langchain-core" },

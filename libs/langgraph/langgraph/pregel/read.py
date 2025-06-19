@@ -12,12 +12,11 @@ from langchain_core.runnables import Runnable, RunnableConfig
 
 from langgraph.constants import CONF, CONFIG_KEY_READ
 from langgraph.pregel.protocol import PregelProtocol
-from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.utils import find_subgraph_pregel
 from langgraph.pregel.write import ChannelWrite
-from langgraph.types import CachePolicy
+from langgraph.types import CachePolicy, RetryPolicy
 from langgraph.utils.config import merge_configs
-from langgraph.utils.runnable import RunnableCallable, RunnableSeq, coerce_to_runnable
+from langgraph.utils.runnable import RunnableCallable, RunnableSeq
 
 READ_TYPE = Callable[[Union[str, Sequence[str]], bool], Union[Any, dict[str, Any]]]
 INPUT_CACHE_KEY_TYPE = tuple[Callable[..., Any], tuple[str, ...]]
@@ -96,7 +95,7 @@ class ChannelRead(RunnableCallable):
 DEFAULT_BOUND = RunnableCallable(lambda input: input)
 
 
-class PregelNode(Runnable):
+class PregelNode:
     """A node in a Pregel graph. This won't be invoked as a runnable by the graph
     itself, but instead acts as a container for the components necessary to make
     a PregelExecutableTask for a node."""
@@ -226,38 +225,6 @@ class PregelNode(Runnable):
             if isinstance(self.channels, list)
             else (self.channels,),
         )
-
-    def __or__(
-        self,
-        other: Runnable[Any, Any]
-        | Callable[[Any], Any]
-        | Mapping[str, Runnable[Any, Any] | Callable[[Any], Any]],
-    ) -> PregelNode:
-        if isinstance(other, Runnable) and ChannelWrite.is_writer(other):
-            return self.copy(update=dict(writers=[*self.writers, other]))
-        elif self.bound is DEFAULT_BOUND:
-            return self.copy(
-                update=dict(bound=coerce_to_runnable(other, name=None, trace=True))
-            )
-        else:
-            return self.copy(update=dict(bound=RunnableSeq(self.bound, other)))
-
-    def pipe(
-        self,
-        *others: Runnable[Any, Any] | Callable[[Any], Any],
-        name: str | None = None,
-    ) -> PregelNode:
-        for other in others:
-            self = self | other
-        return self
-
-    def __ror__(
-        self,
-        other: Runnable[Any, Any]
-        | Callable[[Any], Any]
-        | Mapping[str, Runnable[Any, Any] | Callable[[Any], Any]],
-    ) -> PregelNode:
-        raise NotImplementedError()
 
     def invoke(
         self,
