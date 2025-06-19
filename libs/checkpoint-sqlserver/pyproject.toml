@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "langgraph-checkpoint-sqlserver"
 version = "0.0.1"
 description = "Library with a SQLServer implementation of LangGraph checkpoint saver."
-authors = ["Louis Auneau <louis.auneau.c@gmail.com>"]
+authors = []
 requires-python = ">=3.9"
 readme = "README.md"
 license = "MIT"
