@@ -14,7 +14,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         # Only lint on the min and max supported Python versions.
@@ -24,9 +24,10 @@ jobs:
         # GitHub rate-limits how many jobs can be running at any one time.
         # Starting new jobs is also relatively slow,
         # so linting on fewer versions makes CI faster.
+        os: [ubuntu-latest, windows-latest]
         python-version:
           - "3.12"
-    name: "lint #${{ matrix.python-version }}"
+    name: "lint ${{ matrix.os }} #${{ matrix.python-version }}"
     steps:
       - uses: actions/checkout@v4
       - name: Get changed files
