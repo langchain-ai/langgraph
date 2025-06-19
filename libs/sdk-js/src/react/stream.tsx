@@ -616,7 +616,11 @@ export interface UseStream<
   /**
    * Join an active stream.
    */
-  joinStream: (runId: string, lastEventId?: string, options?: { streamMode?: StreamMode | StreamMode[] }) => Promise<void>;
+  joinStream: (
+    runId: string,
+    lastEventId?: string,
+    options?: { streamMode?: StreamMode | StreamMode[] },
+  ) => Promise<void>;
 }
 
 type ConfigWithConfigurable<ConfigurableType extends Record<string, unknown>> =
@@ -951,7 +955,11 @@ export function useStream<
     }
   }
 
-  const joinStream = async (runId: string, lastEventId?: string, options?: { streamMode?: StreamMode | StreamMode[]; }) => {
+  const joinStream = async (
+    runId: string,
+    lastEventId?: string,
+    options?: { streamMode?: StreamMode | StreamMode[] },
+  ) => {
     lastEventId ??= "-1";
     if (!threadId) return;
     await consumeStream(async (signal: AbortSignal) => {
