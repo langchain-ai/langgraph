@@ -159,7 +159,7 @@ def test_checkpoint_errors() -> None:
             raise ValueError("Faulty put_writes")
 
     class FaultyVersionCheckpointer(InMemorySaver):
-        def get_next_version(self, current: Optional[int]) -> int:
+        def get_next_version(self, current: Optional[int], channel: None) -> int:
             raise ValueError("Faulty get_next_version")
 
     def logic(inp: str) -> str:
@@ -904,7 +904,6 @@ def test_pending_writes_resume(
         "parents": {},
         "source": "loop",
         "step": 0,
-        "thread_id": "1",
     }
     # get_state with checkpoint_id should not apply any pending writes
     state = graph.get_state(state.config)
@@ -994,7 +993,6 @@ def test_pending_writes_resume(
             "parents": {},
             "step": 1,
             "source": "loop",
-            "thread_id": "1",
         },
         parent_config={
             "configurable": {
@@ -1042,7 +1040,6 @@ def test_pending_writes_resume(
             "parents": {},
             "step": 0,
             "source": "loop",
-            "thread_id": "1",
         },
         parent_config={
             "configurable": {
@@ -1094,7 +1091,6 @@ def test_pending_writes_resume(
             "parents": {},
             "step": -1,
             "source": "input",
-            "thread_id": "1",
         },
         parent_config=None,
         pending_writes=UnsortedSequence(
@@ -2058,7 +2054,6 @@ def test_in_one_fan_out_state_graph_waiting_edge(
             "parents": {},
             "source": "update",
             "step": 4,
-            "thread_id": "2",
         },
         parent_config=expected_parent_config,
         interrupts=(),
@@ -2328,7 +2323,6 @@ def test_in_one_fan_out_state_graph_defer_node(
             "parents": {},
             "source": "update",
             "step": 4,
-            "thread_id": "2",
         },
         parent_config=expected_parent_config,
         interrupts=(),
@@ -3930,7 +3924,6 @@ def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:
 
     # assert that checkpoint metadata contains the run's configurable fields
     chkpnt_metadata_1 = sync_checkpointer.get_tuple(config).metadata
-    assert chkpnt_metadata_1["thread_id"] == "1"
     assert chkpnt_metadata_1["test_config_1"] == "foo"
     assert chkpnt_metadata_1["test_config_2"] == "bar"
 
@@ -3939,7 +3932,6 @@ def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:
     # on how the graph is constructed.
     chkpnt_tuples_1 = sync_checkpointer.list(config)
     for chkpnt_tuple in chkpnt_tuples_1:
-        assert chkpnt_tuple.metadata["thread_id"] == "1"
         assert chkpnt_tuple.metadata["test_config_1"] == "foo"
         assert chkpnt_tuple.metadata["test_config_2"] == "bar"
 
@@ -3959,7 +3951,6 @@ def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:
 
     # assert that checkpoint metadata contains the run's configurable fields
     chkpnt_metadata_2 = sync_checkpointer.get_tuple(config).metadata
-    assert chkpnt_metadata_2["thread_id"] == "2"
     assert chkpnt_metadata_2["test_config_3"] == "foo"
     assert chkpnt_metadata_2["test_config_4"] == "bar"
 
@@ -3977,7 +3968,6 @@ def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:
 
     # assert that checkpoint metadata contains the run's configurable fields
     chkpnt_metadata_3 = sync_checkpointer.get_tuple(config).metadata
-    assert chkpnt_metadata_3["thread_id"] == "2"
     assert chkpnt_metadata_3["test_config_3"] == "foo"
     assert chkpnt_metadata_3["test_config_4"] == "bar"
 
@@ -3986,7 +3976,6 @@ def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:
     # on how the graph is constructed.
     chkpnt_tuples_2 = sync_checkpointer.list(config)
     for chkpnt_tuple in chkpnt_tuples_2:
-        assert chkpnt_tuple.metadata["thread_id"] == "2"
         assert chkpnt_tuple.metadata["test_config_3"] == "foo"
         assert chkpnt_tuple.metadata["test_config_4"] == "bar"
 
@@ -4849,7 +4838,6 @@ def test_parent_command(
         },
         metadata={
             "source": "loop",
-            "thread_id": "1",
             "step": 1,
             "parents": {},
         },
@@ -5662,7 +5650,6 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                     "parents": {},
                     "source": "input",
                     "step": -1,
-                    "thread_id": AnyStr(),
                 },
                 "next": [
                     "graph",

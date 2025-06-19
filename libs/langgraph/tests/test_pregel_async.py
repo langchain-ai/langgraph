@@ -103,7 +103,7 @@ async def test_checkpoint_errors() -> None:
             raise ValueError("Faulty put_writes")
 
     class FaultyVersionCheckpointer(InMemorySaver):
-        def get_next_version(self, current: Optional[int]) -> int:
+        def get_next_version(self, current: Optional[int], channel: None) -> int:
             raise ValueError("Faulty get_next_version")
 
     def logic(inp: str) -> str:
@@ -612,7 +612,6 @@ async def test_dynamic_interrupt(async_checkpointer: BaseCheckpointSaver) -> Non
             "parents": {},
             "source": "loop",
             "step": 0,
-            "thread_id": "1",
         },
     ]
     tup = await tool_two.checkpointer.aget_tuple(thread1)
@@ -639,7 +638,6 @@ async def test_dynamic_interrupt(async_checkpointer: BaseCheckpointSaver) -> Non
             "parents": {},
             "source": "loop",
             "step": 0,
-            "thread_id": "1",
         },
         parent_config=None,
         interrupts=(
@@ -665,7 +663,6 @@ async def test_dynamic_interrupt(async_checkpointer: BaseCheckpointSaver) -> Non
             "parents": {},
             "source": "update",
             "step": 1,
-            "thread_id": "1",
         },
         parent_config=(
             [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][-1].config
@@ -785,7 +782,6 @@ async def test_dynamic_interrupt_subgraph(
             "parents": {},
             "source": "loop",
             "step": 0,
-            "thread_id": "1",
         },
     ]
     tup = await tool_two.checkpointer.aget_tuple(thread1)
@@ -818,7 +814,6 @@ async def test_dynamic_interrupt_subgraph(
             "parents": {},
             "source": "loop",
             "step": 0,
-            "thread_id": "1",
         },
         parent_config=None,
         interrupts=(
@@ -844,7 +839,6 @@ async def test_dynamic_interrupt_subgraph(
             "parents": {},
             "source": "update",
             "step": 1,
-            "thread_id": "1",
         },
         parent_config=(
             [c async for c in tool_two.checkpointer.alist(thread1root, limit=2)][
@@ -963,7 +957,6 @@ async def test_copy_checkpoint(async_checkpointer: BaseCheckpointSaver) -> None:
             "parents": {},
             "source": "loop",
             "step": 0,
-            "thread_id": "1",
         },
     ]
 
@@ -1000,7 +993,6 @@ async def test_copy_checkpoint(async_checkpointer: BaseCheckpointSaver) -> None:
             "parents": {},
             "source": "loop",
             "step": 0,
-            "thread_id": "1",
         },
         parent_config=None,
         interrupts=(
@@ -1039,7 +1031,6 @@ async def test_copy_checkpoint(async_checkpointer: BaseCheckpointSaver) -> None:
             "parents": {},
             "source": "fork",
             "step": 1,
-            "thread_id": "1",
         },
         parent_config=(
             [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][-1].config
@@ -1217,7 +1208,6 @@ async def test_cancel_graph_astream(async_checkpointer: BaseCheckpointSaver) -> 
         "parents": {},
         "source": "loop",
         "step": 0,
-        "thread_id": "1",
     }
 
 
@@ -1292,7 +1282,6 @@ async def test_cancel_graph_astream_events_v2(
         "parents": {},
         "source": "loop",
         "step": 1,
-        "thread_id": "2",
     }
 
 
@@ -1815,7 +1804,6 @@ async def test_pending_writes_resume(
         "parents": {},
         "source": "loop",
         "step": 0,
-        "thread_id": "1",
     }
     # get_state with checkpoint_id should not apply any pending writes
     state = await graph.aget_state(state.config)
@@ -1905,7 +1893,6 @@ async def test_pending_writes_resume(
             "parents": {},
             "step": 1,
             "source": "loop",
-            "thread_id": "1",
         },
         parent_config={
             "configurable": {
@@ -1953,7 +1940,6 @@ async def test_pending_writes_resume(
             "parents": {},
             "step": 0,
             "source": "loop",
-            "thread_id": "1",
         },
         parent_config={
             "configurable": {
@@ -2001,7 +1987,6 @@ async def test_pending_writes_resume(
             "parents": {},
             "step": -1,
             "source": "input",
-            "thread_id": "1",
         },
         parent_config=None,
         pending_writes=UnsortedSequence(
@@ -2601,7 +2586,6 @@ async def test_send_dedupe_on_resume(
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 4,
                 "parents": {},
             },
@@ -2637,7 +2621,6 @@ async def test_send_dedupe_on_resume(
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 3,
                 "parents": {},
             },
@@ -2680,7 +2663,6 @@ async def test_send_dedupe_on_resume(
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 2,
                 "parents": {},
             },
@@ -2735,7 +2717,6 @@ async def test_send_dedupe_on_resume(
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 1,
                 "parents": {},
             },
@@ -2790,7 +2771,6 @@ async def test_send_dedupe_on_resume(
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 0,
                 "parents": {},
             },
@@ -2827,7 +2807,6 @@ async def test_send_dedupe_on_resume(
             },
             metadata={
                 "source": "input",
-                "thread_id": "1",
                 "step": -1,
                 "parents": {},
             },
@@ -3006,7 +2985,6 @@ async def test_send_react_interrupt(async_checkpointer: BaseCheckpointSaver) -> 
             "step": 1,
             "source": "loop",
             "parents": {},
-            "thread_id": "2",
         },
         created_at=AnyStr(),
         parent_config=None,
@@ -3052,7 +3030,6 @@ async def test_send_react_interrupt(async_checkpointer: BaseCheckpointSaver) -> 
             "step": 2,
             "source": "update",
             "parents": {},
-            "thread_id": "2",
         },
         created_at=AnyStr(),
         parent_config=(
@@ -3130,7 +3107,6 @@ async def test_send_react_interrupt(async_checkpointer: BaseCheckpointSaver) -> 
             "step": 1,
             "source": "loop",
             "parents": {},
-            "thread_id": "3",
         },
         created_at=AnyStr(),
         parent_config=None,
@@ -3197,7 +3173,6 @@ async def test_send_react_interrupt(async_checkpointer: BaseCheckpointSaver) -> 
             "step": 2,
             "source": "update",
             "parents": {},
-            "thread_id": "3",
         },
         created_at=AnyStr(),
         parent_config=(
@@ -3395,7 +3370,6 @@ async def test_send_react_interrupt_control(
             "step": 1,
             "source": "loop",
             "parents": {},
-            "thread_id": "2",
         },
         created_at=AnyStr(),
         parent_config=None,
@@ -3441,7 +3415,6 @@ async def test_send_react_interrupt_control(
             "step": 2,
             "source": "update",
             "parents": {},
-            "thread_id": "2",
         },
         created_at=AnyStr(),
         parent_config=(
@@ -4387,7 +4360,6 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
             "parents": {},
             "source": "loop",
             "step": 4,
-            "thread_id": "1",
         },
         created_at=AnyStr(),
         parent_config=(
@@ -5646,7 +5618,6 @@ async def test_checkpoint_metadata(async_checkpointer: BaseCheckpointSaver) -> N
 
     # assert that checkpoint metadata contains the run's configurable fields
     chkpnt_metadata_1 = (await async_checkpointer.aget_tuple(config)).metadata
-    assert chkpnt_metadata_1["thread_id"] == "1"
     assert chkpnt_metadata_1["test_config_1"] == "foo"
     assert chkpnt_metadata_1["test_config_2"] == "bar"
 
@@ -5655,7 +5626,6 @@ async def test_checkpoint_metadata(async_checkpointer: BaseCheckpointSaver) -> N
     # on how the graph is constructed.
     chkpnt_tuples_1 = async_checkpointer.alist(config)
     async for chkpnt_tuple in chkpnt_tuples_1:
-        assert chkpnt_tuple.metadata["thread_id"] == "1"
         assert chkpnt_tuple.metadata["test_config_1"] == "foo"
         assert chkpnt_tuple.metadata["test_config_2"] == "bar"
 
@@ -5675,7 +5645,6 @@ async def test_checkpoint_metadata(async_checkpointer: BaseCheckpointSaver) -> N
 
     # assert that checkpoint metadata contains the run's configurable fields
     chkpnt_metadata_2 = (await async_checkpointer.aget_tuple(config)).metadata
-    assert chkpnt_metadata_2["thread_id"] == "2"
     assert chkpnt_metadata_2["test_config_3"] == "foo"
     assert chkpnt_metadata_2["test_config_4"] == "bar"
 
@@ -5693,7 +5662,6 @@ async def test_checkpoint_metadata(async_checkpointer: BaseCheckpointSaver) -> N
 
     # assert that checkpoint metadata contains the run's configurable fields
     chkpnt_metadata_3 = (await async_checkpointer.aget_tuple(config)).metadata
-    assert chkpnt_metadata_3["thread_id"] == "2"
     assert chkpnt_metadata_3["test_config_3"] == "foo"
     assert chkpnt_metadata_3["test_config_4"] == "bar"
 
@@ -5702,7 +5670,6 @@ async def test_checkpoint_metadata(async_checkpointer: BaseCheckpointSaver) -> N
     # on how the graph is constructed.
     chkpnt_tuples_2 = async_checkpointer.alist(config)
     async for chkpnt_tuple in chkpnt_tuples_2:
-        assert chkpnt_tuple.metadata["thread_id"] == "2"
         assert chkpnt_tuple.metadata["test_config_3"] == "foo"
         assert chkpnt_tuple.metadata["test_config_4"] == "bar"
 
@@ -6139,7 +6106,6 @@ async def test_parent_command(
         },
         metadata={
             "source": "loop",
-            "thread_id": "1",
             "step": 1,
             "parents": {},
         },

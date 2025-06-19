@@ -499,6 +499,10 @@
           "type": "boolean",
           "description": "Optional. If True, /assistants routes are removed from the server.\n\nDefault is False (meaning /assistants is enabled).\n"
         },
+        "disable_mcp": {
+          "type": "boolean",
+          "description": "Optional. If True, /mcp routes are removed, disabling the MCP server.\n\nDefault is False.\n"
+        },
         "disable_meta": {
           "type": "boolean",
           "description": "Optional. If True, all meta endpoints (/ok, /info, /metrics, /docs) are disabled.\n\nDefault is False.\n"
