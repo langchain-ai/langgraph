@@ -26,6 +26,6 @@ Once you've created an assistant, subsequent edits to that assistant will create
 
 ## Execution
 
-A **run** is an invocation of an assistant. Each run may have its own input, configuration, and metadata, which may affect execution and output of the underlying graph. A run can optionally be executed on a [thread](../../concepts/persistence.md#threads).
+A **run** is an invocation of an assistant. Each run may have its own input, configuration, and metadata, which may affect execution and output of the underlying graph. A run can optionally be executed on a [thread](./persistence.md#threads).
 
-The LangGraph Platform API provides several endpoints for creating and managing runs. See the [API reference](../../cloud/reference/api/api_ref.html#tag/thread-runs/) for more details.
+The LangGraph Platform API provides several endpoints for creating and managing runs. See the [API reference](../cloud/reference/api/api_ref.html#tag/thread-runs/) for more details.

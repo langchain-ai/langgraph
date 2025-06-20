@@ -56,7 +56,7 @@ This section describes various features of the data plane.
 
 1. CPU utilization
 1. Memory utilization
-1. Number of pending (in progress) [runs](../cloud/concepts/runs.md)
+1. Number of pending (in progress) [runs](./assistants.md#execution)
 
 For CPU utilization, the autoscaler targets 75% utilization. This means the autoscaler will scale the number of containers up or down to ensure that CPU utilization is at or near 75%. For memory utilization, the autoscaler targets 75% utilization as well.
 
