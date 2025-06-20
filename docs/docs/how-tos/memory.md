@@ -516,7 +516,6 @@ agent.invoke(
 
 For more details, see [how to update state from tools](../how-tos/tool-calling.ipynb#update).
 
-
 ## Add long-term memory
 
 Use long-term memory to store user-specific or application-specific data across conversations. This is useful for applications like chatbots, where you want to remember user preferences or other information.
@@ -1124,7 +1123,7 @@ See [this guide](../cloud/deployment/semantic_search.md) for more information on
 
 ## Manage short-term memory
 
-With [short-term memory](#add-short-term-memory) enabled, long conversations can exceed the LLM's context window. Common solutions are:
+With [short-term memory](#short-term-memory) enabled, long conversations can exceed the LLM's context window. Common solutions are:
 
 * [Trimming](#trim-messages): Remove first or last N messages (before calling LLM)
 * [Summarization](#summarize-messages): Summarize earlier messages in the history and replace them with a summary
@@ -1715,8 +1714,8 @@ You can view and delete the information stored by the checkpointer:
                     'v': 3, 
                     'ts': '2025-05-05T16:01:23.863421+00:00', 
                     'id': '1f029ca3-1790-6b0a-8003-baf965b6a38f', 
-                    'channel_versions': {'__start__': '00000000000000000000000000000005.0.5290678567601859', 'messages': '00000000000000000000000000000005.0.7935064215293443', 'branch:to:call_model': '00000000000000000000000000000005.0.1410174088651449'}, 
-                    'versions_seen': {'__input__': {}, '__start__': {'__start__': '00000000000000000000000000000004.0.5736472536395331'}, 'call_model': {'branch:to:call_model': '00000000000000000000000000000002.0.9300422176788571'}}, 
+                    'channel_versions': {'__start__': '00000000000000000000000000000005.0.5290678567601859', 'messages': '00000000000000000000000000000006.0.3205149138784782', 'branch:to:call_model': '00000000000000000000000000000006.0.14611156755133758'}, 
+                    'versions_seen': {'__input__': {}, '__start__': {'__start__': '00000000000000000000000000000004.0.5736472536395331'}, 'call_model': {'branch:to:call_model': '00000000000000000000000000000005.0.1410174088651449'}},
                     'channel_values': {'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?'), HumanMessage(content="what's my name?")], 'branch:to:call_model': None}
                 }, 
                 metadata={'source': 'loop', 'writes': None, 'step': 3, 'parents': {}, 'thread_id': '1'}, 
