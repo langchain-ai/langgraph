@@ -10,9 +10,10 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ubuntu-latest, windows-latest]
         python-version:
           - "3.9"
           - "3.10"
@@ -20,7 +21,7 @@ jobs:
           - "3.12"
           - "3.13"
 
-    name: "test #${{ matrix.python-version }}"
+    name: "test ${{ matrix.os }} #${{ matrix.python-version }}"
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
@@ -31,7 +32,7 @@ jobs:
           cache-suffix: test-${{ inputs.working-directory }}
       - name: Login to Docker Hub
         uses: docker/login-action@v3
-        if: ${{ !github.event.pull_request.head.repo.fork }}
+        if: ${{ !github.event.pull_request.head.repo.fork && matrix.os == 'ubuntu-latest' }}
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_RO_TOKEN }}
@@ -41,10 +42,19 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
         run: uv sync --frozen --group dev
 
-      - name: Run tests
+      - name: Run tests (Unix)
+        if: matrix.os == 'ubuntu-latest'
         shell: bash
         working-directory: ${{ inputs.working-directory }}
         run: make test
+        
+      - name: Run tests (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          # Run tests without Docker dependencies on Windows
+          NO_DOCKER=true uv run pytest .
 
       - name: Ensure the tests did not create any additional files
         shell: bash
