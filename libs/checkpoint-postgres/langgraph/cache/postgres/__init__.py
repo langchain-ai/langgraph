@@ -82,16 +82,17 @@ class PostgresCache(BasePostgresCache):
         with self._cursor() as cur:
             cur.execute(self.SELECT_SQL, (ns_list, key_list))
             to_delete: list[tuple[Any, Any]] = []
-            for row in cur:
-                exp: datetime.datetime | None = row["expiry"]
-                if exp is not None and exp.timestamp() < now.timestamp():
-                    to_delete.append((row["ns"], row["key"]))
-                    continue
-                ns = tuple(row["ns"].split("."))
-                val = self.serde.loads_typed((row["encoding"], row["val"]))
-                out[(ns, row["key"])] = val
-            for ns, key in to_delete:
-                cur.execute(self.DELETE_EXPIRED_SQL, (ns, key))
+            if cur.pgresult is not None:
+                for row in cur:
+                    exp: datetime.datetime | None = row["expiry"]
+                    if exp is not None and exp.timestamp() < now.timestamp():
+                        to_delete.append((row["ns"], row["key"]))
+                        continue
+                    ns = tuple(row["ns"].split("."))
+                    val = self.serde.loads_typed((row["encoding"], row["val"]))
+                    out[(ns, row["key"])] = val
+                for ns, key in to_delete:
+                    cur.execute(self.DELETE_EXPIRED_SQL, (ns, key))
         return out
 
     async def aget(self, keys: Sequence[FullKey]) -> dict[FullKey, ValueT]:
