@@ -69,9 +69,7 @@ LangGraph provides full control over memory implementation:
 - [`Checkpointer`](./persistence.md#checkpoints): Mechanism to store state at every step across different interactions within a session.
 - [`Store`](./persistence.md#memory-store): Mechanism to store user-specific or application-level data across sessions.
 
-This flexible approach allows you to tailor the memory system to your specific agent architecture needs. For a practical guide on adding memory to your graph, see [this tutorial](../how-tos/persistence.ipynb).
-
-Effective [memory management](../how-tos/memory.ipynb) enhances an agent's ability to maintain context, learn from past experiences, and make more informed decisions over time.
+This flexible approach allows you to tailor the memory system to your specific agent architecture needs. Effective memory management enhances an agent's ability to maintain context, learn from past experiences, and make more informed decisions over time. For a practical guide on adding and managing memory, see [Memory](../how-tos/memory.md).
 
 ### Planning
 
