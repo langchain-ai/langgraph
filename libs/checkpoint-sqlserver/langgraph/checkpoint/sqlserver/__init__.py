@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import json
+import threading
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
 from typing import Any
 
 import pyodbc
 from langchain_core.runnables import RunnableConfig
-from pyodbc import Row
+from pyodbc import Row, Cursor
 
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
@@ -38,6 +39,8 @@ from langgraph.checkpoint.sqlserver.base import BaseSQLServerSaver
 class SQLServerSaver(BaseSQLServerSaver):
     """Checkpointer that stores checkpoints in a Microsoft SQL Server database."""
 
+    lock: threading.Lock
+
     def __init__(
         self,
         conn: pyodbc.Connection,
@@ -53,6 +56,7 @@ class SQLServerSaver(BaseSQLServerSaver):
         super().__init__(serde=serde)
         self.conn = conn
         self.schema = schema if schema else "dbo"
+        self.lock = threading.Lock()
 
     @classmethod
     @contextmanager
@@ -70,6 +74,17 @@ class SQLServerSaver(BaseSQLServerSaver):
         with pyodbc.connect(conn_string) as conn:
             yield cls(conn, schema=schema)
 
+    @contextmanager
+    def _cursor(self) -> Iterator[Cursor]:
+        """Create a thread-safe database cursor as a context manager.
+
+        Returns:
+            Iterator[Cursor]: A context manager that yields a database cursor.
+        """
+        with self.lock:
+            with closing(self.conn.cursor()) as cur:
+                yield cur
+
     def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
 
@@ -77,7 +92,7 @@ class SQLServerSaver(BaseSQLServerSaver):
         already exist and runs database migrations. It MUST be called directly by the user
         the first time checkpointer is used.
         """
-        with self.conn.cursor() as cur:
+        with self._cursor() as cur:
             for command in MIGRATIONS_SQL:
                 command = command.replace("${SCHEMA}", self.schema)
                 cur.execute(command)
@@ -133,7 +148,7 @@ class SQLServerSaver(BaseSQLServerSaver):
         if limit:
             query += f" OFFSET 0 ROWS FETCH NEXT {limit} ROWS ONLY;"
 
-        with self.conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(query, args)
             values: list[dict[str, Any]] = self._postprocess_results(
                 data=cur.fetchall(),
@@ -236,7 +251,7 @@ class SQLServerSaver(BaseSQLServerSaver):
                 OFFSET 0 ROWS FETCH NEXT 1 ROWS ONLY;
             """
 
-        with self.conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 SELECT_SQL.replace("${SCHEMA}", self.schema) + where,
                 args,
@@ -331,7 +346,7 @@ class SQLServerSaver(BaseSQLServerSaver):
             }
         }
 
-        with self.conn.cursor() as cur:
+        with self._cursor() as cur:
             blobs = self._dump_blobs(
                 thread_id,
                 checkpoint_ns,
@@ -379,7 +394,9 @@ class SQLServerSaver(BaseSQLServerSaver):
             if all(w[0] in WRITES_IDX_MAP for w in writes)
             else INSERT_CHECKPOINT_WRITES_SQL.replace("${SCHEMA}", self.schema)
         )
-        with self.conn.cursor() as cur:
+
+        print(str(all(w[0] in WRITES_IDX_MAP for w in writes)))
+        with self._cursor() as cur:
             cur.executemany(
                 query,
                 self._dump_writes(
@@ -401,7 +418,7 @@ class SQLServerSaver(BaseSQLServerSaver):
         Returns:
             None
         """
-        with self.conn.cursor() as cur:
+        with self._cursor() as cur:
             cur.execute(
                 DELETE_THREAD_CHECKPOINTS.replace("${SCHEMA}", self.schema),
                 (str(thread_id),),

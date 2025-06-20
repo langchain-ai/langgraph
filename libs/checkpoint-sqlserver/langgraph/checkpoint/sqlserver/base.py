@@ -37,7 +37,7 @@ class BaseSQLServerSaver(BaseCheckpointSaver[str]):
         checkpoint["channel_versions"][TASKS] = (
             max(checkpoint["channel_versions"].values())
             if checkpoint["channel_versions"]
-            else self.get_next_version(None)
+            else self.get_next_version(None, None)
         )
 
     def _load_blobs(
@@ -115,7 +115,7 @@ class BaseSQLServerSaver(BaseCheckpointSaver[str]):
             for idx, (channel, value) in enumerate(writes)
         ]
 
-    def get_next_version(self, current: str | None) -> str:
+    def get_next_version(self, current: str | None, channel: None) -> str:
         if current is None:
             current_v = 0
         elif isinstance(current, int):
