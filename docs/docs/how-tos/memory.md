@@ -374,7 +374,7 @@ with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
 
 ### Use in subgraphs
 
-If your graph contains [subgraphs](../../concepts/subgraphs), you only need to **provide the checkpointer when compiling the parent graph**. LangGraph will automatically propagate the checkpointer to the child subgraphs.
+If your graph contains [subgraphs](../concepts/subgraphs.md), you only need to **provide the checkpointer when compiling the parent graph**. LangGraph will automatically propagate the checkpointer to the child subgraphs.
 
 ```python
 from langgraph.graph import START, StateGraph
@@ -410,7 +410,7 @@ checkpointer = InMemorySaver()
 graph = builder.compile(checkpointer=checkpointer)
 ```    
 
-If you want the subgraph to have its own memory, you can compile it `with checkpointer=True`. This is useful in [multi-agent](../../concepts/multi_agent) systems, if you want agents to keep track of their internal message histories:
+If you want the subgraph to have its own memory, you can compile it `with checkpointer=True`. This is useful in [multi-agent](../concepts/multi_agent.md) systems, if you want agents to keep track of their internal message histories:
 
 ```python
 subgraph_builder = StateGraph(...)
@@ -1462,7 +1462,7 @@ To delete messages from the graph state, you can use the `RemoveMessage`.
 
 !!! important "`add_messages` reducer"
 
-    For `RemoveMessage` to work, you need to use a state key with [`add_messages`][langgraph.graph.message.add_messages] [reducer](../../../concepts/low_level#reducers), like [`MessagesState`](../../../concepts/low_level#messagesstate)
+    For `RemoveMessage` to work, you need to use a state key with [`add_messages`][langgraph.graph.message.add_messages] [reducer](../concepts/low_level.md#reducers), like [`MessagesState`](../concepts/low_level.md#messagesstate)
 
 !!! warning "Valid message history"
 

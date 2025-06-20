@@ -116,7 +116,7 @@ REDIRECT_MAP = {
     "tutorials/deployment.md": "concepts/deployment_options.md",
     # assistant redirects
     "cloud/how-tos/assistant_versioning.md": "cloud/how-tos/configuration_cloud.md",
-    "cloud/concepts/runs.md": "concepts/assistants.md#execution",
+    "cloud/concepts/runs.md": "cloud/concepts/assistants.md#execution",
 }
 
 

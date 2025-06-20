@@ -74,14 +74,14 @@ agent.invoke({
 
 !!! tip "Turning on memory"
 
-    Please see the [memory guide](./memory.md) for more details on how to enable memory. This is a powerful feature that allows you to persist the agent's state across multiple invocations.
+    Please see the [memory guide](../how-tos/memory.md) for more details on how to enable memory. This is a powerful feature that allows you to persist the agent's state across multiple invocations.
     Otherwise, the state is scoped only to a single agent run.
 
 
 
 ### Long-Term Memory (cross-conversation context)
 
-For context that spans *across* conversations or sessions, LangGraph allows access to **long-term memory** via a `store`. This can be used to read or update persistent facts (e.g., user profiles, preferences, prior interactions). For more, see the [Memory guide](./memory.md).
+For context that spans *across* conversations or sessions, LangGraph allows access to **long-term memory** via a `store`. This can be used to read or update persistent facts (e.g., user profiles, preferences, prior interactions). For more, see the [Memory guide](../how-tos/memory.md).
 
 ## Customizing Prompts with Context { #prompts }
 
@@ -233,4 +233,4 @@ Tools can access context through special parameter **annotations**.
 
 ### Update Context from Tools
 
-Tools can update agent's context (state and long-term memory) during execution. This is useful for persisting intermediate results or making information accessible to subsequent tools or prompts. See [Memory](./memory.md#read-short-term) guide for more information.
+Tools can update agent's context (state and long-term memory) during execution. This is useful for persisting intermediate results or making information accessible to subsequent tools or prompts. See [Memory](../how-tos/memory.md#read-short-term) guide for more information.
