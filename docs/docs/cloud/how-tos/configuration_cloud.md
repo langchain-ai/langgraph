@@ -212,6 +212,7 @@ We have now created an assistant called "Open AI Assistant" that has `model_name
 
 Output:
 
+    ```
     Receiving event of type: metadata
     {'run_id': '1ef6746e-5893-67b1-978a-0f1cd4060e16'}
 
@@ -219,6 +220,7 @@ Output:
 
     Receiving event of type: updates
     {'agent': {'messages': [{'content': 'I was created by OpenAI, a research organization focused on developing and advancing artificial intelligence technology.', 'additional_kwargs': {}, 'response_metadata': {'finish_reason': 'stop', 'model_name': 'gpt-4o-2024-05-13', 'system_fingerprint': 'fp_157b3831f5'}, 'type': 'ai', 'name': None, 'id': 'run-e1a6b25c-8416-41f2-9981-f9cfe043f414', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': None}]}}
+    ```
 
 ### LangGraph Platform UI
 
@@ -231,9 +233,11 @@ Inside your deployment, select the "Assistants" tab. For the assistant you would
 To edit the assistant, use the `update` method. This will create a new version of the assistant with the provided edits. See the [Python](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/#langgraph_sdk.client.AssistantsClient.update) and [JS](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#update) SDK reference docs for more information.
 
 !!! note "Note"
-You must pass in the ENTIRE config (and metadata if you are using it). The update endpoint creates new versions completely from scratch and does not rely on previous versions.
+
+    You must pass in the ENTIRE config (and metadata if you are using it). The update endpoint creates new versions completely from scratch and does not rely on previous versions.
 
 For example, to update your assistant's system prompt:
+
 === "Python"
 
     ```python
