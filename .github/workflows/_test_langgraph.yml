@@ -5,9 +5,10 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ubuntu-latest, windows-latest]
         python-version:
           - "3.9"
           - "3.10"
@@ -18,7 +19,7 @@ jobs:
     defaults:
       run:
         working-directory: libs/langgraph
-    name: "test #${{ matrix.python-version }}"
+    name: "test ${{ matrix.os }} #${{ matrix.python-version }}"
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
@@ -29,7 +30,7 @@ jobs:
           cache-suffix: "test-langgraph"
       - name: Login to Docker Hub
         uses: docker/login-action@v3
-        if: ${{ !github.event.pull_request.head.repo.fork }}
+        if: ${{ !github.event.pull_request.head.repo.fork && matrix.os == 'ubuntu-latest' }}
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_RO_TOKEN }}
@@ -38,9 +39,17 @@ jobs:
         shell: bash
         run: uv sync --frozen --group dev
 
-      - name: Run tests
+      - name: Run tests (Unix)
+        if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: make test_parallel
+        
+      - name: Run tests (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          # Run tests without Docker dependencies on Windows
+          NO_DOCKER=true uv run pytest . --tb=short
 
       - name: Ensure the tests did not create any additional files
         shell: bash
