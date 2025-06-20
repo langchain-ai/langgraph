@@ -23,6 +23,7 @@ Then, navigate to [Agent Chat UI](https://agentchat.vercel.app), or clone the re
 
     UI has out-of-box support for rendering tool calls, and tool result messages. To customize what messages are shown, see the [Hiding Messages in the Chat](https://github.com/langchain-ai/agent-chat-ui?tab=readme-ov-file#hiding-messages-in-the-chat) section in the Agent Chat UI documentation.
 
+:::python
 ## Add human-in-the-loop
 
 Agent Chat UI has full support for [human-in-the-loop](../concepts/human_in_the_loop.md) workflows. To try it out, replace the agent code in `src/agent/graph.py` (from the [deployment](./deployment.md) guide) with this [agent implementation](./human-in-the-loop.md#using-with-agent-inbox):
@@ -32,6 +33,7 @@ Agent Chat UI has full support for [human-in-the-loop](../concepts/human_in_the_
 !!! Important
 
     Agent Chat UI works best if your LangGraph agent interrupts using the [`HumanInterrupt` schema][langgraph.prebuilt.interrupt.HumanInterrupt]. If you do not use that schema, the Agent Chat UI will be able to render the input passed to the `interrupt` function, but it will not have full support for resuming your graph.
+:::
 
 ## Generative UI
 
