@@ -21,7 +21,7 @@ To create tools, you can use [@tool](https://python.langchain.com/api_reference/
 
 === "Python functions"
 
-    This requires using LangGraph's prebuilt [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] or [agent](../../agents/agents), which automatically convert the functions to [LangChain tools](https://python.langchain.com/docs/concepts/tools/#tool-interface).
+    This requires using LangGraph's prebuilt [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] or [agent](../agents/agents), which automatically convert the functions to [LangChain tools](https://python.langchain.com/docs/concepts/tools/#tool-interface).
     
     ```python
     def multiply(a: int, b: int) -> int:
@@ -146,7 +146,7 @@ def get_user_info(
 
 ## Short-term memory
 
-LangGraph allows agents to access and update their [short-term memory](../../concepts/memory#short-term-memory) (state) inside the tools.
+LangGraph allows agents to access and update their [short-term memory](../concepts/memory.md#short-term-memory) (state) inside the tools.
 
 ### Read state
 
@@ -316,7 +316,7 @@ def update_user_info(
 
 ## Long-term memory
 
-Use [long-term memory](../../concepts/memory#long-term-memory) to store user-specific or application-specific data across conversations. This is useful for applications like chatbots, where you want to remember user preferences or other information.
+Use [long-term memory](../concepts/memory.md#long-term-memory) to store user-specific or application-specific data across conversations. This is useful for applications like chatbots, where you want to remember user preferences or other information.
 
 To use long-term memory, you need to:
 
@@ -593,11 +593,11 @@ agent = create_react_agent(
 graph.invoke({"messages": [{"role": "user", "content": "what's 42 x 7?"}]})
 ```
 
-See this [guide](../../agents/overview) to learn more.
+See this [guide](../agents/overview.md) to learn more.
 
 ## Use prebuilt `ToolNode`
 
-[`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] is a prebuilt LangGraph [node](../../concepts/low_level#nodes) for executing tool calls.
+[`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] is a prebuilt LangGraph [node](../concepts/low_level.md#nodes) for executing tool calls.
 
 **Why use `ToolNode`?**
 
@@ -605,14 +605,14 @@ See this [guide](../../agents/overview) to learn more.
 * concurrent execution of the tools
 * error handling during tool execution. You can enable / disable this by setting `handle_tool_errors=True` (enabled by default). See [this section](#handle-errors) for more details on handling errors
 
-ToolNode operates on [MessagesState](../../concepts/low_level#messagesstate):
+ToolNode operates on [MessagesState](../concepts/low_level.md#messagesstate):
 
 * input: `MessagesState` where the last message is an `AIMessage` with `tool_calls` parameter
 * output: `MessagesState` with [`ToolMessage`](https://python.langchain.com/docs/concepts/messages/#toolmessage) the result of tool calls
 
 !!! tip
 
-    `ToolNode` is designed to work well out-of-box with LangGraph's prebuilt [agent](../../agents/agents), but can also work with any `StateGraph` that uses `MessagesState.`
+    `ToolNode` is designed to work well out-of-box with LangGraph's prebuilt [agent](../agents/agents), but can also work with any `StateGraph` that uses `MessagesState.`
 
 ```python
 # highlight-next-line
@@ -762,7 +762,7 @@ tool_node.invoke({"messages": [...]})
 
 ??? example "Use in a tool-calling agent"
 
-    This is an example of creating a tool-calling agent from scratch using `ToolNode`. You can also use LangGraph's prebuilt [agent](../../agents/agents).
+    This is an example of creating a tool-calling agent from scratch using `ToolNode`. You can also use LangGraph's prebuilt [agent](../agents/agents).
 
     ```python
     from langchain.chat_models import init_chat_model
