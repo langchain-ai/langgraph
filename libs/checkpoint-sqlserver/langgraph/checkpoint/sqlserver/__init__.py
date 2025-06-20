@@ -4,12 +4,12 @@ import json
 import threading
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager, closing
+from contextlib import closing, contextmanager
 from typing import Any
 
 import pyodbc
 from langchain_core.runnables import RunnableConfig
-from pyodbc import Row, Cursor
+from pyodbc import Cursor, Row
 
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
