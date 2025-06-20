@@ -92,7 +92,7 @@ def my_node_2(state: State):
 
 ```
 
-In the example above, the `add_messages` reducer allows us to [append](./low_level#serialization) new messages to the `messages` state key as shown in `my_node_1`. When it sees a `RemoveMessage`, it will delete the message with that ID from the list (and the RemoveMessage will then be discarded).
+In the example above, the `add_messages` reducer allows us to [append](low_level.md#serialization) new messages to the `messages` state key as shown in `my_node_1`. When it sees a `RemoveMessage`, it will delete the message with that ID from the list (and the RemoveMessage will then be discarded).
 
 For more information, see the [Memory](../how-tos/memory/add-memory.md#delete-messages) guide and module 2 from our [LangChain Academy](https://github.com/langchain-ai/langchain-academy/tree/main/module-2) course.
 
@@ -135,7 +135,7 @@ The problem with trimming or removing messages, as shown above, is that you may 
 
 ![](img/memory/summary.png)
 
-Simple prompting and orchestration logic can be used to achieve this. As an example, in LangGraph you can extend the [MessagesState](./low_level/#working-with-messages-in-graph-state) to include a `summary` key:
+Simple prompting and orchestration logic can be used to achieve this. As an example, in LangGraph you can extend the [MessagesState](low_level#working-with-messages-in-graph-state) to include a `summary` key:
 
 ```python
 from langgraph.graph import MessagesState
