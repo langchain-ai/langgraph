@@ -374,7 +374,7 @@ with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
 
 ### Use in subgraphs
 
-If your graph contains [subgraphs](../concepts/subgraphs.md), you only need to provide the checkpointer when compiling the parent graph. LangGraph will automatically propagate the checkpointer to the child subgraphs.
+If your graph contains [subgraphs](../../concepts/subgraphs.md), you only need to provide the checkpointer when compiling the parent graph. LangGraph will automatically propagate the checkpointer to the child subgraphs.
 
 ```python
 from langgraph.graph import START, StateGraph
@@ -410,7 +410,7 @@ checkpointer = InMemorySaver()
 graph = builder.compile(checkpointer=checkpointer)
 ```    
 
-If you want the subgraph to have its own memory, you can compile it `with checkpointer=True`. This is useful in [multi-agent](../concepts/multi_agent.md) systems, if you want agents to keep track of their internal message histories.
+If you want the subgraph to have its own memory, you can compile it `with checkpointer=True`. This is useful in [multi-agent](../../concepts/multi_agent.md) systems, if you want agents to keep track of their internal message histories.
 
 ```python
 subgraph_builder = StateGraph(...)
@@ -979,7 +979,7 @@ agent.invoke(
 )
 ```
 
-1. The `InMemoryStore` is a store that stores data in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [store documentation](../reference/store.md) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready store for you.
+1. The `InMemoryStore` is a store that stores data in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [store documentation](../../reference/store.md) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready store for you.
 2. For this example, we write some sample data to the store using the `put` method. Please see the [BaseStore.put][langgraph.store.base.BaseStore.put] API reference for more details.
 3. The first argument is the namespace. This is used to group related data together. In this case, we are using the `users` namespace to group user data.
 4. A key within the namespace. This example uses a user ID for the key.
@@ -1030,7 +1030,7 @@ agent.invoke(
 store.get(("users",), "user_123").value
 ```
 
-1. The `InMemoryStore` is a store that stores data in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [store documentation](../reference/store.md) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready store for you.
+1. The `InMemoryStore` is a store that stores data in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [store documentation](../../reference/store.md) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready store for you.
 2. The `UserInfo` class is a `TypedDict` that defines the structure of the user information. The LLM will use this to format the response according to the schema.
 3. The `save_user_info` function is a tool that allows an agent to update user information. This could be useful for a chat application where the user wants to update their profile information.
 4. The `get_store` function is used to access the store. You can call it from anywhere in your code, including tools and prompts. This function returns the store that was passed to the agent when it was created.
@@ -1115,7 +1115,7 @@ items = store.search(
         print(message.content, end="")
     ```
 
-See [this guide](../cloud/deployment/semantic_search.md) for more information on how to use semantic search with LangGraph memory store.
+See [this guide](../../cloud/deployment/semantic_search.md) for more information on how to use semantic search with LangGraph memory store.
 
 ## Manage short-term memory
 
@@ -1410,7 +1410,7 @@ agent = create_react_agent(
 )
 ```
 
-1. The `InMemorySaver` is a checkpointer that stores the agent's state in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [checkpointer documentation](../reference/checkpoints.md) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready checkpointer for you.
+1. The `InMemorySaver` is a checkpointer that stores the agent's state in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [checkpointer documentation](../../reference/checkpoints.md) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready checkpointer for you.
 2. The `context` key is added to the agent's state. The key contains book-keeping information for the summarization node. It is used to keep track of the last summary information and ensure that the agent doesn't summarize on every LLM call, which can be inefficient.
 3. The `checkpointer` is passed to the agent. This enables the agent to persist its state across invocations.
 4. The `pre_model_hook` is set to the `SummarizationNode`. This node will summarize the message history before sending it to the LLM. The summarization node will automatically handle the summarization process and update the agent's state with the new summary. You can replace this with a custom implementation if you prefer. Please see the [create_react_agent][langgraph.prebuilt.chat_agent_executor.create_react_agent] API reference for more details.
@@ -1418,7 +1418,7 @@ agent = create_react_agent(
 
 ### Delete messages
 
-To delete messages from the graph state, you can use the `RemoveMessage`. For `RemoveMessage` to work, you need to use a state key with [`add_messages`][langgraph.graph.message.add_messages] [reducer](../concepts/low_level.md#reducers), like [`MessagesState`](../concepts/low_level.md#messagesstate).
+To delete messages from the graph state, you can use the `RemoveMessage`. For `RemoveMessage` to work, you need to use a state key with [`add_messages`][langgraph.graph.message.add_messages] [reducer](../../concepts/low_level.md#reducers), like [`MessagesState`](../../concepts/low_level.md#messagesstate).
 
 To remove specific messages:
 
