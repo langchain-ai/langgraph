@@ -60,8 +60,8 @@ Tools are useful whenever you want an agent to interact with external systems. E
 
 [Memory](../how-tos/memory.md) is crucial for agents, enabling them to retain and utilize information across multiple steps of problem-solving. It operates on different scales:
 
-1. [Short-term memory](../how-tos/memory.md#short-term-memory): Allows the agent to access information acquired during earlier steps in a sequence.
-2. [Long-term memory](../how-tos/memory.md#long-term-memory): Enables the agent to recall information from previous interactions, such as past messages in a conversation.
+1. [Short-term memory](../how-tos/memory.md#add-short-term-memory): Allows the agent to access information acquired during earlier steps in a sequence.
+2. [Long-term memory](../how-tos/memory.md#add-long-term-memory): Enables the agent to recall information from previous interactions, such as past messages in a conversation.
 
 LangGraph provides full control over memory implementation:
 

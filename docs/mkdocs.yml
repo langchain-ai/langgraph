@@ -131,7 +131,7 @@ nav:
           - Application structure: concepts/application_structure.md
           - Scalability & resilience: concepts/scalability_and_resilience.md
       - Authentication & access control: concepts/auth.md
-      - Assistants: cloud/concepts/assistants.md
+      - Assistants: concepts/assistants.md
       - Double-texting: concepts/double_texting.md
       - Webhooks: cloud/concepts/webhooks.md
       - Cron jobs: cloud/concepts/cron_jobs.md

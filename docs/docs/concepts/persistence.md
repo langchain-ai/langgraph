@@ -15,7 +15,7 @@ LangGraph has a built-in persistence layer, implemented through checkpointers. W
 
 ## Threads
 
-A thread is a unique ID or thread identifier assigned to each checkpoint saved by a checkpointer. It contains the accumulated state of a sequence of [runs](../cloud/concepts/assistants.md#execution). When a run is executed, the [state](../concepts/low_level.md#state) of the underlying graph of the assistant will be persisted to the thread.
+A thread is a unique ID or thread identifier assigned to each checkpoint saved by a checkpointer. It contains the accumulated state of a sequence of [runs](./assistants.md#execution). When a run is executed, the [state](../concepts/low_level.md#state) of the underlying graph of the assistant will be persisted to the thread.
 
 When invoking graph with a checkpointer, you **must** specify a `thread_id` as part of the `configurable` portion of the config:
 

@@ -453,7 +453,7 @@ agent.invoke({
 })
 ```
 
-See the [Context](./context.md#__tabbed_2_2) guide for more information.
+See the [Context](../agents/context.md) guide for more information.
 
 ### Write short-term memory from tools { #write-short-term }
 
@@ -1123,7 +1123,7 @@ See [this guide](../cloud/deployment/semantic_search.md) for more information on
 
 ## Manage short-term memory
 
-With [short-term memory](#short-term-memory) enabled, long conversations can exceed the LLM's context window. Common solutions are:
+With [short-term memory](#add-short-term-memory) enabled, long conversations can exceed the LLM's context window. Common solutions are:
 
 * [Trimming](#trim-messages): Remove first or last N messages (before calling LLM)
 * [Summarization](#summarize-messages): Summarize earlier messages in the history and replace them with a summary
