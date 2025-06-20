@@ -7,7 +7,7 @@ search:
 
 ## Overview
 
-The **Functional API** allows you to add LangGraph's key features — [persistence](./persistence.md), [memory](../how-tos/memory.md), [human-in-the-loop](./human_in_the_loop.md), and [streaming](./streaming.md) — to your applications with minimal changes to your existing code.
+The **Functional API** allows you to add LangGraph's key features — [persistence](./persistence.md), [memory](../how-tos/memory/add-memory.md), [human-in-the-loop](./human_in_the_loop.md), and [streaming](./streaming.md) — to your applications with minimal changes to your existing code.
 
 It is designed to integrate these features into existing code that may use standard language primitives for branching and control flow, such as `if` statements, `for` loops, and function calls. Unlike many data orchestration frameworks that require restructuring code into an explicit pipeline or DAG, the Functional API allows you to incorporate these capabilities without enforcing a rigid execution model.  
 

@@ -529,7 +529,7 @@ First, checkpointers facilitate [human-in-the-loop workflows](agentic_concepts.m
 
 ### Memory
 
-Second, checkpointers allow for ["memory"](agentic_concepts.md#memory) between interactions.  In the case of repeated human interactions (like conversations) any follow up messages can be sent to that thread, which will retain its memory of previous ones. See [this how-to guide](../how-tos/memory.md) for information on how to add and manage conversation memory using checkpointers.
+Second, checkpointers allow for ["memory"](agentic_concepts.md#memory) between interactions.  In the case of repeated human interactions (like conversations) any follow up messages can be sent to that thread, which will retain its memory of previous ones. See [this how-to guide](../how-tos/memory/add-memory.md) for information on how to add and manage conversation memory using checkpointers.
 
 ### Time Travel
 

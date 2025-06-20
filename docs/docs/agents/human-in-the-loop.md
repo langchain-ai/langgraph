@@ -67,7 +67,7 @@ agent = create_react_agent(
 ```
 
 1. The [`interrupt` function][langgraph.types.interrupt] pauses the agent graph at a specific node. In this case, we call `interrupt()` at the beginning of the tool function, which pauses the graph at the node that executes the tool. The information inside `interrupt()` (e.g., tool calls) can be presented to a human, and the graph can be resumed with the user input (tool call approval, edit or feedback).
-2. The `InMemorySaver` is used to store the agent state at every step in the tool calling loop. This enables [short-term memory](../how-tos/memory.md#add-short-term-memory) and [human-in-the-loop](./human-in-the-loop.md) capabilities. In this example, we use `InMemorySaver` to store the agent state in memory. In a production application, the agent state will be stored in a database.
+2. The `InMemorySaver` is used to store the agent state at every step in the tool calling loop. This enables [short-term memory](../how-tos/memory/add-memory.md#add-short-term-memory) and [human-in-the-loop](./human-in-the-loop.md) capabilities. In this example, we use `InMemorySaver` to store the agent state in memory. In a production application, the agent state will be stored in a database.
 3. Initialize the agent with the `checkpointer`.
 
 Run the agent with the `stream()` method, passing the `config` object to specify the thread ID. This allows the agent to resume the same conversation on future invocations.

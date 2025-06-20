@@ -58,10 +58,10 @@ Tools are useful whenever you want an agent to interact with external systems. E
 
 ### Memory
 
-[Memory](../how-tos/memory.md) is crucial for agents, enabling them to retain and utilize information across multiple steps of problem-solving. It operates on different scales:
+[Memory](../how-tos/memory/add-memory.md) is crucial for agents, enabling them to retain and utilize information across multiple steps of problem-solving. It operates on different scales:
 
-1. [Short-term memory](../how-tos/memory.md#add-short-term-memory): Allows the agent to access information acquired during earlier steps in a sequence.
-2. [Long-term memory](../how-tos/memory.md#add-long-term-memory): Enables the agent to recall information from previous interactions, such as past messages in a conversation.
+1. [Short-term memory](../how-tos/memory/add-memory.md#add-short-term-memory): Allows the agent to access information acquired during earlier steps in a sequence.
+2. [Long-term memory](../how-tos/memory/add-memory.md#add-long-term-memory): Enables the agent to recall information from previous interactions, such as past messages in a conversation.
 
 LangGraph provides full control over memory implementation:
 
@@ -69,7 +69,7 @@ LangGraph provides full control over memory implementation:
 - [`Checkpointer`](./persistence.md#checkpoints): Mechanism to store state at every step across different interactions within a session.
 - [`Store`](./persistence.md#memory-store): Mechanism to store user-specific or application-level data across sessions.
 
-This flexible approach allows you to tailor the memory system to your specific agent architecture needs. Effective memory management enhances an agent's ability to maintain context, learn from past experiences, and make more informed decisions over time. For a practical guide on adding and managing memory, see [Memory](../how-tos/memory.md).
+This flexible approach allows you to tailor the memory system to your specific agent architecture needs. Effective memory management enhances an agent's ability to maintain context, learn from past experiences, and make more informed decisions over time. For a practical guide on adding and managing memory, see [Memory](../how-tos/memory/add-memory.md).
 
 ### Planning
 

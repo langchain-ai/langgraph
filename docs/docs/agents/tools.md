@@ -273,10 +273,10 @@ See [API reference][langgraph.prebuilt.tool_node.ToolNode] for more information 
 
 ## Working with memory
 
-LangGraph allows access to short-term and long-term memory from tools. See [Memory](../how-tos/memory.md) guide for more information on:
+LangGraph allows access to short-term and long-term memory from tools. See [Memory](../how-tos/memory/add-memory.md) guide for more information on:
 
-* how to [read](../how-tos/memory.md#read-short-term) from and [write](../how-tos/memory.md#write-short-term) to **short-term** memory
-* how to [read](../how-tos/memory.md#read-long-term) from and [write](../how-tos/memory.md#write-long-term) to **long-term** memory
+* how to [read](../how-tos/memory/add-memory.md#read-short-term) from and [write](../how-tos/memory/add-memory.md#write-short-term) to **short-term** memory
+* how to [read](../how-tos/memory/add-memory.md#read-long-term) from and [write](../how-tos/memory/add-memory.md#write-long-term) to **long-term** memory
 
 ## Prebuilt tools
 

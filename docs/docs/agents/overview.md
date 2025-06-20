@@ -27,7 +27,7 @@ The LLM operates in a loop. In each iteration, it selects a tool to invoke, prov
 
 LangGraph includes several capabilities essential for building robust, production-ready agentic systems:
 
-- [**Memory integration**](../how-tos/memory.md): Native support for *short-term* (session-based) and *long-term* (persistent across sessions) memory, enabling stateful behaviors in chatbots and assistants.
+- [**Memory integration**](../how-tos/memory/add-memory.md): Native support for *short-term* (session-based) and *long-term* (persistent across sessions) memory, enabling stateful behaviors in chatbots and assistants.
 - [**Human-in-the-loop control**](./human-in-the-loop.md): Execution can pause *indefinitely* to await human feedback—unlike websocket-based solutions limited to real-time interaction. This enables asynchronous approval, correction, or intervention at any point in the workflow.
 - [**Streaming support**](../how-tos/streaming.md): Real-time streaming of agent state, model tokens, tool outputs, or combined streams.
 - [**Deployment tooling**](./deployment.md): Includes infrastructure-free deployment tools. [**LangGraph Platform**](https://langchain-ai.github.io/langgraph/concepts/langgraph_platform/) supports testing, debugging, and deployment.
@@ -50,7 +50,7 @@ The high-level components are organized into several packages, each with a speci
 | `langgraph-supervisor`                     | Tools for building [**supervisor**](./multi-agent.md#supervisor) agents     | `pip install -U langgraph-supervisor`   |
 | `langgraph-swarm`                          | Tools for building a [**swarm**](./multi-agent.md#swarm) multi-agent system | `pip install -U langgraph-swarm`        |
 | `langchain-mcp-adapters`                   | Interfaces to [**MCP servers**](./mcp.md) for tool and resource integration | `pip install -U langchain-mcp-adapters` |
-| `langmem`                                  | Agent memory management: [**short-term and long-term**](../how-tos/memory.md)        | `pip install -U langmem`                |
+| `langmem`                                  | Agent memory management: [**short-term and long-term**](../how-tos/memory/add-memory.md)        | `pip install -U langmem`                |
 | `agentevals`                               | Utilities to [**evaluate agent performance**](./evals.md)                   | `pip install -U agentevals`             |
 
 ## Visualize an agent graph
