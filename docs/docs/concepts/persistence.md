@@ -15,21 +15,27 @@ LangGraph has a built-in persistence layer, implemented through checkpointers. W
 
 ## Threads
 
-A thread is a unique ID or [thread identifier](#threads) assigned to each checkpoint saved by a checkpointer. When invoking graph with a checkpointer, you **must** specify a `thread_id` as part of the `configurable` portion of the config:
+A thread is a unique ID or thread identifier assigned to each checkpoint saved by a checkpointer. It contains the accumulated state of a sequence of [runs](../cloud/concepts/runs.md). When a run is executed, the [state](../concepts/low_level.md#state) of the underlying graph of the assistant will be persisted to the thread.
+
+When invoking graph with a checkpointer, you **must** specify a `thread_id` as part of the `configurable` portion of the config:
 
 ```python
 {"configurable": {"thread_id": "1"}}
 ```
 
+A thread's current and historical state can be retrieved. To persist state, a thread must be created prior to executing a run. The LangGraph Platform API provides several endpoints for creating and managing threads and thread state. See the [API reference](../cloud/reference/api/api_ref.html#tag/threads) for more details.
+
 ## Checkpoints
 
-Checkpoint is a snapshot of the graph state saved at each super-step and is represented by `StateSnapshot` object with the following key properties:
+The state of a thread at a particular point in time is called a checkpoint. Checkpoint is a snapshot of the graph state saved at each super-step and is represented by `StateSnapshot` object with the following key properties:
 
 - `config`: Config associated with this checkpoint. 
 - `metadata`: Metadata associated with this checkpoint.
 - `values`: Values of the state channels at this point in time.
 - `next` A tuple of the node names to execute next in the graph.
 - `tasks`: A tuple of `PregelTask` objects that contain information about next tasks to be executed. If the step was previously attempted, it will include error information. If a graph was interrupted [dynamically](../how-tos/human_in_the_loop/breakpoints.ipynb#dynamic-breakpoints) from within a node, tasks will contain additional data associated with interrupts.
+
+Checkpoints are persisted and can be used to restore the state of a thread at a later time.
 
 Let's see what checkpoints are saved when a simple graph is invoked as follows:
 

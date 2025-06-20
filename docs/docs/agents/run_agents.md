@@ -109,7 +109,7 @@ Streaming is available in both sync and async modes:
 
 !!! tip
 
-    For full details, see the [streaming guide](./streaming.md).
+    For full details, see the [streaming guide](../how-tos/streaming.md).
 
 ## Max iterations
 

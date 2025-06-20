@@ -89,4 +89,4 @@ LangGraph Studio Web is a specialized UI that you can connect to LangGraph API s
 
 ## Deployment
 
-Once your LangGraph app is running locally, you can deploy it using LangGraph Platform. Refer to the [deployment options guide](../tutorials/deployment.md) for detailed instructions on all supported deployment models.
+Once your LangGraph app is running locally, you can deploy it using LangGraph Platform. Refer to the [deployment options guide](../concepts/deployment_options.md) for detailed instructions on all supported deployment models.

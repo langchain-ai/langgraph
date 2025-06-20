@@ -62,6 +62,7 @@ REDIRECT_MAP = {
     "how-tos/subgraph-persistence.ipynb": "how-tos/persistence.ipynb#use-with-subgraphs",
     "how-tos/cross-thread-persistence.ipynb": "how-tos/persistence.ipynb#add-long-term-memory",
     "cloud/how-tos/copy_threads": "cloud/how-tos/use_threads",
+    "cloud/concepts/threads.md": "concepts/persistence.md#threads",
     # tool calling how-tos
     "how-tos/tool-calling-errors.ipynb": "how-tos/tool-calling.ipynb#handle-errors",
     "how-tos/pass-config-to-tools.ipynb": "how-tos/tool-calling.ipynb#access-config",
@@ -87,6 +88,8 @@ REDIRECT_MAP = {
     "cloud/how-tos/stream_events.md": "cloud/how-tos/streaming.md#stream-events",
     "cloud/how-tos/stream_debug.md": "cloud/how-tos/streaming.md#debug",
     "cloud/how-tos/stream_multiple.md": "cloud/how-tos/streaming.md#stream-multiple-modes",
+    "cloud/concepts/streaming.md": "concepts/streaming.md",
+    "agents/streaming.md": "how-tos/streaming.md",
     # prebuit redirects
     "how-tos/create-react-agent.ipynb": "agents/agents.md#basic-configuration",
     "how-tos/create-react-agent-memory.ipynb": "agents/memory.md",
@@ -108,8 +111,10 @@ REDIRECT_MAP = {
     # deployment redirects
     "how-tos/deploy-self-hosted.md": "cloud/deployment/self_hosted_data_plane.md",
     "concepts/self_hosted.md": "concepts/langgraph_self_hosted_data_plane.md",
+    "tutorials/deployment.md": "concepts/deployment_options.md",
     # assistant redirects
     "cloud/how-tos/assistant_versioning.md": "cloud/how-tos/configuration_cloud.md",
+    "cloud/concepts/runs.md": "concepts/assistants.md#execution",
 }
 
 
