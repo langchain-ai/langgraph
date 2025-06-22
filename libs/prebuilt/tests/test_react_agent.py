@@ -2,6 +2,7 @@ import dataclasses
 import inspect
 import json
 from functools import partial
+from operator import add
 from typing import (
     Annotated,
     List,
@@ -10,7 +11,6 @@ from typing import (
     TypeVar,
     Union,
 )
-from operator import add
 
 import pytest
 from langchain_core.messages import (
@@ -1432,7 +1432,8 @@ def test_post_model_hook_with_structured_output() -> None:
 
     expected_structured_response = WeatherResponse(temperature=75)
     model = FakeToolCallingModel(
-        tool_calls=tool_calls, structured_response=expected_structured_response,
+        tool_calls=tool_calls,
+        structured_response=expected_structured_response,
         max_generations_with_tools=1,
     )
 
@@ -1463,7 +1464,8 @@ def test_post_model_hook_with_structured_output() -> None:
     # Test with stream - reset state
 
     model = FakeToolCallingModel(
-        tool_calls=tool_calls, structured_response=expected_structured_response,
+        tool_calls=tool_calls,
+        structured_response=expected_structured_response,
         max_generations_with_tools=1,
     )
 
@@ -1595,19 +1597,19 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
 
 
 def test_post_model_hook_identical_tool_call_ids() -> None:
-
     def get_weather():
         """Get the weather"""
         return "The weather is sunny and 75°F."
 
     # two identical calls
-    tool_calls = [[{"args": {}, "id": "1", "name": "get_weather"}]] * 2 
-    
+    tool_calls = [[{"args": {}, "id": "1", "name": "get_weather"}]] * 2
+
     model = FakeToolCallingModel(
         tool_calls=tool_calls,
         # Only two tool calls, then, done.
         max_generations_with_tools=2,
     )
+
     class State(AgentState):
         called_count: Annotated[int, add]
 
@@ -1627,4 +1629,4 @@ def test_post_model_hook_identical_tool_call_ids() -> None:
     response = agent.invoke(
         {"messages": [HumanMessage("What's the weather?")], "called_count": 0}
     )
-    assert response["called_count"] is 3
+    assert response["called_count"] == 3
