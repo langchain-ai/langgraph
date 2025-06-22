@@ -29,6 +29,7 @@ class FakeToolCallingModel(BaseChatModel):
     tool_calls: Optional[list[list[ToolCall]]] = None
     structured_response: Optional[StructuredResponse] = None
     index: int = 0
+    max_generations_with_tools: int = None
     tool_style: Literal["openai", "anthropic"] = "openai"
 
     def _generate(
@@ -40,9 +41,10 @@ class FakeToolCallingModel(BaseChatModel):
     ) -> ChatResult:
         """Top Level call"""
         messages_string = "-".join([m.content for m in messages])
+        allow_tool_calls = self.max_generations_with_tools is None or self.index < self.max_generations_with_tools
         tool_calls = (
             self.tool_calls[self.index % len(self.tool_calls)]
-            if self.tool_calls
+            if self.tool_calls and allow_tool_calls
             else []
         )
         message = AIMessage(

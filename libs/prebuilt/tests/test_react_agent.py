@@ -10,6 +10,7 @@ from typing import (
     TypeVar,
     Union,
 )
+from operator import add
 
 import pytest
 from langchain_core.messages import (
@@ -1582,3 +1583,39 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
         AIMessage("hi-hi-6", id="1"),
     ]
     assert result["foo"] == 2
+
+
+def test_post_model_hook_identical_tool_call_ids() -> None:
+
+    def get_weather():
+        """Get the weather"""
+        return "The weather is sunny and 75°F."
+
+    # two identical calls
+    tool_calls = [[{"args": {}, "id": "1", "name": "get_weather"}]] * 2 
+    
+    model = FakeToolCallingModel(
+        tool_calls=tool_calls,
+        # Only two tool calls, then, done.
+        max_generations_with_tools=2,
+    )
+    class State(AgentState):
+        called_count: Annotated[int, add]
+
+    def post_model_hook(state: State) -> Union[dict[str, bool], Command]:
+        # Track post model hook calls
+        return {"called_count": 1}
+
+    agent = create_react_agent(
+        model,
+        [get_weather],
+        post_model_hook=post_model_hook,
+        state_schema=State,
+    )
+
+    assert "post_model_hook" in agent.nodes
+
+    response = agent.invoke(
+        {"messages": [HumanMessage("What's the weather?")], "called_count": 0}
+    )
+    assert response["called_count"] is 3

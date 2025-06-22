@@ -720,15 +720,24 @@ def create_react_agent(
             """
 
             messages = _get_state_value(state, "messages")
-            tool_messages = [
-                m.tool_call_id for m in messages if isinstance(m, ToolMessage)
-            ]
-            last_ai_message = next(
-                m for m in reversed(messages) if isinstance(m, AIMessage)
-            )
-            pending_tool_calls = [
-                c for c in last_ai_message.tool_calls if c["id"] not in tool_messages
-            ]
+            tool_message_ids_since_last_ai = set()
+            last_ai_message = None
+
+            for message in reversed(messages):
+                if isinstance(message, AIMessage):
+                    last_ai_message = message
+                    break  # Stop as soon as we find the most recent AI message
+                elif isinstance(message, ToolMessage):
+                    tool_message_ids_since_last_ai.add(message.tool_call_id)
+
+            # 2. Determine pending calls from the last AI message.
+            pending_tool_calls = []
+            if last_ai_message and last_ai_message.tool_calls:
+                pending_tool_calls = [
+                    c
+                    for c in last_ai_message.tool_calls
+                    if c["id"] not in tool_message_ids_since_last_ai
+                ]
 
             if pending_tool_calls:
                 pending_tool_calls = [
