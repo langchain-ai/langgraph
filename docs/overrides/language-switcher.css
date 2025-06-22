@@ -1,0 +1,41 @@
+.lang-python,
+.lang-javascript {
+    display: none;
+}
+
+.language-switcher-global {
+    display: flex;
+    align-items: center;
+    padding-left: 0.5rem;
+    margin-right: 0.5rem;
+}
+
+/* Style the select to match the header */
+.language-switcher-global select {
+    appearance: none;
+    font: inherit;
+    border: none;
+    padding: 0.25rem 0.6rem;
+    cursor: pointer;
+    outline: none;
+    font-weight: bolder;
+}
+
+/* Hover/focus effect */
+.language-switcher-global select:hover,
+.language-switcher-global select:focus {
+    text-decoration: underline;
+}
+
+/* Theme-specific overrides */
+html[data-md-color-scheme="default"] .language-switcher-global select,
+html[data-md-color-scheme="default"] .language-switcher-global option {
+    color: #333;
+    background-color: transparent;
+}
+
+html[data-md-color-scheme="slate"] .language-switcher-global select,
+html[data-md-color-scheme="slate"] .language-switcher-global option {
+    color: #eee;
+    background-color: transparent;
+}
