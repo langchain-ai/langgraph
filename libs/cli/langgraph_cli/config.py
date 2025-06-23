@@ -332,6 +332,11 @@ class HttpConfig(TypedDict, total=False):
     
     Default is False.
     """
+    disable_mcp: bool
+    """Optional. If True, /mcp routes are removed, disabling the MCP server.
+    
+    Default is False.
+    """
     disable_meta: bool
     """Optional. If True, all meta endpoints (/ok, /info, /metrics, /docs) are disabled.
     

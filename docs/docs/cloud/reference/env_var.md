@@ -50,10 +50,9 @@ Set this environment variable to have a deployment send traces to a self-hosted 
 
 ## `LANGSMITH_TRACING`
 
-!!! info "Only for Self-Hosted Data Plane, Self-Hosted Control Plane, and Standalone Container"
-    Disabling LangSmith tracing is only available for [Self-Hosted Data Plane](../../concepts/langgraph_self_hosted_data_plane.md), [Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md), and [Standalone Container](../../concepts/langgraph_standalone_container.md) deployments.
-
 Set `LANGSMITH_TRACING` to `false` to disable tracing to LangSmith.
+
+Defaults to `true`.
 
 ## `LOG_LEVEL`
 
