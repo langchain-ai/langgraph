@@ -2,12 +2,12 @@
 
 AI applications need [memory](../../concepts/memory.md) to share context across multiple interactions. In LangGraph, you can add two types of memory:
 
-- [Add short-term memory](#add-short-term-memory) to track the ongoing conversation by maintaining message history within a session.
+- [Add short-term memory](#add-short-term-memory) as a part of your agent's [state](../../concepts/low_level.md#state) to enable multi-turn conversations.
 - [Add long-term memory](#add-long-term-memory) to store user-specific or application-level data across sessions.
 
 ## Add short-term memory
 
-**Short-term** memory (thread-level persistence) enables agents to track multi-turn conversations. To add short-term memory:
+**Short-term** memory (thread-level [persistence](../../concepts/persistence.md)) enables agents to track multi-turn conversations. To add short-term memory:
 
 ```python
 # highlight-next-line
@@ -1121,44 +1121,87 @@ See [this guide](../../cloud/deployment/semantic_search.md) for more information
 
 With [short-term memory](#add-short-term-memory) enabled, long conversations can exceed the LLM's context window. Common solutions are:
 
-* [Trimming](#trim-messages): Remove first or last N messages (before calling LLM)
-* [Summarization](#summarize-messages): Summarize earlier messages in the history and replace them with a summary
+* [Trim messages](#trim-messages): Remove first or last N messages (before calling LLM)
 * [Delete messages](#delete-messages) from LangGraph state permanently
-* custom strategies (e.g., message filtering, etc.)
+* [Summarize messages](#summarize-messages): Summarize earlier messages in the history and replace them with a summary
+* [Manage checkpoints](#manage-checkpoints) to store and retrieve message history
+* Custom strategies (e.g., message filtering, etc.)
 
 This allows the agent to keep track of the conversation without exceeding the LLM's context window.
 
 ### Trim messages
 
-To trim message history, use the [`trim_messages`](https://python.langchain.com/api_reference/core/messages/langchain_core.messages.utils.trim_messages.html) function:
+Most LLMs have a maximum supported context window (denominated in tokens). One way to decide when to truncate messages is to count the tokens in the message history and truncate whenever it approaches that limit. If you're using LangChain, you can use the `trim_messages` utility and specify the number of tokens to keep from the list, as well as the `strategy` (e.g., keep the last `max_tokens`) to use for handling the boundary.
 
-```python
-# highlight-next-line
-from langchain_core.messages.utils import (
-    # highlight-next-line
-    trim_messages,
-    # highlight-next-line
-    count_tokens_approximately
-# highlight-next-line
-)
+=== "In an agent"
 
-def call_model(state: MessagesState):
+    To trim message history in an agent, use [`pre_model_hook`][langgraph.prebuilt.chat_agent_executor.create_react_agent] with the [`trim_messages`](https://python.langchain.com/api_reference/core/messages/langchain_core.messages.utils.trim_messages.html) function:
+
+    ```python
     # highlight-next-line
-    messages = trim_messages(
-        state["messages"],
-        strategy="last",
-        token_counter=count_tokens_approximately,
-        max_tokens=128,
-        start_on="human",
-        end_on=("human", "tool"),
+    from langchain_core.messages.utils import (
+        # highlight-next-line
+        trim_messages,
+        # highlight-next-line
+        count_tokens_approximately
+    # highlight-next-line
     )
-    response = model.invoke(messages)
-    return {"messages": [response]}
+    from langgraph.prebuilt import create_react_agent
 
-builder = StateGraph(MessagesState)
-builder.add_node(call_model)
-...
-```
+    # This function will be called every time before the node that calls LLM
+    def pre_model_hook(state):
+        trimmed_messages = trim_messages(
+            state["messages"],
+            strategy="last",
+            token_counter=count_tokens_approximately,
+            max_tokens=384,
+            start_on="human",
+            end_on=("human", "tool"),
+        )
+        # highlight-next-line
+        return {"llm_input_messages": trimmed_messages}
+
+    checkpointer = InMemorySaver()
+    agent = create_react_agent(
+        model,
+        tools,
+        # highlight-next-line
+        pre_model_hook=pre_model_hook,
+        checkpointer=checkpointer,
+    )
+    ```
+
+=== "In a workflow"
+
+    To trim message history, use the [`trim_messages`](https://python.langchain.com/api_reference/core/messages/langchain_core.messages.utils.trim_messages.html) function:
+
+    ```python
+    # highlight-next-line
+    from langchain_core.messages.utils import (
+        # highlight-next-line
+        trim_messages,
+        # highlight-next-line
+        count_tokens_approximately
+    # highlight-next-line
+    )
+
+    def call_model(state: MessagesState):
+        # highlight-next-line
+        messages = trim_messages(
+            state["messages"],
+            strategy="last",
+            token_counter=count_tokens_approximately,
+            max_tokens=128,
+            start_on="human",
+            end_on=("human", "tool"),
+        )
+        response = model.invoke(messages)
+        return {"messages": [response]}
+
+    builder = StateGraph(MessagesState)
+    builder.add_node(call_model)
+    ...
+    ```
 
 ??? example "Full example: trim messages"
 
@@ -1211,212 +1254,9 @@ builder.add_node(call_model)
     Your name is Bob, as you mentioned when you first introduced yourself.
     ```
 
-To trim message history in an agent, use [`pre_model_hook`][langgraph.prebuilt.chat_agent_executor.create_react_agent] with the [`trim_messages`](https://python.langchain.com/api_reference/core/messages/langchain_core.messages.utils.trim_messages.html) function:
-
-```python
-# highlight-next-line
-from langchain_core.messages.utils import (
-    # highlight-next-line
-    trim_messages,
-    # highlight-next-line
-    count_tokens_approximately
-# highlight-next-line
-)
-from langgraph.prebuilt import create_react_agent
-
-# This function will be called every time before the node that calls LLM
-def pre_model_hook(state):
-    trimmed_messages = trim_messages(
-        state["messages"],
-        strategy="last",
-        token_counter=count_tokens_approximately,
-        max_tokens=384,
-        start_on="human",
-        end_on=("human", "tool"),
-    )
-    # highlight-next-line
-    return {"llm_input_messages": trimmed_messages}
-
-checkpointer = InMemorySaver()
-agent = create_react_agent(
-    model,
-    tools,
-    # highlight-next-line
-    pre_model_hook=pre_model_hook,
-    checkpointer=checkpointer,
-)
-```
-
-### Summarize messages
-
-An effective strategy for handling long conversation history is to summarize earlier messages once they reach a certain threshold. Use [`SummarizationNode`](https://langchain-ai.github.io/langmem/reference/short_term/#langmem.short_term.SummarizationNode) to summarize messages:
-
-```python
-from typing import Any, TypedDict
-
-from langchain_core.messages import AnyMessage
-from langchain_core.messages.utils import count_tokens_approximately
-# highlight-next-line
-from langmem.short_term import SummarizationNode
-from langgraph.graph import StateGraph, START, MessagesState
-
-class State(MessagesState):
-    # highlight-next-line
-    context: dict[str, Any]  # (1)!
-
-class LLMInputState(TypedDict):  # (2)!
-    summarized_messages: list[AnyMessage]
-    context: dict[str, Any]
-
-# highlight-next-line
-summarization_node = SummarizationNode(
-    token_counter=count_tokens_approximately,
-    model=summarization_model,
-    max_tokens=512,
-    max_tokens_before_summary=256,
-    max_summary_tokens=256,
-)
-
-# highlight-next-line
-def call_model(state: LLMInputState):  # (3)!
-    response = model.invoke(state["summarized_messages"])
-    return {"messages": [response]}
-
-builder = StateGraph(State)
-builder.add_node(call_model)
-# highlight-next-line
-builder.add_node("summarize", summarization_node)
-builder.add_edge(START, "summarize")
-builder.add_edge("summarize", "call_model")
-...
-```
-
-1. We will keep track of our running summary in the `context` field
-(expected by the `SummarizationNode`).
-2. Define private state that will be used only for filtering
-the inputs to `call_model` node.
-3. We're passing a private input state here to isolate the messages returned by the summarization node
-
-??? example "Full example: summarize messages"
-
-    ```python
-    from typing import Any, TypedDict
-    
-    from langchain.chat_models import init_chat_model
-    from langchain_core.messages import AnyMessage
-    from langchain_core.messages.utils import count_tokens_approximately
-    from langgraph.graph import StateGraph, START, MessagesState
-    from langgraph.checkpoint.memory import InMemorySaver
-    # highlight-next-line
-    from langmem.short_term import SummarizationNode
-    
-    model = init_chat_model("anthropic:claude-3-7-sonnet-latest")
-    summarization_model = model.bind(max_tokens=128)
-    
-    class State(MessagesState):
-        # highlight-next-line
-        context: dict[str, Any]  # (1)!
-    
-    class LLMInputState(TypedDict):  # (2)!
-        summarized_messages: list[AnyMessage]
-        context: dict[str, Any]
-    
-    # highlight-next-line
-    summarization_node = SummarizationNode(
-        token_counter=count_tokens_approximately,
-        model=summarization_model,
-        max_tokens=256,
-        max_tokens_before_summary=256,
-        max_summary_tokens=128,
-    )
-
-    # highlight-next-line
-    def call_model(state: LLMInputState):  # (3)!
-        response = model.invoke(state["summarized_messages"])
-        return {"messages": [response]}
-    
-    checkpointer = InMemorySaver()
-    builder = StateGraph(State)
-    builder.add_node(call_model)
-    # highlight-next-line
-    builder.add_node("summarize", summarization_node)
-    builder.add_edge(START, "summarize")
-    builder.add_edge("summarize", "call_model")
-    graph = builder.compile(checkpointer=checkpointer)
-    
-    # Invoke the graph
-    config = {"configurable": {"thread_id": "1"}}
-    graph.invoke({"messages": "hi, my name is bob"}, config)
-    graph.invoke({"messages": "write a short poem about cats"}, config)
-    graph.invoke({"messages": "now do the same but for dogs"}, config)
-    final_response = graph.invoke({"messages": "what's my name?"}, config)
-
-    final_response["messages"][-1].pretty_print()
-    print("\nSummary:", final_response["context"]["running_summary"].summary)
-    ```
-
-    1. We will keep track of our running summary in the `context` field
-    (expected by the `SummarizationNode`).
-    2. Define private state that will be used only for filtering
-    the inputs to `call_model` node.
-    3. We're passing a private input state here to isolate the messages returned by the summarization node
-
-    ```
-    ================================== Ai Message ==================================
-
-    From our conversation, I can see that you introduced yourself as Bob. That's the name you shared with me when we began talking.
-    
-    Summary: In this conversation, I was introduced to Bob, who then asked me to write a poem about cats. I composed a poem titled "The Mystery of Cats" that captured cats' graceful movements, independent nature, and their special relationship with humans. Bob then requested a similar poem about dogs, so I wrote "The Joy of Dogs," which highlighted dogs' loyalty, enthusiasm, and loving companionship. Both poems were written in a similar style but emphasized the distinct characteristics that make each pet special.
-    ```
-
-To summarize message history in an agent, use [`pre_model_hook`][langgraph.prebuilt.chat_agent_executor.create_react_agent] with a prebuilt [`SummarizationNode`](https://langchain-ai.github.io/langmem/reference/short_term/#langmem.short_term.SummarizationNode):
-
-```python
-from langchain_anthropic import ChatAnthropic
-from langmem.short_term import SummarizationNode
-from langchain_core.messages.utils import count_tokens_approximately
-from langgraph.prebuilt import create_react_agent
-from langgraph.prebuilt.chat_agent_executor import AgentState
-from langgraph.checkpoint.memory import InMemorySaver
-from typing import Any
-
-model = ChatAnthropic(model="claude-3-7-sonnet-latest")
-
-summarization_node = SummarizationNode( # (1)!
-    token_counter=count_tokens_approximately,
-    model=model,
-    max_tokens=384,
-    max_summary_tokens=128,
-    output_messages_key="llm_input_messages",
-)
-
-class State(AgentState):
-    # NOTE: we're adding this key to keep track of previous summary information
-    # to make sure we're not summarizing on every LLM call
-    # highlight-next-line
-    context: dict[str, Any]  # (2)!
-
-
-checkpointer = InMemorySaver() # (3)!
-
-agent = create_react_agent(
-    model=model,
-    tools=tools,
-    # highlight-next-line
-    pre_model_hook=summarization_node, # (4)!
-    # highlight-next-line
-    state_schema=State, # (5)!
-    checkpointer=checkpointer,
-)
-```
-
-1. The `InMemorySaver` is a checkpointer that stores the agent's state in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [checkpointer documentation](../../reference/checkpoints.md) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready checkpointer for you.
-2. The `context` key is added to the agent's state. The key contains book-keeping information for the summarization node. It is used to keep track of the last summary information and ensure that the agent doesn't summarize on every LLM call, which can be inefficient.
-3. The `checkpointer` is passed to the agent. This enables the agent to persist its state across invocations.
-4. The `pre_model_hook` is set to the `SummarizationNode`. This node will summarize the message history before sending it to the LLM. The summarization node will automatically handle the summarization process and update the agent's state with the new summary. You can replace this with a custom implementation if you prefer. Please see the [create_react_agent][langgraph.prebuilt.chat_agent_executor.create_react_agent] API reference for more details.
-5. The `state_schema` is set to the `State` class, which is the custom state that contains an extra `context` key.
-
 ### Delete messages
+
+You can delete messages from the graph state to manage the message history. This is useful when you want to remove specific messages or clear the entire message history.
 
 To delete messages from the graph state, you can use the `RemoveMessage`. For `RemoveMessage` to work, you need to use a state key with [`add_messages`][langgraph.graph.message.add_messages] [reducer](../../concepts/low_level.md#reducers), like [`MessagesState`](../../concepts/low_level.md#messagesstate).
 
@@ -1499,6 +1339,177 @@ def delete_messages(state):
     [('human', "what's my name?"), ('ai', 'Your name is Bob.')]
     ```
 
+### Summarize messages
+
+The problem with trimming or removing messages, as shown above, is that you may lose information from culling of the message queue. Because of this, some applications benefit from a more sophisticated approach of summarizing the message history using a chat model.
+
+![](img/memory/summary.png)
+
+=== "In an agent"
+
+    To summarize message history in an agent, use [`pre_model_hook`][langgraph.prebuilt.chat_agent_executor.create_react_agent] with a prebuilt [`SummarizationNode`](https://langchain-ai.github.io/langmem/reference/short_term/#langmem.short_term.SummarizationNode) abstraction:
+
+    ```python
+    from langchain_anthropic import ChatAnthropic
+    from langmem.short_term import SummarizationNode
+    from langchain_core.messages.utils import count_tokens_approximately
+    from langgraph.prebuilt import create_react_agent
+    from langgraph.prebuilt.chat_agent_executor import AgentState
+    from langgraph.checkpoint.memory import InMemorySaver
+    from typing import Any
+
+    model = ChatAnthropic(model="claude-3-7-sonnet-latest")
+
+    summarization_node = SummarizationNode( # (1)!
+        token_counter=count_tokens_approximately,
+        model=model,
+        max_tokens=384,
+        max_summary_tokens=128,
+        output_messages_key="llm_input_messages",
+    )
+
+    class State(AgentState):
+        # NOTE: we're adding this key to keep track of previous summary information
+        # to make sure we're not summarizing on every LLM call
+        # highlight-next-line
+        context: dict[str, Any]  # (2)!
+
+
+    checkpointer = InMemorySaver() # (3)!
+
+    agent = create_react_agent(
+        model=model,
+        tools=tools,
+        # highlight-next-line
+        pre_model_hook=summarization_node, # (4)!
+        # highlight-next-line
+        state_schema=State, # (5)!
+        checkpointer=checkpointer,
+    )
+    ```
+
+    1. The `InMemorySaver` is a checkpointer that stores the agent's state in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [checkpointer documentation](../../reference/checkpoints.md) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready checkpointer for you.
+    2. The `context` key is added to the agent's state. The key contains book-keeping information for the summarization node. It is used to keep track of the last summary information and ensure that the agent doesn't summarize on every LLM call, which can be inefficient.
+    3. The `checkpointer` is passed to the agent. This enables the agent to persist its state across invocations.
+    4. The `pre_model_hook` is set to the `SummarizationNode`. This node will summarize the message history before sending it to the LLM. The summarization node will automatically handle the summarization process and update the agent's state with the new summary. You can replace this with a custom implementation if you prefer. Please see the [create_react_agent][langgraph.prebuilt.chat_agent_executor.create_react_agent] API reference for more details.
+    5. The `state_schema` is set to the `State` class, which is the custom state that contains an extra `context` key.
+
+
+=== "In a workflow"
+
+    Prompting and orchestration logic can be used to summarize the message history. For example, in LangGraph you can extend the [`MessagesState`](../../concepts/low_level.md#working-with-messages-in-graph-state) to include a `summary` key:
+
+    ```python
+    from langgraph.graph import MessagesState
+    class State(MessagesState):
+        summary: str
+    ```
+
+    Then, you can generate a summary of the chat history, using any existing summary as context for the next summary. This `summarize_conversation` node can be called after some number of messages have accumulated in the `messages` state key.
+
+    ```python
+    def summarize_conversation(state: State):
+
+        # First, we get any existing summary
+        summary = state.get("summary", "")
+
+        # Create our summarization prompt
+        if summary:
+
+            # A summary already exists
+            summary_message = (
+                f"This is a summary of the conversation to date: {summary}\n\n"
+                "Extend the summary by taking into account the new messages above:"
+            )
+
+        else:
+            summary_message = "Create a summary of the conversation above:"
+
+        # Add prompt to our history
+        messages = state["messages"] + [HumanMessage(content=summary_message)]
+        response = model.invoke(messages)
+
+        # Delete all but the 2 most recent messages
+        delete_messages = [RemoveMessage(id=m.id) for m in state["messages"][:-2]]
+        return {"summary": response.content, "messages": delete_messages}
+    ```
+
+
+
+??? example "Full example: summarize messages"
+
+    ```python
+    from typing import Any, TypedDict
+    
+    from langchain.chat_models import init_chat_model
+    from langchain_core.messages import AnyMessage
+    from langchain_core.messages.utils import count_tokens_approximately
+    from langgraph.graph import StateGraph, START, MessagesState
+    from langgraph.checkpoint.memory import InMemorySaver
+    # highlight-next-line
+    from langmem.short_term import SummarizationNode
+    
+    model = init_chat_model("anthropic:claude-3-7-sonnet-latest")
+    summarization_model = model.bind(max_tokens=128)
+    
+    class State(MessagesState):
+        # highlight-next-line
+        context: dict[str, Any]  # (1)!
+    
+    class LLMInputState(TypedDict):  # (2)!
+        summarized_messages: list[AnyMessage]
+        context: dict[str, Any]
+    
+    # highlight-next-line
+    summarization_node = SummarizationNode(
+        token_counter=count_tokens_approximately,
+        model=summarization_model,
+        max_tokens=256,
+        max_tokens_before_summary=256,
+        max_summary_tokens=128,
+    )
+
+    # highlight-next-line
+    def call_model(state: LLMInputState):  # (3)!
+        response = model.invoke(state["summarized_messages"])
+        return {"messages": [response]}
+    
+    checkpointer = InMemorySaver()
+    builder = StateGraph(State)
+    builder.add_node(call_model)
+    # highlight-next-line
+    builder.add_node("summarize", summarization_node)
+    builder.add_edge(START, "summarize")
+    builder.add_edge("summarize", "call_model")
+    graph = builder.compile(checkpointer=checkpointer)
+    
+    # Invoke the graph
+    config = {"configurable": {"thread_id": "1"}}
+    graph.invoke({"messages": "hi, my name is bob"}, config)
+    graph.invoke({"messages": "write a short poem about cats"}, config)
+    graph.invoke({"messages": "now do the same but for dogs"}, config)
+    final_response = graph.invoke({"messages": "what's my name?"}, config)
+
+    final_response["messages"][-1].pretty_print()
+    print("\nSummary:", final_response["context"]["running_summary"].summary)
+    ```
+
+    1. We will keep track of our running summary in the `context` field
+    (expected by the `SummarizationNode`).
+    2. Define private state that will be used only for filtering
+    the inputs to `call_model` node.
+    3. We're passing a private input state here to isolate the messages returned by the summarization node
+
+    ```
+    ================================== Ai Message ==================================
+
+    From our conversation, I can see that you introduced yourself as Bob. That's the name you shared with me when we began talking.
+    
+    Summary: In this conversation, I was introduced to Bob, who then asked me to write a poem about cats. I composed a poem titled "The Mystery of Cats" that captured cats' graceful movements, independent nature, and their special relationship with humans. Bob then requested a similar poem about dogs, so I wrote "The Joy of Dogs," which highlighted dogs' loyalty, enthusiasm, and loving companionship. Both poems were written in a similar style but emphasized the distinct characteristics that make each pet special.
+    ```
+
+
+
 ### Manage checkpoints
 
 You can view and delete the information stored by the checkpointer.
@@ -1507,261 +1518,261 @@ You can view and delete the information stored by the checkpointer.
 
 === "Graph/Functional API"
 
-```python
-config = {
-    "configurable": {
-        # highlight-next-line
-        "thread_id": "1",
-        # optionally provide an ID for a specific checkpoint,
-        # otherwise the latest checkpoint is shown
-        # highlight-next-line
-        # "checkpoint_id": "1f029ca3-1f5b-6704-8004-820c16b69a5a"
-            
+    ```python
+    config = {
+        "configurable": {
+            # highlight-next-line
+            "thread_id": "1",
+            # optionally provide an ID for a specific checkpoint,
+            # otherwise the latest checkpoint is shown
+            # highlight-next-line
+            # "checkpoint_id": "1f029ca3-1f5b-6704-8004-820c16b69a5a"
+                
+        }
     }
-}
-# highlight-next-line
-graph.get_state(config)
-```
+    # highlight-next-line
+    graph.get_state(config)
+    ```
 
-```
-StateSnapshot(
-    values={'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today?), HumanMessage(content="what's my name?"), AIMessage(content='Your name is Bob.')]}, next=(), 
-    config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1f5b-6704-8004-820c16b69a5a'}},
-    metadata={
-        'source': 'loop',
-        'writes': {'call_model': {'messages': AIMessage(content='Your name is Bob.')}},
-        'step': 4,
-        'parents': {},
-        'thread_id': '1'
-    },
-    created_at='2025-05-05T16:01:24.680462+00:00',
-    parent_config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1790-6b0a-8003-baf965b6a38f'}}, 
-    tasks=(),
-    interrupts=()
-)
-```
+    ```
+    StateSnapshot(
+        values={'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today?), HumanMessage(content="what's my name?"), AIMessage(content='Your name is Bob.')]}, next=(), 
+        config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1f5b-6704-8004-820c16b69a5a'}},
+        metadata={
+            'source': 'loop',
+            'writes': {'call_model': {'messages': AIMessage(content='Your name is Bob.')}},
+            'step': 4,
+            'parents': {},
+            'thread_id': '1'
+        },
+        created_at='2025-05-05T16:01:24.680462+00:00',
+        parent_config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1790-6b0a-8003-baf965b6a38f'}}, 
+        tasks=(),
+        interrupts=()
+    )
+    ```
 
 === "Checkpointer API"
 
-```python
-config = {
-    "configurable": {
-        # highlight-next-line
-        "thread_id": "1",
-        # optionally provide an ID for a specific checkpoint,
-        # otherwise the latest checkpoint is shown
-        # highlight-next-line
-        # "checkpoint_id": "1f029ca3-1f5b-6704-8004-820c16b69a5a"
-            
+    ```python
+    config = {
+        "configurable": {
+            # highlight-next-line
+            "thread_id": "1",
+            # optionally provide an ID for a specific checkpoint,
+            # otherwise the latest checkpoint is shown
+            # highlight-next-line
+            # "checkpoint_id": "1f029ca3-1f5b-6704-8004-820c16b69a5a"
+                
+        }
     }
-}
-# highlight-next-line
-checkpointer.get_tuple(config)
-```
+    # highlight-next-line
+    checkpointer.get_tuple(config)
+    ```
 
-```
-CheckpointTuple(
-    config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1f5b-6704-8004-820c16b69a5a'}},
-    checkpoint={
-        'v': 3,
-        'ts': '2025-05-05T16:01:24.680462+00:00',
-        'id': '1f029ca3-1f5b-6704-8004-820c16b69a5a',
-        'channel_versions': {'__start__': '00000000000000000000000000000005.0.5290678567601859', 'messages': '00000000000000000000000000000006.0.3205149138784782', 'branch:to:call_model': '00000000000000000000000000000006.0.14611156755133758'}, 'versions_seen': {'__input__': {}, '__start__': {'__start__': '00000000000000000000000000000004.0.5736472536395331'}, 'call_model': {'branch:to:call_model': '00000000000000000000000000000005.0.1410174088651449'}},
-        'channel_values': {'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today?), HumanMessage(content="what's my name?"), AIMessage(content='Your name is Bob.')]},
-    },
-    metadata={
-        'source': 'loop',
-        'writes': {'call_model': {'messages': AIMessage(content='Your name is Bob.')}},
-        'step': 4,
-        'parents': {},
-        'thread_id': '1'
-    },
-    parent_config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1790-6b0a-8003-baf965b6a38f'}},
-    pending_writes=[]
-)
-```
+    ```
+    CheckpointTuple(
+        config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1f5b-6704-8004-820c16b69a5a'}},
+        checkpoint={
+            'v': 3,
+            'ts': '2025-05-05T16:01:24.680462+00:00',
+            'id': '1f029ca3-1f5b-6704-8004-820c16b69a5a',
+            'channel_versions': {'__start__': '00000000000000000000000000000005.0.5290678567601859', 'messages': '00000000000000000000000000000006.0.3205149138784782', 'branch:to:call_model': '00000000000000000000000000000006.0.14611156755133758'}, 'versions_seen': {'__input__': {}, '__start__': {'__start__': '00000000000000000000000000000004.0.5736472536395331'}, 'call_model': {'branch:to:call_model': '00000000000000000000000000000005.0.1410174088651449'}},
+            'channel_values': {'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today?), HumanMessage(content="what's my name?"), AIMessage(content='Your name is Bob.')]},
+        },
+        metadata={
+            'source': 'loop',
+            'writes': {'call_model': {'messages': AIMessage(content='Your name is Bob.')}},
+            'step': 4,
+            'parents': {},
+            'thread_id': '1'
+        },
+        parent_config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1790-6b0a-8003-baf965b6a38f'}},
+        pending_writes=[]
+    )
+    ```
 
 #### View the history of the thread (checkpoints)
 
 === "Graph/Functional API"
 
-```python
-config = {
-    "configurable": {
-        # highlight-next-line
-        "thread_id": "1"
+    ```python
+    config = {
+        "configurable": {
+            # highlight-next-line
+            "thread_id": "1"
+        }
     }
-}
-# highlight-next-line
-list(graph.get_state_history(config))
-```
+    # highlight-next-line
+    list(graph.get_state_history(config))
+    ```
 
-```
-[
-    StateSnapshot(
-        values={'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?'), HumanMessage(content="what's my name?"), AIMessage(content='Your name is Bob.')]}, 
-        next=(), 
-        config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1f5b-6704-8004-820c16b69a5a'}}, 
-        metadata={'source': 'loop', 'writes': {'call_model': {'messages': AIMessage(content='Your name is Bob.')}}, 'step': 4, 'parents': {}, 'thread_id': '1'},
-        created_at='2025-05-05T16:01:24.680462+00:00',
-        parent_config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1790-6b0a-8003-baf965b6a38f'}},
-        tasks=(),
-        interrupts=()
-    ),
-    StateSnapshot(
-        values={'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?'), HumanMessage(content="what's my name?")]}, 
-        next=('call_model',), 
-        config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1790-6b0a-8003-baf965b6a38f'}},
-        metadata={'source': 'loop', 'writes': None, 'step': 3, 'parents': {}, 'thread_id': '1'},
-        created_at='2025-05-05T16:01:23.863421+00:00',
-        parent_config={...}
-        tasks=(PregelTask(id='8ab4155e-6b15-b885-9ce5-bed69a2c305c', name='call_model', path=('__pregel_pull', 'call_model'), error=None, interrupts=(), state=None, result={'messages': AIMessage(content='Your name is Bob.')}),),
-        interrupts=()
-    ),
-    StateSnapshot(
-        values={'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?')]}, 
-        next=('__start__',), 
-        config={...}, 
-        metadata={'source': 'input', 'writes': {'__start__': {'messages': [{'role': 'user', 'content': "what's my name?"}]}}, 'step': 2, 'parents': {}, 'thread_id': '1'},
-        created_at='2025-05-05T16:01:23.863173+00:00',
-        parent_config={...}
-        tasks=(PregelTask(id='24ba39d6-6db1-4c9b-f4c5-682aeaf38dcd', name='__start__', path=('__pregel_pull', '__start__'), error=None, interrupts=(), state=None, result={'messages': [{'role': 'user', 'content': "what's my name?"}]}),),
-        interrupts=()
-    ),
-    StateSnapshot(
-        values={'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?')]}, 
-        next=(), 
-        config={...}, 
-        metadata={'source': 'loop', 'writes': {'call_model': {'messages': AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?')}}, 'step': 1, 'parents': {}, 'thread_id': '1'},
-        created_at='2025-05-05T16:01:23.862295+00:00',
-        parent_config={...}
-        tasks=(),
-        interrupts=()
-    ),
-    StateSnapshot(
-        values={'messages': [HumanMessage(content="hi! I'm bob")]}, 
-        next=('call_model',), 
-        config={...}, 
-        metadata={'source': 'loop', 'writes': None, 'step': 0, 'parents': {}, 'thread_id': '1'}, 
-        created_at='2025-05-05T16:01:22.278960+00:00', 
-        parent_config={...}
-        tasks=(PregelTask(id='8cbd75e0-3720-b056-04f7-71ac805140a0', name='call_model', path=('__pregel_pull', 'call_model'), error=None, interrupts=(), state=None, result={'messages': AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?')}),), 
-        interrupts=()
-    ),
-    StateSnapshot(
-        values={'messages': []}, 
-        next=('__start__',), 
-        config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-0870-6ce2-bfff-1f3f14c3e565'}},
-        metadata={'source': 'input', 'writes': {'__start__': {'messages': [{'role': 'user', 'content': "hi! I'm bob"}]}}, 'step': -1, 'parents': {}, 'thread_id': '1'}, 
-        created_at='2025-05-05T16:01:22.277497+00:00', 
-        parent_config=None,
-        tasks=(PregelTask(id='d458367b-8265-812c-18e2-33001d199ce6', name='__start__', path=('__pregel_pull', '__start__'), error=None, interrupts=(), state=None, result={'messages': [{'role': 'user', 'content': "hi! I'm bob"}]}),), 
-        interrupts=()
-    )
-]       
-```
+    ```
+    [
+        StateSnapshot(
+            values={'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?'), HumanMessage(content="what's my name?"), AIMessage(content='Your name is Bob.')]}, 
+            next=(), 
+            config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1f5b-6704-8004-820c16b69a5a'}}, 
+            metadata={'source': 'loop', 'writes': {'call_model': {'messages': AIMessage(content='Your name is Bob.')}}, 'step': 4, 'parents': {}, 'thread_id': '1'},
+            created_at='2025-05-05T16:01:24.680462+00:00',
+            parent_config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1790-6b0a-8003-baf965b6a38f'}},
+            tasks=(),
+            interrupts=()
+        ),
+        StateSnapshot(
+            values={'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?'), HumanMessage(content="what's my name?")]}, 
+            next=('call_model',), 
+            config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1790-6b0a-8003-baf965b6a38f'}},
+            metadata={'source': 'loop', 'writes': None, 'step': 3, 'parents': {}, 'thread_id': '1'},
+            created_at='2025-05-05T16:01:23.863421+00:00',
+            parent_config={...}
+            tasks=(PregelTask(id='8ab4155e-6b15-b885-9ce5-bed69a2c305c', name='call_model', path=('__pregel_pull', 'call_model'), error=None, interrupts=(), state=None, result={'messages': AIMessage(content='Your name is Bob.')}),),
+            interrupts=()
+        ),
+        StateSnapshot(
+            values={'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?')]}, 
+            next=('__start__',), 
+            config={...}, 
+            metadata={'source': 'input', 'writes': {'__start__': {'messages': [{'role': 'user', 'content': "what's my name?"}]}}, 'step': 2, 'parents': {}, 'thread_id': '1'},
+            created_at='2025-05-05T16:01:23.863173+00:00',
+            parent_config={...}
+            tasks=(PregelTask(id='24ba39d6-6db1-4c9b-f4c5-682aeaf38dcd', name='__start__', path=('__pregel_pull', '__start__'), error=None, interrupts=(), state=None, result={'messages': [{'role': 'user', 'content': "what's my name?"}]}),),
+            interrupts=()
+        ),
+        StateSnapshot(
+            values={'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?')]}, 
+            next=(), 
+            config={...}, 
+            metadata={'source': 'loop', 'writes': {'call_model': {'messages': AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?')}}, 'step': 1, 'parents': {}, 'thread_id': '1'},
+            created_at='2025-05-05T16:01:23.862295+00:00',
+            parent_config={...}
+            tasks=(),
+            interrupts=()
+        ),
+        StateSnapshot(
+            values={'messages': [HumanMessage(content="hi! I'm bob")]}, 
+            next=('call_model',), 
+            config={...}, 
+            metadata={'source': 'loop', 'writes': None, 'step': 0, 'parents': {}, 'thread_id': '1'}, 
+            created_at='2025-05-05T16:01:22.278960+00:00', 
+            parent_config={...}
+            tasks=(PregelTask(id='8cbd75e0-3720-b056-04f7-71ac805140a0', name='call_model', path=('__pregel_pull', 'call_model'), error=None, interrupts=(), state=None, result={'messages': AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?')}),), 
+            interrupts=()
+        ),
+        StateSnapshot(
+            values={'messages': []}, 
+            next=('__start__',), 
+            config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-0870-6ce2-bfff-1f3f14c3e565'}},
+            metadata={'source': 'input', 'writes': {'__start__': {'messages': [{'role': 'user', 'content': "hi! I'm bob"}]}}, 'step': -1, 'parents': {}, 'thread_id': '1'}, 
+            created_at='2025-05-05T16:01:22.277497+00:00', 
+            parent_config=None,
+            tasks=(PregelTask(id='d458367b-8265-812c-18e2-33001d199ce6', name='__start__', path=('__pregel_pull', '__start__'), error=None, interrupts=(), state=None, result={'messages': [{'role': 'user', 'content': "hi! I'm bob"}]}),), 
+            interrupts=()
+        )
+    ]       
+    ```
 
 === "Checkpointer API"
 
-```python
-config = {
-    "configurable": {
-        # highlight-next-line
-        "thread_id": "1"
+    ```python
+    config = {
+        "configurable": {
+            # highlight-next-line
+            "thread_id": "1"
+        }
     }
-}
-# highlight-next-line
-list(checkpointer.list(config))
-```
+    # highlight-next-line
+    list(checkpointer.list(config))
+    ```
 
-```
-[
-    CheckpointTuple(
-        config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1f5b-6704-8004-820c16b69a5a'}}, 
-        checkpoint={
-            'v': 3, 
-            'ts': '2025-05-05T16:01:24.680462+00:00', 
-            'id': '1f029ca3-1f5b-6704-8004-820c16b69a5a', 
-            'channel_versions': {'__start__': '00000000000000000000000000000005.0.5290678567601859', 'messages': '00000000000000000000000000000006.0.3205149138784782', 'branch:to:call_model': '00000000000000000000000000000006.0.14611156755133758'}, 
-            'versions_seen': {'__input__': {}, '__start__': {'__start__': '00000000000000000000000000000004.0.5736472536395331'}, 'call_model': {'branch:to:call_model': '00000000000000000000000000000005.0.1410174088651449'}},
-            'channel_values': {'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?'), HumanMessage(content="what's my name?"), AIMessage(content='Your name is Bob.')]},
-        },
-        metadata={'source': 'loop', 'writes': {'call_model': {'messages': AIMessage(content='Your name is Bob.')}}, 'step': 4, 'parents': {}, 'thread_id': '1'}, 
-        parent_config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1790-6b0a-8003-baf965b6a38f'}}, 
-        pending_writes=[]
-    ),
-    CheckpointTuple(
-        config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1790-6b0a-8003-baf965b6a38f'}},
-        checkpoint={
-            'v': 3, 
-            'ts': '2025-05-05T16:01:23.863421+00:00', 
-            'id': '1f029ca3-1790-6b0a-8003-baf965b6a38f', 
-            'channel_versions': {'__start__': '00000000000000000000000000000005.0.5290678567601859', 'messages': '00000000000000000000000000000006.0.3205149138784782', 'branch:to:call_model': '00000000000000000000000000000006.0.14611156755133758'}, 
-            'versions_seen': {'__input__': {}, '__start__': {'__start__': '00000000000000000000000000000004.0.5736472536395331'}, 'call_model': {'branch:to:call_model': '00000000000000000000000000000005.0.1410174088651449'}},
-            'channel_values': {'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?'), HumanMessage(content="what's my name?")], 'branch:to:call_model': None}
-        }, 
-        metadata={'source': 'loop', 'writes': None, 'step': 3, 'parents': {}, 'thread_id': '1'}, 
-        parent_config={...}, 
-        pending_writes=[('8ab4155e-6b15-b885-9ce5-bed69a2c305c', 'messages', AIMessage(content='Your name is Bob.'))]
-    ),
-    CheckpointTuple(
-        config={...}, 
-        checkpoint={
-            'v': 3, 
-            'ts': '2025-05-05T16:01:23.863173+00:00', 
-            'id': '1f029ca3-1790-616e-8002-9e021694a0cd', 
-            'channel_versions': {'__start__': '00000000000000000000000000000004.0.5736472536395331', 'messages': '00000000000000000000000000000003.0.7056767754077798', 'branch:to:call_model': '00000000000000000000000000000003.0.22059023329132854'}, 
-            'versions_seen': {'__input__': {}, '__start__': {'__start__': '00000000000000000000000000000001.0.7040775356287469'}, 'call_model': {'branch:to:call_model': '00000000000000000000000000000002.0.9300422176788571'}}, 
-            'channel_values': {'__start__': {'messages': [{'role': 'user', 'content': "what's my name?"}]}, 'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?')]}
-        }, 
-        metadata={'source': 'input', 'writes': {'__start__': {'messages': [{'role': 'user', 'content': "what's my name?"}]}}, 'step': 2, 'parents': {}, 'thread_id': '1'}, 
-        parent_config={...}, 
-        pending_writes=[('24ba39d6-6db1-4c9b-f4c5-682aeaf38dcd', 'messages', [{'role': 'user', 'content': "what's my name?"}]), ('24ba39d6-6db1-4c9b-f4c5-682aeaf38dcd', 'branch:to:call_model', None)]
-    ),
-    CheckpointTuple(
-        config={...}, 
-        checkpoint={
-            'v': 3, 
-            'ts': '2025-05-05T16:01:23.862295+00:00', 
-            'id': '1f029ca3-178d-6f54-8001-d7b180db0c89', 
-            'channel_versions': {'__start__': '00000000000000000000000000000002.0.18673090920108737', 'messages': '00000000000000000000000000000003.0.7056767754077798', 'branch:to:call_model': '00000000000000000000000000000003.0.22059023329132854'}, 
-            'versions_seen': {'__input__': {}, '__start__': {'__start__': '00000000000000000000000000000001.0.7040775356287469'}, 'call_model': {'branch:to:call_model': '00000000000000000000000000000002.0.9300422176788571'}}, 
-            'channel_values': {'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?')]}
-        }, 
-        metadata={'source': 'loop', 'writes': {'call_model': {'messages': AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?')}}, 'step': 1, 'parents': {}, 'thread_id': '1'}, 
-        parent_config={...}, 
-        pending_writes=[]
-    ),
-    CheckpointTuple(
-        config={...}, 
-        checkpoint={
-            'v': 3, 
-            'ts': '2025-05-05T16:01:22.278960+00:00', 
-            'id': '1f029ca3-0874-6612-8000-339f2abc83b1', 
-            'channel_versions': {'__start__': '00000000000000000000000000000002.0.18673090920108737', 'messages': '00000000000000000000000000000002.0.30296526818059655', 'branch:to:call_model': '00000000000000000000000000000002.0.9300422176788571'}, 
-            'versions_seen': {'__input__': {}, '__start__': {'__start__': '00000000000000000000000000000001.0.7040775356287469'}}, 
-            'channel_values': {'messages': [HumanMessage(content="hi! I'm bob")], 'branch:to:call_model': None}
-        }, 
-        metadata={'source': 'loop', 'writes': None, 'step': 0, 'parents': {}, 'thread_id': '1'}, 
-        parent_config={...}, 
-        pending_writes=[('8cbd75e0-3720-b056-04f7-71ac805140a0', 'messages', AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?'))]
-    ),
-    CheckpointTuple(
-        config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-0870-6ce2-bfff-1f3f14c3e565'}}, 
-        checkpoint={
-            'v': 3, 
-            'ts': '2025-05-05T16:01:22.277497+00:00', 
-            'id': '1f029ca3-0870-6ce2-bfff-1f3f14c3e565', 
-            'channel_versions': {'__start__': '00000000000000000000000000000001.0.7040775356287469'}, 
-            'versions_seen': {'__input__': {}}, 
-            'channel_values': {'__start__': {'messages': [{'role': 'user', 'content': "hi! I'm bob"}]}}
-        }, 
-        metadata={'source': 'input', 'writes': {'__start__': {'messages': [{'role': 'user', 'content': "hi! I'm bob"}]}}, 'step': -1, 'parents': {}, 'thread_id': '1'}, 
-        parent_config=None, 
-        pending_writes=[('d458367b-8265-812c-18e2-33001d199ce6', 'messages', [{'role': 'user', 'content': "hi! I'm bob"}]), ('d458367b-8265-812c-18e2-33001d199ce6', 'branch:to:call_model', None)]
-    )
-]
-```
+    ```
+    [
+        CheckpointTuple(
+            config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1f5b-6704-8004-820c16b69a5a'}}, 
+            checkpoint={
+                'v': 3, 
+                'ts': '2025-05-05T16:01:24.680462+00:00', 
+                'id': '1f029ca3-1f5b-6704-8004-820c16b69a5a', 
+                'channel_versions': {'__start__': '00000000000000000000000000000005.0.5290678567601859', 'messages': '00000000000000000000000000000006.0.3205149138784782', 'branch:to:call_model': '00000000000000000000000000000006.0.14611156755133758'}, 
+                'versions_seen': {'__input__': {}, '__start__': {'__start__': '00000000000000000000000000000004.0.5736472536395331'}, 'call_model': {'branch:to:call_model': '00000000000000000000000000000005.0.1410174088651449'}},
+                'channel_values': {'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?'), HumanMessage(content="what's my name?"), AIMessage(content='Your name is Bob.')]},
+            },
+            metadata={'source': 'loop', 'writes': {'call_model': {'messages': AIMessage(content='Your name is Bob.')}}, 'step': 4, 'parents': {}, 'thread_id': '1'}, 
+            parent_config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1790-6b0a-8003-baf965b6a38f'}}, 
+            pending_writes=[]
+        ),
+        CheckpointTuple(
+            config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1790-6b0a-8003-baf965b6a38f'}},
+            checkpoint={
+                'v': 3, 
+                'ts': '2025-05-05T16:01:23.863421+00:00', 
+                'id': '1f029ca3-1790-6b0a-8003-baf965b6a38f', 
+                'channel_versions': {'__start__': '00000000000000000000000000000005.0.5290678567601859', 'messages': '00000000000000000000000000000006.0.3205149138784782', 'branch:to:call_model': '00000000000000000000000000000006.0.14611156755133758'}, 
+                'versions_seen': {'__input__': {}, '__start__': {'__start__': '00000000000000000000000000000004.0.5736472536395331'}, 'call_model': {'branch:to:call_model': '00000000000000000000000000000005.0.1410174088651449'}},
+                'channel_values': {'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?'), HumanMessage(content="what's my name?")], 'branch:to:call_model': None}
+            }, 
+            metadata={'source': 'loop', 'writes': None, 'step': 3, 'parents': {}, 'thread_id': '1'}, 
+            parent_config={...}, 
+            pending_writes=[('8ab4155e-6b15-b885-9ce5-bed69a2c305c', 'messages', AIMessage(content='Your name is Bob.'))]
+        ),
+        CheckpointTuple(
+            config={...}, 
+            checkpoint={
+                'v': 3, 
+                'ts': '2025-05-05T16:01:23.863173+00:00', 
+                'id': '1f029ca3-1790-616e-8002-9e021694a0cd', 
+                'channel_versions': {'__start__': '00000000000000000000000000000004.0.5736472536395331', 'messages': '00000000000000000000000000000003.0.7056767754077798', 'branch:to:call_model': '00000000000000000000000000000003.0.22059023329132854'}, 
+                'versions_seen': {'__input__': {}, '__start__': {'__start__': '00000000000000000000000000000001.0.7040775356287469'}, 'call_model': {'branch:to:call_model': '00000000000000000000000000000002.0.9300422176788571'}}, 
+                'channel_values': {'__start__': {'messages': [{'role': 'user', 'content': "what's my name?"}]}, 'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?')]}
+            }, 
+            metadata={'source': 'input', 'writes': {'__start__': {'messages': [{'role': 'user', 'content': "what's my name?"}]}}, 'step': 2, 'parents': {}, 'thread_id': '1'}, 
+            parent_config={...}, 
+            pending_writes=[('24ba39d6-6db1-4c9b-f4c5-682aeaf38dcd', 'messages', [{'role': 'user', 'content': "what's my name?"}]), ('24ba39d6-6db1-4c9b-f4c5-682aeaf38dcd', 'branch:to:call_model', None)]
+        ),
+        CheckpointTuple(
+            config={...}, 
+            checkpoint={
+                'v': 3, 
+                'ts': '2025-05-05T16:01:23.862295+00:00', 
+                'id': '1f029ca3-178d-6f54-8001-d7b180db0c89', 
+                'channel_versions': {'__start__': '00000000000000000000000000000002.0.18673090920108737', 'messages': '00000000000000000000000000000003.0.7056767754077798', 'branch:to:call_model': '00000000000000000000000000000003.0.22059023329132854'}, 
+                'versions_seen': {'__input__': {}, '__start__': {'__start__': '00000000000000000000000000000001.0.7040775356287469'}, 'call_model': {'branch:to:call_model': '00000000000000000000000000000002.0.9300422176788571'}}, 
+                'channel_values': {'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?')]}
+            }, 
+            metadata={'source': 'loop', 'writes': {'call_model': {'messages': AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?')}}, 'step': 1, 'parents': {}, 'thread_id': '1'}, 
+            parent_config={...}, 
+            pending_writes=[]
+        ),
+        CheckpointTuple(
+            config={...}, 
+            checkpoint={
+                'v': 3, 
+                'ts': '2025-05-05T16:01:22.278960+00:00', 
+                'id': '1f029ca3-0874-6612-8000-339f2abc83b1', 
+                'channel_versions': {'__start__': '00000000000000000000000000000002.0.18673090920108737', 'messages': '00000000000000000000000000000002.0.30296526818059655', 'branch:to:call_model': '00000000000000000000000000000002.0.9300422176788571'}, 
+                'versions_seen': {'__input__': {}, '__start__': {'__start__': '00000000000000000000000000000001.0.7040775356287469'}}, 
+                'channel_values': {'messages': [HumanMessage(content="hi! I'm bob")], 'branch:to:call_model': None}
+            }, 
+            metadata={'source': 'loop', 'writes': None, 'step': 0, 'parents': {}, 'thread_id': '1'}, 
+            parent_config={...}, 
+            pending_writes=[('8cbd75e0-3720-b056-04f7-71ac805140a0', 'messages', AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?'))]
+        ),
+        CheckpointTuple(
+            config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-0870-6ce2-bfff-1f3f14c3e565'}}, 
+            checkpoint={
+                'v': 3, 
+                'ts': '2025-05-05T16:01:22.277497+00:00', 
+                'id': '1f029ca3-0870-6ce2-bfff-1f3f14c3e565', 
+                'channel_versions': {'__start__': '00000000000000000000000000000001.0.7040775356287469'}, 
+                'versions_seen': {'__input__': {}}, 
+                'channel_values': {'__start__': {'messages': [{'role': 'user', 'content': "hi! I'm bob"}]}}
+            }, 
+            metadata={'source': 'input', 'writes': {'__start__': {'messages': [{'role': 'user', 'content': "hi! I'm bob"}]}}, 'step': -1, 'parents': {}, 'thread_id': '1'}, 
+            parent_config=None, 
+            pending_writes=[('d458367b-8265-812c-18e2-33001d199ce6', 'messages', [{'role': 'user', 'content': "hi! I'm bob"}]), ('d458367b-8265-812c-18e2-33001d199ce6', 'branch:to:call_model', None)]
+        )
+    ]
+    ```
 
 
 #### Delete all checkpoints for a thread

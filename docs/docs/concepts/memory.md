@@ -5,7 +5,9 @@ search:
 
 # Memory
 
-Memory is a system that remembers something about previous interactions. This can be crucial for building a good agent experience. As AI agents undertake more complex tasks involving numerous user interactions, equipping them with memory becomes equally crucial for efficiency and user satisfaction. With memory, agents can learn from feedback and adapt to users' preferences. This guide covers two types of memory based on recall scope:
+[Memory](../how-tos/memory/add-memory.md) is a system that remembers information about previous interactions. For AI agents, memory is crucial because it lets them remember previous interactions, learn from feedback, and adapt to user preferences. As agents tackle more complex tasks with numerous user interactions, this capability becomes essential for both efficiency and user satisfaction.
+
+This conceptual guide covers two types of memory, based on their recall scope:
 
 - [Short-term memory](#short-term-memory), or [thread](persistence.md#threads)-scoped memory, tracks the ongoing conversation by maintaining message history within a session. LangGraph manages short-term memory as a part of your agent's [state](low_level.md#state). State is persisted to a database using a [checkpointer](persistence.md#checkpoints) so the thread can be resumed at any time. Short-term memory updates when the graph is invoked or a step is completed, and the State is read at the start of each step.
 
@@ -13,11 +15,10 @@ Memory is a system that remembers something about previous interactions. This ca
 
 ![](img/memory/short-vs-long.png)
 
-For information on how to add memory to your application, see the [Memory](../how-tos/memory/add-memory.md) guide.
 
 ## Short-term memory
 
-Short-term memory lets your application remember previous interactions within a single [thread](persistence.md#threads) or conversation. A [thread](persistence.md#threads) organizes multiple interactions in a session, similar to the way email groups messages in a single conversation.
+[Short-term memory](../how-tos/memory/add-memory.md#add-short-term-memory) lets your application remember previous interactions within a single [thread](persistence.md#threads) or conversation. A [thread](persistence.md#threads) organizes multiple interactions in a session, similar to the way email groups messages in a single conversation.
 
 LangGraph manages short-term memory as part of the agent's state, persisted via thread-scoped checkpoints. This state can normally include the conversation history along with other stateful data, such as uploaded files, retrieved documents, or generated artifacts. By storing these in the graph's state, the bot can access the full context for a given conversation while maintaining separation between different threads.
 
@@ -29,154 +30,11 @@ Chat models accept context using messages, which include developer provided inst
 
 ![](img/memory/filter.png)
 
-Managing short-term memory is an exercise of balancing [precision & recall](https://en.wikipedia.org/wiki/Precision_and_recall#:~:text=Precision%20can%20be%20seen%20as,irrelevant%20ones%20are%20also%20returned) with your application's other performance requirements like latency and cost. There are a few common techniques for managing message lists:
-
-- [Delete a list of messages](#delete-a-list-of-messages): Filter and remove a list of messages before passing to language model.
-- [Delete specific messages](#delete-specific-messages): Remove unnecessary messages from the conversation history.
-- [Trim messages](#trim-messages): Delete messages based on token count.
-- [Summarize past conversations](#summarize-messages): Summarize the conversation history to keep only the most relevant information.
-
-#### Delete a list of messages
-
-The most direct approach is to remove old messages from a list (similar to a [least-recently used cache](https://en.wikipedia.org/wiki/Page_replacement_algorithm#Least_recently_used)).
-
-The typical technique for deleting content from a list in LangGraph is to return an update from a node telling the system to delete some portion of the list. You get to define what this update looks like, but a common approach would be to let you return an object or dictionary specifying which values to retain.
-
-```python
-def manage_list(existing: list, updates: Union[list, dict]):
-    if isinstance(updates, list):
-        # Normal case, add to the history
-        return existing + updates
-    elif isinstance(updates, dict) and updates["type"] == "keep":
-        # You get to decide what this looks like.
-        # For example, you could simplify and just accept a string "DELETE"
-        # and clear the entire list.
-        return existing[updates["from"]:updates["to"]]
-    # etc. We define how to interpret updates
-
-class State(TypedDict):
-    my_list: Annotated[list, manage_list]
-
-def my_node(state: State):
-    return {
-        # We return an update for the field "my_list" saying to
-        # keep only values from index -5 to the end (deleting the rest)
-        "my_list": {"type": "keep", "from": -5, "to": None}
-    }
-```
-
-LangGraph will call the `manage_list` "[reducer](low_level.md#reducers)" function any time an update is returned under the key `"my_list"`. Within that function, we define what types of updates to accept. Typically, messages will be added to the existing list (the conversation will grow); however, we've also added support to accept a dictionary that lets you "keep" certain parts of the state. This lets you programmatically drop old message context.
-
-#### Delete specific messages
-
-Another common approach is to let you return a list of "remove" objects that specify the IDs of all messages to delete. If you're using the LangChain messages and the [`add_messages`](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.message.add_messages) reducer (or `MessagesState`, which uses the same underlying functionality) in LangGraph, you can do this using a `RemoveMessage`.
-
-```python
-from langchain_core.messages import RemoveMessage, AIMessage
-from langgraph.graph import add_messages
-# ... other imports
-
-class State(TypedDict):
-    # add_messages will default to upserting messages by ID to the existing list
-    # if a RemoveMessage is returned, it will delete the message in the list by ID
-    messages: Annotated[list, add_messages]
-
-def my_node_1(state: State):
-    # Add an AI message to the `messages` list in the state
-    return {"messages": [AIMessage(content="Hi")]}
-
-def my_node_2(state: State):
-    # Delete all but the last 2 messages from the `messages` list in the state
-    delete_messages = [RemoveMessage(id=m.id) for m in state['messages'][:-2]]
-    return {"messages": delete_messages}
-
-```
-
-In the example above, the `add_messages` reducer allows us to [append](low_level.md#serialization) new messages to the `messages` state key as shown in `my_node_1`. When it sees a `RemoveMessage`, it will delete the message with that ID from the list (and the RemoveMessage will then be discarded).
-
-For more information, see the [Memory](../how-tos/memory/add-memory.md#delete-messages) guide and module 2 from our [LangChain Academy](https://github.com/langchain-ai/langchain-academy/tree/main/module-2) course.
-
-#### Trim messages
-
-Most LLMs have a maximum supported context window (denominated in tokens). One way to decide when to truncate messages is to count the tokens in the message history and truncate whenever it approaches that limit. If you're using LangChain, you can use the [`trim_messages`](https://python.langchain.com/docs/how_to/trim_messages/#trimming-based-on-token-count) utility and specify the number of tokens to keep from the list, as well as the `strategy` (e.g., keep the last `max_tokens`) to use for handling the boundary.
-
-```python
-from langchain_core.messages import trim_messages
-trim_messages(
-    messages,
-    # Keep the last <= n_count tokens of the messages.
-    strategy="last",
-    # Remember to adjust based on your model
-    # or else pass a custom token_encoder
-    token_counter=ChatOpenAI(model="gpt-4"),
-    # Remember to adjust based on the desired conversation
-    # length
-    max_tokens=45,
-    # Most chat models expect that chat history starts with either:
-    # (1) a HumanMessage or
-    # (2) a SystemMessage followed by a HumanMessage
-    start_on="human",
-    # Most chat models expect that chat history ends with either:
-    # (1) a HumanMessage or
-    # (2) a ToolMessage
-    end_on=("human", "tool"),
-    # Usually, we want to keep the SystemMessage
-    # if it's present in the original history.
-    # The SystemMessage has special instructions for the model.
-    include_system=True,
-)
-```
-
-For more information, see the [Memory](../how-tos/memory/add-memory.md#trim-messages) guide.
-
-#### Summarize messages
-
-The problem with trimming or removing messages, as shown above, is that you may lose information from culling of the message queue. Because of this, some applications benefit from a more sophisticated approach of summarizing the message history using a chat model.
-
-![](img/memory/summary.png)
-
-Simple prompting and orchestration logic can be used to achieve this. As an example, in LangGraph you can extend the [MessagesState](low_level.md#working-with-messages-in-graph-state) to include a `summary` key:
-
-```python
-from langgraph.graph import MessagesState
-class State(MessagesState):
-    summary: str
-```
-
-Then, you can generate a summary of the chat history, using any existing summary as context for the next summary. This `summarize_conversation` node can be called after some number of messages have accumulated in the `messages` state key.
-
-```python
-def summarize_conversation(state: State):
-
-    # First, we get any existing summary
-    summary = state.get("summary", "")
-
-    # Create our summarization prompt
-    if summary:
-
-        # A summary already exists
-        summary_message = (
-            f"This is a summary of the conversation to date: {summary}\n\n"
-            "Extend the summary by taking into account the new messages above:"
-        )
-
-    else:
-        summary_message = "Create a summary of the conversation above:"
-
-    # Add prompt to our history
-    messages = state["messages"] + [HumanMessage(content=summary_message)]
-    response = model.invoke(messages)
-
-    # Delete all but the 2 most recent messages
-    delete_messages = [RemoveMessage(id=m.id) for m in state["messages"][:-2]]
-    return {"summary": response.content, "messages": delete_messages}
-```
-
-For more information, see the [Memory](https://langchain-ai.github.io/langgraph/how-tos/memory/add-memory.md#summarize-messages) guide and module 2 from our [LangChain Academy](https://github.com/langchain-ai/langchain-academy/tree/main/module-2) course for example usage.
+For more information on common techniques for managing messages, see the [Add and manage memory](../how-tos/memory/add-memory.md#manage-short-term-memory) guide.
 
 ## Long-term memory
 
-Long-term memory in LangGraph allows systems to retain information across different conversations or sessions. Unlike short-term memory, which is **thread-scoped**, long-term memory is saved within custom "namespaces."
+[Long-term memory](../how-tos/memory/add-memory.md#add-long-term-memory) in LangGraph allows systems to retain information across different conversations or sessions. Unlike short-term memory, which is **thread-scoped**, long-term memory is saved within custom "namespaces."
 
 Long-term memory is a complex challenge without a one-size-fits-all solution. However, the following questions provide a framework to help you navigate the different techniques:
 
@@ -272,7 +130,7 @@ def update_instructions(state: State, store: BaseStore):
 
 ### Writing memories
 
-While [humans often form long-term memories during sleep](https://medicine.yale.edu/news-article/sleeps-crucial-role-in-preserving-memory/), AI agents need a different approach. When and how should agents create new memories? There are at least two primary methods for agents to write memories: "on the hot path" and "in the background".
+There are two primary methods for agents to write memories: ["in the hot path"](#in-the-hot-path) and ["in the background"](#in-the-background).
 
 ![](img/memory/hot_path_vs_background.png)
 
