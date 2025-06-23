@@ -186,3 +186,5 @@ items = store.search(
     namespace, filter={"my-key": "my-value"}, query="language preferences"
 )
 ```
+
+For more information about the memory store, see the [Persistence](persistence.md#memory-store) guide.
