@@ -5,7 +5,7 @@ search:
 
 # LangGraph SDK
 
-LangGraph Platform provides both a Python SDK for interacting with [LangGraph Server](./langgraph_server.md).
+LangGraph Platform provides both a Python and JS SDK for interacting with [LangGraph Server](./langgraph_server.md).
 
 !!! tip "Python SDK reference"
   
