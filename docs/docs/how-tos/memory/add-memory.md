@@ -1,4 +1,4 @@
-# Memory
+# Add and manage memory
 
 AI applications need [memory](../../concepts/memory.md) to share context across multiple interactions. In LangGraph, you can add two types of memory:
 
