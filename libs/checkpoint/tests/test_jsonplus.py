@@ -416,8 +416,25 @@ def test_serde_jsonplus_pandas_dataframe(df: pd.DataFrame) -> None:
     serde = JsonPlusSerializer(pickle_fallback=True)
 
     dumped = serde.dumps_typed(df)
-    assert dumped[0] == "pickle"
     result = serde.loads_typed(dumped)
+
+    # Check if PyArrow was used or if it fell back to pickle
+    # Some data types like mixed types, complex objects (lists, dicts), etc. may not be serializable with PyArrow
+    has_complex_types = any(
+        # Check for mixed types, complex objects like lists and dicts (bytes are OK)
+        df[col].dtype == "object"
+        and any(isinstance(val, (list, dict)) for val in df[col] if val is not None)
+        for col in df.columns
+        if df[col].dtype == "object"
+    )
+
+    if has_complex_types:
+        # Should fall back to pickle for complex types
+        assert dumped[0] == "pickle"
+    else:
+        # Should use msgpack with PyArrow for simple types
+        assert dumped[0] == "msgpack"
+
     assert result.equals(df)
 
 
@@ -464,8 +481,231 @@ def test_serde_jsonplus_pandas_dataframe(df: pd.DataFrame) -> None:
 def test_serde_jsonplus_pandas_series(series: pd.Series) -> None:
     serde = JsonPlusSerializer(pickle_fallback=True)
     dumped = serde.dumps_typed(series)
-
-    assert dumped[0] == "pickle"
     result = serde.loads_typed(dumped)
 
+    # Check if PyArrow was used or if it fell back to pickle
+    # Some data types like mixed types, complex objects (lists, dicts), etc. may not be serializable with PyArrow
+    has_complex_types = series.dtype == "object" and any(
+        isinstance(val, (list, dict)) for val in series if val is not None
+    )
+
+    if has_complex_types:
+        # Should fall back to pickle for complex types
+        assert dumped[0] == "pickle"
+    else:
+        # Should use msgpack with PyArrow for simple types
+        assert dumped[0] == "msgpack"
+
     assert result.equals(series)
+
+
+# Test PyArrow-based pandas serialization
+@pytest.mark.parametrize(
+    "df",
+    [
+        pd.DataFrame(),
+        pd.DataFrame({"int_col": [1, 2, 3]}),
+        pd.DataFrame({"float_col": [1.1, 2.2, 3.3]}),
+        pd.DataFrame({"str_col": ["a", "b", "c"]}),
+        pd.DataFrame({"bool_col": [True, False, True]}),
+        pd.DataFrame(
+            {
+                "datetime_col": [
+                    datetime(2024, 1, 1),
+                    datetime(2024, 1, 2),
+                    datetime(2024, 1, 3),
+                ]
+            }
+        ),
+        pd.DataFrame(
+            {
+                "int_col": [1, 2, 3],
+                "float_col": [1.1, 2.2, 3.3],
+                "str_col": ["a", "b", "c"],
+            }
+        ),
+        pd.DataFrame(
+            {
+                "int_col": [1, 2, None],
+                "float_col": [1.1, None, 3.3],
+                "str_col": ["a", None, "c"],
+            }
+        ),
+        pd.DataFrame({"cat_col": pd.Categorical(["a", "b", "a", "c"])}),
+        pd.DataFrame(
+            {
+                "int8": pd.array([1, 2, 3], dtype="int8"),
+                "int16": pd.array([10, 20, 30], dtype="int16"),
+                "int32": pd.array([100, 200, 300], dtype="int32"),
+                "int64": pd.array([1000, 2000, 3000], dtype="int64"),
+                "float32": pd.array([1.1, 2.2, 3.3], dtype="float32"),
+                "float64": pd.array([10.1, 20.2, 30.3], dtype="float64"),
+            }
+        ),
+        pd.DataFrame({"value": [1, 2, 3]}, index=["x", "y", "z"]),
+        pd.DataFrame(
+            [[1, 2, 3, 4]],
+            columns=pd.MultiIndex.from_tuples(
+                [("A", "X"), ("A", "Y"), ("B", "X"), ("B", "Y")]
+            ),
+        ),
+        pd.DataFrame(
+            {"value": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3, freq="D")
+        ),
+        pd.DataFrame(
+            {
+                "col1": range(100),  # Smaller dataset for faster tests
+                "col2": [f"str_{i}" for i in range(100)],
+                "col3": np.random.rand(100),
+            }
+        ),
+        pd.DataFrame(
+            {"tz_datetime": pd.date_range("2024-01-01", periods=3, freq="D", tz="UTC")}
+        ),
+        pd.DataFrame({"timedelta": pd.to_timedelta([1, 2, 3], unit="D")}),
+        pd.DataFrame({"period": pd.period_range("2024-01", periods=3, freq="M")}),
+        pd.DataFrame({"interval": pd.interval_range(start=0, end=3, periods=3)}),
+        pd.DataFrame({"unicode": ["Hello 🌍", "Python 🐍", "Data 📊"]}),
+        pd.DataFrame({"a": [1], "b": ["test"], "c": [3.14]}),
+        pd.DataFrame({"single": [42]}),
+        pd.DataFrame(
+            {
+                "small": [sys.float_info.min, 0, sys.float_info.max],
+                "large_int": [-(2**63), 0, 2**63 - 1],
+            }
+        ),
+        pd.DataFrame({"special_strings": ["", "null", "None", "NaN", "inf", "-inf"]}),
+        # Note: bytes columns might not serialize well with PyArrow, so we'll handle them separately
+    ],
+)
+def test_serde_jsonplus_pandas_dataframe_pyarrow(df: pd.DataFrame) -> None:
+    pytest.importorskip("pyarrow")
+    serde = JsonPlusSerializer()
+
+    dumped = serde.dumps_typed(df)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, pd.DataFrame)
+
+    # Use pandas.testing for more robust comparison
+    # Note: PyArrow may not preserve DatetimeIndex frequency, so we need to handle that
+    try:
+        pd.testing.assert_frame_equal(result, df)
+    except AssertionError as e:
+        # If the error is related to frequency mismatch, try with check_freq=False
+        if "(None, <" in str(e) and ">" in str(e):
+            pd.testing.assert_frame_equal(result, df, check_freq=False)
+        else:
+            raise
+
+
+@pytest.mark.parametrize(
+    "series",
+    [
+        pd.Series([]),
+        pd.Series([1, 2, 3]),
+        pd.Series([1.1, 2.2, 3.3]),
+        pd.Series(["a", "b", "c"]),
+        pd.Series([True, False, True]),
+        pd.Series([datetime(2024, 1, 1), datetime(2024, 1, 2), datetime(2024, 1, 3)]),
+        pd.Series([1, 2, None]),
+        pd.Series([1.1, None, 3.3]),
+        pd.Series(["a", None, "c"]),
+        pd.Series(pd.Categorical(["a", "b", "a", "c"])),
+        pd.Series([1, 2, 3], dtype="int8"),
+        pd.Series([10, 20, 30], dtype="int16"),
+        pd.Series([100, 200, 300], dtype="int32"),
+        pd.Series([1000, 2000, 3000], dtype="int64"),
+        pd.Series([1.1, 2.2, 3.3], dtype="float32"),
+        pd.Series([10.1, 20.2, 30.3], dtype="float64"),
+        pd.Series([1, 2, 3], index=["x", "y", "z"]),
+        pd.Series([1, 2, 3], index=pd.date_range("2024-01-01", periods=3, freq="D")),
+        pd.Series(range(100)),  # Smaller dataset for faster tests
+        pd.Series(pd.date_range("2024-01-01", periods=3, freq="D", tz="UTC")),
+        pd.Series(pd.to_timedelta([1, 2, 3], unit="D")),
+        pd.Series(pd.period_range("2024-01", periods=3, freq="M")),
+        pd.Series(pd.interval_range(start=0, end=3, periods=3)),
+        pd.Series(["Hello 🌍", "Python 🐍", "Data 📊"]),
+        pd.Series([42], name="single"),
+        pd.Series([sys.float_info.min, 0, sys.float_info.max]),
+        pd.Series([-(2**63), 0, 2**63 - 1]),
+        pd.Series(["", "null", "None", "NaN", "inf", "-inf"]),
+        pd.Series([1, 2, 3], name="named_series"),
+        pd.Series(
+            [10, 20],
+            index=pd.MultiIndex.from_tuples([("a", 1), ("b", 2)], names=["x", "y"]),
+        ),
+    ],
+)
+def test_serde_jsonplus_pandas_series_pyarrow(series: pd.Series) -> None:
+    pytest.importorskip("pyarrow")
+    serde = JsonPlusSerializer()
+
+    dumped = serde.dumps_typed(series)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, pd.Series)
+
+    # Use pandas.testing for more robust comparison
+    # Note: PyArrow may not preserve DatetimeIndex frequency, so we need to handle that
+    try:
+        pd.testing.assert_series_equal(result, series)
+    except AssertionError as e:
+        # If the error is related to frequency mismatch, try with check_freq=False
+        if "(None, <" in str(e) and ">" in str(e):
+            pd.testing.assert_series_equal(result, series, check_freq=False)
+        else:
+            raise
+
+
+def test_serde_jsonplus_pandas_dataframe_pyarrow_json_hook() -> None:
+    pytest.importorskip("pyarrow")
+    df = pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})
+
+    serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
+    dumped = serde.dumps_typed(df)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+
+    # Should return a dict representation for JSON compatibility
+    assert isinstance(result, dict)
+    assert "data" in result
+    assert "index" in result
+    assert "columns" in result
+    assert result["data"] == [
+        {"a": 1, "b": "x"},
+        {"a": 2, "b": "y"},
+        {"a": 3, "b": "z"},
+    ]
+    assert result["columns"] == ["a", "b"]
+
+
+def test_serde_jsonplus_pandas_series_pyarrow_json_hook() -> None:
+    pytest.importorskip("pyarrow")
+    series = pd.Series([1, 2, 3], name="test_series")
+
+    serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
+    dumped = serde.dumps_typed(series)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+
+    # Should return a dict representation for JSON compatibility
+    assert isinstance(result, dict)
+    assert "data" in result
+    assert "index" in result
+    assert "name" in result
+    assert result["data"] == [1, 2, 3]
+    assert result["name"] == "test_series"
+
+
+def test_serde_jsonplus_pandas_with_pyarrow_available() -> None:
+    """Test that pandas objects use PyArrow-based serialization when available."""
+    df = pd.DataFrame({"a": [1, 2, 3]})
+    serde = JsonPlusSerializer(pickle_fallback=True)
+
+    dumped = serde.dumps_typed(df)
+    # Should use msgpack with PyArrow since it's available
+    assert dumped[0] == "msgpack"
+
+    result = serde.loads_typed(dumped)
+    pd.testing.assert_frame_equal(result, df)
