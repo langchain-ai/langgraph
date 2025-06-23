@@ -453,7 +453,7 @@ agent.invoke({
 })
 ```
 
-See the [Context](../agents/context.md) guide for more information.
+See the [Context](../../agents/context.md) guide for more information.
 
 ### Write short-term memory from tools { #write-short-term }
 

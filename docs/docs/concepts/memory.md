@@ -135,7 +135,7 @@ The problem with trimming or removing messages, as shown above, is that you may 
 
 ![](img/memory/summary.png)
 
-Simple prompting and orchestration logic can be used to achieve this. As an example, in LangGraph you can extend the [MessagesState](low_level#working-with-messages-in-graph-state) to include a `summary` key:
+Simple prompting and orchestration logic can be used to achieve this. As an example, in LangGraph you can extend the [MessagesState](low_level.md#working-with-messages-in-graph-state) to include a `summary` key:
 
 ```python
 from langgraph.graph import MessagesState
