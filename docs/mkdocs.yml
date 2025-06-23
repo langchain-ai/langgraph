@@ -155,9 +155,7 @@ nav:
     - Context:
       - Use in agent: agents/context.md
     - Memory:
-      - Basic implementation: agents/memory.md
-      - Persistence: how-tos/persistence.ipynb # MERGE
-      - Custom implementation: how-tos/memory.ipynb
+      - Add memory: how-tos/memory/add-memory.md
     - Human-in-the-loop:
       - Add to agent: agents/human-in-the-loop.md
       - Add to workflow: how-tos/human_in_the_loop/add-human-in-the-loop.md

@@ -471,6 +471,124 @@ Please see the following examples for more details:
 
 Short-term memory allows storing information across different **invocations** of the same **thread id**. See [short-term memory](../concepts/functional_api.md#short-term-memory) for more details.
 
+### Manage checkpoints
+
+You can view and delete the information stored by the checkpointer.
+
+#### View thread state (checkpoint)
+
+```python
+config = {
+    "configurable": {
+        # highlight-next-line
+        "thread_id": "1",
+        # optionally provide an ID for a specific checkpoint,
+        # otherwise the latest checkpoint is shown
+        # highlight-next-line
+        # "checkpoint_id": "1f029ca3-1f5b-6704-8004-820c16b69a5a"
+            
+    }
+}
+# highlight-next-line
+graph.get_state(config)
+```
+
+```
+StateSnapshot(
+    values={'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today?), HumanMessage(content="what's my name?"), AIMessage(content='Your name is Bob.')]}, next=(), 
+    config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1f5b-6704-8004-820c16b69a5a'}},
+    metadata={
+        'source': 'loop',
+        'writes': {'call_model': {'messages': AIMessage(content='Your name is Bob.')}},
+        'step': 4,
+        'parents': {},
+        'thread_id': '1'
+    },
+    created_at='2025-05-05T16:01:24.680462+00:00',
+    parent_config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1790-6b0a-8003-baf965b6a38f'}}, 
+    tasks=(),
+    interrupts=()
+)
+```
+
+#### View the history of the thread (checkpoints)
+
+```python
+config = {
+    "configurable": {
+        # highlight-next-line
+        "thread_id": "1"
+    }
+}
+# highlight-next-line
+list(graph.get_state_history(config))
+```
+
+```
+[
+    StateSnapshot(
+        values={'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?'), HumanMessage(content="what's my name?"), AIMessage(content='Your name is Bob.')]}, 
+        next=(), 
+        config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1f5b-6704-8004-820c16b69a5a'}}, 
+        metadata={'source': 'loop', 'writes': {'call_model': {'messages': AIMessage(content='Your name is Bob.')}}, 'step': 4, 'parents': {}, 'thread_id': '1'},
+        created_at='2025-05-05T16:01:24.680462+00:00',
+        parent_config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1790-6b0a-8003-baf965b6a38f'}},
+        tasks=(),
+        interrupts=()
+    ),
+    StateSnapshot(
+        values={'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?'), HumanMessage(content="what's my name?")]}, 
+        next=('call_model',), 
+        config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-1790-6b0a-8003-baf965b6a38f'}},
+        metadata={'source': 'loop', 'writes': None, 'step': 3, 'parents': {}, 'thread_id': '1'},
+        created_at='2025-05-05T16:01:23.863421+00:00',
+        parent_config={...}
+        tasks=(PregelTask(id='8ab4155e-6b15-b885-9ce5-bed69a2c305c', name='call_model', path=('__pregel_pull', 'call_model'), error=None, interrupts=(), state=None, result={'messages': AIMessage(content='Your name is Bob.')}),),
+        interrupts=()
+    ),
+    StateSnapshot(
+        values={'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?')]}, 
+        next=('__start__',), 
+        config={...}, 
+        metadata={'source': 'input', 'writes': {'__start__': {'messages': [{'role': 'user', 'content': "what's my name?"}]}}, 'step': 2, 'parents': {}, 'thread_id': '1'},
+        created_at='2025-05-05T16:01:23.863173+00:00',
+        parent_config={...}
+        tasks=(PregelTask(id='24ba39d6-6db1-4c9b-f4c5-682aeaf38dcd', name='__start__', path=('__pregel_pull', '__start__'), error=None, interrupts=(), state=None, result={'messages': [{'role': 'user', 'content': "what's my name?"}]}),),
+        interrupts=()
+    ),
+    StateSnapshot(
+        values={'messages': [HumanMessage(content="hi! I'm bob"), AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?')]}, 
+        next=(), 
+        config={...}, 
+        metadata={'source': 'loop', 'writes': {'call_model': {'messages': AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?')}}, 'step': 1, 'parents': {}, 'thread_id': '1'},
+        created_at='2025-05-05T16:01:23.862295+00:00',
+        parent_config={...}
+        tasks=(),
+        interrupts=()
+    ),
+    StateSnapshot(
+        values={'messages': [HumanMessage(content="hi! I'm bob")]}, 
+        next=('call_model',), 
+        config={...}, 
+        metadata={'source': 'loop', 'writes': None, 'step': 0, 'parents': {}, 'thread_id': '1'}, 
+        created_at='2025-05-05T16:01:22.278960+00:00', 
+        parent_config={...}
+        tasks=(PregelTask(id='8cbd75e0-3720-b056-04f7-71ac805140a0', name='call_model', path=('__pregel_pull', 'call_model'), error=None, interrupts=(), state=None, result={'messages': AIMessage(content='Hi Bob! How are you doing today? Is there anything I can help you with?')}),), 
+        interrupts=()
+    ),
+    StateSnapshot(
+        values={'messages': []}, 
+        next=('__start__',), 
+        config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1f029ca3-0870-6ce2-bfff-1f3f14c3e565'}},
+        metadata={'source': 'input', 'writes': {'__start__': {'messages': [{'role': 'user', 'content': "hi! I'm bob"}]}}, 'step': -1, 'parents': {}, 'thread_id': '1'}, 
+        created_at='2025-05-05T16:01:22.277497+00:00', 
+        parent_config=None,
+        tasks=(PregelTask(id='d458367b-8265-812c-18e2-33001d199ce6', name='__start__', path=('__pregel_pull', '__start__'), error=None, interrupts=(), state=None, result={'messages': [{'role': 'user', 'content': "hi! I'm bob"}]}),), 
+        interrupts=()
+    )
+]       
+```
+
 ### Decouple return value from saved value
 
 Use `entrypoint.final` to decouple what is returned to the caller from what is persisted in the checkpoint. This is useful when:
