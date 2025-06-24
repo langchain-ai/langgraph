@@ -313,10 +313,22 @@ class PregelLoop:
         # deduplicate writes to special channels, last write wins
         if all(w[0] in WRITES_IDX_MAP for w in writes):
             writes = list({w[0]: w for w in writes}.values())
-        # remove existing writes for this task
-        self.checkpoint_pending_writes = [
-            w for w in self.checkpoint_pending_writes if w[0] != task_id
-        ]
+        if task_id == NULL_TASK_ID:
+            # writes for the null task are accumulated
+            self.checkpoint_pending_writes = [
+                w
+                for w in self.checkpoint_pending_writes
+                if w[0] != task_id or w[1] not in WRITES_IDX_MAP
+            ]
+            writes_to_save: WritesT = [
+                w[1:] for w in self.checkpoint_pending_writes if w[0] == task_id
+            ] + list(writes)
+        else:
+            # remove existing writes for this task
+            self.checkpoint_pending_writes = [
+                w for w in self.checkpoint_pending_writes if w[0] != task_id
+            ]
+            writes_to_save = writes
         # save writes
         self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
         if self.checkpoint_during and self.checkpointer_put_writes is not None:
@@ -337,7 +349,7 @@ class PregelLoop:
                 self.submit(
                     self.checkpointer_put_writes,
                     config,
-                    writes,
+                    writes_to_save,
                     task_id,
                     task_path_str(task.path) if task else "",
                 )
@@ -345,7 +357,7 @@ class PregelLoop:
                 self.submit(
                     self.checkpointer_put_writes,
                     config,
-                    writes,
+                    writes_to_save,
                     task_id,
                 )
         # output writes
