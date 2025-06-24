@@ -184,6 +184,7 @@ nav:
           - cloud/how-tos/datasets_studio.md
         - LangGraph SDK: concepts/sdk.md
       - Data management:
+        - Data storage & privacy: concepts/data_storage_and_privacy.md
         - Add semantic search: cloud/deployment/semantic_search.md
         - Add TTLs: how-tos/ttl/configure_ttl.md
       - Authentication & access control:
