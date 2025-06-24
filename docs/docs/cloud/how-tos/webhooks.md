@@ -128,7 +128,7 @@ For example, if your server listens for webhook events at `https://my-server.app
 
 ## Webhook payload
 
-LangGraph Platform sends webhook notifications in the format of a [Run](../../cloud/concepts/runs.md). See the [API Reference](https://langchain-ai.github.io/langgraph/cloud/reference/api/api_ref.html#model/run) for details. The request payload includes run input, configuration, and other metadata in the `kwargs` field.
+LangGraph Platform sends webhook notifications in the format of a [Run](../../concepts/assistants.md#execution). See the [API Reference](https://langchain-ai.github.io/langgraph/cloud/reference/api/api_ref.html#model/run) for details. The request payload includes run input, configuration, and other metadata in the `kwargs` field.
 
 ## Secure webhooks
 
