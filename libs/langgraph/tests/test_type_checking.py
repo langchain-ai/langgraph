@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from operator import add
-from typing import Annotated, Any
+from typing import Annotated, Any, Union
 
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
@@ -113,7 +113,10 @@ def test_invokeable_node_signature() -> None:
 
     class RunnableIsh:
         def invoke(
-            self, input: State, config: RunnableConfig | None = None, **kwargs: Any
+            self,
+            input: State,
+            config: Union[RunnableConfig, None] = None,
+            **kwargs: Any,
         ) -> dict[str, str]:
             return {}
 
