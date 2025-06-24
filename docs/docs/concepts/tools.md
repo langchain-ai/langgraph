@@ -12,13 +12,13 @@ Tool calling is typically **conditional**. Based on the user input and available
 
 ```python
 llm_with_tools.invoke("What is 2 multiplied by 3?")
-# → AIMessage(tool_calls=[{'name': 'multiply', 'args': {'a': 2, 'b': 3}, ...}])
+# -> AIMessage(tool_calls=[{'name': 'multiply', 'args': {'a': 2, 'b': 3}, ...}])
 ```
 
 If the input is unrelated to any tool, the model returns only a natural language message:
 
 ```python
-llm_with_tools.invoke("Hello world!")  # → AIMessage(content="Hello!")
+llm_with_tools.invoke("Hello world!")  # -> AIMessage(content="Hello!")
 ```
 
 Importantly, the model does not execute the tool—it only generates a request. A separate executor (such as a runtime or agent) is responsible for handling the tool call and returning the result.
