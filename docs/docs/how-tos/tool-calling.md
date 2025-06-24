@@ -45,7 +45,7 @@ Output:
 ToolMessage(content='294', name='multiply', tool_call_id='1')
 ```
 
-### Attach tools to an LLM
+### Use with an LLM
 
 Use `model.bind_tools()`:
 
@@ -89,11 +89,260 @@ LLMs automatically determine if a tool invocation is necessary and handle callin
     )
     ```
 
+### Use in an agent
+
+To create a tool-calling agent, you can use the prebuilt [create_react_agent][langgraph.prebuilt.chat_agent_executor.create_react_agent]
+
+```python
+from langchain_core.tools import tool
+# highlight-next-line
+from langgraph.prebuilt import create_react_agent
+
+@tool
+def multiply(a: int, b: int) -> int:
+    """Multiply two numbers."""
+    return a * b
+
+# highlight-next-line
+agent = create_react_agent(
+    model="anthropic:claude-3-7-sonnet",
+    tools=[multiply]
+)
+agent.invoke({"messages": [{"role": "user", "content": "what's 42 x 7?"}]})
+```
+
+
 !!! tip "Working with agents"
 
-    Attach tools to the LLM when building custom workflows. When using the 
-    prebuilt `create_react_agent`, the specified tools are automatically 
-    attached to the LLM. 
+    When using the prebuilt `create_react_agent`, the tools are automatically 
+    [attached to the LLM](#attach-tools-to-an-llm).
+
+### Use in a workflow (`ToolNode`)
+
+To execute tools in custom workflows, use the prebuilt [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] or implement your own custom node.
+
+`ToolNode` is a specialized node for executing tools in a workflow. It provides the following features:
+
+* Supports synchronous and asynchronous tools.
+* Executes multiple tools concurrently.
+* Handles errors during tool execution (`handle_tool_errors=True`, enabled by default). See [error handling](#handle-tool-errors).
+
+`ToolNode` operates on [`MessagesState`](../concepts/low_level.md#messagesstate):
+
+* **Input**: `MessagesState`, where the last message is an `AIMessage` containing the `tool_calls` parameter.
+* **Output**: `MessagesState` updated with the resulting [`ToolMessage`](https://python.langchain.com/docs/concepts/messages/#toolmessage) from executed tools.
+
+
+```python
+# highlight-next-line
+from langgraph.prebuilt import ToolNode
+
+def get_weather(location: str):
+    """Call to get the current weather."""
+    if location.lower() in ["sf", "san francisco"]:
+        return "It's 60 degrees and foggy."
+    else:
+        return "It's 90 degrees and sunny."
+
+def get_coolest_cities():
+    """Get a list of coolest cities"""
+    return "nyc, sf"
+
+# highlight-next-line
+tool_node = ToolNode([get_weather, get_coolest_cities])
+tool_node.invoke({"messages": [...]})
+```
+
+??? example "Single tool call"
+
+    ```python
+    from langchain_core.messages import AIMessage
+    from langgraph.prebuilt import ToolNode
+    
+    # Define tools
+    @tool
+    def get_weather(location: str):
+        """Call to get the current weather."""
+        if location.lower() in ["sf", "san francisco"]:
+            return "It's 60 degrees and foggy."
+        else:
+            return "It's 90 degrees and sunny."
+    
+    # highlight-next-line
+    tool_node = ToolNode([get_weather])
+    
+    message_with_single_tool_call = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "get_weather",
+                "args": {"location": "sf"},
+                "id": "tool_call_id",
+                "type": "tool_call",
+            }
+        ],
+    )
+    
+    tool_node.invoke({"messages": [message_with_single_tool_call]})
+    ```
+    
+    ```
+    {'messages': [ToolMessage(content="It's 60 degrees and foggy.", name='get_weather', tool_call_id='tool_call_id')]}
+    ```
+
+??? example "Multiple tool calls"
+
+    ```python
+    from langchain_core.messages import AIMessage
+    from langgraph.prebuilt import ToolNode
+    
+    # Define tools
+    
+    def get_weather(location: str):
+        """Call to get the current weather."""
+        if location.lower() in ["sf", "san francisco"]:
+            return "It's 60 degrees and foggy."
+        else:
+            return "It's 90 degrees and sunny."
+    
+    def get_coolest_cities():
+        """Get a list of coolest cities"""
+        return "nyc, sf"
+    
+    # highlight-next-line
+    tool_node = ToolNode([get_weather, get_coolest_cities])
+
+    message_with_multiple_tool_calls = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "get_coolest_cities",
+                "args": {},
+                "id": "tool_call_id_1",
+                "type": "tool_call",
+            },
+            {
+                "name": "get_weather",
+                "args": {"location": "sf"},
+                "id": "tool_call_id_2",
+                "type": "tool_call",
+            },
+        ],
+    )
+
+    # highlight-next-line
+    tool_node.invoke({"messages": [message_with_multiple_tool_calls]})  # (1)!
+    ```
+
+    1. `ToolNode` will execute both tools in parallel
+
+    ```
+    {
+        'messages': [
+            ToolMessage(content='nyc, sf', name='get_coolest_cities', tool_call_id='tool_call_id_1'),
+            ToolMessage(content="It's 60 degrees and foggy.", name='get_weather', tool_call_id='tool_call_id_2')
+        ]
+    }
+    ```
+
+
+
+??? example "Use with a chat model"
+
+    ```python
+    from langchain.chat_models import init_chat_model
+    from langgraph.prebuilt import ToolNode
+    
+    def get_weather(location: str):
+        """Call to get the current weather."""
+        if location.lower() in ["sf", "san francisco"]:
+            return "It's 60 degrees and foggy."
+        else:
+            return "It's 90 degrees and sunny."
+    
+    # highlight-next-line
+    tool_node = ToolNode([get_weather])
+    
+    model = init_chat_model(model="claude-3-5-haiku-latest")
+    # highlight-next-line
+    model_with_tools = model.bind_tools([get_weather])  # (1)!
+    
+    
+    # highlight-next-line
+    response_message = model_with_tools.invoke("what's the weather in sf?")
+    tool_node.invoke({"messages": [response_message]})
+    ```
+
+    1. Use `.bind_tools()` to attach the tool schema to the chat model
+
+    ```
+    {'messages': [ToolMessage(content="It's 60 degrees and foggy.", name='get_weather', tool_call_id='toolu_01Pnkgw5JeTRxXAU7tyHT4UW')]}
+    ```
+
+??? example "Use in a tool-calling agent"
+
+    This is an example of creating a tool-calling agent from scratch using `ToolNode`. You can also use LangGraph's prebuilt [agent](../agents/agents).
+
+    ```python
+    from langchain.chat_models import init_chat_model
+    from langgraph.prebuilt import ToolNode
+    from langgraph.graph import StateGraph, MessagesState, START, END
+    
+    def get_weather(location: str):
+        """Call to get the current weather."""
+        if location.lower() in ["sf", "san francisco"]:
+            return "It's 60 degrees and foggy."
+        else:
+            return "It's 90 degrees and sunny."
+    
+    # highlight-next-line
+    tool_node = ToolNode([get_weather])
+    
+    model = init_chat_model(model="claude-3-5-haiku-latest")
+    # highlight-next-line
+    model_with_tools = model.bind_tools([get_weather])
+    
+    def should_continue(state: MessagesState):
+        messages = state["messages"]
+        last_message = messages[-1]
+        if last_message.tool_calls:
+            return "tools"
+        return END
+    
+    def call_model(state: MessagesState):
+        messages = state["messages"]
+        response = model_with_tools.invoke(messages)
+        return {"messages": [response]}
+    
+    builder = StateGraph(MessagesState)
+    
+    # Define the two nodes we will cycle between
+    builder.add_node("call_model", call_model)
+    # highlight-next-line
+    builder.add_node("tools", tool_node)
+    
+    builder.add_edge(START, "call_model")
+    builder.add_conditional_edges("call_model", should_continue, ["tools", END])
+    builder.add_edge("tools", "call_model")
+    
+    graph = builder.compile()
+    
+    graph.invoke({"messages": [{"role": "user", "content": "what's the weather in sf?"}]})
+    ```
+    
+    ```
+    {
+        'messages': [
+            HumanMessage(content="what's the weather in sf?"),
+            AIMessage(
+                content=[{'text': "I'll help you check the weather in San Francisco right now.", 'type': 'text'}, {'id': 'toolu_01A4vwUEgBKxfFVc5H3v1CNs', 'input': {'location': 'San Francisco'}, 'name': 'get_weather', 'type': 'tool_use'}],
+                tool_calls=[{'name': 'get_weather', 'args': {'location': 'San Francisco'}, 'id': 'toolu_01A4vwUEgBKxfFVc5H3v1CNs', 'type': 'tool_call'}]
+            ),
+            ToolMessage(content="It's 60 degrees and foggy."),
+            AIMessage(content="The current weather in San Francisco is 60 degrees and foggy. Typical San Francisco weather with its famous marine layer!")
+        ]
+    }
+    ```
 
 
 ## 2. Tool customization
@@ -151,154 +400,7 @@ def multiply(a: int, b: int) -> int:
     return a * b
 ```
 
-## 3. Advanced tool features 
-
-### Immediate return 
-
-Use `return_direct=True` to immediately return a tool's result without executing additional logic.
-
-This is useful for tools that should not trigger further processing or tool calls, allowing you to return results directly to the user.
-
-```python
-# highlight-next-line
-@tool(return_direct=True)
-def add(a: int, b: int) -> int:
-    """Add two numbers"""
-    return a + b
-```
-
-??? example "Extended example: Using return_direct in a prebuilt agent"
-
-    ```python
-    from langchain_core.tools import tool
-    from langgraph.prebuilt import create_react_agent
-
-    # highlight-next-line
-    @tool(return_direct=True)
-    def add(a: int, b: int) -> int:
-        """Add two numbers"""
-        return a + b
-
-    agent = create_react_agent(
-        model="anthropic:claude-3-7-sonnet-latest",
-        tools=[add]
-    )
-
-    agent.invoke(
-        {"messages": [{"role": "user", "content": "what's 3 + 5?"}]}
-    )
-    ```
-
-
-!!! important "Using without prebuilt components"
-
-    If you are building a custom workflow and are not relying on `create_react_agent` or `ToolNode`, you will also
-    need to implement the control flow to handle `return_direct=True`.
-
-### Force tool use
-
-If you need to force a specific tool to be used, you will need to configure this
-at the **model** level using the `tool_choice` parameter in the `bind_tools` method.
-
-Force specific tool usage via tool_choice:
-
-```python
-@tool(return_direct=True)
-def greet(user_name: str) -> int:
-    """Greet user."""
-    return f"Hello {user_name}!"
-
-tools = [greet]
-
-configured_model = model.bind_tools(
-    tools,
-    # Force the use of the 'greet' tool
-    # highlight-next-line
-    tool_choice={"type": "tool", "name": "greet"}
-)
-
-```
-
-??? example "Extended example: Force tool usage in an agent"
-
-    To force the agent to use specific tools, you can set the `tool_choice` option in `model.bind_tools()`:
-
-    ```python
-    from langchain_core.tools import tool
-
-    # highlight-next-line
-    @tool(return_direct=True)
-    def greet(user_name: str) -> int:
-        """Greet user."""
-        return f"Hello {user_name}!"
-
-    tools = [greet]
-
-    agent = create_react_agent(
-        # highlight-next-line
-        model=model.bind_tools(tools, tool_choice={"type": "tool", "name": "greet"}),
-        tools=tools
-    )
-
-    agent.invoke(
-        {"messages": [{"role": "user", "content": "Hi, I am Bob"}]}
-    )
-    ```
-
-!!! Warning "Avoid infinite loops"
-
-    Forcing tool usage without stopping conditions can create infinite loops. Use one of the following safeguards:
-
-    - Mark the tool with [`return_direct=True`](#return-tool-results-directly) to end the loop after execution.
-    - Set [`recursion_limit`](../concepts/low_level.md#recursion-limit) to restrict the number of execution steps.
-
-
-!!! tip "Tool choice configuration"
-
-    The `tool_choice` parameter is used to configure which tool should be used by the model when it decides to call a tool. This is useful when you want to ensure that a specific tool is always called for a particular task or when you want to override the model's default behavior of choosing a tool based on its internal logic.
-
-    Note that not all models support this feature, and the exact configuration may vary depending on the model you are using.
-
-### Disabling parallel calls
-
-For supported providers, you can disable parallel tool calling by setting `parallel_tool_calls=False` via the `model.bind_tools()` method:
-
-```python
-model.bind_tools(
-    tools, 
-    # highlight-next-line
-    parallel_tool_calls=False
-)
-```
-
-??? example "Extended example: disable parallel tool calls in a prebuilt agent"
-
-    ```python
-    from langchain.chat_models import init_chat_model
-
-    def add(a: int, b: int) -> int:
-        """Add two numbers"""
-        return a + b
-
-    def multiply(a: int, b: int) -> int:
-        """Multiply two numbers."""
-        return a * b
-
-    model = init_chat_model("anthropic:claude-3-5-sonnet-latest", temperature=0)
-    tools = [add, multiply]
-    agent = create_react_agent(
-        # disable parallel tool calls
-        # highlight-next-line
-        model=model.bind_tools(tools, parallel_tool_calls=False),
-        tools=tools
-    )
-
-    agent.invoke(
-        {"messages": [{"role": "user", "content": "what's 3 + 5 and 4 * 7?"}]}
-    )
-    ```
-
-## 4. Context Management
+## 3. Context Management
 
 Tools within LangGraph sometimes require context data, such as runtime-only arguments (e.g., user IDs or session details), that should not be controlled by the model. LangGraph provides three methods for managing such context:
 
@@ -604,261 +706,264 @@ graph = builder.compile(store=store)
     5. The `put` method is used to store data in the store. The first argument is the namespace, and the second argument is the key. This will store the user information in the store.
     6. The `user_id` is passed in the config. This is used to identify the user whose information is being updated.
 
-## Use prebuilt agent
+## 3. Advanced tool features
 
-To create a tool-calling agent, you can use the prebuilt [create_react_agent][langgraph.prebuilt.chat_agent_executor.create_react_agent]
+### Immediate return
+
+Use `return_direct=True` to immediately return a tool's result without executing additional logic.
+
+This is useful for tools that should not trigger further processing or tool calls, allowing you to return results directly to the user.
 
 ```python
-from langchain_core.tools import tool
 # highlight-next-line
-from langgraph.prebuilt import create_react_agent
-
-@tool
-def multiply(a: int, b: int) -> int:
-    """Multiply two numbers."""
-    return a * b
-
-# highlight-next-line
-agent = create_react_agent(
-    model="anthropic:claude-3-7-sonnet",
-    tools=[multiply]
-)
-graph.invoke({"messages": [{"role": "user", "content": "what's 42 x 7?"}]})
+@tool(return_direct=True)
+def add(a: int, b: int) -> int:
+    """Add two numbers"""
+    return a + b
 ```
 
-See this [guide](../agents/overview.md) to learn more.
+??? example "Extended example: Using return_direct in a prebuilt agent"
 
-## Use prebuilt `ToolNode`
+    ```python
+    from langchain_core.tools import tool
+    from langgraph.prebuilt import create_react_agent
 
-[`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] is a prebuilt LangGraph [node](../concepts/low_level.md#nodes) for executing tool calls.
+    # highlight-next-line
+    @tool(return_direct=True)
+    def add(a: int, b: int) -> int:
+        """Add two numbers"""
+        return a + b
 
-**Why use `ToolNode`?**
+    agent = create_react_agent(
+        model="anthropic:claude-3-7-sonnet-latest",
+        tools=[add]
+    )
 
-* support for both sync and async tools
-* concurrent execution of the tools
-* error handling during tool execution. You can enable / disable this by setting `handle_tool_errors=True` (enabled by default). See [this section](#handle-errors) for more details on handling errors
+    agent.invoke(
+        {"messages": [{"role": "user", "content": "what's 3 + 5?"}]}
+    )
+    ```
 
-ToolNode operates on [MessagesState](../concepts/low_level.md#messagesstate):
 
-* input: `MessagesState` where the last message is an `AIMessage` with `tool_calls` parameter
-* output: `MessagesState` with [`ToolMessage`](https://python.langchain.com/docs/concepts/messages/#toolmessage) the result of tool calls
+!!! important "Using without prebuilt components"
 
-!!! tip
+    If you are building a custom workflow and are not relying on `create_react_agent` or `ToolNode`, you will also
+    need to implement the control flow to handle `return_direct=True`.
 
-    `ToolNode` works with LangGraph's prebuilt [agent](../agents/agents) and with any `StateGraph` that uses `MessagesState.`
+### Force tool use
+
+If you need to force a specific tool to be used, you will need to configure this
+at the **model** level using the `tool_choice` parameter in the `bind_tools` method.
+
+Force specific tool usage via tool_choice:
 
 ```python
-# highlight-next-line
+@tool(return_direct=True)
+def greet(user_name: str) -> int:
+    """Greet user."""
+    return f"Hello {user_name}!"
+
+tools = [greet]
+
+configured_model = model.bind_tools(
+    tools,
+    # Force the use of the 'greet' tool
+    # highlight-next-line
+    tool_choice={"type": "tool", "name": "greet"}
+)
+
+```
+
+??? example "Extended example: Force tool usage in an agent"
+
+    To force the agent to use specific tools, you can set the `tool_choice` option in `model.bind_tools()`:
+
+    ```python
+    from langchain_core.tools import tool
+
+    # highlight-next-line
+    @tool(return_direct=True)
+    def greet(user_name: str) -> int:
+        """Greet user."""
+        return f"Hello {user_name}!"
+
+    tools = [greet]
+
+    agent = create_react_agent(
+        # highlight-next-line
+        model=model.bind_tools(tools, tool_choice={"type": "tool", "name": "greet"}),
+        tools=tools
+    )
+
+    agent.invoke(
+        {"messages": [{"role": "user", "content": "Hi, I am Bob"}]}
+    )
+    ```
+
+!!! Warning "Avoid infinite loops"
+
+    Forcing tool usage without stopping conditions can create infinite loops. Use one of the following safeguards:
+
+    - Mark the tool with [`return_direct=True`](#return-tool-results-directly) to end the loop after execution.
+    - Set [`recursion_limit`](../concepts/low_level.md#recursion-limit) to restrict the number of execution steps.
+
+
+!!! tip "Tool choice configuration"
+
+    The `tool_choice` parameter is used to configure which tool should be used by the model when it decides to call a tool. This is useful when you want to ensure that a specific tool is always called for a particular task or when you want to override the model's default behavior of choosing a tool based on its internal logic.
+
+    Note that not all models support this feature, and the exact configuration may vary depending on the model you are using.
+
+### Disabling parallel calls
+
+For supported providers, you can disable parallel tool calling by setting `parallel_tool_calls=False` via the `model.bind_tools()` method:
+
+```python
+model.bind_tools(
+    tools, 
+    # highlight-next-line
+    parallel_tool_calls=False
+)
+```
+
+??? example "Extended example: disable parallel tool calls in a prebuilt agent"
+
+    ```python
+    from langchain.chat_models import init_chat_model
+
+    def add(a: int, b: int) -> int:
+        """Add two numbers"""
+        return a + b
+
+    def multiply(a: int, b: int) -> int:
+        """Multiply two numbers."""
+        return a * b
+
+    model = init_chat_model("anthropic:claude-3-5-sonnet-latest", temperature=0)
+    tools = [add, multiply]
+    agent = create_react_agent(
+        # disable parallel tool calls
+        # highlight-next-line
+        model=model.bind_tools(tools, parallel_tool_calls=False),
+        tools=tools
+    )
+
+    agent.invoke(
+        {"messages": [{"role": "user", "content": "what's 3 + 5 and 4 * 7?"}]}
+    )
+    ```
+
+### Error handling
+
+LangGraph provides built-in error handling for tool execution through the prebuilt [ToolNode][langgraph.prebuilt.tool_node.ToolNode] component, used both independently and in prebuilt agents.
+
+By **default**, `ToolNode` catches exceptions raised during tool execution and returns them as `ToolMessage` objects with a status indicating an error.
+
+```python
+from langchain_core.messages import AIMessage
 from langgraph.prebuilt import ToolNode
 
-def get_weather(location: str):
-    """Call to get the current weather."""
-    if location.lower() in ["sf", "san francisco"]:
-        return "It's 60 degrees and foggy."
-    else:
-        return "It's 90 degrees and sunny."
+def multiply(a: int, b: int) -> int:
+    if a == 42:
+        raise ValueError("The ultimate error")
+    return a * b
 
-def get_coolest_cities():
-    """Get a list of coolest cities"""
-    return "nyc, sf"
+# Default error handling (enabled by default)
+tool_node = ToolNode([multiply])
 
-# highlight-next-line
-tool_node = ToolNode([get_weather, get_coolest_cities])
-tool_node.invoke({"messages": [...]})
+message = AIMessage(
+    content="",
+    tool_calls=[{
+        "name": "multiply",
+        "args": {"a": 42, "b": 7},
+        "id": "tool_call_id",
+        "type": "tool_call"
+    }]
+)
+
+result = tool_node.invoke({"messages": [message]})
 ```
 
-??? example "Single tool call"
+Output:
 
-    ```python
-    from langchain_core.messages import AIMessage
-    from langgraph.prebuilt import ToolNode
-    
-    # Define tools
-    @tool
-    def get_weather(location: str):
-        """Call to get the current weather."""
-        if location.lower() in ["sf", "san francisco"]:
-            return "It's 60 degrees and foggy."
-        else:
-            return "It's 90 degrees and sunny."
-    
-    # highlight-next-line
-    tool_node = ToolNode([get_weather])
-    
-    message_with_single_tool_call = AIMessage(
-        content="",
-        tool_calls=[
-            {
-                "name": "get_weather",
-                "args": {"location": "sf"},
-                "id": "tool_call_id",
-                "type": "tool_call",
-            }
-        ],
+```pycon
+{'messages': [
+    ToolMessage(
+        content="Error: ValueError('The ultimate error')\n Please fix your mistakes.",
+        name='multiply',
+        tool_call_id='tool_call_id',
+        status='error'
     )
-    
-    tool_node.invoke({"messages": [message_with_single_tool_call]})
-    ```
-    
-    ```
-    {'messages': [ToolMessage(content="It's 60 degrees and foggy.", name='get_weather', tool_call_id='tool_call_id')]}
-    ```
+]}
+```
 
-??? example "Multiple tool calls"
+#### Disabling error handling
 
-    ```python
-    from langchain_core.messages import AIMessage
-    from langgraph.prebuilt import ToolNode
-    
-    # Define tools
-    
-    def get_weather(location: str):
-        """Call to get the current weather."""
-        if location.lower() in ["sf", "san francisco"]:
-            return "It's 60 degrees and foggy."
-        else:
-            return "It's 90 degrees and sunny."
-    
-    def get_coolest_cities():
-        """Get a list of coolest cities"""
-        return "nyc, sf"
-    
-    # highlight-next-line
-    tool_node = ToolNode([get_weather, get_coolest_cities])
+To propagate exceptions directly, disable error handling:
 
-    message_with_multiple_tool_calls = AIMessage(
-        content="",
-        tool_calls=[
-            {
-                "name": "get_coolest_cities",
-                "args": {},
-                "id": "tool_call_id_1",
-                "type": "tool_call",
-            },
-            {
-                "name": "get_weather",
-                "args": {"location": "sf"},
-                "id": "tool_call_id_2",
-                "type": "tool_call",
-            },
-        ],
+```python
+tool_node = ToolNode([multiply], handle_tool_errors=False)
+```
+
+With error handling disabled, exceptions raised by tools will propagate up, requiring explicit management.
+
+#### Custom error messages
+
+Provide a custom error message by setting `handle_tool_errors` to a string:
+
+```python
+tool_node = ToolNode(
+    [multiply],
+    handle_tool_errors="Can't use 42 as the first operand, please switch operands!"
+)
+```
+
+Example output:
+
+```python
+{'messages': [
+    ToolMessage(
+        content="Can't use 42 as the first operand, please switch operands!",
+        name='multiply',
+        tool_call_id='tool_call_id',
+        status='error'
     )
+]}
+```
 
-    # highlight-next-line
-    tool_node.invoke({"messages": [message_with_multiple_tool_calls]})  # (1)!
-    ```
+#### Error handling in agents
 
-    1. `ToolNode` will execute both tools in parallel
+Error handling in prebuilt agents (`create_react_agent`) leverages `ToolNode`:
 
-    ```
-    {
-        'messages': [
-            ToolMessage(content='nyc, sf', name='get_coolest_cities', tool_call_id='tool_call_id_1'),
-            ToolMessage(content="It's 60 degrees and foggy.", name='get_weather', tool_call_id='tool_call_id_2')
-        ]
-    }
-    ```
+```python
+from langgraph.prebuilt import create_react_agent
 
-    
+agent = create_react_agent(
+    model="anthropic:claude-3-7-sonnet-latest",
+    tools=[multiply]
+)
 
-??? example "Use with a chat model"
+# Default error handling
+agent.invoke({"messages": [{"role": "user", "content": "what's 42 x 7?"}]})
+```
 
-    ```python
-    from langchain.chat_models import init_chat_model
-    from langgraph.prebuilt import ToolNode
-    
-    def get_weather(location: str):
-        """Call to get the current weather."""
-        if location.lower() in ["sf", "san francisco"]:
-            return "It's 60 degrees and foggy."
-        else:
-            return "It's 90 degrees and sunny."
-    
-    # highlight-next-line
-    tool_node = ToolNode([get_weather])
-    
-    model = init_chat_model(model="claude-3-5-haiku-latest")
-    # highlight-next-line
-    model_with_tools = model.bind_tools([get_weather])  # (1)!
-    
-    
-    # highlight-next-line
-    response_message = model_with_tools.invoke("what's the weather in sf?")
-    tool_node.invoke({"messages": [response_message]})
-    ```
+To disable or customize error handling in prebuilt agents, explicitly pass a configured `ToolNode`:
 
-    1. Use `.bind_tools()` to attach the tool schema to the chat model
+```python
+custom_tool_node = ToolNode(
+    [multiply],
+    handle_tool_errors="Cannot use 42 as a first operand!"
+)
 
-    ```
-    {'messages': [ToolMessage(content="It's 60 degrees and foggy.", name='get_weather', tool_call_id='toolu_01Pnkgw5JeTRxXAU7tyHT4UW')]}
-    ```
+agent_custom = create_react_agent(
+    model="anthropic:claude-3-7-sonnet-latest",
+    tools=custom_tool_node
+)
 
-??? example "Use in a tool-calling agent"
+agent_custom.invoke({"messages": [{"role": "user", "content": "what's 42 x 7?"}]})
+```
 
-    This is an example of creating a tool-calling agent from scratch using `ToolNode`. You can also use LangGraph's prebuilt [agent](../agents/agents).
-
-    ```python
-    from langchain.chat_models import init_chat_model
-    from langgraph.prebuilt import ToolNode
-    from langgraph.graph import StateGraph, MessagesState, START, END
-    
-    def get_weather(location: str):
-        """Call to get the current weather."""
-        if location.lower() in ["sf", "san francisco"]:
-            return "It's 60 degrees and foggy."
-        else:
-            return "It's 90 degrees and sunny."
-    
-    # highlight-next-line
-    tool_node = ToolNode([get_weather])
-    
-    model = init_chat_model(model="claude-3-5-haiku-latest")
-    # highlight-next-line
-    model_with_tools = model.bind_tools([get_weather])
-    
-    def should_continue(state: MessagesState):
-        messages = state["messages"]
-        last_message = messages[-1]
-        if last_message.tool_calls:
-            return "tools"
-        return END
-    
-    def call_model(state: MessagesState):
-        messages = state["messages"]
-        response = model_with_tools.invoke(messages)
-        return {"messages": [response]}
-    
-    builder = StateGraph(MessagesState)
-    
-    # Define the two nodes we will cycle between
-    builder.add_node("call_model", call_model)
-    # highlight-next-line
-    builder.add_node("tools", tool_node)
-    
-    builder.add_edge(START, "call_model")
-    builder.add_conditional_edges("call_model", should_continue, ["tools", END])
-    builder.add_edge("tools", "call_model")
-    
-    graph = builder.compile()
-    
-    graph.invoke({"messages": [{"role": "user", "content": "what's the weather in sf?"}]})
-    ```
-    
-    ```
-    {
-        'messages': [
-            HumanMessage(content="what's the weather in sf?"),
-            AIMessage(
-                content=[{'text': "I'll help you check the weather in San Francisco right now.", 'type': 'text'}, {'id': 'toolu_01A4vwUEgBKxfFVc5H3v1CNs', 'input': {'location': 'San Francisco'}, 'name': 'get_weather', 'type': 'tool_use'}],
-                tool_calls=[{'name': 'get_weather', 'args': {'location': 'San Francisco'}, 'id': 'toolu_01A4vwUEgBKxfFVc5H3v1CNs', 'type': 'tool_call'}]
-            ),
-            ToolMessage(content="It's 60 degrees and foggy."),
-            AIMessage(content="The current weather in San Francisco is 60 degrees and foggy. Typical San Francisco weather with its famous marine layer!")
-        ]
-    }
-    ```
-
-## Handle large numbers of tools
+### Handle large numbers of tools
 
 As the number of available tools grows, you may want to limit the scope of the LLM's selection, to decrease token consumption and to help manage sources of error in LLM reasoning.
 
@@ -866,202 +971,9 @@ To address this, you can dynamically adjust the tools available to a model by re
 
 See [`langgraph-bigtool`](https://github.com/langchain-ai/langgraph-bigtool) prebuilt library for a ready-to-use implementation and this [how-to guide](../many-tools) for more details.
 
-## Handle tool errors
+## 4. Prebuilt tools
 
-By default, the `ToolNode` will catch all exceptions raised during tool calls and will return those as tool messages. To control how the errors are handled, you can use `ToolNode`'s `handle_tool_errors` parameter:
-
-
-See [API reference][langgraph.prebuilt.tool_node.ToolNode] for more information on different tool error handling options.
-
-
-By default, the agent will catch all exceptions raised during tool calls and will pass those as tool messages to the LLM. To control how the errors are handled, you can use the prebuilt [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] — the node that executes tools inside `create_react_agent` — via its `handle_tool_errors` parameter:
-
-
-=== "In a workflow"
-
-
-    === "Enable error handling (default)"
-
-        ```python
-        from langchain_core.messages import AIMessage
-        from langgraph.prebuilt import ToolNode
-        
-        def multiply(a: int, b: int) -> int:
-            """Multiply two numbers."""
-            if a == 42:
-                raise ValueError("The ultimate error")
-            return a * b
-        
-        tool_node = ToolNode([multiply])
-        
-        # Run with error handling (default)
-        message = AIMessage(
-            content="",
-            tool_calls=[
-                {
-                    "name": "multiply",
-                    "args": {"a": 42, "b": 7},
-                    "id": "tool_call_id",
-                    "type": "tool_call",
-                }
-            ],
-        )
-        
-        tool_node.invoke({"messages": [message]})
-        ```
-
-        ```
-        {'messages': [ToolMessage(content="Error: ValueError('The ultimate error')\n Please fix your mistakes.", name='multiply', tool_call_id='tool_call_id', status='error')]}
-        ```
-
-    === "Disable error handling"
-
-        ```python
-        from langchain_core.messages import AIMessage
-        from langgraph.prebuilt import ToolNode
-
-        def multiply(a: int, b: int) -> int:
-            """Multiply two numbers."""
-            if a == 42:
-                raise ValueError("The ultimate error")
-            return a * b
-
-        tool_node = ToolNode(
-            [multiply],
-            # highlight-next-line
-            handle_tool_errors=False  # (1)!
-        )
-        message = AIMessage(
-            content="",
-            tool_calls=[
-                {
-                    "name": "multiply",
-                    "args": {"a": 42, "b": 7},
-                    "id": "tool_call_id",
-                    "type": "tool_call",
-                }
-            ],
-        )
-        tool_node.invoke({"messages": [message]})
-        ```
-
-        1. This disables error handling (enabled by default). See all available strategies in the [API reference][langgraph.prebuilt.tool_node.ToolNode].
-
-    === "Custom error handling"
-
-        ```python
-        from langchain_core.messages import AIMessage
-        from langgraph.prebuilt import ToolNode
-
-        def multiply(a: int, b: int) -> int:
-            """Multiply two numbers."""
-            if a == 42:
-                raise ValueError("The ultimate error")
-            return a * b
-
-        # highlight-next-line
-        tool_node = ToolNode(
-            [multiply],
-            # highlight-next-line
-            handle_tool_errors=(
-                "Can't use 42 as a first operand, you must switch operands!"  # (1)!
-            )
-        )
-        tool_node.invoke({"messages": [message]})
-        ```
-
-        1. This provides a custom message to send to the LLM in case of an exception. See all available strategies in the [API reference][langgraph.prebuilt.tool_node.ToolNode].
-
-        ```
-        {'messages': [ToolMessage(content="Can't use 42 as a first operand, you must switch operands!", name='multiply', tool_call_id='tool_call_id', status='error')]}
-        ```
-
-=== "In an agent"
-
-    === "Enable error handling (default)"
-
-        ```python
-        from langgraph.prebuilt import create_react_agent
-
-        def multiply(a: int, b: int) -> int:
-            """Multiply two numbers."""
-            if a == 42:
-                raise ValueError("The ultimate error")
-            return a * b
-
-        # Run with error handling (default)
-        agent = create_react_agent(
-            model="anthropic:claude-3-7-sonnet-latest",
-            tools=[multiply]
-        )
-        agent.invoke(
-            {"messages": [{"role": "user", "content": "what's 42 x 7?"}]}
-        )
-        ```
-
-    === "Disable error handling"
-
-        ```python
-        from langgraph.prebuilt import create_react_agent, ToolNode
-
-        def multiply(a: int, b: int) -> int:
-            """Multiply two numbers."""
-            if a == 42:
-                raise ValueError("The ultimate error")
-            return a * b
-
-        # highlight-next-line
-        tool_node = ToolNode(
-            [multiply],
-            # highlight-next-line
-            handle_tool_errors=False  # (1)!
-        )
-        agent_no_error_handling = create_react_agent(
-            model="anthropic:claude-3-7-sonnet-latest",
-            tools=tool_node
-        )
-        agent_no_error_handling.invoke(
-            {"messages": [{"role": "user", "content": "what's 42 x 7?"}]}
-        )
-        ```
-
-        1. This disables error handling (enabled by default). See all available strategies in the [API reference][langgraph.prebuilt.tool_node.ToolNode].
-
-    === "Custom error handling"
-
-        ```python
-        from langgraph.prebuilt import create_react_agent, ToolNode
-
-        def multiply(a: int, b: int) -> int:
-            """Multiply two numbers."""
-            if a == 42:
-                raise ValueError("The ultimate error")
-            return a * b
-
-        # highlight-next-line
-        tool_node = ToolNode(
-            [multiply],
-            # highlight-next-line
-            handle_tool_errors=(
-                "Can't use 42 as a first operand, you must switch operands!"  # (1)!
-            )
-        )
-        agent_custom_error_handling = create_react_agent(
-            model="anthropic:claude-3-7-sonnet-latest",
-            tools=tool_node
-        )
-        agent_custom_error_handling.invoke(
-            {"messages": [{"role": "user", "content": "what's 42 x 7?"}]}
-        )
-        ```
-
-        1. This provides a custom message to send to the LLM in case of an exception. See all available strategies in the [API reference][langgraph.prebuilt.tool_node.ToolNode].
-
-See [API reference][langgraph.prebuilt.tool_node.ToolNode] for more information on different tool error handling options.
-
-## Prebuilt tools
-
-### Built in tools from LLM providers
+### LLM provider tools
 
 You can use prebuilt tools from model providers by passing a dictionary with tool specs to the `tools` parameter of `create_react_agent`. For example, to use the `web_search_preview` tool from OpenAI:
 
