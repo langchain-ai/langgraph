@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from collections import ChainMap
 from collections.abc import Sequence
 from os import getenv
@@ -17,6 +18,7 @@ from langchain_core.runnables.config import (
     COPIABLE_KEYS,
     var_child_runnable_config,
 )
+from typing_extensions import TypedDict, Required, NotRequired
 
 from langgraph.checkpoint.base import CheckpointMetadata
 from langgraph.config import get_config, get_store, get_stream_writer  # noqa
@@ -30,6 +32,40 @@ from langgraph.constants import (
 )
 
 DEFAULT_RECURSION_LIMIT = int(getenv("LANGGRAPH_DEFAULT_RECURSION_LIMIT", "25"))
+
+
+class EnsuredConfig(TypedDict):
+    """Configuration that has been processed by ensure_config with guaranteed fields.
+    
+    This type represents a RunnableConfig where certain fields are guaranteed to be
+    present and non-None after processing through ensure_config().
+    """
+    
+    # Required fields that ensure_config guarantees are always present
+    tags: Required[list[str]]
+    """Tags for this call - guaranteed to be a list (may be empty)."""
+    
+    metadata: Required[ChainMap[str, Any]]  
+    """Metadata for this call - guaranteed to be a ChainMap (may be empty)."""
+    
+    recursion_limit: Required[int]
+    """Recursion limit - guaranteed to be an integer."""
+    
+    configurable: Required[dict[str, Any]]
+    """Configurable values - guaranteed to be a dict (may be empty)."""
+    
+    # Optional fields that may still be None or missing
+    callbacks: NotRequired[Callbacks]
+    """Callbacks - may be None."""
+    
+    run_name: NotRequired[str]
+    """Run name - may be missing."""
+    
+    max_concurrency: NotRequired[int | None]
+    """Max concurrency - may be missing or None."""
+    
+    run_id: NotRequired[uuid.UUID | None]  
+    """Run ID - may be missing or None."""
 
 
 def recast_checkpoint_ns(ns: str) -> str:
@@ -277,14 +313,14 @@ def _is_not_empty(value: Any) -> bool:
         return value is not None
 
 
-def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
+def ensure_config(*configs: RunnableConfig | None) -> EnsuredConfig:
     """Return a config with all keys, merging any provided configs.
 
     Args:
         *configs: Configs to merge before ensuring defaults.
 
     Returns:
-        RunnableConfig: The merged and ensured config.
+        EnsuredConfig: The merged and ensured config with guaranteed fields.
     """
     empty = RunnableConfig(
         tags=[],
@@ -320,4 +356,4 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
             and key not in empty["metadata"]
         ):
             empty["metadata"][key] = value
-    return empty
+    return cast(EnsuredConfig, empty)
