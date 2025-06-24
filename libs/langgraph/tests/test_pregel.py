@@ -4811,7 +4811,9 @@ def test_parent_command(
 
     config = {"configurable": {"thread_id": "1"}}
 
-    assert graph.invoke({"messages": [("user", "get user name")]}, config) == {
+    assert graph.invoke(
+        {"messages": [("user", "get user name")]}, config, checkpoint_during=False
+    ) == {
         "messages": [
             _AnyIdHumanMessage(
                 content="get user name", additional_kwargs={}, response_metadata={}
@@ -5539,7 +5541,10 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
 
     configurable = {"configurable": {"thread_id": uuid.uuid4()}}
     assert [
-        chunk for chunk in graph.stream({"a": 5}, configurable, stream_mode="debug")
+        chunk
+        for chunk in graph.stream(
+            {"a": 5}, configurable, stream_mode="debug", checkpoint_during=False
+        )
     ] == [
         {
             "payload": {
@@ -5641,7 +5646,12 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
     ]
     assert [
         c
-        for c in graph.stream(Command(resume="123"), configurable, stream_mode="debug")
+        for c in graph.stream(
+            Command(resume="123"),
+            configurable,
+            stream_mode="debug",
+            checkpoint_during=False,
+        )
     ] == [
         {
             "payload": {
