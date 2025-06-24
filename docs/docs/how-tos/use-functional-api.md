@@ -535,7 +535,7 @@ After resuming, the run proceeds through the remaining step and terminates as ex
 
 ### Review tool calls
 
-To review tool calls before execution, we add a `review_tool_call` function that calls [interrupt](../concepts/human_in_the_loop.md#interrupt). When this function is called, execution will be paused until we issue a command to resume it.
+To review tool calls before execution, we add a `review_tool_call` function that calls [`interrupt`](../how-tos/human_in_the_loop/add-human-in-the-loop.md#pause-using-interrupt). When this function is called, execution will be paused until we issue a command to resume it.
 
 Given a tool call, our function will `interrupt` for human review. At that point we can either:
 

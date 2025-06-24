@@ -20,7 +20,7 @@ The [`interrupt` function][langgraph.types.interrupt] in LangGraph enables human
 To use `interrupt` in your graph, you need to:
 
 1. [**Specify a checkpointer**](../../concepts/persistence.md#checkpoints) to save the graph state after each step.
-2. **Call `interrupt()`** in the appropriate place. See the [Design Patterns](#design-patterns) section for examples.
+2. **Call `interrupt()`** in the appropriate place. See the [Common Patterns](#common-patterns) section for examples.
 3. **Run the graph** with a [**thread ID**](../../concepts/persistence.md#threads) until the `interrupt` is hit.
 4. **Resume execution** using `invoke`/`ainvoke`/`stream`/`astream` (see [**The `Command` primitive**](#resume-using-the-command-primitive)).
 
