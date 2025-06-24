@@ -87,6 +87,7 @@ One of the most common agent types is a [tool-calling agent](../agents/overview.
 ```python
 from langchain_core.tools import tool
 
+@tool
 def transfer_to_bob():
     """Transfer to bob."""
     return Command(
