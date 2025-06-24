@@ -108,6 +108,7 @@ from langgraph.types import (
 )
 from langgraph.typing import InputT, OutputT, StateT
 from langgraph.utils.config import (
+    EnsuredConfig,
     ensure_config,
     merge_configs,
     patch_checkpoint_map,
@@ -1247,22 +1248,24 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         limit: int | None = None,
     ) -> Iterator[StateSnapshot]:
         """Get the history of the state of the graph."""
-        config = ensure_config(config)
-        checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
+        ensured_config = ensure_config(config)
+        checkpointer: BaseCheckpointSaver | None = ensured_config[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
             raise ValueError("No checkpointer set")
 
         if (
-            checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
-        ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
+            checkpoint_ns := ensured_config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        ) and CONFIG_KEY_CHECKPOINTER not in ensured_config[CONF]:
             # remove task_ids from checkpoint_ns
             recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
             for _, pregel in self.get_subgraphs(namespace=recast, recurse=True):
                 yield from pregel.get_state_history(
-                    patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
+                    patch_configurable(
+                        ensured_config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
+                    ),
                     filter=filter,
                     before=before,
                     limit=limit,
@@ -1271,19 +1274,21 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
             else:
                 raise ValueError(f"Subgraph {recast} not found")
 
-        config = merge_configs(
+        final_config = merge_configs(
             self.config,
-            config,
+            ensured_config,
             {
                 CONF: {
                     CONFIG_KEY_CHECKPOINT_NS: checkpoint_ns,
-                    CONFIG_KEY_THREAD_ID: str(config[CONF][CONFIG_KEY_THREAD_ID]),
+                    CONFIG_KEY_THREAD_ID: str(
+                        ensured_config[CONF][CONFIG_KEY_THREAD_ID]
+                    ),
                 }
             },
         )
         # eagerly consume list() to avoid holding up the db cursor
         for checkpoint_tuple in list(
-            checkpointer.list(config, before=before, limit=limit, filter=filter)
+            checkpointer.list(final_config, before=before, limit=limit, filter=filter)
         ):
             yield self._prepare_state_snapshot(
                 checkpoint_tuple.config, checkpoint_tuple
@@ -1298,22 +1303,24 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         limit: int | None = None,
     ) -> AsyncIterator[StateSnapshot]:
         """Asynchronously get the history of the state of the graph."""
-        config = ensure_config(config)
-        checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
+        ensured_config = ensure_config(config)
+        checkpointer: BaseCheckpointSaver | None = ensured_config[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
             raise ValueError("No checkpointer set")
 
         if (
-            checkpoint_ns := config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
-        ) and CONFIG_KEY_CHECKPOINTER not in config[CONF]:
+            checkpoint_ns := ensured_config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        ) and CONFIG_KEY_CHECKPOINTER not in ensured_config[CONF]:
             # remove task_ids from checkpoint_ns
             recast = recast_checkpoint_ns(checkpoint_ns)
             # find the subgraph with the matching name
             async for _, pregel in self.aget_subgraphs(namespace=recast, recurse=True):
                 async for state in pregel.aget_state_history(
-                    patch_configurable(config, {CONFIG_KEY_CHECKPOINTER: checkpointer}),
+                    patch_configurable(
+                        ensured_config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
+                    ),
                     filter=filter,
                     before=before,
                     limit=limit,
@@ -1323,13 +1330,15 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
             else:
                 raise ValueError(f"Subgraph {recast} not found")
 
-        config = merge_configs(
+        final_config = merge_configs(
             self.config,
-            config,
+            ensured_config,
             {
                 CONF: {
                     CONFIG_KEY_CHECKPOINT_NS: checkpoint_ns,
-                    CONFIG_KEY_THREAD_ID: str(config[CONF][CONFIG_KEY_THREAD_ID]),
+                    CONFIG_KEY_THREAD_ID: str(
+                        ensured_config[CONF][CONFIG_KEY_THREAD_ID]
+                    ),
                 }
             },
         )
@@ -1337,7 +1346,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         for checkpoint_tuple in [
             c
             async for c in checkpointer.alist(
-                config, before=before, limit=limit, filter=filter
+                final_config, before=before, limit=limit, filter=filter
             )
         ]:
             yield await self._aprepare_state_snapshot(
@@ -1396,7 +1405,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         ) -> RunnableConfig:
             # get last checkpoint
             config = ensure_config(self.config, input_config)
-            saved = checkpointer.get_tuple(config)
+            saved = checkpointer.get_tuple(cast(RunnableConfig, config))
             if saved is not None:
                 self._migrate_checkpoint(saved.checkpoint)
             checkpoint = (
@@ -1814,7 +1823,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         ) -> RunnableConfig:
             # get last checkpoint
             config = ensure_config(self.config, input_config)
-            saved = await checkpointer.aget_tuple(config)
+            saved = await checkpointer.aget_tuple(cast(RunnableConfig, config))
             if saved is not None:
                 self._migrate_checkpoint(saved.checkpoint)
             checkpoint = (
@@ -2201,7 +2210,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
 
     def _defaults(
         self,
-        config: RunnableConfig,
+        config: RunnableConfig | EnsuredConfig,
         *,
         stream_mode: StreamMode | list[StreamMode] | None,
         output_keys: str | Sequence[str] | None,
@@ -2336,13 +2345,15 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 else:
                     yield payload
 
-        config = ensure_config(self.config, config)
-        callback_manager = get_callback_manager_for_config(config)
+        ensured_config: EnsuredConfig = ensure_config(self.config, config)
+        callback_manager = get_callback_manager_for_config(
+            cast(RunnableConfig, ensured_config)
+        )
         run_manager = callback_manager.on_chain_start(
             None,
             input,
-            name=config.get("run_name", self.get_name()),
-            run_id=config.get("run_id"),
+            name=ensured_config.get("run_name", self.get_name()),
+            run_id=ensured_config.get("run_id"),
         )
         try:
             # assign defaults
@@ -2356,7 +2367,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 store,
                 cache,
             ) = self._defaults(
-                config,
+                ensured_config,
                 stream_mode=stream_mode,
                 output_keys=output_keys,
                 interrupt_before=interrupt_before,
@@ -2365,8 +2376,10 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
             )
             # set up subgraph checkpointing
             if self.checkpointer is True:
-                ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
-                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
+                ns = cast(str, ensured_config[CONF][CONFIG_KEY_CHECKPOINT_NS])
+                ensured_config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(
+                    ns
+                )
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
@@ -2374,7 +2387,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 )
             # set up custom stream mode
             if "custom" in stream_modes:
-                config[CONF][CONFIG_KEY_STREAM_WRITER] = lambda c: stream.put(
+                ensured_config[CONF][CONFIG_KEY_STREAM_WRITER] = lambda c: stream.put(
                     (
                         tuple(
                             get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(NS_SEP)[
@@ -2386,18 +2399,18 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     )
                 )
             elif (
-                CONFIG_KEY_STREAM not in config[CONF]
-                and CONFIG_KEY_STREAM_WRITER in config[CONF]
+                CONFIG_KEY_STREAM not in ensured_config[CONF]
+                and CONFIG_KEY_STREAM_WRITER in ensured_config[CONF]
             ):
                 # remove parent graph stream writer if subgraph streaming not requested
-                del config[CONF][CONFIG_KEY_STREAM_WRITER]
+                del ensured_config[CONF][CONFIG_KEY_STREAM_WRITER]
             # set checkpointing mode for subgraphs
             if checkpoint_during is not None:
-                config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
+                ensured_config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
             with SyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put, stream_modes),
-                config=config,
+                config=cast(RunnableConfig, ensured_config),
                 store=store,
                 cache=cache,
                 checkpointer=checkpointer,
@@ -2412,7 +2425,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 debug=debug,
                 checkpoint_during=checkpoint_during
                 if checkpoint_during is not None
-                else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, False),
+                else ensured_config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, False),
                 trigger_to_nodes=self.trigger_to_nodes,
                 migrate_checkpoint=self._migrate_checkpoint,
                 retry_policy=self.retry_policy,
@@ -2420,11 +2433,11 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
             ) as loop:
                 # create runner
                 runner = PregelRunner(
-                    submit=config[CONF].get(
+                    submit=ensured_config[CONF].get(
                         CONFIG_KEY_RUNNER_SUBMIT, weakref.WeakMethod(loop.submit)
                     ),
                     put_writes=weakref.WeakMethod(loop.put_writes),
-                    node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
+                    node_finished=ensured_config[CONF].get(CONFIG_KEY_NODE_FINISHED),
                 )
                 # enable subgraph streaming
                 if subgraphs:
@@ -2477,7 +2490,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
             if loop.status == "out_of_steps":
                 msg = create_error_message(
                     message=(
-                        f"Recursion limit of {config['recursion_limit']} reached "
+                        f"Recursion limit of {ensured_config['recursion_limit']} reached "
                         "without hitting a stop condition. You can increase the "
                         "limit by setting the `recursion_limit` config key."
                     ),
@@ -2563,13 +2576,15 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 else:
                     yield payload
 
-        config = ensure_config(self.config, config)
-        callback_manager = get_async_callback_manager_for_config(config)
+        ensured_config: EnsuredConfig = ensure_config(self.config, config)
+        callback_manager = get_async_callback_manager_for_config(
+            cast(RunnableConfig, ensured_config)
+        )
         run_manager = await callback_manager.on_chain_start(
             None,
             input,
-            name=config.get("run_name", self.get_name()),
-            run_id=config.get("run_id"),
+            name=ensured_config.get("run_name", self.get_name()),
+            run_id=ensured_config.get("run_id"),
         )
         # if running from astream_log() run each proc with streaming
         do_stream = (
@@ -2597,7 +2612,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 store,
                 cache,
             ) = self._defaults(
-                config,
+                ensured_config,
                 stream_mode=stream_mode,
                 output_keys=output_keys,
                 interrupt_before=interrupt_before,
@@ -2606,8 +2621,10 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
             )
             # set up subgraph checkpointing
             if self.checkpointer is True:
-                ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
-                config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
+                ns = cast(str, ensured_config[CONF][CONFIG_KEY_CHECKPOINT_NS])
+                ensured_config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(
+                    ns
+                )
             # set up messages stream mode
             if "messages" in stream_modes:
                 run_manager.inheritable_handlers.append(
@@ -2615,7 +2632,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 )
             # set up custom stream mode
             if "custom" in stream_modes:
-                config[CONF][CONFIG_KEY_STREAM_WRITER] = (
+                ensured_config[CONF][CONFIG_KEY_STREAM_WRITER] = (
                     lambda c: aioloop.call_soon_threadsafe(
                         stream.put_nowait,
                         (
@@ -2630,18 +2647,18 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     )
                 )
             elif (
-                CONFIG_KEY_STREAM not in config[CONF]
-                and CONFIG_KEY_STREAM_WRITER in config[CONF]
+                CONFIG_KEY_STREAM not in ensured_config[CONF]
+                and CONFIG_KEY_STREAM_WRITER in ensured_config[CONF]
             ):
                 # remove parent graph stream writer if subgraph streaming not requested
-                del config[CONF][CONFIG_KEY_STREAM_WRITER]
+                del ensured_config[CONF][CONFIG_KEY_STREAM_WRITER]
             # set checkpointing mode for subgraphs
             if checkpoint_during is not None:
-                config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
+                ensured_config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
             async with AsyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put_nowait, stream_modes),
-                config=config,
+                config=cast(RunnableConfig, ensured_config),
                 store=store,
                 cache=cache,
                 checkpointer=checkpointer,
@@ -2656,7 +2673,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 debug=debug,
                 checkpoint_during=checkpoint_during
                 if checkpoint_during is not None
-                else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, False),
+                else ensured_config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, False),
                 trigger_to_nodes=self.trigger_to_nodes,
                 migrate_checkpoint=self._migrate_checkpoint,
                 retry_policy=self.retry_policy,
@@ -2664,12 +2681,12 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
             ) as loop:
                 # create runner
                 runner = PregelRunner(
-                    submit=config[CONF].get(
+                    submit=ensured_config[CONF].get(
                         CONFIG_KEY_RUNNER_SUBMIT, weakref.WeakMethod(loop.submit)
                     ),
                     put_writes=weakref.WeakMethod(loop.put_writes),
                     use_astream=do_stream,
-                    node_finished=config[CONF].get(CONFIG_KEY_NODE_FINISHED),
+                    node_finished=ensured_config[CONF].get(CONFIG_KEY_NODE_FINISHED),
                 )
                 # enable subgraph streaming
                 if subgraphs:
@@ -2714,7 +2731,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
             if loop.status == "out_of_steps":
                 msg = create_error_message(
                     message=(
-                        f"Recursion limit of {config['recursion_limit']} reached "
+                        f"Recursion limit of {ensured_config['recursion_limit']} reached "
                         "without hitting a stop condition. You can increase the "
                         "limit by setting the `recursion_limit` config key."
                     ),

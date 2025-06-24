@@ -51,6 +51,7 @@ from langgraph.constants import (
 from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
 from langgraph.utils.config import (
+    EnsuredConfig,
     ensure_config,
     get_async_callback_manager_for_config,
     get_callback_manager_for_config,
@@ -320,8 +321,7 @@ class RunnableCallable(Runnable):
                 "\nEither initialize with a synchronous function or invoke"
                 " via the async API (ainvoke, astream, etc.)"
             )
-        if config is None:
-            config = ensure_config()
+        ensured_config: EnsuredConfig = ensure_config(config)
         if self.explode_args:
             args, _kwargs = input
             kwargs = {**self.kwargs, **_kwargs, **kwargs}
@@ -329,8 +329,8 @@ class RunnableCallable(Runnable):
             args = (input,)
             kwargs = {**self.kwargs, **kwargs}
         if self.func_accepts_config:
-            kwargs["config"] = config
-        _conf = config[CONF]
+            kwargs["config"] = ensured_config
+        _conf = ensured_config[CONF]
 
         for kw, (config_key, default_value) in self.func_accepts.items():
             # If the kwarg is already set, use the set value
@@ -349,15 +349,19 @@ class RunnableCallable(Runnable):
             kwargs[kw] = _conf.get(config_key, default_value)
 
         if self.trace:
-            callback_manager = get_callback_manager_for_config(config, self.tags)
+            callback_manager = get_callback_manager_for_config(
+                ensured_config, self.tags
+            )
             run_manager = callback_manager.on_chain_start(
                 None,
                 input,
-                name=config.get("run_name") or self.get_name(),
-                run_id=config.pop("run_id", None),
+                name=ensured_config.get("run_name") or self.get_name(),
+                run_id=ensured_config.pop("run_id", None),
             )
             try:
-                child_config = patch_config(config, callbacks=run_manager.get_child())
+                child_config = patch_config(
+                    ensured_config, callbacks=run_manager.get_child()
+                )
                 # get the run
                 for h in run_manager.handlers:
                     if isinstance(h, LangChainTracer):
@@ -376,7 +380,7 @@ class RunnableCallable(Runnable):
         else:
             ret = self.func(*args, **kwargs)
         if self.recurse and isinstance(ret, Runnable):
-            return ret.invoke(input, config)
+            return ret.invoke(input, cast(RunnableConfig, ensured_config))
         return ret
 
     async def ainvoke(
@@ -384,8 +388,7 @@ class RunnableCallable(Runnable):
     ) -> Any:
         if not self.afunc:
             return self.invoke(input, config)
-        if config is None:
-            config = ensure_config()
+        ensured_config: EnsuredConfig = ensure_config(config)
         if self.explode_args:
             args, _kwargs = input
             kwargs = {**self.kwargs, **_kwargs, **kwargs}
@@ -393,8 +396,8 @@ class RunnableCallable(Runnable):
             args = (input,)
             kwargs = {**self.kwargs, **kwargs}
         if self.func_accepts_config:
-            kwargs["config"] = config
-        _conf = config[CONF]
+            kwargs["config"] = ensured_config
+        _conf = ensured_config[CONF]
         for kw, (config_key, default_value) in self.func_accepts.items():
             # If the kwarg has already been set, use the set value
             if kw in kwargs:
@@ -410,15 +413,19 @@ class RunnableCallable(Runnable):
                 )
             kwargs[kw] = _conf.get(config_key, default_value)
         if self.trace:
-            callback_manager = get_async_callback_manager_for_config(config, self.tags)
+            callback_manager = get_async_callback_manager_for_config(
+                ensured_config, self.tags
+            )
             run_manager = await callback_manager.on_chain_start(
                 None,
                 input,
-                name=config.get("run_name") or self.name,
-                run_id=config.pop("run_id", None),
+                name=ensured_config.get("run_name") or self.name,
+                run_id=ensured_config.pop("run_id", None),
             )
             try:
-                child_config = patch_config(config, callbacks=run_manager.get_child())
+                child_config = patch_config(
+                    ensured_config, callbacks=run_manager.get_child()
+                )
                 coro = cast(Coroutine[None, None, Any], self.afunc(*args, **kwargs))
                 if ASYNCIO_ACCEPTS_CONTEXT:
                     for h in run_manager.handlers:
@@ -439,7 +446,7 @@ class RunnableCallable(Runnable):
         else:
             ret = await self.afunc(*args, **kwargs)
         if self.recurse and isinstance(ret, Runnable):
-            return await ret.ainvoke(input, config)
+            return await ret.ainvoke(input, cast(RunnableConfig, ensured_config))
         return ret
 
 
@@ -590,23 +597,22 @@ class RunnableSeq(Runnable):
     def invoke(
         self, input: Input, config: RunnableConfig | None = None, **kwargs: Any
     ) -> Any:
-        if config is None:
-            config = ensure_config()
+        ensured_config: EnsuredConfig = ensure_config(config)
         # setup callbacks and context
-        callback_manager = get_callback_manager_for_config(config)
+        callback_manager = get_callback_manager_for_config(ensured_config)
         # start the root run
         run_manager = callback_manager.on_chain_start(
             None,
             self.trace_inputs(input) if self.trace_inputs is not None else input,
-            name=config.get("run_name") or self.get_name(),
-            run_id=config.pop("run_id", None),
+            name=ensured_config.get("run_name") or self.get_name(),
+            run_id=ensured_config.pop("run_id", None),
         )
         # invoke all steps in sequence
         try:
             for i, step in enumerate(self.steps):
                 # mark each step as a child run
-                config = patch_config(
-                    config, callbacks=run_manager.get_child(f"seq:step:{i + 1}")
+                step_config = patch_config(
+                    ensured_config, callbacks=run_manager.get_child(f"seq:step:{i + 1}")
                 )
                 # 1st step is the actual node,
                 # others are writers which don't need to be run in context
@@ -619,10 +625,10 @@ class RunnableSeq(Runnable):
                     else:
                         run = None
                     # run in context
-                    with set_config_context(config, run) as context:
-                        input = context.run(step.invoke, input, config, **kwargs)
+                    with set_config_context(step_config, run) as context:
+                        input = context.run(step.invoke, input, step_config, **kwargs)
                 else:
-                    input = step.invoke(input, config)
+                    input = step.invoke(input, step_config)
         # finish the root run
         except BaseException as e:
             run_manager.on_chain_error(e)
@@ -637,24 +643,23 @@ class RunnableSeq(Runnable):
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
     ) -> Any:
-        if config is None:
-            config = ensure_config()
+        ensured_config: EnsuredConfig = ensure_config(config)
         # setup callbacks
-        callback_manager = get_async_callback_manager_for_config(config)
+        callback_manager = get_async_callback_manager_for_config(ensured_config)
         # start the root run
         run_manager = await callback_manager.on_chain_start(
             None,
             self.trace_inputs(input) if self.trace_inputs is not None else input,
-            name=config.get("run_name") or self.get_name(),
-            run_id=config.pop("run_id", None),
+            name=ensured_config.get("run_name") or self.get_name(),
+            run_id=ensured_config.pop("run_id", None),
         )
 
         # invoke all steps in sequence
         try:
             for i, step in enumerate(self.steps):
                 # mark each step as a child run
-                config = patch_config(
-                    config, callbacks=run_manager.get_child(f"seq:step:{i + 1}")
+                step_config = patch_config(
+                    ensured_config, callbacks=run_manager.get_child(f"seq:step:{i + 1}")
                 )
                 # 1st step is the actual node,
                 # others are writers which don't need to be run in context
@@ -668,14 +673,15 @@ class RunnableSeq(Runnable):
                         else:
                             run = None
                         # run in context
-                        with set_config_context(config, run) as context:
+                        with set_config_context(step_config, run) as context:
                             input = await asyncio.create_task(
-                                step.ainvoke(input, config, **kwargs), context=context
+                                step.ainvoke(input, step_config, **kwargs),
+                                context=context,
                             )
                     else:
-                        input = await step.ainvoke(input, config, **kwargs)
+                        input = await step.ainvoke(input, step_config, **kwargs)
                 else:
-                    input = await step.ainvoke(input, config)
+                    input = await step.ainvoke(input, step_config)
         # finish the root run
         except BaseException as e:
             await run_manager.on_chain_error(e)
@@ -690,16 +696,15 @@ class RunnableSeq(Runnable):
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
     ) -> Iterator[Any]:
-        if config is None:
-            config = ensure_config()
+        ensured_config: EnsuredConfig = ensure_config(config)
         # setup callbacks
-        callback_manager = get_callback_manager_for_config(config)
+        callback_manager = get_callback_manager_for_config(ensured_config)
         # start the root run
         run_manager = callback_manager.on_chain_start(
             None,
             self.trace_inputs(input) if self.trace_inputs is not None else input,
-            name=config.get("run_name") or self.get_name(),
-            run_id=config.pop("run_id", None),
+            name=ensured_config.get("run_name") or self.get_name(),
+            run_id=ensured_config.pop("run_id", None),
         )
         # get the run object
         for h in run_manager.handlers:
@@ -709,12 +714,12 @@ class RunnableSeq(Runnable):
         else:
             run = None
         # create first step config
-        config = patch_config(
-            config,
+        step_config = patch_config(
+            ensured_config,
             callbacks=run_manager.get_child(f"seq:step:{1}"),
         )
         # run all in context
-        with set_config_context(config, run) as context:
+        with set_config_context(step_config, run) as context:
             try:
                 # stream the last steps
                 # transform the input stream of each step with the next
@@ -722,13 +727,13 @@ class RunnableSeq(Runnable):
                 # buffer input in memory until all available, and then start emitting output
                 for idx, step in enumerate(self.steps):
                     if idx == 0:
-                        iterator = step.stream(input, config, **kwargs)
+                        iterator = step.stream(input, step_config, **kwargs)
                     else:
-                        config = patch_config(
-                            config,
+                        step_config = patch_config(
+                            step_config,
                             callbacks=run_manager.get_child(f"seq:step:{idx + 1}"),
                         )
-                        iterator = step.transform(iterator, config)
+                        iterator = step.transform(iterator, step_config)
                 # populates streamed_output in astream_log() output if needed
                 if _StreamingCallbackHandler is not None:
                     for h in run_manager.handlers:
@@ -750,16 +755,15 @@ class RunnableSeq(Runnable):
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
     ) -> AsyncIterator[Any]:
-        if config is None:
-            config = ensure_config()
+        ensured_config: EnsuredConfig = ensure_config(config)
         # setup callbacks
-        callback_manager = get_async_callback_manager_for_config(config)
+        callback_manager = get_async_callback_manager_for_config(ensured_config)
         # start the root run
         run_manager = await callback_manager.on_chain_start(
             None,
             self.trace_inputs(input) if self.trace_inputs is not None else input,
-            name=config.get("run_name") or self.get_name(),
-            run_id=config.pop("run_id", None),
+            name=ensured_config.get("run_name") or self.get_name(),
+            run_id=ensured_config.pop("run_id", None),
         )
         # stream the last steps
         # transform the input stream of each step with the next
@@ -774,25 +778,25 @@ class RunnableSeq(Runnable):
             else:
                 run = None
             # create first step config
-            config = patch_config(
-                config,
+            step_config = patch_config(
+                ensured_config,
                 callbacks=run_manager.get_child(f"seq:step:{1}"),
             )
             # run all in context
-            with set_config_context(config, run) as context:
+            with set_config_context(step_config, run) as context:
                 try:
                     async with AsyncExitStack() as stack:
                         for idx, step in enumerate(self.steps):
                             if idx == 0:
-                                aiterator = step.astream(input, config, **kwargs)
+                                aiterator = step.astream(input, step_config, **kwargs)
                             else:
-                                config = patch_config(
-                                    config,
+                                step_config = patch_config(
+                                    step_config,
                                     callbacks=run_manager.get_child(
                                         f"seq:step:{idx + 1}"
                                     ),
                                 )
-                                aiterator = step.atransform(aiterator, config)
+                                aiterator = step.atransform(aiterator, step_config)
                             if hasattr(aiterator, "aclose"):
                                 stack.push_async_callback(aiterator.aclose)
                         # populates streamed_output in astream_log() output if needed

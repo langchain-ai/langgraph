@@ -18,7 +18,7 @@ from langchain_core.runnables.config import (
     COPIABLE_KEYS,
     var_child_runnable_config,
 )
-from typing_extensions import TypedDict, Required, NotRequired
+from typing_extensions import NotRequired, Required, TypedDict
 
 from langgraph.checkpoint.base import CheckpointMetadata
 from langgraph.config import get_config, get_store, get_stream_writer  # noqa
@@ -36,35 +36,35 @@ DEFAULT_RECURSION_LIMIT = int(getenv("LANGGRAPH_DEFAULT_RECURSION_LIMIT", "25"))
 
 class EnsuredConfig(TypedDict):
     """Configuration that has been processed by ensure_config with guaranteed fields.
-    
+
     This type represents a RunnableConfig where certain fields are guaranteed to be
     present and non-None after processing through ensure_config().
     """
-    
+
     # Required fields that ensure_config guarantees are always present
     tags: Required[list[str]]
     """Tags for this call - guaranteed to be a list (may be empty)."""
-    
-    metadata: Required[ChainMap[str, Any]]  
+
+    metadata: Required[ChainMap[str, Any]]
     """Metadata for this call - guaranteed to be a ChainMap (may be empty)."""
-    
+
     recursion_limit: Required[int]
     """Recursion limit - guaranteed to be an integer."""
-    
+
     configurable: Required[dict[str, Any]]
     """Configurable values - guaranteed to be a dict (may be empty)."""
-    
+
     # Optional fields that may still be None or missing
     callbacks: NotRequired[Callbacks]
     """Callbacks - may be None."""
-    
+
     run_name: NotRequired[str]
     """Run name - may be missing."""
-    
+
     max_concurrency: NotRequired[int | None]
     """Max concurrency - may be missing or None."""
-    
-    run_id: NotRequired[uuid.UUID | None]  
+
+    run_id: NotRequired[uuid.UUID | None]
     """Run ID - may be missing or None."""
 
 
@@ -83,7 +83,7 @@ def recast_checkpoint_ns(ns: str) -> str:
 
 
 def patch_configurable(
-    config: RunnableConfig | None, patch: dict[str, Any]
+    config: RunnableConfig | EnsuredConfig | None, patch: dict[str, Any]
 ) -> RunnableConfig:
     if config is None:
         return {CONF: patch}
@@ -94,7 +94,7 @@ def patch_configurable(
 
 
 def patch_checkpoint_map(
-    config: RunnableConfig | None, metadata: CheckpointMetadata | None
+    config: RunnableConfig | EnsuredConfig | None, metadata: CheckpointMetadata | None
 ) -> RunnableConfig:
     if config is None:
         return config
@@ -113,7 +113,7 @@ def patch_checkpoint_map(
         return config
 
 
-def merge_configs(*configs: RunnableConfig | None) -> RunnableConfig:
+def merge_configs(*configs: RunnableConfig | EnsuredConfig | None) -> RunnableConfig:
     """Merge multiple configs into one.
 
     Args:
@@ -186,7 +186,7 @@ def merge_configs(*configs: RunnableConfig | None) -> RunnableConfig:
 
 
 def patch_config(
-    config: RunnableConfig | None,
+    config: RunnableConfig | EnsuredConfig | None,
     *,
     callbacks: Callbacks = None,
     recursion_limit: int | None = None,
@@ -232,7 +232,7 @@ def patch_config(
 
 
 def get_callback_manager_for_config(
-    config: RunnableConfig, tags: Sequence[str] | None = None
+    config: RunnableConfig | EnsuredConfig, tags: Sequence[str] | None = None
 ) -> CallbackManager:
     """Get a callback manager for a config.
 
@@ -257,19 +257,20 @@ def get_callback_manager_for_config(
         if all_tags:
             callbacks.add_tags(all_tags)
         if metadata := config.get("metadata"):
-            callbacks.add_metadata(metadata)
+            callbacks.add_metadata(dict(metadata))
         return callbacks
     else:
         # otherwise create a new manager
+        metadata = config.get("metadata")
         return CallbackManager.configure(
             inheritable_callbacks=config.get("callbacks"),
             inheritable_tags=all_tags,
-            inheritable_metadata=config.get("metadata"),
+            inheritable_metadata=dict(metadata) if metadata else None,
         )
 
 
 def get_async_callback_manager_for_config(
-    config: RunnableConfig,
+    config: RunnableConfig | EnsuredConfig,
     tags: Sequence[str] | None = None,
 ) -> AsyncCallbackManager:
     """Get an async callback manager for a config.
@@ -295,14 +296,15 @@ def get_async_callback_manager_for_config(
         if all_tags:
             callbacks.add_tags(all_tags)
         if metadata := config.get("metadata"):
-            callbacks.add_metadata(metadata)
+            callbacks.add_metadata(dict(metadata))
         return callbacks
     else:
         # otherwise create a new manager
+        metadata = config.get("metadata")
         return AsyncCallbackManager.configure(
             inheritable_callbacks=config.get("callbacks"),
             inheritable_tags=all_tags,
-            inheritable_metadata=config.get("metadata"),
+            inheritable_metadata=dict(metadata) if metadata else None,
         )
 
 
