@@ -6,7 +6,7 @@ hide:
   - tags
 ---
 
-# MCP Endpoint
+# MCP endpoint in LangGraph Server
 
 The **Model Context Protocol (MCP)** is an open protocol for describing tools and data sources in a model-agnostic format, enabling LLMs to discover
 and use them via a structured API. 
