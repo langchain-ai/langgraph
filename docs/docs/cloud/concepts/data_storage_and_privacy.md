@@ -53,6 +53,25 @@ Minimal analytics data collected by default to improve the tool:
 
 **To disable:** Set `LANGGRAPH_CLI_NO_ANALYTICS=1`
 
+#### Frontend Telemetry (Opt-out)
+
+LangGraph Studio collects usage analytics to improve the user experience:
+
+**Collected data:**
+
+- Page visits and navigation patterns
+- User actions (button clicks)
+- Feature usage statistics
+- Browser type and version
+- Screen resolution and viewport size
+
+**Not collected:**
+
+- Application data or code
+- Sensitive configuration details
+
+**To disable:** Use browser privacy settings or ad blockers to prevent analytics collection
+
 #### LangSmith Tracing (Opt-in)
 
 Tracing data is only sent when explicitly configured:
