@@ -43,6 +43,15 @@ jobs:
           enable-cache: true
           cache-suffix: lint-${{ inputs.working-directory }}
 
+      - name: Setup MSYS2 (Windows)
+        if: steps.changed-files.outputs.all && matrix.os == 'windows-latest'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: make
+          path-type: inherit
+
       - name: Install dependencies
         if: steps.changed-files.outputs.all
         working-directory: ${{ inputs.working-directory }}
@@ -58,54 +67,29 @@ jobs:
             ${{ inputs.working-directory }}/.mypy_cache
           key: mypy-lint-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ inputs.working-directory }}-${{ hashFiles(format('{0}/uv.lock', inputs.working-directory)) }}
 
-      - name: Run Ruff linting
-        if: steps.changed-files.outputs.all
-        working-directory: ${{ inputs.working-directory }}
-        run: |
-          uv run ruff check --output-format=github .
-          
-      - name: Run Ruff format check
-        if: steps.changed-files.outputs.all  
+      - name: Analysing package code with our lint (Ubuntu)
+        if: steps.changed-files.outputs.all && matrix.os == 'ubuntu-latest'
         working-directory: ${{ inputs.working-directory }}
         shell: bash
         run: |
-          # Find the main package directory and format check
-          for pkg in langgraph langgraph_cli langgraph_sdk; do
-            if [ -d "$pkg" ]; then
-              echo "Running Ruff format check on $pkg"
-              uv run ruff format "$pkg" --diff
-              break
-            fi
-          done
-          
-      - name: Run Ruff import sorting check
-        if: steps.changed-files.outputs.all
+          if make lint_package > /dev/null 2>&1; then
+            make lint_package
+          else
+            echo "lint_package command not found, using lint instead"
+            make lint
+          fi
+
+      - name: Analysing package code with our lint (Windows)
+        if: steps.changed-files.outputs.all && matrix.os == 'windows-latest'
         working-directory: ${{ inputs.working-directory }}
-        shell: bash
+        shell: msys2 {0}
         run: |
-          # Find the main package directory and check import sorting
-          for pkg in langgraph langgraph_cli langgraph_sdk; do
-            if [ -d "$pkg" ]; then
-              echo "Running Ruff import check on $pkg"
-              uv run ruff check --select I "$pkg"
-              break
-            fi
-          done
-        
-      - name: Run MyPy type checking  
-        if: steps.changed-files.outputs.all
-        working-directory: ${{ inputs.working-directory }}
-        shell: bash
-        run: |
-          # Create cache directory and find package
-          mkdir -p .mypy_cache
-          for pkg in langgraph langgraph_cli langgraph_sdk; do
-            if [ -d "$pkg" ]; then
-              echo "Running MyPy on $pkg"
-              uv run mypy "$pkg" --cache-dir .mypy_cache
-              break
-            fi
-          done
+          if make lint_package > /dev/null 2>&1; then
+            make lint_package
+          else
+            echo "lint_package command not found, using lint instead"
+            make lint
+          fi
 
       - name: Install test dependencies
         if: steps.changed-files.outputs.all
@@ -122,26 +106,24 @@ jobs:
             ${{ inputs.working-directory }}/.mypy_cache_test
           key: mypy-test-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ inputs.working-directory }}-${{ hashFiles(format('{0}/uv.lock', inputs.working-directory)) }}
 
-      - name: Run tests linting
-        if: steps.changed-files.outputs.all
+      - name: Analysing tests with our lint (Ubuntu)
+        if: steps.changed-files.outputs.all && matrix.os == 'ubuntu-latest'
         working-directory: ${{ inputs.working-directory }}
         shell: bash
         run: |
-          # Run tests linting if tests directory exists
-          if [ -d "tests" ]; then
-            echo "Running tests linting"
-            uv run ruff check --output-format=github .
-            uv run ruff format tests --diff
-            uv run ruff check --select I tests
-            mkdir -p .mypy_cache_test
-            # Find package for mypy
-            for pkg in langgraph langgraph_cli langgraph_sdk; do
-              if [ -d "$pkg" ]; then
-                echo "Running MyPy on $pkg for tests"
-                uv run mypy "$pkg" --cache-dir .mypy_cache_test
-                break
-              fi
-            done
+          if make lint_tests > /dev/null 2>&1; then
+            make lint_tests
           else
-            echo "No tests directory found, skipping tests linting"
+            echo "lint_tests command not found, skipping step"
+          fi
+
+      - name: Analysing tests with our lint (Windows)
+        if: steps.changed-files.outputs.all && matrix.os == 'windows-latest'
+        working-directory: ${{ inputs.working-directory }}
+        shell: msys2 {0}
+        run: |
+          if make lint_tests > /dev/null 2>&1; then
+            make lint_tests
+          else
+            echo "lint_tests command not found, skipping step"
           fi
