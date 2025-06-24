@@ -103,3 +103,18 @@ def test_input_state_specified() -> None:
 
     new_graph.invoke({"something": 1})
     new_graph.invoke({"something": 2, "info": ["hello", "world"]})  # type: ignore[arg-type]
+
+
+def test_invokeable_node_signature() -> None:
+    class State(TypedDict):
+        info: Annotated[list[str], add]
+
+    graph_builder = StateGraph(State)
+
+    class RunnableIsh:
+        def invoke(
+            self, input: State, config: RunnableConfig | None = None, **kwargs: Any
+        ) -> dict[str, str]:
+            return {}
+
+    graph_builder.add_node("runnable", RunnableIsh())

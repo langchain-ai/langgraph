@@ -148,6 +148,15 @@ class _NodeWithConfigWriterStore(Protocol[StateT_contra]):
     ) -> Any: ...
 
 
+class _Invokable(Protocol[StateT_contra]):
+    def invoke(
+        self,
+        input: StateT_contra,
+        config: RunnableConfig | None = None,
+        **kwargs: Any,
+    ) -> Any: ...
+
+
 # TODO: we probably don't want to explicitly support the config / store signatures once
 # we move to adding a context arg. Maybe what we do is we add support for kwargs with param spec
 # this is purely for typing purposes though, so can easily change in the coming weeks.
@@ -160,7 +169,7 @@ StateNode: TypeAlias = Union[
     _NodeWithConfigWriter[StateT_contra],
     _NodeWithConfigStore[StateT_contra],
     _NodeWithConfigWriterStore[StateT_contra],
-    Runnable[StateT_contra, Any],
+    _Invokable[StateT_contra],
 ]
 
 
@@ -536,7 +545,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
         if input_schema is not None:
             self._add_schema(input_schema)
         self.nodes[node] = StateNodeSpec(
-            coerce_to_runnable(action, name=node, trace=False),
+            coerce_to_runnable(action, name=node, trace=False),  # type: ignore[arg-type]
             metadata,
             input=input_schema or self.state_schema,
             retry_policy=retry_policy,

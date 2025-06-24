@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Union
-
 from typing_extensions import TypeVar
 
 from langgraph._typing import StateLike
@@ -19,12 +17,8 @@ InputT = TypeVar("InputT", bound=StateLike, default=StateT)
 Defaults to `StateT`.
 """
 
-ResolvedInputT = TypeVar("ResolvedInputT", bound=StateLike)
-"""Type variable used to represent the resolved input to a state graph.
+OutputT = TypeVar("OutputT", bound=StateLike, default=StateT)
+"""Type variable used to represent the output of a state graph.
 
-No default.
+Defaults to `StateT`.
 """
-
-
-OutputT = TypeVar("OutputT", bound=Union[StateLike, None], default=StateT)
-"""Type variable used to represent the output of a state graph."""
