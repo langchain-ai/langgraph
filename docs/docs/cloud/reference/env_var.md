@@ -124,6 +124,18 @@ Set `REDIS_CLUSTER` to `True` to enable Redis Cluster mode. When enabled, the sy
 
 Defaults to `False`.
 
+
+## `MAX_STREAM_CHUNK_SIZE_BYTES`
+
+!!! info "Available in API Server version 0.2.44+"
+    This environment variable is supported in API Server version 0.2.44 and above.
+
+Configure the maximum size of a chunk of data that can be added to Redis for streaming events to the client. This is meant to prevent run failure from data that is above the size supported by your redis instance. Default is 128MB (1024 * 1024 * 128).
+
+Set `MAX_STREAM_CHUNK_SIZE_BYTES` to specify the maximum size of a chunk of data that can be sent in a stream. This is useful when connecting to a Redis Cluster deployment.
+
+Defaults to `1024 * 1024`.
+
 ## `MOUNT_PREFIX`
 
 !!! info "Only Allowed in Self-Hosted Deployments"
