@@ -619,7 +619,7 @@ graph = builder.compile(store=store)
     )
     ```
     
-    1. The `InMemoryStore` is a store that stores data in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [store documentation][../reference/store/) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready store for you.
+    1. The `InMemoryStore` is a store that stores data in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [store documentation][../reference/store.md) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready store for you.
     2. For this example, we write some sample data to the store using the `put` method. Please see the [BaseStore.put][langgraph.store.base.BaseStore.put] API reference for more details.
     3. The first argument is the namespace. This is used to group related data together. In this case, we are using the `users` namespace to group user data.
     4. A key within the namespace. This example uses a user ID for the key.
@@ -698,7 +698,7 @@ graph = builder.compile(store=store)
     store.get(("users",), "user_123").value
     ```
     
-    1. The `InMemoryStore` is a store that stores data in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [store documentation](../reference/store/) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready store for you.
+    1. The `InMemoryStore` is a store that stores data in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [store documentation](../reference/store.md) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready store for you.
     2. The `UserInfo` class is a `TypedDict` that defines the structure of the user information. The LLM will use this to format the response according to the schema.
     3. The `save_user_info` function is a tool that allows an agent to update user information. This could be useful for a chat application where the user wants to update their profile information.
     4. The `get_store` function is used to access the store. You can call it from anywhere in your code, including tools and prompts. This function returns the store that was passed to the agent when it was created.
