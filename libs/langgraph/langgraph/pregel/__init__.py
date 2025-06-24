@@ -219,9 +219,9 @@ class NodeBuilder:
         *channels: str,
     ) -> Self:
         """Adds the specified channels to read from, without subscribing to them."""
-        assert isinstance(self._channels, list), (
-            "Cannot read additional channels when subscribed to single channels"
-        )
+        assert isinstance(
+            self._channels, list
+        ), "Cannot read additional channels when subscribed to single channels"
         self._channels.extend(channels)
         return self
 
@@ -1354,7 +1354,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         Args:
             config: The config to apply the updates to.
             supersteps: A list of supersteps, each including a list of updates to apply sequentially to a graph state.
-                        Each update is a tuple of the form `(values, as_node)`.
+                        Each update is a tuple of the form `(values, as_node, task_id)` where task_id is optional.
 
         Raises:
             ValueError: If no checkpointer is set or no updates are provided.
@@ -1544,28 +1544,78 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         f"Received no input writes for {self.input_channels}"
                     )
 
-            # no values, copy checkpoint
-            if values is None and as_node == "__copy__":
+            # copy checkpoint
+            if as_node == "__copy__":
                 if len(updates) > 1:
                     raise InvalidUpdateError(
                         "Cannot copy checkpoint with multiple updates"
                     )
 
+                if saved is None:
+                    raise InvalidUpdateError("Cannot copy a non-existent checkpoint")
+
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
+
                 # copy checkpoint
                 next_config = checkpointer.put(
-                    saved.parent_config or saved.config if saved else checkpoint_config,
+                    saved.parent_config
+                    or patch_configurable(
+                        saved.config, {CONFIG_KEY_CHECKPOINT_ID: None}
+                    ),
                     next_checkpoint,
                     {
                         "source": "fork",
                         "step": step + 1,
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                        "parents": saved.metadata.get("parents", {}),
                     },
                     {},
                 )
-                return patch_checkpoint_map(
-                    next_config, saved.metadata if saved else None
-                )
+
+                # we want to both clone a checkpoint and update state in one go.
+                # reuse the same task ID if possible.
+                if isinstance(values, list) and len(values) > 0:
+                    # figure out the task IDs for the next update checkpoint
+                    next_tasks = prepare_next_tasks(
+                        next_checkpoint,
+                        saved.pending_writes,
+                        self.nodes,
+                        channels,
+                        managed,
+                        next_config,
+                        step + 2,
+                        step + 4,
+                        for_execution=False,
+                    )
+
+                    tasks_group_by = defaultdict(list)
+                    for task in next_tasks.values():
+                        tasks_group_by[task.name].append(task.id)
+
+                    user_group_by: dict[str, list[StateUpdate]] = defaultdict(list)
+                    for item in values:
+                        if not isinstance(item, dict):
+                            continue
+
+                        values = item["values"]
+                        as_node = item["as_node"]
+
+                        user_group = user_group_by[as_node]
+                        tasks_group = tasks_group_by[as_node]
+                        
+                        target_idx = len(user_group)
+                        task_id = tasks_group[target_idx] if target_idx < len(tasks_group) else None
+
+                        user_group_by[as_node].append(
+                            StateUpdate(values=values, as_node=as_node, task_id=task_id)
+                        )
+
+                    return perform_superstep(
+                        patch_checkpoint_map(next_config, saved.metadata),
+                        [item for lst in user_group_by.values() for item in lst],
+                    )
+
+                return patch_checkpoint_map(next_config, saved.metadata)
+
             # apply pending writes, if not on specific checkpoint
             if (
                 CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
@@ -1613,9 +1663,9 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     apply_writes(
                         checkpoint, channels, tasks, None, self.trigger_to_nodes
                     )
-            valid_updates: list[tuple[str, dict[str, Any] | None]] = []
+            valid_updates: list[tuple[str, dict[str, Any] | None, str | None]] = []
             if len(updates) == 1:
-                values, as_node = updates[0]
+                values, as_node, task_id = updates[0]
                 # find last node that updated the state, if not provided
                 if as_node is None and len(self.nodes) == 1:
                     as_node = tuple(self.nodes)[0]
@@ -1646,9 +1696,9 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     raise InvalidUpdateError("Ambiguous update, specify as_node")
                 if as_node not in self.nodes:
                     raise InvalidUpdateError(f"Node {as_node} does not exist")
-                valid_updates.append((as_node, values))
+                valid_updates.append((as_node, values, task_id))
             else:
-                for values, as_node in updates:
+                for values, as_node, task_id in updates:
                     if as_node is None:
                         raise InvalidUpdateError(
                             "as_node is required when applying multiple updates"
@@ -1656,19 +1706,21 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     if as_node not in self.nodes:
                         raise InvalidUpdateError(f"Node {as_node} does not exist")
 
-                    valid_updates.append((as_node, values))
+                    valid_updates.append((as_node, values, task_id))
 
             run_tasks: list[PregelTaskWrites] = []
             run_task_ids: list[str] = []
 
-            for as_node, values in valid_updates:
+            for as_node, values, provided_task_id in valid_updates:
                 # create task to run all writers of the chosen node
                 writers = self.nodes[as_node].flat_writers
                 if not writers:
                     raise InvalidUpdateError(f"Node {as_node} has no writers")
                 writes: deque[tuple[str, Any]] = deque()
                 task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
-                task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
+                task_id = provided_task_id or str(
+                    uuid5(UUID(checkpoint["id"]), INTERRUPT)
+                )
                 run_tasks.append(task)
                 run_task_ids.append(task_id)
                 run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
@@ -1681,6 +1733,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         configurable={
                             # deque.extend is thread-safe
                             CONFIG_KEY_SEND: writes.extend,
+                            CONFIG_KEY_TASK_ID: task_id,
                             CONFIG_KEY_READ: partial(
                                 local_read,
                                 _scratchpad(
@@ -1750,7 +1803,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         Args:
             config: The config to apply the updates to.
             supersteps: A list of supersteps, each including a list of updates to apply sequentially to a graph state.
-                        Each update is a tuple of the form `(values, as_node)`.
+                        Each update is a tuple of the form `(values, as_node, task_id)` where task_id is optional.
 
         Raises:
             ValueError: If no checkpointer is set or no updates are provided.
@@ -2006,9 +2059,9 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     apply_writes(
                         checkpoint, channels, tasks, None, self.trigger_to_nodes
                     )
-            valid_updates: list[tuple[str, dict[str, Any] | None]] = []
+            valid_updates: list[tuple[str, dict[str, Any] | None, str | None]] = []
             if len(updates) == 1:
-                values, as_node = updates[0]
+                values, as_node, task_id = updates[0]
                 # find last node that updated the state, if not provided
                 if as_node is None and len(self.nodes) == 1:
                     as_node = tuple(self.nodes)[0]
@@ -2035,9 +2088,9 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     raise InvalidUpdateError("Ambiguous update, specify as_node")
                 if as_node not in self.nodes:
                     raise InvalidUpdateError(f"Node {as_node} does not exist")
-                valid_updates.append((as_node, values))
+                valid_updates.append((as_node, values, task_id))
             else:
-                for values, as_node in updates:
+                for values, as_node, task_id in updates:
                     if as_node is None:
                         raise InvalidUpdateError(
                             "as_node is required when applying multiple updates"
@@ -2045,19 +2098,21 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     if as_node not in self.nodes:
                         raise InvalidUpdateError(f"Node {as_node} does not exist")
 
-                    valid_updates.append((as_node, values))
+                    valid_updates.append((as_node, values, task_id))
 
             run_tasks: list[PregelTaskWrites] = []
             run_task_ids: list[str] = []
 
-            for as_node, values in valid_updates:
+            for as_node, values, provided_task_id in valid_updates:
                 # create task to run all writers of the chosen node
                 writers = self.nodes[as_node].flat_writers
                 if not writers:
                     raise InvalidUpdateError(f"Node {as_node} has no writers")
                 writes: deque[tuple[str, Any]] = deque()
                 task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
-                task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
+                task_id = provided_task_id or str(
+                    uuid5(UUID(checkpoint["id"]), INTERRUPT)
+                )
                 run_tasks.append(task)
                 run_task_ids.append(task_id)
                 run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
@@ -2070,6 +2125,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         configurable={
                             # deque.extend is thread-safe
                             CONFIG_KEY_SEND: writes.extend,
+                            CONFIG_KEY_TASK_ID: task_id,
                             CONFIG_KEY_READ: partial(
                                 local_read,
                                 _scratchpad(
@@ -2136,24 +2192,28 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         config: RunnableConfig,
         values: dict[str, Any] | Any | None,
         as_node: str | None = None,
+        task_id: str | None = None,
     ) -> RunnableConfig:
         """Update the state of the graph with the given values, as if they came from
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
-        return self.bulk_update_state(config, [[StateUpdate(values, as_node)]])
+        return self.bulk_update_state(config, [[StateUpdate(values, as_node, task_id)]])
 
     async def aupdate_state(
         self,
         config: RunnableConfig,
         values: dict[str, Any] | Any,
         as_node: str | None = None,
+        task_id: str | None = None,
     ) -> RunnableConfig:
         """Asynchronously update the state of the graph with the given values, as if they came from
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
-        return await self.abulk_update_state(config, [[StateUpdate(values, as_node)]])
+        return await self.abulk_update_state(
+            config, [[StateUpdate(values, as_node, task_id)]]
+        )
 
     def _defaults(
         self,
