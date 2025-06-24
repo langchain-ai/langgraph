@@ -224,6 +224,7 @@ nav:
         - how-tos/http/custom_middleware.md
         - how-tos/http/custom_routes.md
       - Data management:
+        - cloud/concepts/data_storage_and_privacy.md
         - Add semantic search: cloud/deployment/semantic_search.md
         - Add TTLs: how-tos/ttl/configure_ttl.md
 
