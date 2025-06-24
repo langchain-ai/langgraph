@@ -4909,7 +4909,7 @@ def test_interrupt_multiple(sync_checkpointer: BaseCheckpointSaver):
     assert [
         event
         for event in graph.stream(
-            Command(resume="answer 1", update={"my_key": "foofoo"}), thread1
+            Command(resume="answer 1", update={"my_key": " foofoo "}), thread1
         )
     ] == [
         {
@@ -4924,8 +4924,14 @@ def test_interrupt_multiple(sync_checkpointer: BaseCheckpointSaver):
         }
     ]
 
-    assert [event for event in graph.stream(Command(resume="answer 2"), thread1)] == [
-        {"node": {"my_key": "answer 1 answer 2"}},
+    assert [
+        event
+        for event in graph.stream(
+            Command(resume="answer 2"), thread1, stream_mode="values"
+        )
+    ] == [
+        {"my_key": "DE foofoo "},
+        {"my_key": "DE foofoo answer 1 answer 2"},
     ]
 
 
