@@ -166,8 +166,7 @@ nav:
       - Set breakpoints: how-tos/human_in_the_loop/breakpoints.ipynb
       - Use Server API: cloud/how-tos/human_in_the_loop_breakpoint.md
     - Tools:
-      - Use tools: agents/tools.md
-      - Customize tools: how-tos/tool-calling.ipynb
+      - Use tools: how-tos/tool-calling.md
     - Subgraphs:
       - Use subgraphs: how-tos/subgraph.ipynb
     - Multi-agent:
