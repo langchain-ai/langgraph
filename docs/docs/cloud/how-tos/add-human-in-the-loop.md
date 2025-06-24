@@ -1,6 +1,6 @@
-# Human-in-the-loop
+# Human-in-the-loop API
 
-To review, edit, and approve tool calls in an agent or workflow, [use LangGraph's human-in-the-loop features](../../concepts/human_in_the_loop.md).
+To review, edit, and approve tool calls in an agent or workflow, use LangGraph's [human-in-the-loop](../../concepts/human_in_the_loop.md) features.
 
 ## LangGraph API invoke & resume
 
@@ -307,6 +307,5 @@ To review, edit, and approve tool calls in an agent or workflow, [use LangGraph'
 
 ## Learn more
 
-- [**LangGraph human-in-the-loop overview**](../../concepts/human_in_the_loop.md): learn more about LangGraph human-in-the-loop features. 
-- [**Design patterns**](../../concepts/human_in_the_loop.md#patterns): learn how to implement patterns like approving/rejecting actions, requesting user input, and more.
-- [**How to review tool calls**](./human_in_the_loop_review_tool_calls.md): detailed examples of how to review and approve/edit tool calls or provide feedback to the tool-calling LLM.
+- [Human-in-the-loop conceptual guide](../../concepts/human_in_the_loop.md): learn more about LangGraph human-in-the-loop features. 
+- [Design patterns](../../concepts/human_in_the_loop.md#patterns): learn how to implement patterns like approving/rejecting actions, requesting user input, and more.

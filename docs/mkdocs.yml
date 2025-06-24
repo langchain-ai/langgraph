@@ -157,7 +157,7 @@ nav:
     - Memory:
       - Add memory: how-tos/memory/add-memory.md
     - Human-in-the-loop:
-      - Add to workflow: how-tos/human_in_the_loop/add-human-in-the-loop.md
+      - how-tos/human_in_the_loop/add-human-in-the-loop.md
       - Use Server API: cloud/how-tos/add-human-in-the-loop.md
     - Time travel:
       - Use Server API: cloud/how-tos/human_in_the_loop_time_travel.md

@@ -9,7 +9,7 @@ hide:
   - tags
 ---
 
-# Add human-in-the-loop
+# Enable human intervention
 
 To review, edit, and approve tool calls in an agent or workflow, use LangGraph's [human-in-the-loop](../../concepts/human_in_the_loop.md) features.
 
