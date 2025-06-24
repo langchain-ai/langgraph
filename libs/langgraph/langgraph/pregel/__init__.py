@@ -2412,7 +2412,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 debug=debug,
                 checkpoint_during=checkpoint_during
                 if checkpoint_during is not None
-                else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, False),
+                else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, True),
                 trigger_to_nodes=self.trigger_to_nodes,
                 migrate_checkpoint=self._migrate_checkpoint,
                 retry_policy=self.retry_policy,
@@ -2656,7 +2656,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 debug=debug,
                 checkpoint_during=checkpoint_during
                 if checkpoint_during is not None
-                else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, False),
+                else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, True),
                 trigger_to_nodes=self.trigger_to_nodes,
                 migrate_checkpoint=self._migrate_checkpoint,
                 retry_policy=self.retry_policy,
