@@ -1343,7 +1343,7 @@ def delete_messages(state):
 
 The problem with trimming or removing messages, as shown above, is that you may lose information from culling of the message queue. Because of this, some applications benefit from a more sophisticated approach of summarizing the message history using a chat model.
 
-![](img/memory/summary.png)
+![](../../concepts/img/memory/summary.png)
 
 === "In an agent"
 

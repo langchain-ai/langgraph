@@ -1,38 +1,8 @@
 # Human-in-the-loop
 
-LangGraph supports robust **human-in-the-loop (HIL)** workflows, enabling human intervention at any point in an automated process. This is especially useful in large language model (LLM)-driven applications where model output may require validation, correction, or additional context.
+To review, edit, and approve tool calls in an agent or workflow, [use LangGraph's human-in-the-loop features](../../concepts/human_in_the_loop.md).
 
-Please see [the overview of LangGraph human-in-the-loop](../../concepts/human_in_the_loop.md) features for more information.
-
-## `interrupt`
-
-The [`interrupt` function][langgraph.types.interrupt] in LangGraph enables human-in-the-loop workflows by pausing the graph at a specific node, presenting information to a human, and resuming the graph with their input. It's useful for tasks like approvals, edits, or gathering additional context.
-
-The graph is resumed using a [`Command`][langgraph.types.Command] object that provides the human's response.
-
-**Graph node with `interrupt`:**
-
-```python
-# highlight-next-line
-from langgraph.types import interrupt, Command
-
-def human_node(state: State):
-    # highlight-next-line
-    value = interrupt( # (1)!
-        {
-            "text_to_revise": state["some_text"] # (2)!
-        }
-    )
-    return {
-        "some_text": value # (3)!
-    }
-```
-
-1. `interrupt(...)` pauses execution at `human_node`, surfacing the given payload to a human.
-2. Any JSON serializable value can be passed to the `interrupt` function. Here, a dict containing the text to revise.
-3. Once resumed, the return value of `interrupt(...)` is the human-provided input, which is used to update the state.
-
-**LangGraph API invoke & resume:**
+## LangGraph API invoke & resume
 
 === "Python"
 
@@ -338,5 +308,5 @@ def human_node(state: State):
 ## Learn more
 
 - [**LangGraph human-in-the-loop overview**](../../concepts/human_in_the_loop.md): learn more about LangGraph human-in-the-loop features. 
-- [**Design patterns**](../../how-tos/human_in_the_loop/add-human-in-the-loop.md#design-patterns): learn how to implement patterns like approving/rejecting actions, requesting user input, and more.
+- [**Design patterns**](../../concepts/human_in_the_loop.md#patterns): learn how to implement patterns like approving/rejecting actions, requesting user input, and more.
 - [**How to review tool calls**](./human_in_the_loop_review_tool_calls.md): detailed examples of how to review and approve/edit tool calls or provide feedback to the tool-calling LLM.

@@ -58,7 +58,7 @@ def human_review_node(state) -> Command[Literal["call_llm", "run_tool"]]:
 
 ## Setup
 
-We are not going to show the full code for the graph we are hosting, but you can see it [here](../../how-tos/human_in_the_loop/review-tool-calls.ipynb). Once this graph is hosted, we are ready to invoke it and wait for user input. 
+Once this graph is hosted, we are ready to invoke it and wait for user input. 
 
 ### SDK initialization
 
