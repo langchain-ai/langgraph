@@ -4811,7 +4811,9 @@ def test_parent_command(
 
     config = {"configurable": {"thread_id": "1"}}
 
-    assert graph.invoke({"messages": [("user", "get user name")]}, config) == {
+    assert graph.invoke(
+        {"messages": [("user", "get user name")]}, config, checkpoint_during=False
+    ) == {
         "messages": [
             _AnyIdHumanMessage(
                 content="get user name", additional_kwargs={}, response_metadata={}
@@ -4909,7 +4911,7 @@ def test_interrupt_multiple(sync_checkpointer: BaseCheckpointSaver):
     assert [
         event
         for event in graph.stream(
-            Command(resume="answer 1", update={"my_key": "foofoo"}), thread1
+            Command(resume="answer 1", update={"my_key": " foofoo "}), thread1
         )
     ] == [
         {
@@ -4924,8 +4926,14 @@ def test_interrupt_multiple(sync_checkpointer: BaseCheckpointSaver):
         }
     ]
 
-    assert [event for event in graph.stream(Command(resume="answer 2"), thread1)] == [
-        {"node": {"my_key": "answer 1 answer 2"}},
+    assert [
+        event
+        for event in graph.stream(
+            Command(resume="answer 2"), thread1, stream_mode="values"
+        )
+    ] == [
+        {"my_key": "DE foofoo "},
+        {"my_key": "DE foofoo answer 1 answer 2"},
     ]
 
 
@@ -5533,7 +5541,10 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
 
     configurable = {"configurable": {"thread_id": uuid.uuid4()}}
     assert [
-        chunk for chunk in graph.stream({"a": 5}, configurable, stream_mode="debug")
+        chunk
+        for chunk in graph.stream(
+            {"a": 5}, configurable, stream_mode="debug", checkpoint_during=False
+        )
     ] == [
         {
             "payload": {
@@ -5635,7 +5646,12 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
     ]
     assert [
         c
-        for c in graph.stream(Command(resume="123"), configurable, stream_mode="debug")
+        for c in graph.stream(
+            Command(resume="123"),
+            configurable,
+            stream_mode="debug",
+            checkpoint_during=False,
+        )
     ] == [
         {
             "payload": {

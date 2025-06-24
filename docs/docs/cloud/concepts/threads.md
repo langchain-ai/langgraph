@@ -1,6 +1,6 @@
 # Threads
 
-A thread contains the accumulated state of a sequence of [runs](./runs.md). When a run is executed, the [state](../../concepts/low_level.md#state) of the underlying graph of the assistant will be persisted to the thread.
+A thread contains the accumulated state of a sequence of [runs](../../concepts/assistants.md#execution). When a run is executed, the [state](../../concepts/low_level.md#state) of the underlying graph of the assistant will be persisted to the thread.
 
 A thread's current and historical state can be retrieved. To persist state, a thread must be created prior to executing a run.
 

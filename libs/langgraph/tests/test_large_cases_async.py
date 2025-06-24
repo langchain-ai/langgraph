@@ -683,7 +683,7 @@ async def test_conditional_graph_state(async_checkpointer: BaseCheckpointSaver) 
     assert [
         c
         async for c in app_w_interrupt.astream(
-            {"input": "what is weather in sf"}, config
+            {"input": "what is weather in sf"}, config, checkpoint_during=False
         )
     ] == [
         {
@@ -858,7 +858,7 @@ async def test_conditional_graph_state(async_checkpointer: BaseCheckpointSaver) 
     assert [
         c
         async for c in app_w_interrupt.astream(
-            {"input": "what is weather in sf"}, config
+            {"input": "what is weather in sf"}, config, checkpoint_during=False
         )
     ] == [
         {
@@ -1574,7 +1574,9 @@ async def test_state_graph_packets(async_checkpointer: BaseCheckpointSaver) -> N
     assert [
         c
         async for c in app_w_interrupt.astream(
-            {"messages": HumanMessage(content="what is weather in sf")}, config
+            {"messages": HumanMessage(content="what is weather in sf")},
+            config,
+            checkpoint_during=False,
         )
     ] == [
         {
@@ -1823,7 +1825,9 @@ async def test_state_graph_packets(async_checkpointer: BaseCheckpointSaver) -> N
     assert [
         c
         async for c in app_w_interrupt.astream(
-            {"messages": HumanMessage(content="what is weather in sf")}, config
+            {"messages": HumanMessage(content="what is weather in sf")},
+            config,
+            checkpoint_during=False,
         )
     ] == [
         {
@@ -2250,7 +2254,9 @@ async def test_message_graph(async_checkpointer: BaseCheckpointSaver) -> None:
     assert [
         c
         async for c in app_w_interrupt.astream(
-            HumanMessage(content="what is weather in sf"), config
+            HumanMessage(content="what is weather in sf"),
+            config,
+            checkpoint_during=False,
         )
     ] == [
         {
@@ -2733,7 +2739,7 @@ async def test_nested_graph_state(async_checkpointer: BaseCheckpointSaver) -> No
     app = graph.compile(checkpointer=async_checkpointer)
 
     config = {"configurable": {"thread_id": "1"}}
-    await app.ainvoke({"my_key": "my value"}, config, debug=True)
+    await app.ainvoke({"my_key": "my value"}, config, checkpoint_during=False)
     # test state w/ nested subgraph state (right after interrupt)
     # first get_state without subgraph state
     expected = StateSnapshot(
@@ -2864,7 +2870,7 @@ async def test_nested_graph_state(async_checkpointer: BaseCheckpointSaver) -> No
     assert child_history == expected_child_history
 
     # resume
-    await app.ainvoke(None, config, debug=True)
+    await app.ainvoke(None, config, checkpoint_during=False)
     # test state w/ nested subgraph state (after resuming from interrupt)
     assert await app.aget_state(config) == StateSnapshot(
         values={"my_key": "hi my value here and there and back again"},
@@ -3021,7 +3027,10 @@ async def test_doubly_nested_graph_state(
     # test invoke w/ nested interrupt
     config = {"configurable": {"thread_id": "1"}}
     assert [
-        c async for c in app.astream({"my_key": "my value"}, config, subgraphs=True)
+        c
+        async for c in app.astream(
+            {"my_key": "my value"}, config, subgraphs=True, checkpoint_during=False
+        )
     ] == [
         ((), {"parent_1": {"my_key": "hi my value"}}),
         (
@@ -3239,7 +3248,12 @@ async def test_doubly_nested_graph_state(
         interrupts=(),
     )
     # resume
-    assert [c async for c in app.astream(None, config, subgraphs=True)] == [
+    assert [
+        c
+        async for c in app.astream(
+            None, config, subgraphs=True, checkpoint_during=False
+        )
+    ] == [
         (
             (AnyStr("child:"), AnyStr("child_1:")),
             {"grandchild_2": {"my_key": "hi my value here and there"}},
@@ -3643,7 +3657,11 @@ async def test_weather_subgraph(
     assert [
         c
         async for c in graph.astream(
-            inputs, config=config, stream_mode="updates", subgraphs=True
+            inputs,
+            config=config,
+            stream_mode="updates",
+            subgraphs=True,
+            checkpoint_during=False,
         )
     ] == [
         ((), {"router_node": {"route": "weather"}}),
@@ -3728,7 +3746,11 @@ async def test_weather_subgraph(
     assert [
         c
         async for c in graph.astream(
-            inputs, config=config, stream_mode="updates", subgraphs=True
+            inputs,
+            config=config,
+            stream_mode="updates",
+            subgraphs=True,
+            checkpoint_during=False,
         )
     ] == [
         ((), {"router_node": {"route": "weather"}}),

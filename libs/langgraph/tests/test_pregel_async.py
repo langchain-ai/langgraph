@@ -274,7 +274,9 @@ async def test_checkpoint_put_after_cancellation() -> None:
     thread1 = {"configurable": {"thread_id": "1"}}
 
     # start the task
-    t = asyncio.create_task(graph.ainvoke({"hello": "world"}, thread1))
+    t = asyncio.create_task(
+        graph.ainvoke({"hello": "world"}, thread1, checkpoint_during=False)
+    )
     # cancel after 0.2 seconds
     await asyncio.sleep(0.2)
     t.cancel()
@@ -340,7 +342,7 @@ async def test_checkpoint_put_after_cancellation_stream_anext() -> None:
     thread1 = {"configurable": {"thread_id": "1"}}
 
     # start the task
-    s = graph.astream({"hello": "world"}, thread1)
+    s = graph.astream({"hello": "world"}, thread1, checkpoint_during=False)
     t = asyncio.create_task(s.__anext__())
     # cancel after 0.2 seconds
     await asyncio.sleep(0.2)
@@ -408,7 +410,11 @@ async def test_checkpoint_put_after_cancellation_stream_events_anext() -> None:
 
     # start the task
     s = graph.astream_events(
-        {"hello": "world"}, thread1, version="v2", include_names=["LangGraph"]
+        {"hello": "world"},
+        thread1,
+        version="v2",
+        include_names=["LangGraph"],
+        checkpoint_during=False,
     )
     # skip first event (happens right away)
     await s.__anext__()
@@ -595,7 +601,9 @@ async def test_dynamic_interrupt(async_checkpointer: BaseCheckpointSaver) -> Non
     # stop when about to enter node
     assert [
         c
-        async for c in tool_two.astream({"my_key": "value ⛰️", "market": "DE"}, thread1)
+        async for c in tool_two.astream(
+            {"my_key": "value ⛰️", "market": "DE"}, thread1, checkpoint_during=False
+        )
     ] == [
         {
             "__interrupt__": (
@@ -765,7 +773,9 @@ async def test_dynamic_interrupt_subgraph(
     # stop when about to enter node
     assert [
         c
-        async for c in tool_two.astream({"my_key": "value ⛰️", "market": "DE"}, thread1)
+        async for c in tool_two.astream(
+            {"my_key": "value ⛰️", "market": "DE"}, thread1, checkpoint_during=False
+        )
     ] == [
         {
             "__interrupt__": (
@@ -940,7 +950,9 @@ async def test_copy_checkpoint(async_checkpointer: BaseCheckpointSaver) -> None:
     # flow: interrupt -> clear tasks
     thread1 = {"configurable": {"thread_id": "1"}}
     # stop when about to enter node
-    assert await tool_two.ainvoke({"my_key": "value ⛰️", "market": "DE"}, thread1) == {
+    assert await tool_two.ainvoke(
+        {"my_key": "value ⛰️", "market": "DE"}, thread1, checkpoint_during=False
+    ) == {
         "my_key": "value ⛰️ one",
         "market": "DE",
         "__interrupt__": [
@@ -2936,7 +2948,9 @@ async def test_send_react_interrupt(async_checkpointer: BaseCheckpointSaver) -> 
     foo_called = 0
     graph = builder.compile(checkpointer=async_checkpointer, interrupt_before=["foo"])
     thread1 = {"configurable": {"thread_id": "2"}}
-    assert await graph.ainvoke({"messages": [HumanMessage("hello")]}, thread1) == {
+    assert await graph.ainvoke(
+        {"messages": [HumanMessage("hello")]}, thread1, checkpoint_during=False
+    ) == {
         "messages": [
             _AnyIdHumanMessage(content="hello"),
             _AnyIdAIMessage(
@@ -3058,7 +3072,9 @@ async def test_send_react_interrupt(async_checkpointer: BaseCheckpointSaver) -> 
     foo_called = 0
     graph = builder.compile(checkpointer=async_checkpointer, interrupt_before=["foo"])
     thread1 = {"configurable": {"thread_id": "3"}}
-    assert await graph.ainvoke({"messages": [HumanMessage("hello")]}, thread1) == {
+    assert await graph.ainvoke(
+        {"messages": [HumanMessage("hello")]}, thread1, checkpoint_during=False
+    ) == {
         "messages": [
             _AnyIdHumanMessage(content="hello"),
             _AnyIdAIMessage(
@@ -3321,7 +3337,9 @@ async def test_send_react_interrupt_control(
     foo_called = 0
     graph = builder.compile(checkpointer=async_checkpointer, interrupt_before=["foo"])
     thread1 = {"configurable": {"thread_id": "2"}}
-    assert await graph.ainvoke({"messages": [HumanMessage("hello")]}, thread1) == {
+    assert await graph.ainvoke(
+        {"messages": [HumanMessage("hello")]}, thread1, checkpoint_during=False
+    ) == {
         "messages": [
             _AnyIdHumanMessage(content="hello"),
             _AnyIdAIMessage(
@@ -6077,7 +6095,9 @@ async def test_parent_command(
 
     config = {"configurable": {"thread_id": "1"}}
 
-    assert await graph.ainvoke({"messages": [("user", "get user name")]}, config) == {
+    assert await graph.ainvoke(
+        {"messages": [("user", "get user name")]}, config, checkpoint_during=False
+    ) == {
         "messages": [
             _AnyIdHumanMessage(
                 content="get user name", additional_kwargs={}, response_metadata={}
