@@ -157,3 +157,4 @@ if __name__ == "__main__":
 
 - [MCP documentation](https://modelcontextprotocol.io/introduction)
 - [MCP Transport documentation](https://modelcontextprotocol.io/docs/concepts/transports)
+- [langchain_mcp_adapters](https://github.com/langchain-ai/langchain-mcp-adapters)
