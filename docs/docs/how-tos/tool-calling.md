@@ -1,6 +1,6 @@
 # Use tools
 
-[Tools](https://python.langchain.com/docs/concepts/tools/) encapsulate callable function and its input schema. These can be passed to compatible [chat models](https://python.langchain.com/docs/concepts/chat_models), allowing the model to decide whether to invoke a tool and with what arguments.
+[Tools](https://python.langchain.com/docs/concepts/tools/) encapsulate a callable function and its input schema. These can be passed to compatible [chat models](https://python.langchain.com/docs/concepts/chat_models), allowing the model to decide whether to invoke a tool and determine the appropriate arguments.
 
 You can [define your own tools](#define-simple-tools) or use [prebuilt tools](#prebuilt-tools).
 
@@ -36,7 +36,7 @@ tool_call = {
     "id": "1",
     "args": {"a": 42, "b": 7}
 }
-multiply.invoke(tool_call) # returns a ToolMessage
+multiply.invoke(tool_call) # returns a ToolMessage object
 ```
 
 Output:
@@ -45,9 +45,43 @@ Output:
 ToolMessage(content='294', name='multiply', tool_call_id='1')
 ```
 
-### Use with an LLM
 
-Use `model.bind_tools()`:
+### Use in an agent
+
+To create a tool-calling agent, you can use the prebuilt [create_react_agent][langgraph.prebuilt.chat_agent_executor.create_react_agent]
+
+```python
+from langchain_core.tools import tool
+# highlight-next-line
+from langgraph.prebuilt import create_react_agent
+
+@tool
+def multiply(a: int, b: int) -> int:
+    """Multiply two numbers."""
+    return a * b
+
+# highlight-next-line
+agent = create_react_agent(
+    model="anthropic:claude-3-7-sonnet",
+    tools=[multiply]
+)
+agent.invoke({"messages": [{"role": "user", "content": "what's 42 x 7?"}]})
+```
+
+
+!!! tip "Working with agents"
+
+    When using the prebuilt `create_react_agent`, the tools are automatically 
+    [attached to the LLM](#attach-tools-to-an-llm).
+
+### Use in a workflow
+
+If you are writing a custom workflow, you will need to:
+
+1. register the tools with the chat model
+2. call the tool if the model decides to use it
+
+Use `model.bind_tools()` to register the tools with the model. 
 
 ```python
 from langchain.chat_models import init_chat_model
@@ -88,42 +122,13 @@ LLMs automatically determine if a tool invocation is necessary and handle callin
         tool_call_id='toolu_0176DV4YKSD8FndkeuuLj36c'
     )
     ```
-
-### Use in an agent
-
-To create a tool-calling agent, you can use the prebuilt [create_react_agent][langgraph.prebuilt.chat_agent_executor.create_react_agent]
-
-```python
-from langchain_core.tools import tool
-# highlight-next-line
-from langgraph.prebuilt import create_react_agent
-
-@tool
-def multiply(a: int, b: int) -> int:
-    """Multiply two numbers."""
-    return a * b
-
-# highlight-next-line
-agent = create_react_agent(
-    model="anthropic:claude-3-7-sonnet",
-    tools=[multiply]
-)
-agent.invoke({"messages": [{"role": "user", "content": "what's 42 x 7?"}]})
-```
-
-
-!!! tip "Working with agents"
-
-    When using the prebuilt `create_react_agent`, the tools are automatically 
-    [attached to the LLM](#attach-tools-to-an-llm).
-
-### Use in a workflow (`ToolNode`)
+#### ToolNode
 
 To execute tools in custom workflows, use the prebuilt [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] or implement your own custom node.
 
 `ToolNode` is a specialized node for executing tools in a workflow. It provides the following features:
 
-* Supports synchronous and asynchronous tools.
+* Supports both synchronous and asynchronous tools.
 * Executes multiple tools concurrently.
 * Handles errors during tool execution (`handle_tool_errors=True`, enabled by default). See [error handling](#handle-tool-errors).
 
