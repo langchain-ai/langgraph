@@ -1,8 +1,8 @@
 # Use tools
 
-[Tools](https://python.langchain.com/docs/concepts/tools/) encapsulate a callable function and its input schema. These can be passed to compatible [chat models](https://python.langchain.com/docs/concepts/chat_models), allowing the model to decide whether to invoke a tool and determine the appropriate arguments.
+[Tools](../concepts/tools.md) encapsulate a callable function and its input schema. These can be passed to compatible [chat models](https://python.langchain.com/docs/concepts/chat_models), allowing the model to decide whether to invoke a tool and determine the appropriate arguments.
 
-You can [define your own tools](#define-simple-tools) or use [prebuilt tools](#prebuilt-tools).
+You can [define your own tools](#1-getting-started-with-tools) or use [prebuilt tools](#4-prebuilt-tools)
 
 ## 1. Getting Started with Tools
 
@@ -48,7 +48,7 @@ ToolMessage(content='294', name='multiply', tool_call_id='1')
 
 ### Use in an agent
 
-To create a tool-calling agent, you can use the prebuilt [create_react_agent][langgraph.prebuilt.chat_agent_executor.create_react_agent]
+To create a tool-calling agent, you can use the prebuilt [create_react_agent][langgraph.prebuilt.chat_agent_executor.create_react_agent]:
 
 ```python
 from langchain_core.tools import tool
@@ -67,12 +67,6 @@ agent = create_react_agent(
 )
 agent.invoke({"messages": [{"role": "user", "content": "what's 42 x 7?"}]})
 ```
-
-
-!!! tip "Working with agents"
-
-    When using the prebuilt `create_react_agent`, the tools are automatically 
-    [attached to the LLM](#attach-tools-to-an-llm).
 
 ### Use in a workflow
 
@@ -130,7 +124,7 @@ To execute tools in custom workflows, use the prebuilt [`ToolNode`][langgraph.pr
 
 * Supports both synchronous and asynchronous tools.
 * Executes multiple tools concurrently.
-* Handles errors during tool execution (`handle_tool_errors=True`, enabled by default). See [error handling](#handle-tool-errors).
+* Handles errors during tool execution (`handle_tool_errors=True`, enabled by default). See [handling tool errors](#handle-errors) for more details.
 
 `ToolNode` operates on [`MessagesState`](../concepts/low_level.md#messagesstate):
 
@@ -286,7 +280,7 @@ tool_node.invoke({"messages": [...]})
 
 ??? example "Use in a tool-calling agent"
 
-    This is an example of creating a tool-calling agent from scratch using `ToolNode`. You can also use LangGraph's prebuilt [agent](../agents/agents).
+    This is an example of creating a tool-calling agent from scratch using `ToolNode`. You can also use LangGraph's prebuilt [agent](../agents/agents.md).
 
     ```python
     from langchain.chat_models import init_chat_model
@@ -548,7 +542,7 @@ Use [long-term memory](../concepts/memory.md#long-term-memory) to store user-spe
 
 To use long-term memory, you need to:
 
-1. [Configure a store](../persistence#add-long-term-memory) to persist data across invocations.
+1. [Configure a store](memory/add-memory.md#add-long-term-memory) to persist data across invocations.
 2. Use the [`get_store`][langgraph.config.get_store] function to access the store from within tools or prompts.
 
 To **access** information in the store:
@@ -625,7 +619,7 @@ graph = builder.compile(store=store)
     )
     ```
     
-    1. The `InMemoryStore` is a store that stores data in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [store documentation](../reference/store) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready store for you.
+    1. The `InMemoryStore` is a store that stores data in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [store documentation][../reference/store/) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready store for you.
     2. For this example, we write some sample data to the store using the `put` method. Please see the [BaseStore.put][langgraph.store.base.BaseStore.put] API reference for more details.
     3. The first argument is the namespace. This is used to group related data together. In this case, we are using the `users` namespace to group user data.
     4. A key within the namespace. This example uses a user ID for the key.
@@ -704,7 +698,7 @@ graph = builder.compile(store=store)
     store.get(("users",), "user_123").value
     ```
     
-    1. The `InMemoryStore` is a store that stores data in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [store documentation](../reference/store) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready store for you.
+    1. The `InMemoryStore` is a store that stores data in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [store documentation](../reference/store/) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready store for you.
     2. The `UserInfo` class is a `TypedDict` that defines the structure of the user information. The LLM will use this to format the response according to the schema.
     3. The `save_user_info` function is a tool that allows an agent to update user information. This could be useful for a chat application where the user wants to update their profile information.
     4. The `get_store` function is used to access the store. You can call it from anywhere in your code, including tools and prompts. This function returns the store that was passed to the agent when it was created.
@@ -809,7 +803,7 @@ configured_model = model.bind_tools(
 
     Forcing tool usage without stopping conditions can create infinite loops. Use one of the following safeguards:
 
-    - Mark the tool with [`return_direct=True`](#return-tool-results-directly) to end the loop after execution.
+    - Mark the tool with [`return_direct=True`](#immediate-return to end the loop after execution.
     - Set [`recursion_limit`](../concepts/low_level.md#recursion-limit) to restrict the number of execution steps.
 
 
@@ -858,7 +852,7 @@ model.bind_tools(
     )
     ```
 
-### Error handling
+### Handle errors
 
 LangGraph provides built-in error handling for tool execution through the prebuilt [ToolNode][langgraph.prebuilt.tool_node.ToolNode] component, used both independently and in prebuilt agents.
 
@@ -974,7 +968,7 @@ As the number of available tools grows, you may want to limit the scope of the L
 
 To address this, you can dynamically adjust the tools available to a model by retrieving relevant tools at runtime using semantic search.
 
-See [`langgraph-bigtool`](https://github.com/langchain-ai/langgraph-bigtool) prebuilt library for a ready-to-use implementation and this [how-to guide](../many-tools) for more details.
+See [`langgraph-bigtool`](https://github.com/langchain-ai/langgraph-bigtool) prebuilt library for a ready-to-use implementation.
 
 ## 4. Prebuilt tools
 
