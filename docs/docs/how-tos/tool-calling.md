@@ -2,7 +2,7 @@
 
 [Tools](../concepts/tools.md) encapsulate a callable function and its input schema. These can be passed to compatible [chat models](https://python.langchain.com/docs/concepts/chat_models), allowing the model to decide whether to invoke a tool and determine the appropriate arguments.
 
-You can [define your own tools](#getting-started-with-tools) or use [prebuilt tools](#prebuilt-tools)
+You can [define your own tools](#define-a-tool) or use [prebuilt tools](#prebuilt-tools)
 
 ## Define a tool
 
