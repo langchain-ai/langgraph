@@ -1,9 +1,9 @@
 # Models
 
-LangGraph provides built-in support for LLMs (language models) via the LangChain library. This makes it easy to integrate various LLMs into your agents and workflows.
+LangGraph provides built-in support for [LLMs (language models)](https://python.langchain.com/docs/concepts/chat_models/) via the LangChain library. This makes it easy to integrate various LLMs into your agents and workflows.
 
 
-## Initializing a model
+## Initialize a model
 
 Use [`init_chat_model`](https://python.langchain.com/docs/how_to/chat_models_universal_init/) to initialize models:
 
@@ -102,7 +102,7 @@ To disable streaming of the individual LLM tokens, set `disable_streaming=True` 
 
 Refer to the [API reference](https://python.langchain.com/api_reference/core/language_models/langchain_core.language_models.chat_models.BaseChatModel.html#langchain_core.language_models.chat_models.BaseChatModel.disable_streaming) for more information on `disable_streaming`
 
-### Adding model fallbacks
+### Add model fallbacks
 
 You can add a fallback to a different model or a different LLM provider using `model.with_fallbacks([...])`:
 
@@ -137,9 +137,9 @@ You can add a fallback to a different model or a different LLM provider using `m
 
 See this [guide](https://python.langchain.com/docs/how_to/fallbacks/#fallback-to-better-model) for more information on model fallbacks.
 
-### Rate limiting
+### Use the built-in rate limiter
 
-Langchain includes a built-in in memory rate limiter. This rate limiter is thread safe and can be shared by multiple threads in the same process.
+Langchain includes a built-in in-memory rate limiter. This rate limiter is thread safe and can be shared by multiple threads in the same process.
 
 ```python
 from langchain_core.rate_limiters import InMemoryRateLimiter
@@ -157,15 +157,15 @@ model = ChatAnthropic(
 )
 ```
 
-- [Handle rate limiting](https://python.langchain.com/docs/how_to/chat_model_rate_limiting/): Add rate limiting to your chat model to handle API rate limits gracefully.
+See the LangChain docs for more information on how to [handle rate limiting](https://python.langchain.com/docs/how_to/chat_model_rate_limiting/).
 
 ## Bring your own model
 
 If your desired LLM isn't officially supported by LangChain, consider these options:
 
-1. **Implement a custom LangChain chat model** Create a model conforming to the [LangChain chat model interface](https://python.langchain.com/docs/how_to/custom_chat_model/). This enables full compatibility with LangGraph's agents and workflows but requires understanding of the LangChain framework.
+1. **Implement a custom LangChain chat model**: Create a model conforming to the [LangChain chat model interface](https://python.langchain.com/docs/how_to/custom_chat_model/). This enables full compatibility with LangGraph's agents and workflows but requires understanding of the LangChain framework.
 
-2. **Direct invocation with custom streaming** Use your model directly by adding custom streaming logic with `StreamWriter`.
+2. **Direct invocation with custom streaming**: Use your model directly by [adding custom streaming logic](../how-tos/streaming.md#use-with-any-llm) with `StreamWriter`.
    Refer to the [custom streaming documentation](../how-tos/streaming.md#use-with-any-llm) for guidance. This approach suits custom workflows where prebuilt agent integration is not necessary.
 
  
