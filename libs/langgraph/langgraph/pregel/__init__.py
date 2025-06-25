@@ -1490,28 +1490,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 return patch_checkpoint_map(
                     next_config, saved.metadata if saved else None
                 )
-            # no values, empty checkpoint
-            if values is None and as_node is None:
-                if len(updates) > 1:
-                    raise InvalidUpdateError(
-                        "Cannot create empty checkpoint with multiple updates"
-                    )
-
-                next_checkpoint = create_checkpoint(checkpoint, None, step)
-                # copy checkpoint
-                next_config = checkpointer.put(
-                    checkpoint_config,
-                    next_checkpoint,
-                    {
-                        "source": "update",
-                        "step": step + 1,
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
-                    },
-                    {},
-                )
-                return patch_checkpoint_map(
-                    next_config, saved.metadata if saved else None
-                )
 
             # act as an input
             if as_node == INPUT:
@@ -1896,28 +1874,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 next_config = await checkpointer.aput(
                     checkpoint_config,
                     create_checkpoint(checkpoint, None, step),
-                    {
-                        "source": "update",
-                        "step": step + 1,
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
-                    },
-                    {},
-                )
-                return patch_checkpoint_map(
-                    next_config, saved.metadata if saved else None
-                )
-            # no values, empty checkpoint
-            if values is None and as_node is None:
-                if len(updates) > 1:
-                    raise InvalidUpdateError(
-                        "Cannot create empty checkpoint with multiple updates"
-                    )
-
-                next_checkpoint = create_checkpoint(checkpoint, None, step)
-                # copy checkpoint
-                next_config = await checkpointer.aput(
-                    checkpoint_config,
-                    next_checkpoint,
                     {
                         "source": "update",
                         "step": step + 1,
