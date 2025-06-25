@@ -8,7 +8,6 @@ from typing import Any
 from uuid import UUID
 
 from langchain_core.runnables.config import RunnableConfig
-from langchain_core.utils.input import get_bolded_text, get_colored_text
 from typing_extensions import TypedDict
 
 from langgraph.channels.base import BaseChannel
@@ -294,3 +293,26 @@ def tasks_w_writes(
             )
         )
     return tuple(out)
+
+
+COLOR_MAPPING = {
+    "black": "0;30",
+    "red": "0;31",
+    "green": "0;32",
+    "yellow": "0;33",
+    "blue": "0;34",
+    "magenta": "0;35",
+    "cyan": "0;36",
+    "white": "0;37",
+    "gray": "1;30",
+}
+
+
+def get_colored_text(text: str, color: str) -> str:
+    """Get colored text."""
+    return f"\033[1;3{COLOR_MAPPING[color]}m{text}\033[0m"
+
+
+def get_bolded_text(text: str) -> str:
+    """Get bolded text."""
+    return f"\033[1m{text}\033[0m"
