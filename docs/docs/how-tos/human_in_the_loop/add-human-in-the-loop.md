@@ -9,13 +9,20 @@ hide:
   - tags
 ---
 
-# Add human-in-the-loop
+# Enable human intervention
 
-## `interrupt`
+To review, edit, and approve tool calls in an agent or workflow, use LangGraph's [human-in-the-loop](../../concepts/human_in_the_loop.md) features.
+
+## Pause using `interrupt`
 
 The [`interrupt` function][langgraph.types.interrupt] in LangGraph enables human-in-the-loop workflows by pausing the graph at a specific node, presenting information to a human, and resuming the graph with their input. It's useful for tasks like approvals, edits, or gathering additional context.
 
-The graph is resumed using a [`Command`][langgraph.types.Command] object that provides the human's response.
+To use `interrupt` in your graph, you need to:
+
+1. [**Specify a checkpointer**](../../concepts/persistence.md#checkpoints) to save the graph state after each step.
+2. **Call `interrupt()`** in the appropriate place. See the [Common Patterns](#common-patterns) section for examples.
+3. **Run the graph** with a [**thread ID**](../../concepts/persistence.md#threads) until the `interrupt` is hit.
+4. **Resume execution** using `invoke`/`ainvoke`/`stream`/`astream` (see [**The `Command` primitive**](#resume-using-the-command-primitive)).
 
 ```python
 # highlight-next-line
@@ -125,34 +132,48 @@ print(graph.invoke(Command(resume="Edited text"), config=config)) # (7)!
     7. The graph is resumed with a `Command(resume=...)`, injecting the human's input and continuing execution.
 
 
-
 !!! tip "New in 0.4.0"
 
       `__interrupt__` is a special key that will be returned when running the graph if the graph is interrupted. Support for `__interrupt__` in `invoke` and `ainvoke` has been added in version 0.4.0. If you're on an older version, you will only see `__interrupt__` in the result if you use `stream` or `astream`. You can also use `graph.get_state(thread_id)` to get the interrupt value.
 
 !!! warning
 
-      Interrupts are both powerful and ergonomic. However, while they may resemble Python's input() function in terms of developer experience, it's important to note that they do not automatically resume execution from the interruption point. Instead, they rerun the entire node where the interrupt was used.
-      For this reason, interrupts are typically best placed at the start of a node or in a dedicated node. Please read the [resuming from an interrupt](#how-does-resuming-from-an-interrupt-work) section for more details.
+      Interrupts are both powerful and ergonomic. However, while they may resemble Python's input() function in terms of developer experience, it's important to note that they do not automatically resume execution from the interruption point. Instead, they rerun the entire node where the interrupt was used. For this reason, interrupts are typically best placed at the start of a node or in a dedicated node.
 
-## Requirements
 
-To use `interrupt` in your graph, you need to:
+## Resume using the `Command` primitive
 
-1. [**Specify a checkpointer**](../../concepts/persistence.md#checkpoints) to save the graph state after each step.
-2. **Call `interrupt()`** in the appropriate place. See the [Design Patterns](#design-patterns) section for examples.
-3. **Run the graph** with a [**thread ID**](../../concepts/persistence.md#threads) until the `interrupt` is hit.
-4. **Resume execution** using `invoke`/`ainvoke`/`stream`/`astream` (see [**The `Command` primitive**](#resume-using-the-command-primitive)).
+!!! warning
 
-## Design patterns
+    Resuming from an `interrupt` is different from Python's `input()` function, where execution resumes from the exact point where the `input()` function was called.
 
-There are typically three different **actions** that you can do with a human-in-the-loop workflow:
+When the `interrupt` function is used within a graph, execution pauses at that point and awaits user input.
 
-1. **Approve or Reject**: Pause the graph before a critical step, such as an API call, to review and approve the action. If the action is rejected, you can prevent the graph from executing the step, and potentially take an alternative action. This pattern often involve **routing** the graph based on the human's input.
-2. **Edit Graph State**: Pause the graph to review and edit the graph state. This is useful for correcting mistakes or updating the state with additional information. This pattern often involves **updating** the state with the human's input.
-3. **Get Input**: Explicitly request human input at a particular step in the graph. This is useful for collecting additional information or context to inform the agent's decision-making process.
+To resume execution, use the [`Command`][langgraph.types.Command] primitive, which can be supplied via the `invoke`, `ainvoke`, `stream`, or `astream` methods. The graph resumes execution from the beginning of the node where `interrupt(...)` was initially called. This time, the `interrupt` function will return the value provided in `Command(resume=value)` rather than pausing again. All code from the beginning of the node to the `interrupt` will be re-executed.
 
-Below we show different design patterns that can be implemented using these **actions**.
+```python
+# Resume graph execution by providing the user's input.
+graph.invoke(Command(resume={"age": "25"}), thread_config)
+```
+
+### Resume multiple interrupts with one invocation
+
+If you have multiple interrupts in the task queue, you can use `Command.resume` with a dictionary mapping of interrupt ids to resume with a single `invoke` / `stream` call.
+
+For example, once your graph has been interrupted (multiple times, theoretically) and is stalled:
+
+```python
+resume_map = {
+    i.interrupt_id: f"human input for prompt {i.value}"
+    for i in parent.get_state(thread_config).interrupts
+}
+
+parent_graph.invoke(Command(resume=resume_map), config=thread_config)
+```
+
+## Common patterns
+
+Below we show different design patterns that can be implemented using `interrupt` and `Command`.
 
 ### Approve or reject
 
@@ -263,9 +284,7 @@ graph.invoke(Command(resume=True), config=thread_config)
     print(final_result)
     ```
 
-See [how to review tool calls](./review-tool-calls.ipynb) for a more detailed example.
-
-### Review & edit state
+### Review and edit state
 
 <figure markdown="1">
 ![image](../../concepts/img/human_in_the_loop/edit-graph-state-simple.png){: style="max-height:400px"}
@@ -393,41 +412,209 @@ critical in applications where the tool calls requested by the LLM may be sensit
 </figcaption>
 </figure>
 
+To add a human approval step to a tool:
+
+1. Use `interrupt()` in the tool to pause execution.
+2. Resume with a `Command(resume=...)` to continue based on human input.
+
 ```python
-def human_review_node(state) -> Command[Literal["call_llm", "run_tool"]]:
-    # This is the value we'll be providing via Command(resume=<human_review>)
-    human_review = interrupt(
-        {
-            "question": "Is this correct?",
-            # Surface tool calls for review
-            "tool_call": tool_call
-        }
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import interrupt
+from langgraph.prebuilt import create_react_agent
+
+# An example of a sensitive tool that requires human review / approval
+def book_hotel(hotel_name: str):
+    """Book a hotel"""
+    # highlight-next-line
+    response = interrupt(  # (1)!
+        f"Trying to call `book_hotel` with args {{'hotel_name': {hotel_name}}}. "
+        "Please approve or suggest edits."
     )
+    if response["type"] == "accept":
+        pass
+    elif response["type"] == "edit":
+        hotel_name = response["args"]["hotel_name"]
+    else:
+        raise ValueError(f"Unknown response type: {response['type']}")
+    return f"Successfully booked a stay at {hotel_name}."
 
-    review_action, review_data = human_review
+# highlight-next-line
+checkpointer = InMemorySaver() # (2)!
 
-    # Approve the tool call and continue
-    if review_action == "continue":
-        return Command(goto="run_tool")
-
-    # Modify the tool call manually and then continue
-    elif review_action == "update":
-        ...
-        updated_msg = get_updated_msg(review_data)
-        # Remember that to modify an existing message you will need
-        # to pass the message with a matching ID.
-        return Command(goto="run_tool", update={"messages": [updated_message]})
-
-    # Give natural language feedback, and then pass that back to the agent
-    elif review_action == "feedback":
-        ...
-        feedback_msg = get_feedback_msg(review_data)
-        return Command(goto="call_llm", update={"messages": [feedback_msg]})
+agent = create_react_agent(
+    model="anthropic:claude-3-5-sonnet-latest",
+    tools=[book_hotel],
+    # highlight-next-line
+    checkpointer=checkpointer, # (3)!
+)
 ```
 
-See [how to review tool calls](./review-tool-calls.ipynb) for a more detailed example.
+1. The [`interrupt` function][langgraph.types.interrupt] pauses the agent graph at a specific node. In this case, we call `interrupt()` at the beginning of the tool function, which pauses the graph at the node that executes the tool. The information inside `interrupt()` (e.g., tool calls) can be presented to a human, and the graph can be resumed with the user input (tool call approval, edit or feedback).
+2. The `InMemorySaver` is used to store the agent state at every step in the tool calling loop. This enables [short-term memory](../memory/add-memory.md#add-short-term-memory) and [human-in-the-loop](../../concepts/human_in_the_loop.md) capabilities. In this example, we use `InMemorySaver` to store the agent state in memory. In a production application, the agent state will be stored in a database.
+3. Initialize the agent with the `checkpointer`.
 
-### Validating human input
+Run the agent with the `stream()` method, passing the `config` object to specify the thread ID. This allows the agent to resume the same conversation on future invocations.
+
+```python
+config = {
+   "configurable": {
+      # highlight-next-line
+      "thread_id": "1"
+   }
+}
+
+for chunk in agent.stream(
+    {"messages": [{"role": "user", "content": "book a stay at McKittrick hotel"}]},
+    # highlight-next-line
+    config
+):
+    print(chunk)
+    print("\n")
+```
+
+> You should see that the agent runs until it reaches the `interrupt()` call, at which point it pauses and waits for human input.
+
+Resume the agent with a `Command(resume=...)` to continue based on human input.
+
+```python
+from langgraph.types import Command
+
+for chunk in agent.stream(
+    # highlight-next-line
+    Command(resume={"type": "accept"}),  # (1)!
+    # Command(resume={"type": "edit", "args": {"hotel_name": "McKittrick Hotel"}}),
+    config
+):
+    print(chunk)
+    print("\n")
+```
+
+1. The [`interrupt` function][langgraph.types.interrupt] is used in conjunction with the [`Command`][langgraph.types.Command] object to resume the graph with a value provided by the human.
+
+### Add interrupts to any tool
+
+You can create a wrapper to add interrupts to *any* tool. The example below provides a reference implementation compatible with [Agent Inbox UI](https://github.com/langchain-ai/agent-inbox) and [Agent Chat UI](https://github.com/langchain-ai/agent-chat-ui).
+
+```python title="Wrapper that adds human-in-the-loop to any tool"
+from typing import Callable
+from langchain_core.tools import BaseTool, tool as create_tool
+from langchain_core.runnables import RunnableConfig
+from langgraph.types import interrupt 
+from langgraph.prebuilt.interrupt import HumanInterruptConfig, HumanInterrupt
+
+def add_human_in_the_loop(
+    tool: Callable | BaseTool,
+    *,
+    interrupt_config: HumanInterruptConfig = None,
+) -> BaseTool:
+    """Wrap a tool to support human-in-the-loop review.""" 
+    if not isinstance(tool, BaseTool):
+        tool = create_tool(tool)
+
+    if interrupt_config is None:
+        interrupt_config = {
+            "allow_accept": True,
+            "allow_edit": True,
+            "allow_respond": True,
+        }
+
+    @create_tool(  # (1)!
+        tool.name,
+        description=tool.description,
+        args_schema=tool.args_schema
+    )
+    def call_tool_with_interrupt(config: RunnableConfig, **tool_input):
+        request: HumanInterrupt = {
+            "action_request": {
+                "action": tool.name,
+                "args": tool_input
+            },
+            "config": interrupt_config,
+            "description": "Please review the tool call"
+        }
+        # highlight-next-line
+        response = interrupt([request])[0]  # (2)!
+        # approve the tool call
+        if response["type"] == "accept":
+            tool_response = tool.invoke(tool_input, config)
+        # update tool call args
+        elif response["type"] == "edit":
+            tool_input = response["args"]["args"]
+            tool_response = tool.invoke(tool_input, config)
+        # respond to the LLM with user feedback
+        elif response["type"] == "response":
+            user_feedback = response["args"]
+            tool_response = user_feedback
+        else:
+            raise ValueError(f"Unsupported interrupt response type: {response['type']}")
+
+        return tool_response
+
+    return call_tool_with_interrupt
+```
+
+1. This wrapper creates a new tool that calls `interrupt()` **before** executing the wrapped tool.
+2. `interrupt()` is using special input and output format that's expected by [Agent Inbox UI](https://github.com/langchain-ai/agent-inbox):
+    - a list of [`HumanInterrupt`][langgraph.prebuilt.interrupt.HumanInterrupt] objects is sent to `AgentInbox` render interrupt information to the end user
+    - resume value is provided by `AgentInbox` as a list (i.e., `Command(resume=[...])`)
+
+You can use the `add_human_in_the_loop` wrapper to add `interrupt()` to any tool without having to add it *inside* the tool:
+
+```python
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.prebuilt import create_react_agent
+
+# highlight-next-line
+checkpointer = InMemorySaver()
+
+def book_hotel(hotel_name: str):
+   """Book a hotel"""
+   return f"Successfully booked a stay at {hotel_name}."
+
+
+agent = create_react_agent(
+    model="anthropic:claude-3-5-sonnet-latest",
+    tools=[
+        # highlight-next-line
+        add_human_in_the_loop(book_hotel), # (1)!
+    ],
+    # highlight-next-line
+    checkpointer=checkpointer,
+)
+
+config = {"configurable": {"thread_id": "1"}}
+
+# Run the agent
+for chunk in agent.stream(
+    {"messages": [{"role": "user", "content": "book a stay at McKittrick hotel"}]},
+    # highlight-next-line
+    config
+):
+    print(chunk)
+    print("\n")
+```
+
+1. The `add_human_in_the_loop` wrapper is used to add `interrupt()` to the tool. This allows the agent to pause execution and wait for human input before proceeding with the tool call.
+
+> You should see that the agent runs until it reaches the `interrupt()` call, 
+>  at which point it pauses and waits for human input.
+
+Resume the agent with a `Command(resume=...)`  to continue based on human input.
+
+```python
+from langgraph.types import Command 
+
+for chunk in agent.stream(
+    # highlight-next-line
+    Command(resume=[{"type": "accept"}]),
+    # Command(resume=[{"type": "edit", "args": {"args": {"hotel_name": "McKittrick Hotel"}}}]),
+    config
+):
+    print(chunk)
+    print("\n")
+```
+
+### Validate human input
 
 If you need to validate the input provided by the human within the graph itself (rather than on the client side), you can achieve this by using multiple interrupt calls within a single node.
 
@@ -525,91 +712,15 @@ def human_node(state: State):
     print(final_result)  # Should include the valid age
     ```
 
+## Considerations
 
-## Resume using the `Command` primitive
+When using human-in-the-loop, there are some considerations to keep in mind.
 
-When the `interrupt` function is used within a graph, execution pauses at that point and awaits user input.
+### Using with code with side-effects
 
-To resume execution, use the [`Command`][langgraph.types.Command] primitive, which can be supplied via the `invoke`, `ainvoke`, `stream`, or `astream` methods.
+Place code with side effects, such as API calls, after the `interrupt` or in a separate node to avoid duplication, as these are re-triggered every time the node is resumed.
 
-**Providing a response to the `interrupt`:**
-To continue execution, pass the user's input using `Command(resume=value)`. The graph resumes execution from the beginning of the node where `interrupt(...)` was initially called. This time, the `interrupt` function will return the value provided in `Command(resume=value)` rather than pausing again.
-
-```python
-# Resume graph execution by providing the user's input.
-graph.invoke(Command(resume={"age": "25"}), thread_config)
-```
-
-## How does resuming from an interrupt work?
-
-!!! warning
-
-    Resuming from an `interrupt` is **different** from Python's `input()` function, where execution resumes from the exact point where the `input()` function was called.
-
-A critical aspect of using `interrupt` is understanding how resuming works. When you resume execution after an `interrupt`, graph execution starts from the **beginning** of the **graph node** where the last `interrupt` was triggered.
-
-**All** code from the beginning of the node to the `interrupt` will be re-executed.
-
-```python
-counter = 0
-def node(state: State):
-    # All the code from the beginning of the node to the interrupt will be re-executed
-    # when the graph resumes.
-    global counter
-    counter += 1
-    print(f"> Entered the node: {counter} # of times")
-    # Pause the graph and wait for user input.
-    answer = interrupt()
-    print("The value of counter is:", counter)
-    ...
-```
-
-Upon **resuming** the graph, the counter will be incremented a second time, resulting in the following output:
-
-```pycon
-> Entered the node: 2 # of times
-The value of counter is: 2
-```
-
-### Resuming multiple interrupts with one invocation
-
-If you have multiple interrupts in the task queue, you can use `Command.resume` with a dictionary mapping
-of interrupt ids to resume values to resume multiple interrupts with a single `invoke` / `stream` call.
-
-For example, once your graph has been interrupted (multiple times, theoretically) and is stalled:
-
-```python
-resume_map = {
-    i.interrupt_id: f"human input for prompt {i.value}"
-    for i in parent.get_state(thread_config).interrupts
-}
-
-parent_graph.invoke(Command(resume=resume_map), config=thread_config)
-```
-
-## Common pitfalls
-
-### Side-effects
-
-Place code with side effects, such as API calls, **after** the `interrupt` to avoid duplication, as these are re-triggered every time the node is resumed.
-
-=== "Side effects before interrupt (BAD)"
-
-    This code will re-execute the API call another time when the node is resumed from
-    the `interrupt`.
-
-    This can be problematic if the API call is not idempotent or is just expensive.
-
-    ```python
-    from langgraph.types import interrupt
-
-    def human_node(state: State):
-        """Human node with validation."""
-        api_call(...) # This code will be re-executed when the node is resumed.
-        answer = interrupt(question)
-    ```
-
-=== "Side effects after interrupt (OK)"
+=== "Side effects after interrupt"
 
     ```python
     from langgraph.types import interrupt
@@ -622,7 +733,7 @@ Place code with side effects, such as API calls, **after** the `interrupt` to av
         api_call(answer) # OK as it's after the interrupt
     ```
 
-=== "Side effects in a separate node (OK)"
+=== "Side effects in a separate node"
 
     ```python
     from langgraph.types import interrupt
@@ -640,11 +751,9 @@ Place code with side effects, such as API calls, **after** the `interrupt` to av
         api_call(...) # OK as it's in a separate node
     ```
 
-### Subgraphs called as functions
+### Using with subgraphs called as functions
 
-When invoking a subgraph [as a function](../../how-tos/subgraph.ipynb#different-state-schemas), the **parent graph** will resume execution from the **beginning of the node** where the subgraph was invoked (and where an `interrupt` was triggered). Similarly, the **subgraph**, will resume from the **beginning of the node** where the `interrupt()` function was called.
-
-For example,
+When invoking a subgraph as a function, the parent graph will resume execution from the **beginning of the node** where the subgraph was invoked where the `interrupt` was triggered. Similarly, the **subgraph** will resume from the **beginning of the node** where the `interrupt()` function was called.
 
 ```python
 def node_in_parent_graph(state: State):
@@ -772,11 +881,9 @@ def node_in_parent_graph(state: State):
     {'parent_node': {'state_counter': 1}}
     ```
 
-
-
 ### Using multiple interrupts
 
-Using multiple interrupts within a **single** node can be helpful for patterns like [validating human input](#validating-human-input). However, using multiple interrupts in the same node can lead to unexpected behavior if not handled carefully.
+Using multiple interrupts within a **single** node can be helpful for patterns like [validating human input](../how-tos/human_in_the_loop/add-human-in-the-loop.md#validate-human-input). However, using multiple interrupts in the same node can lead to unexpected behavior if not handled carefully.
 
 When a node contains multiple interrupt calls, LangGraph keeps a list of resume values specific to the task executing the node. Whenever execution resumes, it starts at the beginning of the node. For each interrupt encountered, LangGraph checks if a matching value exists in the task's resume list. Matching is **strictly index-based**, so the order of interrupt calls within the node is critical.
 
@@ -846,3 +953,4 @@ To avoid issues, refrain from dynamically changing the node's structure between 
     Name: N/A. Age: John
     {'human_node': {'age': 'John', 'name': 'N/A'}}
     ```
+
