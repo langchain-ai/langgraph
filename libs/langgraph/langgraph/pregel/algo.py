@@ -275,7 +275,7 @@ def apply_writes(
             )
 
     # clear pending sends
-    if checkpoint["pending_sends"] and bump_step:
+    if checkpoint.get("pending_sends") and bump_step:
         checkpoint["pending_sends"].clear()
 
     # Group writes by channel
@@ -286,7 +286,7 @@ def apply_writes(
             if chan in (NO_WRITES, PUSH, RESUME, INTERRUPT, RETURN, ERROR):
                 pass
             elif chan == TASKS:
-                checkpoint["pending_sends"].append(val)
+                checkpoint.setdefault("pending_sends", []).append(val)
             elif chan in channels:
                 pending_writes_by_channel[chan].append(val)
             else:
@@ -327,7 +327,7 @@ def apply_writes(
     # If this is (tentatively) the last superstep, notify all channels of finish
     if (
         bump_step
-        and not checkpoint["pending_sends"]
+        and not checkpoint.get("pending_sends")
         and updated_channels.isdisjoint(trigger_to_nodes)
     ):
         for chan in channels:
@@ -342,17 +342,6 @@ def apply_writes(
 
     # Return managed values writes to be applied externally
     return pending_writes_by_managed, updated_channels
-
-
-def has_next_tasks(
-    trigger_to_nodes: Mapping[str, Sequence[str]],
-    updated_channels: set[str],
-    checkpoint: Checkpoint,
-) -> bool:
-    """Check if there are any tasks that should be run in the next step."""
-    return bool(checkpoint["pending_sends"]) or not updated_channels.isdisjoint(
-        trigger_to_nodes
-    )
 
 
 @overload
@@ -446,7 +435,7 @@ def prepare_next_tasks(
     null_version = checkpoint_null_version(checkpoint)
     tasks: list[Union[PregelTask, PregelExecutableTask]] = []
     # Consume pending_sends from previous step
-    for idx, _ in enumerate(checkpoint["pending_sends"]):
+    for idx, _ in enumerate(checkpoint.get("pending_sends", ())):
         if task := prepare_single_task(
             (PUSH, idx),
             None,
@@ -648,7 +637,7 @@ def prepare_single_task(
             # SEND tasks, executed in superstep n+1
             # (PUSH, idx of pending send)
             idx = cast(int, task_path[1])
-            if idx >= len(checkpoint["pending_sends"]):
+            if idx >= len(checkpoint.get("pending_sends", ())):
                 return
             packet = checkpoint["pending_sends"][idx]
             if not isinstance(packet, Send):
