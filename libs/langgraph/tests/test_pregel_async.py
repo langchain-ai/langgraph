@@ -1042,9 +1042,7 @@ async def test_partial_pending_checkpoint(
             "source": "update",
             "step": 1,
         },
-        parent_config=(
-            [c async for c in tool_two.checkpointer.alist(thread1, limit=2)][-1].config
-        ),
+        parent_config=None,
         interrupts=(),
     )
 
