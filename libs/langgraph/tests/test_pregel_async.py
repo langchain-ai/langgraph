@@ -1021,7 +1021,7 @@ async def test_partial_pending_checkpoint(
     # clear the interrupt and next tasks
     await tool_two.aupdate_state(thread1, None, as_node=END)
     # interrupt and next tasks are cleared, finished tasks are kept
-    tup = await tool_two.checkpointer.aget_tuple(thread1)
+    tup_upd = await tool_two.checkpointer.aget_tuple(thread1)
     assert await tool_two.aget_state(thread1) == StateSnapshot(
         values={"my_key": "value ⛰️", "market": "DE"},
         next=("tool_one",),
@@ -1035,14 +1035,14 @@ async def test_partial_pending_checkpoint(
                 state=None,
             ),
         ),
-        config=tup.config,
-        created_at=tup.checkpoint["ts"],
+        config=tup_upd.config,
+        created_at=tup_upd.checkpoint["ts"],
         metadata={
             "parents": {},
             "source": "update",
             "step": 1,
         },
-        parent_config=None,
+        parent_config=tup.config,
         interrupts=(),
     )
 
