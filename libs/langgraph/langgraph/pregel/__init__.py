@@ -1555,12 +1555,17 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     raise InvalidUpdateError("Cannot copy a non-existent checkpoint")
 
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
+                copy_and_apply_tasks = isinstance(values, list) and len(values) > 0
 
                 # copy checkpoint
                 next_config = checkpointer.put(
                     saved.parent_config
-                    or patch_configurable(
-                        saved.config, {CONFIG_KEY_CHECKPOINT_ID: None}
+                    or (
+                        patch_configurable(
+                            saved.config, {CONFIG_KEY_CHECKPOINT_ID: None}
+                        )
+                        if copy_and_apply_tasks
+                        else saved.config
                     ),
                     next_checkpoint,
                     {
@@ -1573,7 +1578,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
 
                 # we want to both clone a checkpoint and update state in one go.
                 # reuse the same task ID if possible.
-                if isinstance(values, list) and len(values) > 0:
+                if copy_and_apply_tasks:
                     # figure out the task IDs for the next update checkpoint
                     next_tasks = prepare_next_tasks(
                         next_checkpoint,
@@ -2008,12 +2013,17 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     raise InvalidUpdateError("Cannot copy a non-existent checkpoint")
 
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
+                copy_and_apply_tasks = isinstance(values, list) and len(values) > 0
 
                 # copy checkpoint
                 next_config = await checkpointer.aput(
                     saved.parent_config
-                    or patch_configurable(
-                        saved.config, {CONFIG_KEY_CHECKPOINT_ID: None}
+                    or (
+                        patch_configurable(
+                            saved.config, {CONFIG_KEY_CHECKPOINT_ID: None}
+                        )
+                        if copy_and_apply_tasks
+                        else saved.config
                     ),
                     next_checkpoint,
                     {
@@ -2026,7 +2036,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
 
                 # we want to both clone a checkpoint and update state in one go.
                 # reuse the same task ID if possible.
-                if isinstance(values, list) and len(values) > 0:
+                if copy_and_apply_tasks:
                     # figure out the task IDs for the next update checkpoint
                     next_tasks = prepare_next_tasks(
                         next_checkpoint,
