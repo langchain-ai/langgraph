@@ -311,4 +311,12 @@ export type AssistantSortBy =
 
 export type ThreadSortBy = "thread_id" | "status" | "created_at" | "updated_at";
 
+export type CronSortBy =
+  | "cron_id"
+  | "assistant_id"
+  | "thread_id"
+  | "created_at"
+  | "updated_at"
+  | "next_run_date";
+
 export type SortOrder = "asc" | "desc";

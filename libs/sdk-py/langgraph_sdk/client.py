@@ -40,6 +40,7 @@ from langgraph_sdk.schema import (
     Command,
     Config,
     Cron,
+    CronSortBy,
     DisconnectMode,
     GraphSchema,
     IfNotExists,
@@ -2532,6 +2533,8 @@ class CronClient:
         thread_id: str | None = None,
         limit: int = 10,
         offset: int = 0,
+        sort_by: CronSortBy | None = None,
+        sort_order: SortOrder | None = None,
         headers: dict[str, str] | None = None,
     ) -> list[Cron]:
         """Get a list of cron jobs.
@@ -2590,6 +2593,10 @@ class CronClient:
             "limit": limit,
             "offset": offset,
         }
+        if sort_by:
+            payload["sort_by"] = sort_by
+        if sort_order:
+            payload["sort_order"] = sort_order
         payload = {k: v for k, v in payload.items() if v is not None}
         return await self.http.post("/runs/crons/search", json=payload, headers=headers)
 
