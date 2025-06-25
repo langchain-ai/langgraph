@@ -2,135 +2,73 @@
 
 LangGraph provides built-in support for LLMs (language models) through the LangChain library. This allows you to easily integrate various LLMs into your agents and workflows.
 
-For more detailed documentation about how to work with LangChain LLMs, refer to:
-
-- [How to use chat models](https://python.langchain.com/docs/how_to/#chat-models)
-- [Chat model integrations](https://python.langchain.com/docs/integrations/chat/)
 
 ## Initializing a model
 
-The [`init_chat_model`](https://python.langchain.com/docs/how_to/chat_models_universal_init/) utility simplifies model initialization with configurable parameters:
+Use [`init_chat_model`](https://python.langchain.com/docs/how_to/chat_models_universal_init/) to initialize models:
 
 {!snippets/chat_model_tabs.md!}
 
-Refer to the [API reference](https://python.langchain.com/api_reference/langchain/chat_models/langchain.chat_models.base.init_chat_model.html) for advanced options.
+### Instantiate a model directly
+
+If a model provider is not available via `init_chat_model`, you can instantiate the provider's model class directly. The model must implement the [BaseChatModel interface](https://python.langchain.com/api_reference/core/language_models/langchain_core.language_models.chat_models.BaseChatModel.html) and support tool calling:
+
+
+```python
+# Anthropic is already supported by `init_chat_model`,
+# but you can also instantiate it directly.
+from langchain_anthropic import ChatAnthropic
+
+model = ChatAnthropic(
+  model="claude-3-7-sonnet-latest",
+  temperature=0,
+  max_tokens=2048
+)
+```
+
+!!! important "Tool calling support"
+
+    If you are building an agent or workflow that requires the model to call external tools, ensure that the underlying
+    language model supports [tool calling](../concepts/tools.md). Compatible models can be found in the [LangChain integrations directory](https://python.langchain.com/docs/integrations/chat/).
 
 
 ## Use in an agent
 
-## Specifying a model by name
+When using `create_react_agent` you can specify the model by its name string, which is a shorthand for initializing the model using `init_chat_model`. This allows you to use the model without needing to import or instantiate it directly.
 
-You can configure an agent with a model name string:
+=== "model name"
 
-=== "OpenAI"
 
-    ```python
-    import os
-    from langgraph.prebuilt import create_react_agent
+      ```python
+      from langgraph.prebuilt import create_react_agent
 
-    os.environ["OPENAI_API_KEY"] = "sk-..."
+      create_react_agent(
+         # highlight-next-line
+         model="anthropic:claude-3-7-sonnet-latest",
+         # other parameters
+      )
+      ```
 
-    agent = create_react_agent(
+=== "model instance"
+
+      ```python
+      from langchain_anthropic import ChatAnthropic
+      from langgraph.prebuilt import create_react_agent
+
+      model = ChatAnthropic(
+          model="claude-3-7-sonnet-latest",
+          temperature=0,
+          max_tokens=2048
+      )
+      # Alternatively
+      # model = init_chat_model("anthropic:claude-3-7-sonnet-latest")
+
+      agent = create_react_agent(
         # highlight-next-line
-        model="openai:gpt-4.1",
+        model=model,
         # other parameters
-    )
-    ```
-
-=== "Anthropic"
-
-    ```python
-    import os
-    from langgraph.prebuilt import create_react_agent
-
-    os.environ["ANTHROPIC_API_KEY"] = "sk-..."
-
-    agent = create_react_agent(
-        # highlight-next-line
-        model="anthropic:claude-3-7-sonnet-latest",
-        # other parameters
-    )
-    ```
-
-=== "Azure"
-
-    ```python
-    import os
-    from langgraph.prebuilt import create_react_agent
-
-    os.environ["AZURE_OPENAI_API_KEY"] = "..."
-    os.environ["AZURE_OPENAI_ENDPOINT"] = "..."
-    os.environ["OPENAI_API_VERSION"] = "2025-03-01-preview"
-
-    agent = create_react_agent(
-        # highlight-next-line
-        model="azure_openai:gpt-4.1",
-        # other parameters
-    )
-    ```
-
-=== "Google Gemini"
-
-    ```python
-    import os
-    from langgraph.prebuilt import create_react_agent
-
-    os.environ["GOOGLE_API_KEY"] = "..."
-
-    agent = create_react_agent(
-        # highlight-next-line
-        model="google_genai:gemini-2.0-flash",
-        # other parameters
-    )
-    ```
-
-=== "AWS Bedrock"
-
-    ```python
-    from langgraph.prebuilt import create_react_agent
-
-    # Follow the steps here to configure your credentials:
-    # https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started.html
-
-    agent = create_react_agent(
-        # highlight-next-line
-        model="bedrock_converse:anthropic.claude-3-5-sonnet-20240620-v1:0",
-        # other parameters
-    )
-    ```
-
-## Tool calling support
-
-If you are building an agent or workflow that requires the model to call external tools, ensure that the underlying
-language model supports [tool calling](../concepts/tools.md).
-
-Compatible models can be found in the [LangChain integrations directory](https://python.langchain.com/docs/integrations/chat/).
-
-
-## Using provider-specific LLMs 
-
-If a model provider is not available via `init_chat_model`, you can instantiate the provider's model class directly. The model must implement the [BaseChatModel interface](https://python.langchain.com/api_reference/core/language_models/langchain_core.language_models.chat_models.BaseChatModel.html) and support tool calling:
-
-```python
-from langchain_anthropic import ChatAnthropic
-from langgraph.prebuilt import create_react_agent
-
-model = ChatAnthropic(
-    model="claude-3-7-sonnet-latest",
-    temperature=0,
-    max_tokens=2048
-)
-
-agent = create_react_agent(
-    # highlight-next-line
-    model=model,
-    # other parameters
-)
-```
-
-!!! note "Illustrative example" 
-
-    The example above uses `ChatAnthropic`, which is already supported by `init_chat_model`. This pattern is shown to illustrate how to manually instantiate a model not available through init_chat_model.
+      )
+      ```
 
 ## Advanced model configuration
 
@@ -199,21 +137,43 @@ You can add a fallback to a different model or a different LLM provider using `m
 
 See this [guide](https://python.langchain.com/docs/how_to/fallbacks/#fallback-to-better-model) for more information on model fallbacks.
 
-## Bringing your own model
+### Rate limiting
 
-If you want to use a model that is not officially supported by LangChain, you can still integrate it into your LangGraph application.
+Langchain comes with a built-in in memory rate limiter. This rate limiter is thread safe and can be shared by multiple threads in the same process.
 
-To use a non-LangChain model, either:
+```python
+from langchain_core.rate_limiters import InMemoryRateLimiter
+from langchain_anthropic import ChatAnthropic
 
-* Implement a custom LangChain-compatible model following the [BaseChatModel](https://python.langchain.com/api_reference/core/language_models/langchain_core.language_models.chat_models.BaseChatModel.html) interface, or
-* Employ custom streaming using the `StreamWriter` utility. Refer to [custom streaming guidance](../how-tos/streaming.md#use-with-any-llm).
+rate_limiter = InMemoryRateLimiter(
+    requests_per_second=0.1,  # <-- Super slow! We can only make a request once every 10 seconds!!
+    check_every_n_seconds=0.1,  # Wake up every 100 ms to check whether allowed to make a request,
+    max_bucket_size=10,  # Controls the maximum burst size.
+)
 
+model = ChatAnthropic(
+   model_name="claude-3-opus-20240229", 
+   rate_limiter=rate_limiter
+)
+```
 
+- [Handle rate limiting](https://python.langchain.com/docs/how_to/chat_model_rate_limiting/): Add rate limiting to your chat model to handle API rate limits gracefully.
+
+## Bring your own model
+
+If your desired LLM isn't officially supported by LangChain, consider these options:
+
+1. **Implement a custom LangChain chat model** Create a model conforming to the [LangChain chat model interface](https://python.langchain.com/docs/how_to/custom_chat_model/). This enables full compatibility with LangGraph's agents and workflows but requires understanding of the LangChain framework.
+
+2. **Direct invocation with custom streaming** Use your model directly by adding custom streaming logic with `StreamWriter`.
+   Refer to the [custom streaming documentation](../how-tos/streaming.md#use-with-any-llm) for guidance. This approach suits custom workflows where prebuilt agent integration is not necessary.
+
+ 
 ## Additional resources
 
-- [Model integration directory](https://python.langchain.com/docs/integrations/chat/)
-- [Universal initialization with `init_chat_model`](https://python.langchain.com/docs/how_to/chat_models_universal_init/)
 - [Multimodal inputs](https://python.langchain.com/docs/how_to/multimodal_inputs/)
-- [Handle rate limiting](https://python.langchain.com/docs/how_to/chat_model_rate_limiting/)
-
-
+- [Structured outputs](https://python.langchain.com/docs/how_to/structured_output/)
+- [Model integration directory](https://python.langchain.com/docs/integrations/chat/)
+- [Force model to call a specific tool](https://python.langchain.com/docs/how_to/tool_choice/)
+- [All chat model how to guides](https://python.langchain.com/docs/how_to/#chat-models)
+- [Chat model integrations](https://python.langchain.com/docs/integrations/chat/)
