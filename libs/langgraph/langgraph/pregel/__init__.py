@@ -219,9 +219,9 @@ class NodeBuilder:
         *channels: str,
     ) -> Self:
         """Adds the specified channels to read from, without subscribing to them."""
-        assert isinstance(self._channels, list), (
-            "Cannot read additional channels when subscribed to single channels"
-        )
+        assert isinstance(
+            self._channels, list
+        ), "Cannot read additional channels when subscribed to single channels"
         self._channels.extend(channels)
         return self
 
@@ -1421,7 +1421,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 self.channels,
                 checkpoint,
             )
-            values, as_node, _ = updates[0]
+            values, as_node = updates[0][:2]
 
             # no values as END, just clear all tasks
             if values is None and as_node == END:
@@ -1594,16 +1594,12 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         tasks_group_by[task.name].append(task.id)
 
                     for item in values:
-                        if isinstance(item, dict):
-                            values = item["values"]
-                            as_node = item["as_node"]
-                        elif isinstance(item, StateUpdate):
-                            values = item.values
-                            as_node = item.as_node
-                        else:
+                        if not isinstance(item, Sequence):
                             raise InvalidUpdateError(
                                 f"Invalid update item: {item} when copying checkpoint"
                             )
+
+                        values, as_node = item[:2]
 
                         user_group = user_group_by[as_node]
                         tasks_group = tasks_group_by[as_node]
@@ -1880,7 +1876,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 self.channels,
                 checkpoint,
             )
-            values, as_node, _ = updates[0]
+            values, as_node = updates[0][:2]
             # no values, just clear all tasks
             if values is None and as_node == END:
                 if len(updates) > 1:
@@ -2012,6 +2008,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     raise InvalidUpdateError("Cannot copy a non-existent checkpoint")
 
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
+
                 # copy checkpoint
                 next_config = await checkpointer.aput(
                     saved.parent_config
@@ -2050,17 +2047,12 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         tasks_group_by[task.name].append(task.id)
 
                     for item in values:
-                        if isinstance(item, dict):
-                            values = item["values"]
-                            as_node = item["as_node"]
-                        elif isinstance(item, StateUpdate):
-                            values = item.values
-                            as_node = item.as_node
-                        else:
+                        if not isinstance(item, Sequence):
                             raise InvalidUpdateError(
                                 f"Invalid update item: {item} when copying checkpoint"
                             )
 
+                        values, as_node = item[:2]
                         user_group = user_group_by[as_node]
                         tasks_group = tasks_group_by[as_node]
 
