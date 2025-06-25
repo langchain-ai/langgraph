@@ -17,7 +17,7 @@ Use LangGraph Server to create and manage [assistants](assistants.md), [threads]
 
 There are two versions of LangGraph Server:
 
-- `Lite` is a limited version of the LangGraph Server that you can run locally or in a self-hosted manner (up to 1 million nodes executed per year).
+- `Lite` is a limited version of the LangGraph Server that you can run locally or in a self-hosted manner (up to 1 million [nodes executed](../concepts/faq.md#what-does-nodes-executed-mean-for-langgraph-platform-usage) per year).
 - `Enterprise` is the full version of the LangGraph Server. To use the `Enterprise` version, you must acquire a license key that you will need to specify when running the Docker image. To acquire a license key, please email sales@langchain.dev.
 
 Feature Differences:

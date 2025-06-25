@@ -63,4 +63,8 @@ Yes! LangGraph is totally ambivalent to what LLMs are used under the hood. The m
 
 Yes! You can use the [development version of LangGraph Server](../tutorials/langgraph-platform/local-server.md) to run the backend locally.
 This will connect to the studio frontend hosted as part of LangSmith.
-If you set an environment variable of `LANGSMITH_TRACING=false` then no traces will be sent to LangSmith.
+If you set an environment variable of `LANGSMITH_TRACING=false`, then no traces will be sent to LangSmith.
+
+## What does "nodes executed" mean for LangGraph Platform usage?
+
+**Nodes Executed** is the aggregate number of nodes in a LangGraph application that are called and completed successfully during an invocation of the application. If a node in the graph is not called during execution or ends in an error state, these nodes will not be counted. If a node is called and completes successfully multiple times, each occurrence will be counted.
