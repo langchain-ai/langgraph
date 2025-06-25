@@ -27,14 +27,14 @@ To review, edit, and approve tool calls in an agent or workflow, [use LangGraph'
 
 There are four typical design patterns that you can implement using `interrupt` and `Command`:
 
-1. [Approve or reject](../how-tos/human_in_the_loop/add-human-in-the-loop.md#approve-or-reject): Pause the graph before a critical step, such as an API call, to review and approve the action. If the action is rejected, you can prevent the graph from executing the step, and potentially take an alternative action. This pattern often involves routing the graph based on the human's input.
-2. [Edit graph state](../how-tos/human_in_the_loop/add-human-in-the-loop.md#review-and-edit-state): Pause the graph to review and edit the graph state. This is useful for correcting mistakes or updating the state with additional information. This pattern often involves updating the state with the human's input.
-3. [Review tool calls](../how-tos/human_in_the_loop/add-human-in-the-loop.md#review-tool-calls): Pause the graph to review and edit tool calls requested by the LLM before tool execution.
-4. [Validate human input](../how-tos/human_in_the_loop/add-human-in-the-loop.md#validate-human-input): Pause the graph to validate human input before proceeding with the next step.
+- [Approve or reject](../how-tos/human_in_the_loop/add-human-in-the-loop.md#approve-or-reject): Pause the graph before a critical step, such as an API call, to review and approve the action. If the action is rejected, you can prevent the graph from executing the step, and potentially take an alternative action. This pattern often involves routing the graph based on the human's input.
+- [Edit graph state](../how-tos/human_in_the_loop/add-human-in-the-loop.md#review-and-edit-state): Pause the graph to review and edit the graph state. This is useful for correcting mistakes or updating the state with additional information. This pattern often involves updating the state with the human's input.
+- [Review tool calls](../how-tos/human_in_the_loop/add-human-in-the-loop.md#review-tool-calls): Pause the graph to review and edit tool calls requested by the LLM before tool execution.
+- [Validate human input](../how-tos/human_in_the_loop/add-human-in-the-loop.md#validate-human-input): Pause the graph to validate human input before proceeding with the next step.
 
-## Common pitfalls
+## Considerations
 
-### Side-effects
+### Using with code with side-effects
 
 Place code with side effects, such as API calls, after the `interrupt` or in a separate node to avoid duplication, as these are re-triggered every time the node is resumed.
 
@@ -69,7 +69,7 @@ Place code with side effects, such as API calls, after the `interrupt` or in a s
         api_call(...) # OK as it's in a separate node
     ```
 
-### Subgraphs called as functions
+### Using with subgraphs called as functions
 
 When invoking a subgraph as a function, the parent graph will resume execution from the **beginning of the node** where the subgraph was invoked where the `interrupt` was triggered. Similarly, the **subgraph** will resume from the **beginning of the node** where the `interrupt()` function was called.
 
@@ -199,7 +199,7 @@ def node_in_parent_graph(state: State):
     {'parent_node': {'state_counter': 1}}
     ```
 
-### Multiple interrupts
+### Using multiple interrupts
 
 Using multiple interrupts within a **single** node can be helpful for patterns like [validating human input](../how-tos/human_in_the_loop/add-human-in-the-loop.md#validate-human-input). However, using multiple interrupts in the same node can lead to unexpected behavior if not handled carefully.
 
