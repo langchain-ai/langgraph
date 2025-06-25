@@ -1,10 +1,8 @@
-# Time travel
+# Time travel using Server API
 
-LangGraph provides [**time travel**](../../concepts/time-travel.md) functionality to **resume execution from a prior checkpoint** — either replaying the same state or modifying it to explore alternatives. In all cases, resuming past execution produces a **new fork** in the history.
+LangGraph provides the [**time travel**](../../concepts/time-travel.md) functionality to resume execution from a prior checkpoint, either replaying the same state or modifying it to explore alternatives. In all cases, resuming past execution produces a new fork in the history.
 
-## Use time travel
-
-To use time-travel in LangGraph:
+To time travel using the LangGraph Server API (via the LangGraph SDK):
 
 1. **Run the graph** with initial inputs using [LangGraph SDK](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/)'s [`client.runs.wait`][langgraph_sdk.client.RunsClient.wait] or [`client.runs.stream`][langgraph_sdk.client.RunsClient.stream] APIs.
 2. **Identify a checkpoint in an existing thread**: Use [`client.threads.get_history`][langgraph_sdk.client.ThreadsClient.get_history] method to retrieve the execution history for a specific `thread_id` and locate the desired `checkpoint_id`.
@@ -12,7 +10,7 @@ To use time-travel in LangGraph:
 3. **(Optional) modify the graph state**: Use the [`client.threads.update_state`][langgraph_sdk.client.ThreadsClient.update_state] method to modify the graph’s state at the checkpoint and resume execution from alternative state.
 4. **Resume execution from the checkpoint**: Use the [`client.runs.wait`][langgraph_sdk.client.RunsClient.wait] or [`client.runs.stream`][langgraph_sdk.client.RunsClient.stream] APIs with an input of `None` and the appropriate `thread_id` and `checkpoint_id`.
 
-## Example
+## Use time travel in a workflow
 
 ??? example "Example graph"
 
@@ -237,4 +235,4 @@ To use time-travel in LangGraph:
 
 ## Learn more
 
-- [**LangGraph time travel guide**](../../how-tos/human_in_the_loop/time-travel.ipynb): learn more about using time travel in LangGraph.
+- [**LangGraph time travel guide**](../../how-tos/human_in_the_loop/time-travel.md): learn more about using time travel in LangGraph.

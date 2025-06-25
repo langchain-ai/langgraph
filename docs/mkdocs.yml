@@ -160,9 +160,10 @@ nav:
       - how-tos/human_in_the_loop/add-human-in-the-loop.md
       - Use Server API: cloud/how-tos/add-human-in-the-loop.md
     - Time travel:
+      - how-tos/human_in_the_loop/time-travel.md
       - Use Server API: cloud/how-tos/human_in_the_loop_time_travel.md
     - Breakpoints:
-      - Set breakpoints: how-tos/human_in_the_loop/breakpoints.ipynb
+      - Set breakpoints: how-tos/human_in_the_loop/breakpoints.md
       - Use Server API: cloud/how-tos/human_in_the_loop_breakpoint.md
     - Tools:
       - Call tools: how-tos/tool-calling.md

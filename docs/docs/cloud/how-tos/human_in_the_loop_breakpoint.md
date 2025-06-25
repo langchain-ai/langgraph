@@ -80,7 +80,7 @@ With breakpoints, you can inspect the graph's state and node inputs at any point
 
 !!! tip
 
-    This example shows how to add **static** breakpoints. See [this guide](../../how-tos/human_in_the_loop/breakpoints.ipynb) for more options for how to add breakpoints.
+    This example shows how to add **static** breakpoints. See [this guide](../../how-tos/human_in_the_loop/breakpoints.md) for more options for how to add breakpoints.
 
 
 === "Python"
@@ -181,4 +181,4 @@ With breakpoints, you can inspect the graph's state and node inputs at any point
 
 ## Learn more
 
-- [**LangGraph breakpoints guide**](../../how-tos/human_in_the_loop/breakpoints.ipynb): learn more about adding breakpoints in LangGraph.
+- [**LangGraph breakpoints guide**](../../how-tos/human_in_the_loop/breakpoints.md): learn more about adding breakpoints in LangGraph.
