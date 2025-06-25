@@ -219,9 +219,9 @@ class NodeBuilder:
         *channels: str,
     ) -> Self:
         """Adds the specified channels to read from, without subscribing to them."""
-        assert isinstance(self._channels, list), (
-            "Cannot read additional channels when subscribed to single channels"
-        )
+        assert isinstance(
+            self._channels, list
+        ), "Cannot read additional channels when subscribed to single channels"
         self._channels.extend(channels)
         return self
 
@@ -1559,12 +1559,8 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 # copy checkpoint
                 next_config = checkpointer.put(
                     saved.parent_config
-                    or (
-                        patch_configurable(
-                            saved.config, {CONFIG_KEY_CHECKPOINT_ID: None}
-                        )
-                        if isinstance(values, list) and len(values) > 0
-                        else saved.config
+                    or patch_configurable(
+                        saved.config, {CONFIG_KEY_CHECKPOINT_ID: None}
                     ),
                     next_checkpoint,
                     {
@@ -2021,12 +2017,8 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 # copy checkpoint
                 next_config = await checkpointer.aput(
                     saved.parent_config
-                    or (
-                        patch_configurable(
-                            saved.config, {CONFIG_KEY_CHECKPOINT_ID: None}
-                        )
-                        if isinstance(values, list) and len(values) > 0
-                        else saved.config
+                    or patch_configurable(
+                        saved.config, {CONFIG_KEY_CHECKPOINT_ID: None}
                     ),
                     next_checkpoint,
                     {

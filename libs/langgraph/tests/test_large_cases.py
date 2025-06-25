@@ -4301,7 +4301,7 @@ def test_dynamic_interrupt(sync_checkpointer: BaseCheckpointSaver) -> None:
     )
 
 
-def test_copy_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_clear_tasks_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
@@ -4450,7 +4450,8 @@ def test_copy_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> None:
     )
 
     # clear the interrupt and next tasks
-    tool_two.update_state(thread1, None, as_node="__copy__")
+    tool_two.update_state(thread1, None)
+
     # interrupt is cleared, next task is kept
     assert tool_two.get_state(thread1) == StateSnapshot(
         values={"my_key": "value ⛰️", "market": "DE"},
@@ -4481,7 +4482,7 @@ def test_copy_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> None:
         created_at=AnyStr(),
         metadata={
             "parents": {},
-            "source": "fork",
+            "source": "update",
             "step": 1,
         },
         parent_config=([*tool_two.checkpointer.list(thread1, limit=2)][-1].config),
