@@ -25,6 +25,20 @@ Importantly, the model does not execute the tool—it only generates a request. 
 
 See the [tool calling guide](../how-tos/tool-calling.md) for more details.
 
+## Prebuilt tools
+
+LangChain provides prebuilt tool integrations for common external systems including APIs, databases, file systems, and web data.
+
+Browse the [integrations directory](https://python.langchain.com/docs/integrations/tools/) for available tools.
+
+Common categories:
+
+* **Search**: Bing, SerpAPI, Tavily
+* **Code execution**: Python REPL, Node.js REPL
+* **Databases**: SQL, MongoDB, Redis
+* **Web data**: Scraping and browsing
+* **APIs**: OpenWeatherMap, NewsAPI, etc.
+
 ## Custom tools
 
 You can define custom tools using the `@tool` decorator or plain Python functions. For example:
@@ -39,20 +53,6 @@ def multiply(a: int, b: int) -> int:
 ```
 
 See the [tool calling guide](../how-tos/tool-calling.md) for more details.
-
-## Prebuilt tools
-
-LangChain provides prebuilt tool integrations for common external systems including APIs, databases, file systems, and web data.
-
-Browse the [integrations directory](https://python.langchain.com/docs/integrations/tools/) for available tools.
-
-Common categories:
-
-* **Search**: Bing, SerpAPI, Tavily
-* **Code execution**: Python REPL, Node.js REPL
-* **Databases**: SQL, MongoDB, Redis
-* **Web data**: Scraping and browsing
-* **APIs**: OpenWeatherMap, NewsAPI, etc.
 
 ## Tool execution
 

@@ -1,4 +1,4 @@
-# Use tools
+# Call tools
 
 [Tools](https://python.langchain.com/docs/concepts/tools/) encapsulate a callable function and its input schema. These can be passed to compatible [chat models](https://python.langchain.com/docs/concepts/chat_models), allowing the model to decide whether to invoke a tool and determine the appropriate arguments.
 
