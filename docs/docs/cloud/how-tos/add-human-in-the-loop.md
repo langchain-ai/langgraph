@@ -308,4 +308,4 @@ To review, edit, and approve tool calls in an agent or workflow, use LangGraph's
 ## Learn more
 
 - [Human-in-the-loop conceptual guide](../../concepts/human_in_the_loop.md): learn more about LangGraph human-in-the-loop features. 
-- [Design patterns](../../concepts/human_in_the_loop.md#patterns): learn how to implement patterns like approving/rejecting actions, requesting user input, and more.
+- [Common patterns](../../how-tos/human_in_the_loop/add-human-in-the-loop.md#common-patterns): learn how to implement patterns like approving/rejecting actions, requesting user input, tool call review, and validating human input.
