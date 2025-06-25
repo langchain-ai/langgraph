@@ -11,7 +11,7 @@ hide:
 
 # Models
 
-This page describes how to configure the chat model used by an agent.
+This guide is a quick reference for using LangChain models with LangGraph.
 
 ## Tool calling support
 
@@ -296,3 +296,5 @@ See this [guide](https://python.langchain.com/docs/how_to/fallbacks/#fallback-to
 
 - [Model integration directory](https://python.langchain.com/docs/integrations/chat/)
 - [Universal initialization with `init_chat_model`](https://python.langchain.com/docs/how_to/chat_models_universal_init/)
+- [Multimodal inputs](https://python.langchain.com/docs/how_to/multimodal_inputs/)
+- [Handle rate limiting](https://python.langchain.com/docs/how_to/chat_model_rate_limiting/)
