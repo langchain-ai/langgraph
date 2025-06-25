@@ -172,8 +172,8 @@ nav:
       - Prebuilt implementation: agents/multi-agent.md
       - Custom implementation: how-tos/multi_agent.ipynb
     - MCP:
-      - Use MCP tools: agents/mcp.md
-      - Server deployment via MCP: concepts/server-mcp.md
+      - Use MCP: agents/mcp.md
+      - Server API: concepts/server-mcp.md
     - Deployment:
       - Basic deployment: agents/deployment.md
       - Set up your application:
