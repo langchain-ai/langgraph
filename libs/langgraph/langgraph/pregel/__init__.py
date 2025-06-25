@@ -1555,7 +1555,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     raise InvalidUpdateError("Cannot copy a non-existent checkpoint")
 
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
-                copy_and_apply_tasks = isinstance(values, list) and len(values) > 0
 
                 # copy checkpoint
                 next_config = checkpointer.put(
@@ -1564,7 +1563,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         patch_configurable(
                             saved.config, {CONFIG_KEY_CHECKPOINT_ID: None}
                         )
-                        if copy_and_apply_tasks
+                        if isinstance(values, list) and len(values) > 0
                         else saved.config
                     ),
                     next_checkpoint,
@@ -1578,18 +1577,23 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
 
                 # we want to both clone a checkpoint and update state in one go.
                 # reuse the same task ID if possible.
-                if copy_and_apply_tasks:
+                if isinstance(values, list) and len(values) > 0:
                     # figure out the task IDs for the next update checkpoint
                     next_tasks = prepare_next_tasks(
                         next_checkpoint,
-                        saved.pending_writes,
+                        saved.pending_writes or [],
                         self.nodes,
                         channels,
                         managed,
                         next_config,
                         step + 2,
                         step + 4,
-                        for_execution=False,
+                        for_execution=True,
+                        store=self.store,
+                        checkpointer=self.checkpointer
+                        if isinstance(self.checkpointer, BaseCheckpointSaver)
+                        else None,
+                        manager=None,
                     )
 
                     tasks_group_by = defaultdict(list)
@@ -2013,7 +2017,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     raise InvalidUpdateError("Cannot copy a non-existent checkpoint")
 
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
-                copy_and_apply_tasks = isinstance(values, list) and len(values) > 0
 
                 # copy checkpoint
                 next_config = await checkpointer.aput(
@@ -2022,7 +2025,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         patch_configurable(
                             saved.config, {CONFIG_KEY_CHECKPOINT_ID: None}
                         )
-                        if copy_and_apply_tasks
+                        if isinstance(values, list) and len(values) > 0
                         else saved.config
                     ),
                     next_checkpoint,
@@ -2036,18 +2039,23 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
 
                 # we want to both clone a checkpoint and update state in one go.
                 # reuse the same task ID if possible.
-                if copy_and_apply_tasks:
+                if isinstance(values, list) and len(values) > 0:
                     # figure out the task IDs for the next update checkpoint
                     next_tasks = prepare_next_tasks(
                         next_checkpoint,
-                        saved.pending_writes,
+                        saved.pending_writes or [],
                         self.nodes,
                         channels,
                         managed,
                         next_config,
                         step + 2,
                         step + 4,
-                        for_execution=False,
+                        for_execution=True,
+                        store=self.store,
+                        checkpointer=self.checkpointer
+                        if isinstance(self.checkpointer, BaseCheckpointSaver)
+                        else None,
+                        manager=None,
                     )
 
                     tasks_group_by = defaultdict(list)
