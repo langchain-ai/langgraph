@@ -1677,9 +1677,9 @@ def test_state_graph_packets(
 
     # Define decision-making logic
     def should_continue(data: dict) -> str:
-        assert data["something_extra"] == "hi there", (
-            "nodes can pass extra data to their cond edges, which isn't saved in state"
-        )
+        assert (
+            data["something_extra"] == "hi there"
+        ), "nodes can pass extra data to their cond edges, which isn't saved in state"
         # Logic to decide whether to continue in the loop or exit
         if tool_calls := data["messages"][-1].tool_calls:
             return [Send("tools", tool_call) for tool_call in tool_calls]
@@ -4301,7 +4301,7 @@ def test_dynamic_interrupt(sync_checkpointer: BaseCheckpointSaver) -> None:
     )
 
 
-def test_clear_tasks_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_partial_pending_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
@@ -4450,26 +4450,17 @@ def test_clear_tasks_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> None:
     )
 
     # clear the interrupt and next tasks
-    tool_two.update_state(thread1, None)
+    tool_two.update_state(thread1, None, as_node=END)
 
-    # interrupt is cleared, next task is kept
+    # interrupt and unresolved tasks are cleared, finished tasks are kept
     assert tool_two.get_state(thread1) == StateSnapshot(
         values={"my_key": "value ⛰️", "market": "DE"},
-        next=(
-            "tool_one",
-            "tool_two",
-        ),
+        next=("tool_one",),
         tasks=(
             PregelTask(
                 id=AnyStr(),
                 name="tool_one",
                 path=("__pregel_push", 0, False),
-            ),
-            PregelTask(
-                AnyStr(),
-                "tool_two",
-                (PULL, "tool_two"),
-                interrupts=(),
             ),
         ),
         config={
