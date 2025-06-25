@@ -1,6 +1,6 @@
 # Tools
 
-Many AI applications interact with users via natural language. However, some use cases require models to interface directly with external systems—such as APIs, databases, or file systems—using structured input. In these scenarios, **tool calling** enables models to generate requests that conform to a specified input schema.
+Many AI applications interact with users via natural language. However, some use cases require models to interface directly with external systems—such as APIs, databases, or file systems—using structured input. In these scenarios, [tool calling](../how-tos/tool-calling.md) enables models to generate requests that conform to a specified input schema.
 
 **Tools** encapsulate a callable function and its input schema. These can be passed to compatible [chat models](https://python.langchain.com/docs/concepts/chat_models), allowing the model to decide whether to invoke a tool and with what arguments.
 
@@ -56,9 +56,9 @@ Common categories:
 
 ## Tool execution
 
-While the model determines *when* to call a tool, **execution** of the tool call must be handled by a runtime component.
+While the model determines when to call a tool, execution of the tool call must be handled by a runtime component.
 
 LangGraph provides prebuilt components for this:
 
-* [ToolNode][langgraph.prebuilt.tool_node.ToolNode]: A prebuilt node that executes tools.
+* [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode]: A prebuilt node that executes tools.
 * [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent]: Constructs a full agent that manages tool calling automatically.

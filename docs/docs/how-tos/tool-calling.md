@@ -399,7 +399,7 @@ def multiply(a: int, b: int) -> int:
     return a * b
 ```
 
-## 3. Context Management
+## Context management
 
 Tools within LangGraph sometimes require context data, such as runtime-only arguments (e.g., user IDs or session details), that should not be controlled by the model. LangGraph provides three methods for managing such context:
 
@@ -705,7 +705,7 @@ graph = builder.compile(store=store)
     5. The `put` method is used to store data in the store. The first argument is the namespace, and the second argument is the key. This will store the user information in the store.
     6. The `user_id` is passed in the config. This is used to identify the user whose information is being updated.
 
-## 3. Advanced tool features
+## Advanced tool features
 
 ### Immediate return
 
@@ -813,7 +813,7 @@ configured_model = model.bind_tools(
 
     Note that not all models support this feature, and the exact configuration may vary depending on the model you are using.
 
-### Disabling parallel calls
+### Disable parallel calls
 
 For supported providers, you can disable parallel tool calling by setting `parallel_tool_calls=False` via the `model.bind_tools()` method:
 
@@ -896,7 +896,7 @@ Output:
 ]}
 ```
 
-#### Disabling error handling
+#### Disable error handling
 
 To propagate exceptions directly, disable error handling:
 
@@ -970,7 +970,7 @@ To address this, you can dynamically adjust the tools available to a model by re
 
 See [`langgraph-bigtool`](https://github.com/langchain-ai/langgraph-bigtool) prebuilt library for a ready-to-use implementation.
 
-## 4. Prebuilt tools
+## Prebuilt tools
 
 ### LLM provider tools
 
