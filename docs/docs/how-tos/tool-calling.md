@@ -2,11 +2,9 @@
 
 [Tools](../concepts/tools.md) encapsulate a callable function and its input schema. These can be passed to compatible [chat models](https://python.langchain.com/docs/concepts/chat_models), allowing the model to decide whether to invoke a tool and determine the appropriate arguments.
 
-You can [define your own tools](#1-getting-started-with-tools) or use [prebuilt tools](#4-prebuilt-tools)
+You can [define your own tools](#getting-started-with-tools) or use [prebuilt tools](#prebuilt-tools)
 
-## 1. Getting Started with Tools
-
-### Define a tool
+## Define a tool
 
 Define a basic tool with the [@tool](https://python.langchain.com/api_reference/core/tools/langchain_core.tools.convert.tool.html) decorator:
 
@@ -20,7 +18,7 @@ def multiply(a: int, b: int) -> int:
     return a * b
 ```
 
-### Run a tool
+## Run a tool
 
 Tools conform to the [Runnable interface](https://python.langchain.com/docs/concepts/runnables/), which means you can run a tool using the `invoke` method:
 
@@ -46,7 +44,7 @@ ToolMessage(content='294', name='multiply', tool_call_id='1')
 ```
 
 
-### Use in an agent
+## Use in an agent
 
 To create a tool-calling agent, you can use the prebuilt [create_react_agent][langgraph.prebuilt.chat_agent_executor.create_react_agent]:
 
@@ -68,7 +66,7 @@ agent = create_react_agent(
 agent.invoke({"messages": [{"role": "user", "content": "what's 42 x 7?"}]})
 ```
 
-### Use in a workflow
+## Use in a workflow
 
 If you are writing a custom workflow, you will need to:
 
@@ -344,7 +342,7 @@ tool_node.invoke({"messages": [...]})
     ```
 
 
-## 2. Tool customization
+## Tool customization
 
 ### Parameter descriptions
 
