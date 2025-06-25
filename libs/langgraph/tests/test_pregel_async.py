@@ -860,7 +860,9 @@ async def test_dynamic_interrupt_subgraph(
 
 
 @NEEDS_CONTEXTVARS
-async def test_copy_checkpoint(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_partial_pending_checkpoint(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
@@ -1017,31 +1019,27 @@ async def test_copy_checkpoint(async_checkpointer: BaseCheckpointSaver) -> None:
     )
 
     # clear the interrupt and next tasks
-    await tool_two.aupdate_state(thread1, None, as_node="__copy__")
-    # interrupt is cleared, next task is kept
+    await tool_two.aupdate_state(thread1, None, as_node=END)
+    # interrupt and next tasks are cleared, finished tasks are kept
     tup = await tool_two.checkpointer.aget_tuple(thread1)
     assert await tool_two.aget_state(thread1) == StateSnapshot(
         values={"my_key": "value ⛰️", "market": "DE"},
-        next=("tool_one", "tool_two"),
+        next=("tool_one",),
         tasks=(
             PregelTask(
                 AnyStr(),
                 "tool_one",
                 (PUSH, 0, False),
-                result=None,
-            ),
-            PregelTask(
-                AnyStr(),
-                "tool_two",
-                (PULL, "tool_two"),
+                error=None,
                 interrupts=(),
+                state=None,
             ),
         ),
         config=tup.config,
         created_at=tup.checkpoint["ts"],
         metadata={
             "parents": {},
-            "source": "fork",
+            "source": "update",
             "step": 1,
         },
         parent_config=(
