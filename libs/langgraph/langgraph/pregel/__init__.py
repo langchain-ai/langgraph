@@ -1421,7 +1421,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 self.channels,
                 checkpoint,
             )
-            values, as_node = updates[0]
+            values, as_node, _ = updates[0]
 
             # no values as END, just clear all tasks
             if values is None and as_node == END:
@@ -1588,22 +1588,32 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     )
 
                     tasks_group_by = defaultdict(list)
+                    user_group_by: dict[str, list[StateUpdate]] = defaultdict(list)
+
                     for task in next_tasks.values():
                         tasks_group_by[task.name].append(task.id)
 
-                    user_group_by: dict[str, list[StateUpdate]] = defaultdict(list)
                     for item in values:
-                        if not isinstance(item, dict):
-                            continue
-
-                        values = item["values"]
-                        as_node = item["as_node"]
+                        if isinstance(item, dict):
+                            values = item["values"]
+                            as_node = item["as_node"]
+                        elif isinstance(item, StateUpdate):
+                            values = item.values
+                            as_node = item.as_node
+                        else:
+                            raise InvalidUpdateError(
+                                f"Invalid update item: {item} when copying checkpoint"
+                            )
 
                         user_group = user_group_by[as_node]
                         tasks_group = tasks_group_by[as_node]
-                        
+
                         target_idx = len(user_group)
-                        task_id = tasks_group[target_idx] if target_idx < len(tasks_group) else None
+                        task_id = (
+                            tasks_group[target_idx]
+                            if target_idx < len(tasks_group)
+                            else None
+                        )
 
                         user_group_by[as_node].append(
                             StateUpdate(values=values, as_node=as_node, task_id=task_id)
@@ -1870,7 +1880,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 self.channels,
                 checkpoint,
             )
-            values, as_node = updates[0]
+            values, as_node, _ = updates[0]
             # no values, just clear all tasks
             if values is None and as_node == END:
                 if len(updates) > 1:
@@ -1992,24 +2002,84 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     )
 
             # no values, copy checkpoint
-            if values is None and as_node == "__copy__":
+            if as_node == "__copy__":
                 if len(updates) > 1:
                     raise InvalidUpdateError(
                         "Cannot copy checkpoint with multiple updates"
                     )
 
+                if saved is None:
+                    raise InvalidUpdateError("Cannot copy a non-existent checkpoint")
+
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
                 # copy checkpoint
                 next_config = await checkpointer.aput(
-                    saved.parent_config or saved.config if saved else checkpoint_config,
+                    saved.parent_config
+                    or patch_configurable(
+                        saved.config, {CONFIG_KEY_CHECKPOINT_ID: None}
+                    ),
                     next_checkpoint,
                     {
                         "source": "fork",
                         "step": step + 1,
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                        "parents": saved.metadata.get("parents", {}),
                     },
                     {},
                 )
+
+                # we want to both clone a checkpoint and update state in one go.
+                # reuse the same task ID if possible.
+                if isinstance(values, list) and len(values) > 0:
+                    # figure out the task IDs for the next update checkpoint
+                    next_tasks = prepare_next_tasks(
+                        next_checkpoint,
+                        saved.pending_writes,
+                        self.nodes,
+                        channels,
+                        managed,
+                        next_config,
+                        step + 2,
+                        step + 4,
+                        for_execution=False,
+                    )
+
+                    tasks_group_by = defaultdict(list)
+                    user_group_by: dict[str, list[StateUpdate]] = defaultdict(list)
+
+                    for task in next_tasks.values():
+                        tasks_group_by[task.name].append(task.id)
+
+                    for item in values:
+                        if isinstance(item, dict):
+                            values = item["values"]
+                            as_node = item["as_node"]
+                        elif isinstance(item, StateUpdate):
+                            values = item.values
+                            as_node = item.as_node
+                        else:
+                            raise InvalidUpdateError(
+                                f"Invalid update item: {item} when copying checkpoint"
+                            )
+
+                        user_group = user_group_by[as_node]
+                        tasks_group = tasks_group_by[as_node]
+
+                        target_idx = len(user_group)
+                        task_id = (
+                            tasks_group[target_idx]
+                            if target_idx < len(tasks_group)
+                            else None
+                        )
+
+                        user_group_by[as_node].append(
+                            StateUpdate(values=values, as_node=as_node, task_id=task_id)
+                        )
+
+                    return await aperform_superstep(
+                        patch_checkpoint_map(next_config, saved.metadata),
+                        [item for lst in user_group_by.values() for item in lst],
+                    )
+
                 return patch_checkpoint_map(
                     next_config, saved.metadata if saved else None
                 )
