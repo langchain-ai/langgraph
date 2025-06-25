@@ -1,15 +1,6 @@
----
-search:
-  boost: 2
-tags:
-  - agent
-hide:
-  - tags
----
+# Context engineering
 
-# Context
-
-Agents often require more than a list of messages to function effectively. They need **context**.
+**Context engineering** is the practice of building dynamic systems that provide the right information and tools, in the right format, so that a language model can plausibly accomplish a task.
 
 Context includes *any* data outside the message list that can shape agent behavior or tool execution. This can be:
 
@@ -22,8 +13,8 @@ LangGraph provides **three** primary ways to supply context:
 | Type                                                                         | Description                                   | Mutable? | Lifetime                |
 |------------------------------------------------------------------------------|-----------------------------------------------|----------|-------------------------|
 | [**Config**](#config-static-context)                                         | data passed at the start of a run             | ❌        | per run                 |
-| [**State**](#state-mutable-context)                                          | dynamic data that can change during execution | ✅        | per run or conversation |
-| [**Long-term Memory (Store)**](#long-term-memory-cross-conversation-context) | data that can be shared between conversations | ✅        | across conversations    |
+| [**Short-term memory (State)**](#state-mutable-context)                      | dynamic data that can change during execution | ✅        | per run or conversation |
+| [**Long-term memory (Store)**](#long-term-memory-cross-conversation-context) | data that can be shared between conversations | ✅        | across conversations    |
 
 You can use context to:
 
@@ -44,46 +35,80 @@ Specify configuration using a key called **"configurable"** which is reserved
 for this purpose:
 
 ```python
-agent.invoke(
-    {"messages": [{"role": "user", "content": "hi!"}]},
+graph.invoke( # (1)!
+    {"messages": [{"role": "user", "content": "hi!"}]}, # (2)!
     # highlight-next-line
-    config={"configurable": {"user_id": "user_123"}}
+    config={"configurable": {"user_id": "user_123"}} # (3)!
 )
 ```
+
+1. This is the invocation of the agent or graph. The `invoke` method runs the underlying graph with the provided input.
+2. This example uses messages as an input, which is common, but your application may use different input structures.
+3. This is where you pass the configuration data. The `config` parameter allows you to provide additional context that the agent can use during its execution.
 
 ### State (mutable context)
 
-State acts as short-term memory during a run. It holds dynamic data that can evolve during execution, such as values derived from tools or LLM outputs.
+State acts as [short-term memory](../concepts/memory.md) during a run. It holds dynamic data that can evolve during execution, such as values derived from tools or LLM outputs.
 
-```python
-class CustomState(AgentState):
-    # highlight-next-line
-    user_name: str
+=== "In an agent"
 
-agent = create_react_agent(
-    # Other agent parameters...
-    # highlight-next-line
-    state_schema=CustomState,
-)
+    ```python
+    class CustomState(AgentState):
+        # highlight-next-line
+        user_name: str
 
-agent.invoke({
-    "messages": "hi!",
-    "user_name": "Jane"
-})
-```
+    agent = create_react_agent(
+        # Other agent parameters...
+        # highlight-next-line
+        state_schema=CustomState,
+    )
+
+    agent.invoke({
+        "messages": "hi!",
+        "user_name": "Jane"
+    })
+    ```
+
+=== "In a workflow"
+
+    ```python
+    from typing import Annotated
+    from langgraph.prebuilt import InjectedState, create_react_agent
+
+    class CustomState(AgentState):
+        user_id: str
+
+    def get_user_info(
+        state: Annotated[CustomState, InjectedState]
+    ) -> str:
+        """Look up user info."""
+        user_id = state["user_id"]
+        return "User is John Smith" if user_id == "user_123" else "Unknown user"
+
+    agent = create_react_agent(
+        model="anthropic:claude-3-7-sonnet-latest",
+        tools=[get_user_info],
+        state_schema=CustomState,
+    )
+
+    agent.invoke({
+        "messages": "look up user information",
+        "user_id": "user_123"
+    })
+    ```
 
 !!! tip "Turning on memory"
 
-    Please see the [memory guide](../how-tos/memory/add-memory.md) for more details on how to enable memory. This is a powerful feature that allows you to persist the agent's state across multiple invocations.
-    Otherwise, the state is scoped only to a single agent run.
-
+    Please see the [memory guide](../how-tos/memory/add-memory.md) for more details on how to enable memory. This is a powerful feature that allows you to persist the agent's state across multiple invocations. Otherwise, the state is scoped only to a single run.
 
 
 ### Long-Term Memory (cross-conversation context)
 
 For context that spans *across* conversations or sessions, LangGraph allows access to **long-term memory** via a `store`. This can be used to read or update persistent facts (e.g., user profiles, preferences, prior interactions). For more, see the [Memory guide](../how-tos/memory/add-memory.md).
 
-## Customizing Prompts with Context { #prompts }
+## Using with agents { #agents }
+
+### Customizing prompts with context { #prompts }
 
 Prompts define how the agent behaves. To incorporate runtime context, you can dynamically generate prompts based on the agent's state or config.
 
@@ -162,7 +187,7 @@ Common use cases:
     })
     ```
 
-## Accessing Context in Tools { #tools }
+## Accessing context in tools { #tools }
 
 Tools can access context through special parameter **annotations**.
 
@@ -185,17 +210,6 @@ Tools can access context through special parameter **annotations**.
         # highlight-next-line
         user_id = config["configurable"].get("user_id")
         return "User is John Smith" if user_id == "user_123" else "Unknown user"
-
-    agent = create_react_agent(
-        model="anthropic:claude-3-7-sonnet-latest",
-        tools=[get_user_info],
-    )
-
-    agent.invoke(
-        {"messages": [{"role": "user", "content": "look up user information"}]},
-        # highlight-next-line
-        config={"configurable": {"user_id": "user_123"}}
-    )
     ```
 
 === "Using State"
