@@ -2203,14 +2203,12 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         self,
         config: RunnableConfig,
         *,
-        stream_mode: StreamMode | list[StreamMode],
+        stream_mode: StreamMode | Sequence[StreamMode],
         print_mode: StreamMode | Sequence[StreamMode],
         output_keys: str | Sequence[str] | None,
         interrupt_before: All | Sequence[str] | None,
         interrupt_after: All | Sequence[str] | None,
-        debug: bool | None,
     ) -> tuple[
-        bool,
         set[StreamMode],
         str | Sequence[str],
         All | Sequence[str],
@@ -2221,7 +2219,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
     ]:
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
-        debug = debug if debug is not None else self.debug
         if output_keys is None:
             output_keys = self.stream_channels_asis
         else:
@@ -2258,7 +2255,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         else:
             cache = self.cache
         return (
-            debug,
             stream_modes,
             output_keys,
             interrupt_before,
@@ -2273,7 +2269,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         input: InputT,
         config: RunnableConfig | None = None,
         *,
-        stream_mode: StreamMode | list[StreamMode] | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
         print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -2309,7 +2305,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             checkpoint_during: Whether to checkpoint intermediate steps, defaults to False. If False, only the final checkpoint is saved.
-            debug: Whether to print debug information during execution, defaults to False.
             subgraphs: Whether to stream events from inside subgraphs, defaults to False.
                 If True, the events will be emitted as tuples `(namespace, data)`,
                 or `(namespace, mode, data)` if `stream_mode` is a list,
@@ -2330,6 +2325,8 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 if config is not None and CONFIG_KEY_TASK_ID in config.get(CONF, {})
                 else self.stream_mode
             )
+        if debug or self.debug:
+            print_mode = ["updates", "values"]
 
         stream = SyncQueue()
 
@@ -2344,7 +2341,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         try:
             # assign defaults
             (
-                debug,
                 stream_modes,
                 output_keys,
                 interrupt_before_,
@@ -2359,7 +2355,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 output_keys=output_keys,
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
-                debug=debug,
             )
             # set up subgraph checkpointing
             if self.checkpointer is True:
@@ -2407,7 +2402,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 interrupt_before=interrupt_before_,
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
-                debug=debug,
                 checkpoint_during=checkpoint_during
                 if checkpoint_during is not None
                 else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, True),
@@ -2497,7 +2491,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         input: InputT,
         config: RunnableConfig | None = None,
         *,
-        stream_mode: StreamMode | list[StreamMode] | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
         print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -2532,7 +2526,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             checkpoint_during: Whether to checkpoint intermediate steps, defaults to False. If False, only the final checkpoint is saved.
-            debug: Whether to print debug information during execution, defaults to False.
             subgraphs: Whether to stream events from inside subgraphs, defaults to False.
                 If True, the events will be emitted as tuples `(namespace, data)`,
                 or `(namespace, mode, data)` if `stream_mode` is a list,
@@ -2553,6 +2546,8 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 if config is not None and CONFIG_KEY_TASK_ID in config.get(CONF, {})
                 else self.stream_mode
             )
+        if debug or self.debug:
+            print_mode = ["updates", "values"]
 
         stream = AsyncQueue()
         aioloop = asyncio.get_running_loop()
@@ -2586,7 +2581,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         try:
             # assign defaults
             (
-                debug,
                 stream_modes,
                 output_keys,
                 interrupt_before_,
@@ -2601,7 +2595,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 output_keys=output_keys,
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
-                debug=debug,
             )
             # set up subgraph checkpointing
             if self.checkpointer is True:
@@ -2652,7 +2645,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 interrupt_before=interrupt_before_,
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
-                debug=debug,
                 checkpoint_during=checkpoint_during
                 if checkpoint_during is not None
                 else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, True),
@@ -2748,7 +2740,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        debug: bool | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Run the graph with a single input and config.
@@ -2761,7 +2752,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
             output_keys: Optional. The output keys to retrieve from the graph run.
             interrupt_before: Optional. The nodes to interrupt the graph run before.
             interrupt_after: Optional. The nodes to interrupt the graph run after.
-            debug: Optional. Enable debug mode for the graph run.
             **kwargs: Additional keyword arguments to pass to the graph run.
 
         Returns:
@@ -2777,22 +2767,30 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         for chunk in self.stream(
             input,
             config,
-            stream_mode=stream_mode,
+            stream_mode=["updates", "values"]
+            if stream_mode == "values"
+            else stream_mode,
             print_mode=print_mode,
             output_keys=output_keys,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
-            debug=debug,
             **kwargs,
         ):
             if stream_mode == "values":
+                if len(chunk) == 2:
+                    mode, payload = cast(tuple[StreamMode, Any], chunk)
+                else:
+                    _, mode, payload = cast(
+                        tuple[tuple[str, ...], StreamMode, Any], chunk
+                    )
                 if (
-                    isinstance(chunk, dict)
-                    and (ints := chunk.get(INTERRUPT)) is not None
+                    mode == "updates"
+                    and isinstance(payload, dict)
+                    and (ints := payload.get(INTERRUPT)) is not None
                 ):
                     interrupts.extend(ints)
-                else:
-                    latest = chunk
+                elif mode == "values":
+                    latest = payload
             else:
                 chunks.append(chunk)
 
@@ -2817,7 +2815,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        debug: bool | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Asynchronously invoke the graph on a single input.
@@ -2830,7 +2827,6 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
             output_keys: Optional. The output keys to include in the result. Default is None.
             interrupt_before: Optional. The nodes to interrupt before. Default is None.
             interrupt_after: Optional. The nodes to interrupt after. Default is None.
-            debug: Optional. Whether to enable debug mode. Default is None.
             **kwargs: Additional keyword arguments.
 
         Returns:
@@ -2847,22 +2843,30 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         async for chunk in self.astream(
             input,
             config,
-            stream_mode=stream_mode,
+            stream_mode=["updates", "values"]
+            if stream_mode == "values"
+            else stream_mode,
             print_mode=print_mode,
             output_keys=output_keys,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
-            debug=debug,
             **kwargs,
         ):
             if stream_mode == "values":
+                if len(chunk) == 2:
+                    mode, payload = cast(tuple[StreamMode, Any], chunk)
+                else:
+                    _, mode, payload = cast(
+                        tuple[tuple[str, ...], StreamMode, Any], chunk
+                    )
                 if (
-                    isinstance(chunk, dict)
-                    and (ints := chunk.get(INTERRUPT)) is not None
+                    mode == "updates"
+                    and isinstance(payload, dict)
+                    and (ints := payload.get(INTERRUPT)) is not None
                 ):
                     interrupts.extend(ints)
-                else:
-                    latest = chunk
+                elif mode == "values":
+                    latest = payload
             else:
                 chunks.append(chunk)
 

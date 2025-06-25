@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import asdict
-from pprint import pformat
 from typing import Any
 from uuid import UUID
 
-from langchain_core.runnables.config import RunnableConfig
 from typing_extensions import TypedDict
 
 from langgraph.channels.base import BaseChannel
@@ -25,7 +22,7 @@ from langgraph.constants import (
 )
 from langgraph.pregel.io import read_channels
 from langgraph.types import PregelExecutableTask, PregelTask, StateSnapshot
-from langgraph.utils.config import patch_checkpoint_map
+from langgraph.utils.config import RunnableConfig, patch_checkpoint_map
 
 
 class TaskPayload(TypedDict):
@@ -176,52 +173,6 @@ def map_debug_checkpoint(
             for t in tasks_w_writes(tasks, pending_writes, task_states, output_keys)
         ],
     }
-
-
-def print_step_tasks(step: int, next_tasks: list[PregelExecutableTask]) -> None:
-    n_tasks = len(next_tasks)
-    print(
-        f"{get_colored_text(f'[{step}:tasks]', color='blue')} "
-        + get_bolded_text(
-            f"Starting {n_tasks} task{'s' if n_tasks != 1 else ''} for step {step}:\n"
-        )
-        + "\n".join(
-            f"- {get_colored_text(task.name, 'green')} -> {pformat(task.input)}"
-            for task in next_tasks
-        )
-    )
-
-
-def print_step_writes(
-    step: int, writes: Sequence[tuple[str, Any]], whitelist: Sequence[str]
-) -> None:
-    by_channel: dict[str, list[Any]] = defaultdict(list)
-    for channel, value in writes:
-        if channel in whitelist:
-            by_channel[channel].append(value)
-    print(
-        f"{get_colored_text(f'[{step}:writes]', color='blue')} "
-        + get_bolded_text(
-            f"Finished step {step} with writes to {len(by_channel)} channel{'s' if len(by_channel) != 1 else ''}:\n"
-        )
-        + "\n".join(
-            f"- {get_colored_text(name, 'yellow')} -> {', '.join(pformat(v) for v in vals)}"
-            for name, vals in by_channel.items()
-        )
-    )
-
-
-def print_step_checkpoint(
-    metadata: CheckpointMetadata,
-    channels: Mapping[str, BaseChannel],
-    whitelist: Sequence[str],
-) -> None:
-    step = metadata["step"]
-    print(
-        f"{get_colored_text(f'[{step}:checkpoint]', color='blue')} "
-        + get_bolded_text(f"State at the end of step {step}:\n")
-        + pformat(read_channels(channels, whitelist), depth=3)
-    )
 
 
 def tasks_w_writes(
