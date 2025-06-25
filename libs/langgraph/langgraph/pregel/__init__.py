@@ -219,9 +219,9 @@ class NodeBuilder:
         *channels: str,
     ) -> Self:
         """Adds the specified channels to read from, without subscribing to them."""
-        assert isinstance(
-            self._channels, list
-        ), "Cannot read additional channels when subscribed to single channels"
+        assert isinstance(self._channels, list), (
+            "Cannot read additional channels when subscribed to single channels"
+        )
         self._channels.extend(channels)
         return self
 
