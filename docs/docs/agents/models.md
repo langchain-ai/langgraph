@@ -1,6 +1,6 @@
 # Models
 
-LangGraph provides built-in support for LLMs (language models) through the LangChain library. This allows you to easily integrate various LLMs into your agents and workflows.
+LangGraph provides built-in support for LLMs (language models) via the LangChain library. This makes it easy to integrate various LLMs into your agents and workflows.
 
 
 ## Initializing a model
@@ -139,7 +139,7 @@ See this [guide](https://python.langchain.com/docs/how_to/fallbacks/#fallback-to
 
 ### Rate limiting
 
-Langchain comes with a built-in in memory rate limiter. This rate limiter is thread safe and can be shared by multiple threads in the same process.
+Langchain includes a built-in in memory rate limiter. This rate limiter is thread safe and can be shared by multiple threads in the same process.
 
 ```python
 from langchain_core.rate_limiters import InMemoryRateLimiter
@@ -175,5 +175,5 @@ If your desired LLM isn't officially supported by LangChain, consider these opti
 - [Structured outputs](https://python.langchain.com/docs/how_to/structured_output/)
 - [Model integration directory](https://python.langchain.com/docs/integrations/chat/)
 - [Force model to call a specific tool](https://python.langchain.com/docs/how_to/tool_choice/)
-- [All chat model how to guides](https://python.langchain.com/docs/how_to/#chat-models)
+- [All chat model how-to guides](https://python.langchain.com/docs/how_to/#chat-models)
 - [Chat model integrations](https://python.langchain.com/docs/integrations/chat/)
