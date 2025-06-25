@@ -1,4 +1,4 @@
-# Human-in-the-loop API
+# Human-in-the-loop in LangGraph Server
 
 To review, edit, and approve tool calls in an agent or workflow, use LangGraph's [human-in-the-loop](../../concepts/human_in_the_loop.md) features.
 
