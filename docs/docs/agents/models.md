@@ -1,23 +1,22 @@
----
-search:
-  boost: 2
-tags:
-  - anthropic
-  - openai
-  - agent
-hide:
-  - tags
----
-
 # Models
 
-This guide is a quick reference for using LangChain models with LangGraph.
+LangGraph provides built-in support for LLMs (language models) through the LangChain library. This allows you to easily integrate various LLMs into your agents and workflows.
 
-## Tool calling support
+For more detailed documentation about how to work with LangChain LLMs, refer to:
 
-To enable tool-calling agents, the underlying LLM must support [tool calling](https://python.langchain.com/docs/concepts/tool_calling/).
+- [How to use chat models](https://python.langchain.com/docs/how_to/#chat-models)
+- [Chat model integrations](https://python.langchain.com/docs/integrations/chat/)
 
-Compatible models can be found in the [LangChain integrations directory](https://python.langchain.com/docs/integrations/chat/).
+## Initializing a model
+
+The [`init_chat_model`](https://python.langchain.com/docs/how_to/chat_models_universal_init/) utility simplifies model initialization with configurable parameters:
+
+{!snippets/chat_model_tabs.md!}
+
+Refer to the [API reference](https://python.langchain.com/api_reference/langchain/chat_models/langchain.chat_models.base.init_chat_model.html) for advanced options.
+
+
+## Use in an agent
 
 ## Specifying a model by name
 
@@ -100,107 +99,13 @@ You can configure an agent with a model name string:
     )
     ```
 
+## Tool calling support
 
-## Using `init_chat_model`
+If you are building an agent or workflow that requires the model to call external tools, ensure that the underlying
+language model supports [tool calling](../concepts/tools.md).
 
-The [`init_chat_model`](https://python.langchain.com/docs/how_to/chat_models_universal_init/) utility simplifies model initialization with configurable parameters:
+Compatible models can be found in the [LangChain integrations directory](https://python.langchain.com/docs/integrations/chat/).
 
-=== "OpenAI"
-
-    ```
-    pip install -U "langchain[openai]"
-    ```
-    ```python
-    import os
-    from langchain.chat_models import init_chat_model
-
-    os.environ["OPENAI_API_KEY"] = "sk-..."
-
-    model = init_chat_model(
-        "openai:gpt-4.1",
-        temperature=0,
-        # other parameters
-    )
-    ```
-
-=== "Anthropic"
-
-    ```
-    pip install -U "langchain[anthropic]"
-    ```
-    ```python
-    import os
-    from langchain.chat_models import init_chat_model
-
-    os.environ["ANTHROPIC_API_KEY"] = "sk-..."
-
-    model = init_chat_model(
-        "anthropic:claude-3-5-sonnet-latest",
-        temperature=0,
-        # other parameters
-    )
-    ```
-
-=== "Azure"
-
-    ```
-    pip install -U "langchain[openai]"
-    ```
-    ```python
-    import os
-    from langchain.chat_models import init_chat_model
-
-    os.environ["AZURE_OPENAI_API_KEY"] = "..."
-    os.environ["AZURE_OPENAI_ENDPOINT"] = "..."
-    os.environ["OPENAI_API_VERSION"] = "2025-03-01-preview"
-
-    model = init_chat_model(
-        "azure_openai:gpt-4.1",
-        azure_deployment=os.environ["AZURE_OPENAI_DEPLOYMENT_NAME"],
-        temperature=0,
-        # other parameters
-    )
-    ```
-
-=== "Google Gemini"
-
-    ```
-    pip install -U "langchain[google-genai]"
-    ```
-    ```python
-    import os
-    from langchain.chat_models import init_chat_model
-
-    os.environ["GOOGLE_API_KEY"] = "..."
-
-    model = init_chat_model(
-        "google_genai:gemini-2.0-flash",
-        temperature=0,
-        # other parameters
-    )
-    ```
-
-=== "AWS Bedrock"
-
-    ```
-    pip install -U "langchain[aws]"
-    ```
-    ```python
-    from langchain.chat_models import init_chat_model
-
-    # Follow the steps here to configure your credentials:
-    # https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started.html
-
-    model = init_chat_model(
-        "anthropic.claude-3-5-sonnet-20240620-v1:0",
-        model_provider="bedrock_converse",
-        temperature=0,
-        # other parameters
-    )
-    ```
-
-
-Refer to the [API reference](https://python.langchain.com/api_reference/langchain/chat_models/langchain.chat_models.base.init_chat_model.html) for advanced options.
 
 ## Using provider-specific LLMs 
 
@@ -227,7 +132,9 @@ agent = create_react_agent(
 
     The example above uses `ChatAnthropic`, which is already supported by `init_chat_model`. This pattern is shown to illustrate how to manually instantiate a model not available through init_chat_model.
 
-## Disable streaming
+## Advanced model configuration
+
+### Disable streaming
 
 To disable streaming of the individual LLM tokens, set `disable_streaming=True` when initializing the model:
 
@@ -257,7 +164,7 @@ To disable streaming of the individual LLM tokens, set `disable_streaming=True` 
 
 Refer to the [API reference](https://python.langchain.com/api_reference/core/language_models/langchain_core.language_models.chat_models.BaseChatModel.html#langchain_core.language_models.chat_models.BaseChatModel.disable_streaming) for more information on `disable_streaming`
 
-## Adding model fallbacks
+### Adding model fallbacks
 
 You can add a fallback to a different model or a different LLM provider using `model.with_fallbacks([...])`:
 
@@ -292,9 +199,21 @@ You can add a fallback to a different model or a different LLM provider using `m
 
 See this [guide](https://python.langchain.com/docs/how_to/fallbacks/#fallback-to-better-model) for more information on model fallbacks.
 
+## Bringing your own model
+
+If you want to use a model that is not officially supported by LangChain, you can still integrate it into your LangGraph application.
+
+To use a non-LangChain model, either:
+
+* Implement a custom LangChain-compatible model following the [BaseChatModel](https://python.langchain.com/api_reference/core/language_models/langchain_core.language_models.chat_models.BaseChatModel.html) interface, or
+* Employ custom streaming using the `StreamWriter` utility. Refer to [custom streaming guidance](../how-tos/streaming.md#use-with-any-llm).
+
+
 ## Additional resources
 
 - [Model integration directory](https://python.langchain.com/docs/integrations/chat/)
 - [Universal initialization with `init_chat_model`](https://python.langchain.com/docs/how_to/chat_models_universal_init/)
 - [Multimodal inputs](https://python.langchain.com/docs/how_to/multimodal_inputs/)
 - [Handle rate limiting](https://python.langchain.com/docs/how_to/chat_model_rate_limiting/)
+
+
