@@ -13,11 +13,7 @@ and use them via a structured API.
 
 [LangGraph Server](./langgraph_server.md) implements MCP using the [Streamable HTTP transport](https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/transports/#streamable-http). This allows LangGraph **agents** to be exposed as **MCP tools**, making them usable with any MCP-compliant client supporting Streamable HTTP.
 
-The MCP endpoint is available at:
-
-```
-/mcp
-```
+The MCP endpoint is available at: `/mcp`
 
 on [LangGraph Server](./langgraph_server.md).
 
