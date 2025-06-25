@@ -3169,7 +3169,8 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
     assert app.get_graph(xray=True).draw_mermaid() == snapshot
     assert app.invoke(
-        {"my_key": "my value", "never_called": never_called}, debug=True
+        {"my_key": "my value", "never_called": never_called},
+        print_mode=["values", "updates"],
     ) == {
         "my_key": "my value there and back again",
         "never_called": never_called,
