@@ -353,3 +353,59 @@ async def test_async_search_with_ttl(temp_db_file: str) -> None:
         # Search after expiration
         results = await store.asearch(("test",), filter={"value": "apple"})
         assert len(results) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.flaky(retries=3)
+async def test_async_asearch_refresh_ttl(temp_db_file: str) -> None:
+    """Test TTL refresh on asearch with async API."""
+    ttl_seconds = 4.0  # Increased TTL for less sensitivity to timing
+    ttl_minutes = ttl_seconds / 60.0
+
+    async with AsyncSqliteStore.from_conn_string(
+        temp_db_file, ttl={"default_ttl": ttl_minutes, "refresh_on_read": True}
+    ) as store:
+        await store.setup()
+
+        namespace = ("docs", "user1")
+        # t=0: items put, expire at t=4.0s
+        await store.aput(namespace, "item1", {"text": "content1", "id": 1})
+        await store.aput(namespace, "item2", {"text": "content2", "id": 2})
+
+        # t=3.0s: (after sleep ttl_seconds * 0.75 = 3s)
+        await asyncio.sleep(ttl_seconds * 0.75)
+
+        # Perform asearch with refresh_ttl=True for item1.
+        # item1's TTL should be refreshed. New expiry: t=3.0s + 4.0s = t=7.0s.
+        # item2's TTL is not affected. Expires at t=4.0s.
+        searched_items = await store.asearch(namespace, filter={"id": 1}, refresh_ttl=True)
+        assert len(searched_items) == 1
+        assert searched_items[0].key == "item1"
+
+        # t=5.0s: (after sleep ttl_seconds * 0.5 = 2s more. Total elapsed: 3s + 2s = 5s)
+        await asyncio.sleep(ttl_seconds * 0.5)
+        # At this point:
+        # - item1 (refreshed by asearch) should expire at t=7.0s. Should be ALIVE.
+        # - item2 (original TTL) should have expired at t=4.0s. Should be GONE after sweep.
+
+        await store.sweep_ttl()
+
+        # Check item1 (should exist due to asearch refresh)
+        item1_check1 = await store.aget(namespace, "item1", refresh_ttl=False)
+        assert item1_check1 is not None, "Item1 should exist after asearch refresh and first sweep"
+        assert item1_check1.value["text"] == "content1"
+
+        # Check item2 (should be gone)
+        item2_check1 = await store.aget(namespace, "item2", refresh_ttl=False)
+        assert item2_check1 is None, "Item2 should be gone after its original TTL expired"
+
+        # t=7.5s: (after sleep ttl_seconds * 0.625 = 2.5s more. Total elapsed: 5s + 2.5s = 7.5s)
+        await asyncio.sleep(ttl_seconds * 0.625)
+        # At this point:
+        # - item1 (refreshed by asearch, expired at t=7.0s) should be GONE after sweep.
+
+        await store.sweep_ttl()
+
+        # Check item1 again (should be gone now)
+        item1_final_check = await store.aget(namespace, "item1", refresh_ttl=False)
+        assert item1_final_check is None, "Item1 should be gone after its refreshed TTL expired"

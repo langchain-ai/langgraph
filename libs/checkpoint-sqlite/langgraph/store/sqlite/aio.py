@@ -508,7 +508,12 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
             results: List to store results in.
             cur: Database cursor.
         """
-        queries, embedding_requests = self._prepare_batch_search_queries(search_ops)
+        # _prepare_batch_search_queries now returns:
+        # list[tuple[str, list[None | str | list[float]], bool]], list[tuple[int, str]]
+        # where bool is needs_ttl_refresh
+        prepared_queries, embedding_requests = self._prepare_batch_search_queries(
+            search_ops
+        )
 
         # Setup dot_product function if it doesn't exist
         if embedding_requests and self.embeddings:
@@ -516,23 +521,61 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
                 [query for _, query in embedding_requests]
             )
 
-            for (idx, _), embedding in zip(embedding_requests, vectors):
-                _params_list: list = queries[idx][1]
-                for i, param in enumerate(_params_list):
-                    if param is _PLACEHOLDER:
-                        _params_list[i] = sqlite_vec.serialize_float32(embedding)
+            for (embed_req_idx, _), embedding in zip(embedding_requests, vectors):
+                # Find the corresponding query in prepared_queries
+                # The embed_req_idx is the original index in search_ops, which should map to prepared_queries
+                if embed_req_idx < len(prepared_queries):
+                    _params_list: list = prepared_queries[embed_req_idx][1]
+                    for i, param in enumerate(_params_list):
+                        if param is _PLACEHOLDER:
+                            _params_list[i] = sqlite_vec.serialize_float32(embedding)
+                else:
+                    logger.warning(
+                        f"Embedding request index {embed_req_idx} out of bounds for prepared_queries."
+                    )
 
-        for (idx, _), (query, params) in zip(search_ops, queries):
+
+        for (original_op_idx, _), (query, params, needs_refresh) in zip(
+            search_ops, prepared_queries
+        ):
             await cur.execute(query, params)
             rows = await cur.fetchall()
 
-            if "score" in query:
+            if needs_refresh and rows and self.ttl_config:
+                keys_to_refresh = []
+                for row_data in rows:
+                    # Assuming row_data[0] is prefix (text), row_data[1] is key (text)
+                    # These are raw text values directly from the DB.
+                    keys_to_refresh.append((row_data[0], row_data[1]))
+
+                if keys_to_refresh:
+                    updates_by_prefix = defaultdict(list)
+                    for prefix_text, key_text in keys_to_refresh:
+                        updates_by_prefix[prefix_text].append(key_text)
+
+                    for prefix_text, key_list in updates_by_prefix.items():
+                        placeholders = ",".join(["?"] * len(key_list))
+                        update_query = f"""
+                            UPDATE store
+                            SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
+                            WHERE prefix = ? AND key IN ({placeholders}) AND ttl_minutes IS NOT NULL
+                        """
+                        update_params = (prefix_text, *key_list)
+                        try:
+                            await cur.execute(update_query, update_params)
+                        except Exception as e:
+                            logger.error(
+                                f"Error during TTL refresh update for search: {e}"
+                            )
+
+            # Process rows into items
+            if "score" in query: # Vector search query
                 items = [
                     _row_to_search_item(
-                        _decode_ns_text(row[0]),
+                        _decode_ns_text(row[0]), # prefix
                         {
-                            "key": row[1],
-                            "value": row[2],
+                            "key": row[1], # key
+                            "value": row[2], # value
                             "created_at": row[3],
                             "updated_at": row[4],
                             "expires_at": row[5] if len(row) > 5 else None,
@@ -546,10 +589,10 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
             else:  # Regular search query
                 items = [
                     _row_to_search_item(
-                        _decode_ns_text(row[0]),
+                        _decode_ns_text(row[0]), # prefix
                         {
-                            "key": row[1],
-                            "value": row[2],
+                            "key": row[1], # key
+                            "value": row[2], # value
                             "created_at": row[3],
                             "updated_at": row[4],
                             "expires_at": row[5] if len(row) > 5 else None,
@@ -560,7 +603,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
                     for row in rows
                 ]
 
-            results[idx] = items
+            results[original_op_idx] = items
 
     async def _batch_list_namespaces_ops(
         self,
