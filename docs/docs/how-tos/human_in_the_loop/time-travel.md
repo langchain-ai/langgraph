@@ -1,12 +1,16 @@
 # Use time-travel
 
-To use time-travel in LangGraph:
+To use [time-travel](../../concepts/time-travel.md) in LangGraph:
 
 1. [Run the graph](#1-run-the-graph) with initial inputs using [`invoke`][langgraph.graph.state.CompiledStateGraph.invoke] or [`stream`][langgraph.graph.state.CompiledStateGraph.stream] methods.
 2. [Identify a checkpoint in an existing thread](#2-identify-a-checkpoint): Use the [`get_state_history()`][langgraph.graph.state.CompiledStateGraph.get_state_history] method to retrieve the execution history for a specific `thread_id` and locate the desired `checkpoint_id`.  
    Alternatively, set a [breakpoint](../../concepts/breakpoints.md) before the node(s) where you want execution to pause. You can then find the most recent checkpoint recorded up to that breakpoint.
 3. [Update the graph state (optional)](#3-update-the-state-optional): Use the [`update_state`][langgraph.graph.state.CompiledStateGraph.update_state] method to modify the graph's state at the checkpoint and resume execution from alternative state.
 4. [Resume execution from the checkpoint](#4-resume-execution-from-the-checkpoint): Use the `invoke` or `stream` methods with an input of `None` and a configuration containing the appropriate `thread_id` and `checkpoint_id`.
+
+!!! tip
+
+    For a conceptual overview of time-travel, see [Time travel](../../concepts/time-travel.md).
 
 ## In a workflow
 

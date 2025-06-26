@@ -1,10 +1,16 @@
-# Breakpoints
+# Set breakpoints using Server API
 
 [Breakpoints](../../concepts/breakpoints.md) pause graph execution at defined points and let you step through each stage. They use LangGraph's [**persistence layer**](../../concepts/persistence.md), which saves the graph state after each step.
 
-With breakpoints, you can inspect the graph's state and node inputs at any point. Execution pauses **indefinitely** until you resume, as the checkpointer preserves the state.
+With breakpoints, you can inspect the graph's state and node inputs at any point. Execution pauses indefinitely until you resume, as the checkpointer preserves the state.
 
-## Set breakpoints
+!!! tip
+
+    For conceptual information on breakpoints, see [Breakpoints](../../concepts/breakpoints.md).
+
+## Set static breakpoints
+
+Static breakpoints are triggered either before or after a node executes. You can set static breakpoints by specifying `interrupt_before` and `interrupt_after` at compile time or run time.
 
 === "Compile time"
 
@@ -78,10 +84,9 @@ With breakpoints, you can inspect the graph's state and node inputs at any point
         }"
         ```
 
-!!! tip
+## Example
 
-    This example shows how to add **static** breakpoints. See [this guide](../../how-tos/human_in_the_loop/breakpoints.md) for more options for how to add breakpoints.
-
+This example shows how to add **static** breakpoints. See [Use breakpoints](../../how-tos/human_in_the_loop/breakpoints.md) for more options on adding breakpoints.
 
 === "Python"
 
@@ -178,7 +183,3 @@ With breakpoints, you can inspect the graph's state and node inputs at any point
       \"assistant_id\": \"agent\"
     }"
     ```
-
-## Learn more
-
-- [**LangGraph breakpoints guide**](../../how-tos/human_in_the_loop/breakpoints.md): learn more about adding breakpoints in LangGraph.

@@ -1,6 +1,9 @@
-# Use breakpoints
+# Set breakpoints
 
-## Requirements
+There are two places where you can set breakpoints:
+
+1. **Before** or **after** a node executes by setting breakpoints at **compile time** or **run time**. We call these [**static breakpoints**](#static-breakpoints).
+2. **Inside** a node using the `NodeInterrupt` exception. We call these [**dynamic breakpoints**](#dynamic-breakpoints).
 
 To use breakpoints, you will need to:
 
@@ -9,16 +12,13 @@ To use breakpoints, you will need to:
 3. **Run the graph** with a [**thread ID**](../../concepts/persistence.md#threads) to pause execution at the breakpoint.
 4. **Resume execution** using `invoke`/`ainvoke`/`stream`/`astream` passing a `None` as the argument for the inputs.
 
-## Setting breakpoints
+!!! tip
 
-There are two places where you can set breakpoints:
-
-1. **Before** or **after** a node executes by setting breakpoints at **compile time** or **run time**. We call these [**static breakpoints**](#static-breakpoints).
-2. **Inside** a node using the `NodeInterrupt` exception. We call these [**dynamic breakpoints**](#dynamic-breakpoints).
+    For a conceptual overview of breakpoints, see [Breakpoints](../../concepts/breakpoints.md).
 
 ## Static breakpoints
 
-Static breakpoints are triggered either **before** or **after** a node executes. You can set static breakpoints by specifying `interrupt_before` and `interrupt_after` at **"compile" time** or **run time**.
+Static breakpoints are triggered either before or after a node executes. You can set static breakpoints by specifying `interrupt_before` and `interrupt_after` at compile time or run time.
 
 Static breakpoints can be especially useful for debugging if you want to step through the graph execution one
 node at a time or if you want to pause the graph execution at specific nodes.
