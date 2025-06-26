@@ -39,3 +39,7 @@ The Standalone Container deployment option supports both of the [server versions
 - The `Enterprise` version has custom pricing and is fully featured.
 
 For more details on feature difference, see [LangGraph Server](../concepts/langgraph_server.md#server-versions).
+
+!!! warning
+
+      The Standalone Container deployment option will not be reliably scalable in serverless settings, as it was not designed for such settings. Additionally, LangGraph Platform will not function in the scale to zero scenarios common in serverless environments.
