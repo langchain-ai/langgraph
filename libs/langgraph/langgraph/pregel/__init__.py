@@ -1587,9 +1587,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         step + 4,
                         for_execution=True,
                         store=self.store,
-                        checkpointer=self.checkpointer
-                        if isinstance(self.checkpointer, BaseCheckpointSaver)
-                        else None,
+                        checkpointer=checkpointer,
                         manager=None,
                     )
 
@@ -2045,9 +2043,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         step + 4,
                         for_execution=True,
                         store=self.store,
-                        checkpointer=self.checkpointer
-                        if isinstance(self.checkpointer, BaseCheckpointSaver)
-                        else None,
+                        checkpointer=checkpointer,
                         manager=None,
                     )
 
