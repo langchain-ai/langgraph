@@ -1443,9 +1443,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         step + 3,
                         for_execution=True,
                         store=self.store,
-                        checkpointer=self.checkpointer
-                        if isinstance(self.checkpointer, BaseCheckpointSaver)
-                        else None,
+                        checkpointer=checkpointer,
                         manager=None,
                     )
                     # apply null writes
@@ -1455,10 +1453,10 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         if w[0] == NULL_TASK_ID
                     ]:
                         apply_writes(
-                            saved.checkpoint,
+                            checkpoint,
                             channels,
                             [PregelTaskWrites((), INPUT, null_writes, [])],
-                            None,
+                            checkpointer.get_next_version,
                             self.trigger_to_nodes,
                         )
                     # apply writes from tasks that already ran
@@ -1473,19 +1471,22 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         checkpoint,
                         channels,
                         next_tasks.values(),
-                        None,
+                        checkpointer.get_next_version,
                         self.trigger_to_nodes,
                     )
                 # save checkpoint
                 next_config = checkpointer.put(
                     checkpoint_config,
-                    create_checkpoint(checkpoint, None, step),
+                    create_checkpoint(checkpoint, channels, step),
                     {
                         "source": "update",
                         "step": step + 1,
                         "parents": saved.metadata.get("parents", {}) if saved else {},
                     },
-                    {},
+                    get_new_channel_versions(
+                        checkpoint_previous_versions,
+                        checkpoint["channel_versions"],
+                    ),
                 )
                 return patch_checkpoint_map(
                     next_config, saved.metadata if saved else None
@@ -1645,11 +1646,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     step + 3,
                     for_execution=True,
                     store=self.store,
-                    checkpointer=(
-                        self.checkpointer
-                        if isinstance(self.checkpointer, BaseCheckpointSaver)
-                        else None
-                    ),
+                    checkpointer=checkpointer,
                     manager=None,
                 )
                 # apply null writes
@@ -1657,10 +1654,10 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
                 ]:
                     apply_writes(
-                        saved.checkpoint,
+                        checkpoint,
                         channels,
                         [PregelTaskWrites((), INPUT, null_writes, [])],
-                        None,
+                        checkpointer.get_next_version,
                         self.trigger_to_nodes,
                     )
                 # apply writes
@@ -1672,7 +1669,11 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     next_tasks[tid].writes.append((k, v))
                 if tasks := [t for t in next_tasks.values() if t.writes]:
                     apply_writes(
-                        checkpoint, channels, tasks, None, self.trigger_to_nodes
+                        checkpoint,
+                        channels,
+                        tasks,
+                        checkpointer.get_next_version,
+                        self.trigger_to_nodes,
                     )
             valid_updates: list[tuple[str, dict[str, Any] | None, str | None]] = []
             if len(updates) == 1:
@@ -1901,9 +1902,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         step + 3,
                         for_execution=True,
                         store=self.store,
-                        checkpointer=self.checkpointer
-                        if isinstance(self.checkpointer, BaseCheckpointSaver)
-                        else None,
+                        checkpointer=checkpointer,
                         manager=None,
                     )
                     # apply null writes
@@ -1913,10 +1912,10 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         if w[0] == NULL_TASK_ID
                     ]:
                         apply_writes(
-                            saved.checkpoint,
+                            checkpoint,
                             channels,
                             [PregelTaskWrites((), INPUT, null_writes, [])],
-                            None,
+                            checkpointer.get_next_version,
                             self.trigger_to_nodes,
                         )
                     # apply writes from tasks that already ran
@@ -1931,19 +1930,21 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                         checkpoint,
                         channels,
                         next_tasks.values(),
-                        None,
+                        checkpointer.get_next_version,
                         self.trigger_to_nodes,
                     )
                 # save checkpoint
                 next_config = await checkpointer.aput(
                     checkpoint_config,
-                    create_checkpoint(checkpoint, None, step),
+                    create_checkpoint(checkpoint, channels, step),
                     {
                         "source": "update",
                         "step": step + 1,
                         "parents": saved.metadata.get("parents", {}) if saved else {},
                     },
-                    {},
+                    get_new_channel_versions(
+                        checkpoint_previous_versions, checkpoint["channel_versions"]
+                    ),
                 )
                 return patch_checkpoint_map(
                     next_config, saved.metadata if saved else None
@@ -2103,11 +2104,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     step + 3,
                     for_execution=True,
                     store=self.store,
-                    checkpointer=(
-                        self.checkpointer
-                        if isinstance(self.checkpointer, BaseCheckpointSaver)
-                        else None
-                    ),
+                    checkpointer=checkpointer,
                     manager=None,
                 )
                 # apply null writes
@@ -2115,10 +2112,10 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
                 ]:
                     apply_writes(
-                        saved.checkpoint,
+                        checkpoint,
                         channels,
                         [PregelTaskWrites((), INPUT, null_writes, [])],
-                        None,
+                        checkpointer.get_next_version,
                         self.trigger_to_nodes,
                     )
                 for tid, k, v in saved.pending_writes:

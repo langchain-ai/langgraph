@@ -4454,15 +4454,9 @@ def test_partial_pending_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> N
 
     # interrupt and unresolved tasks are cleared, finished tasks are kept
     assert tool_two.get_state(thread1) == StateSnapshot(
-        values={"my_key": "value ⛰️", "market": "DE"},
-        next=("tool_one",),
-        tasks=(
-            PregelTask(
-                id=AnyStr(),
-                name="tool_one",
-                path=("__pregel_push", 0, False),
-            ),
-        ),
+        values={"my_key": "value ⛰️ one", "market": "DE"},
+        next=(),
+        tasks=(),
         config={
             "configurable": {
                 "thread_id": "1",

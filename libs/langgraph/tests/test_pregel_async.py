@@ -40,7 +40,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
 )
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, PUSH, START
+from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, START
 from langgraph.errors import InvalidUpdateError, NodeInterrupt, ParentCommand
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, StateGraph
@@ -1023,18 +1023,9 @@ async def test_partial_pending_checkpoint(
     # interrupt and next tasks are cleared, finished tasks are kept
     tup_upd = await tool_two.checkpointer.aget_tuple(thread1)
     assert await tool_two.aget_state(thread1) == StateSnapshot(
-        values={"my_key": "value ⛰️", "market": "DE"},
-        next=("tool_one",),
-        tasks=(
-            PregelTask(
-                AnyStr(),
-                "tool_one",
-                (PUSH, 0, False),
-                error=None,
-                interrupts=(),
-                state=None,
-            ),
-        ),
+        values={"my_key": "value ⛰️ one", "market": "DE"},
+        next=(),
+        tasks=(),
         config=tup_upd.config,
         created_at=tup_upd.checkpoint["ts"],
         metadata={
