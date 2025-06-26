@@ -2126,7 +2126,11 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     next_tasks[tid].writes.append((k, v))
                 if tasks := [t for t in next_tasks.values() if t.writes]:
                     apply_writes(
-                        checkpoint, channels, tasks, None, self.trigger_to_nodes
+                        checkpoint,
+                        channels,
+                        tasks,
+                        checkpointer.get_next_version,
+                        self.trigger_to_nodes,
                     )
             valid_updates: list[tuple[str, dict[str, Any] | None, str | None]] = []
             if len(updates) == 1:
