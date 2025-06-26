@@ -275,7 +275,8 @@ async def test_prompt_with_store_async():
 
 @pytest.mark.parametrize("tool_style", ["openai", "anthropic"])
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_model_with_tools(tool_style: str, version: str):
+@pytest.mark.parametrize("include_builtin", [True, False])
+def test_model_with_tools(tool_style: str, version: str, include_builtin: bool):
     model = FakeToolCallingModel(tool_style=tool_style)
 
     @dec_tool
@@ -288,10 +289,27 @@ def test_model_with_tools(tool_style: str, version: str):
         """Tool 2 docstring."""
         return f"Tool 2: {some_val}"
 
+    tools = [tool1, tool2]
+    if include_builtin:
+        tools.append(
+            {
+                "type": "mcp",
+                "server_label": "atest_sever",
+                "server_url": "https://some.mcp.somewhere.com/sse",
+                "headers": {"foo": "bar"},
+                "allowed_tools": [
+                    "mcp_tool_1",
+                    "set_active_account",
+                    "get_url_markdown",
+                    "get_url_screenshot",
+                ],
+                "require_approval": "never",
+            }
+        )
     # check valid agent constructor
     agent = create_react_agent(
-        model.bind_tools([tool1, tool2]),
-        [tool1, tool2],
+        model.bind_tools(tools),
+        tools,
         version=version,
     )
     result = agent.nodes["tools"].invoke(
