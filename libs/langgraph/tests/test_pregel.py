@@ -8047,3 +8047,347 @@ def test_timeout_with_parent_command(
         graph.invoke({"value": "start"}, thread1)
     assert exc_info.value.args[0].goto == "test_cmd"
     assert exc_info.value.args[0].update == {"key": "value"}
+
+
+def test_fork_and_update_task_results(sync_checkpointer: BaseCheckpointSaver) -> None:
+    """Test forking and updating task results with state history."""
+
+    def checkpoint(values: dict[str, Any]):
+        return ("checkpoint", {"values": values})
+
+    def task(name: str, result: Any):
+        return ("task", {"name": name, "result": result})
+
+    def get_tree(history: list[StateSnapshot]) -> list:
+        """Build a tree structure from state history for comparison."""
+        if not history:
+            return []
+
+        # Build a tree structure similar to renderForks
+        node_map: dict[str, dict] = {}
+        root_nodes: list[dict] = []
+
+        # Second pass: establish parent-child relationships
+        for item in reversed(history):
+            checkpoint_id = item.config["configurable"]["checkpoint_id"]
+            parent_checkpoint_id = (
+                item.parent_config["configurable"]["checkpoint_id"]
+                if item.parent_config
+                else None
+            )
+            node_map[checkpoint_id] = {"item": item, "children": []}
+
+            parent = node_map.get(parent_checkpoint_id)
+            (parent["children"] if parent else root_nodes).append(
+                node_map[checkpoint_id]
+            )
+
+        def node_to_tree(node: dict) -> list:
+            """Convert a node to tree structure."""
+            result = [
+                checkpoint(node["item"].values),
+            ] + [
+                task(task_info.name, task_info.result)
+                for task_info in node["item"].tasks
+            ]
+
+            if len(node["children"]) > 1:
+                branches = [node_to_tree(child) for child in node["children"]]
+                return result + [branches]
+            elif len(node["children"]) == 1:
+                return result + node_to_tree(node["children"][0])
+            else:
+                return result
+
+        if len(root_nodes) == 1:
+            # Process all root nodes
+            return node_to_tree(root_nodes[0])
+
+        elif len(root_nodes) > 1:
+            # Multiple root nodes - treat as branches
+            branches = [node_to_tree(node) for node in root_nodes]
+            return branches
+        else:
+            return []
+
+    class State(TypedDict):
+        name: Annotated[str, lambda a, b: " > ".join([a, b]) if a else b]
+
+    # Define the graph with a sequence of nodes
+    def one(state: State) -> Command:
+        return Command(goto=[Send("two", {})], update={"name": "one"})
+
+    def two(state: State) -> State:
+        return {"name": "two"}
+
+    def three(state: State) -> State:
+        return {"name": "three"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("one", one)
+        .add_node("two", two)
+        .add_node("three", three)
+        .add_edge(START, "one")
+        .add_edge("one", "two")
+        .add_edge("two", "three")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+    history: list[StateSnapshot] = []
+
+    # Initial run
+    graph.invoke({"name": "start"}, config)
+    history = list(graph.get_state_history(config))
+
+    assert get_tree(history) == [
+        checkpoint({"name": ""}),
+        task("__start__", {"name": "start"}),
+        checkpoint({"name": "start"}),
+        task("one", {"name": "one"}),
+        checkpoint({"name": "start > one"}),
+        task("two", {"name": "two"}),
+        task("two", {"name": "two"}),
+        checkpoint({"name": "start > one > two > two"}),
+        task("three", {"name": "three"}),
+        checkpoint({"name": "start > one > two > two > three"}),
+    ]
+
+    # Update the start state
+    graph.invoke(
+        None,
+        graph.update_state(
+            history[4].config,
+            values=[StateUpdate(values={"name": "start*"}, as_node="__start__")],
+            as_node="__copy__",
+        ),
+    )
+
+    history = list(graph.get_state_history(config))
+    assert get_tree(history) == [
+        [
+            checkpoint({"name": ""}),
+            task("__start__", {"name": "start"}),
+            checkpoint({"name": "start"}),
+            task("one", {"name": "one"}),
+            checkpoint({"name": "start > one"}),
+            task("two", {"name": "two"}),
+            task("two", {"name": "two"}),
+            checkpoint({"name": "start > one > two > two"}),
+            task("three", {"name": "three"}),
+            checkpoint({"name": "start > one > two > two > three"}),
+        ],
+        [
+            checkpoint({"name": ""}),
+            task("__start__", {"name": "start*"}),
+            checkpoint({"name": "start*"}),
+            task("one", {"name": "one"}),
+            checkpoint({"name": "start* > one"}),
+            task("two", {"name": "two"}),
+            task("two", {"name": "two"}),
+            checkpoint({"name": "start* > one > two > two"}),
+            task("three", {"name": "three"}),
+            checkpoint({"name": "start* > one > two > two > three"}),
+        ],
+    ]
+
+    # Fork from task "one"
+    # Start from the checkpoint that has the task "one"
+    assert history[3].values == {"name": "start*"}
+    assert len(history[3].tasks) == 1
+    assert history[3].tasks[0].name == "one"
+
+    graph.invoke(
+        None,
+        graph.update_state(
+            history[3].config,
+            [StateUpdate(values={"name": "one*"}, as_node="one")],
+            "__copy__",
+        ),
+    )
+
+    history = list(graph.get_state_history(config))
+    assert get_tree(history) == [
+        [
+            checkpoint({"name": ""}),
+            task("__start__", {"name": "start"}),
+            checkpoint({"name": "start"}),
+            task("one", {"name": "one"}),
+            checkpoint({"name": "start > one"}),
+            task("two", {"name": "two"}),
+            task("two", {"name": "two"}),
+            checkpoint({"name": "start > one > two > two"}),
+            task("three", {"name": "three"}),
+            checkpoint({"name": "start > one > two > two > three"}),
+        ],
+        [
+            checkpoint({"name": ""}),
+            task("__start__", {"name": "start*"}),
+            [
+                [
+                    checkpoint({"name": "start*"}),
+                    task("one", {"name": "one"}),
+                    checkpoint({"name": "start* > one"}),
+                    task("two", {"name": "two"}),
+                    task("two", {"name": "two"}),
+                    checkpoint({"name": "start* > one > two > two"}),
+                    task("three", {"name": "three"}),
+                    checkpoint({"name": "start* > one > two > two > three"}),
+                ],
+                [
+                    checkpoint({"name": "start*"}),
+                    task("one", {"name": "one*"}),
+                    checkpoint({"name": "start* > one*"}),
+                    task("two", {"name": "two"}),
+                    checkpoint({"name": "start* > one* > two"}),
+                    task("three", {"name": "three"}),
+                    checkpoint({"name": "start* > one* > two > three"}),
+                ],
+            ],
+        ],
+    ]
+
+    config = {"configurable": {"thread_id": "2"}}
+
+    # Initialize the thread once again
+    graph.invoke({"name": "start"}, config)
+    history = list(graph.get_state_history(config))
+
+    # Fork from task "two"
+    # Start from the checkpoint that has the task "two"
+    assert history[2].values == {"name": "start > one"}
+
+    graph.invoke(
+        None,
+        graph.update_state(
+            history[2].config,
+            [
+                StateUpdate(values={"name": "two"}, as_node="two"),
+                StateUpdate(values={"name": "two"}, as_node="two"),
+            ],
+            "__copy__",
+        ),
+    )
+
+    history = list(graph.get_state_history(config))
+    assert get_tree(history) == [
+        checkpoint({"name": ""}),
+        task("__start__", {"name": "start"}),
+        checkpoint({"name": "start"}),
+        task("one", {"name": "one"}),
+        [
+            [
+                checkpoint({"name": "start > one"}),
+                task("two", {"name": "two"}),
+                task("two", {"name": "two"}),
+                checkpoint({"name": "start > one > two > two"}),
+                task("three", {"name": "three"}),
+                checkpoint({"name": "start > one > two > two > three"}),
+            ],
+            [
+                checkpoint({"name": "start > one"}),
+                task("two", {"name": "two"}),
+                task("two", {"name": "two"}),
+                checkpoint({"name": "start > one > two > two"}),
+                task("three", {"name": "three"}),
+                checkpoint({"name": "start > one > two > two > three"}),
+            ],
+        ],
+    ]
+
+    # Fork task three
+    assert history[1].values == {"name": "start > one > two > two"}
+    assert len(history[1].tasks) == 1
+    assert history[1].tasks[0].name == "three"
+
+    graph.invoke(
+        None,
+        graph.update_state(
+            history[1].config,
+            [StateUpdate(values={"name": "three*"}, as_node="three")],
+            "__copy__",
+        ),
+    )
+
+    history = list(graph.get_state_history(config))
+    assert get_tree(history) == [
+        checkpoint({"name": ""}),
+        task("__start__", {"name": "start"}),
+        checkpoint({"name": "start"}),
+        task("one", {"name": "one"}),
+        [
+            [
+                checkpoint({"name": "start > one"}),
+                task("two", {"name": "two"}),
+                task("two", {"name": "two"}),
+                checkpoint({"name": "start > one > two > two"}),
+                task("three", {"name": "three"}),
+                checkpoint({"name": "start > one > two > two > three"}),
+            ],
+            [
+                checkpoint({"name": "start > one"}),
+                task("two", {"name": "two"}),
+                task("two", {"name": "two"}),
+                [
+                    [
+                        checkpoint({"name": "start > one > two > two"}),
+                        task("three", {"name": "three"}),
+                        checkpoint({"name": "start > one > two > two > three"}),
+                    ],
+                    [
+                        checkpoint({"name": "start > one > two > two"}),
+                        task("three", {"name": "three*"}),
+                        checkpoint({"name": "start > one > two > two > three*"}),
+                    ],
+                ],
+            ],
+        ],
+    ]
+
+    # Regenerate task three
+    assert history[3].values == {"name": "start > one > two > two"}
+    assert len(history[3].tasks) == 1
+    assert history[3].tasks[0].name == "three"
+
+    graph.invoke(None, graph.update_state(history[3].config, None, "__copy__"))
+
+    history = list(graph.get_state_history(config))
+    assert get_tree(history) == [
+        checkpoint({"name": ""}),
+        task("__start__", {"name": "start"}),
+        checkpoint({"name": "start"}),
+        task("one", {"name": "one"}),
+        [
+            [
+                checkpoint({"name": "start > one"}),
+                task("two", {"name": "two"}),
+                task("two", {"name": "two"}),
+                checkpoint({"name": "start > one > two > two"}),
+                task("three", {"name": "three"}),
+                checkpoint({"name": "start > one > two > two > three"}),
+            ],
+            [
+                checkpoint({"name": "start > one"}),
+                task("two", {"name": "two"}),
+                task("two", {"name": "two"}),
+                [
+                    [
+                        checkpoint({"name": "start > one > two > two"}),
+                        task("three", {"name": "three"}),
+                        checkpoint({"name": "start > one > two > two > three"}),
+                    ],
+                    [
+                        checkpoint({"name": "start > one > two > two"}),
+                        task("three", {"name": "three*"}),
+                        checkpoint({"name": "start > one > two > two > three*"}),
+                    ],
+                    [
+                        checkpoint({"name": "start > one > two > two"}),
+                        task("three", {"name": "three"}),
+                        checkpoint({"name": "start > one > two > two > three"}),
+                    ],
+                ],
+            ],
+        ],
+    ]

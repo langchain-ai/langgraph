@@ -4301,7 +4301,7 @@ def test_dynamic_interrupt(sync_checkpointer: BaseCheckpointSaver) -> None:
     )
 
 
-def test_copy_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_partial_pending_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
@@ -4450,27 +4450,13 @@ def test_copy_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> None:
     )
 
     # clear the interrupt and next tasks
-    tool_two.update_state(thread1, None, as_node="__copy__")
-    # interrupt is cleared, next task is kept
+    tool_two.update_state(thread1, None, as_node=END)
+
+    # interrupt and unresolved tasks are cleared, finished tasks are kept
     assert tool_two.get_state(thread1) == StateSnapshot(
-        values={"my_key": "value ⛰️", "market": "DE"},
-        next=(
-            "tool_one",
-            "tool_two",
-        ),
-        tasks=(
-            PregelTask(
-                id=AnyStr(),
-                name="tool_one",
-                path=("__pregel_push", 0, False),
-            ),
-            PregelTask(
-                AnyStr(),
-                "tool_two",
-                (PULL, "tool_two"),
-                interrupts=(),
-            ),
-        ),
+        values={"my_key": "value ⛰️ one", "market": "DE"},
+        next=(),
+        tasks=(),
         config={
             "configurable": {
                 "thread_id": "1",
@@ -4481,7 +4467,7 @@ def test_copy_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> None:
         created_at=AnyStr(),
         metadata={
             "parents": {},
-            "source": "fork",
+            "source": "update",
             "step": 1,
         },
         parent_config=([*tool_two.checkpointer.list(thread1, limit=2)][-1].config),
