@@ -324,6 +324,7 @@ function useThreadHistory<StateType extends Record<string, unknown>>(
   const fetcher = useCallback(
     (
       threadId: string | undefined | null,
+      client: Client,
     ): Promise<ThreadState<StateType>[]> => {
       if (threadId != null) {
         return fetchHistory<StateType>(client, threadId).then((history) => {
@@ -341,12 +342,12 @@ function useThreadHistory<StateType extends Record<string, unknown>>(
 
   useEffect(() => {
     if (submittingRef.current) return;
-    fetcher(threadId);
-  }, [fetcher, submittingRef, threadId]);
+    fetcher(threadId, client);
+  }, [fetcher, submittingRef, threadId, client]);
 
   return {
     data: history,
-    mutate: (mutateId?: string) => fetcher(mutateId ?? threadId),
+    mutate: (mutateId?: string) => fetcher(mutateId ?? threadId, client),
   };
 }
 
