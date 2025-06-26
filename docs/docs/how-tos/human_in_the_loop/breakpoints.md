@@ -4,9 +4,9 @@
 
 To use breakpoints, you will need to:
 
-1. [**Specify a checkpointer**](../../../concepts/persistence#checkpoints) to save the graph state after each step.
+1. [**Specify a checkpointer**](../../concepts/persistence#checkpoints) to save the graph state after each step.
 2. [**Set breakpoints**](#setting-breakpoints) to specify where execution should pause.
-3. **Run the graph** with a [**thread ID**](../../../concepts/persistence#threads) to pause execution at the breakpoint.
+3. **Run the graph** with a [**thread ID**](../../concepts/persistence#threads) to pause execution at the breakpoint.
 4. **Resume execution** using `invoke`/`ainvoke`/`stream`/`astream` passing a `None` as the argument for the inputs.
 
 ## Setting breakpoints
