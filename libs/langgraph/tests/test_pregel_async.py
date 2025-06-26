@@ -40,6 +40,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
 )
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, START
 from langgraph.errors import InvalidUpdateError, NodeInterrupt, ParentCommand
 from langgraph.func import entrypoint, task
@@ -106,12 +107,28 @@ async def test_checkpoint_errors() -> None:
         def get_next_version(self, current: Optional[int], channel: None) -> int:
             raise ValueError("Faulty get_next_version")
 
+    class FaultySerializer(JsonPlusSerializer):
+        def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
+            raise ValueError("Faulty serializer")
+
     def logic(inp: str) -> str:
         return ""
 
     builder = StateGraph(Annotated[str, operator.add])
     builder.add_node("agent", logic)
     builder.add_edge(START, "agent")
+
+    graph = builder.compile(checkpointer=InMemorySaver(serde=FaultySerializer()))
+    with pytest.raises(ValueError, match="Faulty serializer"):
+        await graph.ainvoke("", {"configurable": {"thread_id": "thread-1"}})
+    with pytest.raises(ValueError, match="Faulty serializer"):
+        async for _ in graph.astream("", {"configurable": {"thread_id": "thread-2"}}):
+            pass
+    with pytest.raises(ValueError, match="Faulty serializer"):
+        async for _ in graph.astream_events(
+            "", {"configurable": {"thread_id": "thread-3"}}, version="v2"
+        ):
+            pass
 
     graph = builder.compile(checkpointer=FaultyGetCheckpointer())
     with pytest.raises(ValueError, match="Faulty get_tuple"):
@@ -168,6 +185,25 @@ async def test_checkpoint_errors() -> None:
             {"configurable": {"thread_id": "thread-3"}},
             version="v2",
             checkpoint_during=True,
+        ):
+            pass
+
+    def faulty_reducer(a: Any, b: Any) -> Any:
+        raise ValueError("Faulty reducer")
+
+    builder = StateGraph(Annotated[str, faulty_reducer])
+    builder.add_node("agent", logic)
+    builder.add_edge(START, "agent")
+    graph = builder.compile(checkpointer=InMemorySaver())
+
+    with pytest.raises(ValueError, match="Faulty reducer"):
+        await graph.ainvoke("", {"configurable": {"thread_id": "thread-1"}})
+    with pytest.raises(ValueError, match="Faulty reducer"):
+        async for _ in graph.astream("", {"configurable": {"thread_id": "thread-2"}}):
+            pass
+    with pytest.raises(ValueError, match="Faulty reducer"):
+        async for _ in graph.astream_events(
+            "", {"configurable": {"thread_id": "thread-3"}}, version="v2"
         ):
             pass
 
