@@ -511,7 +511,7 @@ dev = [
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.1.70"
+version = "0.1.71"
 source = { editable = "../sdk-py" }
 dependencies = [
     { name = "httpx" },

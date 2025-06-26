@@ -117,6 +117,13 @@ ThreadSortBy = Literal["thread_id", "status", "created_at", "updated_at"]
 The field to sort by.
 """
 
+CronSortBy = Literal[
+    "cron_id", "assistant_id", "thread_id", "created_at", "updated_at", "next_run_date"
+]
+"""
+The field to sort by.
+"""
+
 SortOrder = Literal["asc", "desc"]
 """
 The order to sort by.

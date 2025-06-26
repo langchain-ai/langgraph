@@ -9,6 +9,7 @@ import {
   Cron,
   CronCreateForThreadResponse,
   CronCreateResponse,
+  CronSortBy,
   DefaultValues,
   GraphSchema,
   Item,
@@ -415,6 +416,8 @@ export class CronsClient extends BaseClient {
     threadId?: string;
     limit?: number;
     offset?: number;
+    sortBy?: CronSortBy;
+    sortOrder?: SortOrder;
   }): Promise<Cron[]> {
     return this.fetch<Cron[]>("/runs/crons/search", {
       method: "POST",
@@ -423,6 +426,8 @@ export class CronsClient extends BaseClient {
         thread_id: query?.threadId ?? undefined,
         limit: query?.limit ?? 10,
         offset: query?.offset ?? 0,
+        sort_by: query?.sortBy ?? undefined,
+        sort_order: query?.sortOrder ?? undefined,
       },
     });
   }
