@@ -78,7 +78,7 @@ graph.invoke( # (1)!
         ...
     ```
 
-    * See [the Graph API](../how-tos/graph-api/#add-runtime-configuration) for details.
+    * See [the Graph API](https://langchain-ai.github.io/langgraph/how-tos/graph-api/#add-runtime-configuration) for details.
 
 === "In a tool"
 
