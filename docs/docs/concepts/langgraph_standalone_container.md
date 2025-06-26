@@ -42,4 +42,4 @@ For more details on feature difference, see [LangGraph Server](../concepts/langg
 
 !!! warning
 
-      The Standalone Container deployment option will not be reliably scalable in serverless settings, as it was not designed for such settings. Additionally, LangGraph Platform will not function in the scale to zero scenarios common in serverless environments.
+      The Standalone Container deployment option for LangGraph Platform will not scale reliably in serverless environments.
