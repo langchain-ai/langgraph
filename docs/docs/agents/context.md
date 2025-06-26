@@ -99,12 +99,11 @@ graph.invoke( # (1)!
 
 State acts as [short-term memory](../concepts/memory.md) during a run. It holds dynamic data that can evolve during execution, such as values derived from tools or LLM outputs.
 
-
 === "In an agent"
 
     Example shows how to incorporate state into an agent **prompt**.
 
-    State can also be accessed by the agent's **tools**, which can read or update the state as needed. See [tool calling guide](../how-tos/tool-calling.md#state) for details.
+    State can also be accessed by the agent's **tools**, which can read or update the state as needed. See [tool calling guide](../how-tos/tool-calling.md#short-term-memory) for details.
 
     ```python
     from langchain_core.messages import AnyMessage
