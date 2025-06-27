@@ -384,6 +384,38 @@ def create_react_agent(
             A->>U: Return final state
     ```
 
+    !!! note "Passing Model kwargs"
+        You can pass additional keyword arguments to the model calls and structured output configuration
+        by including them in the `config` parameter when invoking the agent:
+
+        ```python
+        config = {
+            "configurable": {
+                # Arguments passed to model invoke/ainvoke calls
+                "model_kwargs": {
+                    "temperature": 0.7,
+                    "max_tokens": 1000,
+                    "top_p": 0.9,
+                    "extra_headers": {"Authorization": "Bearer token"}
+                },
+                # Arguments passed to with_structured_output() method
+                "structured_output_kwargs": {
+                    "method": "function_calling",  # Use old method instead of json_schema
+                    "include_raw": True
+                }
+            }
+        }
+        
+        agent.invoke(
+            {"messages": [{"role": "user", "content": "Hello!"}]},
+            config=config
+        )
+        ```
+
+        !!! info "Structured Output Method"
+            In langchain-openai versions >0.3.0, `with_structured_output()` defaults to `method="json_schema"`.
+            Use `structured_output_kwargs` to override this with `method="function_calling"` if needed.
+
     Example:
         ```python
         from langgraph.prebuilt import create_react_agent
@@ -504,7 +536,11 @@ def create_react_agent(
     # Define the function that calls the model
     def call_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
         state = _get_model_input_state(state)
-        response = cast(AIMessage, model_runnable.invoke(state, config))
+        
+        # Extract model kwargs from config if provided
+        model_kwargs = config.get("configurable", {}).get("model_kwargs", {})
+        
+        response = cast(AIMessage, model_runnable.invoke(state, config, **model_kwargs))
         # add agent name to the AIMessage
         response.name = name
 
@@ -522,7 +558,11 @@ def create_react_agent(
 
     async def acall_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
         state = _get_model_input_state(state)
-        response = cast(AIMessage, await model_runnable.ainvoke(state, config))
+        
+        # Extract model kwargs from config if provided
+        model_kwargs = config.get("configurable", {}).get("model_kwargs", {})
+        
+        response = cast(AIMessage, await model_runnable.ainvoke(state, config, **model_kwargs))
         # add agent name to the AIMessage
         response.name = name
         if _are_more_steps_needed(state, response):
@@ -567,10 +607,17 @@ def create_react_agent(
             system_prompt, structured_response_schema = response_format
             messages = [SystemMessage(content=system_prompt)] + list(messages)
 
+        # Extract model kwargs from config if provided
+        model_kwargs = config.get("configurable", {}).get("model_kwargs", {})
+        
+        # Extract structured output kwargs (like method="function_calling")
+        structured_output_kwargs = config.get("configurable", {}).get("structured_output_kwargs", {})
+
         model_with_structured_output = _get_model(model).with_structured_output(
-            cast(StructuredResponseSchema, structured_response_schema)
+            cast(StructuredResponseSchema, structured_response_schema),
+            **structured_output_kwargs
         )
-        response = model_with_structured_output.invoke(messages, config)
+        response = model_with_structured_output.invoke(messages, config, **model_kwargs)
         return {"structured_response": response}
 
     async def agenerate_structured_response(
@@ -582,10 +629,17 @@ def create_react_agent(
             system_prompt, structured_response_schema = response_format
             messages = [SystemMessage(content=system_prompt)] + list(messages)
 
+        # Extract model kwargs from config if provided
+        model_kwargs = config.get("configurable", {}).get("model_kwargs", {})
+        
+        # Extract structured output kwargs (like method="function_calling")
+        structured_output_kwargs = config.get("configurable", {}).get("structured_output_kwargs", {})
+
         model_with_structured_output = _get_model(model).with_structured_output(
-            cast(StructuredResponseSchema, structured_response_schema)
+            cast(StructuredResponseSchema, structured_response_schema),
+            **structured_output_kwargs
         )
-        response = await model_with_structured_output.ainvoke(messages, config)
+        response = await model_with_structured_output.ainvoke(messages, config, **model_kwargs)
         return {"structured_response": response}
 
     if not tool_calling_enabled:
