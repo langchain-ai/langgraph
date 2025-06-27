@@ -43,7 +43,7 @@ dev = [
     "langgraph-checkpoint-postgres",
     "langgraph-sdk",
     "psycopg[binary]",
-    "uvloop==0.21.0beta1",
+    "uvloop==0.21.0beta1; sys_platform != 'win32'",
     "pyperf",
     "py-spy",
     "types-requests",

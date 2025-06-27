@@ -66,7 +66,10 @@ def react_agent(n_tools: int, checkpointer: Optional[BaseCheckpointSaver]) -> Pr
 if __name__ == "__main__":
     import asyncio
 
-    import uvloop
+    try:
+        import uvloop
+    except ImportError:
+        uvloop = None
 
     from langgraph.checkpoint.memory import MemorySaver
 
@@ -77,5 +80,6 @@ if __name__ == "__main__":
     async def run():
         len([c async for c in graph.astream(input, config=config)])
 
-    uvloop.install()
+    if uvloop:
+        uvloop.install()
     asyncio.run(run())

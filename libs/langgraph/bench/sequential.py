@@ -32,7 +32,10 @@ if __name__ == "__main__":
     import asyncio
     import time
 
-    import uvloop
+    try:
+        import uvloop
+    except ImportError:
+        uvloop = None
 
     graph = create_sequential(3000).compile()
     input = {"messages": []}  # Empty list of messages
@@ -41,7 +44,8 @@ if __name__ == "__main__":
     async def run():
         len([c async for c in graph.astream(input, config=config)])
 
-    uvloop.install()
+    if uvloop:
+        uvloop.install()
     start = time.time()
     asyncio.run(run())
     end = time.time()

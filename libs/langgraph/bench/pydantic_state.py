@@ -302,7 +302,10 @@ def pydantic_state(n: int) -> StateGraph:
 if __name__ == "__main__":
     import asyncio
 
-    import uvloop
+    try:
+        import uvloop
+    except ImportError:
+        uvloop = None
 
     from langgraph.checkpoint.memory import MemorySaver
 
@@ -324,5 +327,6 @@ if __name__ == "__main__":
         async for c in graph.astream(input, config=config):
             print(c.keys())
 
-    uvloop.install()
+    if uvloop:
+        uvloop.install()
     asyncio.run(run())

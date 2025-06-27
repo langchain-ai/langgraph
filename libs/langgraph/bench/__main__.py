@@ -3,7 +3,10 @@ from uuid import uuid4
 
 from langchain_core.messages import HumanMessage
 from pyperf._runner import Runner
-from uvloop import new_event_loop
+try:
+    from uvloop import new_event_loop
+except ImportError:
+    from asyncio import new_event_loop
 
 from bench.fanout_to_subgraph import fanout_to_subgraph, fanout_to_subgraph_sync
 from bench.pydantic_state import pydantic_state

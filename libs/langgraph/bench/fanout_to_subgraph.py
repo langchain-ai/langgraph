@@ -112,7 +112,10 @@ if __name__ == "__main__":
     import random
     import time
 
-    import uvloop
+    try:
+        import uvloop
+    except ImportError:
+        uvloop = None
 
     from langgraph.checkpoint.memory import MemorySaver
 
@@ -127,7 +130,8 @@ if __name__ == "__main__":
     async def run():
         len([c async for c in graph.astream(input, config=config)])
 
-    uvloop.install()
+    if uvloop:
+        uvloop.install()
     start = time.time()
     asyncio.run(run())
     end = time.time()
