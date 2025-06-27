@@ -153,7 +153,7 @@ nav:
       - Stream outputs: how-tos/streaming.md
       - Use Server API: cloud/how-tos/streaming.md
     - Context:
-      - Use in agent: agents/context.md
+      - Add context: agents/context.md
     - Memory:
       - Add memory: how-tos/memory/add-memory.md
     - Human-in-the-loop:
