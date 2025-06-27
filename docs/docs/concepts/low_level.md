@@ -23,6 +23,11 @@ LangGraph's underlying graph algorithm uses [message passing](https://en.wikiped
 
 A super-step can be considered a single iteration over the graph nodes. Nodes that run in parallel are part of the same super-step, while nodes that run sequentially belong to separate super-steps. At the start of graph execution, all nodes begin in an `inactive` state. A node becomes `active` when it receives a new message (state) on any of its incoming edges (or "channels"). The active node then runs its function and responds with updates. At the end of each super-step, nodes with no incoming messages vote to `halt` by marking themselves as `inactive`. The graph execution terminates when all nodes are `inactive` and no messages are in transit.
 
+
+!!! tip
+
+    For information on how to use LangGraph's Graph API, see [Use Graph API](https://langchain-ai.github.io/langgraph/how-tos/graph-api/).
+
 ### StateGraph
 
 The `StateGraph` class is the main graph class to use. This is parameterized by a user defined `State` object.
