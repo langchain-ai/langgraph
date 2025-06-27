@@ -102,22 +102,21 @@ nav:
           -  5. Customize state: tutorials/get-started/5-customize-state.md
           -  6. Time travel: tutorials/get-started/6-time-travel.md
       - Run a local server: tutorials/langgraph-platform/local-server.md
-      - Basic deployment: agents/deployment.md
     - Agent development:
+      - Workflows & agents: tutorials/workflows.md
       - Prebuilt components: agents/overview.md
       - Run an agent: agents/run_agents.md
       - Agent architectures: concepts/agentic_concepts.md
-    - Workflow orchestration:
-      - Workflows & agents: tutorials/workflows.md
-      - Graph API: concepts/low_level.md
-      - Subgraphs: concepts/subgraphs.md
-      - Runtime: concepts/pregel.md
-      - Functional API: concepts/functional_api.md
-    
+
   - Guides:
     - LangGraph APIs:
-      - Use the Graph API: how-tos/graph-api.ipynb
-      - Use the Functional API: how-tos/use-functional-api.md
+      - Runtime: concepts/pregel.md
+      - Graph API:
+          - Overview: concepts/low_level.md
+          - Use the Graph API: how-tos/graph-api.ipynb
+      - Functional API:
+          - Overview: concepts/functional_api.md
+          - Use the Functional API: how-tos/use-functional-api.md
     - Core capabilities:
       - Streaming:
           - Overview: concepts/streaming.md
@@ -150,6 +149,7 @@ nav:
           - Use time travel: how-tos/human_in_the_loop/time-travel.md
           - Use Server API: cloud/how-tos/human_in_the_loop_time_travel.md
       - Subgraphs:
+          - Overview: concepts/subgraphs.md
           - Use subgraphs: how-tos/subgraph.ipynb
       - Multi-agent:
           - Overview: concepts/multi_agent.md
