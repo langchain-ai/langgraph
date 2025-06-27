@@ -448,7 +448,7 @@ def create_react_agent(
 
     if (
         _should_bind_tools(model, tool_classes, num_builtin=len(llm_builtin_tools))
-        and len(tool_classes) > 0
+        and len(tool_classes + llm_builtin_tools) > 0
     ):
         model = cast(BaseChatModel, model).bind_tools(tool_classes + llm_builtin_tools)  # type: ignore[operator]
 
