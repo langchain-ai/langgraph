@@ -24,7 +24,7 @@ jobs:
         # GitHub rate-limits how many jobs can be running at any one time.
         # Starting new jobs is also relatively slow,
         # so linting on fewer versions makes CI faster.
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-2025]
         python-version:
           - "3.12"
     name: "lint ${{ matrix.os }} #${{ matrix.python-version }}"
@@ -74,7 +74,7 @@ jobs:
           fi
 
       - name: Analysing package code with our lint (Windows)
-        if: steps.changed-files.outputs.all && matrix.os == 'windows-latest'
+        if: steps.changed-files.outputs.all && matrix.os == 'windows-2025'
         working-directory: ${{ inputs.working-directory }}
         shell: bash
         run: |
@@ -112,7 +112,7 @@ jobs:
           fi
 
       - name: Analysing tests with our lint (Windows)
-        if: steps.changed-files.outputs.all && matrix.os == 'windows-latest'
+        if: steps.changed-files.outputs.all && matrix.os == 'windows-2025'
         working-directory: ${{ inputs.working-directory }}
         shell: bash
         run: |

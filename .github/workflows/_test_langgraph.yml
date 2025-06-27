@@ -8,7 +8,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-2025]
         python-version:
           - "3.9"
           - "3.10"
@@ -49,7 +49,7 @@ jobs:
         run: make test_parallel
 
       - name: Run tests (Windows)
-        if: matrix.os == 'windows-latest'
+        if: matrix.os == 'windows-2025'
         shell: bash
         run: make test_parallel
 
