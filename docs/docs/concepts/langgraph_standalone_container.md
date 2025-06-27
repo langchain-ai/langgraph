@@ -17,6 +17,10 @@ The Standalone Container deployment option is the least restrictive model for de
 | **Where is it hosted?** | n/a | Your cloud |
 | **Who provisions and manages it?** | n/a | You |
 
+!!! warning
+
+      LangGraph Platform should not be deployed in serverless environments.
+
 ## Architecture
 
 ![Standalone Container](./img/langgraph_platform_deployment_architecture.png)

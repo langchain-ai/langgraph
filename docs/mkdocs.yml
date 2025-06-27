@@ -93,6 +93,14 @@ nav:
     - index.md
     - Quickstarts:
       - Agent: agents/agents.md
+      - LangGraph basics:
+          -  concepts/why-langgraph.md
+          -  Build a basic chatbot: tutorials/get-started/1-build-basic-chatbot.md
+          -  tutorials/get-started/2-add-tools.md
+          -  tutorials/get-started/3-add-memory.md
+          -  Add human-in-the-loop: tutorials/get-started/4-human-in-the-loop.md
+          -  tutorials/get-started/5-customize-state.md
+          -  tutorials/get-started/6-time-travel.md
       - Local server: tutorials/langgraph-platform/local-server.md
       - Deployment: cloud/quick_start.md
     - General concepts:
@@ -101,7 +109,7 @@ nav:
         - Workflows & agents: tutorials/workflows.md
       - Agent development: agents/overview.md
       - Workflow orchestration:
-        - Graphs: concepts/low_level.md
+        - Graph API: concepts/low_level.md
         - Subgraphs: concepts/subgraphs.md
         - Runtime: concepts/pregel.md
         - Functional API: concepts/functional_api.md
@@ -153,7 +161,7 @@ nav:
       - Stream outputs: how-tos/streaming.md
       - Use Server API: cloud/how-tos/streaming.md
     - Context:
-      - Use in agent: agents/context.md
+      - Add context: agents/context.md
     - Memory:
       - Add memory: how-tos/memory/add-memory.md
     - Human-in-the-loop:
@@ -175,6 +183,8 @@ nav:
     - MCP:
       - Use MCP: agents/mcp.md
       - Server API: concepts/server-mcp.md
+    - Evaluation:
+        - Basic implementation: agents/evals.md
     - Deployment:
       - Basic deployment: agents/deployment.md
       - Set up your application:
@@ -182,13 +192,12 @@ nav:
         - Use pyproject.toml: cloud/deployment/setup_pyproject.md
         - Use JavaScript: cloud/deployment/setup_javascript.md
         - Use custom Docker: cloud/deployment/custom_docker.md
+        - Rebuild graph at runtime: cloud/deployment/graph_rebuild.md
       - Deploy to production:
          - Cloud SaaS: cloud/deployment/cloud.md
          - Self-Hosted Data Plane: cloud/deployment/self_hosted_data_plane.md
          - Self-Hosted Control Plane: cloud/deployment/self_hosted_control_plane.md
          - Standalone Container: cloud/deployment/standalone_container.md
-    - Evaluation:
-      - Basic implementation: agents/evals.md
     - Platform capabilities:
       - LangGraph Studio:
         - Quickstart: cloud/how-tos/studio/quick_start.md
@@ -255,14 +264,6 @@ nav:
 
   - Examples:
     - agents/run_agents.md
-    - LangGraph basics:
-      -  concepts/why-langgraph.md
-      -  Build a basic chatbot: tutorials/get-started/1-build-basic-chatbot.md
-      -  tutorials/get-started/2-add-tools.md
-      -  tutorials/get-started/3-add-memory.md
-      -  Add human-in-the-loop: tutorials/get-started/4-human-in-the-loop.md
-      -  tutorials/get-started/5-customize-state.md
-      -  tutorials/get-started/6-time-travel.md
     - Template applications: concepts/template_applications.md  # TODO: make tutorial
     - Agentic RAG: tutorials/rag/langgraph_agentic_rag.ipynb
     - Agent Supervisor: tutorials/multi_agent/agent_supervisor.ipynb
@@ -274,7 +275,6 @@ nav:
         - tutorials/auth/getting_started.md
         - tutorials/auth/resource_auth.md
         - tutorials/auth/add_auth_server.md
-      - Rebuild graph at runtime: cloud/deployment/graph_rebuild.md
       - Use RemoteGraph: how-tos/use-remote-graph.md
       - Deploy CrewAI, AutoGen, and other frameworks: how-tos/autogen-langgraph-platform.ipynb
         # combine with how-tos/autogen-integration.ipynb

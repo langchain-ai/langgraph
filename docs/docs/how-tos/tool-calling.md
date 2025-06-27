@@ -507,7 +507,7 @@ def update_user_name(
     new_name: str,
     tool_call_id: Annotated[str, InjectedToolCallId]
 ) -> Command:
-    """Update user name in short-term memory."""
+    """Update user-name in short-term memory."""
     # highlight-next-line
     return Command(update={
         # highlight-next-line
