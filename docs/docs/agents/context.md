@@ -95,7 +95,7 @@ graph.invoke( # (1)!
 
     See the [tool calling guide](../how-tos/tool-calling.md#configuration) for details.
 
-### State (mutable context)
+### Short-term memory (mutable context)
 
 State acts as [short-term memory](../concepts/memory.md) during a run. It holds dynamic data that can evolve during execution, such as values derived from tools or LLM outputs.
 
@@ -177,8 +177,8 @@ State acts as [short-term memory](../concepts/memory.md) during a run. It holds 
 
     Please see the [memory guide](../how-tos/memory/add-memory.md) for more details on how to enable memory. This is a powerful feature that allows you to persist the agent's state across multiple invocations. Otherwise, the state is scoped only to a single run.
 
-### Long-Term Memory (cross-conversation context)
+### Long-term memory (cross-conversation context)
 
 For context that spans *across* conversations or sessions, LangGraph allows access to **long-term memory** via a `store`. This can be used to read or update persistent facts (e.g., user profiles, preferences, prior interactions). 
 
-For more, see the [memory guide](../how-tos/memory/add-memory.md).
+For more information, see the [Memory guide](../how-tos/memory/add-memory.md).
