@@ -2,7 +2,7 @@ name: Test Windows Make Availability
 
 on:
   push:
-    branches: [add-windows-ci]
+    branches: [test-windows-make-availability]
   workflow_dispatch:
 
 jobs:
