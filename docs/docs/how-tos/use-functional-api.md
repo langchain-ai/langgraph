@@ -1,10 +1,10 @@
 # Use the functional API
 
-The [**Functional API**](../../concepts/functional_api.md) allows you to add LangGraph's key features — [persistence](../concepts/persistence.md), [memory](../how-tos/memory/add-memory.md), [human-in-the-loop](../concepts/human_in_the_loop.md), and [streaming](../concepts/streaming.md) — to your applications with minimal changes to your existing code.
+The [**Functional API**](../concepts/functional_api.md) allows you to add LangGraph's key features — [persistence](../concepts/persistence.md), [memory](../how-tos/memory/add-memory.md), [human-in-the-loop](../concepts/human_in_the_loop.md), and [streaming](../concepts/streaming.md) — to your applications with minimal changes to your existing code.
 
 !!! tip
 
-    For conceptual information on the functional API, see [Functional API](../../concepts/functional_api.md).
+    For conceptual information on the functional API, see [Functional API](../concepts/functional_api.md).
 
 
 ## Creating a simple workflow

@@ -103,11 +103,12 @@ nav:
           -  6. Time travel: tutorials/get-started/6-time-travel.md
       - Run a local server: tutorials/langgraph-platform/local-server.md
       - Basic deployment: agents/deployment.md
-    - Common patterns:
-      - Agent architectures: concepts/agentic_concepts.md
-      - Workflows & agents: tutorials/workflows.md
+    - Agent development:
       - Ready-to-use agent components: agents/overview.md
+      - Run an agent: agents/run_agents.md
+      - Agent architectures: concepts/agentic_concepts.md
     - Workflow orchestration:
+      - Workflows & agents: tutorials/workflows.md
       - Graph API: concepts/low_level.md
       - Subgraphs: concepts/subgraphs.md
       - Runtime: concepts/pregel.md
@@ -264,7 +265,6 @@ nav:
       - Environment variables: cloud/reference/env_var.md
 
   - Examples:
-    - agents/run_agents.md
     - Template applications: concepts/template_applications.md  # TODO: make tutorial
     - Agentic RAG: tutorials/rag/langgraph_agentic_rag.ipynb
     - Agent Supervisor: tutorials/multi_agent/agent_supervisor.ipynb
