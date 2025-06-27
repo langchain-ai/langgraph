@@ -7,7 +7,7 @@ hide:
   - tags
 ---
 
-# Baisc deployment
+# Basic deployment
 
 To deploy your LangGraph agent, create and configure a LangGraph app. This setup supports both local development and production deployments.
 
