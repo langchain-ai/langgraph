@@ -92,26 +92,26 @@ nav:
   - Get started:
     - index.md
     - Quickstarts:
-      - Build an agent: agents/agents.md
-      - LangGraph basics:
+      - Start with a prebuilt agent: agents/agents.md
+      - Build a custom workflow:
           -  concepts/why-langgraph.md
-          -  Build a basic chatbot: tutorials/get-started/1-build-basic-chatbot.md
-          -  tutorials/get-started/2-add-tools.md
-          -  tutorials/get-started/3-add-memory.md
-          -  Add human-in-the-loop: tutorials/get-started/4-human-in-the-loop.md
-          -  tutorials/get-started/5-customize-state.md
-          -  tutorials/get-started/6-time-travel.md
-      - Run locally: tutorials/langgraph-platform/local-server.md
+          -  1. Build a basic chatbot: tutorials/get-started/1-build-basic-chatbot.md
+          -  2. Add tools: tutorials/get-started/2-add-tools.md
+          -  3. Add memory: tutorials/get-started/3-add-memory.md
+          -  4. Add human-in-the-loop: tutorials/get-started/4-human-in-the-loop.md
+          -  5. Customize state: tutorials/get-started/5-customize-state.md
+          -  6. Time travel: tutorials/get-started/6-time-travel.md
+      - Run a local server: tutorials/langgraph-platform/local-server.md
+      - Basic deployment: agents/deployment.md
     - Common patterns:
       - Agent architectures: concepts/agentic_concepts.md
       - Workflows & agents: tutorials/workflows.md
-      - Agent development: agents/overview.md
+      - Ready-to-use agent components: agents/overview.md
     - Workflow orchestration:
       - Graph API: concepts/low_level.md
       - Subgraphs: concepts/subgraphs.md
       - Runtime: concepts/pregel.md
       - Functional API: concepts/functional_api.md
-    
     
   - Guides:
     - LangGraph APIs:
@@ -219,7 +219,6 @@ nav:
       - Deployment:
           - Overview: concepts/deployment_options.md
           - Quickstart: cloud/quick_start.md
-          - Basic deployment: agents/deployment.md
           - Set up your application:
             - Use requirements.txt: cloud/deployment/setup.md
             - Use pyproject.toml: cloud/deployment/setup_pyproject.md
