@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-prebuilt"
-version = "0.5.0"
+dynamic = ["version"]
 description = "Library with high-level APIs for creating and executing LangGraph agents and tools."
 authors = []
 requires-python = ">=3.9"
@@ -70,3 +70,9 @@ warn_unused_ignores = "True"
 warn_redundant_casts = "True"
 allow_redefinition = "True"
 disable_error_code = "typeddict-item, return-value"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.uv-dynamic-versioning]
+fallback-version = "0.5.0"

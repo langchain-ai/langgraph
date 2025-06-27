@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-checkpoint-postgres"
-version = "2.0.21"
+dynamic = ["version"]
 description = "Library with a Postgres implementation of LangGraph checkpoint saver."
 authors = []
 requires-python = ">=3.9"
@@ -73,3 +73,9 @@ now = true
 delay = 0.1
 runner_args = ["--ff", "-x", "-v", "--tb", "short"]
 patterns = ["*.py"]
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.uv-dynamic-versioning]
+fallback-version = "2.0.21"
