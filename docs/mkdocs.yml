@@ -152,53 +152,38 @@ nav:
           - Standalone Container: concepts/langgraph_standalone_container.md
     
   - Guides:
-    - LangGraph APIs:
+    - Core Capabilities:
       - Use the Graph API: how-tos/graph-api.ipynb
       - Use the Functional API: how-tos/use-functional-api.md
-    - Models:
-      - Configure model: agents/models.md
-    - Streaming:
-      - Stream outputs: how-tos/streaming.md
-      - Use Server API: cloud/how-tos/streaming.md
-    - Context:
-      - Add context: agents/context.md
-    - Memory:
-      - Add memory: how-tos/memory/add-memory.md
-    - Human-in-the-loop:
-      - how-tos/human_in_the_loop/add-human-in-the-loop.md
-      - Use Server API: cloud/how-tos/add-human-in-the-loop.md
-    - Time travel:
-      - how-tos/human_in_the_loop/time-travel.md
-      - Use Server API: cloud/how-tos/human_in_the_loop_time_travel.md
-    - Breakpoints:
-      - Set breakpoints: how-tos/human_in_the_loop/breakpoints.md
-      - Use Server API: cloud/how-tos/human_in_the_loop_breakpoint.md
-    - Tools:
-      - Call tools: how-tos/tool-calling.md
-    - Subgraphs:
-      - Use subgraphs: how-tos/subgraph.ipynb
-    - Multi-agent:
-      - Prebuilt implementation: agents/multi-agent.md
-      - Custom implementation: how-tos/multi_agent.ipynb
-    - MCP:
-      - Use MCP: agents/mcp.md
-      - Server API: concepts/server-mcp.md
-    - Evaluation:
-        - Basic implementation: agents/evals.md
-    - Deployment:
-      - Basic deployment: agents/deployment.md
-      - Set up your application:
-        - Use requirements.txt: cloud/deployment/setup.md
-        - Use pyproject.toml: cloud/deployment/setup_pyproject.md
-        - Use JavaScript: cloud/deployment/setup_javascript.md
-        - Use custom Docker: cloud/deployment/custom_docker.md
-        - Rebuild graph at runtime: cloud/deployment/graph_rebuild.md
-      - Deploy to production:
-         - Cloud SaaS: cloud/deployment/cloud.md
-         - Self-Hosted Data Plane: cloud/deployment/self_hosted_data_plane.md
-         - Self-Hosted Control Plane: cloud/deployment/self_hosted_control_plane.md
-         - Standalone Container: cloud/deployment/standalone_container.md
+      - Models: agents/models.md
+      - Streaming: how-tos/streaming.md
+      - Context: agents/context.md
+      - Memory: how-tos/memory/add-memory.md
+      - Human-in-the-loop: how-tos/human_in_the_loop/add-human-in-the-loop.md
+      - Time travel: how-tos/human_in_the_loop/time-travel.md
+      - Breakpoints: how-tos/human_in_the_loop/breakpoints.md
+      - Tools: how-tos/tool-calling.md
+      - Subgraphs: how-tos/subgraph.ipynb
+      - Multi-agent:
+        - Prebuilt implementation: agents/multi-agent.md
+        - Custom implementation: how-tos/multi_agent.ipynb
+      - MCP: agents/mcp.md
+      - Evaluation:
+          - Basic implementation: agents/evals.md
     - Platform capabilities:
+      - Deployment:
+          - Basic deployment: agents/deployment.md
+          - Set up your application:
+              - Use requirements.txt: cloud/deployment/setup.md
+              - Use pyproject.toml: cloud/deployment/setup_pyproject.md
+              - Use JavaScript: cloud/deployment/setup_javascript.md
+              - Use custom Docker: cloud/deployment/custom_docker.md
+              - Rebuild graph at runtime: cloud/deployment/graph_rebuild.md
+          - Deploy to production:
+              - Cloud SaaS: cloud/deployment/cloud.md
+              - Self-Hosted Data Plane: cloud/deployment/self_hosted_data_plane.md
+              - Self-Hosted Control Plane: cloud/deployment/self_hosted_control_plane.md
+              - Standalone Container: cloud/deployment/standalone_container.md
       - LangGraph Studio:
         - Quickstart: cloud/how-tos/studio/quick_start.md
         - cloud/how-tos/invoke_studio.md
@@ -208,9 +193,16 @@ nav:
         - cloud/how-tos/studio/run_evals.md
         - cloud/how-tos/clone_traces_studio.md
         - cloud/how-tos/datasets_studio.md
+      - Server customization:
+          - how-tos/http/custom_lifespan.md
+          - how-tos/http/custom_middleware.md
+          - how-tos/http/custom_routes.md
       - Authentication & access control:
         - how-tos/auth/custom_auth.md
         - how-tos/auth/openapi_security.md
+      - Data management:
+          - Add semantic search: cloud/deployment/semantic_search.md
+          - Add TTLs: how-tos/ttl/configure_ttl.md
       - Assistants:
         - cloud/how-tos/configuration_cloud.md
         - Threads: cloud/how-tos/use_threads.md
@@ -225,15 +217,13 @@ nav:
         - cloud/how-tos/rollback_concurrent.md
         - cloud/how-tos/reject_concurrent.md
         - cloud/how-tos/enqueue_concurrent.md
+      - Streaming: cloud/how-tos/streaming.md
+      - Human in the loop: cloud/how-tos/add-human-in-the-loop.md
+      - Time-travel: cloud/how-tos/human_in_the_loop_time_travel.md
+      - Breakpoints: cloud/how-tos/human_in_the_loop_breakpoint.md
       - Webhooks: cloud/how-tos/webhooks.md
       - Cron jobs: cloud/how-tos/cron_jobs.md
-      - Server customization:
-        - how-tos/http/custom_lifespan.md
-        - how-tos/http/custom_middleware.md
-        - how-tos/http/custom_routes.md
-      - Data management:
-        - Add semantic search: cloud/deployment/semantic_search.md
-        - Add TTLs: how-tos/ttl/configure_ttl.md
+      - MCP: concepts/server-mcp.md
 
   - Reference:
     - reference/index.md
