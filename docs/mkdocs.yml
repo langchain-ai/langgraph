@@ -110,13 +110,13 @@ nav:
 
   - Guides:
     - LangGraph APIs:
-      - Runtime: concepts/pregel.md
       - Graph API:
           - Overview: concepts/low_level.md
           - Use the Graph API: how-tos/graph-api.ipynb
       - Functional API:
           - Overview: concepts/functional_api.md
           - Use the Functional API: how-tos/use-functional-api.md
+      - Runtime: concepts/pregel.md
     - Core capabilities:
       - Streaming:
           - Overview: concepts/streaming.md
