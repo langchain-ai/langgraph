@@ -8,9 +8,9 @@ hide:
   - tags
 ---
 
-# Agent development with LangGraph
+# Agent development using prebuilt components
 
-**LangGraph** provides both low-level primitives and high-level prebuilt components for building agent-based applications. This section focuses on the **prebuilt**, **reusable** components designed to help you construct agentic systems quickly and reliably—without the need to implement orchestration, memory, or human feedback handling from scratch.
+LangGraph provides both low-level primitives and high-level prebuilt components for building agent-based applications. This section focuses on the prebuilt, ready-to-use components designed to help you construct agentic systems quickly and reliably—without the need to implement orchestration, memory, or human feedback handling from scratch.
 
 ## What is an agent?
 
