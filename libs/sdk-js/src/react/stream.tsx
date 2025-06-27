@@ -321,10 +321,9 @@ function useThreadHistory<StateType extends Record<string, unknown>>(
 ) {
   const [history, setHistory] = useState<ThreadState<StateType>[]>([]);
 
+  const clientHash = getClientConfigHash(client);
   const clientRef = useRef(client);
   clientRef.current = client;
-
-  const clientHash = getClientConfigHash(client);
 
   const fetcher = useCallback(
     (
@@ -342,13 +341,13 @@ function useThreadHistory<StateType extends Record<string, unknown>>(
       clearCallbackRef.current?.();
       return Promise.resolve([]);
     },
-    [clientHash],
+    [],
   );
 
   useEffect(() => {
     if (submittingRef.current) return;
     fetcher(threadId);
-  }, [fetcher, submittingRef, threadId]);
+  }, [fetcher, clientHash, submittingRef, threadId]);
 
   return {
     data: history,
