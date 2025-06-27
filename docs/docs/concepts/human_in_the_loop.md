@@ -17,6 +17,10 @@ To review, edit, and approve tool calls in an agent or workflow, [use LangGraph'
 ![image](../concepts/img/human_in_the_loop/tool-call-review.png){: style="max-height:400px"}
 </figure>
 
+!!! tip
+
+    For information on how to use human-in-the-loop, see [Enable human intervention](../how-tos/human_in_the_loop/add-human-in-the-loop.md) and [Human-in-the-loop using Server API](../cloud/how-tos/add-human-in-the-loop.md).
+
 ## Key capabilities
 
 * **Persistent execution state**: LangGraph allows you to pause execution **indefinitely** — for minutes, hours, or even days—until human input is received. This is possible because LangGraph checkpoints the graph state after each step, which allows the system to persist execution context and later resume the workflow, continuing from where it left off. This supports asynchronous human review or input without time constraints.
