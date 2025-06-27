@@ -65,4 +65,6 @@ lint.ignore = ["E501", "B008"]
 source = "uv-dynamic-versioning"
 
 [tool.uv-dynamic-versioning]
-fallback-version = "0.3.3"
+vcs = "git"
+style = "pep440"
+bump = true

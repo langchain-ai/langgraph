@@ -78,4 +78,6 @@ patterns = ["*.py"]
 source = "uv-dynamic-versioning"
 
 [tool.uv-dynamic-versioning]
-fallback-version = "2.0.21"
+vcs = "git"
+style = "pep440"
+bump = true

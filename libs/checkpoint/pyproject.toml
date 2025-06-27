@@ -71,4 +71,6 @@ disable_error_code = "typeddict-item, return-value"
 source = "uv-dynamic-versioning"
 
 [tool.uv-dynamic-versioning]
-fallback-version = "2.1.0"
+vcs = "git"
+style = "pep440"
+bump = true

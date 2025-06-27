@@ -111,4 +111,6 @@ addopts = "--full-trace --strict-markers --strict-config --durations=5 --snapsho
 source = "uv-dynamic-versioning"
 
 [tool.uv-dynamic-versioning]
-fallback-version = "0.5.0"
+vcs = "git"
+style = "pep440"
+bump = true
