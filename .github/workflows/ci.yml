@@ -3,7 +3,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, test-windows-make-availability]
   pull_request:
 
 # If another push to the same PR or branch happens while this workflow is still running,
