@@ -29,14 +29,15 @@ jobs:
           enable-cache: true
           cache-suffix: "test-langgraph"
 
-      - name: Setup MSYS2 (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          install: make
-          path-type: inherit
+      # Temporarily disabled to test if MSYS2 is needed
+      # - name: Setup MSYS2 (Windows)
+      #   if: matrix.os == 'windows-latest'
+      #   uses: msys2/setup-msys2@v2
+      #   with:
+      #     msystem: MINGW64
+      #     update: true
+      #     install: make
+      #     path-type: inherit
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -56,7 +57,7 @@ jobs:
 
       - name: Run tests (Windows)
         if: matrix.os == 'windows-latest'
-        shell: msys2 {0}
+        shell: bash
         run: make test_parallel
 
       - name: Ensure the tests did not create any additional files
