@@ -78,7 +78,7 @@ graph_builder.add_edge(START, "chatbot")
 
 !!! tip
 
-    For more information and examples of human-in-the-loop workflows, see [Human-in-the-loop](../../concepts/human_in_the_loop.md). This includes how to [review and edit tool calls](../../how-tos/human_in_the_loop/review-tool-calls.ipynb) before they are executed.
+    For more information and examples of human-in-the-loop workflows, see [Human-in-the-loop](../../concepts/human_in_the_loop.md).
 
 ## 2. Compile the graph
 

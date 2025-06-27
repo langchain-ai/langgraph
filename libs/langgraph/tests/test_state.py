@@ -92,7 +92,7 @@ def test_state_schema_with_type_hint():
             assert state.pop("foo") == "bar"
             return {"input_state": state}
 
-    graph = StateGraph(InputState, output=OutputState)
+    graph = StateGraph(InputState, output_schema=OutputState)
     actions = [
         complete_hint,
         miss_first_hint,

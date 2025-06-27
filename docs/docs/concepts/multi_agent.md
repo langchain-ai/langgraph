@@ -87,6 +87,7 @@ One of the most common agent types is a [tool-calling agent](../agents/overview.
 ```python
 from langchain_core.tools import tool
 
+@tool
 def transfer_to_bob():
     """Transfer to bob."""
     return Command(
@@ -375,13 +376,13 @@ The most common way for agents to communicate is via a shared state channel, typ
 
 #### Sharing full thought process
 
-Agents can **share the full history** of their thought process (i.e., "scratchpad") with all other agents. This "scratchpad" would typically look like a [list of messages](./low_level.md#why-use-messages). The benefit of sharing the full thought process is that it might help other agents make better decisions and improve reasoning ability for the system as a whole. The downside is that as the number of agents and their complexity grows, the "scratchpad" will grow quickly and might require additional strategies for [memory management](./memory.md/#managing-long-conversation-history).
+Agents can **share the full history** of their thought process (i.e., "scratchpad") with all other agents. This "scratchpad" would typically look like a [list of messages](./low_level.md#why-use-messages). The benefit of sharing the full thought process is that it might help other agents make better decisions and improve reasoning ability for the system as a whole. The downside is that as the number of agents and their complexity grows, the "scratchpad" will grow quickly and might require additional strategies for [memory management](../how-tos/memory/add-memory.md).
 
 #### Sharing only final results
 
 Agents can have their own private "scratchpad" and only **share the final result** with the rest of the agents. This approach might work better for systems with many agents or agents that are more complex. In this case, you would need to define agents with [different state schemas](#using-different-state-schemas).
 
-For agents called as tools, the supervisor determines the inputs based on the tool schema. Additionally, LangGraph allows [passing state](../how-tos/tool-calling.ipynb#read-state) to individual tools at runtime, so subordinate agents can access parent state, if needed.
+For agents called as tools, the supervisor determines the inputs based on the tool schema. Additionally, LangGraph allows [passing state](../how-tos/tool-calling.md#short-term-memory) to individual tools at runtime, so subordinate agents can access parent state, if needed.
 
 #### Indicating agent name in messages
 

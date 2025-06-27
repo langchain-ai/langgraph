@@ -14,7 +14,10 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 pytest.register_assert_rewrite("tests.memory_assert")
 
-from tests.memory_assert import MemorySaverAssertImmutable  # noqa: E402
+from tests.memory_assert import (  # noqa: E402
+    MemorySaverAssertImmutable,
+    MemorySaverNeedsPendingSendsMigration,
+)
 
 DEFAULT_POSTGRES_URI = "postgres://postgres:postgres@localhost:5442/"
 
@@ -22,6 +25,11 @@ DEFAULT_POSTGRES_URI = "postgres://postgres:postgres@localhost:5442/"
 @contextmanager
 def _checkpointer_memory():
     yield MemorySaverAssertImmutable()
+
+
+@contextmanager
+def _checkpointer_memory_migrate_sends():
+    yield MemorySaverNeedsPendingSendsMigration()
 
 
 @contextmanager
@@ -187,6 +195,7 @@ async def _checkpointer_postgres_aio_pool():
 
 __all__ = [
     "_checkpointer_memory",
+    "_checkpointer_memory_migrate_sends",
     "_checkpointer_sqlite",
     "_checkpointer_sqlite_aes",
     "_checkpointer_postgres",

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-checkpoint"
-version = "2.0.26"
+version = "2.1.0"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 authors = []
 requires-python = ">=3.9"
@@ -31,6 +31,7 @@ dev = [
   "dataclasses-json",
   "numpy",
   "pandas",
+  "pandas-stubs>=2.2.2.240807",
 ]
 
 [tool.hatch.build.targets.wheel]

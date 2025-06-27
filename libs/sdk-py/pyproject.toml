@@ -54,4 +54,4 @@ lint.ignore = ["E501", "B008"]
 source = "uv-dynamic-versioning"
 
 [tool.uv-dynamic-versioning]
-fallback-version = "0.1.70"
+fallback-version = "0.1.72"

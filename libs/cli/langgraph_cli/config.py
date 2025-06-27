@@ -332,6 +332,11 @@ class HttpConfig(TypedDict, total=False):
     
     Default is False.
     """
+    disable_mcp: bool
+    """Optional. If True, /mcp routes are removed, disabling the MCP server.
+    
+    Default is False.
+    """
     disable_meta: bool
     """Optional. If True, all meta endpoints (/ok, /info, /metrics, /docs) are disabled.
     
@@ -381,6 +386,14 @@ class Config(TypedDict, total=False):
     package installation (custom indices, credentials, etc.).
     
     Only relevant if Python dependencies are installed via pip. If omitted, default pip settings are used.
+    """
+
+    pip_installer: Optional[str]
+    """Optional. Python package installer to use ('auto', 'pip', 'uv').
+    
+    - 'auto' (default): Use uv for supported base images, otherwise pip
+    - 'pip': Force use of pip regardless of base image support
+    - 'uv': Force use of uv (will fail if base image doesn't support it)
     """
 
     dockerfile_lines: list[str]
@@ -536,6 +549,7 @@ def validate_config(config: Config) -> Config:
         "node_version": node_version,
         "python_version": python_version,
         "pip_config_file": config.get("pip_config_file"),
+        "pip_installer": config.get("pip_installer", "auto"),
         "_INTERNAL_docker_tag": config.get("_INTERNAL_docker_tag"),
         "base_image": config.get("base_image"),
         "image_distro": image_distro,
@@ -598,6 +612,13 @@ def validate_config(config: Config) -> Config:
             raise click.UsageError(
                 f"Invalid image_distro: '{image_distro}'. "
                 "Must be either 'debian' or 'wolfi'."
+            )
+
+    if pip_installer := config.get("pip_installer"):
+        if pip_installer not in ["auto", "pip", "uv"]:
+            raise click.UsageError(
+                f"Invalid pip_installer: '{pip_installer}'. "
+                "Must be 'auto', 'pip', or 'uv'."
             )
 
     # Validate auth config
@@ -1114,12 +1135,21 @@ def python_config_to_docker(
     base_image: str,
 ) -> tuple[str, dict[str, str]]:
     """Generate a Dockerfile from the configuration."""
-    if _image_supports_uv(base_image):
+    pip_installer = config.get("pip_installer", "auto")
+
+    if pip_installer == "uv":
         install_cmd = "uv pip install --system"
         uv_removal = "RUN uv pip uninstall --system pip setuptools wheel && rm /usr/bin/uv /usr/bin/uvx"
-    else:
+    elif pip_installer == "pip":
         install_cmd = "pip install"
         uv_removal = ""
+    else:
+        if _image_supports_uv(base_image):
+            install_cmd = "uv pip install --system"
+            uv_removal = "RUN uv pip uninstall --system pip setuptools wheel && rm /usr/bin/uv /usr/bin/uvx"
+        else:
+            install_cmd = "pip install"
+            uv_removal = ""
 
     # configure pip
     pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
