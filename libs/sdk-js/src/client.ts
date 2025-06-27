@@ -1658,7 +1658,30 @@ export class Client<
    */
   public "~ui": UiClient;
 
+  /**
+   * @internal Used to obtain a stable key representing the client.
+   */
+  private "~configHash": string | undefined;
+
   constructor(config?: ClientConfig) {
+    this["~configHash"] = (() =>
+      JSON.stringify({
+        apiUrl: config?.apiUrl,
+        apiKey: config?.apiKey,
+        timeoutMs: config?.timeoutMs,
+        defaultHeaders: config?.defaultHeaders,
+
+        maxConcurrency: config?.callerOptions?.maxConcurrency,
+        maxRetries: config?.callerOptions?.maxRetries,
+
+        callbacks: {
+          onFailedResponseHook:
+            config?.callerOptions?.onFailedResponseHook != null,
+          onRequest: config?.onRequest != null,
+          fetch: config?.callerOptions?.fetch != null,
+        },
+      }))();
+
     this.assistants = new AssistantsClient(config);
     this.threads = new ThreadsClient(config);
     this.runs = new RunsClient(config);
@@ -1666,4 +1689,11 @@ export class Client<
     this.store = new StoreClient(config);
     this["~ui"] = new UiClient(config);
   }
+}
+
+/**
+ * @internal Used to obtain a stable key representing the client.
+ */
+export function getClientConfigHash(client: Client): string | undefined {
+  return client["~configHash"];
 }
