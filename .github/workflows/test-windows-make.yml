@@ -47,12 +47,16 @@ jobs:
           cd libs/langgraph
           make help || echo "make command failed as expected"
           
-      - name: Test make with MSYS2 (Windows)
+      - name: Test make with bash shell (Windows)
         if: matrix.os == 'windows-latest'
-        shell: msys2 {0}
+        shell: bash
         run: |
-          echo "=== Testing make with MSYS2 ==="
+          echo "=== Testing make with bash shell (no MSYS2) ==="
           which make
           make --version
           cd libs/langgraph
+          # Test actual make commands
           make help
+          echo ""
+          echo "=== Testing make lint ==="
+          make lint || echo "make lint failed"
