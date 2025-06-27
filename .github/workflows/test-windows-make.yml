@@ -1,0 +1,67 @@
+name: Test Windows Make Availability
+
+on:
+  push:
+    branches: [add-windows-ci]
+  workflow_dispatch:
+
+jobs:
+  test-make:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    
+    name: Test make on ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check for make command
+        shell: bash
+        run: |
+          echo "=== Testing make availability on ${{ runner.os }} ==="
+          echo ""
+          echo "1. Which make:"
+          which make || echo "make not found in PATH"
+          echo ""
+          echo "2. Where make:"
+          where make || echo "make not found with where command"
+          echo ""
+          echo "3. Make version:"
+          make --version || echo "make command failed"
+          echo ""
+          echo "4. PATH content:"
+          echo "$PATH"
+          echo ""
+          echo "5. Check common make locations:"
+          ls -la /usr/bin/make || echo "/usr/bin/make not found"
+          ls -la /mingw64/bin/make || echo "/mingw64/bin/make not found"
+          ls -la "C:/Program Files/make.exe" || echo "C:/Program Files/make.exe not found"
+          
+      - name: Try running make (Windows without MSYS2)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        continue-on-error: true
+        run: |
+          echo "=== Attempting to use make without MSYS2 ==="
+          cd libs/langgraph
+          make help || echo "make command failed as expected"
+          
+      - name: Setup MSYS2 and test again (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: make
+          path-type: inherit
+          
+      - name: Test make with MSYS2 (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: msys2 {0}
+        run: |
+          echo "=== Testing make with MSYS2 ==="
+          which make
+          make --version
+          cd libs/langgraph
+          make help
