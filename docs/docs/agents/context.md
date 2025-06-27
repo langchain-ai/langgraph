@@ -13,7 +13,7 @@ LangGraph provides **three** primary ways to supply context:
 | Type                                                                         | Description                                   | Mutable? | Lifetime                |
 |------------------------------------------------------------------------------|-----------------------------------------------|----------|-------------------------|
 | [**Config**](#config-static-context)                                         | data passed at the start of a run             | ❌        | per run                 |
-| [**Short-term memory (State)**](#state-mutable-context)                      | dynamic data that can change during execution | ✅        | per run or conversation |
+| [**Short-term memory (State)**](#short-term-memory-mutable-context)          | dynamic data that can change during execution | ✅        | per run or conversation |
 | [**Long-term memory (Store)**](#long-term-memory-cross-conversation-context) | data that can be shared between conversations | ✅        | across conversations    |
 
 ## Provide runtime context
