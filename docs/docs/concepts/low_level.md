@@ -89,7 +89,7 @@ def node_3(state: PrivateState) -> OutputState:
     # Read from PrivateState, write to OutputState
     return {"graph_output": state["bar"] + " Lance"}
 
-builder = StateGraph(OverallState,input_schema=InputState,output_schema=OutputState)
+builder = StateGraph(OverallState,input=InputState,output=OutputState)
 builder.add_node("node_1", node_1)
 builder.add_node("node_2", node_2)
 builder.add_node("node_3", node_3)
