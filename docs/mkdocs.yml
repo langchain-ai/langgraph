@@ -104,7 +104,7 @@ nav:
       - Run a local server: tutorials/langgraph-platform/local-server.md
       - Basic deployment: agents/deployment.md
     - Agent development:
-      - Ready-to-use agent components: agents/overview.md
+      - Ready-to-use components: agents/overview.md
       - Run an agent: agents/run_agents.md
       - Agent architectures: concepts/agentic_concepts.md
     - Workflow orchestration:
