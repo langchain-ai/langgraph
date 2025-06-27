@@ -1,7 +1,6 @@
 import ast
 import os
 import re
-from pathlib import Path
 from typing import Literal
 
 import nbformat
@@ -26,7 +25,7 @@ def _uses_input(source: str) -> bool:
 
 
 def _rewrite_cell_magic(code: str) -> str:
-    """Process a code block that uses cell magic.:w
+    """Process a code block that uses cell magic.
 
     - Lines starting with "%%capture" are ignored.
     - Lines starting with "%pip" are rewritten by removing the leading "%" character.
@@ -52,10 +51,14 @@ def _rewrite_cell_magic(code: str) -> str:
         if stripped.startswith("%%capture"):
             continue
         # Rewrite %pip lines by dropping the '%'
-        elif stripped.startswith("%pip"):
-            # Drop the leading '%' character
-            rewritten_lines.append(stripped[1:])
-        # Anything else is not supported
+        elif stripped.startswith("%") or stripped.startswith("!"):
+            # Drop the leading '%' character and then drop all leading whitespace
+            stripped = stripped.lstrip("%! \t")
+            # Check if the line starts with "pip"
+            if stripped.startswith("pip"):
+                rewritten_lines.append(stripped)
+            else:
+                raise NotImplementedError(f"Unhandled line: {line}")
         else:
             raise NotImplementedError(f"Unhandled line: {line}")
 
@@ -217,6 +220,24 @@ def _convert_links_in_markdown(markdown: str) -> str:
     )
 
 
+class HideCellTagPreprocessor(Preprocessor):
+    """
+    Removes cells that have '# hide-cell' at the beginning of the cell content.
+    This allows authors to include cells in the notebook that should not
+    appear in the generated markdown output.
+    """
+
+    def preprocess(self, nb, resources):
+        # Filter out cells with the '# hide-cell' comment at the beginning
+        nb.cells = [
+            cell
+            for cell in nb.cells
+            if not (cell.source.strip().startswith("# hide-cell"))
+        ]
+
+        return nb, resources
+
+
 class EscapePreprocessor(Preprocessor):
     def __init__(self, markdown_exec_migration: bool = False, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -247,13 +268,10 @@ class EscapePreprocessor(Preprocessor):
             )
             cell.metadata["exec"] = is_exec
 
-            if self.markdown_exec_migration:
-                # For markdown exec migration we'll re-write cell magic as bash commands
-                if source.startswith("%%"):
-                    cell.source = _rewrite_cell_magic(source)
-                    cell.metadata["language"] = "shell"
-
-                cell.metadata["has_output"] = _has_output(source)
+            # For markdown exec migration we'll re-write cell magic as bash commands
+            if source.startswith("%%"):
+                cell.source = _rewrite_cell_magic(source)
+                cell.metadata["language"] = "shell"
 
             # Remove noqa comments
             cell.source = re.sub(r"#\s*noqa.*$", "", cell.source, flags=re.MULTILINE)
@@ -341,6 +359,7 @@ class ExtractAttachmentsPreprocessor(Preprocessor):
 
 exporter = MarkdownExporter(
     preprocessors=[
+        HideCellTagPreprocessor,
         EscapePreprocessor,
         ExtractAttachmentsPreprocessor,
     ],
@@ -352,7 +371,7 @@ exporter = MarkdownExporter(
 
 
 def convert_notebook(
-    notebook_path: Path,
+    notebook_path: str,
     mode: Literal["markdown", "exec"] = "markdown",
 ) -> str:
     with open(notebook_path) as f:

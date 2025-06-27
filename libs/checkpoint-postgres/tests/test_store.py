@@ -1,9 +1,10 @@
 # type: ignore
+from __future__ import annotations
 
 import re
 import time
 from contextlib import contextmanager
-from typing import Any, Optional
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -52,9 +53,7 @@ def store(request) -> PostgresStore:
         with PostgresStore.from_conn_string(conn_string, ttl=ttl_config) as store:
             store.MIGRATIONS = [
                 (
-                    mig.replace(
-                        "ADD COLUMN ttl_minutes INT;", "ADD COLUMN ttl_minutes FLOAT;"
-                    )
+                    mig.replace("ttl_minutes INT;", "ttl_minutes FLOAT;")
                     if isinstance(mig, str)
                     else mig
                 )
@@ -381,7 +380,7 @@ def _create_vector_store(
     vector_type: str,
     distance_type: str,
     fake_embeddings: Embeddings,
-    text_fields: Optional[list[str]] = None,
+    text_fields: list[str] | None = None,
     enable_ttl: bool = True,
 ) -> PostgresStore:
     """Create a store with vector search enabled."""
@@ -403,7 +402,7 @@ def _create_vector_store(
             "vector_type": vector_type,
         },
         "distance_type": distance_type,
-        "text_fields": text_fields,
+        "fields": text_fields,
     }
 
     with Connection.connect(admin_conn_string, autocommit=True) as conn:
@@ -415,6 +414,10 @@ def _create_vector_store(
             ttl={"default_ttl": 2, "refresh_on_read": True} if enable_ttl else None,
         ) as store:
             store.setup()
+            with store._cursor() as cur:
+                # drop the migration index
+                cur.execute("DROP TABLE IF EXISTS store_migrations")
+            store.setup()  # Will fail if migrations aren't idempotent
             yield store
     finally:
         with Connection.connect(admin_conn_string, autocommit=True) as conn:

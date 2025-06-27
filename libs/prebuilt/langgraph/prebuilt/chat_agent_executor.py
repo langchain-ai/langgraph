@@ -1,4 +1,3 @@
-import functools
 import inspect
 from typing import (
     Any,
@@ -18,7 +17,13 @@ from langchain_core.language_models import (
     LanguageModelInput,
     LanguageModelLike,
 )
-from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    BaseMessage,
+    SystemMessage,
+    ToolMessage,
+)
 from langchain_core.runnables import (
     Runnable,
     RunnableBinding,
@@ -31,13 +36,13 @@ from typing_extensions import Annotated, TypedDict
 
 from langgraph.errors import ErrorCode, create_error_message
 from langgraph.graph import END, StateGraph
-from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.managed import IsLastStep, RemainingSteps
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer, Send
-from langgraph.utils.runnable import RunnableCallable
+from langgraph.utils.runnable import RunnableCallable, RunnableLike
 
 StructuredResponse = Union[dict, BaseModel]
 StructuredResponseSchema = Union[dict, type[BaseModel]]
@@ -135,28 +140,9 @@ def _get_prompt_runnable(prompt: Optional[Prompt]) -> Runnable:
     return prompt_runnable
 
 
-def _convert_modifier_to_prompt(func: F) -> F:
-    """Decorator that converts state_modifier kwarg to prompt kwarg."""
-
-    @functools.wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        prompt = kwargs.get("prompt")
-        state_modifier = kwargs.pop("state_modifier", None)
-        if sum(p is not None for p in (prompt, state_modifier)) > 1:
-            raise ValueError(
-                "Expected only one of (prompt, state_modifier), got multiple values"
-            )
-
-        if state_modifier is not None:
-            prompt = state_modifier
-
-        kwargs["prompt"] = prompt
-        return func(*args, **kwargs)
-
-    return cast(F, wrapper)
-
-
-def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> bool:
+def _should_bind_tools(
+    model: LanguageModelLike, tools: Sequence[BaseTool], num_builtin: int = 0
+) -> bool:
     if isinstance(model, RunnableSequence):
         model = next(
             (
@@ -174,9 +160,10 @@ def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> b
         return True
 
     bound_tools = model.kwargs["tools"]
-    if len(tools) != len(bound_tools):
+    if len(tools) != len(bound_tools) - num_builtin:
         raise ValueError(
             "Number of tools in the model.bind_tools() and tools passed to create_react_agent must match"
+            f" Got {len(tools)} tools, expected {len(bound_tools) - num_builtin}"
         )
 
     tool_names = set(tool.name for tool in tools)
@@ -254,15 +241,16 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
-@_convert_modifier_to_prompt
 def create_react_agent(
     model: Union[str, LanguageModelLike],
-    tools: Union[Sequence[Union[BaseTool, Callable]], ToolNode],
+    tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
     prompt: Optional[Prompt] = None,
     response_format: Optional[
         Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
     ] = None,
+    pre_model_hook: Optional[RunnableLike] = None,
+    post_model_hook: Optional[RunnableLike] = None,
     state_schema: Optional[StateSchemaType] = None,
     config_schema: Optional[Type[Any]] = None,
     checkpointer: Optional[Checkpointer] = None,
@@ -270,10 +258,12 @@ def create_react_agent(
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
-    version: Literal["v1", "v2"] = "v1",
+    version: Literal["v1", "v2"] = "v2",
     name: Optional[str] = None,
-) -> CompiledGraph:
-    """Creates a graph that works with a chat model that utilizes tool calling.
+) -> CompiledStateGraph:
+    """Creates an agent graph that calls tools in a loop until a stopping condition is met.
+
+    For more details on using `create_react_agent`, visit [Agents](https://langchain-ai.github.io/langgraph/agents/overview/) documentation.
 
     Args:
         model: The `LangChain` chat model that supports tool calling.
@@ -305,6 +295,42 @@ def create_react_agent(
             !!! Note
                 The graph will make a separate call to the LLM to generate the structured response after the agent loop is finished.
                 This is not the only strategy to get structured responses, see more options in [this guide](https://langchain-ai.github.io/langgraph/how-tos/react-agent-structured-output/).
+
+        pre_model_hook: An optional node to add before the `agent` node (i.e., the node that calls the LLM).
+            Useful for managing long message histories (e.g., message trimming, summarization, etc.).
+            Pre-model hook must be a callable or a runnable that takes in current graph state and returns a state update in the form of
+                ```python
+                # At least one of `messages` or `llm_input_messages` MUST be provided
+                {
+                    # If provided, will UPDATE the `messages` in the state
+                    "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), ...],
+                    # If provided, will be used as the input to the LLM,
+                    # and will NOT UPDATE `messages` in the state
+                    "llm_input_messages": [...],
+                    # Any other state keys that need to be propagated
+                    ...
+                }
+                ```
+
+            !!! Important
+                At least one of `messages` or `llm_input_messages` MUST be provided and will be used as an input to the `agent` node.
+                The rest of the keys will be added to the graph state.
+
+            !!! Warning
+                If you are returning `messages` in the pre-model hook, you should OVERWRITE the `messages` key by doing the following:
+
+                ```python
+                {
+                    "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), *new_messages]
+                    ...
+                }
+                ```
+        post_model_hook: An optional node to add after the `agent` node (i.e., the node that calls the LLM).
+            Useful for implementing human-in-the-loop, guardrails, validation, or other post-processing.
+            Post-model hook must be a callable or a runnable that takes in current graph state and returns a state update.
+
+            !!! Note
+                Only available with `version="v2"`.
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `remaining_steps` keys.
             Defaults to `AgentState` that defines those two keys.
@@ -337,27 +363,7 @@ def create_react_agent(
     Returns:
         A compiled LangChain runnable that can be used for chat interactions.
 
-    The resulting graph looks like this:
-
-    ``` mermaid
-    stateDiagram-v2
-        [*] --> Start
-        Start --> Agent
-        Agent --> Tools : continue
-        Tools --> Agent
-        Agent --> End : end
-        End --> [*]
-
-        classDef startClass fill:#ffdfba;
-        classDef endClass fill:#baffc9;
-        classDef otherClass fill:#fad7de;
-
-        class Start startClass
-        class End endClass
-        class Agent,Tools otherClass
-    ```
-
-    The "agent" node calls the language model with the messages list (after applying the messages modifier).
+    The "agent" node calls the language model with the messages list (after applying the prompt).
     If the resulting AIMessage contains `tool_calls`, the graph will then call the ["tools"][langgraph.prebuilt.tool_node.ToolNode].
     The "tools" node executes the tools (1 tool per `tool_call`) and adds the responses to the messages list
     as `ToolMessage` objects. The agent node then calls the language model again.
@@ -367,10 +373,10 @@ def create_react_agent(
     ``` mermaid
         sequenceDiagram
             participant U as User
-            participant A as Agent (LLM)
+            participant A as LLM
             participant T as Tools
             U->>A: Initial input
-            Note over A: Messages modifier + LLM
+            Note over A: Prompt + LLM
             loop while tool_calls present
                 A->>T: Execute tools
                 T-->>A: ToolMessage for each tool_calls
@@ -378,233 +384,22 @@ def create_react_agent(
             A->>U: Return final state
     ```
 
-    Examples:
-        Use with a simple tool:
+    Example:
+        ```python
+        from langgraph.prebuilt import create_react_agent
 
-        ```pycon
-        >>> from langchain_openai import ChatOpenAI
-        >>> from langgraph.prebuilt import create_react_agent
+        def check_weather(location: str) -> str:
+            '''Return the weather forecast for the specified location.'''
+            return f"It's always sunny in {location}"
 
-
-        ... def check_weather(location: str) -> str:
-        ...     '''Return the weather forecast for the specified location.'''
-        ...     return f"It's always sunny in {location}"
-        >>>
-        >>> tools = [check_weather]
-        >>> model = ChatOpenAI(model="gpt-4o")
-        >>> graph = create_react_agent(model, tools=tools)
-        >>> inputs = {"messages": [("user", "what is the weather in sf")]}
-        >>> for s in graph.stream(inputs, stream_mode="values"):
-        ...     message = s["messages"][-1]
-        ...     if isinstance(message, tuple):
-        ...         print(message)
-        ...     else:
-        ...         message.pretty_print()
-        ('user', 'what is the weather in sf')
-        ================================== Ai Message ==================================
-        Tool Calls:
-        check_weather (call_LUzFvKJRuaWQPeXvBOzwhQOu)
-        Call ID: call_LUzFvKJRuaWQPeXvBOzwhQOu
-        Args:
-            location: San Francisco
-        ================================= Tool Message =================================
-        Name: check_weather
-        It's always sunny in San Francisco
-        ================================== Ai Message ==================================
-        The weather in San Francisco is sunny.
-        ```
-        Add a system prompt for the LLM:
-
-        ```pycon
-        >>> system_prompt = "You are a helpful bot named Fred."
-        >>> graph = create_react_agent(model, tools, prompt=system_prompt)
-        >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
-        >>> for s in graph.stream(inputs, stream_mode="values"):
-        ...     message = s["messages"][-1]
-        ...     if isinstance(message, tuple):
-        ...         print(message)
-        ...     else:
-        ...         message.pretty_print()
-        ('user', "What's your name? And what's the weather in SF?")
-        ================================== Ai Message ==================================
-        Hi, my name is Fred. Let me check the weather in San Francisco for you.
-        Tool Calls:
-        check_weather (call_lqhj4O0hXYkW9eknB4S41EXk)
-        Call ID: call_lqhj4O0hXYkW9eknB4S41EXk
-        Args:
-            location: San Francisco
-        ================================= Tool Message =================================
-        Name: check_weather
-        It's always sunny in San Francisco
-        ================================== Ai Message ==================================
-        The weather in San Francisco is currently sunny. If you need any more details or have other questions, feel free to ask!
-        ```
-
-        Add a more complex prompt for the LLM:
-
-        ```pycon
-        >>> from langchain_core.prompts import ChatPromptTemplate
-        >>> prompt = ChatPromptTemplate.from_messages([
-        ...     ("system", "You are a helpful bot named Fred."),
-        ...     ("placeholder", "{messages}"),
-        ...     ("user", "Remember, always be polite!"),
-        ... ])
-        >>>
-        >>> graph = create_react_agent(model, tools, prompt=prompt)
-        >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
-        >>> for s in graph.stream(inputs, stream_mode="values"):
-        ...     message = s["messages"][-1]
-        ...     if isinstance(message, tuple):
-        ...         print(message)
-        ...     else:
-        ...         message.pretty_print()
-        ```
-
-        Add complex prompt with custom graph state:
-
-        ```pycon
-        >>> from typing_extensions import TypedDict
-        >>>
-        >>> from langgraph.managed import IsLastStep
-        >>> prompt = ChatPromptTemplate.from_messages(
-        ...     [
-        ...         ("system", "Today is {today}"),
-        ...         ("placeholder", "{messages}"),
-        ...     ]
-        ... )
-        >>>
-        >>> class CustomState(TypedDict):
-        ...     today: str
-        ...     messages: Annotated[list[BaseMessage], add_messages]
-        ...     is_last_step: IsLastStep
-        >>>
-        >>> graph = create_react_agent(model, tools, state_schema=CustomState, prompt=prompt)
-        >>> inputs = {"messages": [("user", "What's today's date? And what's the weather in SF?")], "today": "July 16, 2004"}
-        >>> for s in graph.stream(inputs, stream_mode="values"):
-        ...     message = s["messages"][-1]
-        ...     if isinstance(message, tuple):
-        ...         print(message)
-        ...     else:
-        ...         message.pretty_print()
-        ```
-
-        Add thread-level "chat memory" to the graph:
-
-        ```pycon
-        >>> from langgraph.checkpoint.memory import MemorySaver
-        >>> graph = create_react_agent(model, tools, checkpointer=MemorySaver())
-        >>> config = {"configurable": {"thread_id": "thread-1"}}
-        >>> def print_stream(graph, inputs, config):
-        ...     for s in graph.stream(inputs, config, stream_mode="values"):
-        ...         message = s["messages"][-1]
-        ...         if isinstance(message, tuple):
-        ...             print(message)
-        ...         else:
-        ...             message.pretty_print()
-        >>> inputs = {"messages": [("user", "What's the weather in SF?")]}
-        >>> print_stream(graph, inputs, config)
-        >>> inputs2 = {"messages": [("user", "Cool, so then should i go biking today?")]}
-        >>> print_stream(graph, inputs2, config)
-        ('user', "What's the weather in SF?")
-        ================================== Ai Message ==================================
-        Tool Calls:
-        check_weather (call_ChndaktJxpr6EMPEB5JfOFYc)
-        Call ID: call_ChndaktJxpr6EMPEB5JfOFYc
-        Args:
-            location: San Francisco
-        ================================= Tool Message =================================
-        Name: check_weather
-        It's always sunny in San Francisco
-        ================================== Ai Message ==================================
-        The weather in San Francisco is sunny. Enjoy your day!
-        ================================ Human Message =================================
-        Cool, so then should i go biking today?
-        ================================== Ai Message ==================================
-        Since the weather in San Francisco is sunny, it sounds like a great day for biking! Enjoy your ride!
-        ```
-
-        Add an interrupt to let the user confirm before taking an action:
-
-        ```pycon
-        >>> graph = create_react_agent(
-        ...     model, tools, interrupt_before=["tools"], checkpointer=MemorySaver()
-        >>> )
-        >>> config = {"configurable": {"thread_id": "thread-1"}}
-
-        >>> inputs = {"messages": [("user", "What's the weather in SF?")]}
-        >>> print_stream(graph, inputs, config)
-        >>> snapshot = graph.get_state(config)
-        >>> print("Next step: ", snapshot.next)
-        >>> print_stream(graph, None, config)
-        ```
-
-        Add cross-thread memory to the graph:
-
-        ```pycon
-        >>> from langgraph.prebuilt import InjectedStore
-        >>> from langgraph.store.base import BaseStore
-
-        >>> def save_memory(memory: str, *, config: RunnableConfig, store: Annotated[BaseStore, InjectedStore()]) -> str:
-        ...     '''Save the given memory for the current user.'''
-        ...     # This is a **tool** the model can use to save memories to storage
-        ...     user_id = config.get("configurable", {}).get("user_id")
-        ...     namespace = ("memories", user_id)
-        ...     store.put(namespace, f"memory_{len(store.search(namespace))}", {"data": memory})
-        ...     return f"Saved memory: {memory}"
-
-        >>> def prepare_model_inputs(state: AgentState, config: RunnableConfig, store: BaseStore):
-        ...     # Retrieve user memories and add them to the system message
-        ...     # This function is called **every time** the model is prompted. It converts the state to a prompt
-        ...     user_id = config.get("configurable", {}).get("user_id")
-        ...     namespace = ("memories", user_id)
-        ...     memories = [m.value["data"] for m in store.search(namespace)]
-        ...     system_msg = f"User memories: {', '.join(memories)}"
-        ...     return [{"role": "system", "content": system_msg)] + state["messages"]
-
-        >>> from langgraph.checkpoint.memory import MemorySaver
-        >>> from langgraph.store.memory import InMemoryStore
-        >>> store = InMemoryStore()
-        >>> graph = create_react_agent(model, [save_memory], prompt=prepare_model_inputs, store=store, checkpointer=MemorySaver())
-        >>> config = {"configurable": {"thread_id": "thread-1", "user_id": "1"}}
-
-        >>> inputs = {"messages": [("user", "Hey I'm Will, how's it going?")]}
-        >>> print_stream(graph, inputs, config)
-        ('user', "Hey I'm Will, how's it going?")
-        ================================== Ai Message ==================================
-        Hello Will! It's nice to meet you. I'm doing well, thank you for asking. How are you doing today?
-
-        >>> inputs2 = {"messages": [("user", "I like to bike")]}
-        >>> print_stream(graph, inputs2, config)
-        ================================ Human Message =================================
-        I like to bike
-        ================================== Ai Message ==================================
-        That's great to hear, Will! Biking is an excellent hobby and form of exercise. It's a fun way to stay active and explore your surroundings. Do you have any favorite biking routes or trails you enjoy? Or perhaps you're into a specific type of biking, like mountain biking or road cycling?
-
-        >>> config = {"configurable": {"thread_id": "thread-2", "user_id": "1"}}
-        >>> inputs3 = {"messages": [("user", "Hi there! Remember me?")]}
-        >>> print_stream(graph, inputs3, config)
-        ================================ Human Message =================================
-        Hi there! Remember me?
-        ================================== Ai Message ==================================
-        User memories:
-        Hello! Of course, I remember you, Will! You mentioned earlier that you like to bike. It's great to hear from you again. How have you been? Have you been on any interesting bike rides lately?
-        ```
-
-        Add a timeout for a given step:
-
-        ```pycon
-        >>> import time
-        ... def check_weather(location: str) -> str:
-        ...     '''Return the weather forecast for the specified location.'''
-        ...     time.sleep(2)
-        ...     return f"It's always sunny in {location}"
-        >>>
-        >>> tools = [check_weather]
-        >>> graph = create_react_agent(model, tools)
-        >>> graph.step_timeout = 1 # Seconds
-        >>> for s in graph.stream({"messages": [("user", "what is the weather in sf")]}):
-        ...     print(s)
-        TimeoutError: Timed out at step 2
+        graph = create_react_agent(
+            "anthropic:claude-3-7-sonnet-latest",
+            tools=[check_weather],
+            prompt="You are a helpful assistant",
+        )
+        inputs = {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
+        for chunk in graph.stream(inputs, stream_mode="updates"):
+            print(chunk)
         ```
     """
     if version not in ("v1", "v2"):
@@ -628,12 +423,13 @@ def create_react_agent(
             else AgentState
         )
 
+    llm_builtin_tools: list[dict] = []
     if isinstance(tools, ToolNode):
         tool_classes = list(tools.tools_by_name.values())
         tool_node = tools
     else:
-        tool_node = ToolNode(tools)
-        # get the tool functions wrapped in a tool class from the ToolNode
+        llm_builtin_tools = [t for t in tools if isinstance(t, dict)]
+        tool_node = ToolNode([t for t in tools if not isinstance(t, dict)])
         tool_classes = list(tool_node.tools_by_name.values())
 
     if isinstance(model, str):
@@ -650,8 +446,11 @@ def create_react_agent(
 
     tool_calling_enabled = len(tool_classes) > 0
 
-    if _should_bind_tools(model, tool_classes) and tool_calling_enabled:
-        model = cast(BaseChatModel, model).bind_tools(tool_classes)
+    if (
+        _should_bind_tools(model, tool_classes, num_builtin=len(llm_builtin_tools))
+        and len(tool_classes + llm_builtin_tools) > 0
+    ):
+        model = cast(BaseChatModel, model).bind_tools(tool_classes + llm_builtin_tools)  # type: ignore[operator]
 
     model_runnable = _get_prompt_runnable(prompt) | model
 
@@ -678,10 +477,33 @@ def create_react_agent(
             or (remaining_steps is not None and remaining_steps < 2 and has_tool_calls)
         )
 
+    def _get_model_input_state(state: StateSchema) -> StateSchema:
+        if pre_model_hook is not None:
+            messages = (
+                _get_state_value(state, "llm_input_messages")
+            ) or _get_state_value(state, "messages")
+            error_msg = f"Expected input to call_model to have 'llm_input_messages' or 'messages' key, but got {state}"
+        else:
+            messages = _get_state_value(state, "messages")
+            error_msg = (
+                f"Expected input to call_model to have 'messages' key, but got {state}"
+            )
+
+        if messages is None:
+            raise ValueError(error_msg)
+
+        _validate_chat_history(messages)
+        # we're passing messages under `messages` key, as this is expected by the prompt
+        if isinstance(state_schema, type) and issubclass(state_schema, BaseModel):
+            state.messages = messages  # type: ignore
+        else:
+            state["messages"] = messages  # type: ignore
+
+        return state
+
     # Define the function that calls the model
     def call_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
-        messages = _get_state_value(state, "messages")
-        _validate_chat_history(messages)
+        state = _get_model_input_state(state)
         response = cast(AIMessage, model_runnable.invoke(state, config))
         # add agent name to the AIMessage
         response.name = name
@@ -699,8 +521,7 @@ def create_react_agent(
         return {"messages": [response]}
 
     async def acall_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
-        messages = _get_state_value(state, "messages")
-        _validate_chat_history(messages)
+        state = _get_model_input_state(state)
         response = cast(AIMessage, await model_runnable.ainvoke(state, config))
         # add agent name to the AIMessage
         response.name = name
@@ -716,12 +537,31 @@ def create_react_agent(
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
+    input_schema: StateSchemaType
+    if pre_model_hook is not None:
+        # Dynamically create a schema that inherits from state_schema and adds 'llm_input_messages'
+        if isinstance(state_schema, type) and issubclass(state_schema, BaseModel):
+            # For Pydantic schemas
+            from pydantic import create_model
+
+            input_schema = create_model(
+                "CallModelInputSchema",
+                llm_input_messages=(list[AnyMessage], ...),
+                __base__=state_schema,
+            )
+        else:
+            # For TypedDict schemas
+            class CallModelInputSchema(state_schema):  # type: ignore
+                llm_input_messages: list[AnyMessage]
+
+            input_schema = CallModelInputSchema
+    else:
+        input_schema = state_schema
+
     def generate_structured_response(
         state: StateSchema, config: RunnableConfig
     ) -> StateSchema:
-        # NOTE: we exclude the last message because there is enough information
-        # for the LLM to generate the structured response
-        messages = _get_state_value(state, "messages")[:-1]
+        messages = _get_state_value(state, "messages")
         structured_response_schema = response_format
         if isinstance(response_format, tuple):
             system_prompt, structured_response_schema = response_format
@@ -736,9 +576,7 @@ def create_react_agent(
     async def agenerate_structured_response(
         state: StateSchema, config: RunnableConfig
     ) -> StateSchema:
-        # NOTE: we exclude the last message because there is enough information
-        # for the LLM to generate the structured response
-        messages = _get_state_value(state, "messages")[:-1]
+        messages = _get_state_value(state, "messages")
         structured_response_schema = response_format
         if isinstance(response_format, tuple):
             system_prompt, structured_response_schema = response_format
@@ -753,16 +591,36 @@ def create_react_agent(
     if not tool_calling_enabled:
         # Define a new graph
         workflow = StateGraph(state_schema, config_schema=config_schema)
-        workflow.add_node("agent", RunnableCallable(call_model, acall_model))
-        workflow.set_entry_point("agent")
+        workflow.add_node(
+            "agent",
+            RunnableCallable(call_model, acall_model),
+            input_schema=input_schema,
+        )
+        if pre_model_hook is not None:
+            workflow.add_node("pre_model_hook", pre_model_hook)  # type: ignore[arg-type]
+            workflow.add_edge("pre_model_hook", "agent")
+            entrypoint = "pre_model_hook"
+        else:
+            entrypoint = "agent"
+
+        workflow.set_entry_point(entrypoint)
+
+        if post_model_hook is not None:
+            workflow.add_node("post_model_hook", post_model_hook)  # type: ignore[arg-type]
+            workflow.add_edge("agent", "post_model_hook")
+
         if response_format is not None:
             workflow.add_node(
                 "generate_structured_response",
                 RunnableCallable(
-                    generate_structured_response, agenerate_structured_response
+                    generate_structured_response,
+                    agenerate_structured_response,
                 ),
             )
-            workflow.add_edge("agent", "generate_structured_response")
+            if post_model_hook is not None:
+                workflow.add_edge("post_model_hook", "generate_structured_response")
+            else:
+                workflow.add_edge("agent", "generate_structured_response")
 
         return workflow.compile(
             checkpointer=checkpointer,
@@ -774,17 +632,24 @@ def create_react_agent(
         )
 
     # Define the function that determines whether to continue or not
-    def should_continue(state: StateSchema) -> Union[str, list]:
+    def should_continue(state: StateSchema) -> Union[str, list[Send]]:
         messages = _get_state_value(state, "messages")
         last_message = messages[-1]
         # If there is no function call, then we finish
         if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
-            return END if response_format is None else "generate_structured_response"
+            if post_model_hook is not None:
+                return "post_model_hook"
+            elif response_format is not None:
+                return "generate_structured_response"
+            else:
+                return END
         # Otherwise if there is, we continue
         else:
             if version == "v1":
                 return "tools"
             elif version == "v2":
+                if post_model_hook is not None:
+                    return "post_model_hook"
                 tool_calls = [
                     tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
                     for call in last_message.tool_calls
@@ -795,48 +660,124 @@ def create_react_agent(
     workflow = StateGraph(state_schema or AgentState, config_schema=config_schema)
 
     # Define the two nodes we will cycle between
-    workflow.add_node("agent", RunnableCallable(call_model, acall_model))
+    workflow.add_node(
+        "agent",
+        RunnableCallable(call_model, acall_model),
+        input_schema=input_schema,
+    )
     workflow.add_node("tools", tool_node)
+
+    # Optionally add a pre-model hook node that will be called
+    # every time before the "agent" (LLM-calling node)
+    if pre_model_hook is not None:
+        workflow.add_node("pre_model_hook", pre_model_hook)  # type: ignore[arg-type]
+        workflow.add_edge("pre_model_hook", "agent")
+        entrypoint = "pre_model_hook"
+    else:
+        entrypoint = "agent"
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
-    workflow.set_entry_point("agent")
+    workflow.set_entry_point(entrypoint)
+
+    agent_paths = []
+    post_model_hook_paths = [entrypoint, "tools"]
+
+    # Add a post model hook node if post_model_hook is provided
+    if post_model_hook is not None:
+        workflow.add_node("post_model_hook", post_model_hook)  # type: ignore[arg-type]
+        agent_paths.append("post_model_hook")
+        workflow.add_edge("agent", "post_model_hook")
+    else:
+        agent_paths.append("tools")
 
     # Add a structured output node if response_format is provided
     if response_format is not None:
         workflow.add_node(
             "generate_structured_response",
             RunnableCallable(
-                generate_structured_response, agenerate_structured_response
+                generate_structured_response,
+                agenerate_structured_response,
             ),
         )
-        workflow.add_edge("generate_structured_response", END)
-        should_continue_destinations = ["tools", "generate_structured_response"]
+        if post_model_hook is not None:
+            post_model_hook_paths.append("generate_structured_response")
+        else:
+            agent_paths.append("generate_structured_response")
     else:
-        should_continue_destinations = ["tools", END]
+        if post_model_hook is not None:
+            post_model_hook_paths.append(END)
+        else:
+            agent_paths.append(END)
 
-    # We now add a conditional edge
+    if post_model_hook is not None:
+
+        def post_model_hook_router(state: StateSchema) -> Union[str, list[Send]]:
+            """Route to the next node after post_model_hook.
+
+            Routes to one of:
+            * "tools": if there are pending tool calls without a corresponding message.
+            * "generate_structured_response": if no pending tool calls exist and response_format is specified.
+            * END: if no pending tool calls exist and no response_format is specified.
+            """
+
+            messages = _get_state_value(state, "messages")
+            tool_messages = [
+                m.tool_call_id for m in messages if isinstance(m, ToolMessage)
+            ]
+            last_ai_message = next(
+                m for m in reversed(messages) if isinstance(m, AIMessage)
+            )
+            pending_tool_calls = [
+                c for c in last_ai_message.tool_calls if c["id"] not in tool_messages
+            ]
+
+            if pending_tool_calls:
+                pending_tool_calls = [
+                    tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
+                    for call in pending_tool_calls
+                ]
+                return [Send("tools", [tool_call]) for tool_call in pending_tool_calls]
+            elif isinstance(messages[-1], ToolMessage):
+                return entrypoint
+            elif response_format is not None:
+                return "generate_structured_response"
+            else:
+                return END
+
+        workflow.add_conditional_edges(
+            "post_model_hook",
+            post_model_hook_router,  # type: ignore[arg-type]
+            path_map=post_model_hook_paths,
+        )
+
     workflow.add_conditional_edges(
-        # First, we define the start node. We use `agent`.
-        # This means these are the edges taken after the `agent` node is called.
         "agent",
-        # Next, we pass in the function that will determine which node is called next.
-        should_continue,
-        path_map=should_continue_destinations,
+        should_continue,  # type: ignore[arg-type]
+        path_map=agent_paths,
     )
 
-    def route_tool_responses(state: StateSchema) -> Literal["agent", "__end__"]:
+    def route_tool_responses(state: StateSchema) -> str:
         for m in reversed(_get_state_value(state, "messages")):
             if not isinstance(m, ToolMessage):
                 break
             if m.name in should_return_direct:
                 return END
-        return "agent"
+
+        # handle a case of parallel tool calls where
+        # the tool w/ `return_direct` was executed in a different `Send`
+        if isinstance(m, AIMessage) and m.tool_calls:
+            if any(call["name"] in should_return_direct for call in m.tool_calls):
+                return END
+
+        return entrypoint
 
     if should_return_direct:
-        workflow.add_conditional_edges("tools", route_tool_responses)
+        workflow.add_conditional_edges(
+            "tools", route_tool_responses, path_map=[entrypoint, END]
+        )
     else:
-        workflow.add_edge("tools", "agent")
+        workflow.add_edge("tools", entrypoint)
 
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,

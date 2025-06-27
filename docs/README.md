@@ -3,7 +3,7 @@
 To setup requirements for building docs you can run:
 
 ```bash
-poetry install --with test
+uv sync --group test
 ```
 
 ## Serving documentation locally
@@ -13,6 +13,8 @@ To run the documentation server locally you can run:
 ```bash
 make serve-docs
 ```
+
+This will start the documentation server on [http://127.0.0.1:8000/langgraph/](http://127.0.0.1:8000/langgraph/).
 
 ## Execute notebooks
 

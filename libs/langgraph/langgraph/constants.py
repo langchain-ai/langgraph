@@ -1,6 +1,7 @@
 import sys
+from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Any, Literal, Mapping, cast
+from typing import Any, Literal, cast
 
 from langgraph.types import Interrupt, Send  # noqa: F401
 
@@ -13,8 +14,10 @@ EMPTY_SEQ: tuple[str, ...] = tuple()
 MISSING = object()
 
 # --- Public constants ---
-TAG_NOSTREAM = sys.intern("langsmith:nostream")
+TAG_NOSTREAM = sys.intern("nostream")
 """Tag to disable streaming for a chat model."""
+TAG_NOSTREAM_ALT = sys.intern("langsmith:nostream")
+"""Tag to disable streaming for a chat model. (Deprecated in favour of "nostream")"""
 TAG_HIDDEN = sys.intern("langsmith:hidden")
 """Tag to hide a node/edge from certain tracing/streaming environments."""
 START = sys.intern("__start__")
@@ -36,12 +39,14 @@ ERROR = sys.intern("__error__")
 # for errors raised by nodes
 NO_WRITES = sys.intern("__no_writes__")
 # marker to signal node didn't write anything
-SCHEDULED = sys.intern("__scheduled__")
-# marker to signal node was scheduled (in distributed mode)
 TASKS = sys.intern("__pregel_tasks")
 # for Send objects returned by nodes/edges, corresponds to PUSH below
 RETURN = sys.intern("__return__")
 # for writes of a task where we simply record the return value
+
+# --- Reserved cache namespaces ---
+CACHE_NS_WRITES = sys.intern("__pregel_ns_writes")
+# cache namespace for node writes
 
 # --- Reserved config.configurable keys ---
 CONFIG_KEY_SEND = sys.intern("__pregel_send")
@@ -58,17 +63,14 @@ CONFIG_KEY_STREAM_WRITER = sys.intern("__pregel_stream_writer")
 # holds a `StreamWriter` for stream_mode=custom
 CONFIG_KEY_STORE = sys.intern("__pregel_store")
 # holds a `BaseStore` made available to managed values
+CONFIG_KEY_CACHE = sys.intern("__pregel_cache")
+# holds a `BaseCache` made available to subgraphs
 CONFIG_KEY_RESUMING = sys.intern("__pregel_resuming")
 # holds a boolean indicating if subgraphs should resume from a previous checkpoint
 CONFIG_KEY_TASK_ID = sys.intern("__pregel_task_id")
 # holds the task ID for the current task
-CONFIG_KEY_DEDUPE_TASKS = sys.intern("__pregel_dedupe_tasks")
-# holds a boolean indicating if tasks should be deduplicated (for distributed mode)
-CONFIG_KEY_ENSURE_LATEST = sys.intern("__pregel_ensure_latest")
-# holds a boolean indicating whether to assert the requested checkpoint is the latest
-# (for distributed mode)
-CONFIG_KEY_DELEGATE = sys.intern("__pregel_delegate")
-# holds a boolean indicating whether to delegate subgraphs (for distributed mode)
+CONFIG_KEY_THREAD_ID = sys.intern("thread_id")
+# holds the thread ID for the current invocation
 CONFIG_KEY_CHECKPOINT_MAP = sys.intern("checkpoint_map")
 # holds a mapping of checkpoint_ns -> checkpoint_id for parent graphs
 CONFIG_KEY_CHECKPOINT_ID = sys.intern("checkpoint_id")
@@ -83,6 +85,8 @@ CONFIG_KEY_PREVIOUS = sys.intern("__pregel_previous")
 # holds the previous return value from a stateful Pregel graph.
 CONFIG_KEY_RUNNER_SUBMIT = sys.intern("__pregel_runner_submit")
 # holds a function that receives tasks from runner, executes them and returns results
+CONFIG_KEY_CHECKPOINT_DURING = sys.intern("__pregel_checkpoint_during")
+# holds a boolean indicating whether to checkpoint during the run (or only at the end)
 
 # --- Other constants ---
 PUSH = sys.intern("__pregel_push")
@@ -97,6 +101,8 @@ CONF = cast(Literal["configurable"], sys.intern("configurable"))
 # key for the configurable dict in RunnableConfig
 NULL_TASK_ID = sys.intern("00000000-0000-0000-0000-000000000000")
 # the task_id to use for writes that are not associated with a task
+CONFIG_KEY_RESUME_MAP = sys.intern("__pregel_resume_map")
+# holds a mapping of task ns -> resume value for resuming tasks
 
 RESERVED = {
     TAG_HIDDEN,
@@ -106,8 +112,6 @@ RESERVED = {
     RESUME,
     ERROR,
     NO_WRITES,
-    SCHEDULED,
-    TASKS,
     # reserved config.configurable keys
     CONFIG_KEY_SEND,
     CONFIG_KEY_READ,
@@ -118,9 +122,6 @@ RESERVED = {
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_TASK_ID,
-    CONFIG_KEY_DEDUPE_TASKS,
-    CONFIG_KEY_ENSURE_LATEST,
-    CONFIG_KEY_DELEGATE,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_NS,

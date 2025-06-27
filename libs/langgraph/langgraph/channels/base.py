@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import Any, Generic, Optional, Sequence, TypeVar
+from collections.abc import Sequence
+from typing import Any, Generic, TypeVar
 
 from typing_extensions import Self
 
+from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
 Value = TypeVar("Value")
@@ -11,6 +13,8 @@ C = TypeVar("C")
 
 
 class BaseChannel(Generic[Value, Update, C], ABC):
+    """Base class for all channels."""
+
     __slots__ = ("key", "typ")
 
     def __init__(self, typ: Any, key: str = "") -> None:
@@ -29,18 +33,46 @@ class BaseChannel(Generic[Value, Update, C], ABC):
 
     # serialize/deserialize methods
 
-    def checkpoint(self) -> Optional[C]:
+    def copy(self) -> Self:
+        """Return a copy of the channel.
+        By default, delegates to checkpoint() and from_checkpoint().
+        Subclasses can override this method with a more efficient implementation."""
+        return self.from_checkpoint(self.checkpoint())
+
+    def checkpoint(self) -> C:
         """Return a serializable representation of the channel's current state.
         Raises EmptyChannelError if the channel is empty (never updated yet),
         or doesn't support checkpoints."""
-        return self.get()
+        try:
+            return self.get()
+        except EmptyChannelError:
+            return MISSING
 
     @abstractmethod
-    def from_checkpoint(self, checkpoint: Optional[C]) -> Self:
+    def from_checkpoint(self, checkpoint: C) -> Self:
         """Return a new identical channel, optionally initialized from a checkpoint.
         If the checkpoint contains complex data structures, they should be copied."""
 
-    # state methods
+    # read methods
+
+    @abstractmethod
+    def get(self) -> Value:
+        """Return the current value of the channel.
+
+        Raises EmptyChannelError if the channel is empty (never updated yet)."""
+
+    def is_available(self) -> bool:
+        """Return True if the channel is available (not empty), False otherwise.
+        Subclasses should override this method to provide a more efficient
+        implementation than calling get() and catching EmptyChannelError.
+        """
+        try:
+            self.get()
+            return True
+        except EmptyChannelError:
+            return False
+
+    # write methods
 
     @abstractmethod
     def update(self, values: Sequence[Update]) -> bool:
@@ -51,16 +83,20 @@ class BaseChannel(Generic[Value, Update, C], ABC):
         Raises InvalidUpdateError if the sequence of updates is invalid.
         Returns True if the channel was updated, False otherwise."""
 
-    @abstractmethod
-    def get(self) -> Value:
-        """Return the current value of the channel.
-
-        Raises EmptyChannelError if the channel is empty (never updated yet)."""
-
     def consume(self) -> bool:
-        """Mark the current value of the channel as consumed. By default, no-op.
-        This is called by Pregel before the start of the next step, for all
-        channels that triggered a node. If the channel was updated, return True.
+        """Notify the channel that a subscribed task ran. By default, no-op.
+        A channel can use this method to modify its state, preventing the value
+        from being consumed again.
+
+        Returns True if the channel was updated, False otherwise.
+        """
+        return False
+
+    def finish(self) -> bool:
+        """Notify the channel that the Pregel run is finishing. By default, no-op.
+        A channel can use this method to modify its state, preventing finish.
+
+        Returns True if the channel was updated, False otherwise.
         """
         return False
 

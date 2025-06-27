@@ -1,16 +1,14 @@
+from __future__ import annotations
+
 import asyncio
 import concurrent.futures
 import time
-from contextlib import ExitStack
+from collections.abc import Awaitable, Coroutine
+from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
 from contextvars import copy_context
 from types import TracebackType
 from typing import (
-    AsyncContextManager,
-    Awaitable,
     Callable,
-    ContextManager,
-    Coroutine,
-    Optional,
     Protocol,
     TypeVar,
     cast,
@@ -28,11 +26,11 @@ T = TypeVar("T")
 
 
 class Submit(Protocol[P, T]):
-    def __call__(
+    def __call__(  # type: ignore[valid-type]
         self,
         fn: Callable[P, T],
         *args: P.args,
-        __name__: Optional[str] = None,
+        __name__: str | None = None,
         __cancel_on_exit__: bool = False,
         __reraise_on_exit__: bool = True,
         __next_tick__: bool = False,
@@ -40,7 +38,7 @@ class Submit(Protocol[P, T]):
     ) -> concurrent.futures.Future[T]: ...
 
 
-class BackgroundExecutor(ContextManager):
+class BackgroundExecutor(AbstractContextManager):
     """A context manager that runs sync tasks in the background.
     Uses a thread pool executor to delegate tasks to separate threads.
     On exit,
@@ -58,7 +56,7 @@ class BackgroundExecutor(ContextManager):
         self,
         fn: Callable[P, T],
         *args: P.args,
-        __name__: Optional[str] = None,  # currently not used in sync version
+        __name__: str | None = None,  # currently not used in sync version
         __cancel_on_exit__: bool = False,  # for sync, can cancel only if not started
         __reraise_on_exit__: bool = True,
         __next_tick__: bool = False,
@@ -95,10 +93,10 @@ class BackgroundExecutor(ContextManager):
 
     def __exit__(
         self,
-        exc_type: Optional[type[BaseException]],
-        exc_value: Optional[BaseException],
-        traceback: Optional[TracebackType],
-    ) -> Optional[bool]:
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None:
         # copy the tasks as done() callback may modify the dict
         tasks = self.tasks.copy()
         # cancel all tasks that should be cancelled
@@ -122,7 +120,7 @@ class BackgroundExecutor(ContextManager):
                     pass
 
 
-class AsyncBackgroundExecutor(AsyncContextManager):
+class AsyncBackgroundExecutor(AbstractAsyncContextManager):
     """A context manager that runs async tasks in the background.
     Uses the current event loop to delegate tasks to asyncio tasks.
     On exit,
@@ -136,7 +134,7 @@ class AsyncBackgroundExecutor(AsyncContextManager):
         self.sentinel = object()
         self.loop = asyncio.get_running_loop()
         if max_concurrency := config.get("max_concurrency"):
-            self.semaphore: Optional[asyncio.Semaphore] = asyncio.Semaphore(
+            self.semaphore: asyncio.Semaphore | None = asyncio.Semaphore(
                 max_concurrency
             )
         else:
@@ -146,7 +144,7 @@ class AsyncBackgroundExecutor(AsyncContextManager):
         self,
         fn: Callable[P, Awaitable[T]],
         *args: P.args,
-        __name__: Optional[str] = None,
+        __name__: str | None = None,
         __cancel_on_exit__: bool = False,
         __reraise_on_exit__: bool = True,
         __next_tick__: bool = False,  # noop in async (always True)
@@ -156,10 +154,16 @@ class AsyncBackgroundExecutor(AsyncContextManager):
         if self.semaphore:
             coro = gated(self.semaphore, coro)
         if CONTEXT_NOT_SUPPORTED:
-            task = run_coroutine_threadsafe(coro, self.loop, name=__name__)
+            task = run_coroutine_threadsafe(
+                coro, self.loop, name=__name__, lazy=__next_tick__
+            )
         else:
             task = run_coroutine_threadsafe(
-                coro, self.loop, name=__name__, context=copy_context()
+                coro,
+                self.loop,
+                name=__name__,
+                context=copy_context(),
+                lazy=__next_tick__,
             )
         self.tasks[task] = (__cancel_on_exit__, __reraise_on_exit__)
         task.add_done_callback(self.done)
@@ -182,9 +186,9 @@ class AsyncBackgroundExecutor(AsyncContextManager):
 
     async def __aexit__(
         self,
-        exc_type: Optional[type[BaseException]],
-        exc_value: Optional[BaseException],
-        traceback: Optional[TracebackType],
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
     ) -> None:
         # copy the tasks as done() callback may modify the dict
         tasks = self.tasks.copy()

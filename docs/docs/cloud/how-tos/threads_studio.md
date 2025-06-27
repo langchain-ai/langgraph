@@ -1,23 +1,37 @@
-# Interacting with Threads in Studio
+# Manage threads
 
-## View Thread
+Studio allows you to view [threads](../../concepts/persistence.md#threads) from the server and edit their state.
 
-1. In the top of the right-hand pane, select the `New Thread` dropdown menu to view existing threads.
-1. View the state of the thread (i.e. the output) in the right-hand pane.
-1. To create a new thread, select `+ New Thread`.
+## View threads
 
-The following video shows these exact steps being carried out:
+### Graph mode
 
-<video controls="true" allowfullscreen="true" poster="../img/studio_threads_poster.png">
-    <source src="../img/studio_threads.mp4" type="video/mp4">
-</video>
+1. In the top of the right-hand pane, select the dropdown menu to view existing threads.
+1. Select the desired thread, and the thread history will populate in the right-hand side of the page.
+1. To create a new thread, click `+ New Thread` and [submit a run](../how-tos/invoke_studio.md#graph-mode).
 
-## Edit Thread State
+To view more granular information in the thread, drag the slider at the top of the page to the right. To view less information, drag the slider to the left. Additionally, collapse or expand individual turns, nodes, and keys of the state.
 
-The LangGraph Studio UI contains features for editing thread state. Explore these features in the right-hand pane. Select the `Edit` icon, modify the desired state, and then select `Fork` to invoke the assistant with the updated state.
+Switch between `Pretty` and `JSON` mode for different rendering formats.
 
-The following video shows how to edit a thread in the studio:
+### Chat mode
 
-<video controls allowfullscreen="true" poster="../img/studio_forks_poster.png">
-    <source src="../img/studio_forks.mp4" type="video/mp4">
-</video>
+1. View all threads in the right-hand pane of the page.
+2. Select the desired thread and the thread history will populate in the center panel.
+3. To create a new thread, click the plus button and [submit a run](../how-tos/invoke_studio.md#chat-mode).
+
+## Edit thread history
+
+### Graph mode
+
+To edit the state of the thread, select "edit node state" next to the desired node. Edit the node's output as desired and click "fork" to confirm. This will create a new forked run from the checkpoint of the selected node.
+
+If you instead want to re-run the thread from a given checkpoint without editing the state, click the "Re-run from here". This will again create a new forked run from the selected checkpoint. This is useful for re-running with changes that are not specific to the state, such as the selected assistant.
+
+### Chat mode
+
+To edit a human message in the thread, click the edit button below the human message. Edit the message as desired and submit. This will create a new fork of the conversation history. To re-generate an AI message, click the retry icon below the AI message.
+
+## Learn more
+
+For more information about time travel, [see here](../../concepts/time-travel.md).

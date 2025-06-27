@@ -1,4 +1,5 @@
 # type: ignore
+from __future__ import annotations
 
 import asyncio
 import queue
@@ -7,7 +8,6 @@ import threading
 import types
 from collections import deque
 from time import monotonic
-from typing import Optional
 
 PY_310 = sys.version_info >= (3, 10)
 
@@ -50,7 +50,7 @@ class AsyncQueue(asyncio.Queue):
 class Semaphore(threading.Semaphore):
     """Semaphore subclass with a wait() method."""
 
-    def wait(self, blocking: bool = True, timeout: Optional[float] = None):
+    def wait(self, blocking: bool = True, timeout: float | None = None):
         """Block until the semaphore can be acquired, but don't acquire it."""
         if not blocking and timeout is not None:
             raise ValueError("can't specify timeout for non-blocking acquire")
@@ -91,7 +91,7 @@ class SyncQueue:
         self._queue.append(item)
         self._count.release()
 
-    def get(self, block=True, timeout=None):
+    def get(self, block=False, timeout=None):
         """Remove and return an item from the queue.
 
         If optional args 'block' is true and 'timeout' is None (the default),

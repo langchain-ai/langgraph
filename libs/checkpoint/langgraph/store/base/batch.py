@@ -1,8 +1,12 @@
+"""Utilities for batching operations in a background task."""
+
+from __future__ import annotations
+
 import asyncio
 import functools
 import weakref
 from collections.abc import Iterable
-from typing import Any, Callable, Literal, Optional, TypeVar, Union
+from typing import Any, Callable, Literal, TypeVar
 
 from langgraph.store.base import (
     NOT_PROVIDED,
@@ -28,7 +32,7 @@ F = TypeVar("F", bound=Callable)
 
 def _check_loop(func: F) -> F:
     @functools.wraps(func)
-    def wrapper(store: "AsyncBatchedBaseStore", *args: Any, **kwargs: Any) -> Any:
+    def wrapper(store: AsyncBatchedBaseStore, *args: Any, **kwargs: Any) -> Any:
         method_name: str = func.__name__
         try:
             current_loop = asyncio.get_running_loop()
@@ -73,8 +77,8 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace: tuple[str, ...],
         key: str,
         *,
-        refresh_ttl: Optional[bool] = None,
-    ) -> Optional[Item]:
+        refresh_ttl: bool | None = None,
+    ) -> Item | None:
         assert not self._task.done()
         fut = self._loop.create_future()
         self._aqueue.put_nowait(
@@ -94,11 +98,11 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace_prefix: tuple[str, ...],
         /,
         *,
-        query: Optional[str] = None,
-        filter: Optional[dict[str, Any]] = None,
+        query: str | None = None,
+        filter: dict[str, Any] | None = None,
         limit: int = 10,
         offset: int = 0,
-        refresh_ttl: Optional[bool] = None,
+        refresh_ttl: bool | None = None,
     ) -> list[SearchItem]:
         assert not self._task.done()
         fut = self._loop.create_future()
@@ -122,9 +126,9 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace: tuple[str, ...],
         key: str,
         value: dict[str, Any],
-        index: Optional[Union[Literal[False], list[str]]] = None,
+        index: Literal[False] | list[str] | None = None,
         *,
-        ttl: Union[Optional[float], "NotProvided"] = NOT_PROVIDED,
+        ttl: float | None | NotProvided = NOT_PROVIDED,
     ) -> None:
         assert not self._task.done()
         _validate_namespace(namespace)
@@ -152,9 +156,9 @@ class AsyncBatchedBaseStore(BaseStore):
     async def alist_namespaces(
         self,
         *,
-        prefix: Optional[NamespacePath] = None,
-        suffix: Optional[NamespacePath] = None,
-        max_depth: Optional[int] = None,
+        prefix: NamespacePath | None = None,
+        suffix: NamespacePath | None = None,
+        max_depth: int | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[tuple[str, ...]]:
@@ -185,8 +189,8 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace: tuple[str, ...],
         key: str,
         *,
-        refresh_ttl: Optional[bool] = None,
-    ) -> Optional[Item]:
+        refresh_ttl: bool | None = None,
+    ) -> Item | None:
         return asyncio.run_coroutine_threadsafe(
             self.aget(namespace, key=key, refresh_ttl=refresh_ttl), self._loop
         ).result()
@@ -197,11 +201,11 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace_prefix: tuple[str, ...],
         /,
         *,
-        query: Optional[str] = None,
-        filter: Optional[dict[str, Any]] = None,
+        query: str | None = None,
+        filter: dict[str, Any] | None = None,
         limit: int = 10,
         offset: int = 0,
-        refresh_ttl: Optional[bool] = None,
+        refresh_ttl: bool | None = None,
     ) -> list[SearchItem]:
         return asyncio.run_coroutine_threadsafe(
             self.asearch(
@@ -221,9 +225,9 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace: tuple[str, ...],
         key: str,
         value: dict[str, Any],
-        index: Optional[Union[Literal[False], list[str]]] = None,
+        index: Literal[False] | list[str] | None = None,
         *,
-        ttl: Union[Optional[float], "NotProvided"] = NOT_PROVIDED,
+        ttl: float | None | NotProvided = NOT_PROVIDED,
     ) -> None:
         _validate_namespace(namespace)
         asyncio.run_coroutine_threadsafe(
@@ -251,9 +255,9 @@ class AsyncBatchedBaseStore(BaseStore):
     def list_namespaces(
         self,
         *,
-        prefix: Optional[NamespacePath] = None,
-        suffix: Optional[NamespacePath] = None,
-        max_depth: Optional[int] = None,
+        prefix: NamespacePath | None = None,
+        suffix: NamespacePath | None = None,
+        max_depth: int | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[tuple[str, ...]]:
@@ -269,7 +273,7 @@ class AsyncBatchedBaseStore(BaseStore):
         ).result()
 
 
-def _dedupe_ops(values: list[Op]) -> tuple[Optional[list[int]], list[Op]]:
+def _dedupe_ops(values: list[Op]) -> tuple[list[int] | None, list[Op]]:
     """Dedupe operations while preserving order for results.
 
     Args:

@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import json
 from copy import copy, deepcopy
+from dataclasses import replace
 from typing import (
     Any,
     Callable,
@@ -35,7 +36,7 @@ from typing_extensions import Annotated, get_args, get_origin
 
 from langgraph.errors import GraphBubbleUp
 from langgraph.store.base import BaseStore
-from langgraph.types import Command
+from langgraph.types import Command, Send
 from langgraph.utils.runnable import RunnableCallable
 
 INVALID_TOOL_NAME_ERROR_TEMPLATE = (
@@ -239,25 +240,7 @@ class ToolNode(RunnableCallable):
                 *executor.map(self._run_one, tool_calls, input_types, config_list)
             ]
 
-        # preserve existing behavior for non-command tool outputs for backwards
-        # compatibility
-        if not any(isinstance(output, Command) for output in outputs):
-            # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
-            return outputs if input_type == "list" else {self.messages_key: outputs}
-
-        # LangGraph will automatically handle list of Command and non-command node
-        # updates
-        combined_outputs: list[
-            Command | list[ToolMessage] | dict[str, list[ToolMessage]]
-        ] = []
-        for output in outputs:
-            if isinstance(output, Command):
-                combined_outputs.append(output)
-            else:
-                combined_outputs.append(
-                    [output] if input_type == "list" else {self.messages_key: [output]}
-                )
-        return combined_outputs
+        return self._combine_tool_outputs(outputs, input_type)
 
     async def _afunc(
         self,
@@ -275,22 +258,50 @@ class ToolNode(RunnableCallable):
             *(self._arun_one(call, input_type, config) for call in tool_calls)
         )
 
-        # preserve existing behavior for non-command tool outputs for backwards compatibility
+        return self._combine_tool_outputs(outputs, input_type)
+
+    def _combine_tool_outputs(
+        self,
+        outputs: list[ToolMessage],
+        input_type: Literal["list", "dict", "tool_calls"],
+    ) -> list[Union[Command, list[ToolMessage], dict[str, list[ToolMessage]]]]:
+        # preserve existing behavior for non-command tool outputs for backwards
+        # compatibility
         if not any(isinstance(output, Command) for output in outputs):
             # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
             return outputs if input_type == "list" else {self.messages_key: outputs}
 
-        # LangGraph will automatically handle list of Command and non-command node updates
+        # LangGraph will automatically handle list of Command and non-command node
+        # updates
         combined_outputs: list[
             Command | list[ToolMessage] | dict[str, list[ToolMessage]]
         ] = []
+
+        # combine all parent commands with goto into a single parent command
+        parent_command: Optional[Command] = None
         for output in outputs:
             if isinstance(output, Command):
-                combined_outputs.append(output)
+                if (
+                    output.graph is Command.PARENT
+                    and isinstance(output.goto, list)
+                    and all(isinstance(send, Send) for send in output.goto)
+                ):
+                    if parent_command:
+                        parent_command = replace(
+                            parent_command,
+                            goto=cast(list[Send], parent_command.goto) + output.goto,
+                        )
+                    else:
+                        parent_command = Command(graph=Command.PARENT, goto=output.goto)
+                else:
+                    combined_outputs.append(output)
             else:
                 combined_outputs.append(
                     [output] if input_type == "list" else {self.messages_key: [output]}
                 )
+
+        if parent_command:
+            combined_outputs.append(parent_command)
         return combined_outputs
 
     def _run_one(
@@ -420,22 +431,25 @@ class ToolNode(RunnableCallable):
                 return tool_calls, input_type
             else:
                 input_type = "list"
-                message: AnyMessage = input[-1]
+                messages = input
         elif isinstance(input, dict) and (messages := input.get(self.messages_key, [])):
             input_type = "dict"
-            message = messages[-1]
-        elif messages := getattr(input, self.messages_key, None):
+        elif messages := getattr(input, self.messages_key, []):
             # Assume dataclass-like state that can coerce from dict
             input_type = "dict"
-            message = messages[-1]
         else:
             raise ValueError("No message found in input")
 
-        if not isinstance(message, AIMessage):
-            raise ValueError("Last message is not an AIMessage")
+        try:
+            latest_ai_message = next(
+                m for m in reversed(messages) if isinstance(m, AIMessage)
+            )
+        except StopIteration:
+            raise ValueError("No AIMessage found in input")
 
         tool_calls = [
-            self.inject_tool_args(call, input, store) for call in message.tool_calls
+            self.inject_tool_args(call, input, store)
+            for call in latest_ai_message.tool_calls
         ]
         return tool_calls, input_type
 
@@ -532,10 +546,10 @@ class ToolNode(RunnableCallable):
         tool calls for tool invocation.
 
         Args:
-            tool_call (ToolCall): The tool call to inject state and store into.
-            input (Union[list[AnyMessage], dict[str, Any], BaseModel]): The input state
+            tool_call: The tool call to inject state and store into.
+            input: The input state
                 to inject.
-            store (Optional[BaseStore]): The store to inject.
+            store: The store to inject.
 
         Returns:
             ToolCall: The tool call with injected state and store.
@@ -614,7 +628,7 @@ def tools_condition(
     has tool calls. Otherwise, route to the end.
 
     Args:
-        state (Union[list[AnyMessage], dict[str, Any], BaseModel]): The state to check for
+        state: The state to check for
             tool calls. Must have a list of messages (MessageGraph) or have the
             "messages" key (StateGraph).
 
@@ -836,7 +850,7 @@ def _get_store_arg(tool: BaseTool) -> Optional[str]:
             if _is_injection(type_arg, InjectedStore)
         ]
         if len(injections) > 1:
-            ValueError(
+            raise ValueError(
                 "A tool argument should not be annotated with InjectedStore more than "
                 f"once. Received arg {name} with annotations {injections}."
             )

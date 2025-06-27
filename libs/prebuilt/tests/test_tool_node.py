@@ -17,8 +17,7 @@ from pydantic.v1 import ValidationError as ValidationErrorV1
 from langgraph.errors import NodeInterrupt
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.tool_node import TOOL_CALL_ERROR_TEMPLATE
-from langgraph.types import Command
-from tests.conftest import IS_LANGCHAIN_CORE_030_OR_GREATER
+from langgraph.types import Command, Send
 
 pytestmark = pytest.mark.anyio
 
@@ -492,10 +491,6 @@ def test_tool_node_node_interrupt():
             assert exc_info.value == "foo"
 
 
-@pytest.mark.skipif(
-    not IS_LANGCHAIN_CORE_030_OR_GREATER,
-    reason="Langchain core 0.3.0 or greater is required",
-)
 @pytest.mark.parametrize("input_type", ["dict", "tool_calls"])
 async def test_tool_node_command(input_type: str):
     from langchain_core.tools.base import InjectedToolCallId
@@ -797,10 +792,6 @@ async def test_tool_node_command(input_type: str):
     ) == [Command(update={"messages": []}, graph=Command.PARENT)]
 
 
-@pytest.mark.skipif(
-    not IS_LANGCHAIN_CORE_030_OR_GREATER,
-    reason="Langchain core 0.3.0 or greater is required",
-)
 async def test_tool_node_command_list_input():
     from langchain_core.tools.base import InjectedToolCallId
 
@@ -1051,3 +1042,90 @@ async def test_tool_node_command_list_input():
             )
         ]
     ) == [Command(update=[], graph=Command.PARENT)]
+
+
+def test_tool_node_parent_command_with_send():
+    from langchain_core.tools.base import InjectedToolCallId
+
+    @dec_tool
+    def transfer_to_alice(tool_call_id: Annotated[str, InjectedToolCallId]):
+        """Transfer to Alice"""
+        return Command(
+            goto=[
+                Send(
+                    "alice",
+                    {
+                        "messages": [
+                            ToolMessage(
+                                content="Transferred to Alice",
+                                name="transfer_to_alice",
+                                tool_call_id=tool_call_id,
+                            )
+                        ]
+                    },
+                )
+            ],
+            graph=Command.PARENT,
+        )
+
+    @dec_tool
+    def transfer_to_bob(tool_call_id: Annotated[str, InjectedToolCallId]):
+        """Transfer to Bob"""
+        return Command(
+            goto=[
+                Send(
+                    "bob",
+                    {
+                        "messages": [
+                            ToolMessage(
+                                content="Transferred to Bob",
+                                name="transfer_to_bob",
+                                tool_call_id=tool_call_id,
+                            )
+                        ]
+                    },
+                )
+            ],
+            graph=Command.PARENT,
+        )
+
+    tool_calls = [
+        {"args": {}, "id": "1", "name": "transfer_to_alice", "type": "tool_call"},
+        {"args": {}, "id": "2", "name": "transfer_to_bob", "type": "tool_call"},
+    ]
+
+    result = ToolNode([transfer_to_alice, transfer_to_bob]).invoke(
+        [AIMessage("", tool_calls=tool_calls)]
+    )
+
+    assert result == [
+        Command(
+            goto=[
+                Send(
+                    "alice",
+                    {
+                        "messages": [
+                            ToolMessage(
+                                content="Transferred to Alice",
+                                name="transfer_to_alice",
+                                tool_call_id="1",
+                            )
+                        ]
+                    },
+                ),
+                Send(
+                    "bob",
+                    {
+                        "messages": [
+                            ToolMessage(
+                                content="Transferred to Bob",
+                                name="transfer_to_bob",
+                                tool_call_id="2",
+                            )
+                        ]
+                    },
+                ),
+            ],
+            graph=Command.PARENT,
+        )
+    ]

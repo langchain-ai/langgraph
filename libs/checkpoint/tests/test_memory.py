@@ -68,21 +68,37 @@ class TestMemorySaver:
             },
             "metadata": {"run_id": "my_run_id"},
         }
-        self.memory_saver.put(config, self.chkpnt_2, self.metadata_2, {})
+        self.memory_saver.put(
+            config, self.chkpnt_2, self.metadata_2, self.chkpnt_2["channel_versions"]
+        )
         checkpoint = self.memory_saver.get_tuple(config)
         assert checkpoint is not None
         assert checkpoint.metadata == {
             **self.metadata_2,
-            "thread_id": "thread-2",
             "run_id": "my_run_id",
         }
 
     async def test_search(self) -> None:
         # set up test
         # save checkpoints
-        self.memory_saver.put(self.config_1, self.chkpnt_1, self.metadata_1, {})
-        self.memory_saver.put(self.config_2, self.chkpnt_2, self.metadata_2, {})
-        self.memory_saver.put(self.config_3, self.chkpnt_3, self.metadata_3, {})
+        self.memory_saver.put(
+            self.config_1,
+            self.chkpnt_1,
+            self.metadata_1,
+            self.chkpnt_1["channel_versions"],
+        )
+        self.memory_saver.put(
+            self.config_2,
+            self.chkpnt_2,
+            self.metadata_2,
+            self.chkpnt_2["channel_versions"],
+        )
+        self.memory_saver.put(
+            self.config_3,
+            self.chkpnt_3,
+            self.metadata_3,
+            self.chkpnt_3["channel_versions"],
+        )
 
         # call method / assertions
         query_1 = {"source": "input"}  # search by 1 key
@@ -95,18 +111,11 @@ class TestMemorySaver:
 
         search_results_1 = list(self.memory_saver.list(None, filter=query_1))
         assert len(search_results_1) == 1
-        assert search_results_1[0].metadata == {
-            "thread_id": "thread-1",
-            "thread_ts": "1",
-            **self.metadata_1,
-        }
+        assert search_results_1[0].metadata == self.metadata_1
 
         search_results_2 = list(self.memory_saver.list(None, filter=query_2))
         assert len(search_results_2) == 1
-        assert search_results_2[0].metadata == {
-            "thread_id": "thread-2",
-            **self.metadata_2,
-        }
+        assert search_results_2[0].metadata == self.metadata_2
 
         search_results_3 = list(self.memory_saver.list(None, filter=query_3))
         assert len(search_results_3) == 3
@@ -129,9 +138,24 @@ class TestMemorySaver:
     async def test_asearch(self) -> None:
         # set up test
         # save checkpoints
-        self.memory_saver.put(self.config_1, self.chkpnt_1, self.metadata_1, {})
-        self.memory_saver.put(self.config_2, self.chkpnt_2, self.metadata_2, {})
-        self.memory_saver.put(self.config_3, self.chkpnt_3, self.metadata_3, {})
+        self.memory_saver.put(
+            self.config_1,
+            self.chkpnt_1,
+            self.metadata_1,
+            self.chkpnt_1["channel_versions"],
+        )
+        self.memory_saver.put(
+            self.config_2,
+            self.chkpnt_2,
+            self.metadata_2,
+            self.chkpnt_2["channel_versions"],
+        )
+        self.memory_saver.put(
+            self.config_3,
+            self.chkpnt_3,
+            self.metadata_3,
+            self.chkpnt_3["channel_versions"],
+        )
 
         # call method / assertions
         query_1 = {"source": "input"}  # search by 1 key
@@ -146,20 +170,13 @@ class TestMemorySaver:
             c async for c in self.memory_saver.alist(None, filter=query_1)
         ]
         assert len(search_results_1) == 1
-        assert search_results_1[0].metadata == {
-            "thread_id": "thread-1",
-            "thread_ts": "1",
-            **self.metadata_1,
-        }
+        assert search_results_1[0].metadata == self.metadata_1
 
         search_results_2 = [
             c async for c in self.memory_saver.alist(None, filter=query_2)
         ]
         assert len(search_results_2) == 1
-        assert search_results_2[0].metadata == {
-            "thread_id": "thread-2",
-            **self.metadata_2,
-        }
+        assert search_results_2[0].metadata == self.metadata_2
 
         search_results_3 = [
             c async for c in self.memory_saver.alist(None, filter=query_3)

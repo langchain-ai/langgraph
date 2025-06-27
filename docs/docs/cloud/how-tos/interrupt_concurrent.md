@@ -1,4 +1,4 @@
-# Interrupt
+# How to use the interrupt option
 
 This guide assumes knowledge of what double-texting is, which you can learn about in the [double-texting conceptual guide](../../concepts/double_texting.md).
 
@@ -247,5 +247,7 @@ Verify that the original, interrupted run was interrupted
 
 Output:
 
+    ```
     'interrupted'
+    ```
 

@@ -1,3 +1,7 @@
+---
+search:
+  boost: 0.5
+---
 # Error reference
 
 This page contains guides around resolving common errors you may find while building with LangGraph.
@@ -14,3 +18,4 @@ Errors referenced below will have an `lc_error_code` property corresponding to o
 These guides provide troubleshooting information for errors that are specific to the LangGraph Platform.
 
 - [INVALID_LICENSE](./INVALID_LICENSE.md)
+- [Studio Errors](../studio.md)

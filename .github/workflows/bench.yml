@@ -5,9 +5,6 @@ on:
     paths:
       - "libs/**"
 
-env:
-  POETRY_VERSION: "1.7.1"
-
 jobs:
   benchmark:
     runs-on: ubuntu-latest
@@ -21,14 +18,14 @@ jobs:
         uses: Ana06/get-changed-files@v2.3.0
         with:
           format: json
-      - name: Set up Python 3.11 + Poetry ${{ env.POETRY_VERSION }}
-        uses: "./.github/actions/poetry_setup"
+      - name: Set up Python 3.11
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.11"
-          poetry-version: ${{ env.POETRY_VERSION }}
-          cache-key: bench
+          enable-cache: true
+          cache-suffix: "bench"
       - name: Install dependencies
-        run: poetry install --with dev
+        run: uv sync --group dev
       - name: Download baseline
         uses: actions/cache/restore@v4
         with:
@@ -43,7 +40,7 @@ jobs:
         run: |
           {
             echo 'OUTPUT<<EOF'
-            make -s benchmark
+            make -s benchmark-fast
             echo EOF
           } >> "$GITHUB_OUTPUT"
       - name: Compare benchmarks
@@ -53,7 +50,7 @@ jobs:
             echo 'OUTPUT<<EOF'
             mv out/benchmark-baseline.json out/main.json
             mv out/benchmark.json out/changes.json
-            poetry run pyperf compare_to out/main.json out/changes.json --table --group-by-speed
+            uv run pyperf compare_to out/main.json out/changes.json --table --group-by-speed
             echo EOF
           } >> "$GITHUB_OUTPUT"
       - name: Annotation

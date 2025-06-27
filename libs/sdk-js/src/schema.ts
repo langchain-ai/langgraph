@@ -57,25 +57,25 @@ export interface GraphSchema {
    * The schema for the input state.
    * Missing if unable to generate JSON schema from graph.
    */
-  input_schema?: JSONSchema7;
+  input_schema?: JSONSchema7 | null | undefined;
 
   /**
    * The schema for the output state.
    * Missing if unable to generate JSON schema from graph.
    */
-  output_schema?: JSONSchema7;
+  output_schema?: JSONSchema7 | null | undefined;
 
   /**
    * The schema for the graph state.
    * Missing if unable to generate JSON schema from graph.
    */
-  state_schema?: JSONSchema7;
+  state_schema?: JSONSchema7 | null | undefined;
 
   /**
    * The schema for the graph config.
    * Missing if unable to generate JSON schema from graph.
    */
-  config_schema?: JSONSchema7;
+  config_schema?: JSONSchema7 | null | undefined;
 }
 
 export type Subgraphs = Record<string, GraphSchema>;
@@ -113,6 +113,9 @@ export interface AssistantBase {
 
   /** The name of the assistant */
   name: string;
+
+  /** The description of the assistant */
+  description?: string;
 }
 
 export interface AssistantVersion extends AssistantBase {}
@@ -175,6 +178,9 @@ export interface Cron {
   /** The ID of the cron */
   cron_id: string;
 
+  /** The ID of the assistant */
+  assistant_id: string;
+
   /** The ID of the thread */
   thread_id: Optional<string>;
 
@@ -192,6 +198,15 @@ export interface Cron {
 
   /** The run payload to use for creating new run. */
   payload: Record<string, unknown>;
+
+  /** The user ID of the cron */
+  user_id: Optional<string>;
+
+  /** The next run date of the cron */
+  next_run_date: Optional<string>;
+
+  /** The metadata of the cron */
+  metadata: Record<string, unknown>;
 }
 
 export type DefaultValues = Record<string, unknown>[] | Record<string, unknown>;
@@ -298,3 +313,22 @@ export interface CronCreateForThreadResponse
   extends Omit<CronCreateResponse, "thread_id"> {
   thread_id: string;
 }
+
+export type AssistantSortBy =
+  | "assistant_id"
+  | "graph_id"
+  | "name"
+  | "created_at"
+  | "updated_at";
+
+export type ThreadSortBy = "thread_id" | "status" | "created_at" | "updated_at";
+
+export type CronSortBy =
+  | "cron_id"
+  | "assistant_id"
+  | "thread_id"
+  | "created_at"
+  | "updated_at"
+  | "next_run_date";
+
+export type SortOrder = "asc" | "desc";

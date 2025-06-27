@@ -79,7 +79,7 @@ The CLI uses a `langgraph.json` configuration file with these key settings:
 }
 ```
 
-See the [full documentation](https://langchain-ai.github.io/langgraph/docs/cloud/reference/cli.html) for detailed configuration options.
+See the [full documentation](https://langchain-ai.github.io/langgraph/cloud/reference/cli/) for detailed configuration options.
 
 ## Development
 
@@ -87,17 +87,17 @@ To develop the CLI itself:
 
 1. Clone the repository
 2. Navigate to the CLI directory: `cd libs/cli`
-3. Install development dependencies: `poetry install`
+3. Install development dependencies: `uv pip install`
 4. Make your changes to the CLI code
 5. Test your changes:
    ```bash
    # Run CLI commands directly
-   poetry run langgraph --help
+   uv run langgraph --help
    
    # Or use the examples
    cd examples
-   poetry install
-   poetry run langgraph dev  # or other commands
+   uv pip install
+   uv run langgraph dev  # or other commands
    ```
 
 ## License

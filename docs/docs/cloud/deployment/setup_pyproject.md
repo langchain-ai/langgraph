@@ -1,6 +1,6 @@
-# How to Set Up a LangGraph Application for Deployment
+# How to Set Up a LangGraph Application with pyproject.toml
 
-A LangGraph application must be configured with a [LangGraph API configuration file](../reference/cli.md#configuration-file) in order to be deployed to LangGraph Cloud (or to be self-hosted). This how-to guide discusses the basic steps to setup a LangGraph application for deployment using `pyproject.toml` to define your package's dependencies.
+A LangGraph application must be configured with a [LangGraph configuration file](../reference/cli.md#configuration-file) in order to be deployed to LangGraph Platform (or to be self-hosted). This how-to guide discusses the basic steps to setup a LangGraph application for deployment using `pyproject.toml` to define your package's dependencies.
 
 This walkthrough is based on [this repository](https://github.com/langchain-ai/langgraph-example-pyproject), which you can play around with to learn more about how to setup your LangGraph application for deployment.
 
@@ -10,7 +10,7 @@ This walkthrough is based on [this repository](https://github.com/langchain-ai/l
 !!! tip "Setup with a Monorepo"
     If you are interested in deploying a graph located inside a monorepo, take a look at [this](https://github.com/langchain-ai/langgraph-example-monorepo) repository for an example of how to do so.
 
-The final repo structure will look something like this:
+The final repository structure will look something like this:
 
 ```bash
 my-app/
@@ -31,17 +31,17 @@ After each step, an example file directory is provided to demonstrate how code c
 
 ## Specify Dependencies
 
-Dependencies can optionally be specified in one of the following files: `pyproject.toml`, `setup.py`, or `requirements.txt`. If none of these files is created, then dependencies can be specified later in the [LangGraph API configuration file](#create-langgraph-api-config).
+Dependencies can optionally be specified in one of the following files: `pyproject.toml`, `setup.py`, or `requirements.txt`. If none of these files is created, then dependencies can be specified later in the [LangGraph configuration file](#create-langgraph-configuration-file).
 
 The dependencies below will be included in the image, you can also use them in your code, as long as with a compatible version range:
 
 ```
-langgraph>=0.2.56,<0.4.0
-langgraph-sdk>=0.1.53
-langgraph-checkpoint>=2.0.15,<3.0
-langchain-core>=0.2.38,<0.4.0
+langgraph>=0.3.27
+langgraph-sdk>=0.1.66
+langgraph-checkpoint>=2.0.23
+langchain-core>=0.2.38
 langsmith>=0.1.63
-orjson>=3.9.7
+orjson>=3.9.7,<3.10.17
 httpx>=0.25.0
 tenacity>=8.0.0
 uvicorn>=0.26.0
@@ -49,29 +49,34 @@ sse-starlette>=2.1.0,<2.2.0
 uvloop>=0.18.0
 httptools>=0.5.0
 jsonschema-rs>=0.20.0
-structlog>=23.1.0
+structlog>=24.1.0
+cloudpickle>=3.0.0
 ```
 
 Example `pyproject.toml` file:
 
 ```toml
-[tool.poetry]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
 name = "my-agent"
 version = "0.0.1"
-description = "An excellent agent build for LangGraph cloud."
-authors = ["Polly the parrot <1223+polly@users.noreply.github.com>"]
-license = "MIT"
+description = "An excellent agent build for LangGraph Platform."
+authors = [
+    {name = "Polly the parrot", email = "1223+polly@users.noreply.github.com"}
+]
+license = {text = "MIT"}
 readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "langgraph>=0.2.0",
+    "langchain-fireworks>=0.1.3"
+]
 
-[tool.poetry.dependencies]
-python = ">=3.9.0,<3.13"
-langgraph = "^0.2.0"
-langchain-fireworks = "^0.1.3"
-
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.hatch.build.targets.wheel]
+packages = ["my_agent"]
 ```
 
 Example file directory:
@@ -97,15 +102,15 @@ Example file directory:
 
 ```bash
 my-app/
-├── .env             # file with environment variables
+├── .env # file with environment variables
 └── pyproject.toml
 ```
 
 ## Define Graphs
 
-Implement your graphs! Graphs can be defined in a single file or multiple files. Make note of the variable names of each [CompiledGraph][langgraph.graph.graph.CompiledGraph] to be included in the LangGraph application. The variable names will be used later when creating the [LangGraph API configuration file](../reference/cli.md#configuration-file).
+Implement your graphs! Graphs can be defined in a single file or multiple files. Make note of the variable names of each [CompiledStateGraph][langgraph.graph.state.CompiledStateGraph] to be included in the LangGraph application. The variable names will be used later when creating the [LangGraph configuration file](../reference/cli.md#configuration-file).
 
-Example `agent.py` file, which shows how to import from other modules you define (code for the modules is not shown here, please see [this repo](https://github.com/langchain-ai/langgraph-example-pyproject) to see their implementation):
+Example `agent.py` file, which shows how to import from other modules you define (code for the modules is not shown here, please see [this repository](https://github.com/langchain-ai/langgraph-example-pyproject) to see their implementation):
 
 ```python
 # my_agent/agent.py
@@ -137,9 +142,6 @@ workflow.add_edge("action", "agent")
 graph = workflow.compile()
 ```
 
-!!! warning "Assign `CompiledGraph` to Variable"
-    The build process for LangGraph Cloud requires that the `CompiledGraph` object be assigned to a variable at the top-level of a Python module.
-
 Example file directory:
 
 ```bash
@@ -156,9 +158,9 @@ my-app/
 └── pyproject.toml
 ```
 
-## Create LangGraph API Config
+## Create LangGraph Configuration File
 
-Create a [LangGraph API configuration file](../reference/cli.md#configuration-file) called `langgraph.json`. See the [LangGraph CLI reference](../reference/cli.md#configuration-file) for detailed explanations of each key in the JSON object of the configuration file.
+Create a [LangGraph configuration file](../reference/cli.md#configuration-file) called `langgraph.json`. See the [LangGraph configuration file reference](../reference/cli.md#configuration-file) for detailed explanations of each key in the JSON object of the configuration file.
 
 Example `langgraph.json` file:
 
@@ -174,8 +176,8 @@ Example `langgraph.json` file:
 
 Note that the variable name of the `CompiledGraph` appears at the end of the value of each subkey in the top-level `graphs` key (i.e. `:<variable_name>`).
 
-!!! warning "Configuration Location"
-    The LangGraph API configuration file must be placed in a directory that is at the same level or higher than the Python files that contain compiled graphs and associated dependencies.
+!!! warning "Configuration File Location"
+    The LangGraph configuration file must be placed in a directory that is at the same level or higher than the Python files that contain compiled graphs and associated dependencies.
 
 Example file directory:
 
@@ -196,4 +198,4 @@ my-app/
 
 ## Next
 
-After you setup your project and place it in a github repo, it's time to [deploy your app](./cloud.md).
+After you setup your project and place it in a GitHub repository, it's time to [deploy your app](./cloud.md).

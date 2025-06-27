@@ -1,16 +1,12 @@
 # How to add custom routes
 
-When deploying agents on the LangGraph platform, your server automatically exposes routes for creating runs and threads, interacting with the long-term memory store, managing configurable assistants, and other core functionality ([see all default API endpoints](../../cloud/reference/api/api_ref.md)).
+When deploying agents to LangGraph platform, your server automatically exposes routes for creating runs and threads, interacting with the long-term memory store, managing configurable assistants, and other core functionality ([see all default API endpoints](../../cloud/reference/api/api_ref.md)).
 
-You can add custom routes by providing your own [`Starlette`](https://www.starlette.io/applications/) app (including [`FastAPI`](https://fastapi.tiangolo.com/), [`FastHTML`](https://fastht.ml/) and other compatible apps). You make LangGraph Platform aware of this by providing a path to the app in your `langgraph.json` configuration file. (`"http": {"app": "path/to/app.py:app"}`).
+You can add custom routes by providing your own [`Starlette`](https://www.starlette.io/applications/) app (including [`FastAPI`](https://fastapi.tiangolo.com/), [`FastHTML`](https://fastht.ml/) and other compatible apps). You make LangGraph Platform aware of this by providing a path to the app in your `langgraph.json` configuration file.
 
-Defining a custom app object lets you add any routes you'd like, so you can do anything from adding a `/login` endpoint to writing an entire full-stack web-app, all deployed in a single LangGraph deployment.
+Defining a custom app object lets you add any routes you'd like, so you can do anything from adding a `/login` endpoint to writing an entire full-stack web-app, all deployed in a single LangGraph Server.
 
 Below is an example using FastAPI.
-
-???+ note "Python only"
-
-    We currently only support custom authentication and authorization in Python deployments with `langgraph-api>=0.0.26`.
 
 ## Create app
 
@@ -38,7 +34,7 @@ def read_root():
 
 ## Configure `langgraph.json`
 
-Add the following to your `langgraph.json` file. Make sure the path points to the `app.py` file you created above.
+Add the following to your `langgraph.json` configuration file. Make sure the path points to the FastAPI application instance `app` in the `webapp.py` file you created above.
 
 ```json
 {
@@ -62,7 +58,7 @@ Test the server out locally:
 langgraph dev --no-browser
 ```
 
-If you navigate to `localhost:2024/hello` in your browser (2024 is the default development port), you should see the `hello` endpoint returning `{"Hello": "World"}`.
+If you navigate to `localhost:2024/hello` in your browser (`2024` is the default development port), you should see the `/hello` endpoint returning `{"Hello": "World"}`.
 
 
 !!! note "Shadowing default endpoints"
@@ -71,7 +67,7 @@ If you navigate to `localhost:2024/hello` in your browser (2024 is the default d
 
 ## Deploying
 
-You can deploy this app as-is to the managed langgraph cloud or to your self-hosted platform.
+You can deploy this app as-is to LangGraph Platform or to your self-hosted platform.
 
 ## Next steps
 

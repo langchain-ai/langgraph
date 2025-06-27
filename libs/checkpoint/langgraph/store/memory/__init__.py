@@ -99,14 +99,17 @@ Tip:
     ```
 """
 
+from __future__ import annotations
+
 import asyncio
 import concurrent.futures as cf
 import functools
 import logging
 from collections import defaultdict
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from importlib import util
-from typing import Any, Iterable, Optional
+from typing import Any
 
 from langchain_core.embeddings import Embeddings
 
@@ -177,7 +180,7 @@ class InMemoryStore(BaseStore):
         "embeddings",
     )
 
-    def __init__(self, *, index: Optional[IndexConfig] = None) -> None:
+    def __init__(self, *, index: IndexConfig | None = None) -> None:
         # Both _data and _vectors are wrapped in the In-memory API
         # Do not change their names
         self._data: dict[tuple[str, ...], dict[str, Item]] = defaultdict(dict)
@@ -188,7 +191,7 @@ class InMemoryStore(BaseStore):
         self.index_config = index
         if self.index_config:
             self.index_config = self.index_config.copy()
-            self.embeddings: Optional[Embeddings] = ensure_embeddings(
+            self.embeddings: Embeddings | None = ensure_embeddings(
                 self.index_config.get("embed"),
             )
             self.index_config["__tokenized_fields"] = [
@@ -324,7 +327,7 @@ class InMemoryStore(BaseStore):
                 )
                 # max pooling
                 seen: set[tuple[tuple[str, ...], str]] = set()
-                kept: list[tuple[Optional[float], Item]] = []
+                kept: list[tuple[float | None, Item]] = []
                 for score, item in sorted_results:
                     key = (item.namespace, item.key)
                     if key in seen:
@@ -493,7 +496,7 @@ def _cosine_similarity(X: list[float], Y: list[list[float]]) -> list[float]:
     if not Y:
         return []
     if _check_numpy():
-        import numpy as np  # type: ignore[import-not-found]
+        import numpy as np
 
         X_arr = np.array(X) if not isinstance(X, np.ndarray) else X
         Y_arr = np.array(Y) if not isinstance(Y, np.ndarray) else Y
