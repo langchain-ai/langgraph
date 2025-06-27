@@ -319,6 +319,8 @@ class Cron(TypedDict):
 
     cron_id: str
     """The ID of the cron."""
+    assistant_id: str
+    """The ID of the assistant."""
     thread_id: str | None
     """The ID of the thread."""
     end_time: datetime | None
@@ -331,6 +333,12 @@ class Cron(TypedDict):
     """The last time the cron was updated."""
     payload: dict
     """The run payload to use for creating new run."""
+    user_id: str | None
+    """The user ID of the cron."""
+    next_run_date: datetime | None
+    """The next run date of the cron."""
+    metadata: dict
+    """The metadata of the cron."""
 
 
 class RunCreate(TypedDict):

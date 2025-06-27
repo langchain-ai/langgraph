@@ -178,6 +178,9 @@ export interface Cron {
   /** The ID of the cron */
   cron_id: string;
 
+  /** The ID of the assistant */
+  assistant_id: string;
+
   /** The ID of the thread */
   thread_id: Optional<string>;
 
@@ -195,6 +198,15 @@ export interface Cron {
 
   /** The run payload to use for creating new run. */
   payload: Record<string, unknown>;
+
+  /** The user ID of the cron */
+  user_id: Optional<string>;
+
+  /** The next run date of the cron */
+  next_run_date: Optional<string>;
+
+  /** The metadata of the cron */
+  metadata: Record<string, unknown>;
 }
 
 export type DefaultValues = Record<string, unknown>[] | Record<string, unknown>;
