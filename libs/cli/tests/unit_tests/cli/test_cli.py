@@ -2,11 +2,13 @@ import json
 import pathlib
 import re
 import shutil
+import sys
 import tempfile
 import textwrap
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from langgraph_cli.cli import cli, prepare_args_and_stdin
@@ -540,6 +542,7 @@ def test_build_command_shows_wolfi_warning() -> None:
         assert "wolfi" in result.output
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Docker image not available for Windows")
 def test_build_generate_proper_build_context():
     runner = CliRunner()
     config_content = {
