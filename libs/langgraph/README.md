@@ -7,6 +7,7 @@
 <div>
 <br>
 </div>
+<!-- Trigger CI test -->
 
 [![Version](https://img.shields.io/pypi/v/langgraph.svg)](https://pypi.org/project/langgraph/)
 [![Downloads](https://static.pepy.tech/badge/langgraph/month)](https://pepy.tech/project/langgraph)
