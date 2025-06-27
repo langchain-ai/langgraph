@@ -43,14 +43,15 @@ jobs:
           enable-cache: true
           cache-suffix: lint-${{ inputs.working-directory }}
 
-      - name: Setup MSYS2 (Windows)
-        if: steps.changed-files.outputs.all && matrix.os == 'windows-latest'
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          install: make
-          path-type: inherit
+      # Temporarily disabled to test if MSYS2 is needed
+      # - name: Setup MSYS2 (Windows)
+      #   if: steps.changed-files.outputs.all && matrix.os == 'windows-latest'
+      #   uses: msys2/setup-msys2@v2
+      #   with:
+      #     msystem: MINGW64
+      #     update: true
+      #     install: make
+      #     path-type: inherit
 
       - name: Install dependencies
         if: steps.changed-files.outputs.all
@@ -82,7 +83,7 @@ jobs:
       - name: Analysing package code with our lint (Windows)
         if: steps.changed-files.outputs.all && matrix.os == 'windows-latest'
         working-directory: ${{ inputs.working-directory }}
-        shell: msys2 {0}
+        shell: bash
         run: |
           if make lint_package > /dev/null 2>&1; then
             make lint_package
@@ -120,7 +121,7 @@ jobs:
       - name: Analysing tests with our lint (Windows)
         if: steps.changed-files.outputs.all && matrix.os == 'windows-latest'
         working-directory: ${{ inputs.working-directory }}
-        shell: msys2 {0}
+        shell: bash
         run: |
           if make lint_tests > /dev/null 2>&1; then
             make lint_tests
