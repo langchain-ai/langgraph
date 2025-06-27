@@ -223,10 +223,9 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
         Yields:
             An SQLite cursor object.
         """
+        if not self.is_setup:
+            await self.setup()
         async with self.lock:
-            if not self.is_setup:
-                await self.setup()
-
             if transaction:
                 await self.conn.execute("BEGIN")
 
