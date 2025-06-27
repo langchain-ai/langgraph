@@ -47,15 +47,6 @@ jobs:
           cd libs/langgraph
           make help || echo "make command failed as expected"
           
-      - name: Setup MSYS2 and test again (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          install: make
-          path-type: inherit
-          
       - name: Test make with MSYS2 (Windows)
         if: matrix.os == 'windows-latest'
         shell: msys2 {0}
