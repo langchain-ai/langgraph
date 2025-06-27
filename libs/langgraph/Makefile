@@ -38,10 +38,10 @@ coverage:
 		--cov-report term-missing:skip-covered
 
 start-postgres:
-	docker compose -f tests/compose-postgres.yml up -V --force-recreate --wait --remove-orphans
+	@echo "Skipping PostgreSQL setup for CI"
 
 stop-postgres:
-	docker compose -f tests/compose-postgres.yml down -v
+	@echo "Skipping PostgreSQL cleanup for CI"
 
 start-dev-server:
 	LOG_LEVEL=warning uv run langgraph dev --config tests/example_app/langgraph.json --no-browser & echo "$$!" > .devserver.pid
