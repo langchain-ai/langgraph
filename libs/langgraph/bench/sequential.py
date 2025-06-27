@@ -30,12 +30,19 @@ def create_sequential(number_nodes: int) -> StateGraph:
 
 if __name__ == "__main__":
     import asyncio
+    import sys
     import time
 
-    try:
-        import uvloop
-    except ImportError:
-        uvloop = None
+    def get_event_loop_policy():
+        """Get the best available event loop policy for the platform."""
+        if sys.platform in ('linux', 'darwin'):
+            try:
+                import uvloop
+                return uvloop.EventLoopPolicy()
+            except ImportError:
+                return asyncio.DefaultEventLoopPolicy()
+        else:
+            return asyncio.DefaultEventLoopPolicy()
 
     graph = create_sequential(3000).compile()
     input = {"messages": []}  # Empty list of messages
@@ -44,8 +51,7 @@ if __name__ == "__main__":
     async def run():
         len([c async for c in graph.astream(input, config=config)])
 
-    if uvloop:
-        uvloop.install()
+    asyncio.set_event_loop_policy(get_event_loop_policy())
     start = time.time()
     asyncio.run(run())
     end = time.time()

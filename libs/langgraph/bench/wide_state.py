@@ -137,11 +137,18 @@ def wide_state(n: int) -> StateGraph:
 
 if __name__ == "__main__":
     import asyncio
+    import sys
 
-    try:
-        import uvloop
-    except ImportError:
-        uvloop = None
+    def get_event_loop_policy():
+        """Get the best available event loop policy for the platform."""
+        if sys.platform in ('linux', 'darwin'):
+            try:
+                import uvloop
+                return uvloop.EventLoopPolicy()
+            except ImportError:
+                return asyncio.DefaultEventLoopPolicy()
+        else:
+            return asyncio.DefaultEventLoopPolicy()
 
     from langgraph.checkpoint.memory import MemorySaver
 
@@ -163,6 +170,5 @@ if __name__ == "__main__":
         async for c in graph.astream(input, config=config):
             print(c.keys())
 
-    if uvloop:
-        uvloop.install()
+    asyncio.set_event_loop_policy(get_event_loop_policy())
     asyncio.run(run())

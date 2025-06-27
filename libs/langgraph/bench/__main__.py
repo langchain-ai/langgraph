@@ -1,12 +1,10 @@
+import asyncio
 import random
+import sys
 from uuid import uuid4
 
 from langchain_core.messages import HumanMessage
 from pyperf._runner import Runner
-try:
-    from uvloop import new_event_loop
-except ImportError:
-    from asyncio import new_event_loop
 
 from bench.fanout_to_subgraph import fanout_to_subgraph, fanout_to_subgraph_sync
 from bench.pydantic_state import pydantic_state
@@ -17,6 +15,18 @@ from bench.wide_state import wide_state
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph
 from langgraph.pregel import Pregel
+
+
+def get_event_loop_factory():
+    """Get the best available event loop factory for the platform."""
+    if sys.platform in ('linux', 'darwin'):
+        try:
+            import uvloop
+            return uvloop.new_event_loop
+        except ImportError:
+            return asyncio.new_event_loop
+    else:
+        return asyncio.new_event_loop
 
 
 async def arun(graph: Pregel, input: dict):
@@ -470,7 +480,7 @@ r = Runner()
 
 # Full graph run time
 for name, agraph, graph, input in benchmarks:
-    r.bench_async_func(name, arun, agraph, input, loop_factory=new_event_loop)
+    r.bench_async_func(name, arun, agraph, input, loop_factory=get_event_loop_factory())
     if graph is not None:
         r.bench_func(name + "_sync", run, graph, input)
 
@@ -491,7 +501,7 @@ for name, agraph, graph, input in benchmarks:
         arun_first_event_latency,
         agraph,
         input,
-        loop_factory=new_event_loop,
+        loop_factory=get_event_loop_factory(),
     )
     if graph is not None:
         r.bench_func(

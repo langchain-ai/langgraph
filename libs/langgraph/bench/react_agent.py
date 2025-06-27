@@ -65,11 +65,18 @@ def react_agent(n_tools: int, checkpointer: Optional[BaseCheckpointSaver]) -> Pr
 
 if __name__ == "__main__":
     import asyncio
+    import sys
 
-    try:
-        import uvloop
-    except ImportError:
-        uvloop = None
+    def get_event_loop_policy():
+        """Get the best available event loop policy for the platform."""
+        if sys.platform in ('linux', 'darwin'):
+            try:
+                import uvloop
+                return uvloop.EventLoopPolicy()
+            except ImportError:
+                return asyncio.DefaultEventLoopPolicy()
+        else:
+            return asyncio.DefaultEventLoopPolicy()
 
     from langgraph.checkpoint.memory import MemorySaver
 
@@ -80,6 +87,5 @@ if __name__ == "__main__":
     async def run():
         len([c async for c in graph.astream(input, config=config)])
 
-    if uvloop:
-        uvloop.install()
+    asyncio.set_event_loop_policy(get_event_loop_policy())
     asyncio.run(run())
