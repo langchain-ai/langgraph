@@ -4,6 +4,7 @@ import dataclasses
 import sys
 from collections import deque
 from collections.abc import Hashable, Sequence
+from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -22,6 +23,8 @@ from typing_extensions import Self
 from xxhash import xxh3_128_hexdigest
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
+from langgraph.store.base import BaseStore
+from langgraph.typing import ContextT
 from langgraph.utils.cache import default_cache_key
 from langgraph.utils.fields import get_cached_annotated_keys, get_update_as_tuples
 
@@ -526,3 +529,16 @@ def interrupt(value: Any) -> Any:
             ),
         )
     )
+
+
+@dataclass
+class Runtime(Generic[ContextT]):
+    """Convenience class that bundles run-scoped context and graph configuration."""
+
+    context: ContextT
+
+    store: BaseStore | None
+
+    stream_writer: StreamWriter
+
+    config: RunnableConfig

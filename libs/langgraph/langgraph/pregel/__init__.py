@@ -45,6 +45,7 @@ from langgraph.constants import (
     CONFIG_KEY_NODE_FINISHED,
     CONFIG_KEY_READ,
     CONFIG_KEY_RUNNER_SUBMIT,
+    CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STORE,
     CONFIG_KEY_STREAM,
@@ -100,13 +101,14 @@ from langgraph.types import (
     CachePolicy,
     Checkpointer,
     Interrupt,
+    Runtime,
     Send,
     StateSnapshot,
     StateUpdate,
     StreamChunk,
     StreamMode,
 )
-from langgraph.typing import InputT, OutputT, StateT
+from langgraph.typing import ContextT, InputT, OutputT, StateT
 from langgraph.utils.config import (
     ensure_config,
     merge_configs,
@@ -294,7 +296,10 @@ class NodeBuilder:
         )
 
 
-class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, OutputT]):
+class Pregel(
+    PregelProtocol[StateT, ContextT, InputT, OutputT],
+    Generic[StateT, ContextT, InputT, OutputT],
+):
     """Pregel manages the runtime behavior for LangGraph applications.
 
     ## Overview
@@ -2272,6 +2277,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         input: InputT,
         config: RunnableConfig | None = None,
         *,
+        context: ContextT | None = None,
         stream_mode: StreamMode | list[StreamMode] | None = None,
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -2372,19 +2378,19 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 run_manager.inheritable_handlers.append(
                     StreamMessagesHandler(stream.put, subgraphs)
                 )
+
+            stream_writer = lambda c: stream.put(
+                (
+                    tuple(
+                        get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(NS_SEP)[:-1]
+                    ),
+                    "custom",
+                    c,
+                )
+            )
             # set up custom stream mode
             if "custom" in stream_modes:
-                config[CONF][CONFIG_KEY_STREAM_WRITER] = lambda c: stream.put(
-                    (
-                        tuple(
-                            get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(NS_SEP)[
-                                :-1
-                            ]
-                        ),
-                        "custom",
-                        c,
-                    )
-                )
+                config[CONF][CONFIG_KEY_STREAM_WRITER] = stream_writer
             elif (
                 CONFIG_KEY_STREAM not in config[CONF]
                 and CONFIG_KEY_STREAM_WRITER in config[CONF]
@@ -2394,6 +2400,13 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
             # set checkpointing mode for subgraphs
             if checkpoint_during is not None:
                 config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
+
+            config[CONF][CONFIG_KEY_RUNTIME] = Runtime(
+                context=context,
+                store=store,
+                stream_writer=stream_writer,
+                config=config,
+            )
             with SyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put, stream_modes),
@@ -2495,6 +2508,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         input: InputT,
         config: RunnableConfig | None = None,
         *,
+        context: ContextT | None = None,
         stream_mode: StreamMode | list[StreamMode] | None = None,
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -2614,21 +2628,17 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                     StreamMessagesHandler(stream_put, subgraphs)
                 )
             # set up custom stream mode
-            if "custom" in stream_modes:
-                config[CONF][CONFIG_KEY_STREAM_WRITER] = (
-                    lambda c: aioloop.call_soon_threadsafe(
-                        stream.put_nowait,
-                        (
-                            tuple(
-                                get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(
-                                    NS_SEP
-                                )[:-1]
-                            ),
-                            "custom",
-                            c,
-                        ),
-                    )
+            stream_writer = lambda c: stream.put(
+                (
+                    tuple(
+                        get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(NS_SEP)[:-1]
+                    ),
+                    "custom",
+                    c,
                 )
+            )
+            if "custom" in stream_modes:
+                config[CONF][CONFIG_KEY_STREAM_WRITER] = stream_writer
             elif (
                 CONFIG_KEY_STREAM not in config[CONF]
                 and CONFIG_KEY_STREAM_WRITER in config[CONF]
@@ -2638,6 +2648,13 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
             # set checkpointing mode for subgraphs
             if checkpoint_during is not None:
                 config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
+
+            config[CONF][CONFIG_KEY_RUNTIME] = Runtime(
+                context=context,
+                store=store,
+                stream_writer=stream_writer,
+                config=config,
+            )
             async with AsyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put_nowait, stream_modes),
@@ -2732,6 +2749,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         input: InputT,
         config: RunnableConfig | None = None,
         *,
+        context: ContextT | None = None,
         stream_mode: StreamMode = "values",
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -2764,6 +2782,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         for chunk in self.stream(
             input,
             config,
+            context=context,
             stream_mode=stream_mode,
             output_keys=output_keys,
             interrupt_before=interrupt_before,
@@ -2798,6 +2817,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         input: InputT,
         config: RunnableConfig | None = None,
         *,
+        context: ContextT | None = None,
         stream_mode: StreamMode = "values",
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -2831,6 +2851,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         async for chunk in self.astream(
             input,
             config,
+            context=context,
             stream_mode=stream_mode,
             output_keys=output_keys,
             interrupt_before=interrupt_before,
