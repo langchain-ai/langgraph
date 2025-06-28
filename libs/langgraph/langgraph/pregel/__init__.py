@@ -2378,19 +2378,19 @@ class Pregel(
                 run_manager.inheritable_handlers.append(
                     StreamMessagesHandler(stream.put, subgraphs)
                 )
+
+            stream_writer = lambda c: stream.put(
+                (
+                    tuple(
+                        get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(NS_SEP)[:-1]
+                    ),
+                    "custom",
+                    c,
+                )
+            )
             # set up custom stream mode
             if "custom" in stream_modes:
-                config[CONF][CONFIG_KEY_STREAM_WRITER] = lambda c: stream.put(
-                    (
-                        tuple(
-                            get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(NS_SEP)[
-                                :-1
-                            ]
-                        ),
-                        "custom",
-                        c,
-                    )
-                )
+                config[CONF][CONFIG_KEY_STREAM_WRITER] = stream_writer
             elif (
                 CONFIG_KEY_STREAM not in config[CONF]
                 and CONFIG_KEY_STREAM_WRITER in config[CONF]
@@ -2401,7 +2401,12 @@ class Pregel(
             if checkpoint_during is not None:
                 config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
 
-            config[CONF][CONFIG_KEY_RUNTIME] = GraphRuntime(context)
+            config[CONF][CONFIG_KEY_RUNTIME] = GraphRuntime(
+                context=context,
+                store=store,
+                stream_writer=stream_writer,
+                config=config,
+            )
             with SyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put, stream_modes),
@@ -2623,21 +2628,17 @@ class Pregel(
                     StreamMessagesHandler(stream_put, subgraphs)
                 )
             # set up custom stream mode
-            if "custom" in stream_modes:
-                config[CONF][CONFIG_KEY_STREAM_WRITER] = (
-                    lambda c: aioloop.call_soon_threadsafe(
-                        stream.put_nowait,
-                        (
-                            tuple(
-                                get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(
-                                    NS_SEP
-                                )[:-1]
-                            ),
-                            "custom",
-                            c,
-                        ),
-                    )
+            stream_writer = lambda c: stream.put(
+                (
+                    tuple(
+                        get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(NS_SEP)[:-1]
+                    ),
+                    "custom",
+                    c,
                 )
+            )
+            if "custom" in stream_modes:
+                config[CONF][CONFIG_KEY_STREAM_WRITER] = stream_writer
             elif (
                 CONFIG_KEY_STREAM not in config[CONF]
                 and CONFIG_KEY_STREAM_WRITER in config[CONF]
@@ -2648,7 +2649,12 @@ class Pregel(
             if checkpoint_during is not None:
                 config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
 
-            config[CONF][CONFIG_KEY_RUNTIME] = GraphRuntime(context)
+            config[CONF][CONFIG_KEY_RUNTIME] = GraphRuntime(
+                context=context,
+                store=store,
+                stream_writer=stream_writer,
+                config=config,
+            )
             async with AsyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put_nowait, stream_modes),
