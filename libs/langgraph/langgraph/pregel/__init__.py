@@ -45,6 +45,7 @@ from langgraph.constants import (
     CONFIG_KEY_NODE_FINISHED,
     CONFIG_KEY_READ,
     CONFIG_KEY_RUNNER_SUBMIT,
+    CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STORE,
     CONFIG_KEY_STREAM,
@@ -99,6 +100,7 @@ from langgraph.types import (
     All,
     CachePolicy,
     Checkpointer,
+    GraphRuntime,
     Interrupt,
     Send,
     StateSnapshot,
@@ -106,7 +108,7 @@ from langgraph.types import (
     StreamChunk,
     StreamMode,
 )
-from langgraph.typing import InputT, OutputT, StateT
+from langgraph.typing import ContextT, InputT, OutputT, StateT
 from langgraph.utils.config import (
     ensure_config,
     merge_configs,
@@ -294,7 +296,10 @@ class NodeBuilder:
         )
 
 
-class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, OutputT]):
+class Pregel(
+    PregelProtocol[StateT, ContextT, InputT, OutputT],
+    Generic[StateT, ContextT, InputT, OutputT],
+):
     """Pregel manages the runtime behavior for LangGraph applications.
 
     ## Overview
@@ -2272,6 +2277,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         input: InputT,
         config: RunnableConfig | None = None,
         *,
+        context: ContextT | None = None,
         stream_mode: StreamMode | list[StreamMode] | None = None,
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -2394,6 +2400,8 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
             # set checkpointing mode for subgraphs
             if checkpoint_during is not None:
                 config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
+
+            config[CONF][CONFIG_KEY_RUNTIME] = GraphRuntime(context)
             with SyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put, stream_modes),
@@ -2495,6 +2503,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         input: InputT,
         config: RunnableConfig | None = None,
         *,
+        context: ContextT | None = None,
         stream_mode: StreamMode | list[StreamMode] | None = None,
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -2638,6 +2647,8 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
             # set checkpointing mode for subgraphs
             if checkpoint_during is not None:
                 config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
+
+            config[CONF][CONFIG_KEY_RUNTIME] = GraphRuntime(context)
             async with AsyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put_nowait, stream_modes),
@@ -2732,6 +2743,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         input: InputT,
         config: RunnableConfig | None = None,
         *,
+        context: ContextT | None = None,
         stream_mode: StreamMode = "values",
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -2764,6 +2776,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         for chunk in self.stream(
             input,
             config,
+            context=context,
             stream_mode=stream_mode,
             output_keys=output_keys,
             interrupt_before=interrupt_before,
@@ -2798,6 +2811,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         input: InputT,
         config: RunnableConfig | None = None,
         *,
+        context: ContextT | None = None,
         stream_mode: StreamMode = "values",
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -2831,6 +2845,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         async for chunk in self.astream(
             input,
             config,
+            context=context,
             stream_mode=stream_mode,
             output_keys=output_keys,
             interrupt_before=interrupt_before,
