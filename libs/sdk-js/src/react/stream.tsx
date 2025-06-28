@@ -1,7 +1,7 @@
 /* __LC_ALLOW_ENTRYPOINT_SIDE_EFFECTS__ */
 "use client";
 
-import { Client, type ClientConfig } from "../client.js";
+import { Client, getClientConfigHash, type ClientConfig } from "../client.js";
 import type {
   Command,
   DisconnectMode,
@@ -321,11 +321,16 @@ function useThreadHistory<StateType extends Record<string, unknown>>(
 ) {
   const [history, setHistory] = useState<ThreadState<StateType>[]>([]);
 
+  const clientHash = getClientConfigHash(client);
+  const clientRef = useRef(client);
+  clientRef.current = client;
+
   const fetcher = useCallback(
     (
       threadId: string | undefined | null,
     ): Promise<ThreadState<StateType>[]> => {
       if (threadId != null) {
+        const client = clientRef.current;
         return fetchHistory<StateType>(client, threadId).then((history) => {
           setHistory(history);
           return history;
@@ -342,7 +347,7 @@ function useThreadHistory<StateType extends Record<string, unknown>>(
   useEffect(() => {
     if (submittingRef.current) return;
     fetcher(threadId);
-  }, [fetcher, submittingRef, threadId]);
+  }, [fetcher, clientHash, submittingRef, threadId]);
 
   return {
     data: history,

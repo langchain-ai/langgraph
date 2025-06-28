@@ -111,6 +111,7 @@ REDIRECT_MAP = {
     "concepts/v0-human-in-the-loop.md": "concepts/human-in-the-loop.md",
     "how-tos/index.md": "index.md",
     "tutorials/introduction.ipynb": "concepts/why-langgraph.md",
+    "agents/deployment.md": "tutorials/langgraph-platform/local-server.md",
     # deployment redirects
     "how-tos/deploy-self-hosted.md": "cloud/deployment/self_hosted_data_plane.md",
     "concepts/self_hosted.md": "concepts/langgraph_self_hosted_data_plane.md",
