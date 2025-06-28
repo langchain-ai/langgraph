@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"
 
 [project]
 name = "langgraph"
-version = "0.5.0"
+dynamic = ["version"]
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 requires-python = ">=3.9"
@@ -106,3 +106,11 @@ packages = ["langgraph"]
 
 [tool.pytest.ini_options]
 addopts = "--full-trace --strict-markers --strict-config --durations=5 --snapshot-warn-unused"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.uv-dynamic-versioning]
+vcs = "git"
+style = "pep440"
+bump = true
