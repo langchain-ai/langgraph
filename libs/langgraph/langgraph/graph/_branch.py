@@ -34,7 +34,7 @@ from langgraph.utils.runnable import (
     RunnableCallable,
 )
 
-Writer = Callable[
+_Writer = Callable[
     [Sequence[Union[str, Send]], bool],
     Sequence[Union[ChannelWriteEntry, Send]],
 ]
@@ -82,7 +82,7 @@ def _get_branch_path_input_schema(
     return input
 
 
-class Branch(NamedTuple):
+class BranchSpec(NamedTuple):
     path: Runnable[Any, Hashable | list[Hashable]]
     ends: dict[Hashable, str] | None
     input_schema: type[Any] | None = None
@@ -93,7 +93,7 @@ class Branch(NamedTuple):
         path: Runnable[Any, Hashable | list[Hashable]],
         path_map: dict[Hashable, str] | list[str] | None,
         infer_schema: bool = False,
-    ) -> Branch:
+    ) -> BranchSpec:
         # coerce path_map to a dictionary
         path_map_: dict[Hashable, str] | None = None
         try:
@@ -123,7 +123,7 @@ class Branch(NamedTuple):
 
     def run(
         self,
-        writer: Writer,
+        writer: _Writer,
         reader: Callable[[RunnableConfig], Any] | None = None,
     ) -> RunnableCallable:
         return ChannelWrite.register_writer(
@@ -152,7 +152,7 @@ class Branch(NamedTuple):
         config: RunnableConfig,
         *,
         reader: Callable[[RunnableConfig], Any] | None,
-        writer: Writer,
+        writer: _Writer,
     ) -> Runnable:
         if reader:
             value = reader(config)
@@ -175,7 +175,7 @@ class Branch(NamedTuple):
         config: RunnableConfig,
         *,
         reader: Callable[[RunnableConfig], Any] | None,
-        writer: Writer,
+        writer: _Writer,
     ) -> Runnable:
         if reader:
             value = reader(config)
@@ -194,7 +194,7 @@ class Branch(NamedTuple):
 
     def _finish(
         self,
-        writer: Writer,
+        writer: _Writer,
         input: Any,
         result: Any,
         config: RunnableConfig,
