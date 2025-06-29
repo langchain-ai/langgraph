@@ -40,8 +40,10 @@ from langgraph.store.base import BaseStore
 from langgraph.types import _DC_KWARGS, CachePolicy, RetryPolicy, StreamMode
 from langgraph.warnings import LangGraphDeprecatedSinceV05
 
+__all__ = ("task", "entrypoint")
 
-class TaskFunction(Generic[P, T]):
+
+class _TaskFunction(Generic[P, T]):
     def __init__(
         self,
         func: Callable[P, T],
@@ -97,14 +99,14 @@ def task(
     **kwargs: Unpack[DeprecatedKwargs],
 ) -> Callable[
     [Callable[P, Awaitable[T]] | Callable[P, T]],
-    TaskFunction[P, T],
+    _TaskFunction[P, T],
 ]: ...
 
 
 @overload
 def task(
     __func_or_none__: Callable[P, Awaitable[T]] | Callable[P, T],
-) -> TaskFunction[P, T]: ...
+) -> _TaskFunction[P, T]: ...
 
 
 def task(
@@ -115,8 +117,8 @@ def task(
     cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
     **kwargs: Unpack[DeprecatedKwargs],
 ) -> (
-    Callable[[Callable[P, Awaitable[T]] | Callable[P, T]], TaskFunction[P, T]]
-    | TaskFunction[P, T]
+    Callable[[Callable[P, Awaitable[T]] | Callable[P, T]], _TaskFunction[P, T]]
+    | _TaskFunction[P, T]
 ):
     """Define a LangGraph task using the `task` decorator.
 
@@ -195,7 +197,7 @@ def task(
     def decorator(
         func: Callable[P, Awaitable[T]] | Callable[P, T],
     ) -> Callable[P, concurrent.futures.Future[T]] | Callable[P, asyncio.Future[T]]:
-        return TaskFunction(
+        return _TaskFunction(
             func, retry_policy=retry_policies, cache_policy=cache_policy, name=name
         )
 
