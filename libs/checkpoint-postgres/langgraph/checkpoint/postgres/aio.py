@@ -23,6 +23,7 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.postgres import _ainternal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
+from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
 Conn = _ainternal.Conn  # For backward compatibility
@@ -162,32 +163,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                             value["channel_values"],
                         )
             for value in values:
-                yield CheckpointTuple(
-                    {
-                        "configurable": {
-                            "thread_id": value["thread_id"],
-                            "checkpoint_ns": value["checkpoint_ns"],
-                            "checkpoint_id": value["checkpoint_id"],
-                        }
-                    },
-                    {
-                        **value["checkpoint"],
-                        "channel_values": self._load_blobs(value["channel_values"]),
-                    },
-                    value["metadata"],
-                    (
-                        {
-                            "configurable": {
-                                "thread_id": value["thread_id"],
-                                "checkpoint_ns": value["checkpoint_ns"],
-                                "checkpoint_id": value["parent_checkpoint_id"],
-                            }
-                        }
-                        if value["parent_checkpoint_id"]
-                        else None
-                    ),
-                    await asyncio.to_thread(self._load_writes, value["pending_writes"]),
-                )
+                yield await self._load_checkpoint_tuple(value)
 
     async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the database asynchronously.
@@ -238,32 +214,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                         value["channel_values"],
                     )
 
-            return CheckpointTuple(
-                {
-                    "configurable": {
-                        "thread_id": thread_id,
-                        "checkpoint_ns": checkpoint_ns,
-                        "checkpoint_id": value["checkpoint_id"],
-                    }
-                },
-                {
-                    **value["checkpoint"],
-                    "channel_values": self._load_blobs(value["channel_values"]),
-                },
-                value["metadata"],
-                (
-                    {
-                        "configurable": {
-                            "thread_id": thread_id,
-                            "checkpoint_ns": checkpoint_ns,
-                            "checkpoint_id": value["parent_checkpoint_id"],
-                        }
-                    }
-                    if value["parent_checkpoint_id"]
-                    else None
-                ),
-                await asyncio.to_thread(self._load_writes, value["pending_writes"]),
-            )
+            return await self._load_checkpoint_tuple(value)
 
     async def aput(
         self,
@@ -424,6 +375,45 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 async with conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
 
+    async def _load_checkpoint_tuple(self, value: DictRow) -> CheckpointTuple:
+        """
+        Convert a database row into a CheckpointTuple object.
+
+        Args:
+            value: A row from the database containing checkpoint data.
+
+        Returns:
+            CheckpointTuple: A structured representation of the checkpoint,
+            including its configuration, metadata, parent checkpoint (if any),
+            and pending writes.
+        """
+        return CheckpointTuple(
+            {
+                "configurable": {
+                    "thread_id": value["thread_id"],
+                    "checkpoint_ns": value["checkpoint_ns"],
+                    "checkpoint_id": value["checkpoint_id"],
+                }
+            },
+            {
+                **value["checkpoint"],
+                "channel_values": self._load_blobs(value["channel_values"]),
+            },
+            value["metadata"],
+            (
+                {
+                    "configurable": {
+                        "thread_id": value["thread_id"],
+                        "checkpoint_ns": value["checkpoint_ns"],
+                        "checkpoint_id": value["parent_checkpoint_id"],
+                    }
+                }
+                if value["parent_checkpoint_id"]
+                else None
+            ),
+            await asyncio.to_thread(self._load_writes, value["pending_writes"]),
+        )
+
     def list(
         self,
         config: RunnableConfig | None,
@@ -570,4 +560,4 @@ class AsyncPostgresSaver(BasePostgresSaver):
         ).result()
 
 
-__all__ = ["AsyncPostgresSaver", "Conn"]
+__all__ = ["AsyncPostgresSaver", "AsyncShallowPostgresSaver", "Conn"]

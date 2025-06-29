@@ -198,7 +198,7 @@ async def add_owner(
 You can register handlers for specific resources and actions by chaining the resource and action names together with the [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) decorator.
 When a request is made, the most specific handler that matches that resource and action is called. Below is an example of how to register handlers for specific resources and actions. For the following setup:
 
-1. Authenticated users are able to create threads, read thread, create runs on threads
+1. Authenticated users are able to create threads, read threads, and create runs on threads
 2. Only users with the "assistants:create" permission are allowed to create new assistants
 3. All other endpoints (e.g., e.g., delete assistant, crons, store) are disabled for all users.
 

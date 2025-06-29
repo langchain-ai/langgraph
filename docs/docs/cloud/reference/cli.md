@@ -43,15 +43,17 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
     | <span style="white-space: nowrap;">`graphs`</span>           | **Required**. Mapping from graph ID to path where the compiled graph or a function that makes a graph is defined. Example: <ul><li>`./your_package/your_file.py:variable`, where `variable` is an instance of `langgraph.graph.state.CompiledStateGraph`</li><li>`./your_package/your_file.py:make_graph`, where `make_graph` is a function that takes a config dictionary (`langchain_core.runnables.RunnableConfig`) and returns an instance of `langgraph.graph.state.StateGraph` or `langgraph.graph.state.CompiledStateGraph`. See [how to rebuild a graph at runtime](../../cloud/deployment/graph_rebuild.md) for more details.</li></ul>                                    |
     | <span style="white-space: nowrap;">`auth`</span>             | _(Added in v0.0.11)_ Auth configuration containing the path to your authentication handler. Example: `./your_package/auth.py:auth`, where `auth` is an instance of `langgraph_sdk.Auth`. See [authentication guide](../../concepts/auth.md) for details.                                                                                                                                                                                                                                                                                                                        |
     | <span style="white-space: nowrap;">`base_image`</span>       | Optional. Base image to use for the LangGraph API server. Defaults to `langchain/langgraph-api` or `langchain/langgraphjs-api`. Use this to pin your builds to a particular version of the langgraph API, such as `"langchain/langgraph-server:0.2"`. See https://hub.docker.com/r/langchain/langgraph-server/tags for more details. (added in `langgraph-cli==0.2.8`) |
+    | <span style="white-space: nowrap;">`image_distro`</span>     | Optional. Linux distribution for the base image. Must be either `"debian"` or `"wolfi"`. If omitted, defaults to `"debian"`. Available in `langgraph-cli>=0.2.11`.|
     | <span style="white-space: nowrap;">`env`</span>              | Path to `.env` file or a mapping from environment variable to its value.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
     | <span style="white-space: nowrap;">`store`</span>            | Configuration for adding semantic search and/or time-to-live (TTL) to the BaseStore. Contains the following fields: <ul><li>`index` (optional): Configuration for semantic search indexing with fields `embed`, `dims`, and optional `fields`.</li><li>`ttl` (optional): Configuration for item expiration. An object with optional fields: `refresh_on_read` (boolean, defaults to `true`), `default_ttl` (float, lifespan in **minutes**, defaults to no expiration), and `sweep_interval_minutes` (integer, how often to check for expired items, defaults to no sweeping).</li></ul> |
     | <span style="white-space: nowrap;">`ui`</span>               | Optional. Named definitions of UI components emitted by the agent, each pointing to a JS/TS file. (added in `langgraph-cli==0.1.84`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
     | <span style="white-space: nowrap;">`python_version`</span>   | `3.11`, `3.12`, or `3.13`. Defaults to `3.11`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
     | <span style="white-space: nowrap;">`node_version`</span>     | Specify `node_version: 20` to use LangGraph.js.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
     | <span style="white-space: nowrap;">`pip_config_file`</span>  | Path to `pip` config file.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+    | <span style="white-space: nowrap;">`pip_installer`</span> | _(Added in v0.3)_ Optional. Python package installer selector. It can be set to `"auto"`, `"pip"`, or `"uv"`. From version&nbsp;0.3 onward the default strategy is to run `uv pip`, which typically delivers faster builds while remaining a drop-in replacement. In the uncommon situation where `uv` cannot handle your dependency graph or the structure of your `pyproject.toml`, specify `"pip"` here to revert to the earlier behaviour. |
     | <span style="white-space: nowrap;">`dockerfile_lines`</span> | Array of additional lines to add to Dockerfile following the import from parent image.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
     | <span style="white-space: nowrap;">`checkpointer`</span>   | Configuration for the checkpointer. Contains a `ttl` field which is an object with the following keys: <ul><li>`strategy`: How to handle expired checkpoints (e.g., `"delete"`).</li><li>`sweep_interval_minutes`: How often to check for expired checkpoints (integer).</li><li>`default_ttl`: Default time-to-live for checkpoints in **minutes** (integer). Defines how long checkpoints are kept before the specified strategy is applied.</li></ul> |
-    | <span style="white-space: nowrap;">`http`</span>            | HTTP server configuration with the following fields: <ul><li>`app`: Path to custom Starlette/FastAPI app (e.g., `"./src/agent/webapp.py:app"`). See [custom routes guide](../../how-tos/http/custom_routes.md).</li><li>`disable_assistants`: Disable `/assistants` routes</li><li>`disable_threads`: Disable `/threads` routes</li><li>`disable_runs`: Disable `/runs` routes</li><li>`disable_store`: Disable `/store` routes</li><li>`disable_meta`: Disable `/ok`, `/info`, `/metrics`, and `/docs` routes</li><li>`cors`: CORS configuration with fields for `allow_origins`, `allow_methods`, `allow_headers`, etc.</li><li>`configurable_headers`: Define which request headers to exclude or include as a run's configurable values.</li></ul> |
+    | <span style="white-space: nowrap;">`http`</span>            | HTTP server configuration with the following fields: <ul><li>`app`: Path to custom Starlette/FastAPI app (e.g., `"./src/agent/webapp.py:app"`). See [custom routes guide](../../how-tos/http/custom_routes.md).</li><li>`disable_assistants`: Disable `/assistants` routes</li><li>`disable_threads`: Disable `/threads` routes</li><li>`disable_runs`: Disable `/runs` routes</li><li>`disable_store`: Disable `/store` routes</li><li>`disable_meta`: Disable `/ok`, `/info`, `/metrics`, and `/docs` routes</li><li>`disable_mcp`: Disable `/mcp` routes</li><li>`cors`: CORS configuration with fields for `allow_origins`, `allow_methods`, `allow_headers`, etc.</li><li>`configurable_headers`: Define which request headers to exclude or include as a run's configurable values.</li></ul> |
 
 === "JS"
 
@@ -76,6 +78,20 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
       "graphs": {
         "chat": "./chat/graph.py:graph"
       }
+    }
+    ```
+
+    #### Using Wolfi Base Images
+
+    You can specify the Linux distribution for your base image using the `image_distro` field. Valid options are `debian` or `wolfi`. Wolfi is the recommended option as it provides smaller and more secure images. This is available in `langgraph-cli>=0.2.11`.
+
+    ```json
+    {
+      "dependencies": ["."],
+      "graphs": {
+        "chat": "./chat/graph.py:graph"
+      },
+      "image_distro": "wolfi"
     }
     ```
 
@@ -113,7 +129,7 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
         - `cohere:embed-english-v3.0`: 1024 
         - `cohere:embed-english-light-v3.0`: 384 
         - `cohere:embed-multilingual-v3.0`: 1024 
-        - `cohere:embed-multilingual-light-v3.0`: 384
+        - `cohere:embed-multilingual-light-v3.0`: 384 
 
     #### Semantic search with a custom embedding function
 
@@ -346,8 +362,8 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
 
     **Options**
 
-    | Option               | Default          | Description                                                                                                                  |
-    | -------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+    | Option               | Default          | Description                                                                                                     |
+    | -------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------- |
     | `--platform TEXT`    |                  | Target platform(s) to build the Docker image for. Example: `langgraph build --platform linux/amd64,linux/arm64`              |
     | `-t, --tag TEXT`     |                  | **Required**. Tag for the Docker image. Example: `langgraph build -t my-image`                                               |
     | `--pull / --no-pull` | `--pull`         | Build with latest remote Docker image. Use `--no-pull` for running the LangGraph Platform API server with locally built images. |
@@ -366,8 +382,8 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
 
     **Options**
 
-    | Option               | Default          | Description                                                                                                                  |
-    | -------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+    | Option               | Default          | Description                                                                                                     |
+    | -------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------- |
     | `--platform TEXT`    |                  | Target platform(s) to build the Docker image for. Example: `langgraph build --platform linux/amd64,linux/arm64`              |
     | `-t, --tag TEXT`     |                  | **Required**. Tag for the Docker image. Example: `langgraph build -t my-image`                                               |
     | `--no-pull`          |                  | Use locally built images. Defaults to `false` to build with latest remote Docker image.                                      |

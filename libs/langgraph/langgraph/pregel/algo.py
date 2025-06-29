@@ -83,7 +83,7 @@ from langgraph.types import (
 )
 from langgraph.utils.config import merge_configs, patch_config
 
-GetNextVersion = Callable[[Optional[V]], V]
+GetNextVersion = Callable[[Optional[V], None], V]
 SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
 
 
@@ -214,7 +214,7 @@ def local_read(
     return values
 
 
-def increment(current: int | None) -> int:
+def increment(current: int | None, channel: None) -> int:
     """Default channel versioning function, increments the current int version."""
     return current + 1 if current is not None else 1
 
@@ -265,7 +265,8 @@ def apply_writes(
         next_version = get_next_version(
             max(checkpoint["channel_versions"].values())
             if checkpoint["channel_versions"]
-            else None
+            else None,
+            None,
         )
 
     # Consume all channels that were read
@@ -922,18 +923,18 @@ def _triggers(
     seen: ChannelVersions | None,
     null_version: V,
     proc: PregelNode,
-) -> Sequence[str]:
+) -> bool:
     if seen is None:
         for chan in proc.triggers:
             if channels[chan].is_available():
-                return (chan,)
+                return True
     else:
         for chan in proc.triggers:
             if channels[chan].is_available() and versions.get(  # type: ignore[operator]
                 chan, null_version
             ) > seen.get(chan, null_version):
-                return (chan,)
-    return EMPTY_SEQ
+                return True
+    return False
 
 
 def _scratchpad(
@@ -1019,23 +1020,20 @@ def _proc_input(
         return copy(input_cache[proc.input_cache_key])
     # If all trigger channels subscribed by this process are not empty
     # then invoke the process with the values of all non-empty channels
-    if isinstance(proc.channels, dict):
+    if isinstance(proc.channels, list):
         val: dict[str, Any] = {}
-        for k, chan in proc.channels.items():
-            if chan in channels:
-                if channels[chan].is_available():
-                    val[k] = channels[chan].get()
-            else:
-                val[k] = managed[k].get(scratchpad)
-    elif isinstance(proc.channels, list):
         for chan in proc.channels:
             if chan in channels:
                 if channels[chan].is_available():
-                    val = channels[chan].get()
-                    break
+                    val[chan] = channels[chan].get()
             else:
-                val = managed[chan].get(scratchpad)
-                break
+                val[chan] = managed[chan].get(scratchpad)
+    elif isinstance(proc.channels, str):
+        if proc.channels in channels:
+            if channels[proc.channels].is_available():
+                val = channels[proc.channels].get()
+            else:
+                return MISSING
         else:
             return MISSING
     else:

@@ -13,7 +13,7 @@ LangGraph Studio is accessed from the LangSmith UI, within the LangGraph Platfor
 
 For applications that are [deployed](../../quick_start.md) on LangGraph Platform, you can access Studio as part of that deployment. To do so, navigate to the deployment in LangGraph Platform within the LangSmith UI and click the "LangGraph Studio" button.
 
-This will load the Studio UI connected to your live deployment, allowing you to create, read, and update the [threads](../../concepts/threads.md), [assistants](../../../concepts/assistants.md), and [memory](../../../concepts//memory.md) in that deployment.
+This will load the Studio UI connected to your live deployment, allowing you to create, read, and update the [threads](../../../concepts/persistence.md#threads), [assistants](../../../concepts/assistants.md), and [memory](../../../concepts//memory.md) in that deployment.
 
 ## Local development server
 
@@ -73,9 +73,11 @@ langgraph dev --debug-port 5678
 Then attach your preferred debugger:
 
 === "VS Code"
-Add this configuration to `launch.json`:
-`json
-      {
+
+    Add this configuration to `launch.json`:
+
+    ```json
+    {
         "name": "Attach to LangGraph",
         "type": "debugpy",
         "request": "attach",
@@ -83,11 +85,16 @@ Add this configuration to `launch.json`:
           "host": "0.0.0.0",
           "port": 5678
         }
-      }
-    `
-Specify the port number you chose in the previous step.
+    }
+    ```
 
-=== "PyCharm" 1. Go to Run → Edit Configurations 2. Click + and select "Python Debug Server" 3. Set IDE host name: `localhost` 4. Set port: `5678` (or the port number you chose in the previous step) 5. Click "OK" and start debugging
+=== "PyCharm" 
+
+    1. Go to Run → Edit Configurations 
+    2. Click + and select "Python Debug Server" 
+    3. Set IDE host name: `localhost` 
+    4. Set port: `5678` (or the port number you chose in the previous step) 
+    5. Click "OK" and start debugging
 
 ## Troubleshooting
 

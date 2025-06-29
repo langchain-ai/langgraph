@@ -180,14 +180,14 @@ ny_response = agent.invoke(
 )
 ```
 
-1. `checkpointer` allows the agent to store its state at every step in the tool calling loop. This enables [short-term memory](./memory.md#short-term-memory) and [human-in-the-loop](./human-in-the-loop.md) capabilities.
+1. `checkpointer` allows the agent to store its state at every step in the tool calling loop. This enables [short-term memory](../how-tos/memory/add-memory.md#add-short-term-memory) and [human-in-the-loop](../concepts/human_in_the_loop.md) capabilities.
 2. Pass configuration with `thread_id` to be able to resume the same conversation on future agent invocations.
 
 When you enable the checkpointer, it stores agent state at every step in the provided checkpointer database (or in memory, if using `InMemorySaver`).
 
 Note that in the above example, when the agent is invoked the second time with the same `thread_id`, the original message history from the first conversation is automatically included, together with the new user input.
 
-For more information, see [Memory](./memory.md).
+For more information, see [Memory](../how-tos/memory/add-memory.md).
 
 ## 6. Configure structured output
 

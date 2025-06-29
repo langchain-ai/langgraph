@@ -140,7 +140,9 @@ def _get_prompt_runnable(prompt: Optional[Prompt]) -> Runnable:
     return prompt_runnable
 
 
-def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> bool:
+def _should_bind_tools(
+    model: LanguageModelLike, tools: Sequence[BaseTool], num_builtin: int = 0
+) -> bool:
     if isinstance(model, RunnableSequence):
         model = next(
             (
@@ -158,9 +160,10 @@ def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> b
         return True
 
     bound_tools = model.kwargs["tools"]
-    if len(tools) != len(bound_tools):
+    if len(tools) != len(bound_tools) - num_builtin:
         raise ValueError(
             "Number of tools in the model.bind_tools() and tools passed to create_react_agent must match"
+            f" Got {len(tools)} tools, expected {len(bound_tools) - num_builtin}"
         )
 
     tool_names = set(tool.name for tool in tools)
@@ -444,9 +447,8 @@ def create_react_agent(
     tool_calling_enabled = len(tool_classes) > 0
 
     if (
-        _should_bind_tools(model, tool_classes)
-        and len(tool_classes) > 0
-        or (len(llm_builtin_tools) > 0)
+        _should_bind_tools(model, tool_classes, num_builtin=len(llm_builtin_tools))
+        and len(tool_classes + llm_builtin_tools) > 0
     ):
         model = cast(BaseChatModel, model).bind_tools(tool_classes + llm_builtin_tools)  # type: ignore[operator]
 
@@ -592,10 +594,10 @@ def create_react_agent(
         workflow.add_node(
             "agent",
             RunnableCallable(call_model, acall_model),
-            input=input_schema,
+            input_schema=input_schema,
         )
         if pre_model_hook is not None:
-            workflow.add_node("pre_model_hook", pre_model_hook)
+            workflow.add_node("pre_model_hook", pre_model_hook)  # type: ignore[arg-type]
             workflow.add_edge("pre_model_hook", "agent")
             entrypoint = "pre_model_hook"
         else:
@@ -604,14 +606,15 @@ def create_react_agent(
         workflow.set_entry_point(entrypoint)
 
         if post_model_hook is not None:
-            workflow.add_node("post_model_hook", post_model_hook)
+            workflow.add_node("post_model_hook", post_model_hook)  # type: ignore[arg-type]
             workflow.add_edge("agent", "post_model_hook")
 
         if response_format is not None:
             workflow.add_node(
                 "generate_structured_response",
                 RunnableCallable(
-                    generate_structured_response, agenerate_structured_response
+                    generate_structured_response,
+                    agenerate_structured_response,
                 ),
             )
             if post_model_hook is not None:
@@ -658,14 +661,16 @@ def create_react_agent(
 
     # Define the two nodes we will cycle between
     workflow.add_node(
-        "agent", RunnableCallable(call_model, acall_model), input=input_schema
+        "agent",
+        RunnableCallable(call_model, acall_model),
+        input_schema=input_schema,
     )
     workflow.add_node("tools", tool_node)
 
     # Optionally add a pre-model hook node that will be called
     # every time before the "agent" (LLM-calling node)
     if pre_model_hook is not None:
-        workflow.add_node("pre_model_hook", pre_model_hook)
+        workflow.add_node("pre_model_hook", pre_model_hook)  # type: ignore[arg-type]
         workflow.add_edge("pre_model_hook", "agent")
         entrypoint = "pre_model_hook"
     else:
@@ -680,7 +685,7 @@ def create_react_agent(
 
     # Add a post model hook node if post_model_hook is provided
     if post_model_hook is not None:
-        workflow.add_node("post_model_hook", post_model_hook)
+        workflow.add_node("post_model_hook", post_model_hook)  # type: ignore[arg-type]
         agent_paths.append("post_model_hook")
         workflow.add_edge("agent", "post_model_hook")
     else:
@@ -691,7 +696,8 @@ def create_react_agent(
         workflow.add_node(
             "generate_structured_response",
             RunnableCallable(
-                generate_structured_response, agenerate_structured_response
+                generate_structured_response,
+                agenerate_structured_response,
             ),
         )
         if post_model_hook is not None:

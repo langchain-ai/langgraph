@@ -92,7 +92,7 @@ def test_state_schema_with_type_hint():
             assert state.pop("foo") == "bar"
             return {"input_state": state}
 
-    graph = StateGraph(InputState, output=OutputState)
+    graph = StateGraph(InputState, output_schema=OutputState)
     actions = [
         complete_hint,
         miss_first_hint,
@@ -153,7 +153,7 @@ def test_state_schema_optional_values(total_: bool):
     class State(InputState):  # this would be ignored
         val4: dict
 
-    builder = StateGraph(State, input=InputState, output=OutputState)
+    builder = StateGraph(State, input_schema=InputState, output_schema=OutputState)
     builder.add_node("n", lambda x: x)
     builder.add_edge("__start__", "n")
     graph = builder.compile()

@@ -1,10 +1,6 @@
 # Use threads
 
-!!! info "Prerequisites"
-
-    - [Threads Overview](../concepts/threads.md)
-
-In this guide, we will show how to create, view, and inspect threads.
+In this guide, we will show how to create, view, and inspect [threads](../../concepts/persistence.md#threads).
 
 ## Create a thread
 

@@ -1,6 +1,6 @@
 === "OpenAI"
 
-    ```
+    ```shell
     pip install -U "langchain[openai]"
     ```
     ```python
@@ -12,9 +12,11 @@
     llm = init_chat_model("openai:gpt-4.1")
     ```
 
+    👉 Read the [OpenAI integration docs](https://python.langchain.com/docs/integrations/chat/openai/)
+
 === "Anthropic"
 
-    ```
+    ```shell
     pip install -U "langchain[anthropic]"
     ```
     ```python
@@ -26,9 +28,11 @@
     llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
     ```
 
+    👉 Read the [Anthropic integration docs](https://python.langchain.com/docs/integrations/chat/anthropic/)
+
 === "Azure"
 
-    ```
+    ```shell
     pip install -U "langchain[openai]"
     ```
     ```python
@@ -44,10 +48,12 @@
         azure_deployment=os.environ["AZURE_OPENAI_DEPLOYMENT_NAME"],
     )
     ```
+ 
+    👉 Read the [Azure integration docs](https://python.langchain.com/docs/integrations/chat/azure_chat_openai/)
 
 === "Google Gemini"
 
-    ```
+    ```shell
     pip install -U "langchain[google-genai]"
     ```
     ```python
@@ -59,9 +65,11 @@
     llm = init_chat_model("google_genai:gemini-2.0-flash")
     ```
 
+    👉 Read the [Google GenAI integration docs](https://python.langchain.com/docs/integrations/chat/google_generative_ai/)
+
 === "AWS Bedrock"
 
-    ```
+    ```shell
     pip install -U "langchain[aws]"
     ```
     ```python
@@ -75,3 +83,5 @@
         model_provider="bedrock_converse",
     )
     ```
+
+    👉 Read the [AWS Bedrock integration docs](https://python.langchain.com/docs/integrations/chat/bedrock/)

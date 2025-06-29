@@ -50,10 +50,9 @@ Set this environment variable to have a deployment send traces to a self-hosted 
 
 ## `LANGSMITH_TRACING`
 
-!!! info "Only for Self-Hosted Data Plane, Self-Hosted Control Plane, and Standalone Container"
-    Disabling LangSmith tracing is only available for [Self-Hosted Data Plane](../../concepts/langgraph_self_hosted_data_plane.md), [Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md), and [Standalone Container](../../concepts/langgraph_standalone_container.md) deployments.
-
 Set `LANGSMITH_TRACING` to `false` to disable tracing to LangSmith.
+
+Defaults to `true`.
 
 ## `LOG_LEVEL`
 
@@ -123,3 +122,12 @@ Defaults to `''`.
 Set `REDIS_CLUSTER` to `True` to enable Redis Cluster mode. When enabled, the system will connect to Redis using cluster mode. This is useful when connecting to a Redis Cluster deployment.
 
 Defaults to `False`.
+
+## `MOUNT_PREFIX`
+
+!!! info "Only Allowed in Self-Hosted Deployments"
+    The `MOUNT_PREFIX` environment variable is only allowed in Self-Hosted Deployment models, LangGraph Platform SaaS will not allow this environment variable.
+
+Set `MOUNT_PREFIX` to serve the LangGraph Server under a specific path prefix. This is useful for deployments where the server is behind a reverse proxy or load balancer that requires a specific path prefix.
+
+For example, if the server is to be served under `https://example.com/langgraph`, set `MOUNT_PREFIX` to `/langgraph`.

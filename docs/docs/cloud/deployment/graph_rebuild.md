@@ -20,7 +20,7 @@ my-app/
 |-- openai_agent.py     # code for your graph
 ```
 
-where the graph is defined in `openai_agent.py`.
+where the graph is defined in `openai_agent.py`. 
 
 ### No rebuild
 
@@ -28,11 +28,11 @@ In the standard LangGraph API configuration, the server uses the compiled graph 
 
 ```python
 from langchain_openai import ChatOpenAI
-from langgraph.graph import END, START, StateGraph, MessagesState
+from langgraph.graph import END, START, MessageGraph
 
 model = ChatOpenAI(temperature=0)
 
-graph_workflow = StateGraph(MessagesState)
+graph_workflow = MessageGraph()
 
 graph_workflow.add_node("agent", model)
 graph_workflow.add_edge("agent", END)
@@ -61,7 +61,7 @@ To make your graph rebuild on each new run with custom configuration, you need t
 from typing import Annotated
 from typing_extensions import TypedDict
 from langchain_openai import ChatOpenAI
-from langgraph.graph import END, START
+from langgraph.graph import END, START, MessageGraph
 from langgraph.graph.state import StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode

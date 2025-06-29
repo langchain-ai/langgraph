@@ -1,10 +1,6 @@
 # Manage threads
 
-!!! info "Prerequisites"
-
-    - [Threads Overview](../concepts/threads.md)
-
-Studio allows you to view threads from the server and edit their state.
+Studio allows you to view [threads](../../concepts/persistence.md#threads) from the server and edit their state.
 
 ## View threads
 

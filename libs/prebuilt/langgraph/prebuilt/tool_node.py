@@ -629,7 +629,7 @@ def tools_condition(
 
     Args:
         state: The state to check for
-            tool calls. Must have a list of messages or have the
+            tool calls. Must have a list of messages (MessageGraph) or have the
             "messages" key (StateGraph).
 
     Returns:
@@ -850,7 +850,7 @@ def _get_store_arg(tool: BaseTool) -> Optional[str]:
             if _is_injection(type_arg, InjectedStore)
         ]
         if len(injections) > 1:
-            ValueError(
+            raise ValueError(
                 "A tool argument should not be annotated with InjectedStore more than "
                 f"once. Received arg {name} with annotations {injections}."
             )

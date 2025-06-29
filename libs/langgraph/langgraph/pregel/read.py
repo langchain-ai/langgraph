@@ -12,12 +12,11 @@ from langchain_core.runnables import Runnable, RunnableConfig
 
 from langgraph.constants import CONF, CONFIG_KEY_READ
 from langgraph.pregel.protocol import PregelProtocol
-from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.utils import find_subgraph_pregel
 from langgraph.pregel.write import ChannelWrite
-from langgraph.types import CachePolicy
+from langgraph.types import CachePolicy, RetryPolicy
 from langgraph.utils.config import merge_configs
-from langgraph.utils.runnable import RunnableCallable, RunnableSeq, coerce_to_runnable
+from langgraph.utils.runnable import RunnableCallable, RunnableSeq
 
 READ_TYPE = Callable[[Union[str, Sequence[str]], bool], Union[Any, dict[str, Any]]]
 INPUT_CACHE_KEY_TYPE = tuple[Callable[..., Any], tuple[str, ...]]
@@ -96,16 +95,15 @@ class ChannelRead(RunnableCallable):
 DEFAULT_BOUND = RunnableCallable(lambda input: input)
 
 
-class PregelNode(Runnable):
+class PregelNode:
     """A node in a Pregel graph. This won't be invoked as a runnable by the graph
     itself, but instead acts as a container for the components necessary to make
     a PregelExecutableTask for a node."""
 
-    channels: list[str] | Mapping[str, str]
+    channels: str | list[str]
     """The channels that will be passed as input to `bound`.
-    If a list, the node will be invoked with the first of that isn't empty.
-    If a dict, the keys are the names of the channels, and the values are the keys
-    to use in the input to `bound`."""
+    If a str, the node will be invoked with its value if it isn't empty.
+    If a list, the node will be invoked with a dict of those channels' values."""
 
     triggers: list[str]
     """If any of these channels is written to, this node will be triggered in
@@ -140,7 +138,7 @@ class PregelNode(Runnable):
     def __init__(
         self,
         *,
-        channels: list[str] | Mapping[str, str],
+        channels: str | list[str],
         triggers: Sequence[str],
         mapper: Callable[[Any], Any] | None = None,
         writers: list[Runnable] | None = None,
@@ -223,58 +221,10 @@ class PregelNode(Runnable):
         This is used to avoid calculating the same input multiple times."""
         return (
             self.mapper,
-            tuple(f"{key}:{value}" for key, value in self.channels.items())
-            if isinstance(self.channels, dict)
-            else tuple(self.channels),
+            tuple(self.channels)
+            if isinstance(self.channels, list)
+            else (self.channels,),
         )
-
-    def join(self, channels: Sequence[str]) -> PregelNode:
-        assert isinstance(channels, list) or isinstance(channels, tuple), (
-            "channels must be a list or tuple"
-        )
-        assert isinstance(self.channels, dict), (
-            "all channels must be named when using .join()"
-        )
-        return self.copy(
-            update=dict(
-                channels={
-                    **self.channels,
-                    **{chan: chan for chan in channels},
-                }
-            ),
-        )
-
-    def __or__(
-        self,
-        other: Runnable[Any, Any]
-        | Callable[[Any], Any]
-        | Mapping[str, Runnable[Any, Any] | Callable[[Any], Any]],
-    ) -> PregelNode:
-        if isinstance(other, Runnable) and ChannelWrite.is_writer(other):
-            return self.copy(update=dict(writers=[*self.writers, other]))
-        elif self.bound is DEFAULT_BOUND:
-            return self.copy(
-                update=dict(bound=coerce_to_runnable(other, name=None, trace=True))
-            )
-        else:
-            return self.copy(update=dict(bound=RunnableSeq(self.bound, other)))
-
-    def pipe(
-        self,
-        *others: Runnable[Any, Any] | Callable[[Any], Any],
-        name: str | None = None,
-    ) -> PregelNode:
-        for other in others:
-            self = self | other
-        return self
-
-    def __ror__(
-        self,
-        other: Runnable[Any, Any]
-        | Callable[[Any], Any]
-        | Mapping[str, Runnable[Any, Any] | Callable[[Any], Any]],
-    ) -> PregelNode:
-        raise NotImplementedError()
 
     def invoke(
         self,

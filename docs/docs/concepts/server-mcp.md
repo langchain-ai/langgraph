@@ -6,20 +6,14 @@ hide:
   - tags
 ---
 
-# MCP Endpoint
+# MCP endpoint in LangGraph Server
 
 The **Model Context Protocol (MCP)** is an open protocol for describing tools and data sources in a model-agnostic format, enabling LLMs to discover
 and use them via a structured API. 
 
 [LangGraph Server](./langgraph_server.md) implements MCP using the [Streamable HTTP transport](https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/transports/#streamable-http). This allows LangGraph **agents** to be exposed as **MCP tools**, making them usable with any MCP-compliant client supporting Streamable HTTP.
 
-The MCP endpoint is available at:
-
-```
-/mcp
-```
-
-on [LangGraph Server](./langgraph_server.md).
+The MCP endpoint is available at `/mcp` on [LangGraph Server](./langgraph_server.md).
 
 ## Requirements
 
@@ -94,7 +88,7 @@ def answer_node(state: InputState):
     return {"answer": "bye", "question": state["question"]}
 
 # Build the graph with explicit schemas
-builder = StateGraph(OverallState, input=InputState, output=OutputState)
+builder = StateGraph(OverallState, input_schema=InputState, output_schema=OutputState)
 builder.add_node(answer_node)
 builder.add_edge(START, "answer_node")
 builder.add_edge("answer_node", END)

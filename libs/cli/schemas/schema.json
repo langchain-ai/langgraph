@@ -134,6 +134,17 @@
               ],
               "description": "Optional. Linux distribution for the base image.\n\nMust be either 'debian' or 'wolfi'. If omitted, defaults to 'debian'.\n"
             },
+            "pip_installer": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Python package installer to use ('auto', 'pip', 'uv').\n\n"
+            },
             "store": {
               "anyOf": [
                 {
@@ -286,6 +297,17 @@
                 }
               ],
               "description": "Optional. Linux distribution for the base image.\n\nMust be either 'debian' or 'wolfi'. If omitted, defaults to 'debian'.\n"
+            },
+            "pip_installer": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Python package installer to use ('auto', 'pip', 'uv').\n\n"
             },
             "store": {
               "anyOf": [
@@ -476,6 +498,10 @@
         "disable_assistants": {
           "type": "boolean",
           "description": "Optional. If True, /assistants routes are removed from the server.\n\nDefault is False (meaning /assistants is enabled).\n"
+        },
+        "disable_mcp": {
+          "type": "boolean",
+          "description": "Optional. If True, /mcp routes are removed, disabling the MCP server.\n\nDefault is False.\n"
         },
         "disable_meta": {
           "type": "boolean",

@@ -12,6 +12,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.store.base import BaseStore
 from tests.conftest_checkpointer import (
     _checkpointer_memory,
+    _checkpointer_memory_migrate_sends,
     _checkpointer_postgres,
     _checkpointer_postgres_aio,
     _checkpointer_postgres_aio_pipe,
@@ -125,6 +126,7 @@ async def async_store(request: pytest.FixtureRequest) -> AsyncIterator[BaseStore
     if NO_DOCKER
     else [
         "memory",
+        "memory_migrate_sends",
         "sqlite",
         "sqlite_aes",
         "postgres",
@@ -138,6 +140,9 @@ def sync_checkpointer(
     checkpointer_name = request.param
     if checkpointer_name == "memory":
         with _checkpointer_memory() as checkpointer:
+            yield checkpointer
+    elif checkpointer_name == "memory_migrate_sends":
+        with _checkpointer_memory_migrate_sends() as checkpointer:
             yield checkpointer
     elif checkpointer_name == "sqlite":
         with _checkpointer_sqlite() as checkpointer:
