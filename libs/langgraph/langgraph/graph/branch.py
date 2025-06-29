@@ -34,7 +34,9 @@ from langgraph.utils.runnable import (
     RunnableCallable,
 )
 
-Writer = Callable[
+__all__ = ("Branch",)
+
+_Writer = Callable[
     [Sequence[Union[str, Send]], bool],
     Sequence[Union[ChannelWriteEntry, Send]],
 ]
@@ -123,7 +125,7 @@ class Branch(NamedTuple):
 
     def run(
         self,
-        writer: Writer,
+        writer: _Writer,
         reader: Callable[[RunnableConfig], Any] | None = None,
     ) -> RunnableCallable:
         return ChannelWrite.register_writer(
@@ -152,7 +154,7 @@ class Branch(NamedTuple):
         config: RunnableConfig,
         *,
         reader: Callable[[RunnableConfig], Any] | None,
-        writer: Writer,
+        writer: _Writer,
     ) -> Runnable:
         if reader:
             value = reader(config)
@@ -175,7 +177,7 @@ class Branch(NamedTuple):
         config: RunnableConfig,
         *,
         reader: Callable[[RunnableConfig], Any] | None,
-        writer: Writer,
+        writer: _Writer,
     ) -> Runnable:
         if reader:
             value = reader(config)
@@ -194,7 +196,7 @@ class Branch(NamedTuple):
 
     def _finish(
         self,
-        writer: Writer,
+        writer: _Writer,
         input: Any,
         result: Any,
         config: RunnableConfig,

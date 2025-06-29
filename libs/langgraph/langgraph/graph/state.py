@@ -88,7 +88,11 @@ from langgraph.utils.pydantic import create_model
 from langgraph.utils.runnable import coerce_to_runnable
 from langgraph.warnings import LangGraphDeprecatedSinceV05
 
+__all__ = ("StateGraph", "CompiledStateGraph")
+
 logger = logging.getLogger(__name__)
+
+_CHANNEL_BRANCH_TO = "branch:to:{}"
 
 
 def _warn_invalid_state_schema(schema: type[Any] | Any) -> None:
@@ -171,14 +175,11 @@ def _get_node_name(node: StateNode) -> str:
         raise TypeError(f"Unsupported node type: {type(node)}")
 
 
-class StateNodeSpec(NamedTuple):
-    # TODO: rename this callable, also move away from NamedTuple so that we can use
-    # a generic StateNode, so maybe a dataclass
+# TODO: use a dataclass generic on NodeInputType
+class _StateNodeSpec(NamedTuple):
     runnable: StateNode
     metadata: dict[str, Any] | None
-    # TODO: rename to input_schema, though we really just want to modify this structure to
-    # be a dataclass
-    input: type[Any]
+    input_schema: type[Any]
     retry_policy: RetryPolicy | Sequence[RetryPolicy] | None
     cache_policy: CachePolicy | None
     ends: tuple[str, ...] | dict[str, str] | None = EMPTY_SEQ
@@ -238,7 +239,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
     """
 
     edges: set[tuple[str, str]]
-    nodes: dict[str, StateNodeSpec]
+    nodes: dict[str, _StateNodeSpec]
     branches: defaultdict[str, dict[str, Branch]]
     channels: dict[str, BaseChannel]
     managed: dict[str, ManagedValueSpec]
@@ -535,10 +536,10 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
 
         if input_schema is not None:
             self._add_schema(input_schema)
-        self.nodes[node] = StateNodeSpec(
+        self.nodes[node] = _StateNodeSpec(
             coerce_to_runnable(action, name=node, trace=False),
             metadata,
-            input=input_schema or self.state_schema,
+            input_schema=input_schema or self.state_schema,
             retry_policy=retry_policy,
             cache_policy=cache_policy,
             ends=ends,
@@ -922,7 +923,7 @@ class CompiledStateGraph(
             name=self.get_name("Output"),
         )
 
-    def attach_node(self, key: str, node: StateNodeSpec | None) -> None:
+    def attach_node(self, key: str, node: _StateNodeSpec | None) -> None:
         if key == START:
             output_keys = [
                 k
@@ -994,7 +995,7 @@ class CompiledStateGraph(
                 writers=[ChannelWrite(write_entries)],
             )
         elif node is not None:
-            input_schema = node.input if node else self.builder._state_schema
+            input_schema = node.input_schema if node else self.builder._state_schema
             input_channels = list(self.builder.schemas[input_schema])
             is_single_input = len(input_channels) == 1 and "__root__" in input_channels
             if input_schema in self.schema_to_mapper:
@@ -1003,7 +1004,7 @@ class CompiledStateGraph(
                 mapper = _pick_mapper(input_channels, input_schema)
                 self.schema_to_mapper[input_schema] = mapper
 
-            branch_channel = CHANNEL_BRANCH_TO.format(key)
+            branch_channel = _CHANNEL_BRANCH_TO.format(key)
             self.channels[branch_channel] = (
                 LastValueAfterFinish(Any)
                 if node.defer
@@ -1031,7 +1032,7 @@ class CompiledStateGraph(
             if end != END:
                 self.nodes[starts].writers.append(
                     ChannelWrite(
-                        (ChannelWriteEntry(CHANNEL_BRANCH_TO.format(end), None),)
+                        (ChannelWriteEntry(_CHANNEL_BRANCH_TO.format(end), None),)
                     )
                 )
         elif end != END:
@@ -1060,7 +1061,7 @@ class CompiledStateGraph(
             writes = [
                 (
                     ChannelWriteEntry(
-                        p if p == END else CHANNEL_BRANCH_TO.format(p), None
+                        p if p == END else _CHANNEL_BRANCH_TO.format(p), None
                     )
                     if not isinstance(p, Send)
                     else p
@@ -1075,7 +1076,7 @@ class CompiledStateGraph(
         if with_reader:
             # get schema
             schema = branch.input_schema or (
-                self.builder.nodes[start].input
+                self.builder.nodes[start].input_schema
                 if start in self.builder.nodes
                 else self.builder.state_schema
             )
@@ -1237,12 +1238,12 @@ def _control_branch(value: Any) -> Sequence[tuple[str, Any]]:
         if isinstance(command.goto, Send):
             rtn.append((TASKS, command.goto))
         elif isinstance(command.goto, str):
-            rtn.append((CHANNEL_BRANCH_TO.format(command.goto), None))
+            rtn.append((_CHANNEL_BRANCH_TO.format(command.goto), None))
         else:
             rtn.extend(
                 (TASKS, go)
                 if isinstance(go, Send)
-                else (CHANNEL_BRANCH_TO.format(go), None)
+                else (_CHANNEL_BRANCH_TO.format(go), None)
                 for go in command.goto
             )
     return rtn
@@ -1253,12 +1254,12 @@ def _control_static(
 ) -> Sequence[tuple[str, Any, str | None]]:
     if isinstance(ends, dict):
         return [
-            (k if k == END else CHANNEL_BRANCH_TO.format(k), None, label)
+            (k if k == END else _CHANNEL_BRANCH_TO.format(k), None, label)
             for k, label in ends.items()
         ]
     else:
         return [
-            (e if e == END else CHANNEL_BRANCH_TO.format(e), None, None) for e in ends
+            (e if e == END else _CHANNEL_BRANCH_TO.format(e), None, None) for e in ends
         ]
 
 
@@ -1415,6 +1416,3 @@ def _get_schema(
                     if k in channels and isinstance(channels[k], BaseChannel)
                 },
             )
-
-
-CHANNEL_BRANCH_TO = "branch:to:{}"
