@@ -15,11 +15,15 @@ Before deploying, review the [conceptual guide for the Self-Hosted Data Plane](.
 ### Prerequisites
 1. `KEDA` is installed on your cluster.
 
-        helm repo add kedacore https://kedacore.github.io/charts 
+        helm repo add kedacore https://kedacore.github.io/charts
         helm install keda kedacore/keda --namespace keda --create-namespace
 
 1. A valid `Ingress` controller is installed on your cluster.
 1. You have slack space in your cluster for multiple deployments. `Cluster-Autoscaler` is recommended to automatically provision new nodes.
+1. You will need to enable egress to two control plane URLs. The listener polls these endpoints for deployments:
+
+        https://api.host.langchain.com
+        https://api.smith.langchain.com
 
 ### Setup
 
