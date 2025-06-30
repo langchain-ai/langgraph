@@ -3,10 +3,14 @@ from collections.abc import Mapping
 from types import MappingProxyType
 from typing import Any, Literal, cast
 
-from langgraph.types import Interrupt, Send  # noqa: F401
-
-# Interrupt, Send re-exported for backwards compatibility
-
+__all__ = (
+    "TAG_NOSTREAM",
+    "TAG_HIDDEN",
+    "START",
+    "END",
+    "SELF",
+    "PREVIOUS",
+)
 
 # --- Empty read-only containers ---
 EMPTY_MAP: Mapping[str, Any] = MappingProxyType({})
@@ -16,8 +20,6 @@ MISSING = object()
 # --- Public constants ---
 TAG_NOSTREAM = sys.intern("nostream")
 """Tag to disable streaming for a chat model."""
-TAG_NOSTREAM_ALT = sys.intern("langsmith:nostream")
-"""Tag to disable streaming for a chat model. (Deprecated in favour of "nostream")"""
 TAG_HIDDEN = sys.intern("langsmith:hidden")
 """Tag to hide a node/edge from certain tracing/streaming environments."""
 START = sys.intern("__start__")

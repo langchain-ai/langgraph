@@ -5,8 +5,6 @@ from typing import Any
 from langgraph.checkpoint.base import EmptyChannelError  # noqa: F401
 from langgraph.types import Command, Interrupt
 
-# EmptyChannelError re-exported for backwards compatibility
-
 
 class ErrorCode(Enum):
     GRAPH_RECURSION_LIMIT = "GRAPH_RECURSION_LIMIT"

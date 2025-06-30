@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+__all__ = ("LangGraphDeprecationWarning", "LangGraphDeprecatedSinceV05")
+
 
 class LangGraphDeprecationWarning(DeprecationWarning):
     """A LangGraph specific deprecation warning.
