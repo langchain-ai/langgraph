@@ -71,13 +71,13 @@ from langgraph.pregel._call import get_runnable_for_task, identifier
 from langgraph.pregel._io import read_channels
 from langgraph.pregel._log import logger
 from langgraph.pregel._read import INPUT_CACHE_KEY_TYPE, PregelNode
+from langgraph.pregel._scratchpad import PregelScratchpad
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
     CacheKey,
     CachePolicy,
     PregelExecutableTask,
-    PregelScratchpad,
     PregelTask,
     RetryPolicy,
     Send,

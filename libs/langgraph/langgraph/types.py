@@ -18,7 +18,6 @@ from typing import (
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
-from typing_extensions import Self
 from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._cache import default_cache_key
@@ -352,39 +351,6 @@ class Command(Generic[N], ToolOutputMixin):
     PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
 
 
-StreamChunk = tuple[tuple[str, ...], str, Any]
-
-
-class StreamProtocol:
-    __slots__ = ("modes", "__call__")
-
-    modes: set[StreamMode]
-
-    __call__: Callable[[Self, StreamChunk], None]
-
-    def __init__(
-        self,
-        __call__: Callable[[StreamChunk], None],
-        modes: set[StreamMode],
-    ) -> None:
-        self.__call__ = cast(Callable[[Self, StreamChunk], None], __call__)
-        self.modes = modes
-
-
-@dataclasses.dataclass(**_DC_KWARGS)
-class PregelScratchpad:
-    step: int
-    stop: int
-    # call
-    call_counter: Callable[[], int]
-    # interrupt
-    interrupt_counter: Callable[[], int]
-    get_null_resume: Callable[[bool], Any]
-    resume: list[Any]
-    # subgraph
-    subgraph_counter: Callable[[], int]
-
-
 def interrupt(value: Any) -> Any:
     """Interrupt the graph with a resumable exception from within a node.
 
@@ -492,7 +458,7 @@ def interrupt(value: Any) -> Any:
 
     conf = get_config()["configurable"]
     # track interrupt index
-    scratchpad: PregelScratchpad = conf[CONFIG_KEY_SCRATCHPAD]
+    scratchpad = conf[CONFIG_KEY_SCRATCHPAD]
     idx = scratchpad.interrupt_counter()
     # find previous resume values
     if scratchpad.resume:

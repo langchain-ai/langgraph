@@ -42,7 +42,7 @@ from langgraph.constants import (
     NS_SEP,
 )
 from langgraph.errors import GraphInterrupt
-from langgraph.pregel.protocol import PregelProtocol
+from langgraph.pregel.protocol import PregelProtocol, StreamProtocol
 from langgraph.types import (
     All,
     Command,
@@ -50,7 +50,6 @@ from langgraph.types import (
     PregelTask,
     StateSnapshot,
     StreamMode,
-    StreamProtocol,
 )
 
 __all__ = ("RemoteGraph", "RemoteException")

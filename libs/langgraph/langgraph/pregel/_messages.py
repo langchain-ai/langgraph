@@ -14,7 +14,8 @@ from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
 
 from langgraph.constants import NS_SEP, TAG_HIDDEN, TAG_NOSTREAM
-from langgraph.types import Command, StreamChunk
+from langgraph.pregel.protocol import StreamChunk
+from langgraph.types import Command
 
 try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler

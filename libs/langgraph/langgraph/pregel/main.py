@@ -104,7 +104,7 @@ from langgraph.pregel._checkpoint import (
 from langgraph.pregel._debug import get_bolded_text, get_colored_text, tasks_w_writes
 from langgraph.pregel._draw import draw_graph
 from langgraph.pregel._io import map_input, read_channels
-from langgraph.pregel._loop import AsyncPregelLoop, StreamProtocol, SyncPregelLoop
+from langgraph.pregel._loop import AsyncPregelLoop, SyncPregelLoop
 from langgraph.pregel._messages import StreamMessagesHandler
 from langgraph.pregel._read import DEFAULT_BOUND, PregelNode
 from langgraph.pregel._retry import RetryPolicy
@@ -112,7 +112,7 @@ from langgraph.pregel._runner import PregelRunner
 from langgraph.pregel._utils import get_new_channel_versions
 from langgraph.pregel._validate import validate_graph, validate_keys
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
-from langgraph.pregel.protocol import PregelProtocol
+from langgraph.pregel.protocol import PregelProtocol, StreamChunk, StreamProtocol
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
@@ -122,7 +122,6 @@ from langgraph.types import (
     Send,
     StateSnapshot,
     StateUpdate,
-    StreamChunk,
     StreamMode,
 )
 from langgraph.typing import InputT, OutputT, StateT

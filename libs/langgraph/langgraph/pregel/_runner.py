@@ -36,10 +36,10 @@ from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.pregel._algo import Call
 from langgraph.pregel._executor import Submit
 from langgraph.pregel._retry import arun_with_retry, run_with_retry
+from langgraph.pregel._scratchpad import PregelScratchpad
 from langgraph.types import (
     CachePolicy,
     PregelExecutableTask,
-    PregelScratchpad,
     RetryPolicy,
 )
 
