@@ -629,7 +629,7 @@ def tools_condition(
 
     Args:
         state: The state to check for
-            tool calls. Must have a list of messages (MessageGraph) or have the
+            tool calls. Must have a list of messages or have the
             "messages" key (StateGraph).
 
     Returns:
