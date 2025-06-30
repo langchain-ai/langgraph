@@ -13,6 +13,8 @@ from langgraph.types import PregelScratchpad
 V = TypeVar("V")
 U = TypeVar("U")
 
+__all__ = ("ManagedValueSpec", "ManagedValueMapping")
+
 
 class ManagedValue(ABC, Generic[V]):
     @staticmethod
