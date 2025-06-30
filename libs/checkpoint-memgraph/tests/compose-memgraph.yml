@@ -1,0 +1,25 @@
+services:
+  memgraph:
+    image: memgraph/memgraph-mage:${MEMGRAPH_VERSION:-3.3}
+    container_name: memgraph-mage
+    ports:
+      - "7687:7687"      # Bolt
+      - "7444:7444"      # Logs / HTTP API
+    command: ["--log-level=TRACE"]
+    environment:
+      - MEMGRAPH_USER=memgraph
+      - MEMGRAPH_PASSWORD=memgraph
+    healthcheck:
+      test: ["CMD-SHELL",
+             "echo 'RETURN 1;' | mgconsole --host 127.0.0.1 \
+                                          --port 7687 \
+                                          --username \"$${MEMGRAPH_USER}\" \
+                                          --password \"$${MEMGRAPH_PASSWORD}\" \
+                                          >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+
+volumes:
+  neo4j_data:

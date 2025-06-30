@@ -1,99 +1,207 @@
-"""
-Memgraph Checkpointer (sync) for LangGraph.
-Implements the BaseCheckpointSaver interface storing data in Memgraph.
-"""
+from __future__ import annotations
+
 import threading
+from collections import defaultdict
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from typing import Any, Dict, Iterator, Optional
+from typing import Any
 
-from neo4j import Driver
 from langchain_core.runnables import RunnableConfig
-
-from langgraph.checkpoint.memgraph._internal import MemgraphConn, Conn, get_session
+from neo4j import Driver, GraphDatabase, Transaction
 
 from langgraph.checkpoint.base import (
-    BaseCheckpointSaver,
-    CheckpointTuple,
+    WRITES_IDX_MAP,
+    ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
-    ChannelVersions,
+    CheckpointTuple,
     get_checkpoint_id,
     get_checkpoint_metadata,
 )
-from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from langgraph.checkpoint.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.types import TASKS
+
+from .base import BaseMemgraphSaver
 
 
-class MemgraphSaver(BaseCheckpointSaver):
+class MemgraphSaver(BaseMemgraphSaver):
+    """A checkpointer that stores checkpoints in a Memgraph database.
+
+    This class provides a checkpointer that uses a Memgraph graph database for
+    persistent storage of langgraph checkpoints. It allows for saving, listing, and
+    retrieving checkpoints, enabling the resumption of graph execution from a known
+    state.
+
+    It requires a `neo4j` driver instance to connect to the Memgraph database.
+    Before its first use, the `setup()` method should be called to ensure the
+    database schema (indexes, constraints) is correctly initialized.
     """
-    Sync Memgraph checkpointer for LangGraph.
-    Each checkpoint is stored as a node labeled `Checkpoint`.
-    """
+
+    driver: Driver
+    lock: threading.Lock
 
     def __init__(
         self,
-        conn: Conn,
-        serde=None,
+        driver: Driver,
+        *,
+        serde: SerializerProtocol | None = None,
     ) -> None:
         """
-        Create a MemgraphSaver instance.
+        Initialize the Memgraph saver.
 
         Args:
-            conn: A MemgraphConn or raw neo4j Driver for connecting to Memgraph.
-            serde: Optional custom serializer. Defaults to JsonPlusSerializer.
+            driver: The neo4j.Driver instance to connect to the database.
+            serde: The serializer to use for checkpoint data. Defaults to a JSON serializer.
         """
-        super().__init__(serde=serde or JsonPlusSerializer())
-        self.conn = conn
+        super().__init__(serde=serde)
+        self.driver = driver
         self.lock = threading.Lock()
-        self._setup_done = False
 
     @classmethod
     @contextmanager
-    def from_conn_string(
-        cls, uri: str, user: Optional[str] = None, password: Optional[str] = None
-    ) -> Iterator["MemgraphSaver"]:
+    def from_conn_string(cls, conn_string: str) -> Iterator[MemgraphSaver]:
         """
-        Usage:
-            with MemgraphSaver.from_conn_string("bolt://localhost:7687") as saver:
-                saver.setup()
-                # ...
-        """
-        mgconn = MemgraphConn(uri, user, password)
-        try:
-            yield cls(conn=mgconn)
-        finally:
-            mgconn.close()
+        Create a new MemgraphSaver instance from a connection string.
 
-    def close(self):
-        """Close the underlying driver if present."""
-        if isinstance(self.conn, MemgraphConn):
-            self.conn.close()
-        elif isinstance(self.conn, Driver):
-            self.conn.close()
+        Args:
+            conn_string: The Memgraph connection URI (e.g., "bolt://localhost:7687").
+
+        Yields:
+            A MemgraphSaver instance.
+        """
+        with GraphDatabase.driver(conn_string) as driver:
+            yield cls(driver)
 
     def setup(self) -> None:
         """
-        Create unique constraints for (thread_id, checkpoint_id).
-        This ensures no duplicates.
+        Set up the checkpoint database.
+
+        This method creates the necessary constraints and indexes in Memgraph if they
+        don't already exist and runs any pending database migrations. It should be
+        called once before the checkpointer is used.
         """
-        if self._setup_done:
-            return
-        with get_session(self.conn) as session:
-            # Create a uniqueness constraint in Memgraph:
-            #   CREATE CONSTRAINT IF NOT EXISTS ON (c:Checkpoint) ASSERT (c.thread_id, c.checkpoint_id) IS UNIQUE
-            # Memgraph doesn't strictly have CREATE CONSTRAINT IF NOT EXISTS, so we do a check if needed.
-            # In newest versions, the 'IF NOT EXISTS' is recognized. Otherwise we catch and ignore.
+        with self.driver.session() as session:
             try:
-                session.run("""
-                    CREATE CONSTRAINT IF NOT EXISTS ON (c:Checkpoint) ASSERT (c.thread_id, c.checkpoint_id) IS UNIQUE
-                """)
+                result = session.run(
+                    "MATCH (m:Migration) RETURN m.v AS v ORDER BY m.v DESC LIMIT 1"
+                )
+                version = result.single(strict=True)["v"]
             except Exception:
-                pass
-            # Also index thread_id
-            try:
-                session.run("CREATE INDEX IF NOT EXISTS ON :Checkpoint(thread_id)")
-            except Exception:
-                pass
-        self._setup_done = True
+                version = -1
+            for v, migration in enumerate(self.MIGRATIONS):
+                if v > version:
+                    if not migration.startswith("//"):  # Skip no-op comments
+                        session.run(migration)
+                    session.run("MERGE (m:Migration {v: $v})", v=v)
+
+    def list(
+        self,
+        config: RunnableConfig | None,
+        *,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
+    ) -> Iterator[CheckpointTuple]:
+        """
+        List checkpoints from the database, ordered from newest to oldest.
+
+        Args:
+            config: The config to filter by (e.g., `{"configurable": {"thread_id": "..."}}`).
+            filter: Additional metadata attributes to filter by.
+            before: An optional config to list checkpoints created before the one specified.
+            limit: The maximum number of checkpoints to return.
+
+        Yields:
+            An iterator of checkpoint tuples.
+        """
+        where_clause, params = self._search_where_and_params(config, filter, before)
+        query = self.SELECT_CYPHER.replace(
+            "MATCH (c:Checkpoint)", f"MATCH (c:Checkpoint) {where_clause}"
+        )
+        query += " ORDER BY c.checkpoint_id DESC"
+        if limit:
+            query += f" LIMIT {limit}"
+        with self._session() as tx:
+            records = [dict(r) for r in tx.run(query, params)]
+            if not records:
+                return
+            to_migrate = [
+                r
+                for r in records
+                if r["checkpoint"].get("v", 0) < 4 and r["parent_checkpoint_id"]
+            ]
+            if to_migrate:
+                thread_id = records[0]["thread_id"]
+                parent_ids = list({r["parent_checkpoint_id"] for r in to_migrate})
+                sends_records = list(
+                    tx.run(
+                        self.SELECT_PENDING_SENDS_CYPHER,
+                        {
+                            "thread_id": thread_id,
+                            "checkpoint_ids": parent_ids,
+                            "tasks_channel": TASKS,
+                        },
+                    )
+                )
+                grouped_by_parent = defaultdict(list)
+                for record in to_migrate:
+                    grouped_by_parent[record["parent_checkpoint_id"]].append(record)
+                for sends_record in sends_records:
+                    parent_id = sends_record["checkpoint_id"]
+                    for record in grouped_by_parent[parent_id]:
+                        if record["channel_values"] is None:
+                            record["channel_values"] = []
+                        self._migrate_pending_sends(
+                            sends_record["sends"],
+                            record["checkpoint"],
+                            record["channel_values"],
+                        )
+            for record in records:
+                yield self._load_checkpoint_tuple(record)
+
+    def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
+        """
+        Get a specific checkpoint tuple from the database.
+
+        If `checkpoint_id` is present in the config, it will be retrieved.
+        Otherwise, the latest checkpoint for the given `thread_id` is returned.
+
+        Args:
+            config: The config to use for retrieving the checkpoint.
+
+        Returns:
+            The checkpoint tuple, or None if not found.
+        """
+        where_clause, params = self._search_where_and_params(config, None, None)
+        query = self.SELECT_CYPHER.replace(
+            "MATCH (c:Checkpoint)", f"MATCH (c:Checkpoint) {where_clause}"
+        )
+        if "checkpoint_id" not in config["configurable"]:
+            query += " ORDER BY c.checkpoint_id DESC LIMIT 1"
+        with self._session() as tx:
+            result = tx.run(query, params).single()
+            if result is None:
+                return None
+            record = dict(result)
+            # Perform pending sends migration if necessary
+            if record["checkpoint"].get("v", 0) < 4 and record["parent_checkpoint_id"]:
+                sends_result = tx.run(
+                    self.SELECT_PENDING_SENDS_CYPHER,
+                    {
+                        "thread_id": config["configurable"]["thread_id"],
+                        "checkpoint_ids": [record["parent_checkpoint_id"]],
+                        "tasks_channel": TASKS,
+                    },
+                ).single()
+                if sends_result:
+                    if record.get("channel_values") is None:
+                        record["channel_values"] = []
+                    self._migrate_pending_sends(
+                        sends_result["sends"],
+                        record["checkpoint"],
+                        record["channel_values"],
+                    )
+            return self._load_checkpoint_tuple(record)
 
     def put(
         self,
@@ -103,230 +211,145 @@ class MemgraphSaver(BaseCheckpointSaver):
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
         """
-        Store a checkpoint in Memgraph. If a checkpoint_id was not present, we generate or read from checkpoint.
-        """
-        with self.lock:
-            return self._put_locked(config, checkpoint, metadata)
+        Save a checkpoint to the database.
 
-    def _put_locked(
-        self, config: RunnableConfig, checkpoint: Checkpoint, metadata: CheckpointMetadata
-    ) -> RunnableConfig:
-        thread_id = str(config["configurable"].get("thread_id"))
-        checkpoint_ns = str(config["configurable"].get("checkpoint_ns", ""))
-        parent_id = config["configurable"].get("checkpoint_id")
-        # The new checkpoint_id from the checkpoint data or generate
-        new_cp_id = checkpoint.get("id") or parent_id
-        if not new_cp_id:
-            new_cp_id = self.serde.generate_id()
-            checkpoint["id"] = new_cp_id
+        Args:
+            config: The config to associate with the checkpoint.
+            checkpoint: The checkpoint to save.
+            metadata: Additional metadata to save with the checkpoint.
+            new_versions: New channel versions as of this write.
 
-        # Convert checkpoint to JSON
-        cp_bytes = self.serde.dumps(checkpoint)  # typically bytes
-        cp_str = cp_bytes.decode("utf-8") if isinstance(cp_bytes, bytes) else cp_bytes
-
-        # Convert metadata to JSON
-        meta_dict = get_checkpoint_metadata(config, metadata)
-        meta_bytes = self.serde.dumps(meta_dict)
-        meta_str = (
-            meta_bytes.decode("utf-8") if isinstance(meta_bytes, bytes) else meta_bytes
-        )
-
-        self.setup()
-
-        with get_session(self.conn) as session:
-            # MERGE the node
-            # We'll store the main data in properties: (thread_id, checkpoint_ns, checkpoint_id, parent_id, data, metadata)
-            query = """
-            MERGE (c:Checkpoint {
-                thread_id: $thread_id,
-                checkpoint_ns: $checkpoint_ns,
-                checkpoint_id: $checkpoint_id
-            })
-            ON CREATE SET c.parent_id = $parent_id,
-                          c.data = $cp_data,
-                          c.metadata = $cp_meta
-            ON MATCH SET c.data = $cp_data,
-                         c.metadata = $cp_meta,
-                         c.parent_id = $parent_id
-            """
-            session.run(
-                query,
-                thread_id=thread_id,
-                checkpoint_ns=checkpoint_ns,
-                checkpoint_id=new_cp_id,
-                parent_id=parent_id,
-                cp_data=cp_str,
-                cp_meta=meta_str,
-            )
-
-        # Return updated config with new checkpoint_id
-        next_config = {
-            "configurable": {
-                "thread_id": thread_id,
-                "checkpoint_ns": checkpoint_ns,
-                "checkpoint_id": new_cp_id,
-            }
-        }
-        return next_config
-
-    def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
-        """
-        Retrieve a checkpoint tuple from Memgraph. If no checkpoint_id is in config,
-        fetch the latest for that thread.
+        Returns:
+            The updated runnable config containing the new checkpoint ID.
         """
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        cp_id = config["configurable"].get("checkpoint_id")
-        if not thread_id:
-            return None
-
-        self.setup()
-        with get_session(self.conn) as session:
-            if cp_id:
-                query = """
-                MATCH (c:Checkpoint {thread_id:$thread_id, checkpoint_ns:$checkpoint_ns, checkpoint_id:$cp_id})
-                RETURN c.data as data, c.metadata as metadata, c.parent_id as parent_id
-                """
-                rec = session.run(
-                    query,
-                    thread_id=str(thread_id),
-                    checkpoint_ns=str(checkpoint_ns),
-                    cp_id=str(cp_id),
-                ).single()
-            else:
-                # If no cp_id, pick the latest by creation order if we stored them that way,
-                # but we only stored them as data property. We might store a separate timestamp if we want to do ORDER BY.
-                # For now, let's just pick any existing if there's no cp_id. We'll assume there's only one for shallow usage.
-                query = """
-                MATCH (c:Checkpoint {thread_id:$thread_id, checkpoint_ns:$checkpoint_ns})
-                RETURN c.data as data, c.metadata as metadata, c.parent_id as parent_id
-                LIMIT 1
-                """
-                rec = session.run(
-                    query,
-                    thread_id=str(thread_id),
-                    checkpoint_ns=str(checkpoint_ns),
-                ).single()
-
-            if not rec:
-                return None
-
-            raw_cp = rec["data"]
-            raw_meta = rec["metadata"]
-            parent_id = rec["parent_id"]
-            cp_dict = self.serde.loads(raw_cp.encode("utf-8") if raw_cp else b"")
-            meta_dict = self.serde.loads(raw_meta.encode("utf-8") if raw_meta else b"")
-            parent_config = None
-            if parent_id:
-                parent_config = {
-                    "configurable": {
-                        "thread_id": thread_id,
-                        "checkpoint_ns": checkpoint_ns,
-                        "checkpoint_id": parent_id,
-                    }
-                }
-            # Return the CheckpointTuple
-            return CheckpointTuple(
-                config=config,
-                checkpoint=cp_dict,
-                metadata=meta_dict,
-                parent_config=parent_config,
+        parent_checkpoint_id = get_checkpoint_id(config)
+        checkpoint_blobs = self._dump_blobs(
+            thread_id,
+            checkpoint_ns,
+            checkpoint["channel_values"],
+            new_versions,
+        )
+        with self._session() as tx:
+            # Batch upsert blobs using UNWIND
+            if checkpoint_blobs:
+                tx.run(self.UPSERT_CHECKPOINT_BLOBS_CYPHER, blobs=checkpoint_blobs)
+            # Upsert checkpoint
+            tx.run(
+                self.UPSERT_CHECKPOINTS_CYPHER,
+                thread_id=thread_id,
+                checkpoint_ns=checkpoint_ns,
+                checkpoint_id=checkpoint["id"],
+                parent_checkpoint_id=parent_checkpoint_id,
+                checkpoint=checkpoint,
+                metadata=get_checkpoint_metadata(config, metadata),
             )
-
-    def list(
-        self,
-        config: Optional[RunnableConfig],
-        *,
-        filter: Optional[dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
-    ) -> Iterator[CheckpointTuple]:
-        """
-        List all checkpoints for the given thread (optionally with limit).
-        """
-        thread_id = None
-        checkpoint_ns = ""
-        if config and "thread_id" in config["configurable"]:
-            thread_id = config["configurable"]["thread_id"]
-            checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        self.setup()
-
-        with get_session(self.conn) as session:
-            params = {}
-            conditions = []
-            if thread_id is not None:
-                conditions.append("c.thread_id = $thread_id")
-                params["thread_id"] = str(thread_id)
-            if checkpoint_ns is not None:
-                conditions.append("c.checkpoint_ns = $checkpoint_ns")
-                params["checkpoint_ns"] = str(checkpoint_ns)
-            cypher = "MATCH (c:Checkpoint) "
-            if conditions:
-                cypher += " WHERE " + " AND ".join(conditions)
-            cypher += " RETURN c.data as data, c.metadata as metadata, c.parent_id as parent_id, c.checkpoint_id as cp_id "
-            if limit is not None:
-                cypher += f" LIMIT {limit}"
-
-            results = session.run(cypher, **params)
-            for rec in results:
-                cp_id = rec["cp_id"]
-                raw_cp = rec["data"]
-                raw_meta = rec["metadata"]
-                parent_id = rec["parent_id"]
-                cp_dict = self.serde.loads(raw_cp.encode("utf-8") if raw_cp else b"")
-                meta_dict = self.serde.loads(raw_meta.encode("utf-8") if raw_meta else b"")
-                parent_config = None
-                if parent_id:
-                    parent_config = {
-                        "configurable": {
-                            "thread_id": thread_id,
-                            "checkpoint_ns": checkpoint_ns,
-                            "checkpoint_id": parent_id,
-                        }
-                    }
-                yield CheckpointTuple(
-                    {
-                        "configurable": {
-                            "thread_id": thread_id,
-                            "checkpoint_ns": checkpoint_ns,
-                            "checkpoint_id": cp_id,
-                        }
-                    },
-                    cp_dict,
-                    meta_dict,
-                    parent_config
-                )
+        return {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns": checkpoint_ns,
+                "checkpoint_id": checkpoint["id"],
+            }
+        }
 
     def put_writes(
         self,
         config: RunnableConfig,
-        writes: Any,
+        writes: Sequence[tuple[str, Any]],
+        task_id: str,
+        task_path: str = "",
     ) -> None:
         """
-        Store intermediate writes. We'll store them as a separate node or attach to the checkpoint node.
-        For now, we attach them to the checkpoint node with a relationship :HAS_WRITE.
+        Store intermediate writes linked to a checkpoint.
+
+        Args:
+            config: Configuration of the related checkpoint.
+            writes: A list of writes to store, each a (channel, value) tuple.
+            task_id: The ID of the task that produced the writes.
+            task_path: The path of the task.
         """
-        thread_id = str(config["configurable"].get("thread_id"))
-        checkpoint_ns = str(config["configurable"].get("checkpoint_ns", ""))
-        cp_id = config["configurable"].get("checkpoint_id")
-        if not cp_id:
+        checkpoint_writes = self._dump_writes(
+            config["configurable"]["thread_id"],
+            config["configurable"].get("checkpoint_ns", ""),
+            config["configurable"]["checkpoint_id"],
+            task_id,
+            task_path,
+            writes,
+        )
+        if not checkpoint_writes:
             return
-        writes_bytes = self.serde.dumps(writes)
-        writes_str = writes_bytes.decode("utf-8") if isinstance(writes_bytes, bytes) else writes_bytes
+        upsert_mode = all(w[0] in WRITES_IDX_MAP for w in writes)
+        query_template = (
+            self.UPSERT_CHECKPOINT_WRITES_CYPHER
+            if upsert_mode
+            else self.INSERT_CHECKPOINT_WRITES_CYPHER
+        )
+        with self._session() as tx:
+            tx.run(query_template, writes=checkpoint_writes)
 
-        self.setup()
+    def delete_thread(self, thread_id: str) -> None:
+        """
+        Delete all data associated with a specific thread ID.
 
-        with get_session(self.conn) as session:
-            # Create a node for the writes
-            query = """
-            MATCH (cp:Checkpoint {thread_id:$thread_id, checkpoint_ns:$checkpoint_ns, checkpoint_id:$cp_id})
-            CREATE (w:CheckpointWrite {content:$content})
-            CREATE (cp)-[:HAS_WRITE]->(w)
-            """
-            session.run(
-                query,
+        Args:
+            thread_id: The ID of the thread to delete.
+        """
+        with self._session() as tx:
+            tx.run(
+                """
+                MATCH (c:Checkpoint {thread_id: $thread_id})
+                OPTIONAL MATCH (c)-[:HAS_WRITE]->(w:Write)
+                OPTIONAL MATCH (b:Blob {thread_id: $thread_id})
+                DETACH DELETE c, w, b
+                """,
                 thread_id=thread_id,
-                checkpoint_ns=checkpoint_ns,
-                cp_id=cp_id,
-                content=writes_str,
             )
+
+    @contextmanager
+    def _session(self) -> Iterator[Transaction]:
+        """A context manager for acquiring a Neo4j session and transaction."""
+        # The neo4j.Driver is thread-safe
+        with self.driver.session() as session:
+            with session.begin_transaction() as tx:
+                yield tx
+
+    def _load_checkpoint_tuple(self, record: dict[str, Any]) -> CheckpointTuple:
+        """
+        Convert a database record into a CheckpointTuple.
+
+        Args:
+            record: A dictionary-like object representing a database row.
+
+        Returns:
+            A structured CheckpointTuple.
+        """
+        return CheckpointTuple(
+            {
+                "configurable": {
+                    "thread_id": record["thread_id"],
+                    "checkpoint_ns": record["checkpoint_ns"],
+                    "checkpoint_id": record["checkpoint_id"],
+                }
+            },
+            {
+                **record["checkpoint"],
+                "channel_values": self._load_blobs(record.get("channel_values")),
+            },
+            record["metadata"],
+            (
+                {
+                    "configurable": {
+                        "thread_id": record["thread_id"],
+                        "checkpoint_ns": record["checkpoint_ns"],
+                        "checkpoint_id": record["parent_checkpoint_id"],
+                    }
+                }
+                if record["parent_checkpoint_id"]
+                else None
+            ),
+            self._load_writes(record.get("pending_writes") or []),
+        )
+
+
+__all__ = ["MemgraphSaver", "BaseMemgraphSaver"]

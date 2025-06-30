@@ -1,49 +1,64 @@
-[tool.poetry]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
 name = "langgraph-checkpoint-memgraph"
-version = "1.0.0"
-description = "Library with a Memgraph (neo4j driver) implementation for LangGraph checkpoint and store."
+version = "2.0.22"
+description = "Library with a Memgraph implementation of LangGraph checkpoint saver and store."
 authors = []
-license = "MIT"
+requires-python = ">=3.9"
 readme = "README.md"
-repository = "https://github.com/langchain-ai/langgraph"
-packages = [{ include = "langgraph" }]
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = [
+  "langgraph-checkpoint>=2.0.21",
+  "orjson>=3.10.1",
+  "neo4j>=5.14",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.9"
-langgraph-checkpoint = "^2.0.21"
-neo4j = "^5.10.0"  # or the current stable version recommended for Memgraph
+[project.urls]
+Repository = "https://www.github.com/langchain-ai/langgraph"
 
-[tool.poetry.group.dev.dependencies]
-ruff = "^0.6.2"
-codespell = "^2.2.0"
-pytest = "^7.2.1"
-anyio = "^4.4.0"
-pytest-asyncio = "^0.21.1"
-pytest-mock = "^3.11.1"
-mypy = "^1.10.0"
-pytest-watcher = { version = ">=0.4.3", python = "<4.0" }
+[dependency-groups]
+dev = [
+  "ruff",
+  "codespell",
+  "pytest",
+  "anyio",
+  "pytest-asyncio",
+  "pytest-mock",
+  "mypy",
+  "neo4j",
+  "langgraph-checkpoint",
+  "pytest-watcher",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.uv.sources]
+langgraph-checkpoint = { path = "../checkpoint", editable = true }
+
+[tool.hatch.build.targets.wheel]
+include = ["langgraph"]
 
 [tool.pytest.ini_options]
 addopts = "--strict-markers --strict-config --durations=5 -vv"
-markers = [
-    "asyncio: mark a test as an asyncio test",
-]
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+asyncio_mode = "auto"
 
 [tool.ruff]
 lint.select = [
-  "E",
-  "F",
-  "UP",
-  "B",
-  "I",
+  "E",  # pycodestyle
+  "F",  # Pyflakes
+  "UP", # pyupgrade
+  "B",  # flake8-bugbear
+  "I",  # isort
 ]
 lint.ignore = ["E501", "B008", "UP007", "UP006"]
 
 [tool.mypy]
+# https://mypy.readthedocs.io/en/stable/config_file.html
 disallow_untyped_defs = "True"
 explicit_package_bases = "True"
 warn_no_return = "False"
@@ -51,3 +66,9 @@ warn_unused_ignores = "True"
 warn_redundant_casts = "True"
 allow_redefinition = "True"
 disable_error_code = "typeddict-item, return-value"
+
+[tool.pytest-watcher]
+now = true
+delay = 0.1
+runner_args = ["--ff", "-x", "-v", "--tb", "short"]
+patterns = ["*.py"]
