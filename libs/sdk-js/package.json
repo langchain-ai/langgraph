@@ -22,7 +22,9 @@
     "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "@langchain/core": "^0.3.31",
+    "@langchain/langgraph-api": "http://localhost:3123/1750722568240/@langchain/langgraph-api",
+    "@langchain/core": "^0.3.61",
+    "@langchain/langgraph": "^0.3.5",
     "@langchain/scripts": "^0.1.4",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
@@ -35,6 +37,7 @@
     "@types/uuid": "^9.0.1",
     "@vitejs/plugin-react": "^4.4.1",
     "concat-md": "^0.5.1",
+    "hono": "^4.8.2",
     "jsdom": "^26.1.0",
     "msw": "^2.8.2",
     "prettier": "^3.2.5",
@@ -140,5 +143,8 @@
     "react-ui/server.js",
     "react-ui/server.d.ts",
     "react-ui/server.d.cts"
-  ]
+  ],
+  "resolutions": {
+    "@langchain/langgraph-api": "http://localhost:3123/1750722568240/@langchain/langgraph-api"
+  }
 }
