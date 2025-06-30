@@ -31,7 +31,7 @@ import type {
 } from "../types.stream.js";
 
 import {
-  type MutableRefObject,
+  type RefObject,
   useCallback,
   useEffect,
   useMemo,
@@ -316,8 +316,8 @@ function fetchHistory<StateType extends Record<string, unknown>>(
 function useThreadHistory<StateType extends Record<string, unknown>>(
   threadId: string | undefined | null,
   client: Client,
-  clearCallbackRef: MutableRefObject<(() => void) | undefined>,
-  submittingRef: MutableRefObject<boolean>,
+  clearCallbackRef: RefObject<(() => void) | undefined>,
+  submittingRef: RefObject<boolean>,
 ) {
   const [history, setHistory] = useState<ThreadState<StateType>[]>([]);
 
@@ -512,6 +512,31 @@ export interface UseStreamOptions<
   onDebugEvent?: (data: DebugStreamEvent["data"]) => void;
 
   /**
+   * Callback that is called when the stream is stopped by the user.
+   * Provides a mutate function to update the stream state immediately
+   * without requiring a server roundtrip.
+   *
+   * @example
+   * ```typescript
+   * onStop: ({ mutate }) => {
+   *   mutate((prev) => ({
+   *     ...prev,
+   *     ui: prev.ui?.map(component =>
+   *       component.props.isLoading
+   *         ? { ...component, props: { ...component.props, stopped: true, isLoading: false }}
+   *         : component
+   *     )
+   *   }));
+   * }
+   * ```
+   */
+  onStop?: (options: {
+    mutate: (
+      update: Partial<StateType> | ((prev: StateType) => Partial<StateType>),
+    ) => void;
+  }) => void;
+
+  /**
    * The ID of the thread to fetch history and current values from.
    */
   threadId?: string | null;
@@ -523,6 +548,17 @@ export interface UseStreamOptions<
 
   /** Will reconnect the stream on mount */
   reconnectOnMount?: boolean | (() => RunMetadataStorage);
+
+  /**
+   * Initial values to display immediately when loading a thread.
+   * Useful for displaying cached thread data while official history loads.
+   * These values will be replaced when official thread data is fetched.
+   *
+   * Note: UI components from initialValues will render immediately if they're
+   * predefined in LoadExternalComponent's components prop, providing instant
+   * cached UI display without server fetches.
+   */
+  initialValues?: StateType | null;
 }
 
 interface RunMetadataStorage {
@@ -656,6 +692,61 @@ interface SubmitOptions<
    */
   streamSubgraphs?: boolean;
   streamResumable?: boolean;
+  /**
+   * The ID to use when creating a new thread. When provided, this ID will be used
+   * for thread creation when threadId is `null` or `undefined`.
+   * This enables optimistic UI updates where you know the thread ID
+   * before the thread is actually created.
+   */
+  threadId?: string;
+}
+
+function useStreamValuesState<StateType extends Record<string, unknown>>() {
+  type Kind = "stream" | "stop";
+  type Values = StateType | null;
+  type Update = Values | ((prev: Values, kind?: Kind) => Values);
+  type Mutate = Partial<StateType> | ((prev: StateType) => Partial<StateType>);
+
+  const [values, setValues] = useState<[values: StateType, kind: Kind] | null>(
+    null,
+  );
+
+  const setStreamValues = useCallback(
+    (values: Update, kind: Kind = "stream") => {
+      if (typeof values === "function") {
+        setValues((prevTuple) => {
+          const [prevValues, prevKind] = prevTuple ?? [null, "stream"];
+          const next = values(prevValues, prevKind);
+
+          if (next == null) return null;
+          return [next, kind] as [StateType, Kind];
+        });
+
+        return;
+      }
+
+      if (values == null) setValues(null);
+      setValues([values, kind] as [StateType, Kind]);
+    },
+    [],
+  );
+
+  const mutate = useCallback(
+    (kind: Kind, serverValues: StateType) => (update: Mutate) => {
+      setStreamValues((clientValues) => {
+        const prev = { ...serverValues, ...clientValues };
+        const next = typeof update === "function" ? update(prev) : update;
+        return { ...prev, ...next };
+      }, kind);
+    },
+    [setStreamValues],
+  );
+
+  return [values?.[0] ?? null, setStreamValues, mutate] as [
+    Values,
+    (update: Update, kind?: Kind) => void,
+    (kind: Kind, serverValues: StateType) => (update: Mutate) => void,
+  ];
 }
 
 export function useStream<
@@ -721,7 +812,8 @@ export function useStream<
   const [isLoading, setIsLoading] = useState(false);
 
   const [streamError, setStreamError] = useState<unknown>(undefined);
-  const [streamValues, setStreamValues] = useState<StateType | null>(null);
+  const [streamValues, setStreamValues, getMutateFn] =
+    useStreamValuesState<StateType>();
 
   const messageManagerRef = useRef(new MessageTupleManager());
   const submittingRef = useRef(false);
@@ -792,7 +884,9 @@ export function useStream<
   );
 
   const threadHead: ThreadState<StateType> | undefined = flatHistory.at(-1);
-  const historyValues = threadHead?.values ?? ({} as StateType);
+  const historyValues =
+    threadHead?.values ?? options.initialValues ?? ({} as StateType);
+
   const historyError = (() => {
     const error = threadHead?.tasks?.at(-1)?.error;
     if (error == null) return undefined;
@@ -857,6 +951,8 @@ export function useStream<
       if (runId) client.runs.cancel(threadId, runId);
       runMetadataStorage.removeItem(`lg:stream:${threadId}`);
     }
+
+    options?.onStop?.({ mutate: getMutateFn("stop", historyValues) });
   };
 
   async function consumeStream(
@@ -889,15 +985,7 @@ export function useStream<
         if (event === "updates") options.onUpdateEvent?.(data);
         if (event === "custom")
           options.onCustomEvent?.(data, {
-            mutate: (update) =>
-              setStreamValues((prev) => {
-                // should not happen
-                if (prev == null) return prev;
-                return {
-                  ...prev,
-                  ...(typeof update === "function" ? update(prev) : update),
-                };
-              }),
+            mutate: getMutateFn("stream", historyValues),
           });
         if (event === "metadata") options.onMetadataEvent?.(data);
         if (event === "events") options.onLangChainEvent?.(data);
@@ -939,8 +1027,11 @@ export function useStream<
 
       // TODO: stream created checkpoints to avoid an unnecessary network request
       const result = await run.onSuccess();
-
-      setStreamValues(null);
+      setStreamValues((values, kind) => {
+        // Do not clear out the user values set on `stop`.
+        if (kind === "stop") return values;
+        return null;
+      });
       if (streamError != null) throw streamError;
 
       const lastHead = result.at(0);
@@ -1003,26 +1094,24 @@ export function useStream<
 
       if (newPath != null) setBranch(newPath ?? "");
 
-      // Assumption: we're setting the initial value
-      // Used for instant feedback
       setStreamValues(() => {
-        const values = { ...historyValues };
-
         if (submitOptions?.optimisticValues != null) {
           return {
-            ...values,
+            ...historyValues,
             ...(typeof submitOptions.optimisticValues === "function"
-              ? submitOptions.optimisticValues(values)
+              ? submitOptions.optimisticValues(historyValues)
               : submitOptions.optimisticValues),
           };
         }
 
-        return values;
+        return { ...historyValues };
       });
 
       let usableThreadId = threadId;
       if (!usableThreadId) {
-        const thread = await client.threads.create();
+        const thread = await client.threads.create({
+          threadId: submitOptions?.threadId,
+        });
         onThreadId(thread.thread_id);
         usableThreadId = thread.thread_id;
       }
