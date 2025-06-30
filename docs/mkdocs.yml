@@ -205,8 +205,8 @@ nav:
           - cloud/how-tos/reject_concurrent.md
           - cloud/how-tos/enqueue_concurrent.md
       - Webhooks:
-          - Overview: cloud/how-tos/webhooks.md
-          - cloud/how-tos/webhooks.md
+          - Overview: cloud/concepts/webhooks.md
+          - Use webhooks: cloud/how-tos/webhooks.md
       - Cron jobs:
           - Overview: cloud/how-tos/cron_jobs.md
           - cloud/how-tos/cron_jobs.md
