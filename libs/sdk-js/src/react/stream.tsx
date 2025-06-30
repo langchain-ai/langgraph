@@ -512,9 +512,41 @@ export interface UseStreamOptions<
   onDebugEvent?: (data: DebugStreamEvent["data"]) => void;
 
   /**
+   * Callback that is called when the stream is stopped by the user.
+   * Provides a mutate function to update the stream state immediately
+   * without requiring a server roundtrip.
+   * 
+   * @example
+   * ```typescript
+   * onStop: ({ mutate }) => {
+   *   mutate((prev) => ({
+   *     ...prev,
+   *     ui: prev.ui?.map(component => 
+   *       component.props.isLoading
+   *         ? { ...component, props: { ...component.props, stopped: true, isLoading: false }}
+   *         : component
+   *     )
+   *   }));
+   * }
+   * ```
+   */
+  onStop?: (options: {
+    mutate: (
+      update: Partial<StateType> | ((prev: StateType) => Partial<StateType>),
+    ) => void;
+  }) => void;
+
+  /**
    * The ID of the thread to fetch history and current values from.
    */
   threadId?: string | null;
+
+  /**
+   * The ID to use when creating a new thread. When provided, this ID will be used
+   * for thread creation when threadId is null. This enables optimistic UI updates
+   * where you know the thread ID before the thread is actually created.
+   */
+  newThreadId?: string;
 
   /**
    * Callback that is called when the thread ID is updated (ie when a new thread is created).
@@ -523,6 +555,17 @@ export interface UseStreamOptions<
 
   /** Will reconnect the stream on mount */
   reconnectOnMount?: boolean | (() => RunMetadataStorage);
+
+  /**
+   * Initial values to display immediately when loading a thread.
+   * Useful for displaying cached thread data while official history loads.
+   * These values will be replaced when official thread data is fetched.
+   * 
+   * Note: UI components from initialValues will render immediately if they're 
+   * predefined in LoadExternalComponent's components prop, providing instant
+   * cached UI display without server fetches.
+   */
+  initialValues?: Partial<StateType> | null;
 }
 
 interface RunMetadataStorage {
@@ -844,6 +887,21 @@ export function useStream<
     );
   })();
 
+  // Create a reusable mutate function for both onCustomEvent and onStop callbacks
+  const mutateStreamValues = useCallback(
+    (update: Partial<StateType> | ((prev: StateType) => Partial<StateType>)) => {
+      setStreamValues((prev) => {
+        // should not happen
+        if (prev == null) return prev;
+        return {
+          ...prev,
+          ...(typeof update === "function" ? update(prev) : update),
+        };
+      });
+    },
+    [],
+  );
+
   const stop = () => {
     if (abortRef.current != null) abortRef.current.abort();
     abortRef.current = null;
@@ -852,6 +910,11 @@ export function useStream<
       const runId = runMetadataStorage.getItem(`lg:stream:${threadId}`);
       if (runId) client.runs.cancel(threadId, runId);
       runMetadataStorage.removeItem(`lg:stream:${threadId}`);
+    }
+
+    // Call onStop callback with mutate function
+    if (options.onStop) {
+      options.onStop({ mutate: mutateStreamValues });
     }
   };
 
@@ -885,15 +948,7 @@ export function useStream<
         if (event === "updates") options.onUpdateEvent?.(data);
         if (event === "custom")
           options.onCustomEvent?.(data, {
-            mutate: (update) =>
-              setStreamValues((prev) => {
-                // should not happen
-                if (prev == null) return prev;
-                return {
-                  ...prev,
-                  ...(typeof update === "function" ? update(prev) : update),
-                };
-              }),
+            mutate: mutateStreamValues,
           });
         if (event === "metadata") options.onMetadataEvent?.(data);
         if (event === "events") options.onLangChainEvent?.(data);
@@ -918,7 +973,8 @@ export function useStream<
           }
 
           setStreamValues((streamValues) => {
-            const values = { ...historyValues, ...streamValues };
+            const baseValues = options.initialValues ? { ...historyValues, ...options.initialValues } : historyValues;
+            const values = { ...baseValues, ...streamValues };
 
             // Assumption: we're concatenating the message
             const messages = getMessages(values).slice();
@@ -997,23 +1053,25 @@ export function useStream<
       // Assumption: we're setting the initial value
       // Used for instant feedback
       setStreamValues(() => {
-        const values = { ...historyValues };
+        const baseValues = options.initialValues ? { ...historyValues, ...options.initialValues } : historyValues;
 
         if (submitOptions?.optimisticValues != null) {
           return {
-            ...values,
+            ...baseValues,
             ...(typeof submitOptions.optimisticValues === "function"
-              ? submitOptions.optimisticValues(values)
+              ? submitOptions.optimisticValues(baseValues)
               : submitOptions.optimisticValues),
           };
         }
 
-        return values;
+        return baseValues;
       });
 
       let usableThreadId = threadId;
       if (!usableThreadId) {
-        const thread = await client.threads.create();
+        const thread = await client.threads.create({
+          threadId: options.newThreadId,
+        });
         onThreadId(thread.thread_id);
         usableThreadId = thread.thread_id;
       }
@@ -1107,7 +1165,7 @@ export function useStream<
   }, [reconnectKey]);
 
   const error = streamError ?? historyError;
-  const values = streamValues ?? historyValues;
+  const values = streamValues ?? (options.initialValues ? { ...historyValues, ...options.initialValues } : historyValues);
 
   return {
     get values() {

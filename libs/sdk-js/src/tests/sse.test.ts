@@ -20,7 +20,7 @@ describe("BytesLineDecoder", () => {
 
   test("handles single line with newline", async () => {
     const input = createStream([textEncoder.encode("hello\n")]);
-    const decoded = input.pipeThrough(new BytesLineDecoder());
+    const decoded = input.pipeThrough(BytesLineDecoder());
     const results = await gather(decoded);
 
     expect(results.length).toBe(1);
@@ -29,7 +29,7 @@ describe("BytesLineDecoder", () => {
 
   test("handles multiple lines", async () => {
     const input = createStream([textEncoder.encode("line1\nline2\nline3\n")]);
-    const decoded = input.pipeThrough(new BytesLineDecoder());
+    const decoded = input.pipeThrough(BytesLineDecoder());
     const results = await gather(decoded);
 
     expect(results.length).toBe(3);
@@ -44,7 +44,7 @@ describe("BytesLineDecoder", () => {
       textEncoder.encode("ne1\nli"),
       textEncoder.encode("ne2\n"),
     ]);
-    const decoded = input.pipeThrough(new BytesLineDecoder());
+    const decoded = input.pipeThrough(BytesLineDecoder());
     const results = await gather(decoded);
 
     expect(results.length).toBe(2);
@@ -54,7 +54,7 @@ describe("BytesLineDecoder", () => {
 
   test("handles CR LF line endings", async () => {
     const input = createStream([textEncoder.encode("line1\r\nline2\r\n")]);
-    const decoded = input.pipeThrough(new BytesLineDecoder());
+    const decoded = input.pipeThrough(BytesLineDecoder());
     const results = await gather(decoded);
 
     expect(results.length).toBe(2);
@@ -67,7 +67,7 @@ describe("BytesLineDecoder", () => {
       textEncoder.encode("line1\r"),
       textEncoder.encode("\nline2\r\n"),
     ]);
-    const decoded = input.pipeThrough(new BytesLineDecoder());
+    const decoded = input.pipeThrough(BytesLineDecoder());
     const results = await gather(decoded);
 
     expect(results.length).toBe(2);
@@ -77,7 +77,7 @@ describe("BytesLineDecoder", () => {
 
   test("handles stale line", async () => {
     const input = createStream([textEncoder.encode("hello")]);
-    const decoded = input.pipeThrough(new BytesLineDecoder());
+    const decoded = input.pipeThrough(BytesLineDecoder());
     const results = await gather(decoded);
 
     expect(results.length).toBe(1);
@@ -99,8 +99,8 @@ describe("SSEDecoder", () => {
       "\n",
     ]);
     const decoded = input
-      .pipeThrough(new BytesLineDecoder())
-      .pipeThrough(new SSEDecoder());
+      .pipeThrough(BytesLineDecoder())
+      .pipeThrough(SSEDecoder());
 
     const results = await gather(decoded);
     expect(results.length).toBe(1);
@@ -117,8 +117,8 @@ describe("SSEDecoder", () => {
       'data: {"message": "hello"}\n',
     ]);
     const decoded = input
-      .pipeThrough(new BytesLineDecoder())
-      .pipeThrough(new SSEDecoder());
+      .pipeThrough(BytesLineDecoder())
+      .pipeThrough(SSEDecoder());
 
     const results = await gather(decoded);
     expect(results.length).toBe(1);
@@ -138,8 +138,8 @@ describe("SSEDecoder", () => {
       "\n",
     ]);
     const decoded = input
-      .pipeThrough(new BytesLineDecoder())
-      .pipeThrough(new SSEDecoder());
+      .pipeThrough(BytesLineDecoder())
+      .pipeThrough(SSEDecoder());
 
     const results = await gather(decoded);
     expect(results.length).toBe(2);
@@ -156,8 +156,8 @@ describe("SSEDecoder", () => {
   test("end event without data", async () => {
     const input = createStream(["event: test\n"]);
     const decoded = input
-      .pipeThrough(new BytesLineDecoder())
-      .pipeThrough(new SSEDecoder());
+      .pipeThrough(BytesLineDecoder())
+      .pipeThrough(SSEDecoder());
 
     const results = await gather(decoded);
     expect(results.length).toBe(1);
@@ -170,8 +170,8 @@ describe("SSEDecoder", () => {
   test("end event without newline", async () => {
     const input = createStream(["event: end"]);
     const decoded = input
-      .pipeThrough(new BytesLineDecoder())
-      .pipeThrough(new SSEDecoder());
+      .pipeThrough(BytesLineDecoder())
+      .pipeThrough(SSEDecoder());
 
     const results = await gather(decoded);
     expect(results.length).toBe(1);

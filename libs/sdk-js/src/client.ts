@@ -1014,8 +1014,8 @@ export class RunsClient<
     const stream: ReadableStream<{ event: any; data: any }> = (
       response.body || new ReadableStream({ start: (ctrl) => ctrl.close() })
     )
-      .pipeThrough(new BytesLineDecoder())
-      .pipeThrough(new SSEDecoder());
+      .pipeThrough(BytesLineDecoder())
+      .pipeThrough(SSEDecoder());
 
     yield* IterableReadableStream.fromReadableStream(stream);
   }
@@ -1318,8 +1318,8 @@ export class RunsClient<
     const stream: ReadableStream<{ event: string; data: any }> = (
       response.body || new ReadableStream({ start: (ctrl) => ctrl.close() })
     )
-      .pipeThrough(new BytesLineDecoder())
-      .pipeThrough(new SSEDecoder());
+      .pipeThrough(BytesLineDecoder())
+      .pipeThrough(SSEDecoder());
 
     yield* IterableReadableStream.fromReadableStream(stream);
   }
