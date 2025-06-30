@@ -1095,7 +1095,7 @@ export function useStream<
           };
         }
 
-        return historyValues;
+        return { ...historyValues };
       });
 
       let usableThreadId = threadId;
