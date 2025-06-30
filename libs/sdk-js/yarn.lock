@@ -678,14 +678,15 @@
     zod "^3.25.32"
     zod-to-json-schema "^3.22.3"
 
-"@langchain/langgraph-api@http://localhost:3123/1750722568240/@langchain/langgraph-api":
-  version "0.0.40"
-  resolved "http://localhost:3123/1750722568240/@langchain/langgraph-api#f14b373a947881c7d113ff96a2329eba31c589ce"
+"@langchain/langgraph-api@~0.0.41":
+  version "0.0.41"
+  resolved "https://registry.yarnpkg.com/@langchain/langgraph-api/-/langgraph-api-0.0.41.tgz#a8219651dfd097225e66129ce367ef8e0ae23d45"
+  integrity sha512-LxiVspoVRB5AYBoC04XmigFTjYtEut3Unf9dlwuMgdRMxfyiN/oI3Wuun9Q/Tfn7jYt3E8FVtUqCLgT1QUG3Rw==
   dependencies:
     "@babel/code-frame" "^7.26.2"
     "@hono/node-server" "^1.12.0"
     "@hono/zod-validator" "^0.2.2"
-    "@langchain/langgraph-ui" "workspace:*"
+    "@langchain/langgraph-ui" "0.0.41"
     "@types/json-schema" "^7.0.15"
     "@typescript/vfs" "^1.6.0"
     dedent "^1.5.3"
@@ -720,10 +721,10 @@
     p-retry "4"
     uuid "^9.0.0"
 
-"@langchain/langgraph-ui@workspace:*":
-  version "0.0.40"
-  resolved "https://registry.yarnpkg.com/@langchain/langgraph-ui/-/langgraph-ui-0.0.40.tgz#d60aa72ddfbdeb1f523e34776778a8eb9f90f2d0"
-  integrity sha512-QEpda8dejhhT/BwcJ+jdkI4pioag5AEQaA9rtDeC83G4ZPOTXIODlgGSzDDFoi2Z97mNFiGiVRRDze+IOTGEqA==
+"@langchain/langgraph-ui@0.0.41":
+  version "0.0.41"
+  resolved "https://registry.yarnpkg.com/@langchain/langgraph-ui/-/langgraph-ui-0.0.41.tgz#6c581f150274b397031b687b6a569a220532cb85"
+  integrity sha512-7PSSYCgijNRrDbYDj0VuxzPMgUSh4uAO0Z35p4GuB0CZliztUaZVtSGET0mRscT7+98HeWdt4GnpP1fLZt8bxg==
   dependencies:
     "@commander-js/extra-typings" "^13.0.0"
     commander "^13.0.0"

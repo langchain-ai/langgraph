@@ -1,3 +1,5 @@
+import "@testing-library/jest-dom/vitest";
+
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
@@ -9,8 +11,10 @@ import { StateGraph, MessagesAnnotation, START } from "@langchain/langgraph";
 import { MemorySaver } from "@langchain/langgraph-checkpoint";
 import { FakeStreamingChatModel } from "@langchain/core/utils/testing";
 import { AIMessage, BaseMessageLike } from "@langchain/core/messages";
-import "@testing-library/jest-dom/vitest";
-import { createServer } from "@langchain/langgraph-api/embed";
+
+import { Hono } from "hono";
+import { logger } from "hono/logger";
+import { createEmbedServer } from "@langchain/langgraph-api/experimental/embed";
 
 const threads = (() => {
   const THREADS: Record<
@@ -26,6 +30,9 @@ const threads = (() => {
     ) => {
       THREADS[threadId] = { thread_id: threadId, metadata: metadata ?? {} };
     },
+    delete: async (threadId: string) => {
+      delete THREADS[threadId];
+    },
   };
 })();
 
@@ -40,11 +47,11 @@ const agent = new StateGraph(MessagesAnnotation)
   .addEdge(START, "agent")
   .compile();
 
-const app = createServer({
-  graph: { agent },
-  checkpointer,
-  threads,
-});
+const app = new Hono();
+app.use(logger());
+app.route("/", createEmbedServer({ graph: { agent }, checkpointer, threads }));
+
+const server = setupServer(http.all("*", (ctx) => app.fetch(ctx.request)));
 
 function TestChatComponent() {
   const { messages, isLoading, error, submit, stop } = useStream({
@@ -81,8 +88,6 @@ function TestChatComponent() {
     </div>
   );
 }
-
-const server = setupServer(http.all("*", (ctx) => app.fetch(ctx.request)));
 
 describe("useStream", () => {
   beforeEach(() => server.listen());

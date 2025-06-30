@@ -22,7 +22,7 @@
     "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "@langchain/langgraph-api": "http://localhost:3123/1750722568240/@langchain/langgraph-api",
+    "@langchain/langgraph-api": "~0.0.41",
     "@langchain/core": "^0.3.61",
     "@langchain/langgraph": "^0.3.5",
     "@langchain/scripts": "^0.1.4",
@@ -143,8 +143,5 @@
     "react-ui/server.js",
     "react-ui/server.d.ts",
     "react-ui/server.d.cts"
-  ],
-  "resolutions": {
-    "@langchain/langgraph-api": "http://localhost:3123/1750722568240/@langchain/langgraph-api"
-  }
+  ]
 }
