@@ -1423,7 +1423,7 @@ inmem = [
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "0.5.1"
+version = "0.5.2"
 source = { editable = "../prebuilt" }
 dependencies = [
     { name = "langchain-core" },
