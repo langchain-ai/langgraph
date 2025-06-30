@@ -4,9 +4,9 @@ from typing import Any, Optional
 
 import pytest
 
+from langgraph._internal._runnable import RunnableCallable
 from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
-from langgraph.utils.runnable import RunnableCallable
 
 pytestmark = pytest.mark.anyio
 

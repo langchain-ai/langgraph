@@ -8,7 +8,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.graph import Graph as DrawableGraph
 from typing_extensions import Self
 
-from langgraph.pregel.types import All, StateSnapshot, StateUpdate, StreamMode
+from langgraph.types import All, StateSnapshot, StateUpdate, StreamMode
 from langgraph.typing import InputT, OutputT, StateT
 
 

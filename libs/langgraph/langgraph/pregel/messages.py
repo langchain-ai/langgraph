@@ -13,7 +13,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
 
-from langgraph.constants import NS_SEP, TAG_HIDDEN, TAG_NOSTREAM, TAG_NOSTREAM_ALT
+from langgraph.constants import NS_SEP, TAG_HIDDEN, TAG_NOSTREAM
 from langgraph.types import Command, StreamChunk
 
 try:
@@ -94,9 +94,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> Any:
-        if metadata and (
-            not tags or (TAG_NOSTREAM not in tags and TAG_NOSTREAM_ALT not in tags)
-        ):
+        if metadata and (not tags or (TAG_NOSTREAM not in tags)):
             ns = tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP))[
                 :-1
             ]

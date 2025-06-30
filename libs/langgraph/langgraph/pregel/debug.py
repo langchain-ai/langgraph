@@ -5,8 +5,10 @@ from dataclasses import asdict
 from typing import Any
 from uuid import UUID
 
+from langchain_core.runnables import RunnableConfig
 from typing_extensions import TypedDict
 
+from langgraph._internal._config import patch_checkpoint_map
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import CheckpointMetadata, PendingWrite
 from langgraph.constants import (
@@ -22,7 +24,6 @@ from langgraph.constants import (
 )
 from langgraph.pregel.io import read_channels
 from langgraph.types import PregelExecutableTask, PregelTask, StateSnapshot
-from langgraph.utils.config import RunnableConfig, patch_checkpoint_map
 
 
 class TaskPayload(TypedDict):

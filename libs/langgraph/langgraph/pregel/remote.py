@@ -29,6 +29,7 @@ from langgraph_sdk.schema import Command as CommandSDK
 from langgraph_sdk.schema import StreamMode as StreamModeSDK
 from typing_extensions import Self
 
+from langgraph._internal._config import merge_configs
 from langgraph.checkpoint.base import CheckpointMetadata
 from langgraph.constants import (
     CONF,
@@ -42,9 +43,15 @@ from langgraph.constants import (
 )
 from langgraph.errors import GraphInterrupt
 from langgraph.pregel.protocol import PregelProtocol
-from langgraph.pregel.types import All, PregelTask, StateSnapshot, StreamMode
-from langgraph.types import Command, Interrupt, StreamProtocol
-from langgraph.utils.config import merge_configs
+from langgraph.types import (
+    All,
+    Command,
+    Interrupt,
+    PregelTask,
+    StateSnapshot,
+    StreamMode,
+    StreamProtocol,
+)
 
 CONF_DROPLIST = frozenset(
     (

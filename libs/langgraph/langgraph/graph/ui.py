@@ -6,8 +6,8 @@ from uuid import uuid4
 from langchain_core.messages import AnyMessage
 from typing_extensions import TypedDict
 
+from langgraph.config import get_config, get_stream_writer
 from langgraph.constants import CONF, CONFIG_KEY_SEND
-from langgraph.utils.config import get_config, get_stream_writer
 
 __all__ = (
     "UIMessage",

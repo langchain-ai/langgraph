@@ -26,7 +26,14 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel
 from typing_extensions import Self, Unpack
 
-from langgraph._typing import UNSET, DeprecatedKwargs
+from langgraph._internal._fields import (
+    get_cached_annotated_keys,
+    get_field_default,
+    get_update_as_tuples,
+)
+from langgraph._internal._pydantic import create_model
+from langgraph._internal._runnable import coerce_to_runnable
+from langgraph._internal._typing import UNSET, DeprecatedKwargs
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -77,13 +84,6 @@ from langgraph.types import (
     Send,
 )
 from langgraph.typing import InputT, OutputT, StateT
-from langgraph.utils.fields import (
-    get_cached_annotated_keys,
-    get_field_default,
-    get_update_as_tuples,
-)
-from langgraph.utils.pydantic import create_model
-from langgraph.utils.runnable import coerce_to_runnable
 from langgraph.warnings import LangGraphDeprecatedSinceV05
 
 __all__ = ("StateGraph", "CompiledStateGraph")

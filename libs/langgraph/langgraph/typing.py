@@ -4,7 +4,7 @@ from typing import Union
 
 from typing_extensions import TypeVar
 
-from langgraph._typing import StateLike
+from langgraph._internal._typing import StateLike
 
 __all__ = (
     "StateT",

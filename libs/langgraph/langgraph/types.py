@@ -21,9 +21,10 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from typing_extensions import Self
 from xxhash import xxh3_128_hexdigest
 
+from langgraph._internal._cache import default_cache_key
+from langgraph._internal._fields import get_cached_annotated_keys, get_update_as_tuples
+from langgraph._internal._retry import default_retry_on
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
-from langgraph.utils.cache import default_cache_key
-from langgraph.utils.fields import get_cached_annotated_keys, get_update_as_tuples
 
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
@@ -42,7 +43,6 @@ __all__ = (
     "Checkpointer",
     "StreamMode",
     "StreamWriter",
-    "default_retry_on",
     "RetryPolicy",
     "CachePolicy",
     "Interrupt",
@@ -90,37 +90,6 @@ if sys.version_info >= (3, 10):
     _DC_KWARGS = {"kw_only": True, "slots": True, "frozen": True}
 else:
     _DC_KWARGS = {"frozen": True}
-
-
-def default_retry_on(exc: Exception) -> bool:
-    import httpx
-    import requests
-
-    if isinstance(exc, ConnectionError):
-        return True
-    if isinstance(exc, httpx.HTTPStatusError):
-        return 500 <= exc.response.status_code < 600
-    if isinstance(exc, requests.HTTPError):
-        return 500 <= exc.response.status_code < 600 if exc.response else True
-    if isinstance(
-        exc,
-        (
-            ValueError,
-            TypeError,
-            ArithmeticError,
-            ImportError,
-            LookupError,
-            NameError,
-            SyntaxError,
-            RuntimeError,
-            ReferenceError,
-            StopIteration,
-            StopAsyncIteration,
-            OSError,
-        ),
-    ):
-        return False
-    return True
 
 
 class RetryPolicy(NamedTuple):

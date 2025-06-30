@@ -19,6 +19,7 @@ from typing import (
 
 from langchain_core.callbacks import Callbacks
 
+from langgraph._internal._future import chain_future, run_coroutine_threadsafe
 from langgraph.constants import (
     CONF,
     CONFIG_KEY_CALL,
@@ -41,7 +42,6 @@ from langgraph.types import (
     PregelScratchpad,
     RetryPolicy,
 )
-from langgraph.utils.future import chain_future, run_coroutine_threadsafe
 
 F = TypeVar("F", concurrent.futures.Future, asyncio.Future)
 E = TypeVar("E", threading.Event, asyncio.Event)

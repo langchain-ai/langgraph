@@ -26,13 +26,13 @@ from langchain_core.runnables import (
     RunnableLambda,
 )
 
+from langgraph._internal._runnable import (
+    RunnableCallable,
+)
 from langgraph.constants import END, START
 from langgraph.errors import InvalidUpdateError
 from langgraph.pregel.write import PASSTHROUGH, ChannelWrite, ChannelWriteEntry
 from langgraph.types import Send
-from langgraph.utils.runnable import (
-    RunnableCallable,
-)
 
 _Writer = Callable[
     [Sequence[Union[str, Send]], bool],

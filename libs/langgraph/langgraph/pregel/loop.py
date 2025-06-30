@@ -27,6 +27,7 @@ from langchain_core.callbacks import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import ParamSpec, Self
 
+from langgraph._internal._config import patch_configurable
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import (
@@ -118,7 +119,6 @@ from langgraph.types import (
     StreamMode,
     StreamProtocol,
 )
-from langgraph.utils.config import patch_configurable
 
 V = TypeVar("V")
 P = ParamSpec("P")

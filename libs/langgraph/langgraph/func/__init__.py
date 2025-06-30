@@ -19,7 +19,7 @@ from typing import (
 
 from typing_extensions import Unpack
 
-from langgraph._typing import UNSET, DeprecatedKwargs
+from langgraph._internal._typing import UNSET, DeprecatedKwargs
 from langgraph.cache.base import BaseCache
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue

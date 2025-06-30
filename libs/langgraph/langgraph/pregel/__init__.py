@@ -25,6 +25,25 @@ from langchain_core.runnables.graph import Graph
 from pydantic import BaseModel
 from typing_extensions import Self
 
+from langgraph._internal._config import (
+    ensure_config,
+    merge_configs,
+    patch_checkpoint_map,
+    patch_config,
+    patch_configurable,
+    recast_checkpoint_ns,
+)
+from langgraph._internal._pydantic import create_model
+from langgraph._internal._queue import (  # type: ignore[attr-defined]
+    AsyncQueue,
+    SyncQueue,
+)
+from langgraph._internal._runnable import (
+    Runnable,
+    RunnableLike,
+    RunnableSeq,
+    coerce_to_runnable,
+)
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
@@ -107,22 +126,6 @@ from langgraph.types import (
     StreamMode,
 )
 from langgraph.typing import InputT, OutputT, StateT
-from langgraph.utils.config import (
-    ensure_config,
-    merge_configs,
-    patch_checkpoint_map,
-    patch_config,
-    patch_configurable,
-    recast_checkpoint_ns,
-)
-from langgraph.utils.pydantic import create_model
-from langgraph.utils.queue import AsyncQueue, SyncQueue  # type: ignore[attr-defined]
-from langgraph.utils.runnable import (
-    Runnable,
-    RunnableLike,
-    RunnableSeq,
-    coerce_to_runnable,
-)
 
 try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler
