@@ -181,6 +181,7 @@ For the `StateGraph` you created in the [first tutorial](./1-build-basic-chatbot
 
 Let's first select our LLM:
 
+:::python
 {!snippets/chat_model_tabs.md!}
 
 <!---

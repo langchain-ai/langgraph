@@ -116,6 +116,7 @@ Next, add a "`chatbot`" node. **Nodes** represent units of work and are typicall
 
 Let's first select a chat model:
 
+:::python
 {!snippets/chat_model_tabs.md!}
 
 <!---
@@ -254,6 +255,8 @@ This tells the graph to terminate after running the chatbot node.
 
 Before running the graph, we'll need to compile it. We can do so by calling `compile()`
 on the graph builder. This creates a `CompiledGraph` we can invoke on our state.
+
+:::python
 
 :::python
 
@@ -470,35 +473,27 @@ graph = graph_builder.compile()
 :::js
 
 ```typescript
-import { Annotation } from "@langchain/langgraph";
-import { StateGraph, START, END } from "@langchain/langgraph";
-import { BaseMessage, HumanMessage } from "@langchain/core/messages";
+import { StateGraph, START, END, MessagesZodState } from "@langchain/langgraph";
+import { z } from "zod";
 import { ChatOpenAI } from "@langchain/openai";
-
-const State = Annotation.Root({
-  messages: Annotation<BaseMessage[]>({
-    reducer: (x, y) => x.concat(y),
-  }),
-});
-
-const graphBuilder = new StateGraph(State);
 
 const llm = new ChatOpenAI({
   model: "gpt-4o",
   temperature: 0,
 });
 
-const chatbot = async (state: typeof State.State) => {
-  return { messages: [await llm.invoke(state.messages)] };
-};
+const State = z.object({ messages: MessagesZodState.shape.messages });
 
-// The first argument is the unique node name
-// The second argument is the function or object that will be called whenever
-// the node is used.
-graphBuilder.addNode("chatbot", chatbot);
-graphBuilder.addEdge(START, "chatbot");
-graphBuilder.addEdge("chatbot", END);
-const graph = graphBuilder.compile();
+const graph = new StateGraph(State);
+  // The first argument is the unique node name
+  // The second argument is the function or object that will be called whenever
+  // the node is used.
+  .addNode("chatbot", async (state) => {
+    return { messages: [await llm.invoke(state.messages)] };
+  });
+  .addEdge(START, "chatbot");
+  .addEdge("chatbot", END)
+  .compile();
 ```
 
 :::

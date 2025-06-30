@@ -10,14 +10,14 @@ We will see later that **checkpointing** is _much_ more powerful than simple cha
 
     This tutorial builds on [Add tools](./2-add-tools.md).
 
-## 1. Create a `InMemorySaver` checkpointer
+## 1. Create a `MemorySaver` checkpointer
 
-Create a `InMemorySaver` checkpointer:
+Create a `MemorySaver` checkpointer:
 
 :::python
 
 ```python
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import MemorySaver
 
 memory = InMemorySaver()
 ```
@@ -46,18 +46,37 @@ Compile the graph with the provided checkpointer, which will checkpoint the `Sta
 graph = graph_builder.compile(checkpointer=memory)
 ```
 
+```python
+from IPython.display import Image, display
+
+try:
+    display(Image(graph.get_graph().draw_mermaid_png()))
+except Exception:
+    # This requires some extra dependencies and is optional
+    pass
+```
+
 :::
 
 :::js
 
-```typescript hl_lines="7"
-const graph = new StateGraph(State)
-  .addNode("chatbot", chatbot)
-  .addNode("tools", new ToolNode(tools))
-  .addConditionalEdges("chatbot", toolsCondition, ["tools", END])
-  .addEdge("tools", "chatbot")
-  .addEdge(START, "chatbot")
-  .compile({ checkpointer: memory });
+```typescript
+const graph = graphBuilder.compile({ checkpointer: memory });
+```
+
+```typescript
+import * as tslab from "tslab";
+
+try {
+  const drawableGraph = graph.getGraph();
+  const image = await drawableGraph.drawMermaidPng();
+  const arrayBuffer = await image.arrayBuffer();
+
+  await tslab.display.png(new Uint8Array(arrayBuffer));
+} catch (error) {
+  // This requires some extra dependencies and is optional
+  console.log("Could not render graph");
+}
 ```
 
 :::
@@ -67,6 +86,8 @@ const graph = new StateGraph(State)
 Now you can interact with your bot!
 
 1.  Pick a thread to use as the key for this conversation.
+
+    :::python
 
     :::python
 
@@ -109,6 +130,33 @@ Now you can interact with your bot!
 
     Hello Will! It's nice to meet you. How can I assist you today? Is there anything specific you'd like to know or discuss?
     ```
+
+    :::
+
+    :::js
+
+    ```typescript
+    const userInput = "Hi there! My name is Will.";
+
+    // The config is the **second positional argument** to stream() or invoke()!
+    const events = await graph.stream(
+      { messages: [{ role: "user", content: userInput }] },
+      config,
+      { streamMode: "values" }
+    );
+
+    for await (const event of events) {
+      const lastMessage = event.messages[event.messages.length - 1];
+      console.log(`${lastMessage._getType()}: ${lastMessage.content}`);
+    }
+    ```
+
+    ```
+    human: Hi there! My name is Will.
+    ai: Hello Will! It's nice to meet you. How can I assist you today? Is there anything specific you'd like to know or discuss?
+    ```
+
+    :::
 
     !!! note
 
@@ -178,20 +226,22 @@ Of course, I remember your name, Will. I always try to pay attention to importan
 ```typescript
 const userInput2 = "Remember my name?";
 
+// The config is the **second positional argument** to stream() or invoke()!
 const events2 = await graph.stream(
-  { messages: [{ type: "human", content: userInput2 }] },
-  { configurable: { thread_id: "1" }, streamMode: "values" }
+  { messages: [{ role: "user", content: userInput2 }] },
+  config,
+  { streamMode: "values" }
 );
 
 for await (const event of events2) {
-  const lastMessage = event.messages.at(-1);
-  console.log(`${lastMessage?.getType()}: ${lastMessage?.text}`);
+  const lastMessage = event.messages[event.messages.length - 1];
+  console.log(`${lastMessage._getType()}: ${lastMessage.content}`);
 }
 ```
 
 ```
 human: Remember my name?
-ai: Yes, your name is Will. How can I help you today?
+ai: Of course, I remember your name, Will. I always try to pay attention to important details that users share with me. Is there anything else you'd like to talk about or any questions you have? I'm here to help with a wide range of topics or tasks.
 ```
 
 :::
@@ -227,22 +277,24 @@ I apologize, but I don't have any previous context or memory of your name. As an
 
 :::js
 
-```typescript hl_lines="3-4"
+```typescript
+// The only difference is we change the `thread_id` here to "2" instead of "1"
 const events3 = await graph.stream(
-  { messages: [{ type: "human", content: userInput2 }] },
-  // The only difference is we change the `thread_id` here to "2" instead of "1"
-  { configurable: { thread_id: "2" }, streamMode: "values" }
+  { messages: [{ role: "user", content: userInput2 }] },
+  // highlight-next-line
+  { configurable: { thread_id: "2" } },
+  { streamMode: "values" }
 );
 
 for await (const event of events3) {
-  const lastMessage = event.messages.at(-1);
-  console.log(`${lastMessage?.getType()}: ${lastMessage?.text}`);
+  const lastMessage = event.messages[event.messages.length - 1];
+  console.log(`${lastMessage._getType()}: ${lastMessage.content}`);
 }
 ```
 
 ```
 human: Remember my name?
-ai: I don't have the ability to remember personal information about users between interactions. However, I'm here to help you with any questions or topics you want to discuss!
+ai: I apologize, but I don't have any previous context or memory of your name. As an AI assistant, I don't retain information from past conversations. Each interaction starts fresh. Could you please tell me your name so I can address you properly in this conversation?
 ```
 
 :::
@@ -254,6 +306,8 @@ ai: I don't have the ability to remember personal information about users betwee
 :::python
 
 By now, we have made a few checkpoints across two different threads. But what goes into a checkpoint? To inspect a graph's `state` for a given config at any time, call `get_state(config)`.
+
+:::python
 
 ```python
 snapshot = graph.get_state(config)
@@ -272,10 +326,9 @@ snapshot.next  # (since the graph ended this turn, `next` is empty. If you fetch
 
 :::js
 
-By now, we have made a few checkpoints across two different threads. But what goes into a checkpoint? To inspect a graph's `state` for a given config at any time, call `getState(config)`.
-
 ```typescript
-await graph.getState({ configurable: { thread_id: "1" } });
+const snapshot = await graph.getState(config);
+console.log(snapshot);
 ```
 
 ```typescript
@@ -283,67 +336,77 @@ await graph.getState({ configurable: { thread_id: "1" } });
   values: {
     messages: [
       HumanMessage {
-        "id": "32fabcef-b3b8-481f-8bcb-fd83399a5f8d",
-        "content": "Hi there! My name is Will.",
-        "additional_kwargs": {},
-        "response_metadata": {}
+        content: "Hi there! My name is Will.",
+        additional_kwargs: {},
+        response_metadata: {},
+        id: "8c1ca919-c553-4ebf-95d4-b59a2d61e078"
       },
       AIMessage {
-        "id": "chatcmpl-BrPbTsCJbVqBvXWySlYoTJvM75Kv8",
-        "content": "Hello Will! How can I assist you today?",
-        "additional_kwargs": {},
-        "response_metadata": {},
-        "tool_calls": [],
-        "invalid_tool_calls": []
+        content: "Hello Will! It's nice to meet you. How can I assist you today? Is there anything specific you'd like to know or discuss?",
+        additional_kwargs: {},
+        response_metadata: {
+          id: "msg_01WTQebPhNwmMrmmWojJ9KXJ",
+          model: "claude-3-5-sonnet-20240620",
+          stop_reason: "end_turn",
+          stop_sequence: null,
+          usage: { input_tokens: 405, output_tokens: 32 }
+        },
+        id: "run-58587b77-8c82-41e6-8a90-d62c444a261d-0",
+        usage_metadata: { input_tokens: 405, output_tokens: 32, total_tokens: 437 }
       },
       HumanMessage {
-        "id": "561c3aad-f8fc-4fac-94a6-54269a220856",
-        "content": "Remember my name?",
-        "additional_kwargs": {},
-        "response_metadata": {}
+        content: "Remember my name?",
+        additional_kwargs: {},
+        response_metadata: {},
+        id: "daba7df6-ad75-4d6b-8057-745881cea1ca"
       },
       AIMessage {
-        "id": "chatcmpl-BrPbU4BhhsUikGbW37hYuF5vvnnE2",
-        "content": "Yes, I remember your name, Will! How can I help you today?",
-        "additional_kwargs": {},
-        "response_metadata": {},
-        "tool_calls": [],
-        "invalid_tool_calls": []
+        content: "Of course, I remember your name, Will. I always try to pay attention to important details that users share with me. Is there anything else you'd like to talk about or any questions you have? I'm here to help with a wide range of topics or tasks.",
+        additional_kwargs: {},
+        response_metadata: {
+          id: "msg_01E41KitY74HpENRgXx94vag",
+          model: "claude-3-5-sonnet-20240620",
+          stop_reason: "end_turn",
+          stop_sequence: null,
+          usage: { input_tokens: 444, output_tokens: 58 }
+        },
+        id: "run-ffeaae5c-4d2d-4ddb-bd59-5d5cbf2a5af8-0",
+        usage_metadata: { input_tokens: 444, output_tokens: 58, total_tokens: 502 }
       }
     ]
   },
   next: [],
-  tasks: [],
-  metadata: {
-    source: 'loop',
-    step: 4,
-    parents: {},
-    thread_id: '1'
-  },
   config: {
     configurable: {
-      thread_id: '1',
-      checkpoint_id: '1f05cccc-9bb6-6270-8004-1d2108bcec77',
-      checkpoint_ns: ''
+      thread_id: "1",
+      checkpoint_ns: "",
+      checkpoint_id: "1ef7d06e-93e0-6acc-8004-f2ac846575d2"
     }
   },
-  createdAt: '2025-07-09T13:58:27.607Z',
+  metadata: {
+    source: "loop",
+    writes: {
+      chatbot: {
+        messages: [/* AIMessage */]
+      }
+    },
+    step: 4,
+    parents: {}
+  },
+  createdAt: "2024-09-27T19:30:10.820758+00:00",
   parentConfig: {
     configurable: {
-      thread_id: '1',
-      checkpoint_ns: '',
-      checkpoint_id: '1f05cccc-78fa-68d0-8003-ffb01a76b599'
+      thread_id: "1",
+      checkpoint_ns: "",
+      checkpoint_id: "1ef7d06e-859f-6206-8003-e1bd3c264b8f"
     }
-  }
+  },
+  tasks: []
 }
 ```
 
 ```typescript
-import * as assert from "node:assert";
-
-// Since the graph ended this turn, `next` is empty.
-// If you fetch a state from within a graph invocation, next tells which node will execute next)
-assert.deepEqual(snapshot.next, []);
+console.log(snapshot.next); // (since the graph ended this turn, `next` is empty. If you fetch a state from within a graph invocation, next tells which node will execute next)
 ```
 
 :::
@@ -359,12 +422,24 @@ Check out the code snippet below to review the graph from this tutorial:
 {% include-markdown "../../../snippets/chat_model_tabs.md" %}
 
 <!---
+:::python
 ```python
 from langchain.chat_models import init_chat_model
 
 llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
 ```
+:::
+
+:::js
+```typescript
+import { ChatOpenAI } from "@langchain/openai";
+
+const llm = new ChatOpenAI({ model: "gpt-4o-mini" });
+```
+:::
 -->
+
+:::python
 
 ```python hl_lines="36 37"
 from typing import Annotated
@@ -410,35 +485,43 @@ graph = graph_builder.compile(checkpointer=memory)
 
 :::js
 
-```typescript hl_lines="16 26"
-import { END, MessagesZodState, START } from "@langchain/langgraph";
+```typescript hl_lines="34 35"
+import { Annotation } from "@langchain/langgraph";
 import { ChatOpenAI } from "@langchain/openai";
-import { TavilySearch } from "@langchain/tavily";
-
+import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
+import { BaseMessage } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
 import { StateGraph } from "@langchain/langgraph";
 import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
-import { z } from "zod";
 
-const State = z.object({
-  messages: MessagesZodState.shape.messages,
+const StateAnnotation = Annotation.Root({
+  messages: Annotation<BaseMessage[]>({
+    reducer: (x, y) => x.concat(y),
+  }),
 });
 
-const tools = [new TavilySearch({ maxResults: 2 })];
-const llm = new ChatOpenAI({ model: "gpt-4o-mini" }).bindTools(tools);
-// highlight-next-line
-const memory = new MemorySaver();
+const llm = new ChatOpenAI({ model: "gpt-4o-mini" });
 
-const graph = new StateGraph(State)
-  .addNode("chatbot", async (state) => ({
-    messages: [await llm.invoke(state.messages)],
-  }))
-  .addNode("tools", new ToolNode(tools))
-  .addConditionalEdges("chatbot", toolsCondition, ["tools", END])
-  .addEdge("tools", "chatbot")
-  .addEdge(START, "chatbot")
-  // highlight-next-line
-  .compile({ checkpointer: memory });
+const graphBuilder = new StateGraph(StateAnnotation);
+
+const tool = new TavilySearchResults({ maxResults: 2 });
+const tools = [tool];
+const llmWithTools = llm.bindTools(tools);
+
+const chatbot = async (state: typeof StateAnnotation.State) => {
+  return { messages: [await llmWithTools.invoke(state.messages)] };
+};
+
+graphBuilder.addNode("chatbot", chatbot);
+
+const toolNode = new ToolNode(tools);
+graphBuilder.addNode("tools", toolNode);
+
+graphBuilder.addConditionalEdges("chatbot", toolsCondition);
+graphBuilder.addEdge("tools", "chatbot");
+graphBuilder.addEdge("__start__", "chatbot");
+const memory = new MemorySaver();
+const graph = graphBuilder.compile({ checkpointer: memory });
 ```
 
 :::
