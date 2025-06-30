@@ -15,8 +15,8 @@ from mkdocs.structure.files import Files, File
 from mkdocs.structure.pages import Page
 
 from _scripts.generate_api_reference_links import update_markdown_with_imports
-from _scripts.notebook_convert import convert_notebook
 from _scripts.link_map import JS_LINK_MAP
+from _scripts.notebook_convert import convert_notebook
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
@@ -306,6 +306,12 @@ def _highlight_code_blocks(markdown: str) -> str:
     return markdown
 
 
+TARGET_LANGUAGE = os.environ.get("TARGET_LANGUAGE", "python")
+
+if TARGET_LANGUAGE not in {"python", "js"}:
+    raise ValueError(f"TARGET_LANGUAGE must be 'python' or 'js', got {TARGET_LANGUAGE}")
+
+
 def _on_page_markdown_with_config(
     markdown: str,
     page: Page,
@@ -328,16 +334,15 @@ def _on_page_markdown_with_config(
     markdown = _highlight_code_blocks(markdown)
 
     # Apply conditional rendering for code blocks
-    target_language = kwargs.get("target_language", "python")
-    markdown = _apply_conditional_rendering(markdown, target_language)
-    if target_language == "js":
+    markdown = _apply_conditional_rendering(markdown, TARGET_LANGUAGE)
+    if TARGET_LANGUAGE == "js":
         markdown = _resolve_cross_references(markdown, JS_LINK_MAP)
-    elif target_language == "python":
+    elif TARGET_LANGUAGE == "python":
         # Via a dedicated plugin
         pass
     else:
         raise ValueError(
-            f"Unsupported target language: {target_language}. "
+            f"Unsupported target language: {TARGET_LANGUAGE}. "
             "Supported languages are 'python' and 'js'."
         )
 
