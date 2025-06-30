@@ -13,7 +13,7 @@ license = "MIT"
 license-files = ['LICENSE']
 dependencies = [
     "langgraph-checkpoint>=2.1.0",
-    "langchain-core>=0.3.22",
+    "langchain-core>=0.3.67",
 ]
 
 [project.urls]
