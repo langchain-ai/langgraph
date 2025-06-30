@@ -267,7 +267,7 @@ describe("useStream", () => {
 
     function TestComponent() {
       const { submit, stop } = useStream({
-        assistantId: "test-assistant",
+        assistantId: "agent",
         apiKey: "test-api-key",
         onStop: onStopCallback,
       });
@@ -368,7 +368,7 @@ describe("useStream", () => {
 
     function TestComponent() {
       const { submit, stop, values } = useStream({
-        assistantId: "test-assistant",
+        assistantId: "agent",
         apiKey: "test-api-key",
         initialValues: {
           counter: 5,
@@ -423,7 +423,7 @@ describe("useStream", () => {
 
     function TestComponent() {
       const { submit } = useStream({
-        assistantId: "test-assistant",
+        assistantId: "agent",
         apiKey: "test-api-key",
         onStop: onStopCallback,
       });
