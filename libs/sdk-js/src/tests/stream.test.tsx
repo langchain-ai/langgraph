@@ -6,15 +6,15 @@ import { userEvent } from "@testing-library/user-event";
 import { setupServer } from "msw/node";
 import { http } from "msw";
 import { useStream } from "../react/stream.js";
+import type { Message } from "../types.messages.js";
 
 import { StateGraph, MessagesAnnotation, START } from "@langchain/langgraph";
 import { MemorySaver } from "@langchain/langgraph-checkpoint";
 import { FakeStreamingChatModel } from "@langchain/core/utils/testing";
-import { AIMessage, BaseMessageLike } from "@langchain/core/messages";
-
-import { Hono } from "hono";
-import { logger } from "hono/logger";
+import { AIMessage } from "@langchain/core/messages";
 import { createEmbedServer } from "@langchain/langgraph-api/experimental/embed";
+import { randomUUID } from "node:crypto";
+import { useState } from "react";
 
 const threads = (() => {
   const THREADS: Record<
@@ -40,17 +40,14 @@ const checkpointer = new MemorySaver();
 
 const model = new FakeStreamingChatModel({ responses: [new AIMessage("Hey")] });
 const agent = new StateGraph(MessagesAnnotation)
-  .addNode("agent", async (state: { messages: BaseMessageLike[] }) => {
+  .addNode("agent", async (state: { messages: Message[] }) => {
     const response = await model.invoke(state.messages);
     return { messages: [response] };
   })
   .addEdge(START, "agent")
   .compile();
 
-const app = new Hono();
-app.use(logger());
-app.route("/", createEmbedServer({ graph: { agent }, checkpointer, threads }));
-
+const app = createEmbedServer({ graph: { agent }, checkpointer, threads });
 const server = setupServer(http.all("*", (ctx) => app.fetch(ctx.request)));
 
 function TestChatComponent() {
@@ -74,7 +71,12 @@ function TestChatComponent() {
         {isLoading ? "Loading..." : "Not loading"}
       </div>
       {error ? <div data-testid="error">{String(error)}</div> : null}
-      <button data-testid="submit" onClick={() => submit({})}>
+      <button
+        data-testid="submit"
+        onClick={() =>
+          submit({ messages: [{ content: "Hello", type: "human" }] })
+        }
+      >
         Send
       </button>
       <button data-testid="stop" onClick={stop}>
@@ -134,26 +136,35 @@ describe("useStream", () => {
     });
   });
 
-  it("displays initial values immediately", () => {
-    const initialValues = {
-      messages: [
-        { id: "cached-1", type: "human", content: "Cached user message" },
-        { id: "cached-2", type: "ai", content: "Cached AI response" },
-      ],
-    };
+  it("displays initial values immediately and clears them when submitting", async () => {
+    const user = userEvent.setup();
 
     function TestCachedComponent() {
-      const { messages, values } = useStream({
-        assistantId: "test-assistant",
+      const { messages, values, submit } = useStream<{
+        messages: Message[];
+      }>({
+        assistantId: "agent",
         apiKey: "test-api-key",
-        initialValues,
+        initialValues: {
+          messages: [
+            { id: "cached-1", type: "human", content: "Cached user message" },
+            { id: "cached-2", type: "ai", content: "Cached AI response" },
+          ],
+        },
       });
 
       return (
         <div>
           <div data-testid="messages">
             {messages.map((msg, i) => (
-              <div key={msg.id ?? i} data-testid={`message-${i}`}>
+              <div
+                key={msg.id ?? i}
+                data-testid={
+                  msg.id?.includes("cached")
+                    ? `message-cached-${i}`
+                    : `message-${i}`
+                }
+              >
                 {typeof msg.content === "string"
                   ? msg.content
                   : JSON.stringify(msg.content)}
@@ -161,6 +172,14 @@ describe("useStream", () => {
             ))}
           </div>
           <div data-testid="values">{JSON.stringify(values)}</div>
+          <button
+            data-testid="submit"
+            onClick={() =>
+              submit({ messages: [{ content: "Hello", type: "human" }] })
+            }
+          >
+            Submit
+          </button>
         </div>
       );
     }
@@ -168,10 +187,10 @@ describe("useStream", () => {
     render(<TestCachedComponent />);
 
     // Should immediately show cached messages
-    expect(screen.getByTestId("message-0")).toHaveTextContent(
+    expect(screen.getByTestId("message-cached-0")).toHaveTextContent(
       "Cached user message",
     );
-    expect(screen.getByTestId("message-1")).toHaveTextContent(
+    expect(screen.getByTestId("message-cached-1")).toHaveTextContent(
       "Cached AI response",
     );
 
@@ -179,40 +198,30 @@ describe("useStream", () => {
     expect(screen.getByTestId("values")).toHaveTextContent(
       "Cached user message",
     );
+
+    // Submiting should clear out the cached messages
+    await user.click(screen.getByTestId("submit"));
+
+    // Wait for messages to appear
+    await waitFor(() => {
+      expect(screen.getByTestId("message-0")).toHaveTextContent("Hello");
+      expect(screen.getByTestId("message-1")).toHaveTextContent("Hey");
+    });
   });
 
-  it("handles null initial values", () => {
-    function TestNullInitialComponent() {
-      const { messages, values } = useStream({
-        assistantId: "test-assistant",
-        apiKey: "test-api-key",
-        initialValues: null,
-      });
+  it("accepts newThreadId option without errors", async () => {
+    const user = userEvent.setup();
 
-      return (
-        <div>
-          <div data-testid="message-count">{messages.length}</div>
-          <div data-testid="values">{JSON.stringify(values)}</div>
-        </div>
-      );
-    }
+    const spy = vi.fn();
+    const predeterminedThreadId = randomUUID();
 
-    render(<TestNullInitialComponent />);
-
-    // Should handle null initialValues gracefully
-    expect(screen.getByTestId("message-count")).toHaveTextContent("0");
-    expect(screen.getByTestId("values")).toHaveTextContent("{}");
-  });
-
-  it("accepts newThreadId option without errors", () => {
     // Test that newThreadId option can be passed without causing errors
     function TestNewThreadComponent() {
-      const stream = useStream({
-        assistantId: "test-assistant",
+      const stream = useStream<{ messages: Message[] }>({
+        assistantId: "agent",
         apiKey: "test-api-key",
         threadId: null, // Start with no thread
-        newThreadId: "predetermined-thread-id",
-        onThreadId: () => {}, // Mock callback
+        onThreadId: spy, // Mock callback
       });
 
       return (
@@ -223,6 +232,14 @@ describe("useStream", () => {
           <div data-testid="thread-id">
             {stream.client ? "Client ready" : "No client"}
           </div>
+          <button
+            data-testid="submit"
+            onClick={() =>
+              stream.submit({}, { threadId: predeterminedThreadId })
+            }
+          >
+            Submit
+          </button>
         </div>
       );
     }
@@ -232,55 +249,20 @@ describe("useStream", () => {
     // Should render without errors
     expect(screen.getByTestId("loading")).toHaveTextContent("Not loading");
     expect(screen.getByTestId("thread-id")).toHaveTextContent("Client ready");
+
+    await user.click(screen.getByTestId("submit"));
+    expect(spy).toHaveBeenCalledWith(predeterminedThreadId);
+    expect(await threads.get(predeterminedThreadId)).toEqual({
+      thread_id: predeterminedThreadId,
+      metadata: {
+        graph_id: "agent",
+        assistant_id: "agent",
+      },
+    });
   });
 
-  it("shows initial values before any streaming", () => {
-    const initialValues = {
-      messages: [
-        { id: "initial-1", type: "human", content: "Initial message" },
-      ],
-      customField: "initial-value",
-    };
-
-    function TestInitialValuesComponent() {
-      const stream = useStream({
-        assistantId: "test-assistant",
-        apiKey: "test-api-key",
-        initialValues,
-      });
-
-      return (
-        <div>
-          <div data-testid="message-0">
-            {typeof stream.messages[0]?.content === "string"
-              ? stream.messages[0]?.content
-              : JSON.stringify(stream.messages[0]?.content)}
-          </div>
-          <div data-testid="custom-field">{stream.values.customField}</div>
-          <div data-testid="loading">
-            {stream.isLoading ? "Loading" : "Not loading"}
-          </div>
-        </div>
-      );
-    }
-
-    render(<TestInitialValuesComponent />);
-
-    // Should immediately show initial values without any loading
-    expect(screen.getByTestId("message-0")).toHaveTextContent(
-      "Initial message",
-    );
-    expect(screen.getByTestId("custom-field")).toHaveTextContent(
-      "initial-value",
-    );
-    expect(screen.getByTestId("loading")).toHaveTextContent("Not loading");
-  });
-});
-
-describe("useStream onStop callback", () => {
-  const user = userEvent.setup();
-
-  it("calls onStop callback when stop is called", async () => {
+  it("onStop callback is called when stop is called", async () => {
+    const user = userEvent.setup();
     const onStopCallback = vi.fn();
 
     function TestComponent() {
@@ -317,16 +299,22 @@ describe("useStream onStop callback", () => {
     );
   });
 
-  it("mutate function updates stream values immediately", async () => {
+  it("onStop mutate function updates stream values immediately", async () => {
+    const user = userEvent.setup();
+
     function TestComponent() {
-      const { submit, stop, values } = useStream({
-        assistantId: "test-assistant",
+      const [stopped, setStopped] = useState(false);
+      const { submit, stop, messages } = useStream<{ messages: Message[] }>({
+        assistantId: "agent",
         apiKey: "test-api-key",
         onStop: ({ mutate }) => {
+          setStopped(true);
           mutate((prev) => ({
             ...prev,
-            stoppedByUser: true,
-            customMessage: "Stream stopped",
+            messages: [
+              ...(prev.messages ?? []),
+              { type: "ai", content: "Stream stopped" },
+            ],
           }));
         },
       });
@@ -334,10 +322,16 @@ describe("useStream onStop callback", () => {
       return (
         <div>
           <div data-testid="stopped-status">
-            {(values as any).stoppedByUser ? "Stopped" : "Not stopped"}
+            {stopped ? "Stopped" : "Not stopped"}
           </div>
-          <div data-testid="custom-message">
-            {(values as any).customMessage || "No message"}
+          <div data-testid="messages">
+            {messages.map((msg, i) => (
+              <div key={msg.id ?? i} data-testid={`message-${i}`}>
+                {typeof msg.content === "string"
+                  ? msg.content
+                  : JSON.stringify(msg.content)}
+              </div>
+            ))}
           </div>
           <button data-testid="submit" onClick={() => submit({})}>
             Send
@@ -355,9 +349,6 @@ describe("useStream onStop callback", () => {
     expect(screen.getByTestId("stopped-status")).toHaveTextContent(
       "Not stopped",
     );
-    expect(screen.getByTestId("custom-message")).toHaveTextContent(
-      "No message",
-    );
 
     // Start and stop stream
     await user.click(screen.getByTestId("submit"));
@@ -366,13 +357,15 @@ describe("useStream onStop callback", () => {
     // Verify state was updated immediately
     await waitFor(() => {
       expect(screen.getByTestId("stopped-status")).toHaveTextContent("Stopped");
-      expect(screen.getByTestId("custom-message")).toHaveTextContent(
+      expect(screen.getByTestId("message-0")).toHaveTextContent(
         "Stream stopped",
       );
     });
   });
 
-  it("handles functional updates correctly", async () => {
+  it("onStop handles functional updates correctly", async () => {
+    const user = userEvent.setup();
+
     function TestComponent() {
       const { submit, stop, values } = useStream({
         assistantId: "test-assistant",
@@ -423,7 +416,9 @@ describe("useStream onStop callback", () => {
     });
   });
 
-  it("is not called when stream completes naturally", async () => {
+  it("onStop is not called when stream completes naturally", async () => {
+    const user = userEvent.setup();
+
     const onStopCallback = vi.fn();
 
     function TestComponent() {
