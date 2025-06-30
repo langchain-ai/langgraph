@@ -199,7 +199,7 @@ describe("useStream", () => {
       "Cached user message",
     );
 
-    // Submiting should clear out the cached messages
+    // Submitting should clear out the cached messages
     await user.click(screen.getByTestId("submit"));
 
     // Wait for messages to appear
