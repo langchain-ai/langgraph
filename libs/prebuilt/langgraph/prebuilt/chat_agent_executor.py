@@ -24,10 +24,12 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
+from langchain_core.prompts.base import BasePromptTemplate
 from langchain_core.runnables import (
     Runnable,
     RunnableBinding,
     RunnableConfig,
+    RunnableLambda,
     RunnableSequence,
 )
 from langchain_core.tools import BaseTool
@@ -452,7 +454,23 @@ def create_react_agent(
     ):
         model = cast(BaseChatModel, model).bind_tools(tool_classes + llm_builtin_tools)  # type: ignore[operator]
 
-    model_runnable = _get_prompt_runnable(prompt) | model
+    prompt_runnable = _get_prompt_runnable(prompt)
+    if (
+        state_schema is not None
+        and inspect.isclass(state_schema)
+        and issubclass(state_schema, BaseModel)
+        and isinstance(prompt_runnable, BasePromptTemplate)
+    ):
+        model_runnable = (
+            RunnableLambda(
+                lambda s: s.model_dump() if isinstance(s, BaseModel) else s,
+                name="pydantic_to_dict",
+            )
+            | prompt_runnable
+            | model
+        )
+    else:
+        model_runnable = prompt_runnable | model
 
     # If any of the tools are configured to return_directly after running,
     # our graph needs to check if these were called
