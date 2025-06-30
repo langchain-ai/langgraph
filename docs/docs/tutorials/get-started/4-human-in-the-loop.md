@@ -385,6 +385,7 @@ snapshot.next;
 
     Take a closer look at the `human_assistance` tool:
 
+    :::python
     ```python
     @tool
     def human_assistance(query: str) -> str:
