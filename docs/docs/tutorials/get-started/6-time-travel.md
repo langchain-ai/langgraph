@@ -24,6 +24,8 @@ Rewind your graph by fetching a checkpoint using the graph's `getStateHistory` m
 
 {% include-markdown "../../../snippets/chat_model_tabs.md" %}
 
+:::python
+
 <!---
 ```python
 from langchain.chat_models import init_chat_model
@@ -445,6 +447,13 @@ Checkpoints are saved for every step of the graph. This **spans invocations** so
 :::python
 
 Resume from the `to_replay` state, which is after the `chatbot` node in the second graph invocation. Resuming from this point will call the **action** node next.
+:::
+
+:::js
+Resume from the `to_replay` state, which is after a specific node in one of the graph invocations. Resuming from this point will call the next scheduled node.
+:::
+
+:::python
 
 ```python
 print(to_replay.next)
