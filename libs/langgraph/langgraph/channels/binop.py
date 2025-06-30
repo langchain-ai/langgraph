@@ -8,6 +8,8 @@ from langgraph.channels.base import BaseChannel, Value
 from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError
 
+__all__ = ("BinaryOperatorAggregate",)
+
 
 # Adapted from typing_extensions
 def _strip_extras(t):  # type: ignore[no-untyped-def]

@@ -11,6 +11,12 @@ Value = TypeVar("Value")
 Update = TypeVar("Update")
 C = TypeVar("C")
 
+__all__ = (
+    "BaseChannel",
+    "EmptyChannelError",
+    "InvalidUpdateError",
+)
+
 
 class BaseChannel(Generic[Value, Update, C], ABC):
     """Base class for all channels."""
@@ -99,10 +105,3 @@ class BaseChannel(Generic[Value, Update, C], ABC):
         Returns True if the channel was updated, False otherwise.
         """
         return False
-
-
-__all__ = [
-    "BaseChannel",
-    "EmptyChannelError",
-    "InvalidUpdateError",
-]

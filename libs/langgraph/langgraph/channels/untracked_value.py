@@ -7,6 +7,8 @@ from langgraph.channels.base import BaseChannel, Value
 from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
+__all__ = ("UntrackedValue",)
+
 
 class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the last value received, never checkpointed."""

@@ -9,8 +9,10 @@ from langgraph.channels.base import BaseChannel, Value
 from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError
 
+__all__ = ("Topic",)
 
-def flatten(values: Sequence[Value | list[Value]]) -> Iterator[Value]:
+
+def _flatten(values: Sequence[Value | list[Value]]) -> Iterator[Value]:
     for value in values:
         if isinstance(value, list):
             yield from value
@@ -77,7 +79,7 @@ class Topic(
         if not self.accumulate:
             updated = bool(self.values)
             self.values = list[Value]()
-        if flat_values := tuple(flatten(values)):
+        if flat_values := tuple(_flatten(values)):
             updated = True
             self.values.extend(flat_values)
         return updated
