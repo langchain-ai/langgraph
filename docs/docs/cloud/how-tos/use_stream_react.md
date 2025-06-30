@@ -505,7 +505,7 @@ const handleSubmit = (text: string) => {
 
 ### Cached Thread Display
 
-Use the `initialValues` option to display cached thread data immediately while the official history is being loaded from the server. This improves user experience by showing cached data instantly when navigating to existing threads.
+Use the `initialValues` option to display cached thread data immediately while the history is being loaded from the server. This improves user experience by showing cached data instantly when navigating to existing threads.
 
 ```tsx
 import { useStream } from "@langchain/langgraph-sdk/react";
@@ -530,14 +530,9 @@ const CachedThreadExample = ({ threadId, cachedThreadData }) => {
 };
 ```
 
-The values flow follows this priority:
-1. **Initial load**: Shows `initialValues` while history loads
-2. **During submit**: `optimisticValues` take precedence  
-3. **After server response**: Official history replaces all
-
 ### Optimistic Thread Creation
 
-Use the `newThreadId` option to enable optimistic UI patterns where you need to know the thread ID before the thread is actually created. Namely, when the `threadId` is left `null`, `useStream` will under the hood create a thread using the `newThreadId`.
+Use the `threadId` option in `submit` function to enable optimistic UI patterns where you need to know the thread ID before the thread is actually created.
 
 ```tsx
 import { useState } from "react";
@@ -548,36 +543,33 @@ const OptimisticThreadExample = () => {
   const [optimisticThreadId] = useState(() => crypto.randomUUID());
 
   const stream = useStream({
-    apiUrl: "http://localhost:2024", 
+    apiUrl: "http://localhost:2024",
     assistantId: "agent",
-    threadId, // null initially
-    newThreadId: optimisticThreadId, // predetermined ID for new thread
-    onThreadId: setThreadId, // update threadId after creation
+    threadId,
+    onThreadId: setThreadId, // (3) Updated after thread has been created.
     messagesKey: "messages",
   });
 
   const handleSubmit = (text: string) => {
-    // Can immediately navigate to /threads/optimisticThreadId 
-    // without waiting for thread creation
+    // (1) Perform a soft navigation to /threads/${optimisticThreadId}
+    // without waiting for thread creation.
     window.history.pushState({}, "", `/threads/${optimisticThreadId}`);
-    
-    stream.submit({ messages: [{ type: "human", content: text }] });
+
+    // (2) Submit message to create thread with the predetermined ID.
+    stream.submit(
+      { messages: [{ type: "human", content: text }] },
+      { threadId: optimisticThreadId }
+    );
   };
 
   return (
     <div>
-      <p>Thread ID: {threadId || optimisticThreadId} (optimistic)</p>
+      <p>Thread ID: {threadId ?? optimisticThreadId}</p>
       {/* Rest of component */}
     </div>
   );
 };
 ```
-
-**Usage pattern:**
-- Set `threadId: null` and `newThreadId: "predetermined-id"`
-- Submit message to create thread with the specified ID
-- Use `onThreadId` callback to update `threadId` after creation
-- Navigate optimistically to routes using the predetermined ID
 
 ### TypeScript
 
