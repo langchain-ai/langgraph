@@ -321,7 +321,7 @@ def push_message(
 
     from langgraph.config import get_config
     from langgraph.constants import NS_SEP
-    from langgraph.pregel.messages import StreamMessagesHandler
+    from langgraph.pregel._messages import StreamMessagesHandler
 
     config = get_config()
     message = next(x for x in convert_to_messages([message]))

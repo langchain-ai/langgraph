@@ -54,9 +54,9 @@ from langgraph.pregel import (
     Pregel,
     StateSnapshot,
 )
-from langgraph.pregel.loop import SyncPregelLoop
-from langgraph.pregel.retry import RetryPolicy
-from langgraph.pregel.runner import PregelRunner
+from langgraph.pregel._loop import SyncPregelLoop
+from langgraph.pregel._retry import RetryPolicy
+from langgraph.pregel._runner import PregelRunner
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     CachePolicy,

@@ -48,9 +48,9 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.message import MessagesState, add_messages
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import GraphRecursionError, NodeBuilder, Pregel, StateSnapshot
-from langgraph.pregel.loop import AsyncPregelLoop
-from langgraph.pregel.retry import RetryPolicy
-from langgraph.pregel.runner import PregelRunner
+from langgraph.pregel._loop import AsyncPregelLoop
+from langgraph.pregel._retry import RetryPolicy
+from langgraph.pregel._runner import PregelRunner
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     CachePolicy,

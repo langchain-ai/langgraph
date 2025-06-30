@@ -67,10 +67,10 @@ from langgraph.constants import (
     TASKS,
 )
 from langgraph.managed.base import ManagedValueMapping
-from langgraph.pregel.call import get_runnable_for_task, identifier
-from langgraph.pregel.io import read_channels
-from langgraph.pregel.log import logger
-from langgraph.pregel.read import INPUT_CACHE_KEY_TYPE, PregelNode
+from langgraph.pregel._call import get_runnable_for_task, identifier
+from langgraph.pregel._io import read_channels
+from langgraph.pregel._log import logger
+from langgraph.pregel._read import INPUT_CACHE_KEY_TYPE, PregelNode
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,

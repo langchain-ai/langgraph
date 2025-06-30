@@ -26,7 +26,7 @@ from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import CACHE_NS_WRITES, END, PREVIOUS, START
 from langgraph.pregel import Pregel
-from langgraph.pregel.call import (
+from langgraph.pregel._call import (
     P,
     SyncAsyncFuture,
     T,
@@ -34,8 +34,8 @@ from langgraph.pregel.call import (
     get_runnable_for_entrypoint,
     identifier,
 )
-from langgraph.pregel.read import PregelNode
-from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
+from langgraph.pregel._read import PregelNode
+from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
 from langgraph.types import _DC_KWARGS, CachePolicy, RetryPolicy, StreamMode
 from langgraph.warnings import LangGraphDeprecatedSinceV05

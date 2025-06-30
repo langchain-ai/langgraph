@@ -68,8 +68,8 @@ from langgraph.managed.base import (
     is_managed_value,
 )
 from langgraph.pregel import Pregel
-from langgraph.pregel.read import ChannelRead, PregelNode
-from langgraph.pregel.write import (
+from langgraph.pregel._read import ChannelRead, PregelNode
+from langgraph.pregel._write import (
     ChannelWrite,
     ChannelWriteEntry,
     ChannelWriteTupleEntry,

@@ -22,7 +22,7 @@ from langgraph.constants import (
     RETURN,
     TAG_HIDDEN,
 )
-from langgraph.pregel.io import read_channels
+from langgraph.pregel._io import read_channels
 from langgraph.types import PregelExecutableTask, PregelTask, StateSnapshot
 
 

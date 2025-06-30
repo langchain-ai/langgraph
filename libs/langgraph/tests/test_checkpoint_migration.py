@@ -10,7 +10,7 @@ from typing_extensions import TypedDict
 from langgraph._internal._config import patch_configurable
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointTuple
 from langgraph.graph.state import StateGraph
-from langgraph.pregel.checkpoint import copy_checkpoint
+from langgraph.pregel._checkpoint import copy_checkpoint
 from langgraph.types import Command, Interrupt, PregelTask, StateSnapshot, interrupt
 from tests.any_int import AnyInt
 from tests.any_str import AnyDict, AnyObject, AnyStr

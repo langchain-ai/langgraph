@@ -21,7 +21,7 @@ from langgraph._internal._runnable import (
 )
 from langgraph.config import get_config
 from langgraph.constants import CONF, CONFIG_KEY_CALL, RETURN
-from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
+from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.types import CachePolicy, RetryPolicy
 
 ##
@@ -79,7 +79,7 @@ def _whichmodule(obj: Any, name: str) -> str | None:
 def identifier(obj: Any, name: str | None = None) -> str | None:
     """Return the module and name of an object."""
     from langgraph._internal._runnable import RunnableCallable, RunnableSeq
-    from langgraph.pregel.read import PregelNode
+    from langgraph.pregel._read import PregelNode
 
     if isinstance(obj, PregelNode):
         obj = obj.bound

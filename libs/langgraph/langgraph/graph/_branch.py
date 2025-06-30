@@ -31,7 +31,7 @@ from langgraph._internal._runnable import (
 )
 from langgraph.constants import END, START
 from langgraph.errors import InvalidUpdateError
-from langgraph.pregel.write import PASSTHROUGH, ChannelWrite, ChannelWriteEntry
+from langgraph.pregel._write import PASSTHROUGH, ChannelWrite, ChannelWriteEntry
 from langgraph.types import Send
 
 _Writer = Callable[

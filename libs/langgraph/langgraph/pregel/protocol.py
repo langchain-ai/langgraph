@@ -11,8 +11,9 @@ from typing_extensions import Self
 from langgraph.types import All, StateSnapshot, StateUpdate, StreamMode
 from langgraph.typing import InputT, OutputT, StateT
 
+__all__ = ("PregelProtocol",)
 
-# TODO: remove Runnable inheritance here!
+
 class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT, OutputT], ABC):
     @abstractmethod
     def with_config(
