@@ -699,7 +699,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
         Returns:
             Self: The instance of the graph, allowing for method chaining.
         """
-        return self.add_edge(START, key)
+        return self.add_edge(START,key) 
 
     def set_conditional_entry_point(
         self,
@@ -733,7 +733,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
         Returns:
             Self: The instance of the graph, allowing for method chaining.
         """
-        return self.add_edge(key, END)
+        return self.add_edge(START,key)
 
     def validate(self, interrupt: Sequence[str] | None = None) -> Self:
         # assemble sources
