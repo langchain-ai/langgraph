@@ -14,11 +14,21 @@ We will see later that **checkpointing** is _much_ more powerful than simple cha
 
 Create a `InMemorySaver` checkpointer:
 
+:::python
 ``` python
 from langgraph.checkpoint.memory import InMemorySaver
 
 memory = InMemorySaver()
 ```
+:::
+
+:::js
+```typescript
+import { MemorySaver } from "@langchain/langgraph";
+
+const memory = new MemorySaver();
+```
+:::
 
 This is in-memory checkpointer, which is convenient for the tutorial. However, in a production application, you would likely change this to use `SqliteSaver` or `PostgresSaver` and connect a database.
 
@@ -26,6 +36,7 @@ This is in-memory checkpointer, which is convenient for the tutorial. However, i
 
 Compile the graph with the provided checkpointer, which will checkpoint the `State` as the graph works through each node:
 
+:::python
 ``` python
 graph = graph_builder.compile(checkpointer=memory)
 ```
@@ -39,6 +50,28 @@ except Exception:
     # This requires some extra dependencies and is optional
     pass
 ```
+:::
+
+:::js
+```typescript
+const graph = graphBuilder.compile({ checkpointer: memory });
+```
+
+```typescript
+import * as tslab from "tslab";
+
+try {
+    const drawableGraph = graph.getGraph();
+    const image = await drawableGraph.drawMermaidPng();
+    const arrayBuffer = await image.arrayBuffer();
+    
+    await tslab.display.png(new Uint8Array(arrayBuffer));
+} catch (error) {
+    // This requires some extra dependencies and is optional
+    console.log("Could not render graph");
+}
+```
+:::
 
 ## 3. Interact with your chatbot
 
@@ -46,12 +79,21 @@ Now you can interact with your bot!
 
 1. Pick a thread to use as the key for this conversation.
 
+    :::python
     ```python
     config = {"configurable": {"thread_id": "1"}}
     ```
+    :::
+
+    :::js
+    ```typescript
+    const config = { configurable: { thread_id: "1" } };
+    ```
+    :::
 
 2. Call your chatbot:
 
+    :::python
     ```python
     user_input = "Hi there! My name is Will."
 
@@ -73,6 +115,30 @@ Now you can interact with your bot!
 
     Hello Will! It's nice to meet you. How can I assist you today? Is there anything specific you'd like to know or discuss?
     ```
+    :::
+
+    :::js
+    ```typescript
+    const userInput = "Hi there! My name is Will.";
+
+    // The config is the **second positional argument** to stream() or invoke()!
+    const events = await graph.stream(
+        { messages: [{ role: "user", content: userInput }] },
+        config,
+        { streamMode: "values" }
+    );
+    
+    for await (const event of events) {
+        const lastMessage = event.messages[event.messages.length - 1];
+        console.log(`${lastMessage._getType()}: ${lastMessage.content}`);
+    }
+    ```
+
+    ```
+    human: Hi there! My name is Will.
+    ai: Hello Will! It's nice to meet you. How can I assist you today? Is there anything specific you'd like to know or discuss?
+    ```
+    :::
 
     !!! note 
 
@@ -82,6 +148,7 @@ Now you can interact with your bot!
 
 Ask a follow up question:
 
+:::python
 ```python
 user_input = "Remember my name?"
 
@@ -103,11 +170,36 @@ Remember my name?
 
 Of course, I remember your name, Will. I always try to pay attention to important details that users share with me. Is there anything else you'd like to talk about or any questions you have? I'm here to help with a wide range of topics or tasks.
 ```
+:::
+
+:::js
+```typescript
+const userInput2 = "Remember my name?";
+
+// The config is the **second positional argument** to stream() or invoke()!
+const events2 = await graph.stream(
+    { messages: [{ role: "user", content: userInput2 }] },
+    config,
+    { streamMode: "values" }
+);
+
+for await (const event of events2) {
+    const lastMessage = event.messages[event.messages.length - 1];
+    console.log(`${lastMessage._getType()}: ${lastMessage.content}`);
+}
+```
+
+```
+human: Remember my name?
+ai: Of course, I remember your name, Will. I always try to pay attention to important details that users share with me. Is there anything else you'd like to talk about or any questions you have? I'm here to help with a wide range of topics or tasks.
+```
+:::
 
 **Notice** that we aren't using an external list for memory: it's all handled by the checkpointer! You can inspect the full execution in this [LangSmith trace](https://smith.langchain.com/public/29ba22b5-6d40-4fbe-8d27-b369e3329c84/r) to see what's going on.
 
 Don't believe me? Try this using a different config.
 
+:::python
 ```python
 # The only difference is we change the `thread_id` here to "2" instead of "1"
 events = graph.stream(
@@ -128,6 +220,29 @@ Remember my name?
 
 I apologize, but I don't have any previous context or memory of your name. As an AI assistant, I don't retain information from past conversations. Each interaction starts fresh. Could you please tell me your name so I can address you properly in this conversation?
 ```
+:::
+
+:::js
+```typescript
+// The only difference is we change the `thread_id` here to "2" instead of "1"
+const events3 = await graph.stream(
+    { messages: [{ role: "user", content: userInput2 }] },
+    // highlight-next-line
+    { configurable: { thread_id: "2" } },
+    { streamMode: "values" }
+);
+
+for await (const event of events3) {
+    const lastMessage = event.messages[event.messages.length - 1];
+    console.log(`${lastMessage._getType()}: ${lastMessage.content}`);
+}
+```
+
+```
+human: Remember my name?
+ai: I apologize, but I don't have any previous context or memory of your name. As an AI assistant, I don't retain information from past conversations. Each interaction starts fresh. Could you please tell me your name so I can address you properly in this conversation?
+```
+:::
 
 **Notice** that the **only** change we've made is to modify the `thread_id` in the config. See this call's [LangSmith trace](https://smith.langchain.com/public/51a62351-2f0a-4058-91cc-9996c5561428/r) for comparison.
 
@@ -135,6 +250,7 @@ I apologize, but I don't have any previous context or memory of your name. As an
 
 By now, we have made a few checkpoints across two different threads. But what goes into a checkpoint? To inspect a graph's `state` for a given config at any time, call `get_state(config)`.
 
+:::python
 ```python
 snapshot = graph.get_state(config)
 snapshot
@@ -147,6 +263,92 @@ StateSnapshot(values={'messages': [HumanMessage(content='Hi there! My name is Wi
 ```
 snapshot.next  # (since the graph ended this turn, `next` is empty. If you fetch a state from within a graph invocation, next tells which node will execute next)
 ```
+:::
+
+:::js
+```typescript
+const snapshot = await graph.getState(config);
+console.log(snapshot);
+```
+
+```typescript
+{
+  values: {
+    messages: [
+      HumanMessage {
+        content: "Hi there! My name is Will.",
+        additional_kwargs: {},
+        response_metadata: {},
+        id: "8c1ca919-c553-4ebf-95d4-b59a2d61e078"
+      },
+      AIMessage {
+        content: "Hello Will! It's nice to meet you. How can I assist you today? Is there anything specific you'd like to know or discuss?",
+        additional_kwargs: {},
+        response_metadata: {
+          id: "msg_01WTQebPhNwmMrmmWojJ9KXJ",
+          model: "claude-3-5-sonnet-20240620",
+          stop_reason: "end_turn",
+          stop_sequence: null,
+          usage: { input_tokens: 405, output_tokens: 32 }
+        },
+        id: "run-58587b77-8c82-41e6-8a90-d62c444a261d-0",
+        usage_metadata: { input_tokens: 405, output_tokens: 32, total_tokens: 437 }
+      },
+      HumanMessage {
+        content: "Remember my name?",
+        additional_kwargs: {},
+        response_metadata: {},
+        id: "daba7df6-ad75-4d6b-8057-745881cea1ca"
+      },
+      AIMessage {
+        content: "Of course, I remember your name, Will. I always try to pay attention to important details that users share with me. Is there anything else you'd like to talk about or any questions you have? I'm here to help with a wide range of topics or tasks.",
+        additional_kwargs: {},
+        response_metadata: {
+          id: "msg_01E41KitY74HpENRgXx94vag",
+          model: "claude-3-5-sonnet-20240620",
+          stop_reason: "end_turn",
+          stop_sequence: null,
+          usage: { input_tokens: 444, output_tokens: 58 }
+        },
+        id: "run-ffeaae5c-4d2d-4ddb-bd59-5d5cbf2a5af8-0",
+        usage_metadata: { input_tokens: 444, output_tokens: 58, total_tokens: 502 }
+      }
+    ]
+  },
+  next: [],
+  config: {
+    configurable: {
+      thread_id: "1",
+      checkpoint_ns: "",
+      checkpoint_id: "1ef7d06e-93e0-6acc-8004-f2ac846575d2"
+    }
+  },
+  metadata: {
+    source: "loop",
+    writes: {
+      chatbot: {
+        messages: [/* AIMessage */]
+      }
+    },
+    step: 4,
+    parents: {}
+  },
+  createdAt: "2024-09-27T19:30:10.820758+00:00",
+  parentConfig: {
+    configurable: {
+      thread_id: "1",
+      checkpoint_ns: "",
+      checkpoint_id: "1ef7d06e-859f-6206-8003-e1bd3c264b8f"
+    }
+  },
+  tasks: []
+}
+```
+
+```typescript
+console.log(snapshot.next); // (since the graph ended this turn, `next` is empty. If you fetch a state from within a graph invocation, next tells which node will execute next)
+```
+:::
 
 The snapshot above contains the current state values, corresponding config, and the `next` node to process. In our case, the graph has reached an `END` state, so `next` is empty.
 
@@ -157,13 +359,24 @@ Check out the code snippet below to review the graph from this tutorial:
 {% include-markdown "../../../snippets/chat_model_tabs.md" %}
 
 <!---
+:::python
 ```python
 from langchain.chat_models import init_chat_model
 
 llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
 ```
+:::
+
+:::js
+```typescript
+import { ChatOpenAI } from "@langchain/openai";
+
+const llm = new ChatOpenAI({ model: "gpt-4o-mini" });
+```
+:::
 -->
 
+:::python
 ```python hl_lines="36 37"
 from typing import Annotated
 
@@ -203,6 +416,48 @@ graph_builder.set_entry_point("chatbot")
 memory = InMemorySaver()
 graph = graph_builder.compile(checkpointer=memory)
 ```
+:::
+
+:::js
+```typescript hl_lines="34 35"
+import { Annotation } from "@langchain/langgraph";
+import { ChatOpenAI } from "@langchain/openai";
+import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
+import { BaseMessage } from "@langchain/core/messages";
+import { MemorySaver } from "@langchain/langgraph";
+import { StateGraph } from "@langchain/langgraph";
+import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
+
+const StateAnnotation = Annotation.Root({
+    messages: Annotation<BaseMessage[]>({
+        reducer: (x, y) => x.concat(y),
+    }),
+});
+
+const llm = new ChatOpenAI({ model: "gpt-4o-mini" });
+
+const graphBuilder = new StateGraph(StateAnnotation);
+
+const tool = new TavilySearchResults({ maxResults: 2 });
+const tools = [tool];
+const llmWithTools = llm.bindTools(tools);
+
+const chatbot = async (state: typeof StateAnnotation.State) => {
+    return { messages: [await llmWithTools.invoke(state.messages)] };
+};
+
+graphBuilder.addNode("chatbot", chatbot);
+
+const toolNode = new ToolNode(tools);
+graphBuilder.addNode("tools", toolNode);
+
+graphBuilder.addConditionalEdges("chatbot", toolsCondition);
+graphBuilder.addEdge("tools", "chatbot");
+graphBuilder.addEdge("__start__", "chatbot");
+const memory = new MemorySaver();
+const graph = graphBuilder.compile({ checkpointer: memory });
+```
+:::
 
 ## Next steps
 
