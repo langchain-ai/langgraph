@@ -1,14 +1,61 @@
+import "@testing-library/jest-dom/vitest";
+
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { setupServer } from "msw/node";
-import { http, HttpResponse } from "msw";
+import { http } from "msw";
 import { useStream } from "../react/stream.js";
-import "@testing-library/jest-dom/vitest";
+
+import { StateGraph, MessagesAnnotation, START } from "@langchain/langgraph";
+import { MemorySaver } from "@langchain/langgraph-checkpoint";
+import { FakeStreamingChatModel } from "@langchain/core/utils/testing";
+import { AIMessage, BaseMessageLike } from "@langchain/core/messages";
+
+import { Hono } from "hono";
+import { logger } from "hono/logger";
+import { createEmbedServer } from "@langchain/langgraph-api/experimental/embed";
+
+const threads = (() => {
+  const THREADS: Record<
+    string,
+    { thread_id: string; metadata: Record<string, unknown> }
+  > = {};
+
+  return {
+    get: async (id: string) => THREADS[id],
+    put: async (
+      threadId: string,
+      { metadata }: { metadata?: Record<string, unknown> },
+    ) => {
+      THREADS[threadId] = { thread_id: threadId, metadata: metadata ?? {} };
+    },
+    delete: async (threadId: string) => {
+      delete THREADS[threadId];
+    },
+  };
+})();
+
+const checkpointer = new MemorySaver();
+
+const model = new FakeStreamingChatModel({ responses: [new AIMessage("Hey")] });
+const agent = new StateGraph(MessagesAnnotation)
+  .addNode("agent", async (state: { messages: BaseMessageLike[] }) => {
+    const response = await model.invoke(state.messages);
+    return { messages: [response] };
+  })
+  .addEdge(START, "agent")
+  .compile();
+
+const app = new Hono();
+app.use(logger());
+app.route("/", createEmbedServer({ graph: { agent }, checkpointer, threads }));
+
+const server = setupServer(http.all("*", (ctx) => app.fetch(ctx.request)));
 
 function TestChatComponent() {
   const { messages, isLoading, error, submit, stop } = useStream({
-    assistantId: "test-assistant",
+    assistantId: "agent",
     apiKey: "test-api-key",
   });
 
@@ -42,353 +89,6 @@ function TestChatComponent() {
   );
 }
 
-// Mock server setup
-
-const server = setupServer(
-  // Mock thread creation
-  http.post("*/threads", () => {
-    return HttpResponse.json({ thread_id: "test-thread-id" });
-  }),
-
-  // Mock stream endpoint
-  http.post("*/threads/:threadId/runs/stream", async () => {
-    const encoder = new TextEncoder();
-    const sendSSE = (event: string, data: unknown) =>
-      encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-
-    const stream = new ReadableStream({
-      async start(controller) {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-
-        controller.enqueue(
-          sendSSE("metadata", {
-            run_id: "1f03278a-1734-6518-80a4-3390db59f960",
-            attempt: 1,
-          }),
-        );
-
-        controller.enqueue(
-          sendSSE("values", {
-            messages: [
-              {
-                content: "Hey",
-                additional_kwargs: {},
-                response_metadata: {},
-                type: "human",
-                name: null,
-                id: "2d8c0d9f-a614-4e44-b474-6a56e9471cf5",
-                example: false,
-              },
-            ],
-          }),
-        );
-
-        controller.enqueue(
-          sendSSE("messages", [
-            {
-              content: "",
-              additional_kwargs: {},
-              response_metadata: { model_name: "claude-3-7-sonnet-latest" },
-              type: "AIMessageChunk",
-              name: null,
-              id: "run-3e90ba6a-71d6-49e7-94a8-6bcac2fd0f40",
-              tool_calls: [],
-              invalid_tool_calls: [],
-              tool_call_chunks: [],
-            },
-            { run_attempt: 1 },
-          ]),
-        );
-
-        controller.enqueue(
-          sendSSE("messages", [
-            {
-              content: "Hello",
-              additional_kwargs: {},
-              response_metadata: { model_name: "claude-3-7-sonnet-latest" },
-              type: "AIMessageChunk",
-              name: null,
-              id: "run-3e90ba6a-71d6-49e7-94a8-6bcac2fd0f40",
-              tool_calls: [],
-              invalid_tool_calls: [],
-              tool_call_chunks: [],
-            },
-            { run_attempt: 1 },
-          ]),
-        );
-
-        controller.enqueue(
-          sendSSE("messages", [
-            {
-              content: "! How can I assist you today?",
-              additional_kwargs: {},
-              response_metadata: { model_name: "claude-3-7-sonnet-latest" },
-              type: "AIMessageChunk",
-              name: null,
-              id: "run-3e90ba6a-71d6-49e7-94a8-6bcac2fd0f40",
-              tool_calls: [],
-              invalid_tool_calls: [],
-              tool_call_chunks: [],
-            },
-            { run_attempt: 1 },
-          ]),
-        );
-
-        controller.enqueue(
-          sendSSE("messages", [
-            {
-              content: "",
-              additional_kwargs: {},
-              response_metadata: {
-                stop_reason: "end_turn",
-                stop_sequence: null,
-              },
-              type: "AIMessageChunk",
-              name: null,
-              id: "run-3e90ba6a-71d6-49e7-94a8-6bcac2fd0f40",
-              tool_calls: [],
-              invalid_tool_calls: [],
-              tool_call_chunks: [],
-            },
-            { run_attempt: 1 },
-          ]),
-        );
-
-        controller.enqueue(
-          sendSSE("values", {
-            messages: [
-              {
-                content: "Hey",
-                additional_kwargs: {},
-                response_metadata: {},
-                type: "human",
-                name: null,
-                id: "2d8c0d9f-a614-4e44-b474-6a56e9471cf5",
-                example: false,
-              },
-              {
-                content: "Hello! How can I assist you today?",
-                additional_kwargs: {},
-                response_metadata: {
-                  model_name: "claude-3-7-sonnet-latest",
-                  stop_reason: "end_turn",
-                  stop_sequence: null,
-                },
-                type: "ai",
-                name: null,
-                id: "run-3e90ba6a-71d6-49e7-94a8-6bcac2fd0f40",
-                tool_calls: [],
-                invalid_tool_calls: [],
-              },
-            ],
-          }),
-        );
-
-        controller.close();
-      },
-    });
-
-    server.use(
-      http.post("*/threads/:threadId/history", () => {
-        return HttpResponse.json([
-          {
-            values: {
-              messages: [
-                {
-                  content: "Hey",
-                  additional_kwargs: {},
-                  response_metadata: {},
-                  type: "human",
-                  name: null,
-                  id: "2d8c0d9f-a614-4e44-b474-6a56e9471cf5",
-                  example: false,
-                },
-                {
-                  content: "Hello! How can I assist you today?",
-                  additional_kwargs: {},
-                  response_metadata: {
-                    model_name: "claude-3-7-sonnet-latest",
-                    stop_reason: "end_turn",
-                    stop_sequence: null,
-                  },
-                  type: "ai",
-                  name: null,
-                  id: "run-3e90ba6a-71d6-49e7-94a8-6bcac2fd0f40",
-                  example: false,
-                  tool_calls: [],
-                  invalid_tool_calls: [],
-                },
-              ],
-            },
-            next: [],
-            tasks: [],
-            metadata: {
-              run_attempt: 1,
-              source: "loop",
-              writes: {
-                agent: {
-                  messages: [
-                    {
-                      content: "Hello! How can I assist you today?",
-                      additional_kwargs: {},
-                      response_metadata: {
-                        model_name: "claude-3-7-sonnet-latest",
-                        stop_reason: "end_turn",
-                        stop_sequence: null,
-                      },
-                      type: "ai",
-                      name: null,
-                      id: "run-3e90ba6a-71d6-49e7-94a8-6bcac2fd0f40",
-                      example: false,
-                      tool_calls: [],
-                      invalid_tool_calls: [],
-                    },
-                  ],
-                },
-              },
-              step: 1,
-              parents: {},
-            },
-            created_at: "2025-05-16T17:10:16.987537+00:00",
-            checkpoint: {
-              checkpoint_id: "1f03278a-38cf-6c68-8001-22b77ac43ff6",
-              thread_id: "b06fd92a-955c-446e-b233-7977716c4a9c",
-              checkpoint_ns: "",
-            },
-            parent_checkpoint: {
-              checkpoint_id: "1f03278a-206b-67c6-8000-ac34a0872e1a",
-              thread_id: "b06fd92a-955c-446e-b233-7977716c4a9c",
-              checkpoint_ns: "",
-            },
-            checkpoint_id: "1f03278a-38cf-6c68-8001-22b77ac43ff6",
-            parent_checkpoint_id: "1f03278a-206b-67c6-8000-ac34a0872e1a",
-          },
-          {
-            values: {
-              messages: [
-                {
-                  content: "Hey",
-                  additional_kwargs: {},
-                  response_metadata: {},
-                  type: "human",
-                  name: null,
-                  id: "2d8c0d9f-a614-4e44-b474-6a56e9471cf5",
-                  example: false,
-                },
-              ],
-            },
-            next: ["agent"],
-            tasks: [
-              {
-                id: "e1b7b52b-a78e-4b32-0c89-e06bf46405ed",
-                name: "agent",
-                path: ["__pregel_pull", "agent"],
-                error: null,
-                interrupts: [],
-                checkpoint: null,
-                state: null,
-                result: {
-                  messages: [
-                    {
-                      content: "Hello! How can I assist you today?",
-                      additional_kwargs: {},
-                      response_metadata: {
-                        model_name: "claude-3-7-sonnet-latest",
-                        stop_reason: "end_turn",
-                        stop_sequence: null,
-                      },
-                      type: "ai",
-                      name: null,
-                      id: "run-3e90ba6a-71d6-49e7-94a8-6bcac2fd0f40",
-                      example: false,
-                      tool_calls: [],
-                      invalid_tool_calls: [],
-                    },
-                  ],
-                },
-              },
-            ],
-            metadata: {
-              run_attempt: 1,
-            },
-            created_at: "2025-05-16T17:10:14.429889+00:00",
-            checkpoint: {
-              checkpoint_id: "1f03278a-206b-67c6-8000-ac34a0872e1a",
-              thread_id: "b06fd92a-955c-446e-b233-7977716c4a9c",
-              checkpoint_ns: "",
-            },
-            parent_checkpoint: {
-              checkpoint_id: "1f03278a-2067-6590-bfff-3fb740466fc3",
-              thread_id: "b06fd92a-955c-446e-b233-7977716c4a9c",
-              checkpoint_ns: "",
-            },
-            checkpoint_id: "1f03278a-206b-67c6-8000-ac34a0872e1a",
-            parent_checkpoint_id: "1f03278a-2067-6590-bfff-3fb740466fc3",
-          },
-          {
-            values: {
-              messages: [],
-            },
-            next: ["__start__"],
-            tasks: [
-              {
-                id: "291af033-2ddc-3320-8bbc-28060057cae5",
-                name: "__start__",
-                path: ["__pregel_pull", "__start__"],
-                error: null,
-                interrupts: [],
-                checkpoint: null,
-                state: null,
-                result: {
-                  messages: [
-                    {
-                      id: "2d8c0d9f-a614-4e44-b474-6a56e9471cf5",
-                      type: "human",
-                      content: "Hey",
-                    },
-                  ],
-                },
-              },
-            ],
-            metadata: {
-              run_attempt: 1,
-              source: "input",
-              writes: {
-                __start__: {
-                  messages: [
-                    {
-                      id: "2d8c0d9f-a614-4e44-b474-6a56e9471cf5",
-                      type: "human",
-                      content: "Hey",
-                    },
-                  ],
-                },
-              },
-              step: -1,
-              parents: {},
-            },
-            created_at: "2025-05-16T17:10:14.428191+00:00",
-            checkpoint: {
-              checkpoint_id: "1f03278a-2067-6590-bfff-3fb740466fc3",
-              thread_id: "b06fd92a-955c-446e-b233-7977716c4a9c",
-              checkpoint_ns: "",
-            },
-            parent_checkpoint: null,
-            checkpoint_id: "1f03278a-2067-6590-bfff-3fb740466fc3",
-            parent_checkpoint_id: null,
-          },
-        ]);
-      }),
-    );
-
-    return new HttpResponse(stream, {
-      headers: { "Content-Type": "text/event-stream" },
-    });
-  }),
-);
-
-server.use;
-
 describe("useStream", () => {
   beforeEach(() => server.listen());
 
@@ -417,10 +117,8 @@ describe("useStream", () => {
 
     // Wait for messages to appear
     await waitFor(() => {
-      expect(screen.getByTestId("message-0")).toHaveTextContent("Hey");
-      expect(screen.getByTestId("message-1")).toHaveTextContent(
-        "Hello! How can I assist you today?",
-      );
+      expect(screen.getByTestId("message-0")).toHaveTextContent("Hello");
+      expect(screen.getByTestId("message-1")).toHaveTextContent("Hey");
     });
 
     // Check final state
