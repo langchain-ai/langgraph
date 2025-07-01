@@ -2388,17 +2388,6 @@
       }
     },
     "/mcp/": {
-      "get": {
-        "operationId": "get_mcp",
-        "summary": "MCP Get",
-        "description": "Implemented according to the Streamable HTTP Transport specification.",
-        "responses": {
-          "405": {
-            "description": "GET method not allowed; streaming not supported."
-          }
-        },
-        "tags": ["MCP"]
-      },
       "post": {
         "operationId": "post_mcp",
         "summary": "MCP Post",
@@ -2453,6 +2442,17 @@
           "405": { "description": "HTTP method not allowed." },
           "500": {
             "description": "Internal server error or unexpected failure."
+          }
+        },
+        "tags": ["MCP"]
+      },
+      "get": {
+        "operationId": "get_mcp",
+        "summary": "MCP Get",
+        "description": "Implemented according to the Streamable HTTP Transport specification.",
+        "responses": {
+          "405": {
+            "description": "GET method not allowed; streaming not supported."
           }
         },
         "tags": ["MCP"]
