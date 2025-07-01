@@ -883,7 +883,7 @@ def node_in_parent_graph(state: State):
 
 ### Using multiple interrupts
 
-Using multiple interrupts within a **single** node can be helpful for patterns like [validating human input](../how-tos/human_in_the_loop/add-human-in-the-loop.md#validate-human-input). However, using multiple interrupts in the same node can lead to unexpected behavior if not handled carefully.
+Using multiple interrupts within a **single** node can be helpful for patterns like [validating human input](#validate-human-input). However, using multiple interrupts in the same node can lead to unexpected behavior if not handled carefully.
 
 When a node contains multiple interrupt calls, LangGraph keeps a list of resume values specific to the task executing the node. Whenever execution resumes, it starts at the beginning of the node. For each interrupt encountered, LangGraph checks if a matching value exists in the task's resume list. Matching is **strictly index-based**, so the order of interrupt calls within the node is critical.
 

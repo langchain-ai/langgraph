@@ -40,6 +40,7 @@ from langgraph_sdk.schema import (
     Command,
     Config,
     Cron,
+    CronSortBy,
     DisconnectMode,
     GraphSchema,
     IfNotExists,
@@ -2532,6 +2533,8 @@ class CronClient:
         thread_id: str | None = None,
         limit: int = 10,
         offset: int = 0,
+        sort_by: CronSortBy | None = None,
+        sort_order: SortOrder | None = None,
         headers: dict[str, str] | None = None,
     ) -> list[Cron]:
         """Get a list of cron jobs.
@@ -2590,6 +2593,10 @@ class CronClient:
             "limit": limit,
             "offset": offset,
         }
+        if sort_by:
+            payload["sort_by"] = sort_by
+        if sort_order:
+            payload["sort_order"] = sort_order
         payload = {k: v for k, v in payload.items() if v is not None}
         return await self.http.post("/runs/crons/search", json=payload, headers=headers)
 
@@ -3564,6 +3571,8 @@ class SyncAssistantsClient:
         graph_id: str | None = None,
         limit: int = 10,
         offset: int = 0,
+        sort_by: AssistantSortBy | None = None,
+        sort_order: SortOrder | None = None,
         headers: dict[str, str] | None = None,
     ) -> list[Assistant]:
         """Search for assistants.
@@ -3599,6 +3608,10 @@ class SyncAssistantsClient:
             payload["metadata"] = metadata
         if graph_id:
             payload["graph_id"] = graph_id
+        if sort_by:
+            payload["sort_by"] = sort_by
+        if sort_order:
+            payload["sort_order"] = sort_order
         return self.http.post(
             "/assistants/search",
             json=payload,
@@ -3869,6 +3882,8 @@ class SyncThreadsClient:
         status: ThreadStatus | None = None,
         limit: int = 10,
         offset: int = 0,
+        sort_by: ThreadSortBy | None = None,
+        sort_order: SortOrder | None = None,
         headers: dict[str, str] | None = None,
     ) -> list[Thread]:
         """Search for threads.
@@ -3907,6 +3922,10 @@ class SyncThreadsClient:
             payload["values"] = values
         if status:
             payload["status"] = status
+        if sort_by:
+            payload["sort_by"] = sort_by
+        if sort_order:
+            payload["sort_order"] = sort_order
         return self.http.post("/threads/search", json=payload, headers=headers)
 
     def copy(
@@ -5205,6 +5224,8 @@ class SyncCronClient:
         thread_id: str | None = None,
         limit: int = 10,
         offset: int = 0,
+        sort_by: CronSortBy | None = None,
+        sort_order: SortOrder | None = None,
         headers: dict[str, str] | None = None,
     ) -> list[Cron]:
         """Get a list of cron jobs.
@@ -5262,6 +5283,10 @@ class SyncCronClient:
             "limit": limit,
             "offset": offset,
         }
+        if sort_by:
+            payload["sort_by"] = sort_by
+        if sort_order:
+            payload["sort_order"] = sort_order
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.post("/runs/crons/search", json=payload, headers=headers)
 

@@ -969,10 +969,9 @@ class SqliteStore(BaseSqliteStore, BaseStore):
         Args:
             transaction (bool): whether to use transaction for the DB operations
         """
+        if not self.is_setup:
+            self.setup()
         with self.lock:
-            if not self.is_setup:
-                self.setup()
-
             if transaction:
                 self.conn.execute("BEGIN")
 
@@ -990,10 +989,10 @@ class SqliteStore(BaseSqliteStore, BaseStore):
         This method creates the necessary tables in the SQLite database if they don't
         already exist and runs database migrations. It should be called before first use.
         """
-        if self.is_setup:
-            return
 
         with self.lock:
+            if self.is_setup:
+                return
             # Create migrations table if it doesn't exist
             self.conn.executescript(
                 """

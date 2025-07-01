@@ -9,6 +9,7 @@ import {
   Cron,
   CronCreateForThreadResponse,
   CronCreateResponse,
+  CronSortBy,
   DefaultValues,
   GraphSchema,
   Item,
@@ -415,6 +416,8 @@ export class CronsClient extends BaseClient {
     threadId?: string;
     limit?: number;
     offset?: number;
+    sortBy?: CronSortBy;
+    sortOrder?: SortOrder;
   }): Promise<Cron[]> {
     return this.fetch<Cron[]>("/runs/crons/search", {
       method: "POST",
@@ -423,6 +426,8 @@ export class CronsClient extends BaseClient {
         thread_id: query?.threadId ?? undefined,
         limit: query?.limit ?? 10,
         offset: query?.offset ?? 0,
+        sort_by: query?.sortBy ?? undefined,
+        sort_order: query?.sortOrder ?? undefined,
       },
     });
   }
@@ -1009,8 +1014,8 @@ export class RunsClient<
     const stream: ReadableStream<{ event: any; data: any }> = (
       response.body || new ReadableStream({ start: (ctrl) => ctrl.close() })
     )
-      .pipeThrough(new BytesLineDecoder())
-      .pipeThrough(new SSEDecoder());
+      .pipeThrough(BytesLineDecoder())
+      .pipeThrough(SSEDecoder());
 
     yield* IterableReadableStream.fromReadableStream(stream);
   }
@@ -1313,8 +1318,8 @@ export class RunsClient<
     const stream: ReadableStream<{ event: string; data: any }> = (
       response.body || new ReadableStream({ start: (ctrl) => ctrl.close() })
     )
-      .pipeThrough(new BytesLineDecoder())
-      .pipeThrough(new SSEDecoder());
+      .pipeThrough(BytesLineDecoder())
+      .pipeThrough(SSEDecoder());
 
     yield* IterableReadableStream.fromReadableStream(stream);
   }
@@ -1653,7 +1658,30 @@ export class Client<
    */
   public "~ui": UiClient;
 
+  /**
+   * @internal Used to obtain a stable key representing the client.
+   */
+  private "~configHash": string | undefined;
+
   constructor(config?: ClientConfig) {
+    this["~configHash"] = (() =>
+      JSON.stringify({
+        apiUrl: config?.apiUrl,
+        apiKey: config?.apiKey,
+        timeoutMs: config?.timeoutMs,
+        defaultHeaders: config?.defaultHeaders,
+
+        maxConcurrency: config?.callerOptions?.maxConcurrency,
+        maxRetries: config?.callerOptions?.maxRetries,
+
+        callbacks: {
+          onFailedResponseHook:
+            config?.callerOptions?.onFailedResponseHook != null,
+          onRequest: config?.onRequest != null,
+          fetch: config?.callerOptions?.fetch != null,
+        },
+      }))();
+
     this.assistants = new AssistantsClient(config);
     this.threads = new ThreadsClient(config);
     this.runs = new RunsClient(config);
@@ -1661,4 +1689,11 @@ export class Client<
     this.store = new StoreClient(config);
     this["~ui"] = new UiClient(config);
   }
+}
+
+/**
+ * @internal Used to obtain a stable key representing the client.
+ */
+export function getClientConfigHash(client: Client): string | undefined {
+  return client["~configHash"];
 }
