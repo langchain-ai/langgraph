@@ -89,10 +89,10 @@
   '''
 # ---
 # name: test_conditional_entrypoint_graph_state
-  '{"$defs": {"AgentState": {"properties": {"input": {"title": "Input", "type": "string"}, "output": {"title": "Output", "type": "string"}, "steps": {"items": {"type": "string"}, "title": "Steps", "type": "array"}}, "title": "AgentState", "type": "object"}}, "$ref": "#/$defs/AgentState", "title": "LangGraphInput"}'
+  '{"properties": {"input": {"title": "Input", "type": "string"}, "output": {"title": "Output", "type": "string"}, "steps": {"items": {"type": "string"}, "title": "Steps", "type": "array"}}, "title": "AgentState", "type": "object"}'
 # ---
 # name: test_conditional_entrypoint_graph_state.1
-  '{"properties": {"input": {"default": null, "title": "Input", "type": "string"}, "output": {"default": null, "title": "Output", "type": "string"}, "steps": {"default": null, "items": {"type": "string"}, "title": "Steps", "type": "array"}}, "title": "LangGraphOutput", "type": "object"}'
+  '{"properties": {"input": {"title": "Input", "type": "string"}, "output": {"title": "Output", "type": "string"}, "steps": {"items": {"type": "string"}, "title": "Steps", "type": "array"}}, "title": "AgentState", "type": "object"}'
 # ---
 # name: test_conditional_entrypoint_graph_state.2
   '''
@@ -178,10 +178,10 @@
   '''
 # ---
 # name: test_conditional_entrypoint_to_multiple_state_graph
-  '{"properties": {"locations": {"items": {"type": "string"}, "title": "Locations", "type": "array"}, "results": {"items": {"type": "string"}, "title": "Results", "type": "array"}}, "required": ["locations", "results"], "title": "LangGraphInput", "type": "object"}'
+  '{"properties": {"locations": {"items": {"type": "string"}, "title": "Locations", "type": "array"}, "results": {"items": {"type": "string"}, "title": "Results", "type": "array"}}, "required": ["locations", "results"], "title": "OverallState", "type": "object"}'
 # ---
 # name: test_conditional_entrypoint_to_multiple_state_graph.1
-  '{"properties": {"locations": {"items": {"type": "string"}, "title": "Locations", "type": "array"}, "results": {"items": {"type": "string"}, "title": "Results", "type": "array"}}, "required": ["locations", "results"], "title": "LangGraphOutput", "type": "object"}'
+  '{"properties": {"locations": {"items": {"type": "string"}, "title": "Locations", "type": "array"}, "results": {"items": {"type": "string"}, "title": "Results", "type": "array"}}, "required": ["locations", "results"], "title": "OverallState", "type": "object"}'
 # ---
 # name: test_conditional_entrypoint_to_multiple_state_graph.2
   '''
@@ -605,19 +605,10 @@
   dict({
     'properties': dict({
       'answer': dict({
-        'anyOf': list([
-          dict({
-            'type': 'string',
-          }),
-          dict({
-            'type': 'null',
-          }),
-        ]),
-        'default': None,
         'title': 'Answer',
+        'type': 'string',
       }),
       'docs': dict({
-        'default': None,
         'items': dict({
           'type': 'string',
         }),
@@ -625,7 +616,11 @@
         'type': 'array',
       }),
     }),
-    'title': 'LangGraphOutput',
+    'required': list([
+      'answer',
+      'docs',
+    ]),
+    'title': 'Output',
     'type': 'object',
   })
 # ---
