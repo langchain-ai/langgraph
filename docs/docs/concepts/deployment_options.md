@@ -18,9 +18,9 @@ There are 4 main options for deploying with the [LangGraph Platform](langgraph_p
 
 1. [Cloud SaaS](#cloud-saas)
 
-1. [Self-Hosted Data Plane<sup>(Beta)</sup>](#self-hosted-data-plane)
+1. [Self-Hosted Data Plane](#self-hosted-data-plane)
 
-1. [Self-Hosted Control Plane<sup>(Beta)</sup>](#self-hosted-control-plane)
+1. [Self-Hosted Control Plane](#self-hosted-control-plane)
 
 1. [Standalone Container](#standalone-container)
 
@@ -50,7 +50,7 @@ For more information, please see:
 ## Self-Hosted Data Plane
 
 !!! info "Important"
-    The Self-Hosted Data Plane deployment option is currently in beta stage and requires an [Enterprise](../concepts/plans.md) plan.
+    The Self-Hosted Data Plane deployment option requires an [Enterprise](../concepts/plans.md) plan.
 
 The [Self-Hosted Data Plane](./langgraph_self_hosted_data_plane.md) deployment option is a "hybrid" model for deployment where we manage the [control plane](./langgraph_control_plane.md) in our cloud and you manage the [data plane](./langgraph_data_plane.md) in your cloud. This option provides a way to securely manage your data plane infrastructure, while offloading control plane management to us.
 
@@ -66,7 +66,7 @@ For more information, please see:
 ## Self-Hosted Control Plane
 
 !!! info "Important"
-    The Self-Hosted Control Plane deployment option is currently in beta stage and requires an [Enterprise](../concepts/plans.md) plan.
+    The Self-Hosted Control Plane deployment option requires an [Enterprise](../concepts/plans.md) plan.
 
 The [Self-Hosted Control Plane](./langgraph_self_hosted_control_plane.md) deployment option is a fully self-hosted model for deployment where you manage the [control plane](./langgraph_control_plane.md) and [data plane](./langgraph_data_plane.md) in your cloud. This option gives you full control and responsibility of the control plane and data plane infrastructure.
 
