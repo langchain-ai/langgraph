@@ -382,7 +382,7 @@ Agents can **share the full history** of their thought process (i.e., "scratchpa
 
 Agents can have their own private "scratchpad" and only **share the final result** with the rest of the agents. This approach might work better for systems with many agents or agents that are more complex. In this case, you would need to define agents with [different state schemas](#using-different-state-schemas).
 
-For agents called as tools, the supervisor determines the inputs based on the tool schema. Additionally, LangGraph allows [passing state](../how-tos/tool-calling.ipynb#read-state) to individual tools at runtime, so subordinate agents can access parent state, if needed.
+For agents called as tools, the supervisor determines the inputs based on the tool schema. Additionally, LangGraph allows [passing state](../how-tos/tool-calling.md#short-term-memory) to individual tools at runtime, so subordinate agents can access parent state, if needed.
 
 #### Indicating agent name in messages
 

@@ -395,7 +395,7 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
 
 === "Python"
 
-    Start LangGraph API server. For local testing, requires a LangSmith API key with access to LangGraph Platform closed beta. Requires a license key for production use.
+    Start LangGraph API server. For local testing, requires a LangSmith API key with access to LangGraph Platform. Requires a license key for production use.
 
     **Usage**
 
@@ -422,7 +422,7 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
 
 === "JS"
 
-    Start LangGraph API server. For local testing, requires a LangSmith API key with access to LangGraph Platform closed beta. Requires a license key for production use.
+    Start LangGraph API server. For local testing, requires a LangSmith API key with access to LangGraph Platform. Requires a license key for production use.
 
     **Usage**
 

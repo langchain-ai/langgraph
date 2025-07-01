@@ -1,5 +1,12 @@
 # Use the functional API
 
+The [**Functional API**](../concepts/functional_api.md) allows you to add LangGraph's key features — [persistence](../concepts/persistence.md), [memory](../how-tos/memory/add-memory.md), [human-in-the-loop](../concepts/human_in_the_loop.md), and [streaming](../concepts/streaming.md) — to your applications with minimal changes to your existing code.
+
+!!! tip
+
+    For conceptual information on the functional API, see [Functional API](../concepts/functional_api.md).
+
+
 ## Creating a simple workflow
 
 When defining an `entrypoint`, input is restricted to the first argument of the function. To pass multiple inputs, you can use a dictionary.
@@ -462,10 +469,161 @@ main.invoke(None, config=config)
 
 The functional API supports [human-in-the-loop](../concepts/human_in_the_loop.md) workflows using the `interrupt` function and the `Command` primitive.
 
-Please see the following examples for more details:
+### Basic human-in-the-loop workflow
 
-* [How to wait for user input (Functional API)](./wait-user-input-functional.ipynb): Shows how to implement a simple human-in-the-loop workflow using the functional API.
-* [How to review tool calls (Functional API)](./review-tool-calls-functional.ipynb): Guide demonstrates how to implement human-in-the-loop workflows in a ReAct agent using the LangGraph Functional API.
+We will create three [tasks](../concepts/functional_api.md#task):
+
+1. Append `"bar"`.
+2. Pause for human input. When resuming, append human input.
+3. Append `"qux"`.
+
+```python
+from langgraph.func import entrypoint, task
+from langgraph.types import Command, interrupt
+
+
+@task
+def step_1(input_query):
+    """Append bar."""
+    return f"{input_query} bar"
+
+
+@task
+def human_feedback(input_query):
+    """Append user input."""
+    feedback = interrupt(f"Please provide feedback: {input_query}")
+    return f"{input_query} {feedback}"
+
+
+@task
+def step_3(input_query):
+    """Append qux."""
+    return f"{input_query} qux"
+``` 
+
+We can now compose these tasks in an [entrypoint](../concepts/functional_api.md#entrypoint):
+
+```python
+from langgraph.checkpoint.memory import MemorySaver
+
+checkpointer = MemorySaver()
+
+
+@entrypoint(checkpointer=checkpointer)
+def graph(input_query):
+    result_1 = step_1(input_query).result()
+    result_2 = human_feedback(result_1).result()
+    result_3 = step_3(result_2).result()
+
+    return result_3
+```
+
+[interrupt()](../how-tos/human_in_the_loop/add-human-in-the-loop.md#pause-using-interrupt) is called inside a task, enabling a human to review and edit the output of the previous task. The results of prior tasks-- in this case `step_1`-- are persisted, so that they are not run again following the `interrupt`.
+
+Let's send in a query string:
+
+```python
+config = {"configurable": {"thread_id": "1"}}
+
+for event in graph.stream("foo", config):
+    print(event)
+    print("\n")
+```
+
+Note that we've paused with an `interrupt` after `step_1`. The interrupt provides instructions to resume the run. To resume, we issue a [Command](../how-tos/human_in_the_loop/add-human-in-the-loop.md#resume-using-the-command-primitive) containing the data expected by the `human_feedback` task.
+
+```python
+# Continue execution
+for event in graph.stream(Command(resume="baz"), config):
+    print(event)
+    print("\n")
+```
+After resuming, the run proceeds through the remaining step and terminates as expected.
+
+### Review tool calls
+
+To review tool calls before execution, we add a `review_tool_call` function that calls [`interrupt`](../how-tos/human_in_the_loop/add-human-in-the-loop.md#pause-using-interrupt). When this function is called, execution will be paused until we issue a command to resume it.
+
+Given a tool call, our function will `interrupt` for human review. At that point we can either:
+
+- Accept the tool call
+- Revise the tool call and continue
+- Generate a custom tool message (e.g., instructing the model to re-format its tool call)
+
+```python
+from typing import Union
+
+def review_tool_call(tool_call: ToolCall) -> Union[ToolCall, ToolMessage]:
+    """Review a tool call, returning a validated version."""
+    human_review = interrupt(
+        {
+            "question": "Is this correct?",
+            "tool_call": tool_call,
+        }
+    )
+    review_action = human_review["action"]
+    review_data = human_review.get("data")
+    if review_action == "continue":
+        return tool_call
+    elif review_action == "update":
+        updated_tool_call = {**tool_call, **{"args": review_data}}
+        return updated_tool_call
+    elif review_action == "feedback":
+        return ToolMessage(
+            content=review_data, name=tool_call["name"], tool_call_id=tool_call["id"]
+        )
+```
+
+We can now update our [entrypoint](../concepts/functional_api.md#entrypoint) to review the generated tool calls. If a tool call is accepted or revised, we execute in the same way as before. Otherwise, we just append the `ToolMessage` supplied by the human. The results of prior tasks — in this case the initial model call — are persisted, so that they are not run again following the `interrupt`.
+
+```python
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph.message import add_messages
+from langgraph.types import Command, interrupt
+
+
+checkpointer = MemorySaver()
+
+
+@entrypoint(checkpointer=checkpointer)
+def agent(messages, previous):
+    if previous is not None:
+        messages = add_messages(previous, messages)
+
+    llm_response = call_model(messages).result()
+    while True:
+        if not llm_response.tool_calls:
+            break
+
+        # Review tool calls
+        tool_results = []
+        tool_calls = []
+        for i, tool_call in enumerate(llm_response.tool_calls):
+            review = review_tool_call(tool_call)
+            if isinstance(review, ToolMessage):
+                tool_results.append(review)
+            else:  # is a validated tool call
+                tool_calls.append(review)
+                if review != tool_call:
+                    llm_response.tool_calls[i] = review  # update message
+
+        # Execute remaining tool calls
+        tool_result_futures = [call_tool(tool_call) for tool_call in tool_calls]
+        remaining_tool_results = [fut.result() for fut in tool_result_futures]
+
+        # Append to message list
+        messages = add_messages(
+            messages,
+            [llm_response, *tool_results, *remaining_tool_results],
+        )
+
+        # Call model again
+        llm_response = call_model(messages).result()
+
+    # Generate final response
+    messages = add_messages(messages, llm_response)
+    return entrypoint.final(value=llm_response, save=messages)
+```
 
 ## Short-term memory
 

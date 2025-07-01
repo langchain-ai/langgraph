@@ -73,9 +73,12 @@ class FakeToolCallingModel(BaseChatModel):
 
         tool_dicts = []
         for tool in tools:
+            if isinstance(tool, dict):
+                tool_dicts.append(tool)
+                continue
             if not isinstance(tool, BaseTool):
                 raise TypeError(
-                    "Only BaseTool is supported by FakeToolCallingModel.bind_tools"
+                    "Only BaseTool and dict is supported by FakeToolCallingModel.bind_tools"
                 )
 
             # NOTE: this is a simplified tool spec for testing purposes only

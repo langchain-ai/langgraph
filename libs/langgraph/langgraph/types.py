@@ -167,6 +167,7 @@ class Interrupt:
 class StateUpdate(NamedTuple):
     values: dict[str, Any] | None
     as_node: str | None = None
+    task_id: str | None = None
 
 
 class PregelTask(NamedTuple):
