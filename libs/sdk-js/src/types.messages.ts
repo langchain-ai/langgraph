@@ -19,9 +19,6 @@ type BaseMessage = {
   id?: string | undefined;
   name?: string | undefined;
   response_metadata?: Record<string, unknown> | undefined;
-  pretty_print: () => void;
-  pretty_repr: (html: boolean) => string;
-  text: () => string;
 };
 
 export type HumanMessage = BaseMessage & {
