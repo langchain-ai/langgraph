@@ -1848,8 +1848,8 @@ def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) 
     app = builder.compile()
 
     assert json.dumps(app.config_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+    assert json.dumps(app.get_input_jsonschema()) == snapshot
+    assert json.dumps(app.get_output_jsonschema()) == snapshot
 
     assert builder.channels.keys() == {"input", "agent_outcome", "intermediate_steps"}
 
