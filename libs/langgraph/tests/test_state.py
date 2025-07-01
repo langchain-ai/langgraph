@@ -2,7 +2,7 @@ import inspect
 import operator
 import warnings
 from dataclasses import dataclass, field
-from typing import Annotated, Any, Literal, Optional
+from typing import Annotated, Any, Optional
 from typing import Annotated as Annotated2
 
 import pytest
