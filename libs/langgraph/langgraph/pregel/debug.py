@@ -25,6 +25,8 @@ from langgraph.constants import (
 from langgraph.pregel._io import read_channels
 from langgraph.types import PregelExecutableTask, PregelTask, StateSnapshot
 
+__all__ = ("TaskPayload", "TaskResultPayload", "CheckpointTask", "CheckpointPayload")
+
 
 class TaskPayload(TypedDict):
     id: str

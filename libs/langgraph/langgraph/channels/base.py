@@ -5,17 +5,13 @@ from typing import Any, Generic, TypeVar
 from typing_extensions import Self
 
 from langgraph.constants import MISSING
-from langgraph.errors import EmptyChannelError, InvalidUpdateError
+from langgraph.errors import EmptyChannelError
 
 Value = TypeVar("Value")
 Update = TypeVar("Update")
 C = TypeVar("C")
 
-__all__ = (
-    "BaseChannel",
-    "EmptyChannelError",
-    "InvalidUpdateError",
-)
+__all__ = ("BaseChannel",)
 
 
 class BaseChannel(Generic[Value, Update, C], ABC):

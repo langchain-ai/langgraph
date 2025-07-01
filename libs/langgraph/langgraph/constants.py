@@ -1,7 +1,5 @@
 import sys
-from collections.abc import Mapping
-from types import MappingProxyType
-from typing import Any, Literal, cast
+from typing import Literal, cast
 
 __all__ = (
     "TAG_NOSTREAM",
@@ -13,7 +11,6 @@ __all__ = (
 )
 
 # --- Empty read-only containers ---
-EMPTY_MAP: Mapping[str, Any] = MappingProxyType({})
 EMPTY_SEQ: tuple[str, ...] = tuple()
 MISSING = object()
 

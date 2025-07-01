@@ -85,7 +85,7 @@ def test_runnable_callable_injectable_arguments() -> None:
     """
 
     # Test Optional[BaseStore] annotation.
-    def func_optional_store(inputs: Any, store: Optional[BaseStore]) -> str:  # noqa: UP007
+    def func_optional_store(inputs: Any, store: Optional[BaseStore]) -> str:  # noqa: UP045
         """Test function that accepts an optional store parameter."""
         assert store is None
         return "success"
@@ -159,7 +159,7 @@ async def test_runnable_callable_injectable_arguments_async() -> None:
     """
 
     # Test Optional[BaseStore] annotation.
-    def func_optional_store(inputs: Any, store: Optional[BaseStore]) -> str:  # noqa: UP007
+    def func_optional_store(inputs: Any, store: Optional[BaseStore]) -> str:  # noqa: UP045
         """Test function that accepts an optional store parameter."""
         assert store is None
         return "success"
