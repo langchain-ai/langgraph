@@ -57,12 +57,12 @@ sequenceDiagram
   Note over LangGraph: 7. Apply access control (@auth.on.*)
 
   %% External Service round-trip
-  LangGraph  ->> ExternalService: 9. Call external service (with header)
-  Note over ExternalService: 10. External service validates header and executes action
-  ExternalService  -->> LangGraph: 11. Service response
+  LangGraph  ->> ExternalService: 8. Call external service (with header)
+  Note over ExternalService: 9. External service validates header and executes action
+  ExternalService  -->> LangGraph: 10. Service response
 
   %% Return to caller
-  LangGraph  -->> ClientApp: 12. Return resources 
+  LangGraph  -->> ClientApp: 11. Return resources 
 ```
 
 
