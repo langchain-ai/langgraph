@@ -205,10 +205,10 @@ nav:
           - cloud/how-tos/reject_concurrent.md
           - cloud/how-tos/enqueue_concurrent.md
       - Webhooks:
-          - Overview: cloud/how-tos/webhooks.md
-          - cloud/how-tos/webhooks.md
+          - Overview: cloud/concepts/webhooks.md
+          - Use webhooks: cloud/how-tos/webhooks.md
       - Cron jobs:
-          - Overview: cloud/how-tos/cron_jobs.md
+          - Overview: cloud/concepts/cron_jobs.md
           - cloud/how-tos/cron_jobs.md
       - Server customization:
           - how-tos/http/custom_lifespan.md
@@ -289,6 +289,7 @@ nav:
     - Case studies: adopters.md
     - concepts/faq.md
     - llms.txt: llms-txt-overview.md
+    - LangChain Forum: https://forum.langchain.com/
     - Troubleshooting:
         - Errors:
           - troubleshooting/errors/index.md

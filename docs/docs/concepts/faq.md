@@ -47,7 +47,7 @@ LangGraph is a stateful, orchestration framework that brings added control to ag
 
 No. LangGraph Platform is proprietary software.
 
-There is a free, self-hosted version of LangGraph Platform with access to basic features. The Cloud SaaS deployment option is free while in beta, but will eventually be a paid service. We will always give ample notice before charging for a service and reward our early adopters with preferential pricing. The Self-Hosted deployment options are paid services. [Contact our sales team](https://www.langchain.com/contact-sales) to learn more.
+There is a free, self-hosted version of LangGraph Platform with access to basic features. The Cloud SaaS deployment option and the Self-Hosted deployment options are paid services. [Contact our sales team](https://www.langchain.com/contact-sales) to learn more.
 
 For more information, see our [LangGraph Platform pricing page](https://www.langchain.com/pricing-langgraph-platform).
 

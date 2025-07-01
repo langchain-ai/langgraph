@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-prebuilt"
-version = "0.5.1"
+version = "0.5.2"
 description = "Library with high-level APIs for creating and executing LangGraph agents and tools."
 authors = []
 requires-python = ">=3.9"
@@ -13,7 +13,7 @@ license = "MIT"
 license-files = ['LICENSE']
 dependencies = [
     "langgraph-checkpoint>=2.1.0",
-    "langchain-core>=0.3.22",
+    "langchain-core>=0.3.67",
 ]
 
 [project.urls]

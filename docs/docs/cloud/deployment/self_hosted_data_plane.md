@@ -3,7 +3,7 @@
 Before deploying, review the [conceptual guide for the Self-Hosted Data Plane](../../concepts/langgraph_self_hosted_data_plane.md) deployment option.
 
 !!! info "Important"
-    The Self-Hosted Data Plane deployment option is currently in beta stage and requires an [Enterprise](../../concepts/plans.md) plan.
+    The Self-Hosted Data Plane deployment option requires an [Enterprise](../../concepts/plans.md) plan.
 
 ## Prerequisites
 
