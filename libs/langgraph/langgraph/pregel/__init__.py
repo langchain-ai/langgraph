@@ -2379,15 +2379,19 @@ class Pregel(
                     StreamMessagesHandler(stream.put, subgraphs)
                 )
 
-            stream_writer = lambda c: stream.put(
-                (
-                    tuple(
-                        get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(NS_SEP)[:-1]
-                    ),
-                    "custom",
-                    c,
+            def stream_writer(c: Any) -> None:
+                stream.put(
+                    (
+                        tuple(
+                            get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(NS_SEP)[
+                                :-1
+                            ]
+                        ),
+                        "custom",
+                        c,
+                    )
                 )
-            )
+
             # set up custom stream mode
             if "custom" in stream_modes:
                 config[CONF][CONFIG_KEY_STREAM_WRITER] = stream_writer
@@ -2627,16 +2631,22 @@ class Pregel(
                 run_manager.inheritable_handlers.append(
                     StreamMessagesHandler(stream_put, subgraphs)
                 )
+
             # set up custom stream mode
-            stream_writer = lambda c: stream.put(
-                (
-                    tuple(
-                        get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(NS_SEP)[:-1]
+            def stream_writer(c: Any) -> None:
+                aioloop.call_soon_threadsafe(
+                    stream.put_nowait,
+                    (
+                        tuple(
+                            get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(NS_SEP)[
+                                :-1
+                            ]
+                        ),
+                        "custom",
+                        c,
                     ),
-                    "custom",
-                    c,
                 )
-            )
+
             if "custom" in stream_modes:
                 config[CONF][CONFIG_KEY_STREAM_WRITER] = stream_writer
             elif (

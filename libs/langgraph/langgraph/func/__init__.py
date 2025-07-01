@@ -386,7 +386,7 @@ class entrypoint:
                 stacklevel=2,
             )
             if context_schema is None:
-                context_schema = config_schema
+                context_schema = config_schema  # type: ignore[assignment]
 
         if (retry := kwargs.get("retry", UNSET)) is not UNSET:
             warnings.warn(

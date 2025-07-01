@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import inspect
 import logging
+import sys
 import typing
 import warnings
 from collections import defaultdict
 from collections.abc import Awaitable, Hashable, Sequence
 from functools import partial
 from inspect import isclass, isfunction, ismethod, signature
-from types import FunctionType, NoneType
+from types import FunctionType
 from typing import (
     Any,
     Callable,
@@ -87,6 +88,11 @@ from langgraph.utils.fields import (
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.runnable import coerce_to_runnable
 from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
+
+if sys.version_info < (3, 10):
+    NoneType = type(None)
+else:
+    from types import NoneType as NoneType
 
 logger = logging.getLogger(__name__)
 
