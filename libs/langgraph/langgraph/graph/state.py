@@ -25,8 +25,8 @@ from typing import (
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
-from pydantic import BaseModel
-from typing_extensions import Self, TypeAlias, Unpack
+from pydantic import BaseModel, TypeAdapter
+from typing_extensions import Self, TypeAlias, Unpack, is_typeddict
 
 from langgraph._typing import UNSET, DeprecatedKwargs
 from langgraph.cache.base import BaseCache
@@ -904,18 +904,20 @@ class CompiledStateGraph(
         self.builder = builder
         self.schema_to_mapper = schema_to_mapper
 
-    def get_input_schema(self, config: RunnableConfig | None = None) -> type[BaseModel]:
-        return _get_schema(
+    def get_input_jsonschema(
+        self, config: RunnableConfig | None = None
+    ) -> dict[str, Any]:
+        return _get_json_schema(
             typ=self.builder.input_schema,
             schemas=self.builder.schemas,
             channels=self.builder.channels,
             name=self.get_name("Input"),
         )
 
-    def get_output_schema(
+    def get_output_jsonschema(
         self, config: RunnableConfig | None = None
-    ) -> type[BaseModel]:
-        return _get_schema(
+    ) -> dict[str, Any]:
+        return _get_json_schema(
             typ=self.builder.output_schema,
             schemas=self.builder.schemas,
             channels=self.builder.channels,
@@ -1382,21 +1384,23 @@ def _is_field_managed_value(name: str, typ: type[Any]) -> ManagedValueSpec | Non
     return None
 
 
-def _get_schema(
+def _get_json_schema(
     typ: type,
     schemas: dict,
     channels: dict,
     name: str,
-) -> type[BaseModel]:
+) -> dict[str, Any]:
     if isclass(typ) and issubclass(typ, BaseModel):
-        return typ
+        return typ.model_json_schema()
+    elif is_typeddict(typ):
+        return TypeAdapter(typ).json_schema()
     else:
         keys = list(schemas[typ].keys())
         if len(keys) == 1 and keys[0] == "__root__":
             return create_model(
                 name,
                 root=(channels[keys[0]].UpdateType, None),
-            )
+            ).model_json_schema()
         else:
             return create_model(
                 name,
@@ -1414,7 +1418,7 @@ def _get_schema(
                     for k in schemas[typ]
                     if k in channels and isinstance(channels[k], BaseChannel)
                 },
-            )
+            ).model_json_schema()
 
 
 CHANNEL_BRANCH_TO = "branch:to:{}"
