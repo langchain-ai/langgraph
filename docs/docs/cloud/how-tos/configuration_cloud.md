@@ -8,14 +8,14 @@ First, as a brief refresher on the concept of configurations, consider the follo
 
     ```python
 
-    class ConfigSchema(TypedDict):
+    class ContextSchema(TypedDict):
         model_name: str
 
-    builder = StateGraph(AgentState, config_schema=ConfigSchema)
+    builder = StateGraph(AgentState, context_schema=ContextSchema)
 
-    def call_model(state, config):
+    def call_model(state, runtime: Runtime[ContextSchema]):
         messages = state["messages"]
-        model_name = config.get('configurable', {}).get("model_name", "anthropic")
+        model_name = runtime.context.get("model_name", "anthropic")
         model = _get_model(model_name)
         response = model.invoke(messages)
         # We return a list, because this will get added to the existing list
