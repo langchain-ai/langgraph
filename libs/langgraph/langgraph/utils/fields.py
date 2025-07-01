@@ -128,8 +128,8 @@ def get_enhanced_type_hints(
 
         # Pydantic models
         try:
-            if hasattr(type, "__fields__") and name in type.__fields__:
-                field = type.__fields__[name]
+            if hasattr(type, "model_fields") and name in type.model_fields:
+                field = type.model_fields[name]
 
                 if hasattr(field, "description") and field.description is not None:
                     description = field.description
@@ -163,7 +163,7 @@ def get_update_as_tuples(input: Any, keys: Sequence[str]) -> list[tuple[str, Any
     """Get Pydantic state update as a list of (key, value) tuples."""
     if isinstance(input, BaseModel):
         keep = input.model_fields_set
-        defaults = {k: v.default for k, v in input.model_fields.items()}
+        defaults = {k: v.default for k, v in type(input).model_fields.items()}
     else:
         keep = None
         defaults = {}
