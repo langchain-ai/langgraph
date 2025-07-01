@@ -64,6 +64,7 @@ REDIRECT_MAP = {
     "how-tos/subgraph-persistence.ipynb": "how-tos/memory/add-memory.md#use-with-subgraphs",
     "how-tos/cross-thread-persistence.ipynb": "how-tos/memory/add-memory.md#add-long-term-memory",
     "cloud/how-tos/copy_threads": "cloud/how-tos/use_threads",
+    "cloud/how-tos/check-thread-status": "cloud/how-tos/use_threads",
     "cloud/concepts/threads.md": "concepts/persistence.md#threads",
     "how-tos/persistence.ipynb": "how-tos/memory/add-memory.md",
     # tool calling how-tos
@@ -97,12 +98,11 @@ REDIRECT_MAP = {
     "how-tos/create-react-agent.ipynb": "agents/agents.md#basic-configuration",
     "how-tos/create-react-agent-memory.ipynb": "agents/memory.md",
     "how-tos/create-react-agent-system-prompt.ipynb": "agents/context.md#prompts",
-    "how-tos/create-react-agent-hitl.ipynb": "agents/human-in-the-loop.md",
     "how-tos/create-react-agent-structured-output.ipynb": "agents/agents.md#structured-output",
     # Time-travel
-    "how-tos/human_in_the_loop/edit-graph-state.ipynb": "how-tos/human_in_the_loop/time-travel.ipynb",
+    "how-tos/human_in_the_loop/edit-graph-state.ipynb": "how-tos/human_in_the_loop/time-travel.md",
     # breakpoints
-    "how-tos/human_in_the_loop/dynamic_breakpoints.ipynb": "how-tos/human_in_the_loop/breakpoints.ipynb",
+    "how-tos/human_in_the_loop/dynamic_breakpoints.ipynb": "how-tos/human_in_the_loop/breakpoints.md",
     # misc
     "prebuilt.md": "agents/prebuilt.md",
     "reference/prebuilt.md": "reference/agents.md",
@@ -111,6 +111,7 @@ REDIRECT_MAP = {
     "concepts/v0-human-in-the-loop.md": "concepts/human-in-the-loop.md",
     "how-tos/index.md": "index.md",
     "tutorials/introduction.ipynb": "concepts/why-langgraph.md",
+    "agents/deployment.md": "tutorials/langgraph-platform/local-server.md",
     # deployment redirects
     "how-tos/deploy-self-hosted.md": "cloud/deployment/self_hosted_data_plane.md",
     "concepts/self_hosted.md": "concepts/langgraph_self_hosted_data_plane.md",
@@ -118,6 +119,11 @@ REDIRECT_MAP = {
     # assistant redirects
     "cloud/how-tos/assistant_versioning.md": "cloud/how-tos/configuration_cloud.md",
     "cloud/concepts/runs.md": "concepts/assistants.md#execution",
+    # hitl redirects
+    "how-tos/wait-user-input-functional.ipynb": "how-tos/use-functional-api.md",
+    "how-tos/review-tool-calls-functional.ipynb": "how-tos/use-functional-api.md",
+    "how-tos/create-react-agent-hitl.ipynb": "how-tos/human_in_the_loop/add-human-in-the-loop.md",
+    "agents/human-in-the-loop.md": "how-tos/human_in_the_loop/add-human-in-the-loop.md",
 }
 
 

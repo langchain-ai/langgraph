@@ -83,7 +83,7 @@ from langgraph.pregel.checkpoint import (
     create_checkpoint,
     empty_checkpoint,
 )
-from langgraph.pregel.debug import tasks_w_writes
+from langgraph.pregel.debug import get_bolded_text, get_colored_text, tasks_w_writes
 from langgraph.pregel.draw import draw_graph
 from langgraph.pregel.io import map_input, read_channels
 from langgraph.pregel.loop import AsyncPregelLoop, StreamProtocol, SyncPregelLoop
@@ -1359,7 +1359,7 @@ class Pregel(
         Args:
             config: The config to apply the updates to.
             supersteps: A list of supersteps, each including a list of updates to apply sequentially to a graph state.
-                        Each update is a tuple of the form `(values, as_node)`.
+                        Each update is a tuple of the form `(values, as_node, task_id)` where task_id is optional.
 
         Raises:
             ValueError: If no checkpointer is set or no updates are provided.
@@ -1426,7 +1426,7 @@ class Pregel(
                 self.channels,
                 checkpoint,
             )
-            values, as_node = updates[0]
+            values, as_node = updates[0][:2]
 
             # no values as END, just clear all tasks
             if values is None and as_node == END:
@@ -1448,9 +1448,7 @@ class Pregel(
                         step + 3,
                         for_execution=True,
                         store=self.store,
-                        checkpointer=self.checkpointer
-                        if isinstance(self.checkpointer, BaseCheckpointSaver)
-                        else None,
+                        checkpointer=checkpointer,
                         manager=None,
                     )
                     # apply null writes
@@ -1460,10 +1458,10 @@ class Pregel(
                         if w[0] == NULL_TASK_ID
                     ]:
                         apply_writes(
-                            saved.checkpoint,
+                            checkpoint,
                             channels,
                             [PregelTaskWrites((), INPUT, null_writes, [])],
-                            None,
+                            checkpointer.get_next_version,
                             self.trigger_to_nodes,
                         )
                     # apply writes from tasks that already ran
@@ -1478,41 +1476,22 @@ class Pregel(
                         checkpoint,
                         channels,
                         next_tasks.values(),
-                        None,
+                        checkpointer.get_next_version,
                         self.trigger_to_nodes,
                     )
                 # save checkpoint
                 next_config = checkpointer.put(
                     checkpoint_config,
-                    create_checkpoint(checkpoint, None, step),
+                    create_checkpoint(checkpoint, channels, step),
                     {
                         "source": "update",
                         "step": step + 1,
                         "parents": saved.metadata.get("parents", {}) if saved else {},
                     },
-                    {},
-                )
-                return patch_checkpoint_map(
-                    next_config, saved.metadata if saved else None
-                )
-            # no values, empty checkpoint
-            if values is None and as_node is None:
-                if len(updates) > 1:
-                    raise InvalidUpdateError(
-                        "Cannot create empty checkpoint with multiple updates"
-                    )
-
-                next_checkpoint = create_checkpoint(checkpoint, None, step)
-                # copy checkpoint
-                next_config = checkpointer.put(
-                    checkpoint_config,
-                    next_checkpoint,
-                    {
-                        "source": "update",
-                        "step": step + 1,
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
-                    },
-                    {},
+                    get_new_channel_versions(
+                        checkpoint_previous_versions,
+                        checkpoint["channel_versions"],
+                    ),
                 )
                 return patch_checkpoint_map(
                     next_config, saved.metadata if saved else None
@@ -1571,28 +1550,87 @@ class Pregel(
                         f"Received no input writes for {self.input_channels}"
                     )
 
-            # no values, copy checkpoint
-            if values is None and as_node == "__copy__":
+            # copy checkpoint
+            if as_node == "__copy__":
                 if len(updates) > 1:
                     raise InvalidUpdateError(
                         "Cannot copy checkpoint with multiple updates"
                     )
 
+                if saved is None:
+                    raise InvalidUpdateError("Cannot copy a non-existent checkpoint")
+
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
+
                 # copy checkpoint
                 next_config = checkpointer.put(
-                    saved.parent_config or saved.config if saved else checkpoint_config,
+                    saved.parent_config
+                    or patch_configurable(
+                        saved.config, {CONFIG_KEY_CHECKPOINT_ID: None}
+                    ),
                     next_checkpoint,
                     {
                         "source": "fork",
                         "step": step + 1,
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                        "parents": saved.metadata.get("parents", {}),
                     },
                     {},
                 )
-                return patch_checkpoint_map(
-                    next_config, saved.metadata if saved else None
-                )
+
+                # we want to both clone a checkpoint and update state in one go.
+                # reuse the same task ID if possible.
+                if isinstance(values, list) and len(values) > 0:
+                    # figure out the task IDs for the next update checkpoint
+                    next_tasks = prepare_next_tasks(
+                        next_checkpoint,
+                        saved.pending_writes or [],
+                        self.nodes,
+                        channels,
+                        managed,
+                        next_config,
+                        step + 2,
+                        step + 4,
+                        for_execution=True,
+                        store=self.store,
+                        checkpointer=checkpointer,
+                        manager=None,
+                    )
+
+                    tasks_group_by = defaultdict(list)
+                    user_group_by: dict[str, list[StateUpdate]] = defaultdict(list)
+
+                    for task in next_tasks.values():
+                        tasks_group_by[task.name].append(task.id)
+
+                    for item in values:
+                        if not isinstance(item, Sequence):
+                            raise InvalidUpdateError(
+                                f"Invalid update item: {item} when copying checkpoint"
+                            )
+
+                        values, as_node = item[:2]
+
+                        user_group = user_group_by[as_node]
+                        tasks_group = tasks_group_by[as_node]
+
+                        target_idx = len(user_group)
+                        task_id = (
+                            tasks_group[target_idx]
+                            if target_idx < len(tasks_group)
+                            else None
+                        )
+
+                        user_group_by[as_node].append(
+                            StateUpdate(values=values, as_node=as_node, task_id=task_id)
+                        )
+
+                    return perform_superstep(
+                        patch_checkpoint_map(next_config, saved.metadata),
+                        [item for lst in user_group_by.values() for item in lst],
+                    )
+
+                return patch_checkpoint_map(next_config, saved.metadata)
+
             # apply pending writes, if not on specific checkpoint
             if (
                 CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
@@ -1611,11 +1649,7 @@ class Pregel(
                     step + 3,
                     for_execution=True,
                     store=self.store,
-                    checkpointer=(
-                        self.checkpointer
-                        if isinstance(self.checkpointer, BaseCheckpointSaver)
-                        else None
-                    ),
+                    checkpointer=checkpointer,
                     manager=None,
                 )
                 # apply null writes
@@ -1623,10 +1657,10 @@ class Pregel(
                     w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
                 ]:
                     apply_writes(
-                        saved.checkpoint,
+                        checkpoint,
                         channels,
                         [PregelTaskWrites((), INPUT, null_writes, [])],
-                        None,
+                        checkpointer.get_next_version,
                         self.trigger_to_nodes,
                     )
                 # apply writes
@@ -1638,11 +1672,15 @@ class Pregel(
                     next_tasks[tid].writes.append((k, v))
                 if tasks := [t for t in next_tasks.values() if t.writes]:
                     apply_writes(
-                        checkpoint, channels, tasks, None, self.trigger_to_nodes
+                        checkpoint,
+                        channels,
+                        tasks,
+                        checkpointer.get_next_version,
+                        self.trigger_to_nodes,
                     )
-            valid_updates: list[tuple[str, dict[str, Any] | None]] = []
+            valid_updates: list[tuple[str, dict[str, Any] | None, str | None]] = []
             if len(updates) == 1:
-                values, as_node = updates[0]
+                values, as_node, task_id = updates[0]
                 # find last node that updated the state, if not provided
                 if as_node is None and len(self.nodes) == 1:
                     as_node = tuple(self.nodes)[0]
@@ -1673,9 +1711,9 @@ class Pregel(
                     raise InvalidUpdateError("Ambiguous update, specify as_node")
                 if as_node not in self.nodes:
                     raise InvalidUpdateError(f"Node {as_node} does not exist")
-                valid_updates.append((as_node, values))
+                valid_updates.append((as_node, values, task_id))
             else:
-                for values, as_node in updates:
+                for values, as_node, task_id in updates:
                     if as_node is None:
                         raise InvalidUpdateError(
                             "as_node is required when applying multiple updates"
@@ -1683,19 +1721,21 @@ class Pregel(
                     if as_node not in self.nodes:
                         raise InvalidUpdateError(f"Node {as_node} does not exist")
 
-                    valid_updates.append((as_node, values))
+                    valid_updates.append((as_node, values, task_id))
 
             run_tasks: list[PregelTaskWrites] = []
             run_task_ids: list[str] = []
 
-            for as_node, values in valid_updates:
+            for as_node, values, provided_task_id in valid_updates:
                 # create task to run all writers of the chosen node
                 writers = self.nodes[as_node].flat_writers
                 if not writers:
                     raise InvalidUpdateError(f"Node {as_node} has no writers")
                 writes: deque[tuple[str, Any]] = deque()
                 task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
-                task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
+                task_id = provided_task_id or str(
+                    uuid5(UUID(checkpoint["id"]), INTERRUPT)
+                )
                 run_tasks.append(task)
                 run_task_ids.append(task_id)
                 run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
@@ -1708,6 +1748,7 @@ class Pregel(
                         configurable={
                             # deque.extend is thread-safe
                             CONFIG_KEY_SEND: writes.extend,
+                            CONFIG_KEY_TASK_ID: task_id,
                             CONFIG_KEY_READ: partial(
                                 local_read,
                                 _scratchpad(
@@ -1777,7 +1818,7 @@ class Pregel(
         Args:
             config: The config to apply the updates to.
             supersteps: A list of supersteps, each including a list of updates to apply sequentially to a graph state.
-                        Each update is a tuple of the form `(values, as_node)`.
+                        Each update is a tuple of the form `(values, as_node, task_id)` where task_id is optional.
 
         Raises:
             ValueError: If no checkpointer is set or no updates are provided.
@@ -1844,7 +1885,7 @@ class Pregel(
                 self.channels,
                 checkpoint,
             )
-            values, as_node = updates[0]
+            values, as_node = updates[0][:2]
             # no values, just clear all tasks
             if values is None and as_node == END:
                 if len(updates) > 1:
@@ -1864,9 +1905,7 @@ class Pregel(
                         step + 3,
                         for_execution=True,
                         store=self.store,
-                        checkpointer=self.checkpointer
-                        if isinstance(self.checkpointer, BaseCheckpointSaver)
-                        else None,
+                        checkpointer=checkpointer,
                         manager=None,
                     )
                     # apply null writes
@@ -1876,10 +1915,10 @@ class Pregel(
                         if w[0] == NULL_TASK_ID
                     ]:
                         apply_writes(
-                            saved.checkpoint,
+                            checkpoint,
                             channels,
                             [PregelTaskWrites((), INPUT, null_writes, [])],
-                            None,
+                            checkpointer.get_next_version,
                             self.trigger_to_nodes,
                         )
                     # apply writes from tasks that already ran
@@ -1894,41 +1933,21 @@ class Pregel(
                         checkpoint,
                         channels,
                         next_tasks.values(),
-                        None,
+                        checkpointer.get_next_version,
                         self.trigger_to_nodes,
                     )
                 # save checkpoint
                 next_config = await checkpointer.aput(
                     checkpoint_config,
-                    create_checkpoint(checkpoint, None, step),
+                    create_checkpoint(checkpoint, channels, step),
                     {
                         "source": "update",
                         "step": step + 1,
                         "parents": saved.metadata.get("parents", {}) if saved else {},
                     },
-                    {},
-                )
-                return patch_checkpoint_map(
-                    next_config, saved.metadata if saved else None
-                )
-            # no values, empty checkpoint
-            if values is None and as_node is None:
-                if len(updates) > 1:
-                    raise InvalidUpdateError(
-                        "Cannot create empty checkpoint with multiple updates"
-                    )
-
-                next_checkpoint = create_checkpoint(checkpoint, None, step)
-                # copy checkpoint
-                next_config = await checkpointer.aput(
-                    checkpoint_config,
-                    next_checkpoint,
-                    {
-                        "source": "update",
-                        "step": step + 1,
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
-                    },
-                    {},
+                    get_new_channel_versions(
+                        checkpoint_previous_versions, checkpoint["channel_versions"]
+                    ),
                 )
                 return patch_checkpoint_map(
                     next_config, saved.metadata if saved else None
@@ -1988,24 +2007,83 @@ class Pregel(
                     )
 
             # no values, copy checkpoint
-            if values is None and as_node == "__copy__":
+            if as_node == "__copy__":
                 if len(updates) > 1:
                     raise InvalidUpdateError(
                         "Cannot copy checkpoint with multiple updates"
                     )
 
+                if saved is None:
+                    raise InvalidUpdateError("Cannot copy a non-existent checkpoint")
+
                 next_checkpoint = create_checkpoint(checkpoint, None, step)
+
                 # copy checkpoint
                 next_config = await checkpointer.aput(
-                    saved.parent_config or saved.config if saved else checkpoint_config,
+                    saved.parent_config
+                    or patch_configurable(
+                        saved.config, {CONFIG_KEY_CHECKPOINT_ID: None}
+                    ),
                     next_checkpoint,
                     {
                         "source": "fork",
                         "step": step + 1,
-                        "parents": saved.metadata.get("parents", {}) if saved else {},
+                        "parents": saved.metadata.get("parents", {}),
                     },
                     {},
                 )
+
+                # we want to both clone a checkpoint and update state in one go.
+                # reuse the same task ID if possible.
+                if isinstance(values, list) and len(values) > 0:
+                    # figure out the task IDs for the next update checkpoint
+                    next_tasks = prepare_next_tasks(
+                        next_checkpoint,
+                        saved.pending_writes or [],
+                        self.nodes,
+                        channels,
+                        managed,
+                        next_config,
+                        step + 2,
+                        step + 4,
+                        for_execution=True,
+                        store=self.store,
+                        checkpointer=checkpointer,
+                        manager=None,
+                    )
+
+                    tasks_group_by = defaultdict(list)
+                    user_group_by: dict[str, list[StateUpdate]] = defaultdict(list)
+
+                    for task in next_tasks.values():
+                        tasks_group_by[task.name].append(task.id)
+
+                    for item in values:
+                        if not isinstance(item, Sequence):
+                            raise InvalidUpdateError(
+                                f"Invalid update item: {item} when copying checkpoint"
+                            )
+
+                        values, as_node = item[:2]
+                        user_group = user_group_by[as_node]
+                        tasks_group = tasks_group_by[as_node]
+
+                        target_idx = len(user_group)
+                        task_id = (
+                            tasks_group[target_idx]
+                            if target_idx < len(tasks_group)
+                            else None
+                        )
+
+                        user_group_by[as_node].append(
+                            StateUpdate(values=values, as_node=as_node, task_id=task_id)
+                        )
+
+                    return await aperform_superstep(
+                        patch_checkpoint_map(next_config, saved.metadata),
+                        [item for lst in user_group_by.values() for item in lst],
+                    )
+
                 return patch_checkpoint_map(
                     next_config, saved.metadata if saved else None
                 )
@@ -2027,11 +2105,7 @@ class Pregel(
                     step + 3,
                     for_execution=True,
                     store=self.store,
-                    checkpointer=(
-                        self.checkpointer
-                        if isinstance(self.checkpointer, BaseCheckpointSaver)
-                        else None
-                    ),
+                    checkpointer=checkpointer,
                     manager=None,
                 )
                 # apply null writes
@@ -2039,10 +2113,10 @@ class Pregel(
                     w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
                 ]:
                     apply_writes(
-                        saved.checkpoint,
+                        checkpoint,
                         channels,
                         [PregelTaskWrites((), INPUT, null_writes, [])],
-                        None,
+                        checkpointer.get_next_version,
                         self.trigger_to_nodes,
                     )
                 for tid, k, v in saved.pending_writes:
@@ -2053,11 +2127,15 @@ class Pregel(
                     next_tasks[tid].writes.append((k, v))
                 if tasks := [t for t in next_tasks.values() if t.writes]:
                     apply_writes(
-                        checkpoint, channels, tasks, None, self.trigger_to_nodes
+                        checkpoint,
+                        channels,
+                        tasks,
+                        checkpointer.get_next_version,
+                        self.trigger_to_nodes,
                     )
-            valid_updates: list[tuple[str, dict[str, Any] | None]] = []
+            valid_updates: list[tuple[str, dict[str, Any] | None, str | None]] = []
             if len(updates) == 1:
-                values, as_node = updates[0]
+                values, as_node, task_id = updates[0]
                 # find last node that updated the state, if not provided
                 if as_node is None and len(self.nodes) == 1:
                     as_node = tuple(self.nodes)[0]
@@ -2084,9 +2162,9 @@ class Pregel(
                     raise InvalidUpdateError("Ambiguous update, specify as_node")
                 if as_node not in self.nodes:
                     raise InvalidUpdateError(f"Node {as_node} does not exist")
-                valid_updates.append((as_node, values))
+                valid_updates.append((as_node, values, task_id))
             else:
-                for values, as_node in updates:
+                for values, as_node, task_id in updates:
                     if as_node is None:
                         raise InvalidUpdateError(
                             "as_node is required when applying multiple updates"
@@ -2094,19 +2172,21 @@ class Pregel(
                     if as_node not in self.nodes:
                         raise InvalidUpdateError(f"Node {as_node} does not exist")
 
-                    valid_updates.append((as_node, values))
+                    valid_updates.append((as_node, values, task_id))
 
             run_tasks: list[PregelTaskWrites] = []
             run_task_ids: list[str] = []
 
-            for as_node, values in valid_updates:
+            for as_node, values, provided_task_id in valid_updates:
                 # create task to run all writers of the chosen node
                 writers = self.nodes[as_node].flat_writers
                 if not writers:
                     raise InvalidUpdateError(f"Node {as_node} has no writers")
                 writes: deque[tuple[str, Any]] = deque()
                 task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
-                task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
+                task_id = provided_task_id or str(
+                    uuid5(UUID(checkpoint["id"]), INTERRUPT)
+                )
                 run_tasks.append(task)
                 run_task_ids.append(task_id)
                 run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
@@ -2119,6 +2199,7 @@ class Pregel(
                         configurable={
                             # deque.extend is thread-safe
                             CONFIG_KEY_SEND: writes.extend,
+                            CONFIG_KEY_TASK_ID: task_id,
                             CONFIG_KEY_READ: partial(
                                 local_read,
                                 _scratchpad(
@@ -2185,36 +2266,39 @@ class Pregel(
         config: RunnableConfig,
         values: dict[str, Any] | Any | None,
         as_node: str | None = None,
+        task_id: str | None = None,
     ) -> RunnableConfig:
         """Update the state of the graph with the given values, as if they came from
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
-        return self.bulk_update_state(config, [[StateUpdate(values, as_node)]])
+        return self.bulk_update_state(config, [[StateUpdate(values, as_node, task_id)]])
 
     async def aupdate_state(
         self,
         config: RunnableConfig,
         values: dict[str, Any] | Any,
         as_node: str | None = None,
+        task_id: str | None = None,
     ) -> RunnableConfig:
         """Asynchronously update the state of the graph with the given values, as if they came from
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
-        return await self.abulk_update_state(config, [[StateUpdate(values, as_node)]])
+        return await self.abulk_update_state(
+            config, [[StateUpdate(values, as_node, task_id)]]
+        )
 
     def _defaults(
         self,
         config: RunnableConfig,
         *,
-        stream_mode: StreamMode | list[StreamMode] | None,
+        stream_mode: StreamMode | Sequence[StreamMode],
+        print_mode: StreamMode | Sequence[StreamMode],
         output_keys: str | Sequence[str] | None,
         interrupt_before: All | Sequence[str] | None,
         interrupt_after: All | Sequence[str] | None,
-        debug: bool | None,
     ) -> tuple[
-        bool,
         set[StreamMode],
         str | Sequence[str],
         All | Sequence[str],
@@ -2225,21 +2309,20 @@ class Pregel(
     ]:
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
-        debug = debug if debug is not None else self.debug
         if output_keys is None:
             output_keys = self.stream_channels_asis
         else:
             validate_keys(output_keys, self.channels)
         interrupt_before = interrupt_before or self.interrupt_before_nodes
         interrupt_after = interrupt_after or self.interrupt_after_nodes
-        if stream_mode is None and CONFIG_KEY_TASK_ID in config.get(CONF, {}):
-            # if being called as a node in another graph, default to values mode
-            # but don't overwrite stream_mode arg if provided
-            stream_mode = ["values"]
-        elif stream_mode is None:
-            stream_mode = self.stream_mode
         if not isinstance(stream_mode, list):
-            stream_mode = [stream_mode]
+            stream_modes = {stream_mode}
+        else:
+            stream_modes = set(stream_mode)
+        if isinstance(print_mode, str):
+            stream_modes.add(print_mode)
+        else:
+            stream_modes.update(print_mode)
         if self.checkpointer is False:
             checkpointer: BaseCheckpointSaver | None = None
         elif CONFIG_KEY_CHECKPOINTER in config.get(CONF, {}):
@@ -2262,8 +2345,7 @@ class Pregel(
         else:
             cache = self.cache
         return (
-            debug,
-            set(stream_mode),
+            stream_modes,
             output_keys,
             interrupt_before,
             interrupt_after,
@@ -2278,7 +2360,8 @@ class Pregel(
         config: RunnableConfig | None = None,
         *,
         context: ContextT | None = None,
-        stream_mode: StreamMode | list[StreamMode] | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -2308,11 +2391,11 @@ class Pregel(
                 The streamed outputs will be tuples of `(mode, data)`.
 
                 See [LangGraph streaming guide](https://langchain-ai.github.io/langgraph/how-tos/streaming/) for more details.
+            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes. Does not affect the output of the graph in any way.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             checkpoint_during: Whether to checkpoint intermediate steps, defaults to False. If False, only the final checkpoint is saved.
-            debug: Whether to print debug information during execution, defaults to False.
             subgraphs: Whether to stream events from inside subgraphs, defaults to False.
                 If True, the events will be emitted as tuples `(namespace, data)`,
                 or `(namespace, mode, data)` if `stream_mode` is a list,
@@ -2325,22 +2408,18 @@ class Pregel(
             The output of each step in the graph. The output shape depends on the stream_mode.
         """
 
-        stream = SyncQueue()
+        if stream_mode is None:
+            # if being called as a node in another graph, default to values mode
+            # but don't overwrite stream_mode arg if provided
+            stream_mode = (
+                "values"
+                if config is not None and CONFIG_KEY_TASK_ID in config.get(CONF, {})
+                else self.stream_mode
+            )
+        if debug or self.debug:
+            print_mode = ["updates", "values"]
 
-        def output() -> Iterator:
-            while True:
-                try:
-                    ns, mode, payload = stream.get(block=False)
-                except queue.Empty:
-                    break
-                if subgraphs and isinstance(stream_mode, list):
-                    yield (ns, mode, payload)
-                elif isinstance(stream_mode, list):
-                    yield (mode, payload)
-                elif subgraphs:
-                    yield (ns, payload)
-                else:
-                    yield payload
+        stream = SyncQueue()
 
         config = ensure_config(self.config, config)
         callback_manager = get_callback_manager_for_config(config)
@@ -2353,7 +2432,6 @@ class Pregel(
         try:
             # assign defaults
             (
-                debug,
                 stream_modes,
                 output_keys,
                 interrupt_before_,
@@ -2364,10 +2442,10 @@ class Pregel(
             ) = self._defaults(
                 config,
                 stream_mode=stream_mode,
+                print_mode=print_mode,
                 output_keys=output_keys,
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
-                debug=debug,
             )
             # set up subgraph checkpointing
             if self.checkpointer is True:
@@ -2426,7 +2504,6 @@ class Pregel(
                 interrupt_before=interrupt_before_,
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
-                debug=debug,
                 checkpoint_during=checkpoint_during
                 if checkpoint_during is not None
                 else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, True),
@@ -2486,10 +2563,14 @@ class Pregel(
                         schedule_task=loop.accept_push,
                     ):
                         # emit output
-                        yield from output()
+                        yield from _output(
+                            stream_mode, print_mode, subgraphs, stream.get, queue.Empty
+                        )
                     loop.after_tick()
             # emit output
-            yield from output()
+            yield from _output(
+                stream_mode, print_mode, subgraphs, stream.get, queue.Empty
+            )
             # handle exit
             if loop.status == "out_of_steps":
                 msg = create_error_message(
@@ -2513,7 +2594,8 @@ class Pregel(
         config: RunnableConfig | None = None,
         *,
         context: ContextT | None = None,
-        stream_mode: StreamMode | list[StreamMode] | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -2542,11 +2624,11 @@ class Pregel(
                 The streamed outputs will be tuples of `(mode, data)`.
 
                 See [LangGraph streaming guide](https://langchain-ai.github.io/langgraph/how-tos/streaming/) for more details.
+            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes. Does not affect the output of the graph in any way.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             checkpoint_during: Whether to checkpoint intermediate steps, defaults to False. If False, only the final checkpoint is saved.
-            debug: Whether to print debug information during execution, defaults to False.
             subgraphs: Whether to stream events from inside subgraphs, defaults to False.
                 If True, the events will be emitted as tuples `(namespace, data)`,
                 or `(namespace, mode, data)` if `stream_mode` is a list,
@@ -2559,27 +2641,23 @@ class Pregel(
             The output of each step in the graph. The output shape depends on the stream_mode.
         """
 
+        if stream_mode is None:
+            # if being called as a node in another graph, default to values mode
+            # but don't overwrite stream_mode arg if provided
+            stream_mode = (
+                "values"
+                if config is not None and CONFIG_KEY_TASK_ID in config.get(CONF, {})
+                else self.stream_mode
+            )
+        if debug or self.debug:
+            print_mode = ["updates", "values"]
+
         stream = AsyncQueue()
         aioloop = asyncio.get_running_loop()
         stream_put = cast(
             Callable[[StreamChunk], None],
             partial(aioloop.call_soon_threadsafe, stream.put_nowait),
         )
-
-        def output() -> Iterator:
-            while True:
-                try:
-                    ns, mode, payload = stream.get_nowait()
-                except asyncio.QueueEmpty:
-                    break
-                if subgraphs and isinstance(stream_mode, list):
-                    yield (ns, mode, payload)
-                elif isinstance(stream_mode, list):
-                    yield (mode, payload)
-                elif subgraphs:
-                    yield (ns, payload)
-                else:
-                    yield payload
 
         config = ensure_config(self.config, config)
         callback_manager = get_async_callback_manager_for_config(config)
@@ -2606,7 +2684,6 @@ class Pregel(
         try:
             # assign defaults
             (
-                debug,
                 stream_modes,
                 output_keys,
                 interrupt_before_,
@@ -2617,10 +2694,10 @@ class Pregel(
             ) = self._defaults(
                 config,
                 stream_mode=stream_mode,
+                print_mode=print_mode,
                 output_keys=output_keys,
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
-                debug=debug,
             )
             # set up subgraph checkpointing
             if self.checkpointer is True:
@@ -2680,7 +2757,6 @@ class Pregel(
                 interrupt_before=interrupt_before_,
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
-                debug=debug,
                 checkpoint_during=checkpoint_during
                 if checkpoint_during is not None
                 else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, True),
@@ -2731,11 +2807,23 @@ class Pregel(
                         schedule_task=loop.aaccept_push,
                     ):
                         # emit output
-                        for o in output():
+                        for o in _output(
+                            stream_mode,
+                            print_mode,
+                            subgraphs,
+                            stream.get_nowait,
+                            asyncio.QueueEmpty,
+                        ):
                             yield o
                     loop.after_tick()
             # emit output
-            for o in output():
+            for o in _output(
+                stream_mode,
+                print_mode,
+                subgraphs,
+                stream.get_nowait,
+                asyncio.QueueEmpty,
+            ):
                 yield o
             # handle exit
             if loop.status == "out_of_steps":
@@ -2761,10 +2849,10 @@ class Pregel(
         *,
         context: ContextT | None = None,
         stream_mode: StreamMode = "values",
+        print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        debug: bool | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Run the graph with a single input and config.
@@ -2773,10 +2861,10 @@ class Pregel(
             input: The input data for the graph. It can be a dictionary or any other type.
             config: Optional. The configuration for the graph run.
             stream_mode: Optional[str]. The stream mode for the graph run. Default is "values".
+            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes. Does not affect the output of the graph in any way.
             output_keys: Optional. The output keys to retrieve from the graph run.
             interrupt_before: Optional. The nodes to interrupt the graph run before.
             interrupt_after: Optional. The nodes to interrupt the graph run after.
-            debug: Optional. Enable debug mode for the graph run.
             **kwargs: Additional keyword arguments to pass to the graph run.
 
         Returns:
@@ -2793,21 +2881,30 @@ class Pregel(
             input,
             config,
             context=context,
-            stream_mode=stream_mode,
+            stream_mode=["updates", "values"]
+            if stream_mode == "values"
+            else stream_mode,
+            print_mode=print_mode,
             output_keys=output_keys,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
-            debug=debug,
             **kwargs,
         ):
             if stream_mode == "values":
+                if len(chunk) == 2:
+                    mode, payload = cast(tuple[StreamMode, Any], chunk)
+                else:
+                    _, mode, payload = cast(
+                        tuple[tuple[str, ...], StreamMode, Any], chunk
+                    )
                 if (
-                    isinstance(chunk, dict)
-                    and (ints := chunk.get(INTERRUPT)) is not None
+                    mode == "updates"
+                    and isinstance(payload, dict)
+                    and (ints := payload.get(INTERRUPT)) is not None
                 ):
                     interrupts.extend(ints)
-                else:
-                    latest = chunk
+                elif mode == "values":
+                    latest = payload
             else:
                 chunks.append(chunk)
 
@@ -2829,10 +2926,10 @@ class Pregel(
         *,
         context: ContextT | None = None,
         stream_mode: StreamMode = "values",
+        print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        debug: bool | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Asynchronously invoke the graph on a single input.
@@ -2841,10 +2938,10 @@ class Pregel(
             input: The input data for the computation. It can be a dictionary or any other type.
             config: Optional. The configuration for the computation.
             stream_mode: Optional. The stream mode for the computation. Default is "values".
+            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes. Does not affect the output of the graph in any way.
             output_keys: Optional. The output keys to include in the result. Default is None.
             interrupt_before: Optional. The nodes to interrupt before. Default is None.
             interrupt_after: Optional. The nodes to interrupt after. Default is None.
-            debug: Optional. Whether to enable debug mode. Default is None.
             **kwargs: Additional keyword arguments.
 
         Returns:
@@ -2862,21 +2959,30 @@ class Pregel(
             input,
             config,
             context=context,
-            stream_mode=stream_mode,
+            stream_mode=["updates", "values"]
+            if stream_mode == "values"
+            else stream_mode,
+            print_mode=print_mode,
             output_keys=output_keys,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
-            debug=debug,
             **kwargs,
         ):
             if stream_mode == "values":
+                if len(chunk) == 2:
+                    mode, payload = cast(tuple[StreamMode, Any], chunk)
+                else:
+                    _, mode, payload = cast(
+                        tuple[tuple[str, ...], StreamMode, Any], chunk
+                    )
                 if (
-                    isinstance(chunk, dict)
-                    and (ints := chunk.get(INTERRUPT)) is not None
+                    mode == "updates"
+                    and isinstance(payload, dict)
+                    and (ints := payload.get(INTERRUPT)) is not None
                 ):
                     interrupts.extend(ints)
-                else:
-                    latest = chunk
+                elif mode == "values":
+                    latest = payload
             else:
                 chunks.append(chunk)
 
@@ -2937,3 +3043,46 @@ def _trigger_to_nodes(nodes: dict[str, PregelNode]) -> Mapping[str, Sequence[str
         for trigger in node.triggers:
             trigger_to_nodes[trigger].append(name)
     return dict(trigger_to_nodes)
+
+
+def _output(
+    stream_mode: StreamMode | Sequence[StreamMode],
+    print_mode: StreamMode | Sequence[StreamMode],
+    stream_subgraphs: bool,
+    getter: Callable[[], tuple[tuple[str, ...], str, Any]],
+    empty_exc: type[Exception],
+) -> Iterator:
+    while True:
+        try:
+            ns, mode, payload = getter()
+        except empty_exc:
+            break
+        if mode in print_mode:
+            if stream_subgraphs and ns:
+                print(
+                    " ".join(
+                        (
+                            get_bolded_text(f"[{mode}]"),
+                            get_colored_text(f"[graph={ns}]", color="yellow"),
+                            repr(payload),
+                        )
+                    )
+                )
+            else:
+                print(
+                    " ".join(
+                        (
+                            get_bolded_text(f"[{mode}]"),
+                            repr(payload),
+                        )
+                    )
+                )
+        if mode in stream_mode:
+            if stream_subgraphs and isinstance(stream_mode, list):
+                yield (ns, mode, payload)
+            elif isinstance(stream_mode, list):
+                yield (mode, payload)
+            elif stream_subgraphs:
+                yield (ns, payload)
+            else:
+                yield payload

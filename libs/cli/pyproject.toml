@@ -18,8 +18,8 @@ dependencies = [
 
 [project.optional-dependencies]
 inmem = [
-    "langgraph-api>=0.1.20 ; python_version >= '3.11'",
-    "langgraph-runtime-inmem>=0.0.8 ; python_version >= '3.11'",
+    "langgraph-api>=0.2.67 ; python_version >= '3.11'",
+    "langgraph-runtime-inmem>=0.3.0 ; python_version >= '3.11'",
     "python-dotenv>=0.8.0",
 ]
 

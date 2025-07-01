@@ -30,7 +30,10 @@ from langchain_core.runnables.config import (
 )
 from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
-from langchain_core.tools.base import get_all_basemodel_annotations
+from langchain_core.tools.base import (
+    TOOL_MESSAGE_BLOCK_TYPES,
+    get_all_basemodel_annotations,
+)
 from pydantic import BaseModel
 from typing_extensions import Annotated, get_args, get_origin
 
@@ -46,12 +49,11 @@ TOOL_CALL_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
 
 
 def msg_content_output(output: Any) -> Union[str, list[dict]]:
-    recognized_content_block_types = ("image", "image_url", "text", "json")
     if isinstance(output, str):
         return output
     elif isinstance(output, list) and all(
         [
-            isinstance(x, dict) and x.get("type") in recognized_content_block_types
+            isinstance(x, dict) and x.get("type") in TOOL_MESSAGE_BLOCK_TYPES
             for x in output
         ]
     ):

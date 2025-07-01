@@ -25,7 +25,7 @@ Then, navigate to [Agent Chat UI](https://agentchat.vercel.app), or clone the re
 
 ## Add human-in-the-loop
 
-Agent Chat UI has full support for [human-in-the-loop](../concepts/human_in_the_loop.md) workflows. To try it out, replace the agent code in `src/agent/graph.py` (from the [deployment](./deployment.md) guide) with this [agent implementation](./human-in-the-loop.md#using-with-agent-inbox):
+Agent Chat UI has full support for [human-in-the-loop](../concepts/human_in_the_loop.md) workflows. To try it out, replace the agent code in `src/agent/graph.py` (from the [deployment](./deployment.md) guide) with this [agent implementation](../how-tos/human_in_the_loop/add-human-in-the-loop.md#add-interrupts-to-any-tool):
 
 <video controls src="../assets/interrupt-chat-ui.mp4" type="video/mp4"></video>
 
