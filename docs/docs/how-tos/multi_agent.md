@@ -134,7 +134,7 @@ See the multi-agent [supervisor](../tutorials/multi_agent/agent_supervisor.ipynb
 
 ## Build a multi-agent system
 
-You can use handoffs in any agents built with LangGraph. We recommend using the prebuilt [agent](../agents/overview.md) or [`ToolNode`](./tool-calling.md#use-prebuilt-toolnode), as they natively support handoffs tools returning `Command`. Below is an example of how you can implement a multi-agent system for booking travel using handoffs:
+You can use handoffs in any agents built with LangGraph. We recommend using the prebuilt [agent](../agents/overview.md) or [`ToolNode`](./tool-calling.md#toolnode), as they natively support handoffs tools returning `Command`. Below is an example of how you can implement a multi-agent system for booking travel using handoffs:
 
 ```python
 from langgraph.prebuilt import create_react_agent
