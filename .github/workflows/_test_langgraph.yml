@@ -42,6 +42,14 @@ jobs:
         shell: bash
         run: make test_parallel
 
+      - name: Install min version of deps
+        shell: bash
+        run: uv sync --all-extras --resolution lowest-direct --no-sources --force-reinstall
+
+      - name: Run tests with min version of deps
+        shell: bash
+        run: make test_parallel
+
       - name: Ensure the tests did not create any additional files
         shell: bash
         run: |
