@@ -17,7 +17,11 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  IS_DEPENDENCY_PR: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'dependencies') }}
+  IS_DEPENDENCY_PR: >-
+    ${{
+      github.event_name == 'pull_request' &&
+      contains(github.event.pull_request.labels.*.name, 'dependencies')
+    }}
 
 jobs:
   changes:
