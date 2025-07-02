@@ -130,7 +130,7 @@ After [authentication](#add-custom-authentication-to-your-deployment), the platf
 To allow an agent to perform authenticated actions on behalf of the user, access this object in your graph with the `langgraph_auth_user` key:
 
 ```python
-def get_user_config_node(state, config):
+def my_node(state, config):
     user_config = config["configurable"].get("langgraph_auth_user")
     # token was resolved during the @auth.authenticate function
     token = user_config.get("github_token","") 
