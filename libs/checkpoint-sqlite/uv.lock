@@ -341,7 +341,7 @@ dev = [
     { name = "numpy", specifier = ">=2" },
     { name = "pandas", specifier = ">=2" },
     { name = "pandas-stubs", specifier = ">=2.2.2.240807" },
-    { name = "pytest" },
+    { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
     { name = "pytest-watcher" },
@@ -381,7 +381,7 @@ requires-dist = [
 dev = [
     { name = "codespell" },
     { name = "mypy", specifier = ">=1.15.0" },
-    { name = "pytest" },
+    { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
     { name = "pytest-retry", specifier = ">=1.7.0" },

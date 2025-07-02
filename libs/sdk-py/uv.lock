@@ -147,7 +147,7 @@ requires-dist = [
 dev = [
     { name = "codespell" },
     { name = "mypy", specifier = ">=1.15.0" },
-    { name = "pytest" },
+    { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
     { name = "pytest-watch" },
