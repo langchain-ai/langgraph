@@ -13,7 +13,6 @@ updates:
       - "libs/cli"
       - "libs/langgraph"
       - "libs/prebuilt"
-      - "libs/scheduler-kafka"
       - "libs/sdk-py"
     schedule:
       interval: "weekly"
