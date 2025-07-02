@@ -1,5 +1,5 @@
 import sys
-from typing import Literal, cast
+from typing import Any, Literal, cast
 from warnings import warn
 
 __all__ = (
@@ -12,7 +12,7 @@ __all__ = (
 )
 
 
-def __getattr__(name):
+def __getattr__(name: str) -> Any:
     if name in ["Send", "Interrupt"]:
         warn(
             f"Importing {name} from langgraph.constants is deprecated. "
