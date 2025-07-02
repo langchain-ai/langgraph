@@ -3,6 +3,9 @@ name: JS Release
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   publish:
     # Disallow publishing from branches that aren't `main`.

@@ -5,6 +5,9 @@ on:
     paths:
       - "libs/**"
 
+permissions:
+  contents: read
+
 jobs:
   benchmark:
     runs-on: ubuntu-latest
