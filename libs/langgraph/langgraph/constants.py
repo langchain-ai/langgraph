@@ -2,6 +2,8 @@ import sys
 from typing import Any, Literal, cast
 from warnings import warn
 
+from langgraph.warnings import LangGraphDeprecatedSinceV10
+
 __all__ = (
     "TAG_NOSTREAM",
     "TAG_HIDDEN",
@@ -17,8 +19,7 @@ def __getattr__(name: str) -> Any:
         warn(
             f"Importing {name} from langgraph.constants is deprecated. "
             f"Please use 'from langgraph.types import {name}' instead.",
-            # todo: change to LangGraphDeprecatedSinceV10 once we merge this PR
-            DeprecationWarning,
+            LangGraphDeprecatedSinceV10,
             stacklevel=2,
         )
 
