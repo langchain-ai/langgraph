@@ -30,7 +30,7 @@ dev = [
   "pytest-asyncio",
   "pytest-mock",
   "mypy>=1.15.0",
-  "psycopg[binary]>=3.2.1",
+  "psycopg[binary]>=3.2.2",
   "pytest-watcher",
 ]
 
