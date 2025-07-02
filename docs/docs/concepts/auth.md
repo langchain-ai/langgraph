@@ -145,7 +145,7 @@ The returned user information is available:
 
 ### Agent authentication
 
-When you run an agent on LangGraph Platform (cloud or self-hosted), the platform handles authentication for every request through authentication middleware.
+Custom authentication permits delegated access. The values you return in  `@auth.authenticate` are added to the run context, giving agents user-scoped credentials lets them access resources on the user’s behalf.
 
 ```mermaid
 sequenceDiagram

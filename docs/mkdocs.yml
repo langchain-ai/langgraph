@@ -290,6 +290,7 @@ nav:
     - Case studies: adopters.md
     - concepts/faq.md
     - llms.txt: llms-txt-overview.md
+    - LangChain Forum: https://forum.langchain.com/
     - Troubleshooting:
         - Errors:
           - troubleshooting/errors/index.md

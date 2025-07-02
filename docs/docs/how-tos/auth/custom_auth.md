@@ -138,7 +138,7 @@ def get_user_config_node(state, config):
 ```
 
 !!! note
-    It is highly recommended to connect to a secret store that implements best practices like key rotation and encryption. Storing tokens in graph state is not recommended.
+    Fetch user credentials from a secure secret store. Storing secrets in graph state is not recommended.
 
 ## Learn more
 
