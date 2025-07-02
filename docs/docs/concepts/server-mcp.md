@@ -198,7 +198,7 @@ print(graph.invoke({"question": "hi"}))
 
 For more details, see the [low-level concepts guide](https://langchain-ai.github.io/langgraph/concepts/low_level/#state).
 
-## Use User-Scoped MCP tools in your deployment
+## Use user-scoped MCP tools in your deployment
 
 !!! tip "Prerequisites"
 

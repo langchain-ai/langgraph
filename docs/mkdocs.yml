@@ -112,7 +112,7 @@ nav:
     - LangGraph APIs:
       - Graph API:
           - Overview: concepts/low_level.md
-          - Use the Graph API: how-tos/graph-api.ipynb
+          - Use the Graph API: how-tos/graph-api.md
       - Functional API:
           - Overview: concepts/functional_api.md
           - Use the Functional API: how-tos/use-functional-api.md
@@ -150,11 +150,11 @@ nav:
           - Use Server API: cloud/how-tos/human_in_the_loop_time_travel.md
       - Subgraphs:
           - Overview: concepts/subgraphs.md
-          - Use subgraphs: how-tos/subgraph.ipynb
+          - Use subgraphs: how-tos/subgraph.md
       - Multi-agent:
           - Overview: concepts/multi_agent.md
           - Prebuilt implementation: agents/multi-agent.md
-          - Custom implementation: how-tos/multi_agent.ipynb
+          - Custom implementation: how-tos/multi_agent.md
       - MCP:
           - Overview: concepts/mcp.md
           - Use MCP: agents/mcp.md
