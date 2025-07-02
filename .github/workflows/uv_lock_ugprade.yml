@@ -6,6 +6,9 @@ on:
     - cron: '0 0 * * 0'
   # allow manual triggering
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
 
 jobs:
   upgrade-dependencies:
