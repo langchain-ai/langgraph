@@ -835,6 +835,10 @@ class CompiledStateGraph(
         self, config: RunnableConfig | None = None
     ) -> dict[str, Any]:
         return _get_json_schema(
+    def get_input_jsonschema(
+        self, config: RunnableConfig | None = None
+    ) -> dict[str, Any]:
+        return _get_json_schema(
             typ=self.builder.input_schema,
             schemas=self.builder.schemas,
             channels=self.builder.channels,
@@ -842,7 +846,10 @@ class CompiledStateGraph(
         )
 
     def get_output_jsonschema(
+    def get_output_jsonschema(
         self, config: RunnableConfig | None = None
+    ) -> dict[str, Any]:
+        return _get_json_schema(
     ) -> dict[str, Any]:
         return _get_json_schema(
             typ=self.builder.output_schema,
@@ -1312,12 +1319,17 @@ def _is_field_managed_value(name: str, typ: type[Any]) -> ManagedValueSpec | Non
 
 
 def _get_json_schema(
+def _get_json_schema(
     typ: type,
     schemas: dict,
     channels: dict,
     name: str,
 ) -> dict[str, Any]:
+) -> dict[str, Any]:
     if isclass(typ) and issubclass(typ, BaseModel):
+        return typ.model_json_schema()
+    elif is_typeddict(typ):
+        return TypeAdapter(typ).json_schema()
         return typ.model_json_schema()
     elif is_typeddict(typ):
         return TypeAdapter(typ).json_schema()
@@ -1327,6 +1339,7 @@ def _get_json_schema(
             return create_model(
                 name,
                 root=(channels[keys[0]].UpdateType, None),
+            ).model_json_schema()
             ).model_json_schema()
         else:
             return create_model(
