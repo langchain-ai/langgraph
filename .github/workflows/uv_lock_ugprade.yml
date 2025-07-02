@@ -35,6 +35,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore: upgrade dependencies with uv lock"
           title: "chore: upgrade dependencies with uv lock"
           body: |
