@@ -59,7 +59,7 @@ jobs:
 
             "libs/prebuilt",
           ]
-    if: needs.changes.outputs.python == 'true'
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
     uses: ./.github/workflows/_lint.yml
     with:
       working-directory: ${{ matrix.working-directory }}
@@ -144,7 +144,7 @@ jobs:
 
   integration-test:
     needs: changes
-      if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
     name: CLI integration test
     uses: ./.github/workflows/_integration_test.yml
     secrets: inherit
