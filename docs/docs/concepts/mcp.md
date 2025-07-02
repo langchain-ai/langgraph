@@ -53,5 +53,5 @@ sequenceDiagram
   LangGraph  -->> ClientApp: 12. Return resources / tool output
 ```
 
-For more information, see [MCP endpoint in LangGraph Server](../concepts/server-mcp.md#use-mcp-tools-in-your-deployment).
+For more information, see [MCP endpoint in LangGraph Server](../concepts/server-mcp.md#use-user-scoped-mcp-tools-in-your-deployment).
 
