@@ -150,7 +150,7 @@ nav:
           - Use Server API: cloud/how-tos/human_in_the_loop_time_travel.md
       - Subgraphs:
           - Overview: concepts/subgraphs.md
-          - Use subgraphs: how-tos/subgraph.ipynb
+          - Use subgraphs: how-tos/subgraph.md
       - Multi-agent:
           - Overview: concepts/multi_agent.md
           - Prebuilt implementation: agents/multi-agent.md

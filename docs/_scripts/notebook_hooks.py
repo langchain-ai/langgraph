@@ -55,8 +55,8 @@ REDIRECT_MAP = {
     "how-tos/memory.ipynb": "how-tos/memory/add-memory.md",
     "agents/memory.ipynb": "how-tos/memory/add-memory.md",
     # subgraph how-tos
-    "how-tos/subgraph-transform-state.ipynb": "how-tos/subgraph.ipynb#different-state-schemas",
-    "how-tos/subgraphs-manage-state.ipynb": "how-tos/subgraph.ipynb#add-persistence",
+    "how-tos/subgraph-transform-state.ipynb": "how-tos/subgraph.md#different-state-schemas",
+    "how-tos/subgraphs-manage-state.ipynb": "how-tos/subgraph.md#add-persistence",
     # persistence how-tos
     "how-tos/persistence_postgres.ipynb": "how-tos/memory/add-memory.md#use-in-production",
     "how-tos/persistence_mongodb.ipynb": "how-tos/memory/add-memory.md#use-in-production",
