@@ -1,5 +1,6 @@
 import sys
 from typing import Literal, cast
+from warnings import warn
 
 __all__ = (
     "TAG_NOSTREAM",
@@ -9,6 +10,25 @@ __all__ = (
     "SELF",
     "PREVIOUS",
 )
+
+
+def __getattr__(name):
+    if name in ["Send", "Interrupt"]:
+        warn(
+            f"Importing {name} from langgraph.constants is deprecated. "
+            f"Please use 'from langgraph.types import {name}' instead.",
+            # todo: change to LangGraphDeprecatedSinceV10 once we merge this PR
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+        from importlib import import_module
+
+        module = import_module("langgraph.types")
+        return getattr(module, name)
+
+    raise AttributeError(f"module has no attribute '{name}'")
+
 
 # --- Empty read-only containers ---
 EMPTY_SEQ: tuple[str, ...] = tuple()
