@@ -33,7 +33,7 @@ langgraph = "langgraph_cli.cli:cli"
 dev = [
     "ruff>=0.12.0",
     "codespell",
-    "pytest",
+    "pytest>=8.0.0",
     "pytest-asyncio",
     "pytest-mock",
     "pytest-watch",

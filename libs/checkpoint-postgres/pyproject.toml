@@ -25,12 +25,12 @@ Repository = "https://www.github.com/langchain-ai/langgraph"
 dev = [
   "ruff>=0.12.0",
   "codespell",
-  "pytest",
+  "pytest>=8.0.0",
   "anyio",
   "pytest-asyncio",
   "pytest-mock",
   "mypy>=1.15.0",
-  "psycopg[binary]>=3.2.0",
+  "psycopg[binary]>=3.2.1",
   "pytest-watcher",
 ]
 

@@ -39,7 +39,7 @@ dev = [
     "pytest-repeat>=0.9.3",
     "langgraph-checkpoint-sqlite",
     "langgraph-checkpoint-postgres",
-    'psycopg[binary]>=3.0.0; python_version >= "3.10"',
+    'psycopg[binary]>=3.2.1; python_version >= "3.10"',
     "uvloop==0.21.0beta1",
     "pyperf>=2.7.0",
     "py-spy>=0.3.14",
