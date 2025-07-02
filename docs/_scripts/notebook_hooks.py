@@ -73,9 +73,9 @@ REDIRECT_MAP = {
     "how-tos/pass-run-time-values-to-tools.ipynb": "how-tos/tool-calling.ipynb#read-state",
     "how-tos/update-state-from-tools.ipynb": "how-tos/tool-calling.ipynb#update-state",
     # multi-agent how-tos
-    "how-tos/agent-handoffs.ipynb": "how-tos/multi_agent.ipynb#handoffs",
-    "how-tos/multi-agent-network.ipynb": "how-tos/multi_agent.ipynb#use-in-a-multi-agent-system",
-    "how-tos/multi-agent-multi-turn-convo.ipynb": "how-tos/multi_agent.ipynb#multi-turn-conversation",
+    "how-tos/agent-handoffs.ipynb": "how-tos/multi_agent.md#handoffs",
+    "how-tos/multi-agent-network.ipynb": "how-tos/multi_agent.md#use-in-a-multi-agent-system",
+    "how-tos/multi-agent-multi-turn-convo.ipynb": "how-tos/multi_agent.md#multi-turn-conversation",
     # cloud redirects
     "cloud/index.md": "index.md",
     "cloud/how-tos/index.md": "concepts/langgraph_platform",
