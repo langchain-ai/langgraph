@@ -1246,7 +1246,8 @@ requires-dist = [
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-prebuilt", editable = "../prebuilt" },
     { name = "langgraph-sdk", editable = "../sdk-py" },
-    { name = "pydantic", specifier = ">=2.7.4" },
+    { name = "pydantic", marker = "python_full_version < '3.13'", specifier = ">=2.7.4" },
+    { name = "pydantic", marker = "python_full_version >= '3.13'", specifier = ">=2.0.0" },
     { name = "xxhash", specifier = ">=3.5.0" },
 ]
 

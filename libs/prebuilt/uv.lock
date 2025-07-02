@@ -2,7 +2,8 @@ version = 1
 revision = 2
 requires-python = ">=3.9"
 resolution-markers = [
-    "python_full_version >= '3.12.4'",
+    "python_full_version >= '3.13'",
+    "python_full_version >= '3.12.4' and python_full_version < '3.13'",
     "python_full_version < '3.12.4'",
 ]
 
@@ -337,7 +338,8 @@ requires-dist = [
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-prebuilt", editable = "." },
     { name = "langgraph-sdk", editable = "../sdk-py" },
-    { name = "pydantic", specifier = ">=2.7.4" },
+    { name = "pydantic", marker = "python_full_version < '3.13'", specifier = ">=2.7.4" },
+    { name = "pydantic", marker = "python_full_version >= '3.13'", specifier = ">=2.0.0" },
     { name = "xxhash", specifier = ">=3.5.0" },
 ]
 
