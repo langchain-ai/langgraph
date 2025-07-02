@@ -870,7 +870,7 @@ We next [compile](../concepts/low_level.md#compiling-your-graph) our graph. This
 graph = builder.compile()
 ```
 
-LangGraph provides built-in utilities for visualizing your graph. Let's inspect our sequence. See [this guide](../how-tos/visualization.md) for detail on visualization.
+LangGraph provides built-in utilities for visualizing your graph. Let's inspect our sequence. See [this guide](#visualize-your-graph) for detail on visualization.
 
 ```python
 from IPython.display import Image, display
@@ -1536,7 +1536,7 @@ result = await graph.ainvoke({"messages": [input_message]}) # (3)!
 
 ## Combine control flow and state updates with `Command`
 
-It can be useful to combine control flow (edges) and state updates (nodes). For example, you might want to BOTH perform state updates AND decide which node to go to next in the SAME node. LangGraph provides a way to do so by returning a [Command](../reference/types.md#Command) object from node functions:
+It can be useful to combine control flow (edges) and state updates (nodes). For example, you might want to BOTH perform state updates AND decide which node to go to next in the SAME node. LangGraph provides a way to do so by returning a [Command](../reference/types.md#langgraph.types.Command) object from node functions:
 
 ```python
 def my_node(state: State) -> Command[Literal["my_other_node"]]:
@@ -1722,7 +1722,7 @@ def lookup_user_info(tool_call_id: Annotated[str, InjectedToolCallId], config: R
 !!! important
     You MUST include `messages` (or any state key used for the message history) in `Command.update` when returning `Command` from a tool and the list of messages in `messages` MUST contain a `ToolMessage`. This is necessary for the resulting message history to be valid (LLM providers require AI messages with tool calls to be followed by the tool result messages).
 
-If you are using tools that update state via `Command`, we recommend using prebuilt [`ToolNode`](../reference/prebuilt.md#langgraph.prebuilt.tool_node.ToolNode) which automatically handles tools returning `Command` objects and propagates them to the graph state. If you're writing a custom node that calls tools, you would need to manually propagate `Command` objects returned by the tools as the update from the node.
+If you are using tools that update state via `Command`, we recommend using prebuilt [`ToolNode`](../reference/agents.md#langgraph.prebuilt.tool_node.ToolNode) which automatically handles tools returning `Command` objects and propagates them to the graph state. If you're writing a custom node that calls tools, you would need to manually propagate `Command` objects returned by the tools as the update from the node.
 
 ## Visualize your graph
 
