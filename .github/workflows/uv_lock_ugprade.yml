@@ -1,4 +1,4 @@
-name: UV Lock Upgrade
+name: lockfile upgrades
 
 on:
   schedule:
@@ -35,13 +35,13 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
-          token: ${{ secrets.LANGGRAPH_WRITER_TOKEN }}
+          token: ${{ secrets.LANGGRAPH_WRITE_TOKEN }}
           commit-message: "chore: upgrade dependencies with `uv lock --upgrade`"
           title: "chore: upgrade dependencies with `uv lock --upgrade`"
           body: |
             This PR updates the dependencies in all Python packages using `uv lock --upgrade`.
             
-            This is an automated PR created by the UV Lock Upgrade workflow.
+            This is an automated PR created by the "lockfile upgrades" workflow.
           branch: deps/uv-lock-upgrade
           base: main
           delete-branch: true
