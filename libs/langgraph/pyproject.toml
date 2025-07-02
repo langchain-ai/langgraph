@@ -17,7 +17,8 @@ dependencies = [
     "langgraph-sdk>=0.1.42,<0.2.0",
     "langgraph-prebuilt>=0.5.0,<0.6.0",
     "xxhash>=3.5.0",
-    "pydantic>=2.7.4",
+    "pydantic>=2.7.4; python_version < '3.13'",
+    "pydantic>=2.0.0; python_version >= '3.13'",
 ]
 
 [project.urls]

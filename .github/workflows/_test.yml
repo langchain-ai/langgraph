@@ -58,3 +58,13 @@ jobs:
           # grep will exit non-zero if the target message isn't found,
           # and `set -e` above will cause the step to fail.
           echo "$STATUS" | grep 'nothing to commit, working tree clean'
+
+      - name: Install min version of deps
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: uv sync --no-default-groups --resolution lowest-direct --no-sources --force-reinstall
+
+      - name: Run tests with min version of deps
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: make test
