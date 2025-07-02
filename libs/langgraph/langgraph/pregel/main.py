@@ -775,10 +775,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         self, *, include: Sequence[str] | None = None
     ) -> dict[str, Any]:
         schema = self.config_schema(include=include)
-        if hasattr(schema, "model_json_schema"):
-            return schema.model_json_schema()
-        else:
-            return schema.schema()
+        return schema.model_json_schema()
 
     @property
     def InputType(self) -> Any:
@@ -805,10 +802,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         self, config: RunnableConfig | None = None
     ) -> dict[str, Any]:
         schema = self.get_input_schema(config)
-        if hasattr(schema, "model_json_schema"):
-            return schema.model_json_schema()
-        else:
-            return schema.schema()
+        return schema.model_json_schema()
 
     @property
     def OutputType(self) -> Any:
@@ -837,10 +831,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         self, config: RunnableConfig | None = None
     ) -> dict[str, Any]:
         schema = self.get_output_schema(config)
-        if hasattr(schema, "model_json_schema"):
-            return schema.model_json_schema()
-        else:
-            return schema.schema()
+        return schema.model_json_schema()
 
     @property
     def stream_channels_list(self) -> Sequence[str]:
