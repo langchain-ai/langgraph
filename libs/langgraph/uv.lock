@@ -1216,14 +1216,11 @@ dependencies = [
 dev = [
     { name = "httpx" },
     { name = "jupyter" },
-    { name = "langgraph-checkpoint" },
     { name = "langgraph-checkpoint-postgres" },
     { name = "langgraph-checkpoint-sqlite" },
     { name = "langgraph-cli", extra = ["inmem"] },
-    { name = "langgraph-prebuilt" },
-    { name = "langgraph-sdk" },
     { name = "mypy" },
-    { name = "psycopg", extra = ["binary"] },
+    { name = "psycopg", extra = ["binary"], marker = "python_full_version >= '3.10'" },
     { name = "py-spy" },
     { name = "pycryptodome" },
     { name = "pyperf" },
@@ -1252,29 +1249,26 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx" },
-    { name = "jupyter" },
-    { name = "langgraph-checkpoint", editable = "../checkpoint" },
+    { name = "httpx", specifier = ">=0.26.0" },
+    { name = "jupyter", specifier = ">=1.0.0" },
     { name = "langgraph-checkpoint-postgres", editable = "../checkpoint-postgres" },
     { name = "langgraph-checkpoint-sqlite", editable = "../checkpoint-sqlite" },
-    { name = "langgraph-cli", extras = ["inmem"] },
-    { name = "langgraph-prebuilt", editable = "../prebuilt" },
-    { name = "langgraph-sdk", editable = "../sdk-py" },
-    { name = "mypy" },
-    { name = "psycopg", extras = ["binary"] },
-    { name = "py-spy" },
-    { name = "pycryptodome" },
-    { name = "pyperf" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "pytest-dotenv" },
-    { name = "pytest-mock" },
-    { name = "pytest-repeat" },
-    { name = "pytest-watcher" },
-    { name = "pytest-xdist", extras = ["psutil"] },
-    { name = "ruff" },
-    { name = "syrupy" },
-    { name = "types-requests" },
+    { name = "langgraph-cli", extras = ["inmem"], specifier = ">=0.2.8" },
+    { name = "mypy", specifier = ">=1.6.0" },
+    { name = "psycopg", extras = ["binary"], marker = "python_full_version >= '3.10'", specifier = ">=3.0.0" },
+    { name = "py-spy", specifier = ">=0.3.14" },
+    { name = "pycryptodome", specifier = ">=3.21.0" },
+    { name = "pyperf", specifier = ">=2.7.0" },
+    { name = "pytest", specifier = ">=8.3.2" },
+    { name = "pytest-cov", specifier = ">=4.0.0" },
+    { name = "pytest-dotenv", specifier = ">=0.5.2" },
+    { name = "pytest-mock", specifier = ">=3.10.0" },
+    { name = "pytest-repeat", specifier = ">=0.9.3" },
+    { name = "pytest-watcher", specifier = ">=0.4.1" },
+    { name = "pytest-xdist", extras = ["psutil"], specifier = ">=3.6.1" },
+    { name = "ruff", specifier = ">=0.6.2" },
+    { name = "syrupy", specifier = ">=4.0.2" },
+    { name = "types-requests", specifier = ">=2.32.0.20240914" },
     { name = "uvloop", specifier = "==0.21.0b1" },
 ]
 
@@ -1327,15 +1321,15 @@ requires-dist = [
 dev = [
     { name = "codespell" },
     { name = "dataclasses-json" },
-    { name = "mypy" },
-    { name = "numpy" },
-    { name = "pandas" },
+    { name = "mypy", specifier = ">=1.15.0" },
+    { name = "numpy", specifier = ">=2" },
+    { name = "pandas", specifier = ">=2" },
     { name = "pandas-stubs", specifier = ">=2.2.2.240807" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
     { name = "pytest-watcher" },
-    { name = "ruff" },
+    { name = "ruff", specifier = ">=0.12.0" },
 ]
 
 [[package]]
@@ -1361,14 +1355,13 @@ requires-dist = [
 dev = [
     { name = "anyio" },
     { name = "codespell" },
-    { name = "langgraph-checkpoint", editable = "../checkpoint" },
-    { name = "mypy" },
-    { name = "psycopg", extras = ["binary"] },
+    { name = "mypy", specifier = ">=1.15.0" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2.0" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
     { name = "pytest-watcher" },
-    { name = "ruff" },
+    { name = "ruff", specifier = ">=0.12.0" },
 ]
 
 [[package]]
@@ -1391,14 +1384,13 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "codespell" },
-    { name = "langgraph-checkpoint", editable = "../checkpoint" },
-    { name = "mypy" },
+    { name = "mypy", specifier = ">=1.15.0" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
     { name = "pytest-retry", specifier = ">=1.7.0" },
     { name = "pytest-watcher" },
-    { name = "ruff" },
+    { name = "ruff", specifier = ">=0.12.0" },
 ]
 
 [[package]]
@@ -1440,15 +1432,14 @@ requires-dist = [
 dev = [
     { name = "codespell" },
     { name = "langgraph", editable = "." },
-    { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-checkpoint-postgres", editable = "../checkpoint-postgres" },
     { name = "langgraph-checkpoint-sqlite", editable = "../checkpoint-sqlite" },
-    { name = "mypy" },
+    { name = "mypy", specifier = ">=1.15.0" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
     { name = "pytest-watcher" },
-    { name = "ruff" },
+    { name = "ruff", specifier = ">=0.12.0" },
     { name = "syrupy" },
 ]
 
@@ -1487,12 +1478,12 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "codespell" },
-    { name = "mypy" },
+    { name = "mypy", specifier = ">=1.15.0" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
     { name = "pytest-watch" },
-    { name = "ruff" },
+    { name = "ruff", specifier = ">=0.12.0" },
 ]
 
 [[package]]
@@ -2005,7 +1996,7 @@ wheels = [
 
 [package.optional-dependencies]
 binary = [
-    { name = "psycopg-binary", marker = "implementation_name != 'pypy'" },
+    { name = "psycopg-binary", marker = "python_full_version >= '3.10' and implementation_name != 'pypy'" },
 ]
 
 [[package]]

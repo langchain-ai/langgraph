@@ -23,15 +23,14 @@ Repository = "https://www.github.com/langchain-ai/langgraph"
 
 [dependency-groups]
 dev = [
-  "ruff",
+  "ruff>=0.12.0",
   "codespell",
   "pytest",
   "anyio",
   "pytest-asyncio",
   "pytest-mock",
-  "mypy",
-  "psycopg[binary]",
-  "langgraph-checkpoint",
+  "mypy>=1.15.0",
+  "psycopg[binary]>=3.2.0",
   "pytest-watcher",
 ]
 
