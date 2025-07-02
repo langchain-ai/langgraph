@@ -6,9 +6,6 @@ on:
     - cron: '0 0 * * 0'
   # allow manual triggering
   workflow_dispatch:
-  pull_request:
-    branches:
-      - main
 
 permissions:
   contents: write
@@ -36,14 +33,13 @@ jobs:
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: upgrade dependencies with uv lock"
-          title: "chore: upgrade dependencies with uv lock"
+          commit-message: "chore: upgrade dependencies with `uv lock --upgrade`"
+          title: "chore: upgrade dependencies with `uv lock --upgrade`"
           body: |
             This PR updates the dependencies in all Python packages using `uv lock --upgrade`.
             
             This is an automated PR created by the UV Lock Upgrade workflow.
           branch: deps/uv-lock-upgrade
-          base: main
           delete-branch: true
           labels: |
             dependencies
