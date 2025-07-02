@@ -569,8 +569,8 @@ def test_conditional_state_graph(
     app = workflow.compile()
 
     if isinstance(sync_checkpointer, InMemorySaver):
-        assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
-        assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_input_jsonschema()) == snapshot
+        assert json.dumps(app.get_output_jsonschema()) == snapshot
         assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
         assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
@@ -1302,8 +1302,8 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
 
     app = create_react_agent(model, tools)
 
-    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+    assert json.dumps(app.get_input_jsonschema()) == snapshot
+    assert json.dumps(app.get_output_jsonschema()) == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
@@ -2483,8 +2483,8 @@ def test_message_graph(
     app = workflow.compile()
 
     if isinstance(sync_checkpointer, InMemorySaver):
-        assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
-        assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_input_jsonschema()) == snapshot
+        assert json.dumps(app.get_output_jsonschema()) == snapshot
         assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
         assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
