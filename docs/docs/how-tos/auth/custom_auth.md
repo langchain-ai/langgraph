@@ -8,7 +8,7 @@ This guide shows how to add custom authentication to your LangGraph Platform app
 
 ## Add custom authentication to your deployment
 
-To leverage custom authentication and access user-level metadata in our deployments, you need to populate the `config["configurable"]["langgraph_auth_user"]` object through a custom authentication handler.
+To leverage custom authentication and access user-level metadata in your deployments, set up custom authentication to automatically populate the `config["configurable"]["langgraph_auth_user"]` object through a custom authentication handler. You can then access this object in your graph with the `langgraph_auth_user` key to [allow an agent to perform authenticated actions on behalf of the user](#enable-agent-authentication).
 
 1. Implement authentication:
 
