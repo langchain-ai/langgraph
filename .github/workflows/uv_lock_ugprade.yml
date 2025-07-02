@@ -43,6 +43,7 @@ jobs:
             
             This is an automated PR created by the UV Lock Upgrade workflow.
           branch: deps/uv-lock-upgrade
+          base: main
           delete-branch: true
           labels: |
             dependencies
