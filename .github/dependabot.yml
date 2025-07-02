@@ -7,12 +7,13 @@ updates:
 
   - package-ecosystem: "pip"
     directories:
+      - "libs/checkpoint"
       - "libs/checkpoint-postgres"
       - "libs/checkpoint-sqlite"
       - "libs/cli"
       - "libs/langgraph"
       - "libs/prebuilt"
-      - "libs/runtime-inmem"
-      - "libs/sdk"
+      - "libs/scheduler-kafka"
+      - "libs/sdk-py"
     schedule:
       interval: "weekly"
