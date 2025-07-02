@@ -16,35 +16,32 @@ The [LangGraph Server](../../concepts/langgraph_server.md) provides a durable ex
 
 ### LangSmith Tracing
 
-When running the LangGraph server (either in-memory or in Docker), LangSmith tracing may be enabled to facilitate faster debugging and offer observability in production. You can always disable tracing by setting `LANGSMITH_TRACING=false` in your server's runtime environment.
+When running the LangGraph server (either in-memory or in Docker), LangSmith tracing may be enabled to facilitate faster debugging and offer observability of graph state and LLM prompts in production. You can always disable tracing by setting `LANGSMITH_TRACING=false` in your server's runtime environment.
 
 ### In-memory development server (`langgraph dev`)
 
 `langgraph dev` runs an [in-memory development server](../../tutorials/langgraph-platform/local-server.md) as a single Python process, designed for quick development and testing. It saves all checkpointing and memory data to disk within a `.langgraph_api` directory in the current working directory. Apart from the telemetry data described in the [CLI](#cli) section, no data leaves the machine unless you have enabled tracing or your graph code explicitly contacts an external service.
 
-If you've disabled [tracing](#langsmith-tracing), no user data is persisted outside of your configured storage backend unless your graph code explicitly contacts an external service.
-
 ### Standalone Container (`langgraph up`)
 
-`langgraph up` builds your local package into a Docker image and runs the server as a [standalone container](../../concepts/deployment_options.md#standalone-container) consisting of three containers: the API server, a PostgreSQL container, and a Redis container. All persistence data (checkpoints, assistants, etc.) are stored in the PostgreSQL database. Redis is used as a pubsub connection for real-time streaming of events. You can encrypt all checkpoints before saving to the database by setting a valid `LANGGRAPH_AES_KEY` environment variable. You can also specify [TTLs](../../how-tos/ttl/configure_ttl.md) for checkpoints and cross-thread memories in `langgraph.json` to control how long data is stored. All persisted threads, memories, and other data can be deleted via the relevant API endpoints.
+`langgraph up` builds your local package into a Docker image and runs the server as a [standalone container](../../concepts/deployment_options.md#standalone-container) consisting of three containers: the API server, a PostgreSQL container, and a Redis container. All persistent data (checkpoints, assistants, etc.) are stored in the PostgreSQL database. Redis is used as a pubsub connection for real-time streaming of events. You can encrypt all checkpoints before saving to the database by setting a valid `LANGGRAPH_AES_KEY` environment variable. You can also specify [TTLs](../../how-tos/ttl/configure_ttl.md) for checkpoints and cross-thread memories in `langgraph.json` to control how long data is stored. All persisted threads, memories, and other data can be deleted via the relevant API endpoints.
 
 Additional API calls are made to confirm that the server has a valid license and to track the number of executed runs and tasks. Periodically, the API server validates the provided license key (or API key).
-
 
 If you've disabled [tracing](#langsmith-tracing), no user data is persisted externally unless your graph code explicitly contacts an external service.
 
 ## Studio
 
-[LangGraph Studio](../../concepts/langgraph_studio.md) is a browser client for interacting with your LangGraph server. It does not persist any private data (the data you send to your server is not sent to LangSmith). It does collect usage analytics to improve the user experience. This includes:
+[LangGraph Studio](../../concepts/langgraph_studio.md) is a graphical interface for interacting with your LangGraph server. It does not persist any private data (the data you send to your server is not sent to LangSmith). Though the studio interface is served at [smith.langchain.com](https://smith.langchain.com), it is run in your browser and connects directly to your local LangGraph server so that no data needs to be sent to LangSmith.
+
+If you are logged in, LangSmith does collect some usage analytics to help improve studio's user experience. This includes:
 
 - Page visits and navigation patterns
 - User actions (button clicks)
 - Browser type and version
 - Screen resolution and viewport size
 
-Importantly, no application data or code (or other sensitive configuration details) are collected.
-
-You may also run the studio locally using the [langgraph-debugger](https://hub.docker.com/r/langchain/langgraph-debugger) docker image.
+Importantly, no application data or code (or other sensitive configuration details) are collected. All of that is stored in the persistence layer of your LangGraph server. When using Studio anonymously, no account creation is required and usage analytics are not collected.
 
 ## Quick reference
 
