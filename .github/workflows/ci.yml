@@ -22,6 +22,7 @@ jobs:
     outputs:
       python: ${{ steps.filter.outputs.python }}
       sdk-js: ${{ steps.filter.outputs.sdk-js }}
+      deps: ${{ steps.filter.outputs.deps }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -38,6 +39,9 @@ jobs:
               - 'libs/prebuilt/**'
             sdk-js:
               - 'libs/sdk-js/**'
+            deps:
+              - '**/pyproject.toml'
+              - '**/uv.lock'
 
   lint:
     needs: changes
@@ -55,7 +59,7 @@ jobs:
 
             "libs/prebuilt",
           ]
-    if: needs.changes.outputs.python == 'true'
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
     uses: ./.github/workflows/_lint.yml
     with:
       working-directory: ${{ matrix.working-directory }}
@@ -74,7 +78,7 @@ jobs:
             "libs/checkpoint-postgres",
             "libs/prebuilt",
           ]
-    if: needs.changes.outputs.python == 'true'
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
     uses: ./.github/workflows/_test.yml
     with:
       working-directory: ${{ matrix.working-directory }}
@@ -83,7 +87,7 @@ jobs:
   # NOTE: we're testing langgraph separately because it requires a different matrix
   test-langgraph:
     needs: changes
-    if: needs.changes.outputs.python == 'true'
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
     name: "cd libs/langgraph"
     uses: ./.github/workflows/_test_langgraph.yml
     secrets: inherit
@@ -140,7 +144,7 @@ jobs:
 
   integration-test:
     needs: changes
-    if: needs.changes.outputs.python == 'true'
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
     name: CLI integration test
     uses: ./.github/workflows/_integration_test.yml
     secrets: inherit
