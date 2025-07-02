@@ -156,6 +156,7 @@ nav:
           - Prebuilt implementation: agents/multi-agent.md
           - Custom implementation: how-tos/multi_agent.ipynb
       - MCP:
+          - Overview: concepts/mcp.md
           - Use MCP: agents/mcp.md
           - Server API: concepts/server-mcp.md
       - Evaluation:

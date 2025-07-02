@@ -143,6 +143,54 @@ The returned user information is available:
     In many of our tutorials, we will just show the "authorization" parameter to be concise, but you can opt to accept more information as needed
     to implement your custom authentication scheme.
 
+### Agent authentication
+
+Custom authentication permits delegated access. The values you return in  `@auth.authenticate` are added to the run context, giving agents user-scoped credentials lets them access resources on the user’s behalf.
+
+```mermaid
+sequenceDiagram
+  %% Actors
+  participant ClientApp as Client
+  participant AuthProv  as Auth Provider
+  participant LangGraph as LangGraph Backend
+  participant SecretStore as Secret Store
+  participant ExternalService as External Service
+
+  %% Platform login / AuthN
+  ClientApp  ->> AuthProv: 1. Login (username / password)
+  AuthProv   -->> ClientApp: 2. Return token
+  ClientApp  ->> LangGraph: 3. Request with token
+
+  Note over LangGraph: 4. Validate token (@auth.authenticate)
+  LangGraph  -->> AuthProv: 5. Fetch user info
+  AuthProv   -->> LangGraph: 6. Confirm validity
+
+  %% Fetch user tokens from secret store
+  LangGraph  ->> SecretStore: 6a. Fetch user tokens
+  SecretStore -->> LangGraph: 6b. Return tokens
+
+  Note over LangGraph: 7. Apply access control (@auth.on.*)
+
+  %% External Service round-trip
+  LangGraph  ->> ExternalService: 8. Call external service (with header)
+  Note over ExternalService: 9. External service validates header and executes action
+  ExternalService  -->> LangGraph: 10. Service response
+
+  %% Return to caller
+  LangGraph  -->> ClientApp: 11. Return resources 
+```
+
+After authentication, the platform creates a special configuration object that is passed to your graph and all nodes via the configurable context.
+This object contains information about the current user, including any custom fields you return from your [`@auth.authenticate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.authenticate) handler.
+
+To enable an agent to act on behalf of the user, use [custom authentication middleware](../how-tos/auth/custom_auth.md). This will allow the agent to interact with external systems like MCP servers, external databases, and even other agents on behalf of the user.
+
+For more information, see the [Use custom auth](../how-tos/auth/custom_auth.md#enable-agent-authentication) guide.
+
+### Agent authentication with MCP
+
+For information on how to authenticate an agent to an MCP server, see the [MCP conceptual guide](../concepts/mcp.md).
+
 ## Authorization
 
 After authentication, LangGraph calls your [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) handlers to control access to specific resources (e.g., threads, assistants, crons). These handlers can:
