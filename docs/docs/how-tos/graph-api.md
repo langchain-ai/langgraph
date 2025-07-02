@@ -379,135 +379,126 @@ a
 
 See below for additional features of Pydantic model state:
 
-<details>
-<summary>Serialization Behavior</summary>
+??? example "Serialization Behavior"
 
-When using Pydantic models as state schemas, it's important to understand how serialization works, especially when:
-- Passing Pydantic objects as inputs
-- Receiving outputs from the graph
-- Working with nested Pydantic models
+    When using Pydantic models as state schemas, it's important to understand how serialization works, especially when:
+    - Passing Pydantic objects as inputs
+    - Receiving outputs from the graph
+    - Working with nested Pydantic models
 
-Let's see these behaviors in action.
+    Let's see these behaviors in action.
 
-```python
-from langgraph.graph import StateGraph, START, END
-from pydantic import BaseModel
+    ```python
+    from langgraph.graph import StateGraph, START, END
+    from pydantic import BaseModel
 
-class NestedModel(BaseModel):
-    value: str
+    class NestedModel(BaseModel):
+        value: str
 
-class ComplexState(BaseModel):
-    text: str
-    count: int
-    nested: NestedModel
+    class ComplexState(BaseModel):
+        text: str
+        count: int
+        nested: NestedModel
 
-def process_node(state: ComplexState):
-    # Node receives a validated Pydantic object
-    print(f"Input state type: {type(state)}")
-    print(f"Nested type: {type(state.nested)}")
-    # Return a dictionary update
-    return {"text": state.text + " processed", "count": state.count + 1}
+    def process_node(state: ComplexState):
+        # Node receives a validated Pydantic object
+        print(f"Input state type: {type(state)}")
+        print(f"Nested type: {type(state.nested)}")
+        # Return a dictionary update
+        return {"text": state.text + " processed", "count": state.count + 1}
 
-# Build the graph
-builder = StateGraph(ComplexState)
-builder.add_node("process", process_node)
-builder.add_edge(START, "process")
-builder.add_edge("process", END)
-graph = builder.compile()
+    # Build the graph
+    builder = StateGraph(ComplexState)
+    builder.add_node("process", process_node)
+    builder.add_edge(START, "process")
+    builder.add_edge("process", END)
+    graph = builder.compile()
 
-# Create a Pydantic instance for input
-input_state = ComplexState(text="hello", count=0, nested=NestedModel(value="test"))
-print(f"Input object type: {type(input_state)}")
+    # Create a Pydantic instance for input
+    input_state = ComplexState(text="hello", count=0, nested=NestedModel(value="test"))
+    print(f"Input object type: {type(input_state)}")
 
-# Invoke graph with a Pydantic instance
-result = graph.invoke(input_state)
-print(f"Output type: {type(result)}")
-print(f"Output content: {result}")
+    # Invoke graph with a Pydantic instance
+    result = graph.invoke(input_state)
+    print(f"Output type: {type(result)}")
+    print(f"Output content: {result}")
 
-# Convert back to Pydantic model if needed
-output_model = ComplexState(**result)
-print(f"Converted back to Pydantic: {type(output_model)}")
-```
+    # Convert back to Pydantic model if needed
+    output_model = ComplexState(**result)
+    print(f"Converted back to Pydantic: {type(output_model)}")
+    ```
 
-</details>
+??? example "Runtime Type Coercion"
 
-<details>
-<summary>Runtime Type Coercion</summary>
+    Pydantic performs runtime type coercion for certain data types. This can be helpful but also lead to unexpected behavior if you're not aware of it.
 
-Pydantic performs runtime type coercion for certain data types. This can be helpful but also lead to unexpected behavior if you're not aware of it.
+    ```python
+    from langgraph.graph import StateGraph, START, END
+    from pydantic import BaseModel
 
-```python
-from langgraph.graph import StateGraph, START, END
-from pydantic import BaseModel
+    class CoercionExample(BaseModel):
+        # Pydantic will coerce string numbers to integers
+        number: int
+        # Pydantic will parse string booleans to bool
+        flag: bool
 
-class CoercionExample(BaseModel):
-    # Pydantic will coerce string numbers to integers
-    number: int
-    # Pydantic will parse string booleans to bool
-    flag: bool
+    def inspect_node(state: CoercionExample):
+        print(f"number: {state.number} (type: {type(state.number)})")
+        print(f"flag: {state.flag} (type: {type(state.flag)})")
+        return {}
 
-def inspect_node(state: CoercionExample):
-    print(f"number: {state.number} (type: {type(state.number)})")
-    print(f"flag: {state.flag} (type: {type(state.flag)})")
-    return {}
+    builder = StateGraph(CoercionExample)
+    builder.add_node("inspect", inspect_node)
+    builder.add_edge(START, "inspect")
+    builder.add_edge("inspect", END)
+    graph = builder.compile()
 
-builder = StateGraph(CoercionExample)
-builder.add_node("inspect", inspect_node)
-builder.add_edge(START, "inspect")
-builder.add_edge("inspect", END)
-graph = builder.compile()
+    # Demonstrate coercion with string inputs that will be converted
+    result = graph.invoke({"number": "42", "flag": "true"})
 
-# Demonstrate coercion with string inputs that will be converted
-result = graph.invoke({"number": "42", "flag": "true"})
+    # This would fail with a validation error
+    try:
+        graph.invoke({"number": "not-a-number", "flag": "true"})
+    except Exception as e:
+        print(f"\nExpected validation error: {e}")
+    ```
 
-# This would fail with a validation error
-try:
-    graph.invoke({"number": "not-a-number", "flag": "true"})
-except Exception as e:
-    print(f"\nExpected validation error: {e}")
-```
+??? example "Working with Message Models"
 
-</details>
+    When working with LangChain message types in your state schema, there are important considerations for serialization. You should use `AnyMessage` (rather than `BaseMessage`) for proper serialization/deserialization when using message objects over the wire.
 
-<details>
-<summary>Working with Message Models</summary>
+    ```python
+    from langgraph.graph import StateGraph, START, END
+    from pydantic import BaseModel
+    from langchain_core.messages import HumanMessage, AIMessage, AnyMessage
+    from typing import List
 
-When working with LangChain message types in your state schema, there are important considerations for serialization. You should use `AnyMessage` (rather than `BaseMessage`) for proper serialization/deserialization when using message objects over the wire.
+    class ChatState(BaseModel):
+        messages: List[AnyMessage]
+        context: str
 
-```python
-from langgraph.graph import StateGraph, START, END
-from pydantic import BaseModel
-from langchain_core.messages import HumanMessage, AIMessage, AnyMessage
-from typing import List
+    def add_message(state: ChatState):
+        return {"messages": state.messages + [AIMessage(content="Hello there!")]}
 
-class ChatState(BaseModel):
-    messages: List[AnyMessage]
-    context: str
+    builder = StateGraph(ChatState)
+    builder.add_node("add_message", add_message)
+    builder.add_edge(START, "add_message")
+    builder.add_edge("add_message", END)
+    graph = builder.compile()
 
-def add_message(state: ChatState):
-    return {"messages": state.messages + [AIMessage(content="Hello there!")]}
+    # Create input with a message
+    initial_state = ChatState(
+        messages=[HumanMessage(content="Hi")], context="Customer support chat"
+    )
 
-builder = StateGraph(ChatState)
-builder.add_node("add_message", add_message)
-builder.add_edge(START, "add_message")
-builder.add_edge("add_message", END)
-graph = builder.compile()
+    result = graph.invoke(initial_state)
+    print(f"Output: {result}")
 
-# Create input with a message
-initial_state = ChatState(
-    messages=[HumanMessage(content="Hi")], context="Customer support chat"
-)
-
-result = graph.invoke(initial_state)
-print(f"Output: {result}")
-
-# Convert back to Pydantic model to see message types
-output_model = ChatState(**result)
-for i, msg in enumerate(output_model.messages):
-    print(f"Message {i}: {type(msg).__name__} - {msg.content}")
-```
-
-</details>
+    # Convert back to Pydantic model to see message types
+    output_model = ChatState(**result)
+    for i, msg in enumerate(output_model.messages):
+        print(f"Message {i}: {type(msg).__name__} - {msg.content}")
+    ```
 
 ## Map-Reduce and the Send API
 
@@ -699,169 +690,163 @@ Node B sees ['A', 'B', 'A']
 Recursion Error
 ```
 
-<details class="example"><summary>Extended example: return state on hitting recursion limit</summary>
+??? example "Extended example: return state on hitting recursion limit"
 
-Instead of raising <code>GraphRecursionError</code>, we can introduce a new key to the state that keeps track of the number of steps remaining until reaching the recursion limit. We can then use this key to determine if we should end the run.
+    Instead of raising `GraphRecursionError`, we can introduce a new key to the state that keeps track of the number of steps remaining until reaching the recursion limit. We can then use this key to determine if we should end the run.
 
-LangGraph implements a special <code>RemainingSteps</code> annotation. Under the hood, it creates a <code>ManagedValue</code> channel -- a state channel that will exist for the duration of our graph run and no longer.
-<br>
+    LangGraph implements a special `RemainingSteps` annotation. Under the hood, it creates a `ManagedValue` channel -- a state channel that will exist for the duration of our graph run and no longer.
 
-```python
-import operator
-from typing import Annotated, Literal
-from typing_extensions import TypedDict
-from langgraph.graph import StateGraph, START, END
-from langgraph.managed.is_last_step import RemainingSteps
+    ```python
+    import operator
+    from typing import Annotated, Literal
+    from typing_extensions import TypedDict
+    from langgraph.graph import StateGraph, START, END
+    from langgraph.managed.is_last_step import RemainingSteps
 
-class State(TypedDict):
-    aggregate: Annotated[list, operator.add]
-    remaining_steps: RemainingSteps
+    class State(TypedDict):
+        aggregate: Annotated[list, operator.add]
+        remaining_steps: RemainingSteps
 
-def a(state: State):
-    print(f'Node A sees {state["aggregate"]}')
-    return {"aggregate": ["A"]}
+    def a(state: State):
+        print(f'Node A sees {state["aggregate"]}')
+        return {"aggregate": ["A"]}
 
-def b(state: State):
-    print(f'Node B sees {state["aggregate"]}')
-    return {"aggregate": ["B"]}
+    def b(state: State):
+        print(f'Node B sees {state["aggregate"]}')
+        return {"aggregate": ["B"]}
 
-# Define nodes
-builder = StateGraph(State)
-builder.add_node(a)
-builder.add_node(b)
+    # Define nodes
+    builder = StateGraph(State)
+    builder.add_node(a)
+    builder.add_node(b)
 
-# Define edges
-def route(state: State) -> Literal["b", END]:
-    if state["remaining_steps"] <= 2:
-        return END
-    else:
-        return "b"
+    # Define edges
+    def route(state: State) -> Literal["b", END]:
+        if state["remaining_steps"] <= 2:
+            return END
+        else:
+            return "b"
 
-builder.add_edge(START, "a")
-builder.add_conditional_edges("a", route)
-builder.add_edge("b", "a")
-graph = builder.compile()
+    builder.add_edge(START, "a")
+    builder.add_conditional_edges("a", route)
+    builder.add_edge("b", "a")
+    graph = builder.compile()
 
-# Test it out
-result = graph.invoke({"aggregate": []}, {"recursion_limit": 4})
-print(result)
-```
-```
-Node A sees []
-Node B sees ['A']
-Node A sees ['A', 'B']
-{'aggregate': ['A', 'B', 'A']}
-```
-
-</details>
-
-<details class="example"><summary>Extended example: loops with branches</summary>
-
-To better understand how the recursion limit works, let's consider a more complex example. Below we implement a loop, but one step fans out into two nodes:
-<br>
-
-```python
-import operator
-from typing import Annotated, Literal
-from typing_extensions import TypedDict
-from langgraph.graph import StateGraph, START, END
-
-class State(TypedDict):
-    aggregate: Annotated[list, operator.add]
-
-def a(state: State):
-    print(f'Node A sees {state["aggregate"]}')
-    return {"aggregate": ["A"]}
-
-def b(state: State):
-    print(f'Node B sees {state["aggregate"]}')
-    return {"aggregate": ["B"]}
-
-def c(state: State):
-    print(f'Node C sees {state["aggregate"]}')
-    return {"aggregate": ["C"]}
-
-def d(state: State):
-    print(f'Node D sees {state["aggregate"]}')
-    return {"aggregate": ["D"]}
-
-# Define nodes
-builder = StateGraph(State)
-builder.add_node(a)
-builder.add_node(b)
-builder.add_node(c)
-builder.add_node(d)
-
-# Define edges
-def route(state: State) -> Literal["b", END]:
-    if len(state["aggregate"]) < 7:
-        return "b"
-    else:
-        return END
-
-builder.add_edge(START, "a")
-builder.add_conditional_edges("a", route)
-builder.add_edge("b", "c")
-builder.add_edge("b", "d")
-builder.add_edge(["c", "d"], "a")
-graph = builder.compile()
-```
-
-```python
-from IPython.display import Image, display
-
-display(Image(graph.get_graph().draw_mermaid_png()))
-```
-
-![Complex loop graph with branches](assets/graph_api_image_4.png)
-
-This graph looks complex, but can be conceptualized as loop of [supersteps](../../concepts/low_level.md#graphs):
-
-1. Node A
-2. Node B
-3. Nodes C and D
-4. Node A
-5. ...
-
-We have a loop of four supersteps, where nodes C and D are executed concurrently.
-
-Invoking the graph as before, we see that we complete two full "laps" before hitting the termination condition:
-
-```python
-result = graph.invoke({"aggregate": []})
-```
-```
-Node A sees []
-Node B sees ['A']
-Node D sees ['A', 'B']
-Node C sees ['A', 'B']
-Node A sees ['A', 'B', 'C', 'D']
-Node B sees ['A', 'B', 'C', 'D', 'A']
-Node D sees ['A', 'B', 'C', 'D', 'A', 'B']
-Node C sees ['A', 'B', 'C', 'D', 'A', 'B']
-Node A sees ['A', 'B', 'C', 'D', 'A', 'B', 'C', 'D']
-```
-
-However, if we set the recursion limit to four, we only complete one lap because each lap is four supersteps:
-
-```python
-from langgraph.errors import GraphRecursionError
-
-try:
+    # Test it out
     result = graph.invoke({"aggregate": []}, {"recursion_limit": 4})
-except GraphRecursionError:
-    print("Recursion Error")
-```
-```
-Node A sees []
-Node B sees ['A']
-Node C sees ['A', 'B']
-Node D sees ['A', 'B']
-Node A sees ['A', 'B', 'C', 'D']
-Recursion Error
-```
+    print(result)
+    ```
+    ```
+    Node A sees []
+    Node B sees ['A']
+    Node A sees ['A', 'B']
+    {'aggregate': ['A', 'B', 'A']}
+    ```
 
-</details>
+??? example "Extended example: loops with branches"
+
+    To better understand how the recursion limit works, let's consider a more complex example. Below we implement a loop, but one step fans out into two nodes:
+
+    ```python
+    import operator
+    from typing import Annotated, Literal
+    from typing_extensions import TypedDict
+    from langgraph.graph import StateGraph, START, END
+
+    class State(TypedDict):
+        aggregate: Annotated[list, operator.add]
+
+    def a(state: State):
+        print(f'Node A sees {state["aggregate"]}')
+        return {"aggregate": ["A"]}
+
+    def b(state: State):
+        print(f'Node B sees {state["aggregate"]}')
+        return {"aggregate": ["B"]}
+
+    def c(state: State):
+        print(f'Node C sees {state["aggregate"]}')
+        return {"aggregate": ["C"]}
+
+    def d(state: State):
+        print(f'Node D sees {state["aggregate"]}')
+        return {"aggregate": ["D"]}
+
+    # Define nodes
+    builder = StateGraph(State)
+    builder.add_node(a)
+    builder.add_node(b)
+    builder.add_node(c)
+    builder.add_node(d)
+
+    # Define edges
+    def route(state: State) -> Literal["b", END]:
+        if len(state["aggregate"]) < 7:
+            return "b"
+        else:
+            return END
+
+    builder.add_edge(START, "a")
+    builder.add_conditional_edges("a", route)
+    builder.add_edge("b", "c")
+    builder.add_edge("b", "d")
+    builder.add_edge(["c", "d"], "a")
+    graph = builder.compile()
+    ```
+
+    ```python
+    from IPython.display import Image, display
+
+    display(Image(graph.get_graph().draw_mermaid_png()))
+    ```
+
+    ![Complex loop graph with branches](assets/graph_api_image_4.png)
+
+    This graph looks complex, but can be conceptualized as loop of [supersteps](../../concepts/low_level.md#graphs):
+
+    1. Node A
+    2. Node B
+    3. Nodes C and D
+    4. Node A
+    5. ...
+
+    We have a loop of four supersteps, where nodes C and D are executed concurrently.
+
+    Invoking the graph as before, we see that we complete two full "laps" before hitting the termination condition:
+
+    ```python
+    result = graph.invoke({"aggregate": []})
+    ```
+    ```
+    Node A sees []
+    Node B sees ['A']
+    Node D sees ['A', 'B']
+    Node C sees ['A', 'B']
+    Node A sees ['A', 'B', 'C', 'D']
+    Node B sees ['A', 'B', 'C', 'D', 'A']
+    Node D sees ['A', 'B', 'C', 'D', 'A', 'B']
+    Node C sees ['A', 'B', 'C', 'D', 'A', 'B']
+    Node A sees ['A', 'B', 'C', 'D', 'A', 'B', 'C', 'D']
+    ```
+
+    However, if we set the recursion limit to four, we only complete one lap because each lap is four supersteps:
+
+    ```python
+    from langgraph.errors import GraphRecursionError
+
+    try:
+        result = graph.invoke({"aggregate": []}, {"recursion_limit": 4})
+    except GraphRecursionError:
+        print("Recursion Error")
+    ```
+    ```
+    Node A sees []
+    Node B sees ['A']
+    Node C sees ['A', 'B']
+    Node D sees ['A', 'B']
+    Node A sees ['A', 'B', 'C', 'D']
+    Recursion Error
+    ```
 
 ## Async
 
