@@ -139,7 +139,7 @@ def node(state: State):
     # highlight-next-line
     return {"messages": [new_message], "extra_field": 10}
 ```
-
+```python
 from langgraph.graph import START
 
 graph = StateGraph(State).add_node(node).add_edge(START, "node").compile()
@@ -500,6 +500,119 @@ See below for additional features of Pydantic model state:
         print(f"Message {i}: {type(msg).__name__} - {msg.content}")
     ```
 
+## Add runtime configuration
+
+You can add runtime configuration to your graph invocations. For example, you can set a custom config when invoking a graph:
+
+```python
+config = {"llm": {"temperature": 0.2, "model": "gpt-4"}}
+response = graph.invoke({"messages": [input_message]}, config)
+for message in response["messages"]:
+    message.pretty_print()
+```
+```
+================================ Human Message ================================
+
+hi
+================================== Ai Message ==================================
+
+Ciao! Come posso aiutarti oggi?
+```
+
+## Add retry policies
+
+There are many use cases where you may wish for your node to have a custom retry policy, for example if you are calling an API, querying a database, or calling an LLM, etc. LangGraph lets you add retry policies to nodes.
+
+To configure a retry policy, pass the `retry_policy` parameter to the [add_node](https://langchain-ai.github.io/langgraph/reference/graphs.md#langgraph.graph.state.StateGraph.add_node). The `retry_policy` parameter takes in a `RetryPolicy` named tuple object. Below we instantiate a `RetryPolicy` object with the default parameters and associate it with a node:
+
+```python
+from langgraph.pregel import RetryPolicy
+
+builder.add_node(
+    "node_name",
+    node_function,
+    retry_policy=RetryPolicy(),
+)
+```
+
+By default, the `retry_on` parameter uses the `default_retry_on` function, which retries on any exception except for the following:
+
+*   `ValueError`
+*   `TypeError`
+*   `ArithmeticError`
+*   `ImportError`
+*   `LookupError`
+*   `NameError`
+*   `SyntaxError`
+*   `RuntimeError`
+*   `ReferenceError`
+*   `StopIteration`
+*   `StopAsyncIteration`
+*   `OSError`
+
+In addition, for exceptions from popular http request libraries such as `requests` and `httpx` it only retries on 5xx status codes.
+
+??? example "Extended example: customizing retry policies"
+    Consider an example in which we are reading from a SQL database. Below we pass two different retry policies to nodes:
+
+    ```python
+    import sqlite3
+    from typing_extensions import TypedDict
+    from langchain.chat_models import init_chat_model
+    from langgraph.graph import END, MessagesState, StateGraph, START
+    from langgraph.pregel import RetryPolicy
+    from langchain_community.utilities import SQLDatabase
+    from langchain_core.messages import AIMessage
+
+    db = SQLDatabase.from_uri("sqlite:///:memory:")
+    model = init_chat_model("anthropic:claude-3-5-haiku-latest")
+
+    def query_database(state: MessagesState):
+        query_result = db.run("SELECT * FROM Artist LIMIT 10;")
+        return {"messages": [AIMessage(content=query_result)]}
+
+    def call_model(state: MessagesState):
+        response = model.invoke(state["messages"])
+        return {"messages": [response]}
+
+    # Define a new graph
+    builder = StateGraph(MessagesState)
+    builder.add_node(
+        "query_database",
+        query_database,
+        retry_policy=RetryPolicy(retry_on=sqlite3.OperationalError),
+    )
+    builder.add_node("model", call_model, retry_policy=RetryPolicy(max_attempts=5))
+    builder.add_edge(START, "model")
+    builder.add_edge("model", "query_database")
+    builder.add_edge("query_database", END)
+    graph = builder.compile()
+    ```
+
+## Add node caching
+
+Node caching is useful in cases where you want to avoid repeating operations, like when doing something expensive (either in terms of time or cost). LangGraph lets you add individualized caching policies to nodes in a graph.
+
+To configure a cache policy, pass the `cache_policy` parameter to the [add_node](https://langchain-ai.github.io/langgraph/reference/graphs.md#langgraph.graph.state.StateGraph.add_node) function. In the following example, a [`CachePolicy`](https://langchain-ai.github.io/langgraph/reference/types/?h=cachepolicy#langgraph.types.CachePolicy) object is instantiated with a time to live of 120 seconds and the default `key_func` generator. Then it is associated with a node:
+
+```python
+from langgraph.types import CachePolicy
+
+builder.add_node(
+    "node_name",
+    node_function,
+    cache_policy=CachePolicy(ttl=120),
+)
+```
+
+Then, to enable node-level caching for a graph, set the `cache` argument when compiling the graph. The example below uses `InMemoryCache` to set up a graph with in-memory cache, but `SqliteCache` is also available.
+
+```python
+from langgraph.cache.memory import InMemoryCache
+
+graph = builder.compile(cache=InMemoryCache())
+```
+
 ## Map-Reduce and the Send API
 
 LangGraph supports map-reduce and other advanced branching patterns using the Send API. Here is an example of how to use it:
@@ -539,6 +652,7 @@ builder.add_edge(START, "generate_topics")
 builder.add_conditional_edges("generate_topics", continue_to_jokes, ["generate_joke"])
 builder.add_edge("generate_joke", "best_joke")
 builder.add_edge("best_joke", END)
+builder.add_edge("generate_topics", END)
 graph = builder.compile()
 ```
 
@@ -685,8 +799,9 @@ except GraphRecursionError:
 ```
 Node A sees []
 Node B sees ['A']
-Node A sees ['A', 'B']
-Node B sees ['A', 'B', 'A']
+Node C sees ['A', 'B']
+Node D sees ['A', 'B']
+Node A sees ['A', 'B', 'C', 'D']
 Recursion Error
 ```
 
