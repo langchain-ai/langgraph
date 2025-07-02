@@ -40,8 +40,8 @@ jobs:
             sdk-js:
               - 'libs/sdk-js/**'
             deps:
-              - 'pyproject.toml'
-              - 'uv.lock'
+              - '**/pyproject.toml'
+              - '**/uv.lock'
 
   lint:
     needs: changes
