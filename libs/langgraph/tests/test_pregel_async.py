@@ -4493,8 +4493,8 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydant
 
     if isinstance(async_checkpointer, InMemorySaver):
         assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
-        assert app.get_input_schema().model_json_schema() == snapshot
-        assert app.get_output_schema().model_json_schema() == snapshot
+        assert app.get_input_jsonschema() == snapshot
+        assert app.get_output_jsonschema() == snapshot
 
     with pytest.raises(ValidationError):
         await app.ainvoke({"query": {}})
