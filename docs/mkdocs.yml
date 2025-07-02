@@ -259,6 +259,7 @@ nav:
       - MCP Adapters: reference/mcp.md
     - LangGraph Platform:
       - Server API: cloud/reference/api/api_ref.md
+      - Control Plane API: cloud/reference/api/api_ref_control_plane.md
       - CLI: cloud/reference/cli.md
       - SDK (Python): cloud/reference/sdk/python_sdk_ref.md
       - SDK (JS/TS): cloud/reference/sdk/js_ts_sdk_ref.md
