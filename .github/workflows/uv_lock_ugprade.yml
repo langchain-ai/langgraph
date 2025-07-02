@@ -6,6 +6,9 @@ on:
     - cron: '0 0 * * 0'
   # allow manual triggering
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -32,7 +35,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.LANGGRAPH_WRITER_TOKEN }}
           commit-message: "chore: upgrade dependencies with `uv lock --upgrade`"
           title: "chore: upgrade dependencies with `uv lock --upgrade`"
           body: |
@@ -40,6 +43,7 @@ jobs:
             
             This is an automated PR created by the UV Lock Upgrade workflow.
           branch: deps/uv-lock-upgrade
+          base: main
           delete-branch: true
           labels: |
             dependencies
