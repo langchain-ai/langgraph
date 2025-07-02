@@ -15,18 +15,18 @@ pip install -U langgraph
 
 ## Define and update state
 
-Here we show how to define and update [state](../../concepts/low_level.md#state) in LangGraph. We will demonstrate:
+Here we show how to define and update [state](../concepts/low_level.md#state) in LangGraph. We will demonstrate:
 
-1. How to use state to define a graph's [schema](../../concepts/low_level.md#schema)
-2. How to use [reducers](../../concepts/low_level.md#reducers) to control how state updates are processed.
+1. How to use state to define a graph's [schema](../concepts/low_level.md#schema)
+2. How to use [reducers](../concepts/low_level.md#reducers) to control how state updates are processed.
 
 ### Define state
 
-[State](../../concepts/low_level.md#state) in LangGraph can be a `TypedDict`, `Pydantic` model, or dataclass. Below we will use `TypedDict`. See [this section](#use-pydantic-models-for-graph-state) for detail on using Pydantic.
+[State](../concepts/low_level.md#state) in LangGraph can be a `TypedDict`, `Pydantic` model, or dataclass. Below we will use `TypedDict`. See [this section](#use-pydantic-models-for-graph-state) for detail on using Pydantic.
 
 By default, graphs will have the same input and output schema, and the state determines that schema. See [this section](#define-input-and-output-schemas) for how to define distinct input and output schemas.
 
-Let's consider a simple example using [messages](../../concepts/low_level.md#messagesstate). This represents a versatile formulation of state for many LLM applications. See our [concepts page](../../concepts/low_level.md#working-with-messages-in-graph-state) for more detail.
+Let's consider a simple example using [messages](../concepts/low_level.md#messagesstate). This represents a versatile formulation of state for many LLM applications. See our [concepts page](../concepts/low_level.md#working-with-messages-in-graph-state) for more detail.
 
 ```python
 from langchain_core.messages import AnyMessage
@@ -41,7 +41,7 @@ This state tracks a list of [message](https://python.langchain.com/docs/concepts
 
 ### Update state
 
-Let's build an example graph with a single node. Our [node](../../concepts/low_level.md#nodes) is just a Python function that reads our graph's state and makes updates to it. The first argument to this function will always be the state:
+Let's build an example graph with a single node. Our [node](../concepts/low_level.md#nodes) is just a Python function that reads our graph's state and makes updates to it. The first argument to this function will always be the state:
 
 ```python
 from langchain_core.messages import AIMessage
@@ -57,7 +57,7 @@ This node simply appends a message to our message list, and populates an extra f
 !!! important
     Nodes should return updates to the state directly, instead of mutating the state.
 
-Let's next define a simple graph containing this node. We use [StateGraph](../../concepts/low_level.md#stategraph) to define a graph that operates on this state. We then use [add_node](../../concepts/low_level.md#nodes) populate our graph.
+Let's next define a simple graph containing this node. We use [StateGraph](../concepts/low_level.md#stategraph) to define a graph that operates on this state. We then use [add_node](../concepts/low_level.md#nodes) populate our graph.
 
 ```python
 from langgraph.graph import StateGraph
@@ -112,7 +112,7 @@ Hello!
 
 ### Process state updates with reducers
 
-Each key in the state can have its own independent [reducer](../../concepts/low_level.md#reducers) function, which controls how updates from nodes are applied. If no reducer function is explicitly specified then it is assumed that all updates to the key should override it.
+Each key in the state can have its own independent [reducer](../concepts/low_level.md#reducers) function, which controls how updates from nodes are applied. If no reducer function is explicitly specified then it is assumed that all updates to the key should override it.
 
 For `TypedDict` state schemas, we can define reducers by annotating the corresponding field of the state with a reducer function.
 
@@ -163,7 +163,7 @@ Hello!
 In practice, there are additional considerations for updating lists of messages:
 
 - We may wish to update an existing message in the state.
-- We may want to accept short-hands for [message formats](../../concepts/low_level.md#using-messages-in-your-graph), such as [OpenAI format](https://python.langchain.com/docs/concepts/messages.md#openai-format).
+- We may want to accept short-hands for [message formats](../concepts/low_level.md#using-messages-in-your-graph), such as [OpenAI format](https://python.langchain.com/docs/concepts/messages.md#openai-format).
 
 LangGraph includes a built-in reducer `add_messages` that handles these considerations:
 
@@ -676,13 +676,12 @@ for step in graph.stream({"topic": "animals"}):
 {'generate_joke': {'jokes': ['Why don't penguins like talking to strangers at parties? Because they find it hard to break the ice.']}}
 {'best_joke': {'best_selected_joke': 'penguins'}}
 ```
-```
 
 ## Create and control loops
 
-When creating a graph with a loop, we require a mechanism for terminating execution. This is most commonly done by adding a [conditional edge](../../concepts/low_level.md#conditional-edges) that routes to the [END](../../concepts/low_level.md#end-node) node once we reach some termination condition.
+When creating a graph with a loop, we require a mechanism for terminating execution. This is most commonly done by adding a [conditional edge](../concepts/low_level.md#conditional-edges) that routes to the [END](../concepts/low_level.md#end-node) node once we reach some termination condition.
 
-You can also set the graph recursion limit when invoking or streaming the graph. The recursion limit sets the number of [supersteps](../../concepts/low_level.md#graphs) that the graph is allowed to execute before it raises an error. Read more about the concept of recursion limits [here](../../concepts/low_level.md#recursion-limit).
+You can also set the graph recursion limit when invoking or streaming the graph. The recursion limit sets the number of [supersteps](../concepts/low_level.md#graphs) that the graph is allowed to execute before it raises an error. Read more about the concept of recursion limits [here](../concepts/low_level.md#recursion-limit).
 
 Let's consider a simple graph with a loop to better understand how these mechanisms work.
 
@@ -765,7 +764,7 @@ display(Image(graph.get_graph().draw_mermaid_png()))
 
 ![Simple loop graph](assets/graph_api_image_3.png)
 
-This architecture is similar to a [ReAct agent](../../agents/overview) in which node `"a"` is a tool-calling model, and node `"b"` represents the tools.
+This architecture is similar to a [ReAct agent](../agents/overview.md) in which node `"a"` is a tool-calling model, and node `"b"` represents the tools.
 
 In our `route` conditional edge, we specify that we should end after the `"aggregate"` list in the state passes a threshold length.
 
@@ -786,7 +785,7 @@ Node A sees ['A', 'B', 'A', 'B', 'A', 'B']
 
 ### Impose a recursion limit
 
-In some applications, we may not have a guarantee that we will reach a given termination condition. In these cases, we can set the graph's [recursion limit](../../concepts/low_level.md#recursion-limit). This will raise a `GraphRecursionError` after a given number of [supersteps](../../concepts/low_level.md#graphs). We can then catch and handle this exception:
+In some applications, we may not have a guarantee that we will reach a given termination condition. In these cases, we can set the graph's [recursion limit](../concepts/low_level.md#recursion-limit). This will raise a `GraphRecursionError` after a given number of [supersteps](../concepts/low_level.md#graphs). We can then catch and handle this exception:
 
 ```python
 from langgraph.errors import GraphRecursionError
@@ -917,7 +916,7 @@ Recursion Error
 
     ![Complex loop graph with branches](assets/graph_api_image_4.png)
 
-    This graph looks complex, but can be conceptualized as loop of [supersteps](../../concepts/low_level.md#graphs):
+    This graph looks complex, but can be conceptualized as loop of [supersteps](../concepts/low_level.md#graphs):
 
     1. Node A
     2. Node B
@@ -1002,11 +1001,11 @@ result = await graph.ainvoke({"messages": [input_message]}) # (3)!
 3. Use async invocations on the graph object itself.
 
 !!! tip "Async streaming"
-    See the [streaming guide](../../how-tos/streaming) for examples of streaming with async.
+    See the [streaming guide](./streaming.md) for examples of streaming with async.
 
 ## Combine control flow and state updates with `Command`
 
-It can be useful to combine control flow (edges) and state updates (nodes). For example, you might want to BOTH perform state updates AND decide which node to go to next in the SAME node. LangGraph provides a way to do so by returning a [Command](/langgraph/reference/types.md#langgraph.types.Command) object from node functions:
+It can be useful to combine control flow (edges) and state updates (nodes). For example, you might want to BOTH perform state updates AND decide which node to go to next in the SAME node. LangGraph provides a way to do so by returning a [Command](../reference/types.md#Command) object from node functions:
 
 ```python
 def my_node(state: State) -> Command[Literal["my_other_node"]]:
@@ -1058,7 +1057,7 @@ def node_c(state: State):
     return {"foo": state["foo"] + "c"}
 ```
 
-We can now create the `StateGraph` with the above nodes. Notice that the graph doesn't have [conditional edges](../../concepts/low_level#conditional-edges) for routing! This is because control flow is defined with `Command` inside `node_a`.
+We can now create the `StateGraph` with the above nodes. Notice that the graph doesn't have [conditional edges](../concepts/low_level.md#conditional-edges) for routing! This is because control flow is defined with `Command` inside `node_a`.
 
 ```python
 builder = StateGraph(State)
@@ -1094,7 +1093,7 @@ Called C
 
 ### Navigate to a node in a parent graph
 
-If you are using [subgraphs](../../concepts/subgraphs), you might want to navigate from a node within a subgraph to a different subgraph (i.e. a different node in the parent graph). To do so, you can specify `graph=Command.PARENT` in `Command`:
+If you are using [subgraphs](../concepts/subgraphs.md), you might want to navigate from a node within a subgraph to a different subgraph (i.e. a different node in the parent graph). To do so, you can specify `graph=Command.PARENT` in `Command`:
 
 ```python
 def my_node(state: State) -> Command[Literal["my_other_node"]]:
@@ -1108,7 +1107,7 @@ def my_node(state: State) -> Command[Literal["my_other_node"]]:
 Let's demonstrate this using the above example. We'll do so by changing `node_a` in the above example into a single-node graph that we'll add as a subgraph to our parent graph.
 
 !!! important "State updates with `Command.PARENT`"
-    When you send updates from a subgraph node to a parent graph node for a key that's shared by both parent and subgraph [state schemas](../../concepts/low_level#schema), you **must** define a [reducer](../../concepts/low_level#reducers) for the key you're updating in the parent graph state. See the example below.
+    When you send updates from a subgraph node to a parent graph node for a key that's shared by both parent and subgraph [state schemas](../concepts/low_level.md#schema), you **must** define a [reducer](../concepts/low_level.md#reducers) for the key you're updating in the parent graph state. See the example below.
 
 ```python
 import operator

@@ -1,11 +1,11 @@
 # Use subgraphs
 
-This guide explains the mechanics of using [subgraphs](../../concepts/subgraphs). A common application of subgraphs is to build [multi-agent](../../concepts/multi_agent) systems.
+This guide explains the mechanics of using [subgraphs](../concepts/subgraphs.md). A common application of subgraphs is to build [multi-agent](../concepts/multi_agent.md) systems.
 
 When adding subgraphs, you need to define how the parent graph and the subgraph communicate:
 
-* [Shared state schemas](#shared-state-schemas) — parent and subgraph have **shared state keys** in their state [schemas](../../concepts/low_level#state)
-* [Different state schemas](#different-state-schemas) — **no shared state keys** in parent and subgraph [schemas](../../concepts/low_level#state)
+* [Shared state schemas](#shared-state-schemas) — parent and subgraph have **shared state keys** in their state [schemas](../concepts/low_level.md#state)
+* [Different state schemas](#different-state-schemas) — **no shared state keys** in parent and subgraph [schemas](../concepts/low_level.md#state)
 
 ## Setup
 
@@ -18,7 +18,7 @@ pip install -U langgraph
 
 ## Shared state schemas
 
-A common case is for the parent graph and subgraph to communicate over a shared state key (channel) in the [schema](../../concepts/low_level#state). For example, in [multi-agent](../../concepts/multi_agent) systems, the agents often communicate over a shared [messages](https://langchain-ai.github.io/langgraph/concepts/low_level.md#why-use-messages) key.
+A common case is for the parent graph and subgraph to communicate over a shared state key (channel) in the [schema](../concepts/low_level.md#state). For example, in [multi-agent](../concepts/multi_agent.md) systems, the agents often communicate over a shared [messages](https://langchain-ai.github.io/langgraph/concepts/low_level.md#why-use-messages) key.
 
 If your subgraph shares state keys with the parent graph, you can follow these steps to add it to your graph:
 
@@ -321,7 +321,7 @@ checkpointer = InMemorySaver()
 graph = builder.compile(checkpointer=checkpointer)
 ```    
 
-If you want the subgraph to **have its own memory**, you can compile it `with checkpointer=True`. This is useful in [multi-agent](../../concepts/multi_agent) systems, if you want agents to keep track of their internal message histories:
+If you want the subgraph to **have its own memory**, you can compile it `with checkpointer=True`. This is useful in [multi-agent](../concepts/multi_agent.md) systems, if you want agents to keep track of their internal message histories:
 
 ```python
 subgraph_builder = StateGraph(...)
@@ -330,7 +330,7 @@ subgraph = subgraph_builder.compile(checkpointer=True)
 
 ## View subgraph state
 
-When you enable [persistence](../persistence), you can [inspect the graph state](../persistence#manage-checkpoints) (checkpoint) via `graph.get_state(config)`. To view the subgraph state, you can use `graph.get_state(config, subgraphs=True)`.
+When you enable [persistence](../concepts/persistence.md), you can [inspect the graph state](../concepts/persistence.md#checkpoints) (checkpoint) via `graph.get_state(config)`. To view the subgraph state, you can use `graph.get_state(config, subgraphs=True)`.
 
 !!! important "Available **only** when interrupted"
 
@@ -382,7 +382,7 @@ When you enable [persistence](../persistence), you can [inspect the graph state]
 
 ## Stream subgraph outputs
 
-To include outputs from [subgraphs](../concepts/low_level.md#subgraphs) in the streamed outputs, you can set `subgraphs=True` in the `.stream()` method of the parent graph. This will stream outputs from both the parent graph and any subgraphs.
+To include outputs from subgraphs in the streamed outputs, you can set `subgraphs=True` in the `.stream()` method of the parent graph. This will stream outputs from both the parent graph and any subgraphs.
 
 ```python
 for chunk in graph.stream(
