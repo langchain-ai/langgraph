@@ -198,7 +198,11 @@ print(graph.invoke({"question": "hi"}))
 
 For more details, see the [low-level concepts guide](https://langchain-ai.github.io/langgraph/concepts/low_level/#state).
 
-## Use MCP tools in your deployment
+## Use User-Scoped MCP tools in your deployment
+
+!!! tip "Prerequisites"
+
+    You have added your own [custom auth middleware](https://langchain-ai.github.io/langgraph/how-tos/auth/custom_auth/) that populates the `langgraph_auth_user` object, making it accessible through configurable context for every node in your graph. 
 
 To make user-scoped tools available to your LangGraph Platform deployment, start with implementing a snippet like the following: 
 
