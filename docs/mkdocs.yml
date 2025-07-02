@@ -156,6 +156,7 @@ nav:
           - Prebuilt implementation: agents/multi-agent.md
           - Custom implementation: how-tos/multi_agent.ipynb
       - MCP:
+          - Overview: concepts/mcp.md
           - Use MCP: agents/mcp.md
           - Server API: concepts/server-mcp.md
       - Evaluation:
@@ -289,7 +290,6 @@ nav:
     - Case studies: adopters.md
     - concepts/faq.md
     - llms.txt: llms-txt-overview.md
-    - LangChain Forum: https://forum.langchain.com/
     - Troubleshooting:
         - Errors:
           - troubleshooting/errors/index.md

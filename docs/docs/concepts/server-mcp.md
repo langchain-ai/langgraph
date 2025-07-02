@@ -28,79 +28,6 @@ Install them with:
 pip install "langgraph-api>=0.2.3" "langgraph-sdk>=0.1.61"
 ```
 
-## Exposing an agent as MCP tool
-
-
-When deployed, your agent will appear as a tool in the MCP endpoint
-with this configuration:
-
-- **Tool name**: The agent's name.
-- **Tool description**: The agent's description.
-- **Tool input schema**: The agent's input schema.
-
-### Setting name and description 
-
-You can set the name and description of your agent in `langgraph.json`:
-
-```json
-{
-    "graphs": {
-        "my_agent": {
-            "path": "./my_agent/agent.py:graph",
-            "description": "A description of what the agent does"
-        }
-    },
-    "env": ".env"
-}
-```
-
-After deployment, you can update the name and description using the LangGraph SDK.
-
-### Schema
-
-Define clear, minimal input and output schemas to avoid exposing unnecessary internal complexity to the LLM.
-
-The default [MessagesState](./low_level.md#messagesstate) uses `AnyMessage`, which supports many message types but is too general for direct LLM exposure.
-
-Instead, define **custom agents or workflows** that use explicitly typed input and output structures.
-
-For example, a workflow answering documentation questions might look like this:
-
-```python
-from langgraph.graph import StateGraph, START, END
-from typing_extensions import TypedDict
-
-# Define input schema
-class InputState(TypedDict):
-    question: str
-
-# Define output schema
-class OutputState(TypedDict):
-    answer: str
-
-# Combine input and output
-class OverallState(InputState, OutputState):
-    pass
-
-# Define the processing node
-def answer_node(state: InputState):
-    # Replace with actual logic and do something useful
-    return {"answer": "bye", "question": state["question"]}
-
-# Build the graph with explicit schemas
-builder = StateGraph(OverallState, input_schema=InputState, output_schema=OutputState)
-builder.add_node(answer_node)
-builder.add_edge(START, "answer_node")
-builder.add_edge("answer_node", END)
-graph = builder.compile()
-
-# Run the graph
-print(graph.invoke({"question": "hi"}))
-```
-
-For more details, see the [low-level concepts guide](https://langchain-ai.github.io/langgraph/concepts/low_level/#state).
-
-
 ## Usage overview
 
 To enable MCP:
@@ -201,6 +128,105 @@ Use an MCP-compliant client to connect to the LangGraph server. The following ex
         asyncio.run(main())
     ```
 
+## Expose an agent as MCP tool
+
+When deployed, your agent will appear as a tool in the MCP endpoint
+with this configuration:
+
+- **Tool name**: The agent's name.
+- **Tool description**: The agent's description.
+- **Tool input schema**: The agent's input schema.
+
+### Setting name and description 
+
+You can set the name and description of your agent in `langgraph.json`:
+
+```json
+{
+    "graphs": {
+        "my_agent": {
+            "path": "./my_agent/agent.py:graph",
+            "description": "A description of what the agent does"
+        }
+    },
+    "env": ".env"
+}
+```
+
+After deployment, you can update the name and description using the LangGraph SDK.
+
+### Schema
+
+Define clear, minimal input and output schemas to avoid exposing unnecessary internal complexity to the LLM.
+
+The default [MessagesState](./low_level.md#messagesstate) uses `AnyMessage`, which supports many message types but is too general for direct LLM exposure.
+
+Instead, define **custom agents or workflows** that use explicitly typed input and output structures.
+
+For example, a workflow answering documentation questions might look like this:
+
+```python
+from langgraph.graph import StateGraph, START, END
+from typing_extensions import TypedDict
+
+# Define input schema
+class InputState(TypedDict):
+    question: str
+
+# Define output schema
+class OutputState(TypedDict):
+    answer: str
+
+# Combine input and output
+class OverallState(InputState, OutputState):
+    pass
+
+# Define the processing node
+def answer_node(state: InputState):
+    # Replace with actual logic and do something useful
+    return {"answer": "bye", "question": state["question"]}
+
+# Build the graph with explicit schemas
+builder = StateGraph(OverallState, input_schema=InputState, output_schema=OutputState)
+builder.add_node(answer_node)
+builder.add_edge(START, "answer_node")
+builder.add_edge("answer_node", END)
+graph = builder.compile()
+
+# Run the graph
+print(graph.invoke({"question": "hi"}))
+```
+
+For more details, see the [low-level concepts guide](https://langchain-ai.github.io/langgraph/concepts/low_level/#state).
+
+## Use MCP tools in your deployment
+
+To make user-scoped tools available to your LangGraph Platform deployment, start with implementing a snippet like the following: 
+
+```python
+from langchain_mcp_adapters.client import MultiServerMCPClient
+
+def get_mcp_tools_node(state, config):
+    user = config["configurable"].get("langgraph_auth_user")
+		 # e.g., user["github_token"], user["email"], etc.
+		
+    client = MultiServerMCPClient({
+        "github": {
+            "transport": "streamable_http", # (1)
+            "url": "https://my-github-mcp-server/mcp", # (2)
+            "headers": {
+                "Authorization": f"Bearer {user['github_token']}" 
+            }
+        }
+    })
+    tools = await client.get_tools() # (3)
+    return {"tools": tools}
+	
+```
+
+1. MCP only supports adding headers to requests made to `streamable_http` and `sse` `transport` servers.
+2. Your MCP server URL.
+3. Get available tools from your MCP server.
 
 ## Session behavior  
 
@@ -210,7 +236,7 @@ The current LangGraph MCP implementation does not support sessions. Each `/mcp` 
 
 The `/mcp` endpoint uses the same authentication as the rest of the LangGraph API. Refer to the [authentication guide](./auth.md) for setup details.
 
-## Disabling MCP
+## Disable MCP
 
 To disable the MCP endpoint, set `disable_mcp` to `true` in your `langgraph.json` configuration file:
 
