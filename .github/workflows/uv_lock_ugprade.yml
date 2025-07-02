@@ -1,0 +1,45 @@
+name: UV Lock Upgrade
+
+on:
+  schedule:
+    # run at midnight every Sunday
+    - cron: '0 0 * * 0'
+  # allow manual triggering
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  upgrade-dependencies:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          # use minimum supported Python version
+          python-version: "3.9"
+          enable-cache: true
+          cache-suffix: "uv-lock-upgrade"
+          
+      - name: Run uv lock --upgrade in all Python packages
+        run: make lock-upgrade
+          
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: upgrade dependencies with `uv lock --upgrade`"
+          title: "chore: upgrade dependencies with `uv lock --upgrade`"
+          body: |
+            This PR updates the dependencies in all Python packages using `uv lock --upgrade`.
+            
+            This is an automated PR created by the UV Lock Upgrade workflow.
+          branch: deps/uv-lock-upgrade
+          delete-branch: true
+          labels: |
+            dependencies

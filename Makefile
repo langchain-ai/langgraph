@@ -47,6 +47,16 @@ lock:
 		fi; \
 	done
 
+# Lock all projects and upgrade dependencies
+.PHONY: lock-upgrade
+lock-upgrade:
+	@for dir in $(LIBS_DIRS); do \
+		if [ -f $$dir/Makefile ]; then \
+			echo "Running lock-upgrade in $$dir"; \
+			(cd $$dir && uv lock --upgrade); \
+		fi; \
+	done
+
 # Test all projects
 .PHONY: test
 test:

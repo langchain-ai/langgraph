@@ -49,19 +49,24 @@ REDIRECT_MAP = {
     "how-tos/return-when-recursion-limit-hits.ipynb": "how-tos/graph-api/#impose-a-recursion-limit",
     "how-tos/async.ipynb": "how-tos/graph-api/#async",
     # memory how-tos
-    "how-tos/memory/manage-conversation-history.ipynb": "how-tos/memory.ipynb",
-    "how-tos/memory/delete-messages.ipynb": "how-tos/memory.ipynb#delete-messages",
-    "how-tos/memory/add-summary-conversation-history.ipynb": "how-tos/memory.ipynb#summarize-messages",
+    "how-tos/memory/manage-conversation-history.ipynb": "how-tos/memory/add-memory.md",
+    "how-tos/memory/delete-messages.ipynb": "how-tos/memory/add-memory.md#delete-messages",
+    "how-tos/memory/add-summary-conversation-history.ipynb": "how-tos/memory/add-memory.md#summarize-messages",
+    "how-tos/memory.ipynb": "how-tos/memory/add-memory.md",
+    "agents/memory.ipynb": "how-tos/memory/add-memory.md",
     # subgraph how-tos
     "how-tos/subgraph-transform-state.ipynb": "how-tos/subgraph.ipynb#different-state-schemas",
     "how-tos/subgraphs-manage-state.ipynb": "how-tos/subgraph.ipynb#add-persistence",
     # persistence how-tos
-    "how-tos/persistence_postgres.ipynb": "how-tos/persistence.ipynb#use-in-production",
-    "how-tos/persistence_mongodb.ipynb": "how-tos/persistence.ipynb#use-in-production",
-    "how-tos/persistence_redis.ipynb": "how-tos/persistence.ipynb#use-in-production",
-    "how-tos/subgraph-persistence.ipynb": "how-tos/persistence.ipynb#use-with-subgraphs",
-    "how-tos/cross-thread-persistence.ipynb": "how-tos/persistence.ipynb#add-long-term-memory",
+    "how-tos/persistence_postgres.ipynb": "how-tos/memory/add-memory.md#use-in-production",
+    "how-tos/persistence_mongodb.ipynb": "how-tos/memory/add-memory.md#use-in-production",
+    "how-tos/persistence_redis.ipynb": "how-tos/memory/add-memory.md#use-in-production",
+    "how-tos/subgraph-persistence.ipynb": "how-tos/memory/add-memory.md#use-with-subgraphs",
+    "how-tos/cross-thread-persistence.ipynb": "how-tos/memory/add-memory.md#add-long-term-memory",
     "cloud/how-tos/copy_threads": "cloud/how-tos/use_threads",
+    "cloud/how-tos/check-thread-status": "cloud/how-tos/use_threads",
+    "cloud/concepts/threads.md": "concepts/persistence.md#threads",
+    "how-tos/persistence.ipynb": "how-tos/memory/add-memory.md",
     # tool calling how-tos
     "how-tos/tool-calling-errors.ipynb": "how-tos/tool-calling.ipynb#handle-errors",
     "how-tos/pass-config-to-tools.ipynb": "how-tos/tool-calling.ipynb#access-config",
@@ -87,16 +92,17 @@ REDIRECT_MAP = {
     "cloud/how-tos/stream_events.md": "cloud/how-tos/streaming.md#stream-events",
     "cloud/how-tos/stream_debug.md": "cloud/how-tos/streaming.md#debug",
     "cloud/how-tos/stream_multiple.md": "cloud/how-tos/streaming.md#stream-multiple-modes",
+    "cloud/concepts/streaming.md": "concepts/streaming.md",
+    "agents/streaming.md": "how-tos/streaming.md",
     # prebuilt redirects
     "how-tos/create-react-agent.ipynb": "agents/agents.md#basic-configuration",
     "how-tos/create-react-agent-memory.ipynb": "agents/memory.md",
     "how-tos/create-react-agent-system-prompt.ipynb": "agents/context.md#prompts",
-    "how-tos/create-react-agent-hitl.ipynb": "agents/human-in-the-loop.md",
     "how-tos/create-react-agent-structured-output.ipynb": "agents/agents.md#structured-output",
     # Time-travel
-    "how-tos/human_in_the_loop/edit-graph-state.ipynb": "how-tos/human_in_the_loop/time-travel.ipynb",
+    "how-tos/human_in_the_loop/edit-graph-state.ipynb": "how-tos/human_in_the_loop/time-travel.md",
     # breakpoints
-    "how-tos/human_in_the_loop/dynamic_breakpoints.ipynb": "how-tos/human_in_the_loop/breakpoints.ipynb",
+    "how-tos/human_in_the_loop/dynamic_breakpoints.ipynb": "how-tos/human_in_the_loop/breakpoints.md",
     # misc
     "prebuilt.md": "agents/prebuilt.md",
     "reference/prebuilt.md": "reference/agents.md",
@@ -105,11 +111,19 @@ REDIRECT_MAP = {
     "concepts/v0-human-in-the-loop.md": "concepts/human-in-the-loop.md",
     "how-tos/index.md": "index.md",
     "tutorials/introduction.ipynb": "concepts/why-langgraph.md",
+    "agents/deployment.md": "tutorials/langgraph-platform/local-server.md",
     # deployment redirects
     "how-tos/deploy-self-hosted.md": "cloud/deployment/self_hosted_data_plane.md",
     "concepts/self_hosted.md": "concepts/langgraph_self_hosted_data_plane.md",
+    "tutorials/deployment.md": "concepts/deployment_options.md",
     # assistant redirects
     "cloud/how-tos/assistant_versioning.md": "cloud/how-tos/configuration_cloud.md",
+    "cloud/concepts/runs.md": "concepts/assistants.md#execution",
+    # hitl redirects
+    "how-tos/wait-user-input-functional.ipynb": "how-tos/use-functional-api.md",
+    "how-tos/review-tool-calls-functional.ipynb": "how-tos/use-functional-api.md",
+    "how-tos/create-react-agent-hitl.ipynb": "how-tos/human_in_the_loop/add-human-in-the-loop.md",
+    "agents/human-in-the-loop.md": "how-tos/human_in_the_loop/add-human-in-the-loop.md",
 }
 
 

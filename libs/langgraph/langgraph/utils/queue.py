@@ -91,7 +91,7 @@ class SyncQueue:
         self._queue.append(item)
         self._count.release()
 
-    def get(self, block=True, timeout=None):
+    def get(self, block=False, timeout=None):
         """Remove and return an item from the queue.
 
         If optional args 'block' is true and 'timeout' is None (the default),

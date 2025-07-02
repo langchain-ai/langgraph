@@ -5,13 +5,22 @@ search:
 
 # Deployment Options
 
-There are 4 main options for deploying with the LangGraph Platform:
+## Free deployment
+
+There are two free options for deploying LangGraph applications via the LangGraph Server:
+
+1. [Local](../tutorials/langgraph-platform/local-server.md): Deploy for local testing and development. 
+1. [Standalone Container (Lite)](../concepts/langgraph_standalone_container.md): A limited version of Standalone Container for deployments unlikely to see more that 1 million node executions per year and that do not need crons and other enterprise features. Standalone Container (Lite) deployment option is free with a LangSmith API key.
+
+## Production deployment
+
+There are 4 main options for deploying with the [LangGraph Platform](langgraph_platform.md):
 
 1. [Cloud SaaS](#cloud-saas)
 
-1. [Self-Hosted Data Plane<sup>(Beta)</sup>](#self-hosted-data-plane)
+1. [Self-Hosted Data Plane](#self-hosted-data-plane)
 
-1. [Self-Hosted Control Plane<sup>(Beta)</sup>](#self-hosted-control-plane)
+1. [Self-Hosted Control Plane](#self-hosted-control-plane)
 
 1. [Standalone Container](#standalone-container)
 
@@ -22,7 +31,7 @@ A quick comparison:
 |----------------------|----------------|----------------------------|-------------------------------|--------------------------|
 | **[Control plane UI/API](../concepts/langgraph_control_plane.md)** | Yes | Yes | Yes | No |
 | **CI/CD** | Managed internally by platform | Managed externally by you | Managed externally by you | Managed externally by you |
-| **Data/compute residency** | LangChain’s cloud | Your cloud | Your cloud | Your cloud |
+| **Data/compute residency** | LangChain's cloud | Your cloud | Your cloud | Your cloud |
 | **LangSmith compatibility** | Trace to LangSmith SaaS | Trace to LangSmith SaaS | Trace to Self-Hosted LangSmith | Optional tracing |
 | **[Server version compatibility](../concepts/langgraph_server.md#server-versions)** | Enterprise | Enterprise | Enterprise | Lite, Enterprise |
 | **[Pricing](https://www.langchain.com/pricing-langgraph-platform)** | Plus | Enterprise | Enterprise | Developer |
@@ -41,7 +50,7 @@ For more information, please see:
 ## Self-Hosted Data Plane
 
 !!! info "Important"
-    The Self-Hosted Data Plane deployment option is currently in beta stage and requires an [Enterprise](../concepts/plans.md) plan.
+    The Self-Hosted Data Plane deployment option requires an [Enterprise](../concepts/plans.md) plan.
 
 The [Self-Hosted Data Plane](./langgraph_self_hosted_data_plane.md) deployment option is a "hybrid" model for deployment where we manage the [control plane](./langgraph_control_plane.md) in our cloud and you manage the [data plane](./langgraph_data_plane.md) in your cloud. This option provides a way to securely manage your data plane infrastructure, while offloading control plane management to us.
 
@@ -57,7 +66,7 @@ For more information, please see:
 ## Self-Hosted Control Plane
 
 !!! info "Important"
-    The Self-Hosted Control Plane deployment option is currently in beta stage and requires an [Enterprise](../concepts/plans.md) plan.
+    The Self-Hosted Control Plane deployment option requires an [Enterprise](../concepts/plans.md) plan.
 
 The [Self-Hosted Control Plane](./langgraph_self_hosted_control_plane.md) deployment option is a fully self-hosted model for deployment where you manage the [control plane](./langgraph_control_plane.md) and [data plane](./langgraph_data_plane.md) in your cloud. This option gives you full control and responsibility of the control plane and data plane infrastructure.
 
