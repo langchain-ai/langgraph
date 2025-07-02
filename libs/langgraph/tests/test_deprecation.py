@@ -79,4 +79,4 @@ def test_constants_deprecation() -> None:
         DeprecationWarning,
         match="Importing Interrupt from langgraph.constants is deprecated. Please use 'from langgraph.types import Interrupt' instead.",
     ):
-        from langgraph.constants import Interrupt
+        from langgraph.constants import Interrupt  # noqa: F401
