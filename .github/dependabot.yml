@@ -1,11 +1,18 @@
-# Please see the documentation for all configuration options:
-# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
-# and
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-
 version: 2
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "pip"
+    directories:
+      - "libs/checkpoint"
+      - "libs/checkpoint-postgres"
+      - "libs/checkpoint-sqlite"
+      - "libs/cli"
+      - "libs/langgraph"
+      - "libs/prebuilt"
+      - "libs/sdk-py"
     schedule:
       interval: "weekly"

@@ -1,4 +1,4 @@
-# LangGraph Platform quickstart
+# Run a local server
 
 This guide shows you how to run a LangGraph application locally.
 
