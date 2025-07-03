@@ -77,7 +77,7 @@ Resources for `Production` type deployments can be manually increased on a case-
     
     This behavior is expected. Preemptible compute infrastructure **significantly reduces the cost to provision a `Development` type deployment**. By design, LangGraph Server is fault-tolerant. The implementation will automatically attempt to recover from Redis/Postgres connection errors and retry failed background runs.
 
-    `Production` type deployments are provisioned on durable compute infrastucture, not preemptible compute infrastructure.
+    `Production` type deployments are provisioned on durable compute infrastructure, not preemptible compute infrastructure.
 
 Database disk size for `Development` type deployments can be manually increased on a case-by-case basis depending on use case and capacity constraints. For most use cases, [TTLs](../how-tos/ttl/configure_ttl.md) should be configured to manage disk usage. Contact support@langchain.dev to request an increase in resources.
 
