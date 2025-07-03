@@ -459,32 +459,31 @@ LangGraph can easily handle migrations of graph definitions (nodes, edges, and s
 - State keys that are renamed lose their saved state in existing threads
 - State keys whose types change in incompatible ways could currently cause issues in threads with state from before the change -- if this is a blocker please reach out and we can prioritize a solution.
 
-## Configuration
+## Runtime Context
 
-When creating a graph, you can also mark that certain parts of the graph are configurable. This is commonly done to enable easily switching between models or system prompts. This allows you to create a single "cognitive architecture" (the graph) but have multiple different instance of it.
-
-You can optionally specify a `config_schema` when creating a graph.
+When creating a graph, you can specify a `context_schema` for runtime context passed to nodes. This is useful for passing
+information to nodes that is not part of the graph state. For example, you might want to pass dependencies such as model name or a database connection.
 
 ```python
-class ConfigSchema(TypedDict):
+class ContextSchema(TypedDict):
     llm: str
 
-graph = StateGraph(State, config_schema=ConfigSchema)
+graph = StateGraph(State, context_schema=ContextSchema)
 ```
 
-You can then pass this configuration into the graph using the `configurable` config field.
+You can then pass this context into the graph using the `context` parameter of the `invoke` method.
 
 ```python
-config = {"configurable": {"llm": "anthropic"}}
-
-graph.invoke(inputs, config=config)
+graph.invoke(inputs, context={"llm": "anthropic"})
 ```
 
 You can then access and use this configuration inside a node or conditional edge:
 
 ```python
-def node_a(state, config):
-    llm_type = config.get("configurable", {}).get("llm", "openai")
+from langgraph.types import Runtime
+
+def node_a(state, context: Runtime[ContextSchema]):
+    llm_type = runtime.context.get("llm", "openai")
     llm = get_llm(llm_type)
     ...
 ```

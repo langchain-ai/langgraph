@@ -4,6 +4,7 @@ import dataclasses
 import sys
 from collections import deque
 from collections.abc import Hashable, Sequence
+from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -24,6 +25,8 @@ from langgraph._internal._cache import default_cache_key
 from langgraph._internal._fields import get_cached_annotated_keys, get_update_as_tuples
 from langgraph._internal._retry import default_retry_on
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
+from langgraph.store.base import BaseStore
+from langgraph.typing import ContextT
 
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
@@ -481,3 +484,16 @@ def interrupt(value: Any) -> Any:
             ),
         )
     )
+
+
+@dataclass
+class Runtime(Generic[ContextT]):
+    """Convenience class that bundles run-scoped context and graph configuration."""
+
+    context: ContextT
+
+    store: BaseStore | None
+
+    stream_writer: StreamWriter
+
+    config: RunnableConfig

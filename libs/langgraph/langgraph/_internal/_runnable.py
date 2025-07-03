@@ -51,6 +51,7 @@ from langgraph._internal._config import (
 from langgraph.constants import (
     CONF,
     CONFIG_KEY_PREVIOUS,
+    CONFIG_KEY_RUNTIME,
     CONFIG_KEY_STORE,
     CONFIG_KEY_STREAM_WRITER,
 )
@@ -168,6 +169,12 @@ KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
         (ANY_TYPE,),
         CONFIG_KEY_PREVIOUS,
         inspect.Parameter.empty,
+    ),
+    (
+        sys.intern("runtime"),
+        (ANY_TYPE,),
+        CONFIG_KEY_RUNTIME,
+        None,
     ),
 )
 """List of kwargs that can be passed to functions, and their corresponding
