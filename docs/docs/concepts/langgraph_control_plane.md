@@ -26,7 +26,7 @@ The Control Plane UI is embedded in [LangSmith](https://docs.smith.langchain.com
 
 ## Control Plane API
 
-This section describes data model of the control plane API. The API is used to create, update, and delete deployments. However, they are not publicly accessible.
+This section describes the data model of the control plane API. The API is used to create, update, and delete deployments. See the [control plane API reference](../cloud/reference/api/api_ref_control_plane.md) for more details.
 
 ### Deployment
 
@@ -34,11 +34,7 @@ A deployment is an instance of a LangGraph Server. A single deployment can have 
 
 ### Revision
 
-A revision is an iteration of a deployment. When a new deployment is created, an initial revision is automatically created. To deploy code changes or update environment variables for a deployment, a new revision must be created.
-
-### Environment Variable
-
-Environment variables are set for a deployment. All environment variables are stored as secrets (i.e. saved in a secrets store).
+A revision is an iteration of a deployment. When a new deployment is created, an initial revision is automatically created. To deploy code changes or update secrets for a deployment, a new revision must be created.
 
 ## Control Plane Features
 
