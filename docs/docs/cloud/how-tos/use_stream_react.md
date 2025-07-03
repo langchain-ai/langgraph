@@ -1,4 +1,4 @@
-How to integrate LangGraph into your React application# How to integrate LangGraph into your React application
+# How to integrate LangGraph into your React application
 
 !!! info "Prerequisites"
 

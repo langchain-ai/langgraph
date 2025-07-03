@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-__all__ = [
+__all__ = (
     "LangGraphDeprecationWarning",
     "LangGraphDeprecatedSinceV05",
     "LangGraphDeprecatedSinceV10",
-]
+)
 
 
 class LangGraphDeprecationWarning(DeprecationWarning):

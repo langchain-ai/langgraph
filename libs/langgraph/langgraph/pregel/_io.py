@@ -18,7 +18,7 @@ from langgraph.constants import (
     TASKS,
 )
 from langgraph.errors import InvalidUpdateError
-from langgraph.pregel.log import logger
+from langgraph.pregel._log import logger
 from langgraph.types import Command, PregelExecutableTask, Send
 
 

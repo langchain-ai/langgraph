@@ -12,6 +12,8 @@ from langgraph.errors import (
     create_error_message,
 )
 
+__all__ = ("LastValue", "LastValueAfterFinish")
+
 
 class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the last value received, can receive at most one value per step."""

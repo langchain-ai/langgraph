@@ -43,27 +43,26 @@ from langgraph.checkpoint.base import (
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.config import get_stream_writer
 from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, START
-from langgraph.errors import InvalidUpdateError, ParentCommand
+from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentCommand
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import MessageGraph, MessagesState, add_messages
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import (
-    GraphRecursionError,
     NodeBuilder,
     Pregel,
-    StateSnapshot,
 )
-from langgraph.pregel.loop import SyncPregelLoop
-from langgraph.pregel.retry import RetryPolicy
-from langgraph.pregel.runner import PregelRunner
+from langgraph.pregel._loop import SyncPregelLoop
+from langgraph.pregel._runner import PregelRunner
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     CachePolicy,
     Command,
     Interrupt,
     PregelTask,
+    RetryPolicy,
     Send,
+    StateSnapshot,
     StateUpdate,
     StreamWriter,
     interrupt,
@@ -1723,8 +1722,8 @@ def test_conditional_entrypoint_to_multiple_state_graph(
 
     app = workflow.compile()
 
-    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+    assert json.dumps(app.get_input_jsonschema()) == snapshot
+    assert json.dumps(app.get_output_jsonschema()) == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
@@ -1848,8 +1847,8 @@ def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) 
     app = builder.compile()
 
     assert json.dumps(app.config_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+    assert json.dumps(app.get_input_jsonschema()) == snapshot
+    assert json.dumps(app.get_output_jsonschema()) == snapshot
 
     assert builder.channels.keys() == {"input", "agent_outcome", "intermediate_steps"}
 
@@ -1912,8 +1911,8 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
 
     app = workflow.compile()
 
-    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+    assert json.dumps(app.get_input_jsonschema()) == snapshot
+    assert json.dumps(app.get_output_jsonschema()) == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
@@ -2507,8 +2506,8 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
 
     if isinstance(sync_checkpointer, InMemorySaver):
         assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
-        assert app.get_input_schema().model_json_schema() == snapshot
-        assert app.get_output_schema().model_json_schema() == snapshot
+        assert app.get_input_jsonschema() == snapshot
+        assert app.get_output_jsonschema() == snapshot
 
     with pytest.raises(ValidationError):
         app.invoke({"query": {}})
@@ -6549,7 +6548,7 @@ def test_entrypoint_output_schema_with_return_and_save() -> None:
     def foo2(inputs, *, previous: Any) -> entrypoint.final:
         return entrypoint.final(value="foo", save=1)
 
-    assert foo2.get_output_schema().model_json_schema() == {
+    assert foo2.get_output_jsonschema() == {
         "title": "LangGraphOutput",
     }
 
@@ -6557,7 +6556,7 @@ def test_entrypoint_output_schema_with_return_and_save() -> None:
     def foo(inputs, *, previous: Any) -> entrypoint.final[str, int]:
         return entrypoint.final(value="foo", save=1)
 
-    assert foo.get_output_schema().model_json_schema() == {
+    assert foo.get_output_jsonschema() == {
         "title": "LangGraphOutput",
         "type": "string",
     }
@@ -6584,7 +6583,7 @@ def test_entrypoint_with_return_and_save(
         previous = previous or []
         return entrypoint.final(value=len(previous), save=previous + [msg])
 
-    assert foo.get_output_schema().model_json_schema() == {
+    assert foo.get_output_jsonschema() == {
         "title": "LangGraphOutput",
         "type": "integer",
     }

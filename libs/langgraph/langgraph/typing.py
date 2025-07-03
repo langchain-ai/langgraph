@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from typing_extensions import TypeVar
 
-from langgraph._typing import StateLike
+from langgraph._internal._typing import StateLike
+
+__all__ = (
+    "StateT",
+    "StateT_co",
+    "StateT_contra",
+    "InputT",
+    "OutputT",
+)
 
 StateT = TypeVar("StateT", bound=StateLike)
 """Type variable used to represent the state in a graph."""
@@ -18,12 +26,6 @@ InputT = TypeVar("InputT", bound=StateLike, default=StateT)
 """Type variable used to represent the input to a state graph.
 
 Defaults to `StateT`.
-"""
-
-ResolvedInputT = TypeVar("ResolvedInputT", bound=StateLike)
-"""Type variable used to represent the resolved input to a state graph.
-
-No default.
 """
 
 

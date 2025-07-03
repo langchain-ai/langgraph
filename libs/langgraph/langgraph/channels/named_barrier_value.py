@@ -7,6 +7,8 @@ from langgraph.channels.base import BaseChannel, Value
 from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
+__all__ = ("NamedBarrierValue", "NamedBarrierValueAfterFinish")
+
 
 class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
     """A channel that waits until all named values are received before making the value available."""
