@@ -9,20 +9,11 @@ hide:
 
 # Use MCP
 
-[Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) is an open protocol that standardizes how applications provide tools and context to language models. LangGraph agents can use tools defined on MCP servers through the `langchain-mcp-adapters` library.
-
-![MCP](./assets/mcp.png)
-
-Install the `langchain-mcp-adapters` library to use MCP tools in LangGraph:
-
-```bash
-pip install langchain-mcp-adapters
-```
+The Model Context Protocol (MCP) is an open protocol that standardizes how applications provide tools and context to language models. LangGraph agents can use tools defined on MCP servers through the `langchain-mcp-adapters` library.
 
 ## Use MCP tools
 
 The `langchain-mcp-adapters` package enables agents to use tools defined across one or more MCP servers.
-
 
 === "In an agent"
 

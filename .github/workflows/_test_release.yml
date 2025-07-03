@@ -11,6 +11,9 @@ on:
 env:
   PYTHON_VERSION: "3.10"
 
+permissions:
+  contents: read
+
 jobs:
   build:
     if: github.ref == 'refs/heads/main'
