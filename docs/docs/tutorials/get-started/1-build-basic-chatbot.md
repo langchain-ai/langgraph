@@ -14,20 +14,43 @@ tool-calling features, such as [OpenAI](https://platform.openai.com/api-keys),
 Install the required packages:
 
 :::python
+
 ```bash
 pip install -U langgraph langsmith
 ```
+
 :::
 
 :::js
-```bash
-npm install @langchain/langgraph @langchain/core
-```
+=== "npm"
+
+    ```bash
+    npm install @langchain/langgraph @langchain/core zod
+    ```
+
+=== "yarn"
+
+    ```bash
+    yarn add @langchain/langgraph @langchain/core zod
+    ```
+
+=== "pnpm"
+
+    ```bash
+    pnpm add @langchain/langgraph @langchain/core zod
+    ```
+
+=== "bun"
+
+    ```bash
+    bun add @langchain/langgraph @langchain/core zod
+    ```
+
 :::
 
 !!! tip
 
-    Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM apps built with LangGraph. For more information on how to get started, see [LangSmith docs](https://docs.smith.langchain.com). 
+    Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM apps built with LangGraph. For more information on how to get started, see [LangSmith docs](https://docs.smith.langchain.com).
 
 ## 2. Create a `StateGraph`
 
@@ -36,6 +59,7 @@ Now you can create a basic chatbot using LangGraph. This chatbot will respond di
 Start by creating a `StateGraph`. A `StateGraph` object defines the structure of our chatbot as a "state machine". We'll add `nodes` to represent the llm and functions our chatbot can call and `edges` to specify how the bot should transition between these functions.
 
 :::python
+
 ```python
 from typing import Annotated
 
@@ -54,25 +78,20 @@ class State(TypedDict):
 
 graph_builder = StateGraph(State)
 ```
+
 :::
 
 :::js
+
 ```typescript
-import { Annotation } from "@langchain/langgraph";
-import { StateGraph, START, END } from "@langchain/langgraph";
-import { BaseMessage } from "@langchain/core/messages";
+import { StateGraph, MessagesZodState, START } from "@langchain/langgraph";
+import { z } from "zod";
 
-const State = Annotation.Root({
-  // Messages have the type "BaseMessage[]". The reducer function
-  // defines how this state key should be updated
-  // (in this case, it appends messages to the list, rather than overwriting them)
-  messages: Annotation<BaseMessage[]>({
-    reducer: (x, y) => x.concat(y),
-  }),
-});
+const State = z.object({ messages: MessagesZodState.shape.messages });
 
-const graphBuilder = new StateGraph(State);
+const graph = new StateGraph(State).compile();
 ```
+
 :::
 
 Our graph can now handle two key tasks:
@@ -80,11 +99,13 @@ Our graph can now handle two key tasks:
 1. Each `node` can receive the current `State` as input and output an update to the state.
 2. Updates to `messages` will be appended to the existing list rather than overwriting it, thanks to the prebuilt reducer function.
 
-------
+---
 
 !!! tip "Concept"
 
-    When defining a graph, the first step is to define its `State`. The `State` includes the graph's schema and [reducer functions](https://langchain-ai.github.io/langgraph/concepts/low_level/#reducers) that handle state updates. In our example, `State` is a schema with one key: `messages`. The reducer function is used to append new messages to the list instead of overwriting it. Keys without a reducer annotation will overwrite previous values. To learn more about state, reducers, and related concepts, see [LangGraph reference docs](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.message.add_messages).
+    When defining a graph, the first step is to define its `State`. The `State` includes the graph's schema and [reducer functions](https://langchain-ai.github.io/langgraph/concepts/low_level/#reducers) that handle state updates. In our example, `State` is a schema with one key: `messages`. The reducer function is used to append new messages to the list instead of overwriting it. Keys without a reducer annotation will overwrite previous values.
+
+    To learn more about state, reducers, and related concepts, see [LangGraph reference docs](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.message.add_messages).
 
 ## 3. Add a node
 
@@ -102,9 +123,11 @@ from langchain.chat_models import init_chat_model
 llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
 ```
 -->
+
 :::
 
 :::js
+
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
 // or import { ChatAnthropic } from "@langchain/anthropic";
@@ -114,11 +137,13 @@ const llm = new ChatOpenAI({
   temperature: 0,
 });
 ```
+
 :::
 
 We can now incorporate the chat model into a simple node:
 
 :::python
+
 ```python
 
 def chatbot(state: State):
@@ -130,19 +155,24 @@ def chatbot(state: State):
 # the node is used.
 graph_builder.add_node("chatbot", chatbot)
 ```
+
 :::
 
 :::js
-```typescript
-const chatbot = async (state: typeof State.State) => {
-  return { messages: [await llm.invoke(state.messages)] };
-};
 
-// The first argument is the unique node name
-// The second argument is the function or object that will be called whenever
-// the node is used.
-graphBuilder.addNode("chatbot", chatbot);
+```typescript hl_lines="7-9"
+import { StateGraph, MessagesZodState, START } from "@langchain/langgraph";
+import { z } from "zod";
+
+const State = z.object({ messages: MessagesZodState.shape.messages });
+
+const graph = new StateGraph(State)
+  .addNode("chatbot", async (state: z.infer<typeof State>) => {
+    return { messages: [await llm.invoke(state.messages)] };
+  })
+  .compile();
 ```
+
 :::
 
 **Notice** how the `chatbot` node function takes the current `State` as input and returns a dictionary containing an updated `messages` list under the key "messages". This is the basic pattern for all LangGraph node functions.
@@ -152,7 +182,7 @@ The `add_messages` function in our `State` will append the LLM's response messag
 :::
 
 :::js
-The reducer function in our `State` will append the LLM's response messages to whatever messages are already in the state.
+The `addMessages` function used within `MessagesZodState` will append the LLM's response messages to whatever messages are already in the state.
 :::
 
 ## 4. Add an `entry` point
@@ -160,15 +190,29 @@ The reducer function in our `State` will append the LLM's response messages to w
 Add an `entry` point to tell the graph **where to start its work** each time it is run:
 
 :::python
+
 ```python
 graph_builder.add_edge(START, "chatbot")
 ```
+
 :::
 
 :::js
-```typescript
-graphBuilder.addEdge(START, "chatbot");
+
+```typescript hl_lines="10"
+import { StateGraph, MessagesZodState, START } from "@langchain/langgraph";
+import { z } from "zod";
+
+const State = z.object({ messages: MessagesZodState.shape.messages });
+
+const graph = new StateGraph(State)
+  .addNode("chatbot", async (state: z.infer<typeof State>) => {
+    return { messages: [await llm.invoke(state.messages)] };
+  })
+  .addEdge(START, "chatbot")
+  .compile();
 ```
+
 :::
 
 ## 5. Add an `exit` point
@@ -176,15 +220,30 @@ graphBuilder.addEdge(START, "chatbot");
 Add an `exit` point to indicate **where the graph should finish execution**. This is helpful for more complex flows, but even in a simple graph like this, adding an end node improves clarity.
 
 :::python
+
 ```python
 graph_builder.add_edge("chatbot", END)
 ```
+
 :::
 
 :::js
-```typescript
-graphBuilder.addEdge("chatbot", END);
+
+```typescript hl_lines="11"
+import { StateGraph, MessagesZodState, START, END } from "@langchain/langgraph";
+import { z } from "zod";
+
+const State = z.object({ messages: MessagesZodState.shape.messages });
+
+const graph = new StateGraph(State)
+  .addNode("chatbot", async (state: z.infer<typeof State>) => {
+    return { messages: [await llm.invoke(state.messages)] };
+  })
+  .addEdge(START, "chatbot")
+  .addEdge("chatbot", END)
+  .compile();
 ```
+
 :::
 
 This tells the graph to terminate after running the chatbot node.
@@ -194,15 +253,30 @@ This tells the graph to terminate after running the chatbot node.
 Before running the graph, we'll need to compile it. We can do so by calling `compile()` on the graph builder. This creates a `CompiledGraph` we can invoke on our state.
 
 :::python
+
 ```python
 graph = graph_builder.compile()
 ```
+
 :::
 
 :::js
-```typescript
-const graph = graphBuilder.compile();
+
+```typescript hl_lines="12"
+import { StateGraph, MessagesZodState, START, END } from "@langchain/langgraph";
+import { z } from "zod";
+
+const State = z.object({ messages: MessagesZodState.shape.messages });
+
+const graph = new StateGraph(State)
+  .addNode("chatbot", async (state: z.infer<typeof State>) => {
+    return { messages: [await llm.invoke(state.messages)] };
+  })
+  .addEdge(START, "chatbot")
+  .addEdge("chatbot", END)
+  .compile();
 ```
+
 :::
 
 ## 7. Visualize the graph (optional)
@@ -219,34 +293,36 @@ except Exception:
     # This requires some extra dependencies and is optional
     pass
 ```
+
 :::
 
 :::js
 You can visualize the graph using the `getGraph` method and one of the "draw" methods, like `drawMermaidPng`. The `draw` methods each require additional dependencies.
 
 ```typescript
-// Note: tslab only works inside a jupyter notebook. Don't worry about running this code yourself!
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const drawableGraph = graph.getGraph();
+const drawableGraph = await graph.getGraphAsync();
 const image = await drawableGraph.drawMermaidPng();
-const arrayBuffer = await image.arrayBuffer();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer));
+await fs.writeFile("basic-chatbot.png", imageBuffer);
 ```
+
 :::
 
 ![basic chatbot diagram](basic-chatbot.png)
 
 ## 8. Run the chatbot
 
-Now run the chatbot! 
+Now run the chatbot!
 
 !!! tip
 
     You can exit the chat loop at any time by typing `quit`, `exit`, or `q`.
 
 :::python
+
 ```python
 def stream_graph_updates(user_input: str):
     for event in graph.stream({"messages": [{"role": "user", "content": user_input}]}):
@@ -268,55 +344,69 @@ while True:
         stream_graph_updates(user_input)
         break
 ```
+
 :::
 
 :::js
-```typescript
-import { HumanMessage } from "@langchain/core/messages";
 
-async function streamGraphUpdates(userInput: string) {
-  const stream = await graph.stream({
-    messages: [new HumanMessage(userInput)]
-  });
-  
+```typescript
+import * as readline from "node:readline/promises";
+import { StateGraph, MessagesZodState, START, END } from "@langchain/langgraph";
+import { ChatOpenAI } from "@langchain/openai";
+import { z } from "zod";
+
+const llm = new ChatOpenAI({ model: "gpt-4o-mini" });
+
+const State = z.object({ messages: MessagesZodState.shape.messages });
+
+const graph = new StateGraph(State)
+  .addNode("chatbot", async (state: z.infer<typeof State>) => {
+    return { messages: [await llm.invoke(state.messages)] };
+  })
+  .addEdge(START, "chatbot")
+  .addEdge("chatbot", END)
+  .compile();
+
+async function generateText(content: string) {
+  const stream = await graph.stream(
+    { messages: [{ type: "human", content }] },
+    { streamMode: "values" }
+  );
+
   for await (const event of stream) {
-    for (const value of Object.values(event)) {
-      console.log("Assistant:", value.messages[value.messages.length - 1].content);
+    const lastMessage = event.messages.at(-1);
+    if (lastMessage?.getType() === "ai") {
+      console.log(`Assistant: ${lastMessage.text}`);
     }
   }
 }
 
-// Example usage (in a real application, you'd implement input handling differently)
-async function runChatbot() {
-  try {
-    const userInput = "What do you know about LangGraph?";
-    console.log("User: " + userInput);
-    await streamGraphUpdates(userInput);
-  } catch (error) {
-    console.error("Error:", error);
-  }
+const prompt = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
+
+while (true) {
+  const human = await prompt.question("User: ");
+  if (["quit", "exit", "q"].includes(human.trim())) break;
+  await generateText(human || "What do you know about LangGraph?");
 }
 
-// Run the example
-await runChatbot();
+prompt.close();
 ```
+
 :::
 
 ```
 Assistant: LangGraph is a library designed to help build stateful multi-agent applications using language models. It provides tools for creating workflows and state machines to coordinate multiple AI agents or language model interactions. LangGraph is built on top of LangChain, leveraging its components while adding graph-based coordination capabilities. It's particularly useful for developing more complex, stateful AI applications that go beyond simple query-response interactions.
 ```
 
-:::python
-```
-Goodbye!
-```
-:::
-
 **Congratulations!** You've built your first chatbot using LangGraph. This bot can engage in basic conversation by taking user input and generating responses using an LLM. You can inspect a [LangSmith Trace](https://smith.langchain.com/public/7527e308-9502-4894-b347-f34385740d5a/r) for the call above.
+
+:::python
 
 Below is the full code for this tutorial:
 
-:::python
 ```python
 from typing import Annotated
 
@@ -349,40 +439,7 @@ graph_builder.add_edge(START, "chatbot")
 graph_builder.add_edge("chatbot", END)
 graph = graph_builder.compile()
 ```
-:::
 
-:::js
-```typescript
-import { Annotation } from "@langchain/langgraph";
-import { StateGraph, START, END } from "@langchain/langgraph";
-import { BaseMessage, HumanMessage } from "@langchain/core/messages";
-import { ChatOpenAI } from "@langchain/openai";
-
-const State = Annotation.Root({
-  messages: Annotation<BaseMessage[]>({
-    reducer: (x, y) => x.concat(y),
-  }),
-});
-
-const graphBuilder = new StateGraph(State);
-
-const llm = new ChatOpenAI({
-  model: "gpt-4o",
-  temperature: 0,
-});
-
-const chatbot = async (state: typeof State.State) => {
-  return { messages: [await llm.invoke(state.messages)] };
-};
-
-// The first argument is the unique node name
-// The second argument is the function or object that will be called whenever
-// the node is used.
-graphBuilder.addNode("chatbot", chatbot);
-graphBuilder.addEdge(START, "chatbot");
-graphBuilder.addEdge("chatbot", END);
-const graph = graphBuilder.compile();
-```
 :::
 
 ## Next steps
