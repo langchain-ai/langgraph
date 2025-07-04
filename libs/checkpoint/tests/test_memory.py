@@ -22,8 +22,7 @@ class TestMemorySaver:
             "configurable": {
                 "thread_id": "thread-1",
                 "checkpoint_ns": "",
-                # for backwards compatibility testing
-                "thread_ts": "1",
+                "checkpoint_id": "1",
             }
         }
         self.config_2: RunnableConfig = {

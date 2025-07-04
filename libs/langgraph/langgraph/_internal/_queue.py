@@ -128,6 +128,3 @@ class SyncQueue:
         return len(self._queue)
 
     __class_getitem__ = classmethod(types.GenericAlias)
-
-
-__all__ = ["AsyncQueue", "SyncQueue"]

@@ -15,8 +15,7 @@ from langgraph.errors import GraphInterrupt
 from langgraph.graph import StateGraph, add_messages
 from langgraph.pregel import Pregel
 from langgraph.pregel.remote import RemoteGraph
-from langgraph.pregel.types import StateSnapshot
-from langgraph.types import Interrupt
+from langgraph.types import Interrupt, StateSnapshot
 from tests.conftest import NO_DOCKER
 from tests.example_app.example_graph import app
 

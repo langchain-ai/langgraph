@@ -2,17 +2,18 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Sequence
-from typing import Any, Generic
+from typing import Any, Callable, Generic, cast
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.graph import Graph as DrawableGraph
 from typing_extensions import Self
 
-from langgraph.pregel.types import All, StateSnapshot, StateUpdate, StreamMode
+from langgraph.types import All, StateSnapshot, StateUpdate, StreamMode
 from langgraph.typing import InputT, OutputT, StateT
 
+__all__ = ("PregelProtocol", "StreamProtocol")
 
-# TODO: remove Runnable inheritance here!
+
 class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT, OutputT], ABC):
     @abstractmethod
     def with_config(
@@ -138,3 +139,22 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT, OutputT], AB
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
     ) -> dict[str, Any] | Any: ...
+
+
+StreamChunk = tuple[tuple[str, ...], str, Any]
+
+
+class StreamProtocol:
+    __slots__ = ("modes", "__call__")
+
+    modes: set[StreamMode]
+
+    __call__: Callable[[Self, StreamChunk], None]
+
+    def __init__(
+        self,
+        __call__: Callable[[StreamChunk], None],
+        modes: set[StreamMode],
+    ) -> None:
+        self.__call__ = cast(Callable[[Self, StreamChunk], None], __call__)
+        self.modes = modes

@@ -7,6 +7,8 @@ from langgraph.channels.base import BaseChannel, Value
 from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError
 
+__all__ = ("AnyValue",)
+
 
 class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the last value received, assumes that if multiple values are

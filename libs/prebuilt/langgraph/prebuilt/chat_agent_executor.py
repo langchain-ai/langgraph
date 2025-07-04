@@ -34,6 +34,7 @@ from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 from typing_extensions import Annotated, TypedDict
 
+from langgraph._internal._runnable import RunnableCallable, RunnableLike
 from langgraph.errors import ErrorCode, create_error_message
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
@@ -42,7 +43,6 @@ from langgraph.managed import IsLastStep, RemainingSteps
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer, Send
-from langgraph.utils.runnable import RunnableCallable, RunnableLike
 
 StructuredResponse = Union[dict, BaseModel]
 StructuredResponseSchema = Union[dict, type[BaseModel]]

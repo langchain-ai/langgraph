@@ -37,10 +37,10 @@ from langchain_core.tools.base import (
 from pydantic import BaseModel
 from typing_extensions import Annotated, get_args, get_origin
 
+from langgraph._internal._runnable import RunnableCallable
 from langgraph.errors import GraphBubbleUp
 from langgraph.store.base import BaseStore
 from langgraph.types import Command, Send
-from langgraph.utils.runnable import RunnableCallable
 
 INVALID_TOOL_NAME_ERROR_TEMPLATE = (
     "Error: {requested_tool} is not a valid tool, try one of [{available_tools}]."

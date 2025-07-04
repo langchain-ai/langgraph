@@ -2,10 +2,22 @@ from collections.abc import Sequence
 from enum import Enum
 from typing import Any
 
+# EmptyChannelError is re-exported from langgraph.channels.base
 from langgraph.checkpoint.base import EmptyChannelError  # noqa: F401
 from langgraph.types import Command, Interrupt
 
-# EmptyChannelError re-exported for backwards compatibility
+__all__ = (
+    "EmptyChannelError",
+    "ErrorCode",
+    "GraphRecursionError",
+    "InvalidUpdateError",
+    "GraphBubbleUp",
+    "GraphInterrupt",
+    "NodeInterrupt",
+    "ParentCommand",
+    "EmptyInputError",
+    "TaskNotFound",
+)
 
 
 class ErrorCode(Enum):

@@ -42,18 +42,18 @@ def test_create_new_with_mocked_download(mock_urlopen: MagicMock) -> None:
 
         # Verify CLI command execution and success
         assert result.exit_code == 0, result.output
-        assert (
-            "New project created" in result.output
-        ), "Expected success message in output."
+        assert "New project created" in result.output, (
+            "Expected success message in output."
+        )
 
         # Verify that the directory is not empty
         assert os.listdir(temp_dir), "Expected files to be created in temp directory."
 
         # Check for a known file in the extracted content
         extracted_files = [f.name for f in Path(temp_dir).glob("*")]
-        assert (
-            "test-file.txt" in extracted_files
-        ), "Expected 'test-file.txt' in the extracted content."
+        assert "test-file.txt" in extracted_files, (
+            "Expected 'test-file.txt' in the extracted content."
+        )
 
 
 def test_invalid_template_id() -> None:
@@ -65,6 +65,6 @@ def test_invalid_template_id() -> None:
 
     # Verify the command failed and proper message is displayed
     assert result.exit_code != 0, "Expected non-zero exit code for invalid template."
-    assert (
-        "Template 'invalid-template-id' not found" in result.output
-    ), "Expected error message in output."
+    assert "Template 'invalid-template-id' not found" in result.output, (
+        "Expected error message in output."
+    )

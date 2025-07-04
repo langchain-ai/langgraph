@@ -4,7 +4,7 @@ from typing_extensions import TypedDict
 from langgraph.func import entrypoint, task
 from langgraph.graph import StateGraph
 from langgraph.types import RetryPolicy
-from langgraph.warnings import LangGraphDeprecatedSinceV05
+from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
 
 
 class PlainState(TypedDict): ...
@@ -66,3 +66,25 @@ def test_add_node_input_schema() -> None:
         match="`input` is deprecated and will be removed. Please use `input_schema` instead.",
     ):
         builder.add_node("test_node", lambda state: state, input=PlainState)  # type: ignore[arg-type]
+
+
+def test_constants_deprecation() -> None:
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="Importing Send from langgraph.constants is deprecated. Please use 'from langgraph.types import Send' instead.",
+    ):
+        from langgraph.constants import Send  # noqa: F401
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="Importing Interrupt from langgraph.constants is deprecated. Please use 'from langgraph.types import Interrupt' instead.",
+    ):
+        from langgraph.constants import Interrupt  # noqa: F401
+
+
+def test_pregel_deprecation() -> None:
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="Importing from langgraph.pregel.types is deprecated. Please use 'from langgraph.types import ...' instead.",
+    ):
+        from langgraph.pregel.types import StateSnapshot  # noqa: F401

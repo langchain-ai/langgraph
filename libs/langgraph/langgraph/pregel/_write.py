@@ -13,9 +13,10 @@ from typing import (
 
 from langchain_core.runnables import Runnable, RunnableConfig
 
-from langgraph.constants import CONF, CONFIG_KEY_SEND, MISSING, TASKS, Send
+from langgraph._internal._runnable import RunnableCallable
+from langgraph.constants import CONF, CONFIG_KEY_SEND, MISSING, TASKS
 from langgraph.errors import InvalidUpdateError
-from langgraph.utils.runnable import RunnableCallable
+from langgraph.types import Send
 
 TYPE_SEND = Callable[[Sequence[tuple[str, Any]]], None]
 R = TypeVar("R", bound=Runnable)

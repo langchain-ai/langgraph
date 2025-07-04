@@ -42,6 +42,12 @@ from langchain_core.runnables.utils import Input, Output
 from langchain_core.tracers.langchain import LangChainTracer
 from typing_extensions import TypeGuard
 
+from langgraph._internal._config import (
+    ensure_config,
+    get_async_callback_manager_for_config,
+    get_callback_manager_for_config,
+    patch_config,
+)
 from langgraph.constants import (
     CONF,
     CONFIG_KEY_PREVIOUS,
@@ -50,12 +56,6 @@ from langgraph.constants import (
 )
 from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
-from langgraph.utils.config import (
-    ensure_config,
-    get_async_callback_manager_for_config,
-    get_callback_manager_for_config,
-    patch_config,
-)
 
 try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler

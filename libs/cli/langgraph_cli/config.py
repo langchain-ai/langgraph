@@ -602,8 +602,7 @@ def validate_config(config: Config) -> Config:
 
     if not config["graphs"]:
         raise click.UsageError(
-            "No graphs found in config. "
-            "Add at least one graph to 'graphs' dictionary."
+            "No graphs found in config. Add at least one graph to 'graphs' dictionary."
         )
 
     # Validate image_distro config
@@ -1181,7 +1180,7 @@ def python_config_to_docker(
             )
             for reqpath, destpath in local_deps.pip_reqs
         )
-        pip_reqs_str += f'{os.linesep}RUN {pip_install} {" ".join("-r " + r for _,r in local_deps.pip_reqs)}'
+        pip_reqs_str += f"{os.linesep}RUN {pip_install} {' '.join('-r ' + r for _, r in local_deps.pip_reqs)}"
         pip_reqs_str = f"""# -- Installing local requirements --
 {pip_reqs_str}
 # -- End of local requirements install --"""

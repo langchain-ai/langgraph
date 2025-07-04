@@ -1,23 +1,43 @@
 import sys
-from collections.abc import Mapping
-from types import MappingProxyType
 from typing import Any, Literal, cast
+from warnings import warn
 
-from langgraph.types import Interrupt, Send  # noqa: F401
+from langgraph.warnings import LangGraphDeprecatedSinceV10
 
-# Interrupt, Send re-exported for backwards compatibility
+__all__ = (
+    "TAG_NOSTREAM",
+    "TAG_HIDDEN",
+    "START",
+    "END",
+    "SELF",
+    "PREVIOUS",
+)
+
+
+def __getattr__(name: str) -> Any:
+    if name in ["Send", "Interrupt"]:
+        warn(
+            f"Importing {name} from langgraph.constants is deprecated. "
+            f"Please use 'from langgraph.types import {name}' instead.",
+            LangGraphDeprecatedSinceV10,
+            stacklevel=2,
+        )
+
+        from importlib import import_module
+
+        module = import_module("langgraph.types")
+        return getattr(module, name)
+
+    raise AttributeError(f"module has no attribute '{name}'")
 
 
 # --- Empty read-only containers ---
-EMPTY_MAP: Mapping[str, Any] = MappingProxyType({})
 EMPTY_SEQ: tuple[str, ...] = tuple()
 MISSING = object()
 
 # --- Public constants ---
 TAG_NOSTREAM = sys.intern("nostream")
 """Tag to disable streaming for a chat model."""
-TAG_NOSTREAM_ALT = sys.intern("langsmith:nostream")
-"""Tag to disable streaming for a chat model. (Deprecated in favour of "nostream")"""
 TAG_HIDDEN = sys.intern("langsmith:hidden")
 """Tag to hide a node/edge from certain tracing/streaming environments."""
 START = sys.intern("__start__")

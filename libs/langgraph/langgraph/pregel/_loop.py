@@ -27,6 +27,7 @@ from langchain_core.callbacks import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import ParamSpec, Self
 
+from langgraph._internal._config import patch_configurable
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import (
@@ -69,7 +70,7 @@ from langgraph.managed.base import (
     ManagedValueMapping,
     ManagedValueSpec,
 )
-from langgraph.pregel.algo import (
+from langgraph.pregel._algo import (
     Call,
     GetNextVersion,
     PregelTaskWrites,
@@ -81,44 +82,42 @@ from langgraph.pregel.algo import (
     should_interrupt,
     task_path_str,
 )
-from langgraph.pregel.checkpoint import (
+from langgraph.pregel._checkpoint import (
     channels_from_checkpoint,
     copy_checkpoint,
     create_checkpoint,
     empty_checkpoint,
 )
-from langgraph.pregel.debug import (
-    map_debug_checkpoint,
-    map_debug_task_results,
-    map_debug_tasks,
-)
-from langgraph.pregel.executor import (
+from langgraph.pregel._executor import (
     AsyncBackgroundExecutor,
     BackgroundExecutor,
     Submit,
 )
-from langgraph.pregel.io import (
+from langgraph.pregel._io import (
     map_command,
     map_input,
     map_output_updates,
     map_output_values,
     read_channels,
 )
-from langgraph.pregel.read import PregelNode
-from langgraph.pregel.utils import get_new_channel_versions, is_xxh3_128_hexdigest
+from langgraph.pregel._read import PregelNode
+from langgraph.pregel._scratchpad import PregelScratchpad
+from langgraph.pregel._utils import get_new_channel_versions, is_xxh3_128_hexdigest
+from langgraph.pregel.debug import (
+    map_debug_checkpoint,
+    map_debug_task_results,
+    map_debug_tasks,
+)
+from langgraph.pregel.protocol import StreamChunk, StreamProtocol
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
     CachePolicy,
     Command,
     PregelExecutableTask,
-    PregelScratchpad,
     RetryPolicy,
-    StreamChunk,
     StreamMode,
-    StreamProtocol,
 )
-from langgraph.utils.config import patch_configurable
 
 V = TypeVar("V")
 P = ParamSpec("P")

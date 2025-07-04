@@ -375,10 +375,8 @@ class EmptyChannelError(Exception):
 
 
 def get_checkpoint_id(config: RunnableConfig) -> str | None:
-    """Get checkpoint ID in a backwards-compatible manner (fallback on thread_ts)."""
-    return config["configurable"].get(
-        "checkpoint_id", config["configurable"].get("thread_ts")
-    )
+    """Get checkpoint ID."""
+    return config["configurable"].get("checkpoint_id")
 
 
 def get_checkpoint_metadata(
@@ -413,7 +411,6 @@ WRITES_IDX_MAP = {ERROR: -1, SCHEDULED: -2, INTERRUPT: -3, RESUME: -4}
 
 EXCLUDED_METADATA_KEYS = {
     "thread_id",
-    "thread_ts",
     "checkpoint_id",
     "checkpoint_ns",
     "checkpoint_map",

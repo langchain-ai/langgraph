@@ -15,7 +15,7 @@ from langgraph.checkpoint.base import (
     SerializerProtocol,
 )
 from langgraph.checkpoint.memory import InMemorySaver, PersistentDict
-from langgraph.pregel.checkpoint import copy_checkpoint
+from langgraph.pregel._checkpoint import copy_checkpoint
 
 
 class NoopSerializer(SerializerProtocol):

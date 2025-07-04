@@ -42,22 +42,28 @@ from langgraph.checkpoint.base import (
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, START
-from langgraph.errors import InvalidUpdateError, NodeInterrupt, ParentCommand
+from langgraph.errors import (
+    GraphRecursionError,
+    InvalidUpdateError,
+    NodeInterrupt,
+    ParentCommand,
+)
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import MessagesState, add_messages
 from langgraph.prebuilt.tool_node import ToolNode
-from langgraph.pregel import GraphRecursionError, NodeBuilder, Pregel, StateSnapshot
-from langgraph.pregel.loop import AsyncPregelLoop
-from langgraph.pregel.retry import RetryPolicy
-from langgraph.pregel.runner import PregelRunner
+from langgraph.pregel import NodeBuilder, Pregel
+from langgraph.pregel._loop import AsyncPregelLoop
+from langgraph.pregel._runner import PregelRunner
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     CachePolicy,
     Command,
     Interrupt,
     PregelTask,
+    RetryPolicy,
     Send,
+    StateSnapshot,
     StateUpdate,
     StreamWriter,
     interrupt,
@@ -8381,7 +8387,7 @@ async def test_draw_invalid():
                 "id": "__start__",
                 "type": "runnable",
                 "data": {
-                    "id": ["langgraph", "utils", "runnable", "RunnableCallable"],
+                    "id": ["langgraph", "_internal", "_runnable", "RunnableCallable"],
                     "name": "__start__",
                 },
             },
@@ -8389,7 +8395,7 @@ async def test_draw_invalid():
                 "id": "agent",
                 "type": "runnable",
                 "data": {
-                    "id": ["langgraph", "utils", "runnable", "RunnableCallable"],
+                    "id": ["langgraph", "_internal", "_runnable", "RunnableCallable"],
                     "name": "agent",
                 },
             },
@@ -8397,7 +8403,7 @@ async def test_draw_invalid():
                 "id": "tool",
                 "type": "runnable",
                 "data": {
-                    "id": ["langgraph", "utils", "runnable", "RunnableCallable"],
+                    "id": ["langgraph", "_internal", "_runnable", "RunnableCallable"],
                     "name": "tool",
                 },
             },
@@ -8405,7 +8411,7 @@ async def test_draw_invalid():
                 "id": "nothing",
                 "type": "runnable",
                 "data": {
-                    "id": ["langgraph", "utils", "runnable", "RunnableCallable"],
+                    "id": ["langgraph", "_internal", "_runnable", "RunnableCallable"],
                     "name": "nothing",
                 },
             },
