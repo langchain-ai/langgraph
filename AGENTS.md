@@ -22,6 +22,7 @@ The repository contains several Python and JavaScript/TypeScript libraries.
 Below is a high-level overview:
 
 - **checkpoint** – base interfaces for LangGraph checkpointers.
+- **checkpoint-memgraph** – Memgraph implementation of the checkpoint saver.
 - **checkpoint-postgres** – Postgres implementation of the checkpoint saver.
 - **checkpoint-sqlite** – SQLite implementation of the checkpoint saver.
 - **cli** – official command-line interface for LangGraph.
@@ -37,6 +38,7 @@ declared in that library's `pyproject.toml` (or `package.json`).
 
 ```text
 checkpoint
+├── checkpoint-memgraph
 ├── checkpoint-postgres
 ├── checkpoint-sqlite
 ├── prebuilt
