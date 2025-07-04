@@ -39,25 +39,25 @@ Install the requirements to use the [Tavily Search Engine](https://docs.tavily.c
 === "npm"
 
     ```bash
-    npm install @langchain/community
+    npm install @langchain/tavily
     ```
 
 === "yarn"
 
     ```bash
-    yarn add @langchain/community
+    yarn add @langchain/tavily
     ```
 
 === "pnpm"
 
     ```bash
-    pnpm add @langchain/community
+    pnpm add @langchain/tavily
     ```
 
 === "bun"
 
     ```bash
-    bun add @langchain/community
+    bun add @langchain/tavily
     ```
 
 :::
@@ -655,42 +655,30 @@ graph = graph_builder.compile()
 - `routeTools` is replaced with the prebuilt [tools_condition](https://langchain-ai.github.io/langgraph/reference/prebuilt/#tools_condition)
 
 ```typescript
-import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
+import { TavilySearch } from "@langchain/tavily";
 import { ChatOpenAI } from "@langchain/openai";
-import { Annotation } from "@langchain/langgraph";
-import { BaseMessage } from "@langchain/core/messages";
-import { StateGraph, START } from "@langchain/langgraph";
+import { StateGraph, START, MessagesZodState, END } from "@langchain/langgraph";
 import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
+import { z } from "zod";
 
-const StateAnnotation = Annotation.Root({
-  messages: Annotation<BaseMessage[]>({
-    reducer: (x, y) => x.concat(y),
-  }),
+const State = z.object({
+  messages: MessagesZodState.shape.messages,
 });
 
-const graphBuilder = new StateGraph(StateAnnotation);
+const tools = [new TavilySearch({ maxResults: 2 })];
 
-const tool = new TavilySearchResults({ maxResults: 2 });
-const tools = [tool];
+const llm = new ChatOpenAI({ model: "gpt-4o-mini" }).bindTools(tools);
 
-const llm = new ChatOpenAI({ model: "gpt-4o-mini" });
-const llmWithTools = llm.bindTools(tools);
-
-const chatbot = async (state: typeof StateAnnotation.State) => {
-  return { messages: [await llmWithTools.invoke(state.messages)] };
-};
-
-graphBuilder.addNode("chatbot", chatbot);
-
-const toolNode = new ToolNode(tools);
-graphBuilder.addNode("tools", toolNode);
-
-graphBuilder.addConditionalEdges("chatbot", toolsCondition);
-// Any time a tool is called, we return to the chatbot to decide the next step
-graphBuilder.addEdge("tools", "chatbot");
-graphBuilder.addEdge(START, "chatbot");
-
-const graph = graphBuilder.compile();
+const graph = new StateGraph(State)
+  .addNode("chatbot", async (state: z.infer<typeof State>) => {
+    return { messages: [await llm.invoke(state.messages)] };
+  })
+  .addNode("tools", new ToolNode(tools))
+  .addConditionalEdges("chatbot", toolsCondition, ["tools", END])
+  // Any time a tool is called, we return to the chatbot to decide the next step
+  .addEdge("tools", "chatbot")
+  .addEdge(START, "chatbot")
+  .compile();
 ```
 
 :::
