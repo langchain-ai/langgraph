@@ -23,12 +23,16 @@ pip install -U langchain-tavily
 
 Configure your environment with your search engine API key:
 
-```bash
+```python
+def _set_env(var: str):
+    if not os.environ.get(var):
+        os.environ[var] = getpass.getpass(f"{var}: ")
+
 _set_env("TAVILY_API_KEY")
 ```
 
 ```
-TAVILY_API_KEY:  ········
+os.environ["TAVILY_API_KEY"]:  "········"
 ```
 
 ## 3. Define the tool
