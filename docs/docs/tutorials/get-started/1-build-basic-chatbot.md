@@ -112,7 +112,7 @@ This tells the graph to terminate after running the chatbot node.
 ## 6. Compile the graph
 
 Before running the graph, we'll need to compile it. We can do so by calling `compile()`
-on the graph builder. This creates a `CompiledGraph` we can invoke on our state.
+on the graph builder. This creates a `CompiledStateGraph` we can invoke on our state.
 
 ```python
 graph = graph_builder.compile()
