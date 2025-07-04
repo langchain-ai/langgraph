@@ -17,7 +17,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         # Only lint on the min and max supported Python versions.
@@ -27,9 +27,10 @@ jobs:
         # GitHub rate-limits how many jobs can be running at any one time.
         # Starting new jobs is also relatively slow,
         # so linting on fewer versions makes CI faster.
+        os: [ubuntu-latest, windows-latest]
         python-version:
           - "3.12"
-    name: "lint #${{ matrix.python-version }}"
+    name: "lint ${{ matrix.os }} #${{ matrix.python-version }}"
     steps:
       - uses: actions/checkout@v4
       - name: Get changed files
@@ -44,6 +45,15 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
           cache-suffix: lint-${{ inputs.working-directory }}
+
+      - name: Setup MSYS2 (Windows)
+        if: steps.changed-files.outputs.all && matrix.os == 'windows-latest'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: make
+          path-type: inherit
 
       - name: Install dependencies
         if: steps.changed-files.outputs.all
@@ -60,9 +70,22 @@ jobs:
             ${{ inputs.working-directory }}/.mypy_cache
           key: mypy-lint-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ inputs.working-directory }}-${{ hashFiles(format('{0}/uv.lock', inputs.working-directory)) }}
 
-      - name: Analysing package code with our lint
-        if: steps.changed-files.outputs.all
+      - name: Analysing package code with our lint (Ubuntu)
+        if: steps.changed-files.outputs.all && matrix.os == 'ubuntu-latest'
         working-directory: ${{ inputs.working-directory }}
+        shell: bash
+        run: |
+          if make lint_package > /dev/null 2>&1; then
+            make lint_package
+          else
+            echo "lint_package command not found, using lint instead"
+            make lint
+          fi
+
+      - name: Analysing package code with our lint (Windows)
+        if: steps.changed-files.outputs.all && matrix.os == 'windows-latest'
+        working-directory: ${{ inputs.working-directory }}
+        shell: msys2 {0}
         run: |
           if make lint_package > /dev/null 2>&1; then
             make lint_package
@@ -86,9 +109,21 @@ jobs:
             ${{ inputs.working-directory }}/.mypy_cache_test
           key: mypy-test-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ inputs.working-directory }}-${{ hashFiles(format('{0}/uv.lock', inputs.working-directory)) }}
 
-      - name: Analysing tests with our lint
-        if: steps.changed-files.outputs.all
+      - name: Analysing tests with our lint (Ubuntu)
+        if: steps.changed-files.outputs.all && matrix.os == 'ubuntu-latest'
         working-directory: ${{ inputs.working-directory }}
+        shell: bash
+        run: |
+          if make lint_tests > /dev/null 2>&1; then
+            make lint_tests
+          else
+            echo "lint_tests command not found, skipping step"
+          fi
+
+      - name: Analysing tests with our lint (Windows)
+        if: steps.changed-files.outputs.all && matrix.os == 'windows-latest'
+        working-directory: ${{ inputs.working-directory }}
+        shell: msys2 {0}
         run: |
           if make lint_tests > /dev/null 2>&1; then
             make lint_tests
