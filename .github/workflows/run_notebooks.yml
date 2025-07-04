@@ -11,6 +11,9 @@ on:
   schedule:
     - cron: "0 13 * * *"
 
+permissions:
+  contents: read
+
 defaults:
   run:
     working-directory: docs

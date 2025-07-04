@@ -97,7 +97,7 @@ Parallel processing is vital for efficient multi-agent systems and complex tasks
 - Implementation of map-reduce-like operations
 - Efficient handling of independent subtasks
 
-For practical implementation, see our [map-reduce tutorial](../how-tos/graph-api.ipynb#map-reduce-and-the-send-api)
+For practical implementation, see our [map-reduce tutorial](../how-tos/graph-api.md#map-reduce-and-the-send-api)
 
 ### Subgraphs
 
@@ -107,7 +107,7 @@ For practical implementation, see our [map-reduce tutorial](../how-tos/graph-api
 - Hierarchical organization of agent teams
 - Controlled communication between agents and the main system
 
-Subgraphs communicate with the parent graph through overlapping keys in the state schema. This enables flexible, modular agent design. For implementation details, refer to our [subgraph how-to guide](../how-tos/subgraph.ipynb).
+Subgraphs communicate with the parent graph through overlapping keys in the state schema. This enables flexible, modular agent design. For implementation details, refer to our [subgraph how-to guide](../how-tos/subgraph.md).
 
 ### Reflection
 

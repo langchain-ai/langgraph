@@ -112,7 +112,7 @@ nav:
     - LangGraph APIs:
       - Graph API:
           - Overview: concepts/low_level.md
-          - Use the Graph API: how-tos/graph-api.ipynb
+          - Use the Graph API: how-tos/graph-api.md
       - Functional API:
           - Overview: concepts/functional_api.md
           - Use the Functional API: how-tos/use-functional-api.md
@@ -150,12 +150,13 @@ nav:
           - Use Server API: cloud/how-tos/human_in_the_loop_time_travel.md
       - Subgraphs:
           - Overview: concepts/subgraphs.md
-          - Use subgraphs: how-tos/subgraph.ipynb
+          - Use subgraphs: how-tos/subgraph.md
       - Multi-agent:
           - Overview: concepts/multi_agent.md
           - Prebuilt implementation: agents/multi-agent.md
-          - Custom implementation: how-tos/multi_agent.ipynb
+          - Custom implementation: how-tos/multi_agent.md
       - MCP:
+          - Overview: concepts/mcp.md
           - Use MCP: agents/mcp.md
           - Server API: concepts/server-mcp.md
       - Evaluation:
@@ -215,6 +216,7 @@ nav:
           - how-tos/http/custom_middleware.md
           - how-tos/http/custom_routes.md
       - Data management:
+        - cloud/concepts/data_storage_and_privacy.md
         - Add semantic search: cloud/deployment/semantic_search.md
         - Add TTLs: how-tos/ttl/configure_ttl.md
       - Deployment:
@@ -258,9 +260,10 @@ nav:
       - MCP Adapters: reference/mcp.md
     - LangGraph Platform:
       - Server API: cloud/reference/api/api_ref.md
+      - Control Plane API: cloud/reference/api/api_ref_control_plane.md
       - CLI: cloud/reference/cli.md
       - SDK (Python): cloud/reference/sdk/python_sdk_ref.md
-      - SDK (JS/TS): cloud/reference/sdk/js_ts_sdk_ref.md
+      - SDK (JS/TS): https://langchain-ai.github.io/langgraphjs/reference/modules/sdk.html
       - RemoteGraph: reference/remote_graph.md
       - Environment variables: cloud/reference/env_var.md
 
