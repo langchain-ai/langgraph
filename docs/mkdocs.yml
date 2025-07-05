@@ -384,4 +384,8 @@ extra_css:
   - stylesheets/logos.css
   - stylesheets/sticky_navigation.css
   - stylesheets/agent_graph_widget.css
+  - static/page-actions.css
+
+extra_javascript:
+  - static/page-actions.js
 

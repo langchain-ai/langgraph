@@ -1,0 +1,147 @@
+/* Page actions container */
+.page-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin: 1rem 0;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+/* Button group for copy dropdown */
+.copy-button-group {
+    position: relative;
+    display: flex;
+}
+
+/* Base button styles */
+.page-action {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.8rem;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    background: white;
+    color: #333;
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-family: inherit;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    text-decoration: none;
+}
+
+.page-action:hover {
+    border-color: #1976d2;
+    color: #1976d2;
+    background: rgba(25, 118, 210, 0.04);
+}
+
+.page-action svg {
+    fill: currentColor;
+    flex-shrink: 0;
+}
+
+/* Copy button specific styles */
+.copy-text-btn {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-right: none;
+}
+
+.dropdown-btn {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    padding: 0.4rem 0.5rem;
+    border-left: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+/* Dropdown menu */
+.dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 1000;
+    display: none;
+    min-width: 200px;
+    background: white;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    margin-top: 2px;
+}
+
+.dropdown-menu.show {
+    display: block;
+}
+
+.dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.6rem 0.8rem;
+    border: none;
+    background: none;
+    color: #333;
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-family: inherit;
+    text-align: left;
+    transition: background-color 0.2s ease;
+}
+
+.dropdown-item:hover {
+    background: rgba(25, 118, 210, 0.08);
+    color: #1976d2;
+}
+
+.dropdown-item svg {
+    fill: currentColor;
+}
+
+/* Dark mode support */
+[data-md-color-scheme="slate"] .page-action {
+    background: #2d2d2d;
+    color: #e0e0e0;
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+[data-md-color-scheme="slate"] .page-action:hover {
+    border-color: #64b5f6;
+    color: #64b5f6;
+    background: rgba(100, 181, 246, 0.08);
+}
+
+[data-md-color-scheme="slate"] .dropdown-btn {
+    border-left-color: rgba(255, 255, 255, 0.12);
+}
+
+[data-md-color-scheme="slate"] .dropdown-menu {
+    background: #2d2d2d;
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+[data-md-color-scheme="slate"] .dropdown-item {
+    color: #e0e0e0;
+}
+
+[data-md-color-scheme="slate"] .dropdown-item:hover {
+    background: rgba(100, 181, 246, 0.12);
+    color: #64b5f6;
+}
+
+/* Responsive */
+@media screen and (max-width: 76.1875em) {
+    .page-actions {
+        margin-bottom: 1.5rem;
+    }
+    
+    .page-action {
+        font-size: 0.7rem;
+        padding: 0.35rem 0.7rem;
+    }
+    
+    .dropdown-btn {
+        padding: 0.35rem 0.45rem;
+    }
+} 
