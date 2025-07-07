@@ -2066,7 +2066,7 @@ async def test_message_graph(async_checkpointer: BaseCheckpointSaver) -> None:
     from langchain_core.messages import AIMessage, HumanMessage
     from langchain_core.tools import tool
 
-    class FakeFuntionChatModel(FakeMessagesListChatModel):
+    class FakeFunctionChatModel(FakeMessagesListChatModel):
         def bind_functions(self, functions: list):
             return self
 
@@ -2077,7 +2077,7 @@ async def test_message_graph(async_checkpointer: BaseCheckpointSaver) -> None:
 
     tools = [search_api]
 
-    model = FakeFuntionChatModel(
+    model = FakeFunctionChatModel(
         responses=[
             AIMessage(
                 content="",
