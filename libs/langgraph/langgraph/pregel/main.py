@@ -70,9 +70,7 @@ from langgraph.constants import (
     CONFIG_KEY_RUNNER_SUBMIT,
     CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SEND,
-    CONFIG_KEY_STORE,
     CONFIG_KEY_STREAM,
-    CONFIG_KEY_STREAM_WRITER,
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
     END,
@@ -2382,8 +2380,8 @@ class Pregel(
                 "Checkpointer requires one or more of the following 'configurable' "
                 "keys: thread_id, checkpoint_ns, checkpoint_id"
             )
-        if CONFIG_KEY_STORE in config.get(CONF, {}):
-            store: BaseStore | None = config[CONF][CONFIG_KEY_STORE]
+        if CONFIG_KEY_RUNTIME in config.get(CONF, {}):
+            store: BaseStore | None = config[CONF][CONFIG_KEY_RUNTIME].store
         else:
             store = self.store
         if CONFIG_KEY_CACHE in config.get(CONF, {}):
@@ -2503,28 +2501,28 @@ class Pregel(
                     StreamMessagesHandler(stream.put, subgraphs)
                 )
 
-            def stream_writer(c: Any) -> None:
-                stream.put(
-                    (
-                        tuple(
-                            get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(NS_SEP)[
-                                :-1
-                            ]
-                        ),
-                        "custom",
-                        c,
-                    )
-                )
-
             # set up custom stream mode
             if "custom" in stream_modes:
-                config[CONF][CONFIG_KEY_STREAM_WRITER] = stream_writer
-            elif (
-                CONFIG_KEY_STREAM not in config[CONF]
-                and CONFIG_KEY_STREAM_WRITER in config[CONF]
-            ):
-                # remove parent graph stream writer if subgraph streaming not requested
-                del config[CONF][CONFIG_KEY_STREAM_WRITER]
+
+                def stream_writer(c: Any) -> None:
+                    stream.put(
+                        (
+                            tuple(
+                                get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(
+                                    NS_SEP
+                                )[:-1]
+                            ),
+                            "custom",
+                            c,
+                        )
+                    )
+            elif CONFIG_KEY_STREAM in config[CONF]:
+                stream_writer = config[CONF][CONFIG_KEY_RUNTIME].stream_writer
+            else:
+
+                def stream_writer(c: Any) -> None:
+                    pass
+
             # set checkpointing mode for subgraphs
             if checkpoint_during is not None:
                 config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
@@ -2533,7 +2531,7 @@ class Pregel(
                 context=context,
                 store=store,
                 stream_writer=stream_writer,
-                config=config,
+                previous=None,
             )
             with SyncPregelLoop(
                 input,
@@ -2771,13 +2769,27 @@ class Pregel(
                 )
 
             if "custom" in stream_modes:
-                config[CONF][CONFIG_KEY_STREAM_WRITER] = stream_writer
-            elif (
-                CONFIG_KEY_STREAM not in config[CONF]
-                and CONFIG_KEY_STREAM_WRITER in config[CONF]
-            ):
-                # remove parent graph stream writer if subgraph streaming not requested
-                del config[CONF][CONFIG_KEY_STREAM_WRITER]
+
+                def stream_writer(c: Any) -> None:
+                    aioloop.call_soon_threadsafe(
+                        stream.put_nowait,
+                        (
+                            tuple(
+                                get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(
+                                    NS_SEP
+                                )[:-1]
+                            ),
+                            "custom",
+                            c,
+                        ),
+                    )
+            elif CONFIG_KEY_STREAM in config[CONF]:
+                stream_writer = config[CONF][CONFIG_KEY_RUNTIME].stream_writer
+            else:
+
+                def stream_writer(c: Any) -> None:
+                    pass
+
             # set checkpointing mode for subgraphs
             if checkpoint_during is not None:
                 config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
@@ -2786,7 +2798,7 @@ class Pregel(
                 context=context,
                 store=store,
                 stream_writer=stream_writer,
-                config=config,
+                previous=None,
             )
             async with AsyncPregelLoop(
                 input,

@@ -496,4 +496,4 @@ class Runtime(Generic[ContextT]):
 
     stream_writer: StreamWriter
 
-    config: RunnableConfig
+    previous: Any | None

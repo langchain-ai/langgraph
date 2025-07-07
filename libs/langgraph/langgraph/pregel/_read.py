@@ -46,7 +46,6 @@ class ChannelRead(RunnableCallable):
             tags=tags,
             name=None,
             trace=False,
-            func_accepts_config=True,
         )
         self.fresh = fresh
         self.mapper = mapper

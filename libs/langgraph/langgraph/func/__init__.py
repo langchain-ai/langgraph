@@ -382,7 +382,7 @@ class entrypoint(Generic[ContextT]):
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         """Initialize the entrypoint decorator."""
-        if (config_schema := kwargs.get("config_schema")) is not UNSET:
+        if (config_schema := kwargs.get("config_schema", UNSET)) is not UNSET:
             warnings.warn(
                 "`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
                 category=LangGraphDeprecatedSinceV10,

@@ -134,7 +134,6 @@ class BranchSpec(NamedTuple):
                 reader=reader,
                 name=None,
                 trace=False,
-                func_accepts_config=True,
             ),
             list(
                 zip_longest(

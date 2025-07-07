@@ -93,6 +93,8 @@ def test_pregel_types_deprecation() -> None:
         from langgraph.pregel.types import StateSnapshot  # noqa: F401
 
 
+@pytest.mark.filterwarnings("ignore:`config_schema` is deprecated")
+@pytest.mark.filterwarnings("ignore:`get_config_jsonschema` is deprecated")
 def test_config_schema_deprecation() -> None:
     with pytest.warns(
         LangGraphDeprecatedSinceV10,
