@@ -309,7 +309,6 @@ LIMIT 1;
 ================================= Tool Message ==================================
 Name: sql_db_query_checker
 
-```sql
 SELECT e.EmployeeId, e.FirstName, e.LastName, SUM(i.Total) as TotalSales
 FROM Employee e
 JOIN Customer c ON e.EmployeeId = c.SupportRepId
@@ -318,7 +317,7 @@ WHERE i.InvoiceDate BETWEEN '2009-01-01' AND '2009-12-31'
 GROUP BY e.EmployeeId, e.FirstName, e.LastName
 ORDER BY TotalSales DESC
 LIMIT 1;
-```
+
 ================================== Ai Message ===================================
 Tool Calls:
   sql_db_query (call_X747YMElSeY5D3CfhE6KzLUj)
