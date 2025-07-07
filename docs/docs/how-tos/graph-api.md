@@ -163,7 +163,7 @@ Hello!
 In practice, there are additional considerations for updating lists of messages:
 
 - We may wish to update an existing message in the state.
-- We may want to accept short-hands for [message formats](../concepts/low_level.md#using-messages-in-your-graph), such as [OpenAI format](https://python.langchain.com/docs/concepts/messages.md#openai-format).
+- We may want to accept short-hands for [message formats](../concepts/low_level.md#using-messages-in-your-graph), such as [OpenAI format](https://python.langchain.com/docs/concepts/messages/#openai-format).
 
 LangGraph includes a built-in reducer `add_messages` that handles these considerations:
 
