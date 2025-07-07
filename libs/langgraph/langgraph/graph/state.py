@@ -180,14 +180,14 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
     compiled: bool
     state_schema: type[StateT]
-    context_schema: type[ContextT]
+    context_schema: type[ContextT] | None
     input_schema: type[InputT]
     output_schema: type[OutputT]
 
     def __init__(
         self,
         state_schema: type[StateT],
-        context_schema: type[ContextT] = NoneType,  # type: ignore[assignment]
+        context_schema: type[ContextT] | None = None,
         *,
         input_schema: type[InputT] | None = None,
         output_schema: type[OutputT] | None = None,
@@ -199,7 +199,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 category=LangGraphDeprecatedSinceV10,
                 stacklevel=2,
             )
-            if context_schema is NoneType:
+            if context_schema is None:
                 context_schema = cast(type[ContextT], config_schema)
 
         if (input_ := kwargs.get("input", UNSET)) is not UNSET:
