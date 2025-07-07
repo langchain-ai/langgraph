@@ -271,7 +271,7 @@ nav:
     - Template applications: concepts/template_applications.md  # TODO: make tutorial
     - Agentic RAG: tutorials/rag/langgraph_agentic_rag.md
     - Agent Supervisor: tutorials/multi_agent/agent_supervisor.md
-    - SQL agent: tutorials/sql-agent.ipynb
+    - SQL agent: tutorials/sql/sql-agent.md
     - Prebuilt chat UI: agents/ui.md
     - Graph runs in LangSmith: how-tos/run-id-langsmith.ipynb
     - LangGraph Platform:

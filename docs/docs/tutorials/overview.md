@@ -6,7 +6,7 @@ The pages in this section provide end-to-end examples for the following topics:
 
 - [Agentic RAG](./rag/langgraph_adaptive_rag.ipynb)
 - [Agent Supervisor](./multi_agent/agent_supervisor.md)
-- [SQL agent](./sql-agent.ipynb)
+- [SQL agent](./sql/sql-agent.md)
 - [Graph runs in LangSmith](../how-tos/run-id-langsmith.ipynb)
 
 ## LangGraph Platform
