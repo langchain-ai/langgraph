@@ -33,8 +33,8 @@ jobs:
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: upgrade dependencies with `uv lock --upgrade`"
-          title: "chore: upgrade dependencies with `uv lock --upgrade`"
+          commit-message: "chore[deps]: upgrade dependencies with `uv lock --upgrade`"
+          title: "chore[deps]: upgrade dependencies with `uv lock --upgrade`"
           body: |
             This PR updates the dependencies in all Python packages using `uv lock --upgrade`.
             

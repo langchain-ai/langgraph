@@ -123,7 +123,7 @@ def _download_repo_with_requests(repo_url: str, path: str) -> None:
                 )
     except error.HTTPError as e:
         click.secho(
-            f"❌ Error: Failed to download repository.\n" f"Details: {e}\n",
+            f"❌ Error: Failed to download repository.\nDetails: {e}\n",
             fg="red",
             bold=True,
             err=True,
