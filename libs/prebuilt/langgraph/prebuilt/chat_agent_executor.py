@@ -11,6 +11,7 @@ from typing import (
     cast,
     get_type_hints,
 )
+from warnings import warn
 
 from langchain_core.language_models import (
     BaseChatModel,
@@ -35,6 +36,7 @@ from pydantic import BaseModel
 from typing_extensions import Annotated, TypedDict
 
 from langgraph._internal._runnable import RunnableCallable, RunnableLike
+from langgraph._internal._typing import UNSET
 from langgraph.errors import ErrorCode, create_error_message
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
@@ -43,6 +45,7 @@ from langgraph.managed import IsLastStep, RemainingSteps
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer, Send
+from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 StructuredResponse = Union[dict, BaseModel]
 StructuredResponseSchema = Union[dict, type[BaseModel]]
@@ -252,7 +255,7 @@ def create_react_agent(
     pre_model_hook: Optional[RunnableLike] = None,
     post_model_hook: Optional[RunnableLike] = None,
     state_schema: Optional[StateSchemaType] = None,
-    config_schema: Optional[Type[Any]] = None,
+    context_schema: Optional[Type[Any]] = None,
     checkpointer: Optional[Checkpointer] = None,
     store: Optional[BaseStore] = None,
     interrupt_before: Optional[list[str]] = None,
@@ -260,6 +263,7 @@ def create_react_agent(
     debug: bool = False,
     version: Literal["v1", "v2"] = "v2",
     name: Optional[str] = None,
+    **deprecated_kwargs: Any,
 ) -> CompiledStateGraph:
     """Creates an agent graph that calls tools in a loop until a stopping condition is met.
 
@@ -334,8 +338,7 @@ def create_react_agent(
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `remaining_steps` keys.
             Defaults to `AgentState` that defines those two keys.
-        config_schema: An optional schema for configuration.
-            Use this to expose configurable parameters via agent.config_specs.
+        context_schema: An optional schema for runtime context.
         checkpointer: An optional checkpoint saver object. This is used for persisting
             the state of the graph (e.g., as chat memory) for a single thread (e.g., a single conversation).
         store: An optional store object. This is used for persisting data
@@ -402,6 +405,15 @@ def create_react_agent(
             print(chunk)
         ```
     """
+    if (config_schema := deprecated_kwargs.pop("config_schema", UNSET)) is not UNSET:
+        warn(
+            "`config_schema` is no longer supported. Use `context_schema` instead.",
+            category=LangGraphDeprecatedSinceV10,
+        )
+
+        if context_schema is not None:
+            context_schema = config_schema
+
     if version not in ("v1", "v2"):
         raise ValueError(
             f"Invalid version {version}. Supported versions are 'v1' and 'v2'."
@@ -590,7 +602,7 @@ def create_react_agent(
 
     if not tool_calling_enabled:
         # Define a new graph
-        workflow = StateGraph(state_schema, config_schema=config_schema)
+        workflow = StateGraph(state_schema=state_schema, context_schema=context_schema)
         workflow.add_node(
             "agent",
             RunnableCallable(call_model, acall_model),
@@ -657,7 +669,9 @@ def create_react_agent(
                 return [Send("tools", [tool_call]) for tool_call in tool_calls]
 
     # Define a new graph
-    workflow = StateGraph(state_schema or AgentState, config_schema=config_schema)
+    workflow = StateGraph(
+        state_schema=state_schema or AgentState, context_schema=context_schema
+    )
 
     # Define the two nodes we will cycle between
     workflow.add_node(

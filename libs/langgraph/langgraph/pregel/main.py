@@ -64,13 +64,13 @@ from langgraph.constants import (
     CONFIG_KEY_NODE_FINISHED,
     CONFIG_KEY_READ,
     CONFIG_KEY_RUNNER_SUBMIT,
+    CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STORE,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_STREAM_WRITER,
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
-    CONFIG_KEY_RUNTIME,
     END,
     ERROR,
     INPUT,
@@ -120,10 +120,10 @@ from langgraph.types import (
     CachePolicy,
     Checkpointer,
     Interrupt,
+    Runtime,
     Send,
     StateSnapshot,
     StateUpdate,
-    Runtime,
     StreamMode,
 )
 from langgraph.typing import ContextT, InputT, OutputT, StateT
@@ -300,7 +300,10 @@ class NodeBuilder:
         )
 
 
-class Pregel(PregelProtocol[StateT, ContextT, InputT, OutputT], Generic[StateT, ContextT, InputT, OutputT]):
+class Pregel(
+    PregelProtocol[StateT, ContextT, InputT, OutputT],
+    Generic[StateT, ContextT, InputT, OutputT],
+):
     """Pregel manages the runtime behavior for LangGraph applications.
 
     ## Overview
@@ -2448,7 +2451,7 @@ class Pregel(PregelProtocol[StateT, ContextT, InputT, OutputT], Generic[StateT, 
                 run_manager.inheritable_handlers.append(
                     StreamMessagesHandler(stream.put, subgraphs)
                 )
-            
+
             def stream_writer(c: Any) -> None:
                 stream.put(
                     (
@@ -2700,6 +2703,7 @@ class Pregel(PregelProtocol[StateT, ContextT, InputT, OutputT], Generic[StateT, 
                 run_manager.inheritable_handlers.append(
                     StreamMessagesHandler(stream_put, subgraphs)
                 )
+
             # set up custom stream mode
             def stream_writer(c: Any) -> None:
                 aioloop.call_soon_threadsafe(
@@ -2712,7 +2716,7 @@ class Pregel(PregelProtocol[StateT, ContextT, InputT, OutputT], Generic[StateT, 
                         ),
                         "custom",
                         c,
-                    )
+                    ),
                 )
 
             if "custom" in stream_modes:
@@ -2727,7 +2731,7 @@ class Pregel(PregelProtocol[StateT, ContextT, InputT, OutputT], Generic[StateT, 
             if checkpoint_during is not None:
                 config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
 
-             config[CONF][CONFIG_KEY_RUNTIME] = Runtime(
+            config[CONF][CONFIG_KEY_RUNTIME] = Runtime(
                 context=context,
                 store=store,
                 stream_writer=stream_writer,

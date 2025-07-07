@@ -9,7 +9,7 @@ from langchain_core.runnables.graph import Graph as DrawableGraph
 from typing_extensions import Self
 
 from langgraph.types import All, StateSnapshot, StateUpdate, StreamMode
-from langgraph.typing import ContextT,InputT, OutputT, StateT
+from langgraph.typing import ContextT, InputT, OutputT, StateT
 
 __all__ = ("PregelProtocol", "StreamProtocol")
 

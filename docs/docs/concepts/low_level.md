@@ -466,7 +466,7 @@ information to nodes that is not part of the graph state. For example, you might
 
 ```python
 class ContextSchema(TypedDict):
-    llm: str
+    llm_provider: str
 
 graph = StateGraph(State, context_schema=ContextSchema)
 ```
@@ -474,17 +474,17 @@ graph = StateGraph(State, context_schema=ContextSchema)
 You can then pass this context into the graph using the `context` parameter of the `invoke` method.
 
 ```python
-graph.invoke(inputs, context={"llm": "anthropic"})
+graph.invoke(inputs, context={"llm_provider": "anthropic"})
 ```
 
-You can then access and use this configuration inside a node or conditional edge:
+You can then access and use this context inside a node or conditional edge:
 
 ```python
 from langgraph.types import Runtime
 
 def node_a(state, context: Runtime[ContextSchema]):
-    llm_type = runtime.context.get("llm", "openai")
-    llm = get_llm(llm_type)
+    llm_provider = runtime.context.get("llm_provider", "openai")
+    llm = get_llm(llm_provider)
     ...
 ```
 

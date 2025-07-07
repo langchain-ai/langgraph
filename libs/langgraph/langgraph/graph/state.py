@@ -117,6 +117,7 @@ def _get_node_name(node: StateNode) -> str:
     except AttributeError:
         raise TypeError(f"Unsupported node type: {type(node)}")
 
+
 class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     """A graph whose nodes communicate by reading and writing to a shared state.
     The signature of each node is State -> Partial<State>.
@@ -186,7 +187,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     def __init__(
         self,
         state_schema: type[StateT],
-        context_schema: type[ContextT] = NoneType,
+        context_schema: type[ContextT] = NoneType,  # type: ignore[assignment]
         *,
         input_schema: type[InputT] | None = None,
         output_schema: type[OutputT] | None = None,
@@ -478,7 +479,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         if input_schema is not None:
             self._add_schema(input_schema)
         self.nodes[node] = StateNodeSpec(
-            coerce_to_runnable(action, name=node, trace=False),  # type: ignore[arg-type]
+            coerce_to_runnable(action, name=node, trace=False),
             metadata,
             input_schema=input_schema or self.state_schema,
             retry_policy=retry_policy,
