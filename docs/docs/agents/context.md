@@ -20,18 +20,27 @@ LangGraph provides **three** primary ways to supply context:
 
 ### Runtime Context
 
+!!! note "`config['configurable']` -> `runtime.context`"
+
+    In LangGraph < v1.0, static runtime context was passed via the `config['configurable']` key, paired with a `config_schema` argument
+    to `StateGraph` or `Pregel`. This is now deprecated and will be removed in v2.0.
+
+    In LangGraph v1.0, we've introduced the [`Runtime`][langgraph.types.Runtime] object, which holds both static `context` and other
+    runtime-specific information like the store and stream writer.
+
 Runtime context is for immutable data like user metadata or API keys. Use this when you have values that don't change mid-run.
 
 Specify static context via the `context` argument to `invoke` / `stream`, which is reserved for this purpose:
 
 ```python
-class ContextSchema(TypedDict):
+@dataclass
+class ContextSchema:
     user_name: str
 
 graph.invoke( # (1)!
     {"messages": [{"role": "user", "content": "hi!"}]}, # (2)!
     # highlight-next-line
-    context={"user_id": "user_123"} # (3)!
+    context={"user_name": "John Smith"} # (3)!
 )
 ```
 
@@ -49,8 +58,7 @@ graph.invoke( # (1)!
 
     # highlight-next-line
     def prompt(state: AgentState, runtime: Runtime[ContextSchema]) -> list[AnyMessage]:
-        user_name = runtime.context.get("user_name")
-        system_msg = f"You are a helpful assistant. Address the user as {user_name}."
+        system_msg = f"You are a helpful assistant. Address the user as {runtime.context.user_name}."
         return [{"role": "system", "content": system_msg}] + state["messages"]
 
     agent = create_react_agent(
@@ -76,7 +84,7 @@ graph.invoke( # (1)!
 
     # highlight-next-line
     def node(state: State, config: Runtime[ContextSchema]):
-        user_name = runtime.context.get("user_name")
+        user_name = runtime.context.user_name
         ...
     ```
 
@@ -89,10 +97,11 @@ graph.invoke( # (1)!
 
     @tool
     # highlight-next-line
-    def get_user_info(runtime: Runtime[ContextSchema]) -> str:
+    def get_user_email(runtime: Runtime[ContextSchema]) -> str:
         """Retrieve user information based on user ID."""
-        user_id = runtime.context.get("user_id")
-        return "User is John Smith" if user_id == "user_123" else "Unknown user"
+        # simulate fetching user info from a database
+        email = get_user_email_from_db(runtime.context.user_name)
+        return email
     ```
 
     See the [tool calling guide](../how-tos/tool-calling.md#configuration) for details.

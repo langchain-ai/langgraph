@@ -212,7 +212,7 @@ def test_context_json_schema() -> None:
         context_schema=Foo,
     )
 
-    assert app.get_context_json_schema() == {
+    assert app.get_context_jsonschema() == {
         "properties": {
             "x": {
                 "title": "X",
@@ -1234,7 +1234,7 @@ def test_imp_task(
         "items": {"type": "string"},
         "title": "LangGraphOutput",
     }
-    assert graph.get_context_json_schema() == {
+    assert graph.get_context_jsonschema() == {
         "properties": {"model": {"title": "Model", "type": "string"}},
         "required": ["model"],
         "title": "Context",
@@ -1815,7 +1815,7 @@ def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) 
 
     app = builder.compile()
 
-    assert json.dumps(app.get_context_json_schema()) == snapshot
+    assert json.dumps(app.get_context_jsonschema()) == snapshot
     assert json.dumps(app.get_input_jsonschema()) == snapshot
     assert json.dumps(app.get_output_jsonschema()) == snapshot
 

@@ -465,8 +465,9 @@ When creating a graph, you can specify a `context_schema` for runtime context pa
 information to nodes that is not part of the graph state. For example, you might want to pass dependencies such as model name or a database connection.
 
 ```python
-class ContextSchema(TypedDict):
-    llm_provider: str
+@dataclass
+class ContextSchema:
+    llm_provider: str = "openai"
 
 graph = StateGraph(State, context_schema=ContextSchema)
 ```
@@ -482,9 +483,8 @@ You can then access and use this context inside a node or conditional edge:
 ```python
 from langgraph.types import Runtime
 
-def node_a(state, context: Runtime[ContextSchema]):
-    llm_provider = runtime.context.get("llm_provider", "openai")
-    llm = get_llm(llm_provider)
+def node_a(state: State, runtime: Runtime[ContextSchema]):
+    llm = get_llm(runtime.context.llm_provider)
     ...
 ```
 
@@ -495,7 +495,7 @@ See [this guide](../how-tos/graph-api.md#add-runtime-configuration) for a full b
 The recursion limit sets the maximum number of [super-steps](#graphs) the graph can execute during a single execution. Once the limit is reached, LangGraph will raise `GraphRecursionError`. By default this value is set to 25 steps. The recursion limit can be set on any graph at runtime, and is passed to `.invoke`/`.stream` via the config dictionary. Importantly, `recursion_limit` is a standalone `config` key and should not be passed inside the `configurable` key as all other user-defined configuration. See the example below:
 
 ```python
-graph.invoke(inputs, config={"recursion_limit": 5, "configurable":{"llm": "anthropic"}})
+graph.invoke(inputs, config={"recursion_limit": 5}, context={"llm": "anthropic"})
 ```
 
 Read [this how-to](https://langchain-ai.github.io/langgraph/how-tos/recursion-limit/) to learn more about how the recursion limit works.

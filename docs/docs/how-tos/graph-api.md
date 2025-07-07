@@ -559,13 +559,16 @@ print(graph.invoke({}, context={"my_runtime_value": "b"}))
     Below we demonstrate a practical example in which we configure what LLM to use at runtime. We will use both OpenAI and Anthropic models.
 
     ```python
+    from dataclasses import dataclass
+
     from langchain.chat_models import init_chat_model
     from langgraph.graph import MessagesState, END, StateGraph, START
     from langgraph.types import Runtime
     from typing_extensions import TypedDict
 
-    class ContextSchema(TypedDict):
-        model: str
+    @dataclass
+    class ContextSchema:
+        model_provider: str = "anthropic"
 
     MODELS = {
         "anthropic": init_chat_model("anthropic:claude-3-5-haiku-latest"),
@@ -573,8 +576,7 @@ print(graph.invoke({}, context={"my_runtime_value": "b"}))
     }
 
     def call_model(state: MessagesState, runtime: Runtime[ContextSchema]):
-        model = runtime.context.get("model", "anthropic")
-        model = MODELS[model]
+        model = MODELS[runtime.context.model_provider]
         response = model.invoke(state["messages"])
         return {"messages": [response]}
 
@@ -590,7 +592,7 @@ print(graph.invoke({}, context={"my_runtime_value": "b"}))
     # With no configuration, uses default (Anthropic)
     response_1 = graph.invoke({"messages": [input_message]})["messages"][-1]
     # Or, can set OpenAI
-    response_2 = graph.invoke({"messages": [input_message]}, context={"model": "openai"})["messages"][-1]
+    response_2 = graph.invoke({"messages": [input_message]}, context={"model_provider": "openai"})["messages"][-1]
 
     print(response_1.response_metadata["model_name"])
     print(response_2.response_metadata["model_name"])
@@ -604,6 +606,7 @@ print(graph.invoke({}, context={"my_runtime_value": "b"}))
     Below we demonstrate a practical example in which we configure two parameters: the LLM and system message to use at runtime.
 
     ```python
+    from dataclasses import dataclass
     from typing import Optional
     from langchain.chat_models import init_chat_model
     from langchain_core.messages import SystemMessage
@@ -611,9 +614,10 @@ print(graph.invoke({}, context={"my_runtime_value": "b"}))
     from langgraph.types import Runtime
     from typing_extensions import TypedDict
 
-    class ContextSchema(TypedDict):
-        model: Optional[str]
-        system_message: Optional[str]
+    @dataclass
+    class ContextSchema:
+        model_provider: str = "anthropic"
+        system_message: str | None = None
 
     MODELS = {
         "anthropic": init_chat_model("anthropic:claude-3-5-haiku-latest"),
@@ -621,10 +625,9 @@ print(graph.invoke({}, context={"my_runtime_value": "b"}))
     }
 
     def call_model(state: MessagesState, runtime: Runtime[ContextSchema]):
-        model = runtime.context.get("model", "anthropic")
-        model = MODELS[model]
+        model = MODELS[runtime.context.model_provider]
         messages = state["messages"]
-        if system_message := runtime.context.get("system_message"):
+        if (system_message := runtime.context.system_message):
             messages = [SystemMessage(system_message)] + messages
         response = model.invoke(messages)
         return {"messages": [response]}
@@ -638,7 +641,7 @@ print(graph.invoke({}, context={"my_runtime_value": "b"}))
 
     # Usage
     input_message = {"role": "user", "content": "hi"}
-    response = graph.invoke({"messages": [input_message]}, context={"model": "openai", "system_message": "Respond in Italian."})
+    response = graph.invoke({"messages": [input_message]}, context={"model_provider": "openai", "system_message": "Respond in Italian."})
     for message in response["messages"]:
         message.pretty_print()
     ```

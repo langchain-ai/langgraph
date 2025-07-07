@@ -106,13 +106,13 @@ def test_config_schema_deprecation() -> None:
 
     with pytest.warns(
         LangGraphDeprecatedSinceV10,
-        match="`config_schema` is deprecated. Use `get_context_json_schema` for the relevant schema instead.",
+        match="`config_schema` is deprecated. Use `get_context_jsonschema` for the relevant schema instead.",
     ):
         graph.config_schema()
 
     with pytest.warns(
         LangGraphDeprecatedSinceV10,
-        match="`get_config_jsonschema` is deprecated. Use `get_context_json_schema` instead.",
+        match="`get_config_jsonschema` is deprecated. Use `get_context_jsonschema` instead.",
     ):
         graph.get_config_jsonschema()
 

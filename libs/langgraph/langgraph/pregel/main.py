@@ -781,11 +781,11 @@ class Pregel(
         return self
 
     @deprecated(
-        "`config_schema` is deprecated. Use `get_context_json_schema` for the relevant schema instead."
+        "`config_schema` is deprecated. Use `get_context_jsonschema` for the relevant schema instead."
     )
     def config_schema(self, *, include: Sequence[str] | None = None) -> type[BaseModel]:
         warnings.warn(
-            "`config_schema` is deprecated. Use `get_context_json_schema` for the relevant schema instead.",
+            "`config_schema` is deprecated. Use `get_context_jsonschema` for the relevant schema instead.",
             category=LangGraphDeprecatedSinceV10,
             stacklevel=2,
         )
@@ -806,13 +806,13 @@ class Pregel(
         return create_model(self.get_name("Config"), field_definitions=fields)
 
     @deprecated(
-        "`get_config_jsonschema` is deprecated. Use `get_context_json_schema` instead."
+        "`get_config_jsonschema` is deprecated. Use `get_context_jsonschema` instead."
     )
     def get_config_jsonschema(
         self, *, include: Sequence[str] | None = None
     ) -> dict[str, Any]:
         warnings.warn(
-            "`get_config_jsonschema` is deprecated. Use `get_context_json_schema` instead.",
+            "`get_config_jsonschema` is deprecated. Use `get_context_jsonschema` instead.",
             category=LangGraphDeprecatedSinceV10,
             stacklevel=2,
         )
@@ -822,7 +822,7 @@ class Pregel(
             schema = self.config_schema(include=include)
         return schema.model_json_schema()
 
-    def get_context_json_schema(self) -> dict[str, Any]:
+    def get_context_jsonschema(self) -> dict[str, Any]:
         context_schema = self.context_schema
         if isclass(context_schema) and issubclass(context_schema, BaseModel):
             return context_schema.model_json_schema()
