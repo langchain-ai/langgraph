@@ -14,10 +14,7 @@ from mkdocs.structure.pages import Page
 from pydantic import BaseModel, Field
 from yaml import SafeLoader
 
-from _scripts.notebook_hooks import (
-    _on_page_markdown_with_config,
-    _apply_conditional_rendering,
-)
+from _scripts.notebook_hooks import _on_page_markdown_with_config
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 # Get source directory (parent of HERE / docs)
