@@ -273,7 +273,7 @@ nav:
     - Agent Supervisor: tutorials/multi_agent/agent_supervisor.md
     - SQL agent: tutorials/sql/sql-agent.md
     - Prebuilt chat UI: agents/ui.md
-    - Graph runs in LangSmith: how-tos/run-id-langsmith.ipynb
+    - Graph runs in LangSmith: how-tos/run-id-langsmith.md
     - LangGraph Platform:
       - Authentication:
         - tutorials/auth/getting_started.md
