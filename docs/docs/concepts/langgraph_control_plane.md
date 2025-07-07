@@ -112,6 +112,8 @@ After a deployment is ready, the control plane monitors the deployment and recor
 - Number of container restarts.
 - Number of replicas (this will increase with [autoscaling](../concepts/langgraph_data_plane.md#autoscaling)).
 - [Postgres](../concepts/langgraph_data_plane.md#postgres) CPU, memory usage, and disk usage.
+- [LangGraph Server queue](../concepts/langgraph_server.md#persistence-and-task-queue) pending/active run count.
+- [LangGraph Server API](../concepts/langgraph_server.md) success response count, error response count, and latency.
 
 These metrics are displayed as charts in the Control Plane UI.
 
