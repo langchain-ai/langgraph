@@ -45,9 +45,9 @@ The first thing you do when you define a graph is define the `State` of the grap
 
 ### Schema
 
-The main documented way to specify the schema of a graph is by using `TypedDict`. However, we also support [using a Pydantic BaseModel](../how-tos/graph-api.ipynb#use-pydantic-models-for-graph-state) as your graph state to add **default values** and additional data validation.
+The main documented way to specify the schema of a graph is by using `TypedDict`. However, we also support [using a Pydantic BaseModel](../how-tos/graph-api.md#use-pydantic-models-for-graph-state) as your graph state to add **default values** and additional data validation.
 
-By default, the graph will have the same input and output schemas. If you want to change this, you can also specify explicit input and output schemas directly. This is useful when you have a lot of keys, and some are explicitly for input and others for output. See the [guide here](../how-tos/graph-api.ipynb#define-input-and-output-schemas) for how to use.
+By default, the graph will have the same input and output schemas. If you want to change this, you can also specify explicit input and output schemas directly. This is useful when you have a lot of keys, and some are explicitly for input and others for output. See the [guide here](../how-tos/graph-api.md#define-input-and-output-schemas) for how to use.
 
 #### Multiple schemas
 
@@ -56,9 +56,9 @@ Typically, all graph nodes communicate with a single schema. This means that the
 - Internal nodes can pass information that is not required in the graph's input / output.
 - We may also want to use different input / output schemas for the graph. The output might, for example, only contain a single relevant output key.
 
-It is possible to have nodes write to private state channels inside the graph for internal node communication. We can simply define a private schema, `PrivateState`. See [this guide](../how-tos/graph-api.ipynb#pass-private-state-between-nodes) for more detail.
+It is possible to have nodes write to private state channels inside the graph for internal node communication. We can simply define a private schema, `PrivateState`. See [this guide](../how-tos/graph-api.md#pass-private-state-between-nodes) for more detail.
 
-It is also possible to define explicit input and output schemas for a graph. In these cases, we define an "internal" schema that contains _all_ keys relevant to graph operations. But, we also define `input` and `output` schemas that are sub-sets of the "internal" schema to constrain the input and output of the graph. See [this guide](../how-tos/graph-api.ipynb#define-input-and-output-schemas) for more detail.
+It is also possible to define explicit input and output schemas for a graph. In these cases, we define an "internal" schema that contains _all_ keys relevant to graph operations. But, we also define `input` and `output` schemas that are sub-sets of the "internal" schema to constrain the input and output of the graph. See [this guide](../how-tos/graph-api.md#define-input-and-output-schemas) for more detail.
 
 Let's look at an example:
 
@@ -406,7 +406,7 @@ def my_node(state: State) -> Command[Literal["my_other_node"]]:
 
     When returning `Command` in your node functions, you must add return type annotations with the list of node names the node is routing to, e.g. `Command[Literal["my_other_node"]]`. This is necessary for the graph rendering and tells LangGraph that `my_node` can navigate to `my_other_node`.
 
-Check out this [how-to guide](../how-tos/graph-api.ipynb#combine-control-flow-and-state-updates-with-command) for an end-to-end example of how to use `Command`.
+Check out this [how-to guide](../how-tos/graph-api.md#combine-control-flow-and-state-updates-with-command) for an end-to-end example of how to use `Command`.
 
 ### When should I use Command instead of conditional edges?
 
@@ -433,17 +433,17 @@ def my_node(state: State) -> Command[Literal["other_subgraph"]]:
 
 !!! important "State updates with `Command.PARENT`"
 
-    When you send updates from a subgraph node to a parent graph node for a key that's shared by both parent and subgraph [state schemas](#schema), you **must** define a [reducer](#reducers) for the key you're updating in the parent graph state. See this [example](../how-tos/graph-api.ipynb#navigate-to-a-node-in-a-parent-graph).
+    When you send updates from a subgraph node to a parent graph node for a key that's shared by both parent and subgraph [state schemas](#schema), you **must** define a [reducer](#reducers) for the key you're updating in the parent graph state. See this [example](../how-tos/graph-api.md#navigate-to-a-node-in-a-parent-graph).
 
 This is particularly useful when implementing [multi-agent handoffs](./multi_agent.md#handoffs).
 
-Check out [this guide](../how-tos/graph-api.ipynb#navigate-to-a-node-in-a-parent-graph) for detail.
+Check out [this guide](../how-tos/graph-api.md#navigate-to-a-node-in-a-parent-graph) for detail.
 
 ### Using inside tools
 
 A common use case is updating graph state from inside a tool. For example, in a customer support application you might want to look up customer information based on their account number or ID in the beginning of the conversation.
 
-Refer to [this guide](../how-tos/graph-api.ipynb#use-inside-tools) for detail.
+Refer to [this guide](../how-tos/graph-api.md#use-inside-tools) for detail.
 
 ### Human-in-the-loop
 
@@ -488,7 +488,7 @@ def node_a(state, context: Runtime[ContextSchema]):
     ...
 ```
 
-See [this guide](../how-tos/graph-api.ipynb#add-runtime-configuration) for a full breakdown on configuration.
+See [this guide](../how-tos/graph-api.md#add-runtime-configuration) for a full breakdown on configuration.
 
 ### Recursion Limit
 
@@ -502,4 +502,4 @@ Read [this how-to](https://langchain-ai.github.io/langgraph/how-tos/recursion-li
 
 ## Visualization
 
-It's often nice to be able to visualize graphs, especially as they get more complex. LangGraph comes with several built-in ways to visualize graphs. See [this how-to guide](../how-tos/graph-api.ipynb#visualize-your-graph) for more info.
+It's often nice to be able to visualize graphs, especially as they get more complex. LangGraph comes with several built-in ways to visualize graphs. See [this how-to guide](../how-tos/graph-api.md#visualize-your-graph) for more info.

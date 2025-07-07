@@ -1339,9 +1339,6 @@ def _get_json_schema(
         return typ.model_json_schema()
     elif is_typeddict(typ):
         return TypeAdapter(typ).json_schema()
-        return typ.model_json_schema()
-    elif is_typeddict(typ):
-        return TypeAdapter(typ).json_schema()
     else:
         keys = list(schemas[typ].keys())
         if len(keys) == 1 and keys[0] == "__root__":
