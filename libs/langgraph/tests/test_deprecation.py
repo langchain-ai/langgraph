@@ -1,8 +1,11 @@
 import pytest
+from pytest_mock import MockerFixture
 from typing_extensions import TypedDict
 
+from langgraph.channels.last_value import LastValue
 from langgraph.func import entrypoint, task
 from langgraph.graph import StateGraph
+from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.types import RetryPolicy
 from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
 
@@ -112,3 +115,25 @@ def test_config_schema_deprecation() -> None:
         match="`get_config_jsonschema` is deprecated. Use `get_context_json_schema` instead.",
     ):
         graph.get_config_jsonschema()
+
+
+def test_config_type_deprecation_pregel(mocker: MockerFixture) -> None:
+    add_one = mocker.Mock(side_effect=lambda x: x + 1)
+    chain = NodeBuilder().subscribe_only("input").do(add_one).write_to("output")
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`config_type` is deprecated and will be removed. Please use `context_schema` instead.",
+    ):
+        Pregel(
+            nodes={
+                "one": chain,
+            },
+            channels={
+                "input": LastValue(int),
+                "output": LastValue(int),
+            },
+            input_channels="input",
+            output_channels="output",
+            config_type=PlainState,
+        )

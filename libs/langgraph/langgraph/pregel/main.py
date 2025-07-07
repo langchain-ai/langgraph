@@ -26,7 +26,7 @@ from langchain_core.runnables.config import (
 )
 from langchain_core.runnables.graph import Graph
 from pydantic import BaseModel, TypeAdapter
-from typing_extensions import Self, deprecated, is_typeddict
+from typing_extensions import Self, Unpack, deprecated, is_typeddict
 
 from langgraph._internal._config import (
     ensure_config,
@@ -47,6 +47,7 @@ from langgraph._internal._runnable import (
     RunnableSeq,
     coerce_to_runnable,
 )
+from langgraph._internal._typing import DeprecatedKwargs
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
@@ -632,7 +633,18 @@ class Pregel(
         config: RunnableConfig | None = None,
         trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
         name: str = "LangGraph",
+        **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
+        if config_type := deprecated_kwargs.get("config_type"):
+            warnings.warn(
+                "`config_type` is deprecated and will be removed. Please use `context_schema` instead.",
+                category=LangGraphDeprecatedSinceV10,
+                stacklevel=2,
+            )
+
+            if context_schema is None:
+                context_schema = cast(type[ContextT], config_type)
+
         self.nodes = {
             k: v.build() if isinstance(v, NodeBuilder) else v for k, v in nodes.items()
         }
