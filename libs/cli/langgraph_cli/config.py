@@ -471,21 +471,63 @@ class Config(TypedDict, total=False):
     """Optional. Named definitions of UI components emitted by the agent, each pointing to a JS/TS file.
     """
 
+    retain_build_tools: Optional[Union[bool, list[str]]]
+    """Optional. Control whether to retain Python build tools (`pip`, `setuptools`, `wheel`) in the final image.
 
-PIP_CLEANUP_LINES = """# -- Ensure user deps didn't inadvertently overwrite langgraph-api
+    Accepted values:
+        - True : Keep all three tools (skip uninstall).
+        - False / omitted : Uninstall all three tools (default behaviour).
+        - list[str] : Names of tools **to retain**. Each value must be one of "pip", "setuptools", "wheel".
+    """
+
+
+_BUILD_TOOLS = ("pip", "setuptools", "wheel")
+
+
+def _get_pip_cleanup_lines(
+    install_cmd: str,
+    to_uninstall: Optional[tuple[str]],
+    pip_installer: Literal["uv", "pip"],
+) -> str:
+    commands = [
+        f"""# -- Ensure user deps didn't inadvertently overwrite langgraph-api
 RUN mkdir -p /api/langgraph_api /api/langgraph_runtime /api/langgraph_license && \
-    touch /api/langgraph_api/__init__.py /api/langgraph_runtime/__init__.py /api/langgraph_license/__init__.py
+touch /api/langgraph_api/__init__.py /api/langgraph_runtime/__init__.py /api/langgraph_license/__init__.py
 RUN PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir --no-deps -e /api
 # -- End of ensuring user deps didn't inadvertently overwrite langgraph-api --
-# -- Removing pip from the final image ~<:===~~~ --
-RUN pip uninstall -y pip setuptools wheel && \
-    rm -rf /usr/local/lib/python*/site-packages/pip* /usr/local/lib/python*/site-packages/setuptools* /usr/local/lib/python*/site-packages/wheel* && \
-    find /usr/local/bin -name "pip*" -delete || true
-# pip removal for wolfi
-RUN rm -rf /usr/lib/python*/site-packages/pip* /usr/lib/python*/site-packages/setuptools* /usr/lib/python*/site-packages/wheel* && \
-    find /usr/bin -name "pip*" -delete || true
-{uv_removal}
-# -- End of pip removal --"""
+# -- Removing build deps from the final image ~<:===~~~ --"""
+    ]
+    if to_uninstall:
+        for pack in to_uninstall:
+            if pack not in _BUILD_TOOLS:
+                raise ValueError(
+                    f"Invalid build tool: {pack}; must be one of {', '.join(_BUILD_TOOLS)}"
+                )
+        packs_str = " ".join(sorted(to_uninstall))
+        commands.append(f"RUN pip uninstall -y {packs_str}")
+        # Ensure the directories are removed entirely
+        packages_rm = " ".join(
+            f"/usr/local/lib/python*/site-packages/{pack}*" for pack in to_uninstall
+        )
+        if "pip" in to_uninstall:
+            packages_rm += ' && find /usr/local/bin -name "pip*" -delete || true'
+        commands.append(f"RUN rm -rf {packages_rm}")
+        wolfi_packages_rm = " ".join(
+            f"/usr/lib/python*/site-packages/{pack}*" for pack in to_uninstall
+        )
+        if "pip" in to_uninstall:
+            wolfi_packages_rm += ' && find /usr/bin -name "pip*" -delete || true'
+        commands.append(f"RUN rm -rf {wolfi_packages_rm}")
+        if pip_installer == "uv":
+            commands.append(
+                f"RUN uv pip uninstall --system {packs_str} && rm /usr/bin/uv /usr/bin/uvx"
+            )
+    else:
+        if pip_installer == "uv":
+            commands.append(
+                "RUN rm /usr/bin/uv /usr/bin/uvx\n# -- End of build deps removal --"
+            )
+    return "\n".join(commands)
 
 
 def _parse_version(version_str: str) -> tuple[int, int]:
@@ -563,6 +605,7 @@ def validate_config(config: Config) -> Config:
         "checkpointer": config.get("checkpointer"),
         "ui": config.get("ui"),
         "ui_config": config.get("ui_config"),
+        "retain_build_tools": config.get("retain_build_tools"),
     }
 
     if config.get("node_version"):
@@ -636,6 +679,22 @@ def validate_config(config: Config) -> Config:
                     f"Invalid http.app format: '{http_conf['app']}'. "
                     "Must be in format './path/to/file.py:attribute_name'"
                 )
+    if retain_build_tools := config.get("retain_build_tools"):
+        if isinstance(retain_build_tools, list):
+            for tool in retain_build_tools:
+                if tool not in _BUILD_TOOLS:
+                    raise ValueError(
+                        f"Invalid retain_build_tools: '{tool}'. "
+                        "Must be one of 'pip', 'setuptools', 'wheel'."
+                    )
+        elif retain_build_tools is True:
+            pass
+        else:
+            raise ValueError(
+                f"Invalid retain_build_tools: '{retain_build_tools}'. "
+                "Must be bool or list[str] (with values"
+                " 'pip', 'setuptools', and/or 'wheel')."
+            )
     return config
 
 
@@ -1129,6 +1188,27 @@ def _image_supports_uv(base_image: str) -> bool:
     return version >= min_uv
 
 
+def get_build_tools_to_uninstall(config: Config) -> tuple[str]:
+    retain_build_tools = config.get("retain_build_tools")
+    if not retain_build_tools:
+        return _BUILD_TOOLS
+    if retain_build_tools is True:
+        return ()
+    expected = _BUILD_TOOLS
+    if isinstance(retain_build_tools, list):
+        for tool in retain_build_tools:
+            if tool not in expected:
+                raise ValueError(
+                    f"Invalid build tool to uninstall: {tool}. Expected one of {expected}"
+                )
+        return tuple(sorted(set(_BUILD_TOOLS) - set(retain_build_tools)))
+    else:
+        raise ValueError(
+            f"Invalid value for retain_build_tools: {retain_build_tools}."
+            " Expected True or a list containing any of {expected}."
+        )
+
+
 def python_config_to_docker(
     config_path: pathlib.Path,
     config: Config,
@@ -1136,20 +1216,18 @@ def python_config_to_docker(
 ) -> tuple[str, dict[str, str]]:
     """Generate a Dockerfile from the configuration."""
     pip_installer = config.get("pip_installer", "auto")
-
+    build_tools_to_uninstall = get_build_tools_to_uninstall(config)
+    if pip_installer == "auto":
+        if _image_supports_uv(base_image):
+            pip_installer = "uv"
+        else:
+            pip_installer = "pip"
     if pip_installer == "uv":
         install_cmd = "uv pip install --system"
-        uv_removal = "RUN uv pip uninstall --system pip setuptools wheel && rm /usr/bin/uv /usr/bin/uvx"
     elif pip_installer == "pip":
         install_cmd = "pip install"
-        uv_removal = ""
     else:
-        if _image_supports_uv(base_image):
-            install_cmd = "uv pip install --system"
-            uv_removal = "RUN uv pip uninstall --system pip setuptools wheel && rm /usr/bin/uv /usr/bin/uvx"
-        else:
-            install_cmd = "pip install"
-            uv_removal = ""
+        raise ValueError(f"Invalid pip_installer: {pip_installer}")
 
     # configure pip
     pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
@@ -1298,7 +1376,11 @@ ADD {relpath} /deps/{name}
         js_inst_str,
         "",
         # Add pip cleanup after all installations are complete
-        PIP_CLEANUP_LINES.format(install_cmd=install_cmd, uv_removal=uv_removal),
+        _get_pip_cleanup_lines(
+            install_cmd=install_cmd,
+            to_uninstall=build_tools_to_uninstall,
+            pip_installer=pip_installer,
+        ),
         "",
         f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
     ]

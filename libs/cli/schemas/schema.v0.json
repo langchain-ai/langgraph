@@ -145,6 +145,23 @@
               ],
               "description": "Optional. Python package installer to use ('auto', 'pip', 'uv').\n\n"
             },
+            "retain_build_tools": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Control whether to retain Python build tools (`pip`, `setuptools`, `wheel`) in the final image.\n\n"
+            },
             "store": {
               "anyOf": [
                 {
@@ -308,6 +325,23 @@
                 }
               ],
               "description": "Optional. Python package installer to use ('auto', 'pip', 'uv').\n\n"
+            },
+            "retain_build_tools": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Control whether to retain Python build tools (`pip`, `setuptools`, `wheel`) in the final image.\n\n"
             },
             "store": {
               "anyOf": [
@@ -505,7 +539,7 @@
         },
         "disable_meta": {
           "type": "boolean",
-          "description": "Optional. If True, all meta endpoints (/ok, /info, /metrics, /docs) are disabled.\n\nDefault is False.\n"
+          "description": "Optional. If True, all meta endpoints (/openapi.json, /info, /metrics, /docs) are disabled.\n\nDefault is False.\n"
         },
         "disable_runs": {
           "type": "boolean",
