@@ -269,7 +269,7 @@ nav:
 
   - Examples:
     - Template applications: concepts/template_applications.md  # TODO: make tutorial
-    - Agentic RAG: tutorials/rag/langgraph_agentic_rag.ipynb
+    - Agentic RAG: tutorials/rag/langgraph_agentic_rag.md
     - Agent Supervisor: tutorials/multi_agent/agent_supervisor.ipynb
     - SQL agent: tutorials/sql-agent.ipynb
     - Prebuilt chat UI: agents/ui.md
