@@ -62,7 +62,7 @@ print(web_search_results["results"][0]["content"])
 Find events, attractions, deals, and more at nyctourism.com Skip Main Navigation Menu The Official Website of the City of New York Text Size Powered by Translate SearchSearch Primary Navigation The official website of NYC Home NYC Resources NYC311 Office of the Mayor Events Connect Jobs Search Office of the Mayor | Mayor's Bio | City of New York Secondary Navigation MayorBiographyNewsOfficials Eric L. Adams 110th Mayor of New York City Mayor Eric Adams has served the people of New York City as an NYPD officer, State Senator, Brooklyn Borough President, and now as the 110th Mayor of the City of New York. Mayor Eric Adams has served the people of New York City as an NYPD officer, State Senator, Brooklyn Borough President, and now as the 110th Mayor of the City of New York. He gave voice to a diverse coalition of working families in all five boroughs and is leading the fight to bring back New York City's economy, reduce inequality, improve public safety, and build a stronger, healthier city that delivers for all New Yorkers. As the representative of one of the nation's largest counties, Eric fought tirelessly to grow the local economy, invest in schools, reduce inequality, improve public safety, and advocate for smart policies and better government that delivers for all New Yorkers.
 ```
 
-To create individual worker agents, we will use LangGraph's prebuilt [agent](../../agents/agents.md#basic-configuration).
+To create individual worker agents, we will use LangGraph's prebuilt [agent](../../agents/agents.md).
 
 ```python
 from langgraph.prebuilt import create_react_agent
@@ -498,7 +498,7 @@ supervisor_agent = create_react_agent(
 
 ### Create multi-agent graph
 
-Putting this all together, let's create a graph for our overall multi-agent system. We will add the supervisor and the individual agents as [subgraph](../../concepts/low_level.md#subgraphs) nodes.
+Putting this all together, let's create a graph for our overall multi-agent system. We will add the supervisor and the individual agents as subgraph [nodes](../../concepts/low_level.md#nodes).
 
 ```python
 from langgraph.graph import END
@@ -655,7 +655,7 @@ Name: tavily_search
 !!! important
     You can see that the supervisor system appends **all** of the individual agent messages (i.e., their internal tool-calling loop) to the full message history. This means that on every supervisor turn, supervisor agent sees this full history. If you want more control over:
 
-    * **how inputs are passed to agents**: you can use LangGraph [`Send()`][langgraph.types.Send] primitive to directly send data to the worker agents during the handoff. See the [task delegation](#create-delegation-tasks) example below
+    * **how inputs are passed to agents**: you can use LangGraph [`Send()`][langgraph.types.Send] primitive to directly send data to the worker agents during the handoff. See the [task delegation](#4-create-delegation-tasks) example below
     * **how agent outputs are added**: you can control how much of the agent's internal message history is added to the overall supervisor message history by wrapping the agent in a separate node function:
 
         ```python
