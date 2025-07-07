@@ -792,8 +792,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         compiled = CompiledStateGraph[StateT, ContextT, InputT, OutputT](
             builder=self,
             schema_to_mapper={},
-            # legacy arg used to support Runnable.config_schema
-            config_type=self.context_schema,
+            context_schema=self.context_schema,
             nodes={},
             channels={
                 **self.channels,

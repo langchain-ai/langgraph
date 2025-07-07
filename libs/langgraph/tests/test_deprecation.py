@@ -82,9 +82,33 @@ def test_constants_deprecation() -> None:
         from langgraph.constants import Interrupt  # noqa: F401
 
 
-def test_pregel_deprecation() -> None:
+def test_pregel_types_deprecation() -> None:
     with pytest.warns(
         LangGraphDeprecatedSinceV10,
         match="Importing from langgraph.pregel.types is deprecated. Please use 'from langgraph.types import ...' instead.",
     ):
         from langgraph.pregel.types import StateSnapshot  # noqa: F401
+
+
+def test_config_schema_deprecation() -> None:
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
+    ):
+        builder = StateGraph(PlainState, config_schema=PlainState)
+
+    builder.add_node("test_node", lambda state: state)
+    builder.set_entry_point("test_node")
+    graph = builder.compile()
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`config_schema` is deprecated. Use `get_context_json_schema` for the relevant schema instead.",
+    ):
+        graph.config_schema()
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`get_config_jsonschema` is deprecated. Use `get_context_json_schema` instead.",
+    ):
+        graph.get_config_jsonschema()

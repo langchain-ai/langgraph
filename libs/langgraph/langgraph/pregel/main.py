@@ -4,10 +4,13 @@ import asyncio
 import concurrent
 import concurrent.futures
 import queue
+import warnings
 import weakref
 from collections import defaultdict, deque
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from dataclasses import is_dataclass
 from functools import partial
+from inspect import isclass
 from typing import Any, Callable, Generic, Union, cast, get_type_hints
 from uuid import UUID, uuid5
 
@@ -22,8 +25,8 @@ from langchain_core.runnables.config import (
     get_callback_manager_for_config,
 )
 from langchain_core.runnables.graph import Graph
-from pydantic import BaseModel
-from typing_extensions import Self
+from pydantic import BaseModel, TypeAdapter
+from typing_extensions import Self, deprecated, is_typeddict
 
 from langgraph._internal._config import (
     ensure_config,
@@ -127,6 +130,7 @@ from langgraph.types import (
     StreamMode,
 )
 from langgraph.typing import ContextT, InputT, OutputT, StateT
+from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler
@@ -596,7 +600,7 @@ class Pregel(
     """Cache policy to use for all nodes. Can be overridden by individual nodes.
     Defaults to None."""
 
-    config_type: type[Any] | None = None
+    context_schema: type[ContextT] | None = None
 
     config: RunnableConfig | None = None
 
@@ -624,7 +628,7 @@ class Pregel(
         cache: BaseCache | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
-        config_type: type[Any] | None = None,
+        context_schema: type[ContextT] | None = None,
         config: RunnableConfig | None = None,
         trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
         name: str = "LangGraph",
@@ -655,7 +659,7 @@ class Pregel(
             (retry_policy,) if isinstance(retry_policy, RetryPolicy) else retry_policy
         )
         self.cache_policy = cache_policy
-        self.config_type = config_type
+        self.context_schema = context_schema
         self.config = config
         self.trigger_to_nodes = trigger_to_nodes or {}
         self.name = name
@@ -764,10 +768,23 @@ class Pregel(
         self.trigger_to_nodes = _trigger_to_nodes(self.nodes)
         return self
 
+    @deprecated(
+        "`config_schema` is deprecated. Use `get_context_json_schema` for the relevant schema instead."
+    )
     def config_schema(self, *, include: Sequence[str] | None = None) -> type[BaseModel]:
+        warnings.warn(
+            "`config_schema` is deprecated. Use `get_context_json_schema` for the relevant schema instead.",
+            category=LangGraphDeprecatedSinceV10,
+            stacklevel=2,
+        )
+
         include = include or []
         fields = {
-            **({"configurable": (self.config_type, None)} if self.config_type else {}),
+            **(
+                {"configurable": (self.context_schema, None)}
+                if self.context_schema
+                else {}
+            ),
             **{
                 field_name: (field_type, None)
                 for field_name, field_type in get_type_hints(RunnableConfig).items()
@@ -776,11 +793,33 @@ class Pregel(
         }
         return create_model(self.get_name("Config"), field_definitions=fields)
 
+    @deprecated(
+        "`get_config_jsonschema` is deprecated. Use `get_context_json_schema` instead."
+    )
     def get_config_jsonschema(
         self, *, include: Sequence[str] | None = None
     ) -> dict[str, Any]:
-        schema = self.config_schema(include=include)
+        warnings.warn(
+            "`get_config_jsonschema` is deprecated. Use `get_context_json_schema` instead.",
+            category=LangGraphDeprecatedSinceV10,
+            stacklevel=2,
+        )
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=LangGraphDeprecatedSinceV10)
+            schema = self.config_schema(include=include)
         return schema.model_json_schema()
+
+    def get_context_json_schema(self) -> dict[str, Any]:
+        context_schema = self.context_schema
+        if isclass(context_schema) and issubclass(context_schema, BaseModel):
+            return context_schema.model_json_schema()
+        elif is_typeddict(context_schema) or is_dataclass(context_schema):
+            return TypeAdapter(context_schema).json_schema()
+        else:
+            raise ValueError(
+                f"Invalid context schema type: {context_schema}. Must be a BaseModel or a TypedDict."
+            )
 
     @property
     def InputType(self) -> Any:

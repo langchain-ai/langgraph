@@ -38,6 +38,7 @@ from langgraph.pregel._read import PregelNode
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
 from langgraph.types import _DC_KWARGS, CachePolicy, RetryPolicy, StreamMode
+from langgraph.typing import ContextT
 from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
 
 __all__ = ("task", "entrypoint")
@@ -215,7 +216,7 @@ S = TypeVar("S")
 # In this form, the `final` attribute should play nicely with IDE autocompletion,
 # and type checking tools.
 # In addition, we'll be able to surface this information in the API Reference.
-class entrypoint:
+class entrypoint(Generic[ContextT]):
     """Define a LangGraph workflow using the `entrypoint` decorator.
 
     ### Function signature
@@ -375,7 +376,7 @@ class entrypoint:
         checkpointer: BaseCheckpointSaver | None = None,
         store: BaseStore | None = None,
         cache: BaseCache | None = None,
-        context_schema: type[Any] | None = None,
+        context_schema: type[ContextT] | None = None,
         cache_policy: CachePolicy | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
@@ -535,6 +536,5 @@ class entrypoint:
             cache=self.cache,
             cache_policy=self.cache_policy,
             retry_policy=self.retry_policy or (),
-            # legacy arg used to support Runnable.config_schema
-            config_type=self.context_schema,
+            context_schema=self.context_schema,  # type: ignore[arg-type]
         )
