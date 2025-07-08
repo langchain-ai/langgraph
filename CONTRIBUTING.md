@@ -60,7 +60,7 @@ In LangGraph, these are often higher level guides that show off end-to-end use c
 Some examples include:
 
 - [Build a Customer Support Bot](https://langchain-ai.github.io/langgraph/tutorials/customer-support/customer-support/)
-- [Build a SQL Agent](https://langchain-ai.github.io/langgraph/tutorials/sql-agent/)
+- [Build a SQL Agent](https://langchain-ai.github.io/langgraph/tutorials/sql/sql-agent/)
 
 Here are some high-level tips on writing a good tutorial:
 
