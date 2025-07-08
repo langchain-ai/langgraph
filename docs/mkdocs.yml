@@ -109,7 +109,7 @@ nav:
       - Agent architectures: concepts/agentic_concepts.md
 
   - Guides:
-    - how-tos/index.md
+    - guides/index.md
     - LangGraph APIs:
       - Graph API:
           - Overview: concepts/low_level.md
@@ -269,7 +269,7 @@ nav:
       - Environment variables: cloud/reference/env_var.md
 
   - Examples:
-    - tutorials/index.md
+    - examples/index.md
     - Template applications: concepts/template_applications.md  # TODO: make tutorial
     - Agentic RAG: tutorials/rag/langgraph_agentic_rag.md
     - Agent Supervisor: tutorials/multi_agent/agent_supervisor.md
