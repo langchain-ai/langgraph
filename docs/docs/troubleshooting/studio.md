@@ -17,7 +17,7 @@ Safari blocks plain-HTTP traffic on localhost. When running Studio with `langgra
 
     ```shell
     # Requires @langchain/langgraph-cli>=0.0.26
-    npx @langchain/langgraph-cli dev --tunnel
+    npx @langchain/langgraph-cli dev
     ```
 
 The command outputs a URL in this format:
@@ -55,7 +55,7 @@ Disable Brave Shields for LangSmith using the Brave icon in the URL bar.
 
     ```shell
     # Requires @langchain/langgraph-cli>=0.0.26
-    npx @langchain/langgraph-cli dev --tunnel
+    npx @langchain/langgraph-cli dev
     ```
 
 The command outputs a URL in this format:
