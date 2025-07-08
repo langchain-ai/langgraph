@@ -123,7 +123,7 @@ def workflow(topic: str) -> dict:
 
     ```pycon
     {'write_essay': 'An essay about topic: cat'}
-    {'__interrupt__': (Interrupt(value={'essay': 'An essay about topic: cat', 'action': 'Please approve/reject the essay'}, resumable=True, ns=['workflow:f7b8508b-21c0-8b4c-5958-4e8de74d2684'], when='during'),)}
+    {'__interrupt__': (Interrupt(value={'essay': 'An essay about topic: cat', 'action': 'Please approve/reject the essay'}, id='65666b28e6dc45a72bf20ae9df63363a'),)}
     ```
 
     An essay has been written and is ready for review. Once the review is provided, we can resume the workflow:

@@ -260,9 +260,9 @@ class RemoteGraph(PregelProtocol):
     def _create_state_snapshot(self, state: ThreadState) -> StateSnapshot:
         tasks: list[PregelTask] = []
         for task in state["tasks"]:
-            interrupts = []
-            for interrupt in task["interrupts"]:
-                interrupts.append(Interrupt(**interrupt))
+            interrupts = tuple(
+                Interrupt(**interrupt) for interrupt in task["interrupts"]
+            )
 
             tasks.append(
                 PregelTask(
@@ -270,7 +270,7 @@ class RemoteGraph(PregelProtocol):
                     name=task["name"],
                     path=tuple(),
                     error=Exception(task["error"]) if task["error"] else None,
-                    interrupts=tuple(interrupts),
+                    interrupts=interrupts,
                     state=(
                         self._create_state_snapshot(task["state"])
                         if task["state"]

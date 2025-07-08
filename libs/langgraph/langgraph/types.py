@@ -177,7 +177,7 @@ class Interrupt:
 
         self.value = value
 
-        if (id == _DEFAULT_INTERRUPT_ID) and (ns is not None):
+        if (id == _DEFAULT_INTERRUPT_ID) and (isinstance(ns, Sequence)):
             self.id = xxh3_128_hexdigest("|".join(ns).encode())
         else:
             self.id = id
@@ -434,7 +434,7 @@ def interrupt(value: Any) -> Any:
         from langgraph.checkpoint.memory import MemorySaver
         from langgraph.constants import START
         from langgraph.graph import StateGraph
-        from langgraph.types import interrupt
+        from langgraph.types import interrupt, Command
 
 
         class State(TypedDict):
@@ -471,22 +471,16 @@ def interrupt(value: Any) -> Any:
 
         for chunk in graph.stream({\"foo\": \"abc\"}, config):
             print(chunk)
-        ```
 
-        ```pycon
-        {'__interrupt__': (Interrupt(value='what is your age?', resumable=True, ns=['node:62e598fa-8653-9d6d-2046-a70203020e37'], when='during'),)}
-        ```
+        # > {'__interrupt__': (Interrupt(value='what is your age?', id='45fda8478b2ef754419799e10992af06'),)}
 
-        ```python
         command = Command(resume=\"some input from a human!!!\")
 
         for chunk in graph.stream(Command(resume=\"some input from a human!!!\"), config):
             print(chunk)
-        ```
 
-        ```pycon
-        Received an input from the interrupt: some input from a human!!!
-        {'node': {'human_value': 'some input from a human!!!'}}
+        # > Received an input from the interrupt: some input from a human!!!
+        # > {'node': {'human_value': 'some input from a human!!!'}}
         ```
 
     Args:

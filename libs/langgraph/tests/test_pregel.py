@@ -1280,9 +1280,7 @@ def test_imp_task(
             "__interrupt__": (
                 Interrupt(
                     value="question",
-                    resumable=True,
-                    ns=[AnyStr("graph:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         },
@@ -1349,9 +1347,7 @@ def test_imp_nested(
             "__interrupt__": (
                 Interrupt(
                     value="question",
-                    resumable=True,
-                    ns=[AnyStr("graph:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         },
@@ -3371,8 +3367,7 @@ def test_subgraph_checkpoint_true_interrupt(
         "__interrupt__": [
             Interrupt(
                 value="Provide baz value",
-                resumable=True,
-                ns=[AnyStr("node_2"), AnyStr("subgraph_node_1:")],
+                id=AnyStr(),
             )
         ],
     }
@@ -4900,9 +4895,7 @@ def test_interrupt_multiple(sync_checkpointer: BaseCheckpointSaver):
             "__interrupt__": (
                 Interrupt(
                     value={"value": 1},
-                    resumable=True,
-                    ns=[AnyStr("node:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         }
@@ -4918,9 +4911,7 @@ def test_interrupt_multiple(sync_checkpointer: BaseCheckpointSaver):
             "__interrupt__": (
                 Interrupt(
                     value={"value": 2},
-                    resumable=True,
-                    ns=[AnyStr("node:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         }
@@ -4968,9 +4959,7 @@ def test_interrupt_loop(sync_checkpointer: BaseCheckpointSaver):
             "__interrupt__": (
                 Interrupt(
                     value="How old are you?",
-                    resumable=True,
-                    ns=[AnyStr("node:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         }
@@ -4987,9 +4976,7 @@ def test_interrupt_loop(sync_checkpointer: BaseCheckpointSaver):
             "__interrupt__": (
                 Interrupt(
                     value="invalid response",
-                    resumable=True,
-                    ns=[AnyStr("node:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         }
@@ -5006,9 +4993,7 @@ def test_interrupt_loop(sync_checkpointer: BaseCheckpointSaver):
             "__interrupt__": (
                 Interrupt(
                     value="invalid response",
-                    resumable=True,
-                    ns=[AnyStr("node:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         }
@@ -5044,8 +5029,7 @@ def test_interrupt_functional(
         "__interrupt__": [
             Interrupt(
                 value="Provide value for bar:",
-                resumable=True,
-                ns=[AnyStr("graph:")],
+                id=AnyStr(),
             )
         ]
     }
@@ -5078,8 +5062,7 @@ def test_interrupt_task_functional(
         "__interrupt__": [
             Interrupt(
                 value="Provide value for bar:",
-                resumable=True,
-                ns=[AnyStr("graph:"), AnyStr("bar:")],
+                id=AnyStr(),
             ),
         ]
     }
@@ -5102,8 +5085,7 @@ def test_interrupt_task_functional(
         "__interrupt__": [
             Interrupt(
                 value="Provide value for bar:",
-                resumable=True,
-                ns=[AnyStr("graph:"), AnyStr("bar:")],
+                id=AnyStr(),
             ),
         ]
     }
@@ -5901,9 +5883,7 @@ def test_double_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> No
             "__interrupt__": (
                 Interrupt(
                     value="interrupt node 1",
-                    resumable=True,
-                    ns=[AnyStr("node_1:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         },
@@ -5917,9 +5897,7 @@ def test_double_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> No
             "__interrupt__": (
                 Interrupt(
                     value="interrupt node 2",
-                    resumable=True,
-                    ns=[AnyStr("node_2:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         },
@@ -5950,9 +5928,7 @@ def test_double_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> No
             "__interrupt__": (
                 Interrupt(
                     value="interrupt node 1",
-                    resumable=True,
-                    ns=[AnyStr("invoke_sub_agent:"), AnyStr("node_1:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         },
@@ -5964,9 +5940,7 @@ def test_double_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> No
             "__interrupt__": (
                 Interrupt(
                     value="interrupt node 2",
-                    resumable=True,
-                    ns=[AnyStr("invoke_sub_agent:"), AnyStr("node_2:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         }
@@ -6045,7 +6019,7 @@ def test_multi_resume(sync_checkpointer: BaseCheckpointSaver) -> None:
     assert interrupt_values == set(prompts)
 
     resume_map: dict[str, str] = {
-        i.interrupt_id: f"human input for prompt {i.value}"
+        i.id: f"human input for prompt {i.value}"
         for i in parent_graph.get_state(thread_config).interrupts
     }
 
@@ -7123,8 +7097,7 @@ def test_interrupt_subgraph_reenter_checkpointer_true(
         "__interrupt__": [
             Interrupt(
                 value="Provide value",
-                resumable=True,
-                ns=[AnyStr("call_subgraph"), AnyStr("subnode_2:")],
+                id=AnyStr(),
             )
         ],
     }
@@ -7134,8 +7107,7 @@ def test_interrupt_subgraph_reenter_checkpointer_true(
         "__interrupt__": [
             Interrupt(
                 value="Provide value",
-                resumable=True,
-                ns=[AnyStr("call_subgraph"), AnyStr("subnode_2:")],
+                id=AnyStr(),
             )
         ],
     }
@@ -7165,8 +7137,7 @@ def test_interrupt_subgraph_reenter_checkpointer_true(
         "__interrupt__": [
             Interrupt(
                 value="Provide value",
-                resumable=True,
-                ns=[AnyStr("call_subgraph"), AnyStr("subnode_2:")],
+                id=AnyStr(),
             )
         ],
     }
@@ -7329,11 +7300,7 @@ def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
             "__interrupt__": (
                 Interrupt(
                     value="a",
-                    resumable=True,
-                    ns=[
-                        AnyStr("child_graph:"),
-                        AnyStr("get_human_input:"),
-                    ],
+                    id=AnyStr(),
                 ),
             )
         },
@@ -7341,11 +7308,7 @@ def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
             "__interrupt__": (
                 Interrupt(
                     value="b",
-                    resumable=True,
-                    ns=[
-                        AnyStr("child_graph:"),
-                        AnyStr("get_human_input:"),
-                    ],
+                    id=AnyStr(),
                 ),
             )
         },
@@ -7356,11 +7319,7 @@ def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
                 "__interrupt__": (
                     Interrupt(
                         value="a",
-                        resumable=True,
-                        ns=[
-                            AnyStr("child_graph:"),
-                            AnyStr("get_human_input:"),
-                        ],
+                        id=AnyStr(),
                     ),
                 )
             },
@@ -7371,11 +7330,7 @@ def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
                 "__interrupt__": (
                     Interrupt(
                         value="b",
-                        resumable=True,
-                        ns=[
-                            AnyStr("child_graph:"),
-                            AnyStr("get_human_input:"),
-                        ],
+                        id=AnyStr(),
                     ),
                 )
             },
