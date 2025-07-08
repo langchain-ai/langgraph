@@ -130,7 +130,7 @@ def create_task_description_handoff_tool(
     return handoff_tool
 ```
 
-See the multi-agent [supervisor](../tutorials/multi_agent/agent_supervisor.ipynb#4-create-delegation-tasks) example for a full example of using [`Send()`][langgraph.types.Send] in handoffs.
+See the multi-agent [supervisor](../tutorials/multi_agent/agent_supervisor.md#4-create-delegation-tasks) example for a full example of using [`Send()`][langgraph.types.Send] in handoffs.
 
 ## Build a multi-agent system
 
