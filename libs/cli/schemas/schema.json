@@ -134,17 +134,6 @@
               ],
               "description": "Optional. Linux distribution for the base image.\n\nMust be either 'debian' or 'wolfi'. If omitted, defaults to 'debian'.\n"
             },
-            "pip_installer": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Optional. Python package installer to use ('auto', 'pip', 'uv').\n\n"
-            },
             "keep_pkg_tools": {
               "anyOf": [
                 {
@@ -160,7 +149,18 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Control whether to retain Python build tools (`pip`, `setuptools`, `wheel`) in the final image.\n\n"
+              "description": "Optional. Control whether to retain Python packaging tools in the final image.\n\nYou can also set to true to include all packaging tools.\n"
+            },
+            "pip_installer": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Python package installer to use ('auto', 'pip', 'uv').\n\n"
             },
             "store": {
               "anyOf": [
@@ -315,17 +315,6 @@
               ],
               "description": "Optional. Linux distribution for the base image.\n\nMust be either 'debian' or 'wolfi'. If omitted, defaults to 'debian'.\n"
             },
-            "pip_installer": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Optional. Python package installer to use ('auto', 'pip', 'uv').\n\n"
-            },
             "keep_pkg_tools": {
               "anyOf": [
                 {
@@ -341,7 +330,18 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Control whether to retain Python build tools (`pip`, `setuptools`, `wheel`) in the final image.\n\n"
+              "description": "Optional. Control whether to retain Python packaging tools in the final image.\n\nYou can also set to true to include all packaging tools.\n"
+            },
+            "pip_installer": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Python package installer to use ('auto', 'pip', 'uv').\n\n"
             },
             "store": {
               "anyOf": [

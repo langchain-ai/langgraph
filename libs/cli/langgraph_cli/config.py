@@ -472,12 +472,10 @@ class Config(TypedDict, total=False):
     """
 
     keep_pkg_tools: Optional[Union[bool, list[str]]]
-    """Optional. Control whether to retain Python packaging tools (`pip`, `setuptools`, `wheel`) in the final image.
-
-    Accepted values:
-        - True : Keep all three tools (skip uninstall).
-        - False / omitted : Uninstall all three tools (default behaviour).
-        - list[str] : Names of tools **to retain**. Each value must be one of "pip", "setuptools", "wheel".
+    """Optional. Control whether to retain Python packaging tools in the final image.
+    
+    Allowed tools are: "pip", "setuptools", "wheel".
+    You can also set to true to include all packaging tools.
     """
 
 
