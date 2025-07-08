@@ -338,7 +338,10 @@ class HttpConfig(TypedDict, total=False):
     Default is False.
     """
     disable_meta: bool
-    """Optional. If True, all meta endpoints (/openapi.json, /info, /metrics, /docs) are disabled.
+    """Optional. Remove meta endpoints.
+    
+    Set to True to disable the following endpoints: /openapi.json, /info, /metrics, /docs.
+    This will also make the /ok endpoint skip any DB or other checks, always returning {"ok": True}.
     
     Default is False.
     """
