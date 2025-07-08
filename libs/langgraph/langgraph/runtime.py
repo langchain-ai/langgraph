@@ -14,16 +14,22 @@ _no_op_stream_writer = lambda _: None
 class Runtime(Generic[ContextT]):
     """Convenience class that bundles run-scoped context and graph configuration.
 
-    !!! version-added "Added in version 1.0.0.
+    !!! version-added "Added in version 1.0.0."
     """
 
     context: ContextT
+    """Static context for the graph run, like user_id, db_conn, etc.
+    
+    Can also be thought of as 'run dependencies'."""
 
     store: BaseStore | None
+    """Store for the graph run, enabling persistence and memory."""
 
     stream_writer: StreamWriter
+    """Function to write to the stream."""
 
     previous: Any | None
+    """The previous return value for the given thread (available only when a checkpointer is provided)."""
 
 
 DEFAULT_RUNTIME = Runtime(
