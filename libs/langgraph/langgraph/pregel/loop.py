@@ -200,7 +200,6 @@ class PregelLoop:
     tasks: dict[str, PregelExecutableTask]
     output: None | dict[str, Any] | Any = None
     updated_channels: set[str] | None = None
-
     # public
 
     def __init__(
@@ -809,30 +808,56 @@ class PregelLoop:
         *args: P.args,
         **kwargs: P.kwargs,
     ) -> None:
-        if self.stream is None:
+        stream = self.stream
+        if stream is None:
             return
-        debug_remap = mode in ("checkpoints", "tasks") and "debug" in self.stream.modes
-        if mode not in self.stream.modes and not debug_remap:
+        modes = stream.modes
+        checkpoint_ns = self.checkpoint_ns
+        debug_mode = "debug"
+
+        # Flags to avoid repeated computation and attribute lookups
+        debug_remap = mode in ("checkpoints", "tasks") and debug_mode in modes
+        mode_in_stream = mode in modes
+
+        if not mode_in_stream and not debug_remap:
             return
+
+        # Pre-calculate timestamp for this batch if debug_remap enabled
+        if debug_remap:
+            timestamp = datetime.now(timezone.utc).isoformat()
+
+            # Precompute logic for debug info outside loop for fast path branching
+            step_val = self.step - 1 if mode == "checkpoints" else self.step
+            type_checkpoint = "checkpoint" if mode == "checkpoints" else None
+
+        # Local reference for efficiency
+        emit_stream = stream
+
         for v in values(*args, **kwargs):
-            if mode in self.stream.modes:
-                self.stream((self.checkpoint_ns, mode, v))
-            # "debug" mode is "checkpoints" or "tasks" with a wrapper dict
+            if mode_in_stream:
+                emit_stream((checkpoint_ns, mode, v))
+
+            # Compose debug dict only if needed
             if debug_remap:
-                self.stream(
+                # Only determine type once, using as few conditionals/evaluations as possible
+                if type_checkpoint is not None:
+                    type_val = type_checkpoint
+                    debug_step = step_val
+                else:
+                    # Only determine "task_result" on demand
+                    if "result" in v:
+                        type_val = "task_result"
+                    else:
+                        type_val = "task"
+                    debug_step = step_val
+                emit_stream(
                     (
-                        self.checkpoint_ns,
-                        "debug",
+                        checkpoint_ns,
+                        debug_mode,
                         {
-                            "step": self.step - 1
-                            if mode == "checkpoints"
-                            else self.step,
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                            "type": "checkpoint"
-                            if mode == "checkpoints"
-                            else "task_result"
-                            if "result" in v
-                            else "task",
+                            "step": debug_step,
+                            "timestamp": timestamp,
+                            "type": type_val,
                             "payload": v,
                         },
                     )
