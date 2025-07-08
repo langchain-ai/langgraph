@@ -269,19 +269,18 @@ nav:
 
   - Examples:
     - Template applications: concepts/template_applications.md  # TODO: make tutorial
-    - Agentic RAG: tutorials/rag/langgraph_agentic_rag.ipynb
-    - Agent Supervisor: tutorials/multi_agent/agent_supervisor.ipynb
-    - SQL agent: tutorials/sql-agent.ipynb
+    - Agentic RAG: tutorials/rag/langgraph_agentic_rag.md
+    - Agent Supervisor: tutorials/multi_agent/agent_supervisor.md
+    - SQL agent: tutorials/sql/sql-agent.md
     - Prebuilt chat UI: agents/ui.md
-    - Graph runs in LangSmith: how-tos/run-id-langsmith.ipynb
+    - Graph runs in LangSmith: how-tos/run-id-langsmith.md
     - LangGraph Platform:
       - Authentication:
         - tutorials/auth/getting_started.md
         - tutorials/auth/resource_auth.md
         - tutorials/auth/add_auth_server.md
       - Use RemoteGraph: how-tos/use-remote-graph.md
-      - Deploy CrewAI, AutoGen, and other frameworks: how-tos/autogen-langgraph-platform.ipynb
-        # combine with how-tos/autogen-integration.ipynb
+      - Deploy CrewAI, AutoGen, and other frameworks: how-tos/autogen-integration.md
       - Front-end and generative UI:
         - Integrate LangGraph into a React app: cloud/how-tos/use_stream_react.md
         - Implement generative UI with LangGraph: cloud/how-tos/generative_ui_react.md
