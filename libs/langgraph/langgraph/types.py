@@ -15,15 +15,20 @@ from typing import (
     TypeVar,
     Union,
     cast,
+    final,
 )
+from warnings import warn
 
 from langchain_core.runnables import Runnable, RunnableConfig
+from typing_extensions import Unpack, deprecated
 from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._cache import default_cache_key
 from langgraph._internal._fields import get_cached_annotated_keys, get_update_as_tuples
 from langgraph._internal._retry import default_retry_on
+from langgraph._internal._typing import UNSET, DeprecatedKwargs
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
+from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
@@ -128,7 +133,11 @@ class CachePolicy(Generic[KeyFuncT]):
     """Time to live for the cache entry in seconds. If None, the entry never expires."""
 
 
-@dataclasses.dataclass(**_DC_KWARGS)
+_DEFAULT_INTERRUPT_ID = "placeholder-id"
+
+
+@final
+@dataclasses.dataclass(init=False)
 class Interrupt:
     """Information about an interrupt that occurred in a node.
 
@@ -136,16 +145,59 @@ class Interrupt:
     """
 
     value: Any
-    resumable: bool = False
-    ns: Sequence[str] | None = None
-    when: Literal["during"] = dataclasses.field(default="during", repr=False)
+    id: str
+
+    def __init__(
+        self,
+        value: Any,
+        id: str = _DEFAULT_INTERRUPT_ID,
+        **deprecated_kwargs: Unpack[DeprecatedKwargs],
+    ) -> None:
+        if (ns := cast(Sequence[str], deprecated_kwargs.get("ns", UNSET))) is not UNSET:
+            warn(
+                "The `ns` field is deprecated. You can use `interrupt_id` to map a resume value to an interrupt.",
+                LangGraphDeprecatedSinceV10,
+                stacklevel=2,
+            )
+
+        if deprecated_kwargs.get("when", UNSET) is not UNSET:
+            warn(
+                "The `when` field is deprecated. Interrupts are always constructed 'during' the execution of a node/task.",
+                LangGraphDeprecatedSinceV10,
+                stacklevel=2,
+            )
+
+        if (resumable := deprecated_kwargs.get("resumable", UNSET)) is not UNSET:
+            warn(
+                "The `resumable` field is deprecated. All interrupts are by nature resumable=True.",
+                LangGraphDeprecatedSinceV10,
+                stacklevel=2,
+            )
+            self._resumable = cast(bool, resumable)
+
+        self.value = value
+
+        if (id == _DEFAULT_INTERRUPT_ID) and (ns is not None):
+            self.id = xxh3_128_hexdigest("|".join(ns).encode())
+        else:
+            self.id = id
+
+    @classmethod
+    def from_ns(cls, value: Any, ns: str) -> Interrupt:
+        return cls(value=value, id=xxh3_128_hexdigest(ns.encode()))
 
     @property
+    @deprecated(
+        _DEFAULT_INTERRUPT_ID,
+        stacklevel=2,
+    )
     def interrupt_id(self) -> str:
-        """Generate a unique ID for the interrupt based on its namespace."""
-        if self.ns is None:
-            return "placeholder-id"
-        return xxh3_128_hexdigest("|".join(self.ns).encode())
+        warn(
+            "`interrupt_id` is deprecated. Use `id` instead.",
+            LangGraphDeprecatedSinceV10,
+            stacklevel=2,
+        )
+        return self.id
 
 
 class StateUpdate(NamedTuple):
@@ -451,7 +503,6 @@ def interrupt(value: Any) -> Any:
         CONFIG_KEY_CHECKPOINT_NS,
         CONFIG_KEY_SCRATCHPAD,
         CONFIG_KEY_SEND,
-        NS_SEP,
         RESUME,
     )
     from langgraph.errors import GraphInterrupt
@@ -474,10 +525,12 @@ def interrupt(value: Any) -> Any:
     # no resume value found
     raise GraphInterrupt(
         (
-            Interrupt(
+            Interrupt.from_ns(
                 value=value,
-                resumable=True,
-                ns=cast(str, conf[CONFIG_KEY_CHECKPOINT_NS]).split(NS_SEP),
+                ns=conf[CONFIG_KEY_CHECKPOINT_NS],
             ),
         )
     )
+
+
+id

@@ -86,8 +86,11 @@ class GraphInterrupt(GraphBubbleUp):
 class NodeInterrupt(GraphInterrupt):
     """Raised by a node to interrupt execution."""
 
-    def __init__(self, value: Any) -> None:
-        super().__init__([Interrupt(value=value)])
+    def __init__(self, value: Any, id: str | None = None) -> None:
+        if id is None:
+            super().__init__([Interrupt(value=value)])
+        else:
+            super().__init__([Interrupt(value=value, id=id)])
 
 
 class ParentCommand(GraphBubbleUp):

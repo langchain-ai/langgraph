@@ -3,7 +3,7 @@ from typing_extensions import TypedDict
 
 from langgraph.func import entrypoint, task
 from langgraph.graph import StateGraph
-from langgraph.types import RetryPolicy
+from langgraph.types import Interrupt, RetryPolicy
 from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
 
 
@@ -88,3 +88,31 @@ def test_pregel_deprecation() -> None:
         match="Importing from langgraph.pregel.types is deprecated. Please use 'from langgraph.types import ...' instead.",
     ):
         from langgraph.pregel.types import StateSnapshot  # noqa: F401
+
+
+def test_interrupt_attributes_deprecation() -> None:
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="The `when` field is deprecated. Interrupts are always constructed 'during' the execution of a node/task.",
+    ):
+        Interrupt(value="question", id="123", when="during")
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="The `resumable` field is deprecated. All interrupts are by nature resumable=True.",
+    ):
+        Interrupt(value="question", id="123", resumable=True)
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="The `ns` field is deprecated. You can use `interrupt_id` to map a resume value to an interrupt.",
+    ):
+        Interrupt(value="question", id="123", ns=["graph:"])
+
+    interrupt = Interrupt(value="question", id="abc")
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`interrupt_id` is deprecated. Use `id` instead.",
+    ):
+        interrupt.interrupt_id
