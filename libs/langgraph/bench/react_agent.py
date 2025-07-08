@@ -15,7 +15,7 @@ from langgraph.pregel import Pregel
 
 
 def react_agent(n_tools: int, checkpointer: Optional[BaseCheckpointSaver]) -> Pregel:
-    class FakeFuntionChatModel(FakeMessagesListChatModel):
+    class FakeFunctionChatModel(FakeMessagesListChatModel):
         def bind_tools(self, functions: list):
             return self
 
@@ -40,7 +40,7 @@ def react_agent(n_tools: int, checkpointer: Optional[BaseCheckpointSaver]) -> Pr
         description="",
     )
 
-    model = FakeFuntionChatModel(
+    model = FakeFunctionChatModel(
         responses=[
             AIMessage(
                 content="",

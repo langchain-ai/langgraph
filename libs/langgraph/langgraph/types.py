@@ -77,7 +77,7 @@ StreamMode = Literal[
 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
 - `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by get_state().
 - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
-- `"debug"`: Emit "checlkpoints" and "tasks" events, for debugging purposes.
+- `"debug"`: Emit "checkpoints" and "tasks" events, for debugging purposes.
 """
 
 StreamWriter = Callable[[Any], None]

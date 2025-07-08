@@ -117,7 +117,7 @@
           "id": [
             "tests",
             "test_large_cases",
-            "FakeFuntionChatModel"
+            "FakeFunctionChatModel"
           ],
           "name": "agent"
         }
