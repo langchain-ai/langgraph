@@ -525,6 +525,3 @@ def interrupt(value: Any) -> Any:
             ),
         )
     )
-
-
-id
