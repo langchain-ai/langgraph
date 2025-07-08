@@ -481,7 +481,7 @@ graph.invoke(inputs, context={"llm_provider": "anthropic"})
 You can then access and use this context inside a node or conditional edge:
 
 ```python
-from langgraph.types import Runtime
+from langgraph.runtime import Runtime
 
 def node_a(state: State, runtime: Runtime[ContextSchema]):
     llm = get_llm(runtime.context.llm_provider)

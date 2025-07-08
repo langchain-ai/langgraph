@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import dataclasses
 import sys
 from collections import deque
 from collections.abc import Hashable, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -19,13 +18,13 @@ from typing import (
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
+from typing_extensions import Unpack
 from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._cache import default_cache_key
 from langgraph._internal._fields import get_cached_annotated_keys, get_update_as_tuples
 from langgraph._internal._retry import default_retry_on
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
-from langgraph.store.base import BaseStore
 from langgraph.typing import ContextT
 
 if TYPE_CHECKING:
@@ -119,7 +118,7 @@ class RetryPolicy(NamedTuple):
 KeyFuncT = TypeVar("KeyFuncT", bound=Callable[..., Union[str, bytes]])
 
 
-@dataclasses.dataclass(**_DC_KWARGS)
+@dataclass(**_DC_KWARGS)
 class CachePolicy(Generic[KeyFuncT]):
     """Configuration for caching nodes."""
 
@@ -131,7 +130,7 @@ class CachePolicy(Generic[KeyFuncT]):
     """Time to live for the cache entry in seconds. If None, the entry never expires."""
 
 
-@dataclasses.dataclass(**_DC_KWARGS)
+@dataclass(**_DC_KWARGS)
 class Interrupt:
     """Information about an interrupt that occurred in a node.
 
@@ -141,7 +140,7 @@ class Interrupt:
     value: Any
     resumable: bool = False
     ns: Sequence[str] | None = None
-    when: Literal["during"] = dataclasses.field(default="during", repr=False)
+    when: Literal["during"] = field(default="during", repr=False)
 
     @property
     def interrupt_id(self) -> str:
@@ -186,7 +185,7 @@ class CacheKey(NamedTuple):
     """Time to live for the cache entry in seconds."""
 
 
-@dataclasses.dataclass(**_T_DC_KWARGS)
+@dataclass(**_T_DC_KWARGS)
 class PregelExecutableTask:
     name: str
     input: Any
@@ -297,7 +296,7 @@ class Send:
 N = TypeVar("N", bound=Hashable)
 
 
-@dataclasses.dataclass(**_DC_KWARGS)
+@dataclass(**_DC_KWARGS)
 class Command(Generic[N], ToolOutputMixin):
     """One or more commands to update the graph's state and send messages to nodes.
 
@@ -330,9 +329,7 @@ class Command(Generic[N], ToolOutputMixin):
     def __repr__(self) -> str:
         # get all non-None values
         contents = ", ".join(
-            f"{key}={value!r}"
-            for key, value in dataclasses.asdict(self).items()
-            if value
+            f"{key}={value!r}" for key, value in asdict(self).items() if value
         )
         return f"Command({contents})"
 
@@ -484,16 +481,3 @@ def interrupt(value: Any) -> Any:
             ),
         )
     )
-
-
-@dataclass
-class Runtime(Generic[ContextT]):
-    """Convenience class that bundles run-scoped context and graph configuration."""
-
-    context: ContextT
-
-    store: BaseStore | None
-
-    stream_writer: StreamWriter
-
-    previous: Any | None

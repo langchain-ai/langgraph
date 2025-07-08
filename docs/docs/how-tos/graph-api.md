@@ -514,7 +514,7 @@ See below for a simple example:
 
 ```python
 from langgraph.graph import END, StateGraph, START
-from langgraph.types import Runtime
+from langgraph.runtime import Runtime
 from typing_extensions import TypedDict
 
 # 1. Specify config schema
@@ -563,7 +563,7 @@ print(graph.invoke({}, context={"my_runtime_value": "b"}))
 
     from langchain.chat_models import init_chat_model
     from langgraph.graph import MessagesState, END, StateGraph, START
-    from langgraph.types import Runtime
+    from langgraph.runtime import Runtime
     from typing_extensions import TypedDict
 
     @dataclass
@@ -611,7 +611,7 @@ print(graph.invoke({}, context={"my_runtime_value": "b"}))
     from langchain.chat_models import init_chat_model
     from langchain_core.messages import SystemMessage
     from langgraph.graph import END, MessagesState, StateGraph, START
-    from langgraph.types import Runtime
+    from langgraph.runtime import Runtime
     from typing_extensions import TypedDict
 
     @dataclass

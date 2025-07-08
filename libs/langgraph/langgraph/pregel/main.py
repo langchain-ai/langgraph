@@ -116,13 +116,13 @@ from langgraph.pregel._validate import validate_graph, validate_keys
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.pregel.debug import get_bolded_text, get_colored_text, tasks_w_writes
 from langgraph.pregel.protocol import PregelProtocol, StreamChunk, StreamProtocol
+from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
     CachePolicy,
     Checkpointer,
     Interrupt,
-    Runtime,
     Send,
     StateSnapshot,
     StateUpdate,

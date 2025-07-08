@@ -26,6 +26,7 @@ from langchain_core.runnables.config import RunnableConfig
 from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._config import merge_configs, patch_config
+from langgraph._internal._runtime import patch_runtime_non_null
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
 from langgraph.checkpoint.base import (
@@ -71,6 +72,7 @@ from langgraph.pregel._io import read_channels
 from langgraph.pregel._log import logger
 from langgraph.pregel._read import INPUT_CACHE_KEY_TYPE, PregelNode
 from langgraph.pregel._scratchpad import PregelScratchpad
+from langgraph.runtime import DEFAULT_RUNTIME
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
@@ -79,7 +81,6 @@ from langgraph.types import (
     PregelExecutableTask,
     PregelTask,
     RetryPolicy,
-    Runtime,
     Send,
 )
 
@@ -583,13 +584,10 @@ def prepare_single_task(
                 step,
                 stop,
             )
-            if (runtime := configurable.get(CONFIG_KEY_RUNTIME)) is None:
-                runtime = Runtime(
-                    context=None,
-                    store=store,
-                    stream_writer=lambda _: None,
-                    previous=None,
-                )
+            runtime = patch_runtime_non_null(
+                configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME),
+                store=store,
+            )
             return PregelExecutableTask(
                 name,
                 call.input,
@@ -716,17 +714,11 @@ def prepare_single_task(
                 step,
                 stop,
             )
-            previous = checkpoint["channel_values"].get(PREVIOUS, None)
-            if (runtime := configurable.get(CONFIG_KEY_RUNTIME)) is None:
-                runtime = Runtime(
-                    context=None,
-                    store=store,
-                    stream_writer=lambda _: None,
-                    previous=previous,
-                )
-            else:
-                runtime.previous = previous
-                runtime.store = store or runtime.store
+            runtime = patch_runtime_non_null(
+                configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME),
+                store=store,
+                previous=checkpoint["channel_values"].get(PREVIOUS, None),
+            )
             return PregelExecutableTask(
                 packet.node,
                 packet.arg,
@@ -861,17 +853,11 @@ def prepare_single_task(
                         )
                     else:
                         cache_key = None
-                    previous = checkpoint["channel_values"].get(PREVIOUS, None)
-                    if (runtime := configurable.get(CONFIG_KEY_RUNTIME)) is None:
-                        runtime = Runtime(
-                            context=None,
-                            store=store,
-                            stream_writer=lambda _: None,
-                            previous=previous,
-                        )
-                    else:
-                        runtime.previous = previous
-                        runtime.store = store or runtime.store
+                    runtime = patch_runtime_non_null(
+                        configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME),
+                        previous=checkpoint["channel_values"].get(PREVIOUS, None),
+                        store=store,
+                    )
                     return PregelExecutableTask(
                         name,
                         val,

@@ -52,7 +52,7 @@ graph.invoke( # (1)!
 
     ```python
     from langchain_core.messages import AnyMessage
-    from langgraph.types import Runtime
+    from langgraph.runtime import Runtime
     from langgraph.prebuilt.chat_agent_executor import AgentState
     from langgraph.prebuilt import create_react_agent
 
@@ -80,7 +80,7 @@ graph.invoke( # (1)!
 === "Workflow node"
 
     ```python
-    from langgraph.types import Runtime
+    from langgraph.runtime import Runtime
 
     # highlight-next-line
     def node(state: State, config: Runtime[ContextSchema]):
@@ -93,7 +93,7 @@ graph.invoke( # (1)!
 === "In a tool"
 
     ```python
-    from langgraph.types import Runtime
+    from langgraph.runtime import Runtime
 
     @tool
     # highlight-next-line
