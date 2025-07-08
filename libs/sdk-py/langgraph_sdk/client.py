@@ -420,7 +420,7 @@ class HttpClient:
                     yield sse
 
 
-async def _aencode_json(json: Any) -> tuple[dict[str, str], bytes]:
+async def _aencode_json(json: Any) -> tuple[dict[str, str], bytes | None]:
     if json is None:
         return {}, None
     body = await asyncio.get_running_loop().run_in_executor(
