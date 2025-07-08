@@ -460,9 +460,7 @@ def test_stream():
                 "__interrupt__": [
                     {
                         "value": {"question": "Does this look good?"},
-                        "resumable": True,
-                        "ns": ["some_ns"],
-                        "when": "during",
+                        "id": AnyStr(),
                     }
                 ]
             },
@@ -631,9 +629,7 @@ async def test_astream():
                 "__interrupt__": [
                     {
                         "value": {"question": "Does this look good?"},
-                        "resumable": True,
-                        "ns": ["some_ns"],
-                        "when": "during",
+                        "id": AnyStr(),
                     }
                 ]
             },

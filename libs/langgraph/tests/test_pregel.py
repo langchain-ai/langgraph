@@ -5610,12 +5610,8 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                 "id": AnyStr(),
                 "interrupts": [
                     {
-                        "ns": [
-                            AnyStr(),
-                        ],
-                        "resumable": True,
+                        "id": AnyStr(),
                         "value": "test",
-                        "when": "during",
                     },
                 ],
                 "name": "graph",
@@ -5658,12 +5654,8 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                         "id": AnyStr(),
                         "interrupts": (
                             {
-                                "ns": [
-                                    AnyStr(),
-                                ],
-                                "resumable": True,
+                                "id": AnyStr(),
                                 "value": "test",
-                                "when": "during",
                             },
                         ),
                         "name": "graph",
@@ -7283,7 +7275,7 @@ def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
                 # assume that it breaks here, because it is an interrupt
 
         # get human input and resume
-        if any(i.resumable for i in current_interrupts):
+        if len(current_interrupts) > 0:
             current_input = Command(resume=f"Resume #{invokes}")
 
         # not more human input required, must be completed
@@ -7444,7 +7436,7 @@ def test_parallel_interrupts_double(sync_checkpointer: BaseCheckpointSaver) -> N
                 # assume that it breaks here, because it is an interrupt
 
         # get human input and resume
-        if any(i.resumable for i in current_interrupts):
+        if len(current_interrupts) > 0:
             current_input = Command(resume=f"Resume #{invokes}")
 
         # not more human input required, must be completed
