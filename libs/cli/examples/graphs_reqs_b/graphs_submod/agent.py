@@ -17,7 +17,7 @@ model_oai = ChatOpenAI(temperature=0)
 model_anth = model_anth.bind_tools(tools)
 model_oai = model_oai.bind_tools(tools)
 
-prompt = open(Path(__file__).parent / "prompt.txt").read()
+prompt = open(Path(__file__).parent.parent / "prompt.txt").read()
 subprompt = open(Path(__file__).parent / "subprompt.txt").read()
 
 
