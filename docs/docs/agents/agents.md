@@ -52,7 +52,7 @@ agent.invoke(
 )
 ```
 
-1. Define a tool for the agent to use. Tools can be defined as vanilla Python functions. For more advanced tool usage and customization, check the [tools](./tools.md) page.
+1. Define a tool for the agent to use. Tools can be defined as vanilla Python functions. For more advanced tool usage and customization, check the [tools](../how-tos/tool-calling.md) page.
 2. Provide a language model for the agent to use. To learn more about configuring language models for the agents, check the [models](./models.md) page.
 3. Provide a list of tools for the model to use.
 4. Provide a system prompt (instructions) to the language model used by the agent.
