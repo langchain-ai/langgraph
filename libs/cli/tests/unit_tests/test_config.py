@@ -53,7 +53,7 @@ def test_validate_config():
         "http": None,
         "ui": None,
         "ui_config": None,
-        "retain_build_tools": None,
+        "keep_pkg_tools": None,
         **expected_config,
     }
     assert actual_config == expected_config
@@ -80,7 +80,7 @@ def test_validate_config():
         "http": None,
         "ui": None,
         "ui_config": None,
-        "retain_build_tools": None,
+        "keep_pkg_tools": None,
     }
     actual_config = validate_config(expected_config)
     assert actual_config == expected_config
@@ -937,7 +937,7 @@ def test_config_retain_build_tools():
         "graphs": graphs,
     }
     config_true = validate_config(
-        {**copy.deepcopy(base_config), "retain_build_tools": True}
+        {**copy.deepcopy(base_config), "keep_pkg_tools": True}
     )
     docker_true, _ = config_to_docker(
         PATH_TO_CONFIG, config_true, "langchain/langgraph-api:0.2.47"
@@ -948,7 +948,7 @@ def test_config_retain_build_tools():
     )
     assert "RUN pip uninstall -y pip setuptools wheel" not in docker_true
     config_false = validate_config(
-        {**copy.deepcopy(base_config), "retain_build_tools": False}
+        {**copy.deepcopy(base_config), "keep_pkg_tools": False}
     )
     docker_false, _ = config_to_docker(
         PATH_TO_CONFIG, config_false, "langchain/langgraph-api:0.2.47"
@@ -959,7 +959,7 @@ def test_config_retain_build_tools():
     )
     assert "RUN pip uninstall -y pip setuptools wheel" in docker_false
     config_list = validate_config(
-        {**copy.deepcopy(base_config), "retain_build_tools": ["pip", "setuptools"]}
+        {**copy.deepcopy(base_config), "keep_pkg_tools": ["pip", "setuptools"]}
     )
     docker_list, _ = config_to_docker(
         PATH_TO_CONFIG, config_list, "langchain/langgraph-api:0.2.47"

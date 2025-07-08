@@ -471,7 +471,7 @@ class Config(TypedDict, total=False):
     """Optional. Named definitions of UI components emitted by the agent, each pointing to a JS/TS file.
     """
 
-    retain_build_tools: Optional[Union[bool, list[str]]]
+    keep_pkg_tools: Optional[Union[bool, list[str]]]
     """Optional. Control whether to retain Python build tools (`pip`, `setuptools`, `wheel`) in the final image.
 
     Accepted values:
@@ -605,7 +605,7 @@ def validate_config(config: Config) -> Config:
         "checkpointer": config.get("checkpointer"),
         "ui": config.get("ui"),
         "ui_config": config.get("ui_config"),
-        "retain_build_tools": config.get("retain_build_tools"),
+        "keep_pkg_tools": config.get("keep_pkg_tools"),
     }
 
     if config.get("node_version"):
@@ -679,19 +679,19 @@ def validate_config(config: Config) -> Config:
                     f"Invalid http.app format: '{http_conf['app']}'. "
                     "Must be in format './path/to/file.py:attribute_name'"
                 )
-    if retain_build_tools := config.get("retain_build_tools"):
-        if isinstance(retain_build_tools, list):
-            for tool in retain_build_tools:
+    if keep_pkg_tools := config.get("keep_pkg_tools"):
+        if isinstance(keep_pkg_tools, list):
+            for tool in keep_pkg_tools:
                 if tool not in _BUILD_TOOLS:
                     raise ValueError(
-                        f"Invalid retain_build_tools: '{tool}'. "
+                        f"Invalid keep_pkg_tools: '{tool}'. "
                         "Must be one of 'pip', 'setuptools', 'wheel'."
                     )
-        elif retain_build_tools is True:
+        elif keep_pkg_tools is True:
             pass
         else:
             raise ValueError(
-                f"Invalid retain_build_tools: '{retain_build_tools}'. "
+                f"Invalid keep_pkg_tools: '{keep_pkg_tools}'. "
                 "Must be bool or list[str] (with values"
                 " 'pip', 'setuptools', and/or 'wheel')."
             )
@@ -1189,22 +1189,22 @@ def _image_supports_uv(base_image: str) -> bool:
 
 
 def get_build_tools_to_uninstall(config: Config) -> tuple[str]:
-    retain_build_tools = config.get("retain_build_tools")
-    if not retain_build_tools:
+    keep_pkg_tools = config.get("keep_pkg_tools")
+    if not keep_pkg_tools:
         return _BUILD_TOOLS
-    if retain_build_tools is True:
+    if keep_pkg_tools is True:
         return ()
     expected = _BUILD_TOOLS
-    if isinstance(retain_build_tools, list):
-        for tool in retain_build_tools:
+    if isinstance(keep_pkg_tools, list):
+        for tool in keep_pkg_tools:
             if tool not in expected:
                 raise ValueError(
                     f"Invalid build tool to uninstall: {tool}. Expected one of {expected}"
                 )
-        return tuple(sorted(set(_BUILD_TOOLS) - set(retain_build_tools)))
+        return tuple(sorted(set(_BUILD_TOOLS) - set(keep_pkg_tools)))
     else:
         raise ValueError(
-            f"Invalid value for retain_build_tools: {retain_build_tools}."
+            f"Invalid value for keep_pkg_tools: {keep_pkg_tools}."
             " Expected True or a list containing any of {expected}."
         )
 

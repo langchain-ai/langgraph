@@ -145,7 +145,7 @@
               ],
               "description": "Optional. Python package installer to use ('auto', 'pip', 'uv').\n\n"
             },
-            "retain_build_tools": {
+            "keep_pkg_tools": {
               "anyOf": [
                 {
                   "type": "boolean"
@@ -326,7 +326,7 @@
               ],
               "description": "Optional. Python package installer to use ('auto', 'pip', 'uv').\n\n"
             },
-            "retain_build_tools": {
+            "keep_pkg_tools": {
               "anyOf": [
                 {
                   "type": "boolean"
