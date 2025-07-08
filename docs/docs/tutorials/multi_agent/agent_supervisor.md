@@ -130,7 +130,6 @@ Let's [run the agent](../../agents/run_agents.md) to verify that it behaves as e
     ```
 
 ```python
-# hide-cell
 from langchain_core.messages import convert_to_messages
 
 
@@ -412,9 +411,9 @@ In 2024, the US GDP was $29.18 trillion and New York State's GDP was $2.297 tril
 
 Let's now implement this same multi-agent system from scratch. We will need to:
 
-1. Set up how the supervisor [communicates](#set-up-agent-communication) with individual agents
-2. Create the [supervisor agent](#create-supervisor-agent)
-3. [Combine]() supervisor and worker agents into a single multi-agent graph.
+1. [Set up how the supervisor communicates](#set-up-agent-communication) with individual agents
+2. [Create the supervisor agent](#create-supervisor-agent)
+3. Combine supervisor and worker agents into a [single multi-agent graph](#create-multi-agent-graph).
 
 ### Set up agent communication
 
