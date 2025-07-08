@@ -539,7 +539,7 @@
         },
         "disable_meta": {
           "type": "boolean",
-          "description": "Optional. If True, all meta endpoints (/openapi.json, /info, /metrics, /docs) are disabled.\n\nDefault is False.\n"
+          "description": "Optional. Remove meta endpoints.\n\n\nDefault is False.\n"
         },
         "disable_runs": {
           "type": "boolean",
