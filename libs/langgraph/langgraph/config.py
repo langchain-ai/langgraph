@@ -21,7 +21,7 @@ def get_config() -> RunnableConfig:
         except RuntimeError:
             # No event loop is running, so we're in sync context
             current_task = None
-        
+
         if current_task is not None:
             raise RuntimeError(
                 "Python 3.11 or later required to use get_config in an async context"
