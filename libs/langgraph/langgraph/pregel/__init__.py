@@ -99,6 +99,7 @@ from langgraph.types import (
     All,
     CachePolicy,
     Checkpointer,
+    Command,
     Interrupt,
     Send,
     StateSnapshot,
@@ -2342,7 +2343,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
 
     def stream(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode | Sequence[StreamMode] | None = None,
@@ -2564,7 +2565,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
 
     async def astream(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode | Sequence[StreamMode] | None = None,
@@ -2808,7 +2809,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
 
     def invoke(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode = "values",
@@ -2883,7 +2884,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
 
     async def ainvoke(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode = "values",
