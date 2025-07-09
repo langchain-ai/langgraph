@@ -91,24 +91,6 @@ def test_pregel_deprecation() -> None:
 
 
 def test_interrupt_attributes_deprecation() -> None:
-    with pytest.warns(
-        LangGraphDeprecatedSinceV10,
-        match="The `when` field is deprecated. Interrupts are always constructed 'during' the execution of a node/task.",
-    ):
-        Interrupt(value="question", id="123", when="during")  # type: ignore[arg-type]
-
-    with pytest.warns(
-        LangGraphDeprecatedSinceV10,
-        match="The `resumable` field is deprecated. All interrupts are by nature resumable=True.",
-    ):
-        Interrupt(value="question", id="123", resumable=True)  # type: ignore[arg-type]
-
-    with pytest.warns(
-        LangGraphDeprecatedSinceV10,
-        match="The `ns` field is deprecated. You can use `interrupt_id` to map a resume value to an interrupt.",
-    ):
-        Interrupt(value="question", id="123", ns=["graph:"])  # type: ignore[arg-type]
-
     interrupt = Interrupt(value="question", id="abc")
 
     with pytest.warns(

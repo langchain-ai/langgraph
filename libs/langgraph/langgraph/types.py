@@ -153,31 +153,13 @@ class Interrupt:
         id: str = _DEFAULT_INTERRUPT_ID,
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
-        if (ns := cast(Sequence[str], deprecated_kwargs.get("ns", UNSET))) is not UNSET:
-            warn(
-                "The `ns` field is deprecated. You can use `interrupt_id` to map a resume value to an interrupt.",
-                LangGraphDeprecatedSinceV10,
-                stacklevel=2,
-            )
-
-        if deprecated_kwargs.get("when", UNSET) is not UNSET:
-            warn(
-                "The `when` field is deprecated. Interrupts are always constructed 'during' the execution of a node/task.",
-                LangGraphDeprecatedSinceV10,
-                stacklevel=2,
-            )
-
-        if (resumable := deprecated_kwargs.get("resumable", UNSET)) is not UNSET:
-            warn(
-                "The `resumable` field is deprecated. All interrupts are by nature resumable=True.",
-                LangGraphDeprecatedSinceV10,
-                stacklevel=2,
-            )
-            self._resumable = cast(bool, resumable)
-
         self.value = value
 
-        if (id == _DEFAULT_INTERRUPT_ID) and (isinstance(ns, Sequence)):
+        if (
+            (ns := deprecated_kwargs.get("ns", UNSET)) is not UNSET
+            and (id == _DEFAULT_INTERRUPT_ID)
+            and (isinstance(ns, Sequence))
+        ):
             self.id = xxh3_128_hexdigest("|".join(ns).encode())
         else:
             self.id = id
