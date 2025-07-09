@@ -4,6 +4,58 @@
 
 ---
 
+## v0.2.84 (2025-07-09)
+- Removed unnecessary status updates to streamline thread handling and updated version to 0.2.84.
+
+## v0.2.83 (2025-07-09)
+- Reduced the default time-to-live for resumable streams to 2 minutes.
+- Enhanced data submission logic to send data to both Beacon and LangSmith instance based on license configuration.
+- Enabled submission of self-hosted data to a Langsmith instance when the endpoint is configured.
+
+## v0.2.82 (2025-07-03)
+- Addressed a race condition in background runs by implementing a lock using join, ensuring reliable execution across CTEs.
+
+## v0.2.81 (2025-07-03)
+- Optimized run streams by reducing initial wait time to improve responsiveness for older or non-existent runs.
+
+## v0.2.80 (2025-07-03)
+- Corrected parameter passing in the `logger.ainfo()` API call to resolve a TypeError.
+
+## v0.2.79 (2025-07-02)
+- Fixed a JsonDecodeError in checkpointing with remote graph by correcting JSON serialization to handle trailing slashes properly.
+- Introduced a configuration flag to disable webhooks globally across all routes.
+
+## v0.2.78 (2025-07-02)
+- Added timeout retries to webhook calls to improve reliability.
+- Added HTTP request metrics, including a request count and latency histogram, for enhanced monitoring capabilities.
+
+## v0.2.77 (2025-07-02)
+- Added HTTP metrics to improve performance monitoring.
+- Changed the Redis cache delimiter to reduce conflicts with subgraph message names and updated caching behavior.
+
+## v0.2.76 (2025-07-01)
+- Updated Redis cache delimiter to prevent conflicts with subgraph messages.
+
+## v0.2.74 (2025-06-30)
+- Scheduled webhooks in an isolated loop to ensure thread-safe operations and prevent errors with PYTHONASYNCIODEBUG=1.
+
+## v0.2.73 (2025-06-27)
+- Fixed an infinite frame loop issue and removed the dict_parser due to structlog's unexpected behavior.
+- Throw a 409 error on deadlock occurrence during run cancellations to handle lock conflicts gracefully.
+
+## v0.2.72 (2025-06-27)
+- Ensured compatibility with future langgraph versions.
+- Implemented a 409 response status to handle deadlock issues during cancellation.
+
+## v0.2.71 (2025-06-26)
+- Improved logging for better clarity and detail regarding log types.
+
+## v0.2.70 (2025-06-26)
+- Improved error handling to better distinguish and log TimeoutErrors caused by users from internal run timeouts.
+
+## v0.2.69 (2025-06-26)
+- Added sorting and pagination to the crons API and updated schema definitions for improved accuracy.
+
 ## v0.2.66 (2025-06-26)
 - Fixed a 404 error when creating multiple runs with the same thread_id using `on_not_exist="create"`.
 
