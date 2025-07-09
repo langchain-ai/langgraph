@@ -206,7 +206,7 @@ Name: tavily_search
 
 ### Math agent
 
-For math agent tools we will use [vanilla Python functions](../../agents/tools.md#define-simple-tools):
+For math agent tools we will use [vanilla Python functions](../../how-tos/tool-calling.md#define-a-tool):
 
 ```python
 def add(a: float, b: float):

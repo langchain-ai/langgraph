@@ -10,13 +10,14 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from langgraph_cli.cli import cli, prepare_args_and_stdin
-from langgraph_cli.config import PIP_CLEANUP_LINES, Config, validate_config
+from langgraph_cli.config import Config, _get_pip_cleanup_lines, validate_config
 from langgraph_cli.docker import DEFAULT_POSTGRES_URI, DockerCapabilities, Version
 from langgraph_cli.util import clean_empty_lines
 
-FORMATTED_CLEANUP_LINES = PIP_CLEANUP_LINES.format(
+FORMATTED_CLEANUP_LINES = _get_pip_cleanup_lines(
     install_cmd="uv pip install --system",
-    uv_removal="RUN uv pip uninstall --system pip setuptools wheel && rm /usr/bin/uv /usr/bin/uvx",
+    to_uninstall=("pip", "setuptools", "wheel"),
+    pip_installer="uv",
 )
 DEFAULT_DOCKER_CAPABILITIES = DockerCapabilities(
     version_docker=Version(26, 1, 1),

@@ -134,6 +134,23 @@
               ],
               "description": "Optional. Linux distribution for the base image.\n\nMust be either 'debian' or 'wolfi'. If omitted, defaults to 'debian'.\n"
             },
+            "keep_pkg_tools": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Control whether to retain Python packaging tools in the final image.\n\nYou can also set to true to include all packaging tools.\n"
+            },
             "pip_installer": {
               "anyOf": [
                 {
@@ -297,6 +314,23 @@
                 }
               ],
               "description": "Optional. Linux distribution for the base image.\n\nMust be either 'debian' or 'wolfi'. If omitted, defaults to 'debian'.\n"
+            },
+            "keep_pkg_tools": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Control whether to retain Python packaging tools in the final image.\n\nYou can also set to true to include all packaging tools.\n"
             },
             "pip_installer": {
               "anyOf": [
@@ -505,7 +539,7 @@
         },
         "disable_meta": {
           "type": "boolean",
-          "description": "Optional. If True, all meta endpoints (/ok, /info, /metrics, /docs) are disabled.\n\nDefault is False.\n"
+          "description": "Optional. Remove meta endpoints.\n\n\nDefault is False.\n"
         },
         "disable_runs": {
           "type": "boolean",
