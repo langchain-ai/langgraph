@@ -8,7 +8,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.graph import Graph as DrawableGraph
 from typing_extensions import Self
 
-from langgraph.types import All, StateSnapshot, StateUpdate, StreamMode
+from langgraph.types import All, Command, StateSnapshot, StateUpdate, StreamMode
 from langgraph.typing import InputT, OutputT, StateT
 
 __all__ = ("PregelProtocol", "StreamProtocol")
@@ -99,7 +99,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT, OutputT], AB
     @abstractmethod
     def stream(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode | list[StreamMode] | None = None,
@@ -111,7 +111,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT, OutputT], AB
     @abstractmethod
     def astream(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode | list[StreamMode] | None = None,
@@ -123,7 +123,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT, OutputT], AB
     @abstractmethod
     def invoke(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         interrupt_before: All | Sequence[str] | None = None,
@@ -133,7 +133,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT, OutputT], AB
     @abstractmethod
     async def ainvoke(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         interrupt_before: All | Sequence[str] | None = None,
