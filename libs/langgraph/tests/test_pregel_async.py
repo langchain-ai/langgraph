@@ -45,7 +45,6 @@ from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, START
 from langgraph.errors import (
     GraphRecursionError,
     InvalidUpdateError,
-    NodeInterrupt,
     ParentCommand,
 )
 from langgraph.func import entrypoint, task
@@ -2506,7 +2505,7 @@ async def test_send_dedupe_on_resume(
         def __call__(self, state):
             self.ticks += 1
             if self.ticks == 1:
-                raise NodeInterrupt("Bahh")
+                interrupt("Bahh")
             return ["|".join(("flaky", str(state)))]
 
     class Node:

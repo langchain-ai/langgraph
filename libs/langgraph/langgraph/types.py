@@ -169,7 +169,7 @@ class Interrupt:
 
     @property
     @deprecated(
-        _DEFAULT_INTERRUPT_ID,
+        "`interrupt_id` is deprecated. Use `id` instead.",
         stacklevel=2,
     )
     def interrupt_id(self) -> str:
