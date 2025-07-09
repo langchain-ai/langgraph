@@ -104,6 +104,9 @@ REDIRECT_MAP = {
     "how-tos/human_in_the_loop/edit-graph-state.ipynb": "how-tos/human_in_the_loop/time-travel.md",
     # breakpoints
     "how-tos/human_in_the_loop/dynamic_breakpoints.ipynb": "how-tos/human_in_the_loop/breakpoints.md",
+    "concepts/breakpoints.md": "concepts/human_in_the_loop.md",
+    "how-tos/human_in_the_loop/breakpoints.md": "how-tos/human_in_the_loop/add-human-in-the-loop.md",
+    "cloud/how-tos/human_in_the_loop_breakpoint.md": "cloud/how-tos/add-human-in-the-loop.md",
     # misc
     "prebuilt.md": "agents/prebuilt.md",
     "reference/prebuilt.md": "reference/agents.md",

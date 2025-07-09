@@ -23,9 +23,13 @@ To review, edit, and approve tool calls in an agent or workflow, [use LangGraph'
 
 ## Key capabilities
 
-* **Persistent execution state**: LangGraph allows you to pause execution **indefinitely** — for minutes, hours, or even days—until human input is received. This is possible because LangGraph checkpoints the graph state after each step, which allows the system to persist execution context and later resume the workflow, continuing from where it left off. This supports asynchronous human review or input without time constraints.
+* **Persistent execution state**: Breakpoints (`interrupt`) allow you to pause graph execution at defined points **indefinitely** — for minutes, hours, or even days—until human input is received. They use LangGraph's [persistence layer](./persistence.md), which saves the graph state after each step. This allows the system to persist execution context and later resume the workflow, continuing from where it left off, supporting asynchronous human review or input without time constraints.
 
-* **Flexible integration points**: HIL logic can be introduced at any point in the workflow. This allows targeted human involvement, such as approving API calls, correcting outputs, or guiding conversations.
+  <figure markdown="1">
+  ![image](img/breakpoints.png){: style="max-height:400px"}
+  <figcaption>An example graph consisting of 3 sequential steps with a breakpoint before step_3. </figcaption> </figure>
+
+* **Flexible integration points**: Human-in-the-loop logic can be introduced at any point in the workflow. This allows targeted human involvement, such as approving API calls, correcting outputs, or guiding conversations.
 
 ## Patterns
 

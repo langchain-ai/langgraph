@@ -33,7 +33,7 @@ The state of a thread at a particular point in time is called a checkpoint. Chec
 - `metadata`: Metadata associated with this checkpoint.
 - `values`: Values of the state channels at this point in time.
 - `next` A tuple of the node names to execute next in the graph.
-- `tasks`: A tuple of `PregelTask` objects that contain information about next tasks to be executed. If the step was previously attempted, it will include error information. If a graph was interrupted [dynamically](../how-tos/human_in_the_loop/breakpoints.md#dynamic-breakpoints) from within a node, tasks will contain additional data associated with interrupts.
+- `tasks`: A tuple of `PregelTask` objects that contain information about next tasks to be executed. If the step was previously attempted, it will include error information. If a graph was interrupted [dynamically](../how-tos/human_in_the_loop/add-human-in-the-loop.md#dynamic-interrupts) from within a node, tasks will contain additional data associated with interrupts.
 
 Checkpoints are persisted and can be used to restore the state of a thread at a later time.
 
@@ -525,7 +525,7 @@ When running on LangGraph Platform, encryption is automatically enabled whenever
 
 ### Human-in-the-loop
 
-First, checkpointers facilitate [human-in-the-loop workflows](agentic_concepts.md#human-in-the-loop) workflows by allowing humans to inspect, interrupt, and approve graph steps. Checkpointers are needed for these workflows as the human has to be able to view the state of a graph at any point in time, and the graph has to be to resume execution after the human has made any updates to the state. See [these how-to guides](../how-tos/human_in_the_loop/breakpoints.md) for concrete examples.
+First, checkpointers facilitate [human-in-the-loop workflows](agentic_concepts.md#human-in-the-loop) workflows by allowing humans to inspect, interrupt, and approve graph steps. Checkpointers are needed for these workflows as the human has to be able to view the state of a graph at any point in time, and the graph has to be to resume execution after the human has made any updates to the state. See [the how-to guides](../how-tos/human_in_the_loop/add-human-in-the-loop.md) for examples.
 
 ### Memory
 
