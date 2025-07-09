@@ -90,8 +90,10 @@ Always injected into nodes if requested as a keyword argument, but it's a no-op
 when not using stream_mode="custom"."""
 
 if sys.version_info >= (3, 10):
+    _DC_SLOTS = {"slots": True}
     _DC_KWARGS = {"kw_only": True, "slots": True, "frozen": True}
 else:
+    _DC_SLOTS = {}
     _DC_KWARGS = {"frozen": True}
 
 
@@ -136,7 +138,7 @@ _DEFAULT_INTERRUPT_ID = "placeholder-id"
 
 
 @final
-@dataclasses.dataclass(init=False)
+@dataclasses.dataclass(init=False, **_DC_SLOTS)
 class Interrupt:
     """Information about an interrupt that occurred in a node.
 
