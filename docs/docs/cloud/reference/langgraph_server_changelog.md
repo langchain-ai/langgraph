@@ -4,6 +4,56 @@
 
 ---
 
+## v0.2.83 (2025-07-09)
+- Reduced the `default` `time`-to-`live` for `resumable` `streams` to 2 `minutes` for `improved` `resource` `management`.
+- Submitted `self`-`hosted` `data` to the LangSmith `instance` if the `endpoint` is `set`, with `conditional` `behavior` `based` on `deployment` `mode` and `license` `type`.
+- Enabled `submission` of `self`-`hosted` `data` to Langsmith `instance` when an `endpoint` is `configured`.
+
+## v0.2.82 (2025-07-03)
+- Addressed a `race` `condition` in `background` `runs` by `using` `join` to `lock` `run` `queries`, `ensuring` `stability` `across` `concurrent` `executions`.
+
+## v0.2.81 (2025-07-03)
+- Retained a `placeholder` `/`ok`` `endpoint` to `ensure` `deployments` are `marked` `successful` `even` when ``disable_meta`=True`.
+- Optimized `run` `streams` by `starting` with a `lower` `initial` `wait` `time`, `reducing` `delays` for `certain` `operations`.
+
+## v0.2.80 (2025-07-03)
+- Resolved an `issue` in the ``logger`.`ainfo`()` API `call` where the ``event`` `parameter` was `incorrectly` `passed`, `causing` a `runtime` `error`.
+
+## v0.2.79 (2025-07-02)
+- Resolved a JsonDecodeError in `checkpointing` with `remote` `graph` by `enhancing` JSON `handling` to `prevent` `invalid` `outputs`.
+- Introduced a `configuration` `flag` to `globally` `disable` `webhooks` `across` all `routes`.
+
+## v0.2.78 (2025-07-02)
+- Added `retries` for `webhook` `calls` that `timeout` to `ensure` `robust` `processing`.
+- Added HTTP `request` `total` and `latency` `metrics` for `improved` `monitoring` and `charting` `capabilities`.
+
+## v0.2.77 (2025-07-02)
+- Added HTTP `metrics` to `enhance` `performance` `monitoring` and `analysis`.
+- Changed the Redis `cache` `delimiter` to `minimize` `conflicts` with `subgraph` `message` `names`.
+
+## v0.2.76 (2025-07-01)
+- Changed the Redis `cache` `delimiter` to `prevent` `conflicts` with `subgraph` `messages`.
+
+## v0.2.74 (2025-06-30)
+- Scheduled `webhook` in an `isolated` `loop` to `ensure` `thread` `safety` and `prevent` `errors` with PYTHONASYNCIODEBUG=1.
+
+## v0.2.73 (2025-06-27)
+- Fixed an `infinite` `frame` `loop` and `removed` ``dict_parser`` to `prevent` `conflicts` with ``structlog`` `functionalities`.
+- Threw a 409 `error` on `deadlock` `during` `cancellation` to `handle` `lock` `availability` `issues`.
+
+## v0.2.72 (2025-06-27)
+- Avoided `catching` `cancellation` `errors` in SSE `heartbeat` to `improve` `error` `handling`.
+- Implemented a 409 `error` `response` for `deadlocks` `occurring` `during` `cancel` `operations`.
+
+## v0.2.71 (2025-06-26)
+- Improved `logging` by `adding` `type` `information` to `enhance` `error` `tracking`.
+
+## v0.2.70 (2025-06-26)
+- Improved `error` `handling` to `distinguish` `user`-`generated` TimeoutErrors from `system` `run` `timeouts`, `ensuring` `clearer` `logging`.
+
+## v0.2.69 (2025-06-26)
+- Introduced `sorting` and `pagination` `features` to the `crons` API and `updated` `schema` `definitions` for `accuracy`.
+
 ## v0.2.66 (2025-06-26)
 - Fixed a 404 error when creating multiple runs with the same thread_id using `on_not_exist="create"`.
 
