@@ -8,7 +8,7 @@
 - Fixed a 404 error when creating multiple runs with the same thread_id using `on_not_exist="create"`.
 
 ## v0.2.65 (2025-06-25)
-- Ensured that only fields from assistant_versions are returned when necessary.
+- Ensured that only fields from `assistant_versions` are returned when necessary.
 - Ensured consistent data types for in-memory and PostgreSQL users, improving internal authentication handling.
 
 ## v0.2.64 (2025-06-24)
