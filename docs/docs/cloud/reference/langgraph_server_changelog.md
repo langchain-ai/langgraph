@@ -4,6 +4,55 @@
 
 ---
 
+v0.2.83, 2025-07-09
+- Reduced the default time-to-live for resumable streams to 2 minutes.
+- Enabled data submission to LangSmith and Beacon endpoints based on deployment mode and license configuration.
+- Enabled submission of self-hosted data to a Langsmith instance when the endpoint is configured.
+
+v0.2.82, 2025-07-03
+- Resolved a race condition in Runs.next by implementing join to lock runs, ensuring reliable execution across concurrent processes.
+
+v0.2.81, 2025-07-03
+- Ensured successful deployment by retaining an /ok endpoint even when disable_meta=True.
+- Improved stream start times by reducing initial wait time and optimizing run status checks.
+
+v0.2.80, 2025-07-03
+- Resolved a TypeError in the `logger.ainfo()` API call by correcting the parameter passing method.
+
+v0.2.79, 2025-07-02
+- Resolved a JsonDecodeError during checkpointing with remote graphs caused by invalid JSON.
+- Added a configuration flag to globally disable webhooks across all routes.
+
+v0.2.78, 2025-07-02
+- Added retry mechanism for webhook calls that experience timeouts.
+- Added new HTTP metrics to track requests per second and latency.
+
+v0.2.77, 2025-07-02
+- Added HTTP metrics for improved performance monitoring.
+- Updated the Redis cache delimiter to reduce conflicts with subgraph messages.
+
+v0.2.76, 2025-07-01
+- Updated the redis cache delimiter to prevent conflicts with subgraph messages.
+
+v0.2.74, 2025-06-30
+- Ensured thread-safe scheduling of webhooks by using a queue for event handling.
+
+v0.2.73, 2025-06-27
+- Resolved an infinite loop issue and removed the dict_parser for better logging stability.
+- Implemented a 409 error response when encountering a deadlock during the cancellation process.
+
+v0.2.72, 2025-06-27
+- Added a response to return a 409 error code on deadlock situations during cancellation.
+
+v0.2.71, 2025-06-26
+- Resolved an issue with the logging type configuration.
+
+v0.2.70, 2025-06-26
+- Improved error handling for TimeoutErrors to better distinguish between system and user-generated issues.
+
+v0.2.69, 2025-06-26
+- Added sorting and pagination to the crons API and updated schema definitions for accuracy.
+
 ## v0.2.66 (2025-06-26)
 - Fixed a 404 error when creating multiple runs with the same thread_id using `on_not_exist="create"`.
 
