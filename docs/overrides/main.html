@@ -83,7 +83,12 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
             };
             option1.onmouseout = function() { this.style.background = 'transparent'; };
             option1.onclick = function() {
-                copyPageAsMarkdown();
+                // Check if we're on a reference page
+                if (window.location.pathname.includes('/reference/')) {
+                    alert('Copy Page not yet available in API reference pages.');
+                } else {
+                    copyPageAsMarkdown();
+                }
                 dropdown.style.display = 'none';
             };
             
