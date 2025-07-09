@@ -25,11 +25,15 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         try {
             let rawContent = markdownScript.textContent;
             
-            // Import a library for decoding HTML entities
-            import { decode } from 'he';
+            // Safe HTML entity decoding function
+            function decodeHtmlEntities(text) {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(text, 'text/html');
+                return doc.documentElement.textContent || '';
+            }
             
-            // Always decode HTML entities using a safe library
-            rawContent = decode(rawContent);
+            // Always decode HTML entities since the browser might encode them
+            rawContent = decodeHtmlEntities(rawContent);
             
             
             const data = JSON.parse(rawContent);
