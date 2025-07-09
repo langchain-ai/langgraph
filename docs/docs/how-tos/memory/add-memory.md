@@ -1351,7 +1351,7 @@ The problem with trimming or removing messages, as shown above, is that you may 
 
     ```python
     from langchain_anthropic import ChatAnthropic
-    from langmem.short_term import SummarizationNode
+    from langmem.short_term import SummarizationNode, RunningSummary
     from langchain_core.messages.utils import count_tokens_approximately
     from langgraph.prebuilt import create_react_agent
     from langgraph.prebuilt.chat_agent_executor import AgentState
@@ -1372,7 +1372,7 @@ The problem with trimming or removing messages, as shown above, is that you may 
         # NOTE: we're adding this key to keep track of previous summary information
         # to make sure we're not summarizing on every LLM call
         # highlight-next-line
-        context: dict[str, Any]  # (2)!
+        context: dict[str, RunningSummary]  # (2)!
 
 
     checkpointer = InMemorySaver() # (3)!
@@ -1447,18 +1447,18 @@ The problem with trimming or removing messages, as shown above, is that you may 
     from langgraph.graph import StateGraph, START, MessagesState
     from langgraph.checkpoint.memory import InMemorySaver
     # highlight-next-line
-    from langmem.short_term import SummarizationNode
+    from langmem.short_term import SummarizationNode, RunningSummary
     
     model = init_chat_model("anthropic:claude-3-7-sonnet-latest")
     summarization_model = model.bind(max_tokens=128)
     
     class State(MessagesState):
         # highlight-next-line
-        context: dict[str, Any]  # (1)!
+        context: dict[str, RunningSummary]  # (1)!
     
     class LLMInputState(TypedDict):  # (2)!
         summarized_messages: list[AnyMessage]
-        context: dict[str, Any]
+        context: dict[str, RunningSummary]
     
     # highlight-next-line
     summarization_node = SummarizationNode(

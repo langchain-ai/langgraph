@@ -1298,9 +1298,7 @@ def test_tool_node_node_interrupt(
     assert task.interrupts == (
         Interrupt(
             value="provide value for foo",
-            when="during",
-            resumable=True,
-            ns=[AnyStr("tools:")],
+            id=AnyStr(),
         ),
     )
 

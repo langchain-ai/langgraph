@@ -6,7 +6,8 @@ from langgraph.channels.last_value import LastValue
 from langgraph.func import entrypoint, task
 from langgraph.graph import StateGraph
 from langgraph.pregel import NodeBuilder, Pregel
-from langgraph.types import RetryPolicy
+from langgraph.errors import NodeInterrupt
+from langgraph.types import Interrupt, RetryPolicy
 from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
 
 
@@ -139,3 +140,21 @@ def test_config_type_deprecation_pregel(mocker: MockerFixture) -> None:
             output_channels="output",
             config_type=PlainState,
         )
+
+
+def test_interrupt_attributes_deprecation() -> None:
+    interrupt = Interrupt(value="question", id="abc")
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`interrupt_id` is deprecated. Use `id` instead.",
+    ):
+        interrupt.interrupt_id
+
+
+def test_node_interrupt_deprecation() -> None:
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="NodeInterrupt is deprecated. Please use `langgraph.types.interrupt` instead.",
+    ):
+        NodeInterrupt(value="test")

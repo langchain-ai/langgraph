@@ -45,7 +45,6 @@ from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, START
 from langgraph.errors import (
     GraphRecursionError,
     InvalidUpdateError,
-    NodeInterrupt,
     ParentCommand,
 )
 from langgraph.func import entrypoint, task
@@ -592,9 +591,7 @@ async def test_dynamic_interrupt(async_checkpointer: BaseCheckpointSaver) -> Non
     ) == {
         "my_key": "value",
         "market": "DE",
-        "__interrupt__": [
-            Interrupt(value="Just because...", resumable=True, ns=[AnyStr("tool_two:")])
-        ],
+        "__interrupt__": [Interrupt(value="Just because...", id=AnyStr())],
     }
     assert tool_two_node_count == 1, "interrupts aren't retried"
     assert len(tracer.runs) == 1
@@ -625,8 +622,7 @@ async def test_dynamic_interrupt(async_checkpointer: BaseCheckpointSaver) -> Non
             "__interrupt__": (
                 Interrupt(
                     value="Just because...",
-                    resumable=True,
-                    ns=[AnyStr("tool_two:")],
+                    id=AnyStr(),
                 ),
             )
         },
@@ -651,8 +647,7 @@ async def test_dynamic_interrupt(async_checkpointer: BaseCheckpointSaver) -> Non
             "__interrupt__": (
                 Interrupt(
                     value="Just because...",
-                    resumable=True,
-                    ns=[AnyStr("tool_two:")],
+                    id=AnyStr(),
                 ),
             )
         },
@@ -676,8 +671,7 @@ async def test_dynamic_interrupt(async_checkpointer: BaseCheckpointSaver) -> Non
                 interrupts=(
                     Interrupt(
                         value="Just because...",
-                        resumable=True,
-                        ns=[AnyStr("tool_two:")],
+                        id=AnyStr(),
                     ),
                 ),
             ),
@@ -693,8 +687,7 @@ async def test_dynamic_interrupt(async_checkpointer: BaseCheckpointSaver) -> Non
         interrupts=(
             Interrupt(
                 value="Just because...",
-                resumable=True,
-                ns=[AnyStr("tool_two:")],
+                id=AnyStr(),
             ),
         ),
     )
@@ -762,8 +755,7 @@ async def test_dynamic_interrupt_subgraph(
         "__interrupt__": [
             Interrupt(
                 value="Just because...",
-                resumable=True,
-                ns=[AnyStr("tool_two:"), AnyStr("do:")],
+                id=AnyStr(),
             )
         ],
     }
@@ -796,8 +788,7 @@ async def test_dynamic_interrupt_subgraph(
             "__interrupt__": (
                 Interrupt(
                     value="Just because...",
-                    resumable=True,
-                    ns=[AnyStr("tool_two:"), AnyStr("do:")],
+                    id=AnyStr(),
                 ),
             )
         },
@@ -823,8 +814,7 @@ async def test_dynamic_interrupt_subgraph(
             "__interrupt__": (
                 Interrupt(
                     value="Just because...",
-                    resumable=True,
-                    ns=[AnyStr("tool_two:"), AnyStr("do:")],
+                    id=AnyStr(),
                 ),
             )
         },
@@ -848,8 +838,7 @@ async def test_dynamic_interrupt_subgraph(
                 interrupts=(
                     Interrupt(
                         value="Just because...",
-                        resumable=True,
-                        ns=[AnyStr("tool_two:"), AnyStr("do:")],
+                        id=AnyStr(),
                     ),
                 ),
                 state={
@@ -871,8 +860,7 @@ async def test_dynamic_interrupt_subgraph(
         interrupts=(
             Interrupt(
                 value="Just because...",
-                resumable=True,
-                ns=[AnyStr("tool_two:"), AnyStr("do:")],
+                id=AnyStr(),
             ),
         ),
     )
@@ -938,9 +926,7 @@ async def test_partial_pending_checkpoint(
     ) == {
         "my_key": "value one",
         "market": "DE",
-        "__interrupt__": [
-            Interrupt(value="Just because...", resumable=True, ns=[AnyStr("tool_two:")])
-        ],
+        "__interrupt__": [Interrupt(value="Just because...", id=AnyStr())],
     }
     assert tool_two_node_count == 1, "interrupts aren't retried"
     assert len(tracer.runs) == 1
@@ -971,8 +957,7 @@ async def test_partial_pending_checkpoint(
             "__interrupt__": (
                 Interrupt(
                     value="Just because...",
-                    resumable=True,
-                    ns=[AnyStr("tool_two:")],
+                    id=AnyStr(),
                 ),
             )
         },
@@ -1002,8 +987,7 @@ async def test_partial_pending_checkpoint(
         "__interrupt__": [
             Interrupt(
                 value="Just because...",
-                resumable=True,
-                ns=[AnyStr("tool_two:")],
+                id=AnyStr(),
             )
         ],
     }
@@ -1037,8 +1021,7 @@ async def test_partial_pending_checkpoint(
                 interrupts=(
                     Interrupt(
                         value="Just because...",
-                        resumable=True,
-                        ns=[AnyStr("tool_two:")],
+                        id=AnyStr(),
                     ),
                 ),
             ),
@@ -1054,8 +1037,7 @@ async def test_partial_pending_checkpoint(
         interrupts=(
             Interrupt(
                 value="Just because...",
-                resumable=True,
-                ns=[AnyStr("tool_two:")],
+                id=AnyStr(),
             ),
         ),
     )
@@ -1119,8 +1101,7 @@ async def test_node_not_cancelled_on_other_node_interrupted(
         "__interrupt__": [
             Interrupt(
                 value="I am bad",
-                resumable=True,
-                ns=[AnyStr("bad:")],
+                id=AnyStr(),
             )
         ],
     }
@@ -1133,8 +1114,7 @@ async def test_node_not_cancelled_on_other_node_interrupted(
         "__interrupt__": [
             Interrupt(
                 value="I am bad",
-                resumable=True,
-                ns=[AnyStr("bad:")],
+                id=AnyStr(),
             )
         ],
     }
@@ -2292,9 +2272,7 @@ async def test_imp_task(
             "__interrupt__": (
                 Interrupt(
                     value="question",
-                    resumable=True,
-                    ns=[AnyStr("graph:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         },
@@ -2373,9 +2351,7 @@ async def test_imp_nested(
             "__interrupt__": (
                 Interrupt(
                     value="question",
-                    resumable=True,
-                    ns=[AnyStr("graph:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         },
@@ -2428,9 +2404,7 @@ async def test_imp_task_cancel(
             "__interrupt__": (
                 Interrupt(
                     value="question",
-                    resumable=True,
-                    ns=[AnyStr("graph:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         },
@@ -2522,6 +2496,10 @@ async def test_imp_stream_order(
     ]
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Requires Python 3.11 or higher for context management",
+)
 async def test_send_dedupe_on_resume(
     async_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
 ) -> None:
@@ -2531,7 +2509,7 @@ async def test_send_dedupe_on_resume(
         def __call__(self, state):
             self.ticks += 1
             if self.ticks == 1:
-                raise NodeInterrupt("Bahh")
+                interrupt("Bahh")
             return ["|".join(("flaky", str(state)))]
 
     class Node:
@@ -2578,8 +2556,7 @@ async def test_send_dedupe_on_resume(
         "__interrupt__": [
             Interrupt(
                 value="Bahh",
-                resumable=False,
-                ns=None,
+                id=AnyStr(),
             ),
         ],
     }
@@ -2730,7 +2707,7 @@ async def test_send_dedupe_on_resume(
                     name="flaky",
                     path=("__pregel_push", 1, False),
                     error=None,
-                    interrupts=(Interrupt(value="Bahh", resumable=False, ns=None),),
+                    interrupts=(Interrupt(value="Bahh", id=AnyStr()),),
                     state=None,
                     result=["flaky|4"] if checkpoint_during else None,
                 ),
@@ -2744,7 +2721,7 @@ async def test_send_dedupe_on_resume(
                     result=["3"],
                 ),
             ),
-            interrupts=(Interrupt(value="Bahh", resumable=False, ns=None),),
+            interrupts=(Interrupt(value="Bahh", id=AnyStr()),),
         ),
         StateSnapshot(
             values=["0", "1"],
@@ -5143,8 +5120,7 @@ async def test_subgraph_checkpoint_true_interrupt(
         "__interrupt__": [
             Interrupt(
                 value="Provide baz value",
-                resumable=True,
-                ns=[AnyStr("node_2"), AnyStr("subgraph_node_1:")],
+                id=AnyStr(),
             )
         ],
     }
@@ -6220,9 +6196,7 @@ async def test_interrupt_multiple(async_checkpointer: BaseCheckpointSaver):
             "__interrupt__": (
                 Interrupt(
                     value={"value": 1},
-                    resumable=True,
-                    ns=[AnyStr("node:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         }
@@ -6240,9 +6214,7 @@ async def test_interrupt_multiple(async_checkpointer: BaseCheckpointSaver):
             "__interrupt__": (
                 Interrupt(
                     value={"value": 2},
-                    resumable=True,
-                    ns=[AnyStr("node:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         }
@@ -6290,9 +6262,7 @@ async def test_interrupt_loop(async_checkpointer: BaseCheckpointSaver) -> None:
             "__interrupt__": (
                 Interrupt(
                     value="How old are you?",
-                    resumable=True,
-                    ns=[AnyStr("node:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         }
@@ -6309,9 +6279,7 @@ async def test_interrupt_loop(async_checkpointer: BaseCheckpointSaver) -> None:
             "__interrupt__": (
                 Interrupt(
                     value="invalid response",
-                    resumable=True,
-                    ns=[AnyStr("node:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         }
@@ -6328,9 +6296,7 @@ async def test_interrupt_loop(async_checkpointer: BaseCheckpointSaver) -> None:
             "__interrupt__": (
                 Interrupt(
                     value="invalid response",
-                    resumable=True,
-                    ns=[AnyStr("node:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         }
@@ -6392,8 +6358,7 @@ async def test_interrupt_task_functional(
         "__interrupt__": [
             Interrupt(
                 value="Provide value for bar:",
-                resumable=True,
-                ns=[AnyStr("graph:"), AnyStr("bar:")],
+                id=AnyStr(),
             ),
         ]
     }
@@ -6914,9 +6879,7 @@ async def test_double_interrupt_subgraph(
             "__interrupt__": (
                 Interrupt(
                     value="interrupt node 1",
-                    resumable=True,
-                    ns=[AnyStr("node_1:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         },
@@ -6930,9 +6893,7 @@ async def test_double_interrupt_subgraph(
             "__interrupt__": (
                 Interrupt(
                     value="interrupt node 2",
-                    resumable=True,
-                    ns=[AnyStr("node_2:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         },
@@ -6964,9 +6925,7 @@ async def test_double_interrupt_subgraph(
             "__interrupt__": (
                 Interrupt(
                     value="interrupt node 1",
-                    resumable=True,
-                    ns=[AnyStr("invoke_sub_agent:"), AnyStr("node_1:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         },
@@ -6978,9 +6937,7 @@ async def test_double_interrupt_subgraph(
             "__interrupt__": (
                 Interrupt(
                     value="interrupt node 2",
-                    resumable=True,
-                    ns=[AnyStr("invoke_sub_agent:"), AnyStr("node_2:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         }
@@ -7843,8 +7800,7 @@ async def test_interrupt_subgraph_reenter_checkpointer_true(
         "__interrupt__": [
             Interrupt(
                 value="Provide value",
-                resumable=True,
-                ns=[AnyStr("call_subgraph"), AnyStr("subnode_2:")],
+                id=AnyStr(),
             )
         ],
     }
@@ -7854,8 +7810,7 @@ async def test_interrupt_subgraph_reenter_checkpointer_true(
         "__interrupt__": [
             Interrupt(
                 value="Provide value",
-                resumable=True,
-                ns=[AnyStr("call_subgraph"), AnyStr("subnode_2")],
+                id=AnyStr(),
             )
         ],
     }
@@ -7885,8 +7840,7 @@ async def test_interrupt_subgraph_reenter_checkpointer_true(
         "__interrupt__": [
             Interrupt(
                 value="Provide value",
-                resumable=True,
-                ns=[AnyStr("call_subgraph"), AnyStr("subnode_2:")],
+                id=AnyStr(),
             )
         ],
     }
@@ -7923,8 +7877,7 @@ async def test_handles_multiple_interrupts_from_tasks(
         "__interrupt__": [
             Interrupt(
                 value="Hey do you want to add James?",
-                resumable=True,
-                ns=[AnyStr("program:"), AnyStr("add_participant:")],
+                id=AnyStr(),
             ),
         ]
     }
@@ -7932,10 +7885,6 @@ async def test_handles_multiple_interrupts_from_tasks(
     state = await program.aget_state(config=config)
     assert len(state.tasks[0].interrupts) == 1
     task_interrupt = state.tasks[0].interrupts[0]
-    assert task_interrupt.resumable is True
-    assert len(task_interrupt.ns) == 2
-    assert task_interrupt.ns[0].startswith("program:")
-    assert task_interrupt.ns[1].startswith("add_participant:")
     assert task_interrupt.value == "Hey do you want to add James?"
 
     result = await program.ainvoke(Command(resume=True), config=config)
@@ -7943,8 +7892,7 @@ async def test_handles_multiple_interrupts_from_tasks(
         "__interrupt__": [
             Interrupt(
                 value="Hey do you want to add Will?",
-                resumable=True,
-                ns=[AnyStr("program:"), AnyStr("add_participant:")],
+                id=AnyStr(),
             ),
         ]
     }
@@ -7952,10 +7900,6 @@ async def test_handles_multiple_interrupts_from_tasks(
     state = await program.aget_state(config=config)
     assert len(state.tasks[0].interrupts) == 1
     task_interrupt = state.tasks[0].interrupts[0]
-    assert task_interrupt.resumable is True
-    assert len(task_interrupt.ns) == 2
-    assert task_interrupt.ns[0].startswith("program:")
-    assert task_interrupt.ns[1].startswith("add_participant:")
     assert task_interrupt.value == "Hey do you want to add Will?"
 
     result = await program.ainvoke(Command(resume=True), config=config)
@@ -7999,10 +7943,6 @@ async def test_interrupts_in_tasks_surfaced_once(
     state = await program.aget_state(config=config)
     assert len(state.tasks[0].interrupts) == 1
     task_interrupt = state.tasks[0].interrupts[0]
-    assert task_interrupt.resumable is True
-    assert len(task_interrupt.ns) == 2
-    assert task_interrupt.ns[0].startswith("program:")
-    assert task_interrupt.ns[1].startswith("add_participant:")
     assert task_interrupt.value == "Hey do you want to add James?"
 
     interrupts = [
@@ -8015,10 +7955,6 @@ async def test_interrupts_in_tasks_surfaced_once(
     state = await program.aget_state(config=config)
     assert len(state.tasks[0].interrupts) == 1
     task_interrupt = state.tasks[0].interrupts[0]
-    assert task_interrupt.resumable is True
-    assert len(task_interrupt.ns) == 2
-    assert task_interrupt.ns[0].startswith("program:")
-    assert task_interrupt.ns[1].startswith("add_participant:")
     assert task_interrupt.value == "Hey do you want to add Will?"
 
     result = await program.ainvoke(Command(resume=True), config=config)

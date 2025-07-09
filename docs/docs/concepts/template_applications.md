@@ -64,7 +64,7 @@ To create a new app from a template, use the `langgraph new` command.
 === "JS"
 
     ```bash
-    npx @langchain/langgraph-cli new 
+    npm create langgraph@latest
     ```
 
 ## Next Steps

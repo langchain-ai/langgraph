@@ -92,8 +92,7 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                     else (
                         Interrupt(
                             value="",
-                            resumable=True,
-                            ns=[AnyStr("qa:")],
+                            id=AnyStr(),
                         ),
                     ),
                     state=None,
@@ -107,8 +106,7 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
             else (
                 Interrupt(
                     value="",
-                    resumable=True,
-                    ns=[AnyStr("qa:")],
+                    id=AnyStr(),
                 ),
             ),
         ),
@@ -412,8 +410,8 @@ SAVED_CHECKPOINTS = {
                     [
                         Interrupt(
                             value="",
-                            resumable=True,
-                            ns=["qa:2430f303-da9f-2e3e-738c-2e8ea28e8973"],
+                            resumable=True,  # type: ignore[arg-type]
+                            ns=["qa:2430f303-da9f-2e3e-738c-2e8ea28e8973"],  # type: ignore[arg-type]
                         )
                     ],
                 ),
@@ -786,8 +784,8 @@ SAVED_CHECKPOINTS = {
                     [
                         Interrupt(
                             value="",
-                            resumable=True,
-                            ns=["qa:4ee8637e-0a95-285e-75bc-4da721c0beab"],
+                            resumable=True,  # type: ignore[arg-type]
+                            ns=["qa:4ee8637e-0a95-285e-75bc-4da721c0beab"],  # type: ignore[arg-type]
                         )
                     ],
                 ),
@@ -1173,7 +1171,7 @@ SAVED_CHECKPOINTS = {
                         Interrupt(
                             value="",
                             resumable=True,
-                            ns=["qa:369e94b1-77d1-d67a-ab59-23d1ba20ee73"],
+                            ns=["qa:369e94b1-77d1-d67a-ab59-23d1ba20ee73"],  # type: ignore[arg-type]
                         )
                     ],
                 ),
@@ -1525,8 +1523,7 @@ def test_latest_checkpoint_state_graph(
             "__interrupt__": (
                 Interrupt(
                     value="",
-                    resumable=True,
-                    ns=[AnyStr("qa:")],
+                    id=AnyStr(),
                 ),
             )
         },
@@ -1570,8 +1567,7 @@ async def test_latest_checkpoint_state_graph_async(
             "__interrupt__": (
                 Interrupt(
                     value="",
-                    resumable=True,
-                    ns=[AnyStr("qa:")],
+                    id=AnyStr(),
                 ),
             )
         },

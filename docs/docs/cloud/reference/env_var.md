@@ -10,6 +10,10 @@ This environment variable should be set to `True` if the implementation of a gra
 
 Defaults to `False`.
 
+## `BG_JOB_SHUTDOWN_GRACE_PERIOD_SECS`
+
+Specifies, in seconds, how long the server will wait for background jobs to finish after the queue receives a shutdown signal. After this period, the server will force termination. Defaults to `180` seconds. Set this to ensure jobs have enough time to complete cleanly during shutdown. Added in `langgraph-api==0.2.16`.
+
 ## `BG_JOB_TIMEOUT_SECS`
 
 The timeout of a background run can be increased. However, the infrastructure for a Cloud SaaS deployment enforces a 1 hour timeout limit for API requests. This means the connection between client and server will timeout after 1 hour. This is not configurable.
@@ -17,10 +21,6 @@ The timeout of a background run can be increased. However, the infrastructure fo
 A background run can execute for longer than 1 hour, but a client must reconnect to the server (e.g. join stream via `POST /threads/{thread_id}/runs/{run_id}/stream`) to retrieve output from the run if the run is taking longer than 1 hour.
 
 Defaults to `3600`.
-
-## `BG_JOB_SHUTDOWN_GRACE_PERIOD_SECS`
-
-Specifies, in seconds, how long the server will wait for background jobs to finish after the queue receives a shutdown signal. After this period, the server will force termination. Defaults to `3600` seconds. Set this to ensure jobs have enough time to complete cleanly during shutdown. Added in `langgraph-api==0.2.16`.
 
 ## `DD_API_KEY`
 
@@ -40,6 +40,14 @@ Type of authentication for the LangGraph Server deployment. Valid values: `langs
 
 For deployments to LangGraph Platform, this environment variable is set automatically. For local development or deployments where authentication is handled externally (e.g. self-hosted), set this environment variable to `noop`.
 
+## `LANGGRAPH_POSTGRES_POOL_MAX_SIZE`
+
+Beginning with langgraph-api version `0.2.12`, the maximum size of the Postgres connection pool (per replica) can be controlled using the `LANGGRAPH_POSTGRES_POOL_MAX_SIZE` environment variable. By setting this variable, you can determine the upper bound on the number of simultaneous connections the server will establish with the Postgres database.
+
+For example, if a deployment is scaled up to 10 replicas and `LANGGRAPH_POSTGRES_POOL_MAX_SIZE` is configured to `150`, then up to `1500` connections to Postgres can be established. This is particularly useful for deployments where database resources are limited (or more available) or where you need to tune connection behavior for performance or scaling reasons.
+
+Defaults to `150` connections.
+
 ## `LANGSMITH_RUNS_ENDPOINTS`
 
 For deployments with [self-hosted LangSmith](https://docs.smith.langchain.com/self_hosting) only.
@@ -54,6 +62,10 @@ Set `LANGSMITH_TRACING` to `false` to disable tracing to LangSmith.
 
 Defaults to `true`.
 
+## `LOG_COLOR`
+
+This is mainly relevant in the context of using the dev server via the `langgraph dev` command. Set `LOG_COLOR` to `true` to enable ANSI-colored console output when using the default console renderer. Disabling color output by setting this variable to `false` produces monochrome logs. Defaults to `true`.
+
 ## `LOG_LEVEL`
 
 Configure [log level](https://docs.python.org/3/library/logging.html#logging-levels). Defaults to `INFO`.
@@ -62,9 +74,14 @@ Configure [log level](https://docs.python.org/3/library/logging.html#logging-lev
 
 Set `LOG_JSON` to `true` to render all log messages as JSON objects using the configured `JSONRenderer`. This produces structured logs that can be easily parsed or ingested by log management systems. Defaults to `false`.
 
-## `LOG_COLOR`
+## `MOUNT_PREFIX`
 
-This is mainly relevant in the context of using the dev server via the `langgraph dev` command. Set `LOG_COLOR` to `true` to enable ANSI-colored console output when using the default console renderer. Disabling color output by setting this variable to `false` produces monochrome logs. Defaults to `true`.
+!!! info "Only Allowed in Self-Hosted Deployments"
+    The `MOUNT_PREFIX` environment variable is only allowed in Self-Hosted Deployment models, LangGraph Platform SaaS will not allow this environment variable.
+
+Set `MOUNT_PREFIX` to serve the LangGraph Server under a specific path prefix. This is useful for deployments where the server is behind a reverse proxy or load balancer that requires a specific path prefix.
+
+For example, if the server is to be served under `https://example.com/langgraph`, set `MOUNT_PREFIX` to `/langgraph`.
 
 ## `N_JOBS_PER_WORKER`
 
@@ -94,16 +111,14 @@ Database Connectivity:
 
 - The custom Postgres instance must be accessible by the LangGraph Server. The user is responsible for ensuring connectivity.
 
-## `LANGGRAPH_POSTGRES_POOL_MAX_SIZE`
+## `REDIS_CLUSTER`
 
-Beginning with langgraph-api version `0.2.12`, the maximum size of the Postgres connection pool can be controlled using the `LANGGRAPH_POSTGRES_POOL_MAX_SIZE` environment variable. By setting this variable, you can determine the upper bound on the number of simultaneous connections the server will establish with the Postgres database. This is particularly useful for deployments where database resources are limited (or more available) or where you need to tune connection behavior for performance or scaling reasons. If not specified, the pool size defaults to 150 connections.
+!!! info "Only Allowed in Self-Hosted Deployments"
+    Redis Cluster mode is only available in Self-Hosted Deployment models, LangGraph Platform SaaS will provision a redis instance for you by default.
 
-## `REDIS_URI_CUSTOM`
+Set `REDIS_CLUSTER` to `True` to enable Redis Cluster mode. When enabled, the system will connect to Redis using cluster mode. This is useful when connecting to a Redis Cluster deployment.
 
-!!! info "Only for Self-Hosted Data Plane and Self-Hosted Control Plane"
-    Custom Redis instances are only available for [Self-Hosted Data Plane](../../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md) deployments.
-
-Specify `REDIS_URI_CUSTOM` to use a custom Redis instance. The value of `REDIS_URI_CUSTOM` must be a valid [Redis connection URI](https://redis-py.readthedocs.io/en/stable/connections.html#redis.Redis.from_url).
+Defaults to `False`.
 
 ## `REDIS_KEY_PREFIX`
 
@@ -114,20 +129,19 @@ Specify a prefix for Redis keys. This allows multiple LangGraph Server instances
 
 Defaults to `''`.
 
-## `REDIS_CLUSTER`
+## `REDIS_URI_CUSTOM`
 
-!!! info "Only Allowed in Self-Hosted Deployments"
-    Redis Cluster mode is only available in Self-Hosted Deployment models, LangGraph Platform SaaS will provision a redis instance for you by default.
+!!! info "Only for Self-Hosted Data Plane and Self-Hosted Control Plane"
+    Custom Redis instances are only available for [Self-Hosted Data Plane](../../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md) deployments.
 
-Set `REDIS_CLUSTER` to `True` to enable Redis Cluster mode. When enabled, the system will connect to Redis using cluster mode. This is useful when connecting to a Redis Cluster deployment.
+Specify `REDIS_URI_CUSTOM` to use a custom Redis instance. The value of `REDIS_URI_CUSTOM` must be a valid [Redis connection URI](https://redis-py.readthedocs.io/en/stable/connections.html#redis.Redis.from_url).
 
-Defaults to `False`.
+## `RESUMABLE_STREAM_TTL_SECONDS`
 
-## `MOUNT_PREFIX`
+Time-to-live in seconds for resumable stream data in Redis.
 
-!!! info "Only Allowed in Self-Hosted Deployments"
-    The `MOUNT_PREFIX` environment variable is only allowed in Self-Hosted Deployment models, LangGraph Platform SaaS will not allow this environment variable.
+When a run is created and the output is streamed, the stream can be configured to be resumable (e.g. `stream_resumable=True`). If a stream is resumable, output from the stream is temporarily stored in Redis. The TTL for this data can be configured by setting `RESUMABLE_STREAM_TTL_SECONDS`.
 
-Set `MOUNT_PREFIX` to serve the LangGraph Server under a specific path prefix. This is useful for deployments where the server is behind a reverse proxy or load balancer that requires a specific path prefix.
+See the [Python](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/#langgraph_sdk.client.RunsClient.stream) and [JS/TS](https://langchain-ai.github.io/langgraphjs/reference/classes/sdk_client.RunsClient.html#stream) SDKs for more details on how to implement resumable streams.
 
-For example, if the server is to be served under `https://example.com/langgraph`, set `MOUNT_PREFIX` to `/langgraph`.
+Defaults to `120` seconds.
