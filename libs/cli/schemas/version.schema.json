@@ -1,0 +1,46 @@
+{
+  "$id": "https://github.com/langchain-ai/langgraph/libs/cli/schemas/version.schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LangGraph Platform configuration (when building via the langgraph-cli).",
+  "type": "object",
+  "oneOf": [
+    {
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "version": {
+                  "type": "string",
+                  "maxLength": 0
+                }
+              },
+              "required": ["version"]
+            },
+            {
+              "not": {
+                "required": ["version"]
+              }
+            }
+          ]
+        },
+        {
+          "$ref": "https://raw.githubusercontent.com/langchain-ai/langgraph/main/libs/cli/schemas/schema.json"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "version": { "const": "v0" }
+          },
+          "required": ["version"]
+        },
+        {
+          "$ref": "https://raw.githubusercontent.com/langchain-ai/langgraph/main/libs/cli/schemas/schema.v0.json"
+        }
+      ]
+    }
+  ]
+}

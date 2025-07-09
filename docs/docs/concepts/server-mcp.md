@@ -209,7 +209,7 @@ To make user-scoped tools available to your LangGraph Platform deployment, start
 ```python
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
-def get_mcp_tools_node(state, config):
+def mcp_tools_node(state, config):
     user = config["configurable"].get("langgraph_auth_user")
 		 # e.g., user["github_token"], user["email"], etc.
 		
@@ -223,13 +223,18 @@ def get_mcp_tools_node(state, config):
         }
     })
     tools = await client.get_tools() # (3)
-    return {"tools": tools}
-	
+    
+    # Your tool-calling logic here
+    
+    tool_messages = ...
+    return {"messages": tool_messages}
 ```
 
 1. MCP only supports adding headers to requests made to `streamable_http` and `sse` `transport` servers.
 2. Your MCP server URL.
 3. Get available tools from your MCP server.
+
+_This can also be done by [rebuilding your graph at runtime](https://langchain-ai.github.io/langgraph/cloud/deployment/graph_rebuild/) to have a different configuration for a new run_
 
 ## Session behavior  
 

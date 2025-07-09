@@ -72,6 +72,7 @@ REDIRECT_MAP = {
     "how-tos/pass-config-to-tools.ipynb": "how-tos/tool-calling.ipynb#access-config",
     "how-tos/pass-run-time-values-to-tools.ipynb": "how-tos/tool-calling.ipynb#read-state",
     "how-tos/update-state-from-tools.ipynb": "how-tos/tool-calling.ipynb#update-state",
+    "agents/tools.md": "how-tos/tool-calling.md",
     # multi-agent how-tos
     "how-tos/agent-handoffs.ipynb": "how-tos/multi_agent.md#handoffs",
     "how-tos/multi-agent-network.ipynb": "how-tos/multi_agent.md#use-in-a-multi-agent-system",
