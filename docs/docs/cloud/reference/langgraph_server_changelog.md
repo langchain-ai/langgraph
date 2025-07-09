@@ -4,6 +4,56 @@
 
 ---
 
+## v0.2.83 (2025-07-09)
+- Reduced the `default` TTL for `resumable` `streams` to 2 `minutes`.
+- Added `functionality` to `submit` `data` to a LangSmith `instance` if the `endpoint` is `configured`, `supporting` `various` `deployment` `modes` `depending` on `license` and API `key` `configuration`.
+- Enabled `submission` of `self`-`hosted` `data` to ``langsmith`` `instance` when the `endpoint` is `configured`.
+
+## v0.2.82 (2025-07-03)
+- Resolved a `race` `condition` in `Runs.`next`` by `using` a `join` to `lock` `runs`.
+
+## v0.2.81 (2025-07-03)
+- Introduced a `placeholder` `/`ok`` `endpoint` to `ensure` `deployment` `success` `even` when ``disable_meta`=True`.
+- Reduced `wait` `time` for `starting` `stream` `calls` by `switching` to a `shorter` `initial` `wait` `period`.
+
+## v0.2.80 (2025-07-03)
+- Fixed `incorrect` `parameter` `usage` in ``logger`.`ainfo`()` to `prevent` TypeError `exceptions`.
+
+## v0.2.79 (2025-07-02)
+- Fixed an `issue` where `JsonDecodeError` `occurred` `during` `checkpointing` with `invalid` JSON, `ensuring` `proper` `loading` by `handling` `trailing` `slashes` `correctly`.
+- Added a ``disable_webhooks`` `configuration` `flag` to `allow` `disabling` `webhooks` `across` all `routes`.
+
+## v0.2.78 (2025-07-02)
+- Added `retry` `mechanism` to `webhook` `calls` to `handle` `timeouts`.
+- Added ``lg_api_http_requests_total`` `counter` and ``lg_api_http_requests_latency_seconds`` `histogram` `metrics` to `enable` `requests` `per` `second` and `latency` `chart` `plotting`.
+
+## v0.2.77 (2025-07-02)
+- Added HTTP `metrics` to `improve` `monitoring` and `performance` `analysis`.
+- Changed the Redis `cache` `delimiter` to `reduce` `conflicts` with `subgraph` `messages` by `using` a `different` `character`.
+
+## v0.2.76 (2025-07-01)
+- Updated ``redis`` `cache` `delimiter` to `prevent` `conflicts` with `subgraph` `messages`.
+
+## v0.2.74 (2025-06-30)
+- Scheduled `webhooks` in an `isolated` `loop` to `ensure` `thread` `safety` and `prevent` `errors` `during` `event` `handling`.
+
+## v0.2.73 (2025-06-27)
+- Resolved an `infinite` `loop` `issue` in `frame` `processing` and `removed` ``dict_parser`` for `improved` `logging` `compatibility`.
+- Throw a `409 Conflict` `error` when a `deadlock` `occurs` `during` `cancellation` `attempts`.
+
+## v0.2.72 (2025-06-27)
+- Added `compatibility` with `future` ``langgraph`` `updates`.
+- Added a 409 `error` `response` for `deadlock` `situations` `during` `cancellation` `requests`.
+
+## v0.2.71 (2025-06-26)
+- Resolved an `issue` with `Log` `type` that was `causing` `incorrect` `logging` `behavior`.
+
+## v0.2.70 (2025-06-26)
+- Improved `error` `handling` by `distinguishing` `between` `user` `TimeoutError` and `run` `timeouts`, `ensuring` `accurate` `error` `logging` and `robust` `execution`.
+
+## v0.2.69 (2025-06-26)
+- Enhanced the ``crons`` API by `adding` `sorting` and `pagination`, and `updated` `schema` `definitions` for `accuracy`.
+
 ## v0.2.66 (2025-06-26)
 - Fixed a 404 error when creating multiple runs with the same thread_id using `on_not_exist="create"`.
 
