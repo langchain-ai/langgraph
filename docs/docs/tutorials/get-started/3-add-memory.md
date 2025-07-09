@@ -426,9 +426,8 @@ const State = z.object({
 
 const tools = [new TavilySearch({ maxResults: 2 })];
 const llm = new ChatOpenAI({ model: "gpt-4o-mini" }).bindTools(tools);
+// highlight-next-line
 const memory = new MemorySaver();
-
-async function generateText(content: string) {
 
 const graph = new StateGraph(State)
   .addNode("chatbot", async (state) => ({
@@ -438,6 +437,7 @@ const graph = new StateGraph(State)
   .addConditionalEdges("chatbot", toolsCondition, ["tools", END])
   .addEdge("tools", "chatbot")
   .addEdge(START, "chatbot")
+  // highlight-next-line
   .compile({ checkpointer: memory });
 ```
 
