@@ -813,10 +813,9 @@ class PregelLoop:
             return
         modes = stream.modes
         checkpoint_ns = self.checkpoint_ns
-        debug_mode = "debug"
 
         # Flags to avoid repeated computation and attribute lookups
-        debug_remap = mode in ("checkpoints", "tasks") and debug_mode in modes
+        debug_remap = mode in ("checkpoints", "tasks") and "debug" in modes
         mode_in_stream = mode in modes
 
         if not mode_in_stream and not debug_remap:
@@ -830,14 +829,10 @@ class PregelLoop:
             step_val = self.step - 1 if mode == "checkpoints" else self.step
             type_checkpoint = "checkpoint" if mode == "checkpoints" else None
 
-        # Local reference for efficiency
-        emit_stream = stream
-
         for v in values(*args, **kwargs):
             if mode_in_stream:
-                emit_stream((checkpoint_ns, mode, v))
+                stream((checkpoint_ns, mode, v))
 
-            # Compose debug dict only if needed
             if debug_remap:
                 # Only determine type once, using as few conditionals/evaluations as possible
                 if type_checkpoint is not None:
@@ -850,10 +845,10 @@ class PregelLoop:
                     else:
                         type_val = "task"
                     debug_step = step_val
-                emit_stream(
+                stream(
                     (
                         checkpoint_ns,
-                        debug_mode,
+                        "debug",
                         {
                             "step": debug_step,
                             "timestamp": timestamp,
