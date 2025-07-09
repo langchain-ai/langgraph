@@ -300,7 +300,7 @@ except Exception:
 :::
 
 :::js
-You can visualize the graph using the `getGraph` method and one of the "draw" methods, like `drawMermaidPng`. The `draw` methods each require additional dependencies.
+You can visualize the graph using the `getGraph` method and render the graph with the `drawMermaidPng` method.
 
 ```typescript
 import * as fs from "node:fs/promises";

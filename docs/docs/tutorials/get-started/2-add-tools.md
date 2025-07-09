@@ -105,9 +105,9 @@ tool.invoke("What's a 'node' in LangGraph?")
 :::js
 
 ```typescript
-import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
+import { TavilySearch } from "@langchain/tavily";
 
-const tool = new TavilySearchResults({ maxResults: 2 });
+const tool = new TavilySearch({ maxResults: 2 });
 const tools = [tool];
 
 await tool.invoke({ query: "What's a 'node' in LangGraph?" });
@@ -141,8 +141,30 @@ The results are page summaries our chat bot can use to answer questions:
 
 :::js
 
-```
-"[{\"title\":\"Introduction to LangGraph: A Beginner's Guide - Medium\",\"url\":\"https://medium.com/@cplog/introduction-to-langgraph-a-beginners-guide-14f9be027141\",\"content\":\"Stateful Graph: LangGraph revolves around the concept of a stateful graph, where each node in the graph represents a step in your computation, and the graph maintains a state that is passed around and updated as the computation progresses. LangGraph supports conditional edges, allowing you to dynamically determine the next node to execute based on the current state of the graph. We define nodes for classifying the input, handling greetings, and handling search queries. def classify_input_node(state): LangGraph is a versatile tool for building complex, stateful applications with LLMs. By understanding its core concepts and working through simple examples, beginners can start to leverage its power for their projects. Remember to pay attention to state management, conditional edges, and ensuring there are no dead-end nodes in your graph.\",\"score\":0.7065353,\"raw_content\":null},{\"title\":\"LangGraph Tutorial: What Is LangGraph and How to Use It?\",\"url\":\"https://www.datacamp.com/tutorial/langgraph-tutorial\",\"content\":\"LangGraph is a library within the LangChain ecosystem that provides a framework for defining, coordinating, and executing multiple LLM agents (or chains) in a structured and efficient manner. By managing the flow of data and the sequence of operations, LangGraph allows developers to focus on the high-level logic of their applications rather than the intricacies of agent coordination. Whether you need a chatbot that can handle various types of user requests or a multi-agent system that performs complex tasks, LangGraph provides the tools to build exactly what you need. LangGraph significantly simplifies the development of complex LLM applications by providing a structured framework for managing state and coordinating agent interactions.\",\"score\":0.5008063,\"raw_content\":null}]"
+```json
+{
+  "query": "What's a 'node' in LangGraph?",
+  "follow_up_questions": null,
+  "answer": null,
+  "images": [],
+  "results": [
+    {
+      "url": "https://blog.langchain.dev/langgraph/",
+      "title": "LangGraph - LangChain Blog",
+      "content": "TL;DR: LangGraph is module built on top of LangChain to better enable creation of cyclical graphs, often needed for agent runtimes. This state is updated by nodes in the graph, which return operations to attributes of this state (in the form of a key-value store). After adding nodes, you can then add edges to create the graph. An example of this may be in the basic agent runtime, where we always want the model to be called after we call a tool. The state of this graph by default contains concepts that should be familiar to you if you've used LangChain agents: `input`, `chat_history`, `intermediate_steps` (and `agent_outcome` to represent the most recent agent outcome)",
+      "score": 0.7407191,
+      "raw_content": null
+    },
+    {
+      "url": "https://medium.com/@cplog/introduction-to-langgraph-a-beginners-guide-14f9be027141",
+      "title": "Introduction to LangGraph: A Beginner's Guide - Medium",
+      "content": "*   **Stateful Graph:** LangGraph revolves around the concept of a stateful graph, where each node in the graph represents a step in your computation, and the graph maintains a state that is passed around and updated as the computation progresses. LangGraph supports conditional edges, allowing you to dynamically determine the next node to execute based on the current state of the graph. Image 10: Introduction to AI Agent with LangChain and LangGraph: A Beginner’s Guide Image 18: How to build LLM Agent with LangGraph — StateGraph and Reducer Image 20: Simplest Graphs using LangGraph Framework Image 24: Building a ReAct Agent with Langgraph: A Step-by-Step Guide Image 28: Building an Agentic RAG with LangGraph: A Step-by-Step Guide",
+      "score": 0.65279555,
+      "raw_content": null
+    }
+  ],
+  "response_time": 1.34
+}
 ```
 
 :::
@@ -174,9 +196,9 @@ llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
 :::js
 
 ```typescript
-import { ChatOpenAI } from "@langchain/openai";
+import { ChatAnthropic } from "@langchain/anthropic";
 
-const llm = new ChatOpenAI({ model: "gpt-4o-mini" });
+const llm = new ChatAnthropic({ model: "claude-3-5-sonnet-latest" });
 ```
 
 :::
@@ -212,35 +234,27 @@ graph_builder.add_node("chatbot", chatbot)
 
 :::js
 
-```typescript
-import { Annotation } from "@langchain/langgraph";
-import { BaseMessage } from "@langchain/core/messages";
+```typescript hl_lines="7-8"
+import { StateGraph, MessagesZodState } from "@langchain/langgraph";
+import { z } from "zod";
 
-const StateAnnotation = Annotation.Root({
-  messages: Annotation<BaseMessage[]>({
-    reducer: (x, y) => x.concat(y),
-  }),
-});
+const State = z.object({ messages: MessagesZodState.shape.messages });
 
-const graphBuilder = new StateGraph(StateAnnotation);
+const chatbot = async (state: z.infer<typeof State>) => {
+  // Modification: tell the LLM which tools it can call
+  const llmWithTools = llm.bindTools(tools);
 
-// Modification: tell the LLM which tools it can call
-const llmWithTools = llm.bindTools(tools);
-
-const chatbot = async (state: typeof StateAnnotation.State) => {
   return { messages: [await llmWithTools.invoke(state.messages)] };
 };
-
-graphBuilder.addNode("chatbot", chatbot);
 ```
 
 :::
 
 ## 5. Create a function to run the tools
 
-Now, create a function to run the tools if they are called. Do this by adding the tools to a new node called`BasicToolNode` that checks the most recent message in the state and calls tools if the message contains `tool_calls`. It relies on the LLM's `tool_calling` support, which is available in Anthropic, OpenAI, Google Gemini, and a number of other LLM providers.
-
 :::python
+
+Now, create a function to run the tools if they are called. Do this by adding the tools to a new node called `BasicToolNode` that checks the most recent message in the state and calls tools if the message contains `tool_calls`. It relies on the LLM's `tool_calling` support, which is available in Anthropic, OpenAI, Google Gemini, and a number of other LLM providers.
 
 ```python
 import json
@@ -278,62 +292,65 @@ tool_node = BasicToolNode(tools=[tool])
 graph_builder.add_node("tools", tool_node)
 ```
 
+!!! note
+
+    If you do not want to build this yourself in the future, you can use LangGraph's prebuilt [ToolNode](https://langchain-ai.github.io/langgraph/reference/agents/#langgraph.prebuilt.tool_node.ToolNode).
+
 :::
 
 :::js
 
+Now, create a function to run the tools if they are called. Do this by adding the tools to a new node called `"tools"` that checks the most recent message in the state and calls tools if the message contains `tool_calls`. It relies on the LLM's tool calling support, which is available in Anthropic, OpenAI, Google Gemini, and a number of other LLM providers.
+
 ```typescript
-import { ToolMessage } from "@langchain/core/messages";
-import { isAIMessage } from "@langchain/core/messages";
+import type { StructuredToolInterface } from "@langchain/core/tools";
+import { isAIMessage, ToolMessage } from "@langchain/core/messages";
 
-class BasicToolNode {
-  private toolsByName: Record<string, any>;
-
-  constructor(tools: any[]) {
-    this.toolsByName = {};
-    for (const tool of tools) {
-      this.toolsByName[tool.name] = tool;
-    }
+function createToolNode(tools: StructuredToolInterface[]) {
+  const toolByName: Record<string, StructuredToolInterface> = {};
+  for (const tool of tools) {
+    toolByName[tool.name] = tool;
   }
 
-  async invoke(inputs: Record<string, any>) {
+  return async (inputs: z.infer<typeof State>) => {
     const { messages } = inputs;
     if (!messages || messages.length === 0) {
       throw new Error("No message found in input");
     }
 
-    const message = messages[messages.length - 1];
-
-    if (!isAIMessage(message) || !message.tool_calls) {
+    const message = messages.at(-1);
+    if (!message || !isAIMessage(message) || !message.tool_calls) {
       throw new Error("Last message is not an AI message with tool calls");
     }
 
-    const outputs = [];
+    const outputs: ToolMessage[] = [];
     for (const toolCall of message.tool_calls) {
-      const toolResult = await this.toolsByName[toolCall.name].invoke(
-        toolCall.args
-      );
+      if (!toolCall.id) throw new Error("Tool call ID is required");
+
+      const tool = toolByName[toolCall.name];
+      if (!tool) throw new Error(`Tool ${toolCall.name} not found`);
+
+      const result = await tool.invoke(toolCall.args);
+
       outputs.push(
         new ToolMessage({
-          content: JSON.stringify(toolResult),
+          content: JSON.stringify(result),
           name: toolCall.name,
           tool_call_id: toolCall.id,
         })
       );
     }
+
     return { messages: outputs };
-  }
+  };
 }
-
-const toolNode = new BasicToolNode([tool]);
-graphBuilder.addNode("tools", toolNode.invoke.bind(toolNode));
 ```
-
-:::
 
 !!! note
 
-    If you do not want to build this yourself in the future, you can use LangGraph's prebuilt [ToolNode](https://langchain-ai.github.io/langgraph/reference/agents/#langgraph.prebuilt.tool_node.ToolNode).
+    If you do not want to build this yourself in the future, you can use LangGraph's prebuilt [ToolNode](https://langchain-ai.github.io/langgraphjs/reference/classes/langgraph_prebuilt.ToolNode.html).
+
+:::
 
 ## 6. Define the `conditional_edges`
 
@@ -390,6 +407,10 @@ graph_builder.add_edge(START, "chatbot")
 graph = graph_builder.compile()
 ```
 
+!!! note
+
+    You can replace this with the prebuilt [tools_condition](https://langchain-ai.github.io/langgraph/reference/prebuilt/#tools_condition) to be more concise.
+
 :::
 
 :::js
@@ -397,45 +418,48 @@ graph = graph_builder.compile()
 ```typescript
 import { END, START } from "@langchain/langgraph";
 
-const routeTools = (state: typeof StateAnnotation.State) => {
+const routeTools = (state: z.infer<typeof State>) => {
   /**
-   * Use in the conditional_edge to route to the ToolNode if the last message
-   * has tool calls. Otherwise, route to the end.
+   * Use as conditional edge to route to the ToolNode if the last message
+   * has tool calls.
    */
-  const { messages } = state;
-  const lastMessage = messages[messages.length - 1];
-
-  if (isAIMessage(lastMessage) && lastMessage.tool_calls?.length) {
+  const lastMessage = state.messages.at(-1);
+  if (
+    lastMessage &&
+    isAIMessage(lastMessage) &&
+    lastMessage.tool_calls?.length
+  ) {
     return "tools";
   }
+
+  /** Otherwise, route to the end. */
   return END;
 };
 
-// The `routeTools` function returns "tools" if the chatbot asks to use a tool, and "END" if
-// it is fine directly responding. This conditional routing defines the main agent loop.
-graphBuilder.addConditionalEdges(
-  "chatbot",
-  routeTools,
-  // The following dictionary lets you tell the graph to interpret the condition's outputs as a specific node
-  // It defaults to the identity function, but if you
-  // want to use a node named something else apart from "tools",
-  // You can update the value of the dictionary to something else
-  // e.g., "tools": "my_tools"
-  { tools: "tools", [END]: END }
-);
+const graph = new StateGraph(State)
+  .addNode("chatbot", chatbot)
 
-// Any time a tool is called, we return to the chatbot to decide the next step
-graphBuilder.addEdge("tools", "chatbot");
-graphBuilder.addEdge(START, "chatbot");
+  // The `routeTools` function returns "tools" if the chatbot asks to use a tool, and "END" if
+  // it is fine directly responding. This conditional routing defines the main agent loop.
+  .addNode("tools", createToolNode(tools))
 
-const graph = graphBuilder.compile();
+  // Start the graph with the chatbot
+  .addEdge(START, "chatbot")
+
+  // The `routeTools` function returns "tools" if the chatbot asks to use a tool, and "END" if
+  // it is fine directly responding.
+  .addConditionalEdges("chatbot", routeTools, ["tools", END])
+
+  // Any time a tool is called, we need to return to the chatbot
+  .addEdge("tools", "chatbot")
+  .compile();
 ```
-
-:::
 
 !!! note
 
-    You can replace this with the prebuilt [tools_condition](https://langchain-ai.github.io/langgraph/reference/prebuilt/#tools_condition) to be more concise.
+    You can replace this with the prebuilt [toolsCondition](https://langchain-ai.github.io/langgraphjs/reference/functions/langgraph_prebuilt.toolsCondition.html) to be more concise.
+
+:::
 
 ## 7. Visualize the graph (optional)
 
@@ -452,27 +476,24 @@ except Exception:
     pass
 ```
 
-![chatbot-with-tools-diagram](chatbot-with-tools.png)
 :::
 
 :::js
-You can visualize the graph using the `getGraph` method and one of the "draw" methods, like `drawAscii` or `drawMermaidPng`. The `draw` methods each require additional dependencies.
+You can visualize the graph using the `getGraph` method and render the graph with the `drawMermaidPng` method.
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-try {
-  const graphRepresentation = graph.getGraph();
-  const image = await graphRepresentation.drawMermaidPng();
-  const arrayBuffer = await image.arrayBuffer();
-  await tslab.display.png(new Uint8Array(arrayBuffer));
-} catch (error) {
-  // This requires some extra dependencies and is optional
-  console.log("Could not render graph");
-}
+const drawableGraph = await graph.getGraphAsync();
+const image = await drawableGraph.drawMermaidPng();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
+
+await fs.writeFile("chatbot-with-tools.png", imageBuffer);
 ```
 
 :::
+
+![chatbot-with-tools-diagram](chatbot-with-tools.png)
 
 ## 8. Ask the bot questions
 
@@ -533,7 +554,6 @@ Assistant: Based on the search results, I can provide you with information about
 
 LangGraph appears to be a significant tool in the evolving landscape of LLM-based application development, offering developers new ways to create more complex, stateful, and interactive AI systems.
 Goodbye!
-Output is truncated. View as a scrollable element or open in a text editor. Adjust cell output settings...
 ```
 
 :::
@@ -541,24 +561,35 @@ Output is truncated. View as a scrollable element or open in a text editor. Adju
 :::js
 
 ```typescript
-import { HumanMessage } from "@langchain/core/messages";
+import readline from "node:readline/promises";
 
-const streamGraphUpdates = async (userInput: string) => {
+const prompt = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
+
+async function generateText(content: string) {
   const stream = await graph.stream(
-    { messages: [new HumanMessage(userInput)] },
+    { messages: [{ type: "human", content }] },
     { streamMode: "values" }
   );
 
   for await (const event of stream) {
-    const lastMessage = event.messages[event.messages.length - 1];
-    console.log("Assistant:", lastMessage.content);
-  }
-};
+    const lastMessage = event.messages.at(-1);
 
-// Example usage
-const userInput = "What do you know about LangGraph?";
-console.log("User:", userInput);
-await streamGraphUpdates(userInput);
+    if (lastMessage?.getType() === "ai" || lastMessage?.getType() === "tool") {
+      console.log(`Assistant: ${lastMessage?.text}`);
+    }
+  }
+}
+
+while (true) {
+  const human = await prompt.question("User: ");
+  if (["quit", "exit", "q"].includes(human.trim())) break;
+  await generateText(human || "What do you know about LangGraph?");
+}
+
+prompt.close();
 ```
 
 ```
@@ -609,6 +640,14 @@ For ease of use, adjust your code to replace the following with LangGraph prebui
 
 {% include-markdown "../../../snippets/chat_model_tabs.md" %}
 
+<!---
+```python
+from langchain.chat_models import init_chat_model
+
+llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
+```
+-->
+
 ```python hl_lines="25 30"
 from typing import Annotated
 
@@ -651,8 +690,8 @@ graph = graph_builder.compile()
 
 :::js
 
-- `BasicToolNode` is replaced with the prebuilt [ToolNode](https://langchain-ai.github.io/langgraph/reference/prebuilt/#toolnode)
-- `routeTools` is replaced with the prebuilt [tools_condition](https://langchain-ai.github.io/langgraph/reference/prebuilt/#tools_condition)
+- `createToolNode` is replaced with the prebuilt [ToolNode](https://langchain-ai.github.io/langgraphjs/reference/classes/langgraph_prebuilt.ToolNode.html)
+- `routeTools` is replaced with the prebuilt [toolsCondition](https://langchain-ai.github.io/langgraphjs/reference/functions/langgraph_prebuilt.toolsCondition.html)
 
 ```typescript
 import { TavilySearch } from "@langchain/tavily";
@@ -661,21 +700,18 @@ import { StateGraph, START, MessagesZodState, END } from "@langchain/langgraph";
 import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
 import { z } from "zod";
 
-const State = z.object({
-  messages: MessagesZodState.shape.messages,
-});
+const State = z.object({ messages: MessagesZodState.shape.messages });
 
 const tools = [new TavilySearch({ maxResults: 2 })];
 
 const llm = new ChatOpenAI({ model: "gpt-4o-mini" }).bindTools(tools);
 
 const graph = new StateGraph(State)
-  .addNode("chatbot", async (state: z.infer<typeof State>) => {
-    return { messages: [await llm.invoke(state.messages)] };
-  })
+  .addNode("chatbot", async (state) => ({
+    messages: [await llm.invoke(state.messages)],
+  }))
   .addNode("tools", new ToolNode(tools))
   .addConditionalEdges("chatbot", toolsCondition, ["tools", END])
-  // Any time a tool is called, we return to the chatbot to decide the next step
   .addEdge("tools", "chatbot")
   .addEdge(START, "chatbot")
   .compile();
@@ -683,7 +719,13 @@ const graph = new StateGraph(State)
 
 :::
 
-**Congratulations!** You've created a conversational agent in LangGraph that can use a search engine to retrieve updated information when needed. Now it can handle a wider range of user queries. :::python To inspect all the steps your agent just took, check out this [LangSmith trace](https://smith.langchain.com/public/4fbd7636-25af-4638-9587-5a02fdbb0172/r). :::
+**Congratulations!** You've created a conversational agent in LangGraph that can use a search engine to retrieve updated information when needed. Now it can handle a wider range of user queries.
+
+:::python
+
+To inspect all the steps your agent just took, check out this [LangSmith trace](https://smith.langchain.com/public/4fbd7636-25af-4638-9587-5a02fdbb0172/r).
+
+:::
 
 ## Next steps
 
