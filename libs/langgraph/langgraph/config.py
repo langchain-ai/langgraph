@@ -17,12 +17,16 @@ def _no_op_stream_writer(c: Any) -> None:
 def get_config() -> RunnableConfig:
     if sys.version_info < (3, 11):
         try:
-            if asyncio.current_task():
-                raise RuntimeError(
-                    "Python 3.11 or later required to use this in an async context"
-                )
+            current_task = asyncio.current_task()
         except RuntimeError:
-            pass
+            # No event loop is running, so we're in sync context
+            current_task = None
+        
+        if current_task is not None:
+            raise RuntimeError(
+                "Python 3.11 or later required to use get_config in an async context"
+            )
+
     if var_config := var_child_runnable_config.get():
         return var_config
     else:
