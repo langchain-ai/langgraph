@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Generic, Protocol, Union
@@ -11,6 +12,8 @@ from langgraph.constants import EMPTY_SEQ
 from langgraph.store.base import BaseStore
 from langgraph.types import CachePolicy, RetryPolicy, StreamWriter
 from langgraph.typing import NodeInputT, NodeInputT_contra
+
+_DC_SLOTS = {"slots": True} if sys.version_info >= (3, 10) else {}
 
 
 class _Node(Protocol[NodeInputT_contra]):
@@ -74,7 +77,7 @@ StateNode: TypeAlias = Union[
 ]
 
 
-@dataclass
+@dataclass(**_DC_SLOTS)
 class StateNodeSpec(Generic[NodeInputT]):
     runnable: StateNode[NodeInputT]
     metadata: dict[str, Any] | None
