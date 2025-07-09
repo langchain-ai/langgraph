@@ -89,162 +89,157 @@ plugins:
                 - "!^_"
 
 nav:
-  - Guides:
+  - Get started:
     - index.md
-    - Get started:
-      - Quickstart: agents/agents.md
-      - LangGraph basics:
-        -  concepts/why-langgraph.md
-        -  Build a basic chatbot: tutorials/get-started/1-build-basic-chatbot.md
-        -  tutorials/get-started/2-add-tools.md
-        -  tutorials/get-started/3-add-memory.md
-        -  Add human-in-the-loop: tutorials/get-started/4-human-in-the-loop.md
-        -  tutorials/get-started/5-customize-state.md
-        -  tutorials/get-started/6-time-travel.md
-      - Deployment: tutorials/deployment.md
-    - Prebuilt agents:
-      - Overview: agents/overview.md
-      - agents/run_agents.md
-      - agents/streaming.md
-      - agents/models.md
-      - agents/tools.md
-      - agents/mcp.md
-      - agents/context.md
-      - agents/memory.md
-      - agents/human-in-the-loop.md
-      - agents/multi-agent.md
-      - agents/evals.md
-      - agents/deployment.md
-      - agents/ui.md
-    - LangGraph framework:
-      - Agent architectures:
-        - Overview: concepts/agentic_concepts.md
-        - Workflows & agents: tutorials/workflows.md
-      - Graphs:
-        - Overview: concepts/low_level.md
-        - Runtime overview: concepts/pregel.md
-        - Use the Graph API: how-tos/graph-api.ipynb
+    - Quickstarts:
+      - Start with a prebuilt agent: agents/agents.md
+      - Build a custom workflow:
+          -  concepts/why-langgraph.md
+          -  1. Build a basic chatbot: tutorials/get-started/1-build-basic-chatbot.md
+          -  2. Add tools: tutorials/get-started/2-add-tools.md
+          -  3. Add memory: tutorials/get-started/3-add-memory.md
+          -  4. Add human-in-the-loop: tutorials/get-started/4-human-in-the-loop.md
+          -  5. Customize state: tutorials/get-started/5-customize-state.md
+          -  6. Time travel: tutorials/get-started/6-time-travel.md
+      - Run a local server: tutorials/langgraph-platform/local-server.md
+    - Agent development:
+      - Workflows & agents: tutorials/workflows.md
+      - Prebuilt components: agents/overview.md
+      - Run an agent: agents/run_agents.md
+      - Agent architectures: concepts/agentic_concepts.md
+
+  - Guides:
+    - guides/index.md
+    - LangGraph APIs:
+      - Graph API:
+          - Overview: concepts/low_level.md
+          - Use the Graph API: how-tos/graph-api.md
+      - Functional API:
+          - Overview: concepts/functional_api.md
+          - Use the Functional API: how-tos/use-functional-api.md
+      - Runtime: concepts/pregel.md
+    - Core capabilities:
       - Streaming:
           - Overview: concepts/streaming.md
-          - "Stream outputs": how-tos/streaming.md
+          - Stream outputs: how-tos/streaming.md
+          - Use Server API: cloud/how-tos/streaming.md
       - Persistence:
-        - Overview: concepts/persistence.md
-        - concepts/durable_execution.md
-        - how-tos/persistence.ipynb
+          - Overview: concepts/persistence.md
+      - Durable execution:
+          - Overview: concepts/durable_execution.md
       - Memory:
-        - Overview: concepts/memory.md
-        - Manage memory: how-tos/memory.ipynb
-      - Human-in-the-loop:
-        - Overview: concepts/human_in_the_loop.md
-        - how-tos/human_in_the_loop/add-human-in-the-loop.md
-      - Breakpoints:
-        - Overview: concepts/breakpoints.md
-        - how-tos/human_in_the_loop/breakpoints.ipynb
-      - Time travel:
-        - Overview: concepts/time-travel.md
-        - how-tos/human_in_the_loop/time-travel.ipynb
+          - Overview: concepts/memory.md
+          - Add memory: how-tos/memory/add-memory.md
+      - Context:
+          - Add context: agents/context.md
+      - Models:
+          - Configure model: agents/models.md
       - Tools:
-        - Overview: concepts/tools.md
-        - how-tos/tool-calling.ipynb
+          - Overview: concepts/tools.md
+          - Call tools: how-tos/tool-calling.md
+      - Human-in-the-loop:
+          - Overview: concepts/human_in_the_loop.md
+          - Add human intervention: how-tos/human_in_the_loop/add-human-in-the-loop.md
+          - Use Server API: cloud/how-tos/add-human-in-the-loop.md
+      - Breakpoints:
+          - Overview: concepts/breakpoints.md
+          - Set breakpoints: how-tos/human_in_the_loop/breakpoints.md
+          - Use Server API: cloud/how-tos/human_in_the_loop_breakpoint.md
+      - Time travel:
+          - Overview: concepts/time-travel.md
+          - Use time travel: how-tos/human_in_the_loop/time-travel.md
+          - Use Server API: cloud/how-tos/human_in_the_loop_time_travel.md
       - Subgraphs:
-        - Overview: concepts/subgraphs.md
-        - how-tos/subgraph.ipynb
+          - Overview: concepts/subgraphs.md
+          - Use subgraphs: how-tos/subgraph.md
       - Multi-agent:
-        - Overview: concepts/multi_agent.md
-        - how-tos/multi_agent.ipynb
-      - Functional API:
-        - Overview: concepts/functional_api.md
-        - how-tos/use-functional-api.md
-
-    - LangGraph Platform:
-      - Overview: concepts/langgraph_platform.md
-      - Get started:
-        - Quickstart: tutorials/langgraph-platform/local-server.md
-        - Deployment quickstart: cloud/quick_start.md
-      - Components:
-        - Overview: concepts/langgraph_components.md
-        - LangGraph Server:
-          - Overview: concepts/langgraph_server.md
-          - Application structure:
-            - Overview: concepts/application_structure.md
-            - cloud/deployment/setup.md
-            - cloud/deployment/setup_pyproject.md
-            - cloud/deployment/setup_javascript.md
-            - cloud/deployment/custom_docker.md
-        - LangGraph CLI: concepts/langgraph_cli.md
-        - LangGraph Studio:
-          - Overview: concepts/langgraph_studio.md
-          - Quickstart: cloud/how-tos/studio/quick_start.md
-          - cloud/how-tos/invoke_studio.md
-          - cloud/how-tos/studio/manage_assistants.md
-          - cloud/how-tos/threads_studio.md
-          - cloud/how-tos/iterate_graph_studio.md
-          - cloud/how-tos/clone_traces_studio.md
-          - cloud/how-tos/datasets_studio.md
-        - LangGraph SDK: concepts/sdk.md
+          - Overview: concepts/multi_agent.md
+          - Prebuilt implementation: agents/multi-agent.md
+          - Custom implementation: how-tos/multi_agent.md
+      - MCP:
+          - Overview: concepts/mcp.md
+          - Use MCP: agents/mcp.md
+          - Server API: concepts/server-mcp.md
+      - Evaluation:
+          - Basic implementation: agents/evals.md
+    - Platform-only capabilities:
+      - LangGraph Platform:
+          - Overview: concepts/langgraph_platform.md
+          - Components:
+            - Overview: concepts/langgraph_components.md
+            - LangGraph Server:
+              - Overview: concepts/langgraph_server.md
+              - Data plane: concepts/langgraph_data_plane.md
+              - Control plane: concepts/langgraph_control_plane.md
+            - LangGraph CLI: concepts/langgraph_cli.md
+            - LangGraph Studio: 
+              - Overview: concepts/langgraph_studio.md
+              - Quickstart: cloud/how-tos/studio/quick_start.md
+              - cloud/how-tos/invoke_studio.md
+              - cloud/how-tos/studio/manage_assistants.md
+              - cloud/how-tos/threads_studio.md
+              - cloud/how-tos/iterate_graph_studio.md
+              - cloud/how-tos/studio/run_evals.md
+              - cloud/how-tos/clone_traces_studio.md
+              - cloud/how-tos/datasets_studio.md
+            - LangGraph SDK: concepts/sdk.md
+          - Plans & pricing: concepts/plans.md
+          - Application structure: concepts/application_structure.md
+          - Scalability & resilience: concepts/scalability_and_resilience.md
+      - Authentication & access control:
+          - Overview: concepts/auth.md
+          - how-tos/auth/custom_auth.md
+          - how-tos/auth/openapi_security.md
+      - Assistants:
+          - Overview: concepts/assistants.md
+          - cloud/how-tos/configuration_cloud.md
+          - Threads: cloud/how-tos/use_threads.md
+          - Runs:
+            - cloud/how-tos/background_run.md
+            - cloud/how-tos/same-thread.md
+            - cloud/how-tos/cron_jobs.md
+            - cloud/how-tos/stateless_runs.md
+            - cloud/how-tos/configurable_headers.md
+      - Double-texting: 
+          - Overview: concepts/double_texting.md
+          - cloud/how-tos/interrupt_concurrent.md
+          - cloud/how-tos/rollback_concurrent.md
+          - cloud/how-tos/reject_concurrent.md
+          - cloud/how-tos/enqueue_concurrent.md
+      - Webhooks:
+          - Overview: cloud/concepts/webhooks.md
+          - Use webhooks: cloud/how-tos/webhooks.md
+      - Cron jobs:
+          - Overview: cloud/concepts/cron_jobs.md
+          - cloud/how-tos/cron_jobs.md
+      - Server customization:
+          - how-tos/http/custom_lifespan.md
+          - how-tos/http/custom_middleware.md
+          - how-tos/http/custom_routes.md
       - Data management:
+        - cloud/concepts/data_storage_and_privacy.md
         - Add semantic search: cloud/deployment/semantic_search.md
         - Add TTLs: how-tos/ttl/configure_ttl.md
-      - Authentication & access control:
-        - Overview: concepts/auth.md
-        - how-tos/auth/custom_auth.md
-        - how-tos/auth/openapi_security.md
-      - Assistants:
-        - Overview: concepts/assistants.md
-        - cloud/how-tos/configuration_cloud.md
-      - Threads:
-        - Overview: cloud/concepts/threads.md
-        - cloud/how-tos/use_threads.md
-      - Runs:
-        - Overview: cloud/concepts/runs.md
-        - cloud/how-tos/background_run.md
-        - cloud/how-tos/same-thread.md
-        - cloud/how-tos/cron_jobs.md
-        - cloud/how-tos/stateless_runs.md
-        - cloud/how-tos/configurable_headers.md
-      - Streaming:
-        - Overview: cloud/concepts/streaming.md
-        - cloud/how-tos/streaming.md
-      - Human-in-the-loop: cloud/how-tos/add-human-in-the-loop.md
-      - Breakpoints: cloud/how-tos/human_in_the_loop_breakpoint.md
-      - Time travel: cloud/how-tos/human_in_the_loop_time_travel.md
-      - MCP: concepts/server-mcp.md
-      - Double-texting:
-        - Overview: concepts/double_texting.md
-        - cloud/how-tos/interrupt_concurrent.md
-        - cloud/how-tos/rollback_concurrent.md
-        - cloud/how-tos/reject_concurrent.md
-        - cloud/how-tos/enqueue_concurrent.md
-      - Webhooks:
-        - Overview: cloud/concepts/webhooks.md
-        - cloud/how-tos/webhooks.md
-      - Cron jobs:
-        - Overview: cloud/concepts/cron_jobs.md
-        - cloud/how-tos/cron_jobs.md
-      - Server customization:
-        - how-tos/http/custom_lifespan.md
-        - how-tos/http/custom_middleware.md
-        - how-tos/http/custom_routes.md
       - Deployment:
-        - Overview: concepts/deployment_options.md
-        - Data plane: concepts/langgraph_data_plane.md
-        - Control plane: concepts/langgraph_control_plane.md
-        - Deployment options:
-          - Cloud SaaS:
-            - Overview: concepts/langgraph_cloud.md
-            - Deploy Cloud SaaS: cloud/deployment/cloud.md
-          - Self-Hosted Data Plane:
-            - Overview: concepts/langgraph_self_hosted_data_plane.md
-            - Deploy Self-Hosted Data Plane: cloud/deployment/self_hosted_data_plane.md
-          - Self-Hosted Control Plane:
-            - Overview: concepts/langgraph_self_hosted_control_plane.md
-            - Deploy Self-Hosted Control Plane: cloud/deployment/self_hosted_control_plane.md
-          - Standalone Container:
-            - Overview: concepts/langgraph_standalone_container.md
-            - Deploy Standalone Container: cloud/deployment/standalone_container.md
-        - Scalability & resilience: concepts/scalability_and_resilience.md
-        - Plans & pricing: concepts/plans.md
-      
+          - Overview: concepts/deployment_options.md
+          - Quickstart: cloud/quick_start.md
+          - Set up your application:
+            - Use requirements.txt: cloud/deployment/setup.md
+            - Use pyproject.toml: cloud/deployment/setup_pyproject.md
+            - Use JavaScript: cloud/deployment/setup_javascript.md
+            - Use custom Docker: cloud/deployment/custom_docker.md
+            - Rebuild graph at runtime: cloud/deployment/graph_rebuild.md
+          - Deployment options:
+            - Cloud SaaS: concepts/langgraph_cloud.md
+            - Self-Hosted Data Plane: concepts/langgraph_self_hosted_data_plane.md
+            - Self-Hosted Control Plane: concepts/langgraph_self_hosted_control_plane.md
+            - Standalone Container: concepts/langgraph_standalone_container.md
+          - Deploy to production:
+            - Cloud SaaS: cloud/deployment/cloud.md
+            - Self-Hosted Data Plane: cloud/deployment/self_hosted_data_plane.md
+            - Self-Hosted Control Plane: cloud/deployment/self_hosted_control_plane.md
+            - Standalone Container: cloud/deployment/standalone_container.md
+
   - Reference:
     - reference/index.md
     - LangGraph:
@@ -266,35 +261,40 @@ nav:
       - MCP Adapters: reference/mcp.md
     - LangGraph Platform:
       - Server API: cloud/reference/api/api_ref.md
+      - Control Plane API: cloud/reference/api/api_ref_control_plane.md
       - CLI: cloud/reference/cli.md
       - SDK (Python): cloud/reference/sdk/python_sdk_ref.md
-      - SDK (JS/TS): cloud/reference/sdk/js_ts_sdk_ref.md
+      - SDK (JS/TS): https://langchain-ai.github.io/langgraphjs/reference/modules/sdk.html
       - RemoteGraph: reference/remote_graph.md
       - Environment variables: cloud/reference/env_var.md
 
   - Examples:
-    - Agentic RAG: tutorials/rag/langgraph_agentic_rag.ipynb
-    - Agent Supervisor: tutorials/multi_agent/agent_supervisor.ipynb
-    - SQL agent: tutorials/sql-agent.ipynb
-    - Graph runs in LangSmith: how-tos/run-id-langsmith.ipynb
+    - examples/index.md
+    - Template applications: concepts/template_applications.md  # TODO: make tutorial
+    - Agentic RAG: tutorials/rag/langgraph_agentic_rag.md
+    - Agent Supervisor: tutorials/multi_agent/agent_supervisor.md
+    - SQL agent: tutorials/sql/sql-agent.md
+    - Prebuilt chat UI: agents/ui.md
+    - Graph runs in LangSmith: how-tos/run-id-langsmith.md
     - LangGraph Platform:
       - Authentication:
         - tutorials/auth/getting_started.md
         - tutorials/auth/resource_auth.md
         - tutorials/auth/add_auth_server.md
-      - Rebuild graph at runtime: cloud/deployment/graph_rebuild.md
       - Use RemoteGraph: how-tos/use-remote-graph.md
-      - Deploy CrewAI, AutoGen, and other frameworks: how-tos/autogen-langgraph-platform.ipynb
-        # combine with how-tos/autogen-integration.ipynb
+      - Deploy CrewAI, AutoGen, and other frameworks: how-tos/autogen-integration.md
       - Front-end and generative UI:
         - Integrate LangGraph into a React app: cloud/how-tos/use_stream_react.md
         - Implement generative UI with LangGraph: cloud/how-tos/generative_ui_react.md
 
-  - Resources:
-    - concepts/faq.md
-    - Template applications: concepts/template_applications.md  # TODO: make tutorial
-    - llms.txt: llms-txt-overview.md
+  - Additional resources:
+    - additional-resources/index.md
     - agents/prebuilt.md # NOTE: prebuilt.md is auto-generated by `make build-prebuilt`
+    - LangGraph Academy course: https://academy.langchain.com/courses/intro-to-langgraph
+    - Case studies: adopters.md
+    - concepts/faq.md
+    - llms.txt: llms-txt-overview.md
+    - LangChain Forum: https://forum.langchain.com/
     - Troubleshooting:
         - Errors:
           - troubleshooting/errors/index.md
@@ -305,9 +305,7 @@ nav:
           - troubleshooting/errors/INVALID_CHAT_HISTORY.md
           - troubleshooting/errors/INVALID_LICENSE.md
         - LangGraph Studio: troubleshooting/studio.md
-    - Learn:
-      - LangGraph Academy course: https://academy.langchain.com/courses/intro-to-langgraph
-      - Case studies: adopters.md
+    
 
 markdown_extensions:
   - abbr
@@ -364,16 +362,6 @@ markdown_extensions:
 hooks:
   - _scripts/notebook_hooks.py
 extra:
-  consent:
-    title: Cookie consent
-    actions:
-      - accept
-      - reject
-    description: >- 
-      We use cookies to recognize your repeated visits and preferences, as well
-      as to measure the effectiveness of our documentation and whether users
-      find what they're searching for. <strong>Clicking "Accept" makes our
-      documentation better. Thank you!</strong> ❤️
   social:
     - icon: fontawesome/brands/js
       link: https://langchain-ai.github.io/langgraphjs/
@@ -393,7 +381,6 @@ validation:
 copyright: >
   Copyright &copy; 2025 LangChain, Inc | <a href="#__consent">Consent Preferences</a>
 extra_css:
-  - stylesheets/navigation_title_ovverides.css
   - stylesheets/version_admonitions.css
   - stylesheets/logos.css
   - stylesheets/sticky_navigation.css

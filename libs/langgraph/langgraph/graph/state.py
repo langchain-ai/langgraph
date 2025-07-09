@@ -25,8 +25,8 @@ from typing import (
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
-from pydantic import BaseModel
-from typing_extensions import Self, TypeAlias, Unpack
+from pydantic import BaseModel, TypeAdapter
+from typing_extensions import Self, TypeAlias, Unpack, is_typeddict
 
 from langgraph._typing import UNSET, DeprecatedKwargs
 from langgraph.cache.base import BaseCache
@@ -86,7 +86,7 @@ from langgraph.utils.fields import (
 )
 from langgraph.utils.pydantic import create_model
 from langgraph.utils.runnable import coerce_to_runnable
-from langgraph.warnings import LangGraphDeprecatedSinceV10
+from langgraph.warnings import LangGraphDeprecatedSinceV05
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +160,7 @@ StateNode: TypeAlias = Union[
     _NodeWithConfigWriter[StateT_contra],
     _NodeWithConfigStore[StateT_contra],
     _NodeWithConfigWriterStore[StateT_contra],
+    Runnable[StateT_contra, Any],
 ]
 
 
@@ -261,7 +262,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
         if (input_ := kwargs.get("input", UNSET)) is not UNSET:
             warnings.warn(
                 "`input` is deprecated and will be removed. Please use `input_schema` instead.",
-                category=LangGraphDeprecatedSinceV10,
+                category=LangGraphDeprecatedSinceV05,
                 stacklevel=2,
             )
             if input_schema is None:
@@ -270,7 +271,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
         if (output := kwargs.get("output", UNSET)) is not UNSET:
             warnings.warn(
                 "`output` is deprecated and will be removed. Please use `output_schema` instead.",
-                category=LangGraphDeprecatedSinceV10,
+                category=LangGraphDeprecatedSinceV05,
                 stacklevel=2,
             )
             if output_schema is None:
@@ -436,7 +437,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
         if (retry := kwargs.get("retry", UNSET)) is not UNSET:
             warnings.warn(
                 "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
-                category=LangGraphDeprecatedSinceV10,
+                category=LangGraphDeprecatedSinceV05,
             )
             if retry_policy is None:
                 retry_policy = retry  # type: ignore[assignment]
@@ -444,7 +445,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
         if (input_ := kwargs.get("input", UNSET)) is not UNSET:
             warnings.warn(
                 "`input` is deprecated and will be removed. Please use `input_schema` instead.",
-                category=LangGraphDeprecatedSinceV10,
+                category=LangGraphDeprecatedSinceV05,
             )
             if input_schema is None:
                 input_schema = cast(Union[type[InputT], None], input_)
@@ -535,7 +536,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
         if input_schema is not None:
             self._add_schema(input_schema)
         self.nodes[node] = StateNodeSpec(
-            coerce_to_runnable(action, name=node, trace=False),  # type: ignore
+            coerce_to_runnable(action, name=node, trace=False),
             metadata,
             input=input_schema or self.state_schema,
             retry_policy=retry_policy,
@@ -903,18 +904,20 @@ class CompiledStateGraph(
         self.builder = builder
         self.schema_to_mapper = schema_to_mapper
 
-    def get_input_schema(self, config: RunnableConfig | None = None) -> type[BaseModel]:
-        return _get_schema(
+    def get_input_jsonschema(
+        self, config: RunnableConfig | None = None
+    ) -> dict[str, Any]:
+        return _get_json_schema(
             typ=self.builder.input_schema,
             schemas=self.builder.schemas,
             channels=self.builder.channels,
             name=self.get_name("Input"),
         )
 
-    def get_output_schema(
+    def get_output_jsonschema(
         self, config: RunnableConfig | None = None
-    ) -> type[BaseModel]:
-        return _get_schema(
+    ) -> dict[str, Any]:
+        return _get_json_schema(
             typ=self.builder.output_schema,
             schemas=self.builder.schemas,
             channels=self.builder.channels,
@@ -1101,6 +1104,7 @@ class CompiledStateGraph(
 
     def _migrate_checkpoint(self, checkpoint: Checkpoint) -> None:
         """Migrate a checkpoint to new channel layout."""
+        super()._migrate_checkpoint(checkpoint)
 
         values = checkpoint["channel_values"]
         versions = checkpoint["channel_versions"]
@@ -1380,21 +1384,23 @@ def _is_field_managed_value(name: str, typ: type[Any]) -> ManagedValueSpec | Non
     return None
 
 
-def _get_schema(
+def _get_json_schema(
     typ: type,
     schemas: dict,
     channels: dict,
     name: str,
-) -> type[BaseModel]:
+) -> dict[str, Any]:
     if isclass(typ) and issubclass(typ, BaseModel):
-        return typ
+        return typ.model_json_schema()
+    elif is_typeddict(typ):
+        return TypeAdapter(typ).json_schema()
     else:
         keys = list(schemas[typ].keys())
         if len(keys) == 1 and keys[0] == "__root__":
             return create_model(
                 name,
                 root=(channels[keys[0]].UpdateType, None),
-            )
+            ).model_json_schema()
         else:
             return create_model(
                 name,
@@ -1412,7 +1418,7 @@ def _get_schema(
                     for k in schemas[typ]
                     if k in channels and isinstance(channels[k], BaseChannel)
                 },
-            )
+            ).model_json_schema()
 
 
 CHANNEL_BRANCH_TO = "branch:to:{}"

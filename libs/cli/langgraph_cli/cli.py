@@ -208,7 +208,7 @@ def up(
 ):
     click.secho("Starting LangGraph API server...", fg="green")
     click.secho(
-        """For local dev, requires env var LANGSMITH_API_KEY with access to LangGraph Platform closed beta.
+        """For local dev, requires env var LANGSMITH_API_KEY with access to LangGraph Platform.
 For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KEY.""",
     )
     with Runner() as runner, Progress(message="Pulling...") as set:

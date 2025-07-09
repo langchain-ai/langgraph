@@ -52,7 +52,7 @@ agent.invoke(
 )
 ```
 
-1. Define a tool for the agent to use. Tools can be defined as vanilla Python functions. For more advanced tool usage and customization, check the [tools](./tools.md) page.
+1. Define a tool for the agent to use. Tools can be defined as vanilla Python functions. For more advanced tool usage and customization, check the [tools](../how-tos/tool-calling.md) page.
 2. Provide a language model for the agent to use. To learn more about configuring language models for the agents, check the [models](./models.md) page.
 3. Provide a list of tools for the model to use.
 4. Provide a system prompt (instructions) to the language model used by the agent.
@@ -180,14 +180,14 @@ ny_response = agent.invoke(
 )
 ```
 
-1. `checkpointer` allows the agent to store its state at every step in the tool calling loop. This enables [short-term memory](./memory.md#short-term-memory) and [human-in-the-loop](./human-in-the-loop.md) capabilities.
+1. `checkpointer` allows the agent to store its state at every step in the tool calling loop. This enables [short-term memory](../how-tos/memory/add-memory.md#add-short-term-memory) and [human-in-the-loop](../concepts/human_in_the_loop.md) capabilities.
 2. Pass configuration with `thread_id` to be able to resume the same conversation on future agent invocations.
 
 When you enable the checkpointer, it stores agent state at every step in the provided checkpointer database (or in memory, if using `InMemorySaver`).
 
 Note that in the above example, when the agent is invoked the second time with the same `thread_id`, the original message history from the first conversation is automatically included, together with the new user input.
 
-For more information, see [Memory](./memory.md).
+For more information, see [Memory](../how-tos/memory/add-memory.md).
 
 ## 6. Configure structured output
 

@@ -119,7 +119,6 @@ async def test_invoke_two_processes_in_out_interrupt(
                 "parents": {},
                 "source": "loop",
                 "step": 6,
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[1].config,
@@ -140,7 +139,6 @@ async def test_invoke_two_processes_in_out_interrupt(
                 "parents": {},
                 "source": "loop",
                 "step": 5,
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[2].config,
@@ -161,7 +159,6 @@ async def test_invoke_two_processes_in_out_interrupt(
                 "parents": {},
                 "source": "input",
                 "step": 4,
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[3].config,
@@ -182,7 +179,6 @@ async def test_invoke_two_processes_in_out_interrupt(
                 "parents": {},
                 "source": "loop",
                 "step": 3,
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[4].config,
@@ -203,7 +199,6 @@ async def test_invoke_two_processes_in_out_interrupt(
                 "parents": {},
                 "source": "input",
                 "step": 2,
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[5].config,
@@ -224,7 +219,6 @@ async def test_invoke_two_processes_in_out_interrupt(
                 "parents": {},
                 "source": "loop",
                 "step": 1,
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[6].config,
@@ -245,7 +239,6 @@ async def test_invoke_two_processes_in_out_interrupt(
                 "parents": {},
                 "source": "loop",
                 "step": 0,
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[7].config,
@@ -266,7 +259,6 @@ async def test_invoke_two_processes_in_out_interrupt(
                 "parents": {},
                 "source": "input",
                 "step": -1,
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -342,7 +334,6 @@ async def test_fork_always_re_runs_nodes(
                 "parents": {},
                 "source": "loop",
                 "step": 5,
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[1].config,
@@ -363,7 +354,6 @@ async def test_fork_always_re_runs_nodes(
                 "parents": {},
                 "source": "loop",
                 "step": 4,
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[2].config,
@@ -384,7 +374,6 @@ async def test_fork_always_re_runs_nodes(
                 "parents": {},
                 "source": "loop",
                 "step": 3,
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[3].config,
@@ -405,7 +394,6 @@ async def test_fork_always_re_runs_nodes(
                 "parents": {},
                 "source": "loop",
                 "step": 2,
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[4].config,
@@ -426,7 +414,6 @@ async def test_fork_always_re_runs_nodes(
                 "parents": {},
                 "source": "loop",
                 "step": 1,
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[5].config,
@@ -447,7 +434,6 @@ async def test_fork_always_re_runs_nodes(
                 "parents": {},
                 "source": "loop",
                 "step": 0,
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=history[6].config,
@@ -468,7 +454,6 @@ async def test_fork_always_re_runs_nodes(
                 "parents": {},
                 "source": "input",
                 "step": -1,
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -698,7 +683,7 @@ async def test_conditional_graph_state(async_checkpointer: BaseCheckpointSaver) 
     assert [
         c
         async for c in app_w_interrupt.astream(
-            {"input": "what is weather in sf"}, config
+            {"input": "what is weather in sf"}, config, checkpoint_during=False
         )
     ] == [
         {
@@ -736,7 +721,6 @@ async def test_conditional_graph_state(async_checkpointer: BaseCheckpointSaver) 
             "parents": {},
             "source": "loop",
             "step": 1,
-            "thread_id": "1",
         },
         parent_config=None,
         interrupts=(),
@@ -776,7 +760,6 @@ async def test_conditional_graph_state(async_checkpointer: BaseCheckpointSaver) 
             "parents": {},
             "source": "update",
             "step": 2,
-            "thread_id": "1",
         },
         parent_config=(
             [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
@@ -854,7 +837,6 @@ async def test_conditional_graph_state(async_checkpointer: BaseCheckpointSaver) 
             "parents": {},
             "source": "update",
             "step": 5,
-            "thread_id": "1",
         },
         parent_config=(
             [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
@@ -876,7 +858,7 @@ async def test_conditional_graph_state(async_checkpointer: BaseCheckpointSaver) 
     assert [
         c
         async for c in app_w_interrupt.astream(
-            {"input": "what is weather in sf"}, config
+            {"input": "what is weather in sf"}, config, checkpoint_during=False
         )
     ] == [
         {
@@ -912,7 +894,6 @@ async def test_conditional_graph_state(async_checkpointer: BaseCheckpointSaver) 
             "parents": {},
             "source": "loop",
             "step": 1,
-            "thread_id": "2",
         },
         parent_config=None,
         interrupts=(),
@@ -952,7 +933,6 @@ async def test_conditional_graph_state(async_checkpointer: BaseCheckpointSaver) 
             "parents": {},
             "source": "update",
             "step": 2,
-            "thread_id": "2",
         },
         parent_config=[
             c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -1028,7 +1008,6 @@ async def test_conditional_graph_state(async_checkpointer: BaseCheckpointSaver) 
             "parents": {},
             "source": "update",
             "step": 5,
-            "thread_id": "2",
         },
         parent_config=[
             c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
@@ -1595,7 +1574,9 @@ async def test_state_graph_packets(async_checkpointer: BaseCheckpointSaver) -> N
     assert [
         c
         async for c in app_w_interrupt.astream(
-            {"messages": HumanMessage(content="what is weather in sf")}, config
+            {"messages": HumanMessage(content="what is weather in sf")},
+            config,
+            checkpoint_during=False,
         )
     ] == [
         {
@@ -1647,7 +1628,6 @@ async def test_state_graph_packets(async_checkpointer: BaseCheckpointSaver) -> N
             "parents": {},
             "source": "loop",
             "step": 1,
-            "thread_id": "1",
         },
         parent_config=None,
         interrupts=(),
@@ -1685,7 +1665,6 @@ async def test_state_graph_packets(async_checkpointer: BaseCheckpointSaver) -> N
             "parents": {},
             "source": "update",
             "step": 2,
-            "thread_id": "1",
         },
         parent_config=(
             [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
@@ -1778,7 +1757,6 @@ async def test_state_graph_packets(async_checkpointer: BaseCheckpointSaver) -> N
             "parents": {},
             "source": "loop",
             "step": 4,
-            "thread_id": "1",
         },
         parent_config=(
             [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
@@ -1826,7 +1804,6 @@ async def test_state_graph_packets(async_checkpointer: BaseCheckpointSaver) -> N
             "parents": {},
             "source": "update",
             "step": 5,
-            "thread_id": "1",
         },
         parent_config=(
             [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
@@ -1848,7 +1825,9 @@ async def test_state_graph_packets(async_checkpointer: BaseCheckpointSaver) -> N
     assert [
         c
         async for c in app_w_interrupt.astream(
-            {"messages": HumanMessage(content="what is weather in sf")}, config
+            {"messages": HumanMessage(content="what is weather in sf")},
+            config,
+            checkpoint_during=False,
         )
     ] == [
         {
@@ -1894,7 +1873,6 @@ async def test_state_graph_packets(async_checkpointer: BaseCheckpointSaver) -> N
             "parents": {},
             "source": "loop",
             "step": 1,
-            "thread_id": "2",
         },
         parent_config=None,
         interrupts=(),
@@ -1932,7 +1910,6 @@ async def test_state_graph_packets(async_checkpointer: BaseCheckpointSaver) -> N
             "parents": {},
             "source": "update",
             "step": 2,
-            "thread_id": "2",
         },
         parent_config=(
             [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
@@ -2025,7 +2002,6 @@ async def test_state_graph_packets(async_checkpointer: BaseCheckpointSaver) -> N
             "parents": {},
             "source": "loop",
             "step": 4,
-            "thread_id": "2",
         },
         parent_config=(
             [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
@@ -2073,7 +2049,6 @@ async def test_state_graph_packets(async_checkpointer: BaseCheckpointSaver) -> N
             "parents": {},
             "source": "update",
             "step": 5,
-            "thread_id": "2",
         },
         parent_config=(
             [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
@@ -2091,7 +2066,7 @@ async def test_message_graph(async_checkpointer: BaseCheckpointSaver) -> None:
     from langchain_core.messages import AIMessage, HumanMessage
     from langchain_core.tools import tool
 
-    class FakeFuntionChatModel(FakeMessagesListChatModel):
+    class FakeFunctionChatModel(FakeMessagesListChatModel):
         def bind_functions(self, functions: list):
             return self
 
@@ -2102,7 +2077,7 @@ async def test_message_graph(async_checkpointer: BaseCheckpointSaver) -> None:
 
     tools = [search_api]
 
-    model = FakeFuntionChatModel(
+    model = FakeFunctionChatModel(
         responses=[
             AIMessage(
                 content="",
@@ -2279,7 +2254,9 @@ async def test_message_graph(async_checkpointer: BaseCheckpointSaver) -> None:
     assert [
         c
         async for c in app_w_interrupt.astream(
-            HumanMessage(content="what is weather in sf"), config
+            HumanMessage(content="what is weather in sf"),
+            config,
+            checkpoint_during=False,
         )
     ] == [
         {
@@ -2322,7 +2299,6 @@ async def test_message_graph(async_checkpointer: BaseCheckpointSaver) -> None:
             "parents": {},
             "source": "loop",
             "step": 1,
-            "thread_id": "1",
         },
         parent_config=None,
         interrupts=(),
@@ -2358,7 +2334,6 @@ async def test_message_graph(async_checkpointer: BaseCheckpointSaver) -> None:
             "parents": {},
             "source": "update",
             "step": 2,
-            "thread_id": "1",
         },
         parent_config=(
             [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
@@ -2434,7 +2409,6 @@ async def test_message_graph(async_checkpointer: BaseCheckpointSaver) -> None:
             "parents": {},
             "source": "loop",
             "step": 4,
-            "thread_id": "1",
         },
         parent_config=(
             [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
@@ -2480,7 +2454,6 @@ async def test_message_graph(async_checkpointer: BaseCheckpointSaver) -> None:
             "parents": {},
             "source": "update",
             "step": 5,
-            "thread_id": "1",
         },
         parent_config=(
             [c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)][
@@ -2766,7 +2739,7 @@ async def test_nested_graph_state(async_checkpointer: BaseCheckpointSaver) -> No
     app = graph.compile(checkpointer=async_checkpointer)
 
     config = {"configurable": {"thread_id": "1"}}
-    await app.ainvoke({"my_key": "my value"}, config, debug=True)
+    await app.ainvoke({"my_key": "my value"}, config, checkpoint_during=False)
     # test state w/ nested subgraph state (right after interrupt)
     # first get_state without subgraph state
     expected = StateSnapshot(
@@ -2791,7 +2764,6 @@ async def test_nested_graph_state(async_checkpointer: BaseCheckpointSaver) -> No
             "parents": {},
             "source": "loop",
             "step": 1,
-            "thread_id": "1",
         },
         created_at=AnyStr(),
         parent_config=None,
@@ -2835,12 +2807,6 @@ async def test_nested_graph_state(async_checkpointer: BaseCheckpointSaver) -> No
                         },
                         "source": "loop",
                         "step": 1,
-                        "thread_id": "1",
-                        "langgraph_node": "inner",
-                        "langgraph_path": [PULL, "inner"],
-                        "langgraph_step": 2,
-                        "langgraph_triggers": ["branch:to:inner"],
-                        "langgraph_checkpoint_ns": AnyStr("inner:"),
                     },
                     created_at=AnyStr(),
                     parent_config=None,
@@ -2860,7 +2826,6 @@ async def test_nested_graph_state(async_checkpointer: BaseCheckpointSaver) -> No
             "parents": {},
             "source": "loop",
             "step": 1,
-            "thread_id": "1",
         },
         created_at=AnyStr(),
         parent_config=None,
@@ -2894,12 +2859,6 @@ async def test_nested_graph_state(async_checkpointer: BaseCheckpointSaver) -> No
                 "source": "loop",
                 "step": 1,
                 "parents": {"": AnyStr()},
-                "thread_id": "1",
-                "langgraph_node": "inner",
-                "langgraph_path": [PULL, "inner"],
-                "langgraph_step": 2,
-                "langgraph_triggers": ["branch:to:inner"],
-                "langgraph_checkpoint_ns": AnyStr("inner:"),
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -2911,7 +2870,7 @@ async def test_nested_graph_state(async_checkpointer: BaseCheckpointSaver) -> No
     assert child_history == expected_child_history
 
     # resume
-    await app.ainvoke(None, config, debug=True)
+    await app.ainvoke(None, config, checkpoint_during=False)
     # test state w/ nested subgraph state (after resuming from interrupt)
     assert await app.aget_state(config) == StateSnapshot(
         values={"my_key": "hi my value here and there and back again"},
@@ -2928,7 +2887,6 @@ async def test_nested_graph_state(async_checkpointer: BaseCheckpointSaver) -> No
             "parents": {},
             "source": "loop",
             "step": 3,
-            "thread_id": "1",
         },
         created_at=AnyStr(),
         parent_config=(
@@ -2960,7 +2918,6 @@ async def test_nested_graph_state(async_checkpointer: BaseCheckpointSaver) -> No
                 "parents": {},
                 "source": "loop",
                 "step": 3,
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=(
@@ -3002,7 +2959,6 @@ async def test_nested_graph_state(async_checkpointer: BaseCheckpointSaver) -> No
                 "parents": {},
                 "source": "loop",
                 "step": 1,
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -3071,7 +3027,10 @@ async def test_doubly_nested_graph_state(
     # test invoke w/ nested interrupt
     config = {"configurable": {"thread_id": "1"}}
     assert [
-        c async for c in app.astream({"my_key": "my value"}, config, subgraphs=True)
+        c
+        async for c in app.astream(
+            {"my_key": "my value"}, config, subgraphs=True, checkpoint_during=False
+        )
     ] == [
         ((), {"parent_1": {"my_key": "hi my value"}}),
         (
@@ -3109,7 +3068,6 @@ async def test_doubly_nested_graph_state(
             "parents": {},
             "source": "loop",
             "step": 1,
-            "thread_id": "1",
         },
         created_at=AnyStr(),
         parent_config=None,
@@ -3146,15 +3104,9 @@ async def test_doubly_nested_graph_state(
             }
         },
         metadata={
-            "langgraph_checkpoint_ns": AnyStr("child:"),
-            "langgraph_node": "child",
-            "langgraph_path": ["__pregel_pull", "child"],
-            "langgraph_step": 2,
-            "langgraph_triggers": ["branch:to:child"],
             "parents": {"": AnyStr()},
             "source": "loop",
             "step": 0,
-            "thread_id": "1",
         },
         created_at=AnyStr(),
         parent_config=None,
@@ -3194,14 +3146,6 @@ async def test_doubly_nested_graph_state(
             ),
             "source": "loop",
             "step": 1,
-            "thread_id": "1",
-            "langgraph_checkpoint_ns": AnyStr("child:"),
-            "langgraph_node": "child_1",
-            "langgraph_path": [PULL, AnyStr("child_1")],
-            "langgraph_step": 1,
-            "langgraph_triggers": [
-                "branch:to:child_1",
-            ],
         },
         created_at=AnyStr(),
         parent_config=None,
@@ -3257,17 +3201,6 @@ async def test_doubly_nested_graph_state(
                                     ),
                                     "source": "loop",
                                     "step": 1,
-                                    "thread_id": "1",
-                                    "langgraph_checkpoint_ns": AnyStr("child:"),
-                                    "langgraph_node": "child_1",
-                                    "langgraph_path": [
-                                        PULL,
-                                        AnyStr("child_1"),
-                                    ],
-                                    "langgraph_step": 1,
-                                    "langgraph_triggers": [
-                                        "branch:to:child_1",
-                                    ],
                                 },
                                 created_at=AnyStr(),
                                 parent_config=None,
@@ -3290,14 +3223,6 @@ async def test_doubly_nested_graph_state(
                         "parents": {"": AnyStr()},
                         "source": "loop",
                         "step": 0,
-                        "thread_id": "1",
-                        "langgraph_node": "child",
-                        "langgraph_path": [PULL, AnyStr("child")],
-                        "langgraph_step": 2,
-                        "langgraph_triggers": [
-                            "branch:to:child",
-                        ],
-                        "langgraph_checkpoint_ns": AnyStr("child:"),
                     },
                     created_at=AnyStr(),
                     parent_config=None,
@@ -3317,14 +3242,18 @@ async def test_doubly_nested_graph_state(
             "parents": {},
             "source": "loop",
             "step": 1,
-            "thread_id": "1",
         },
         created_at=AnyStr(),
         parent_config=None,
         interrupts=(),
     )
     # resume
-    assert [c async for c in app.astream(None, config, subgraphs=True)] == [
+    assert [
+        c
+        async for c in app.astream(
+            None, config, subgraphs=True, checkpoint_during=False
+        )
+    ] == [
         (
             (AnyStr("child:"), AnyStr("child_1:")),
             {"grandchild_2": {"my_key": "hi my value here and there"}},
@@ -3355,7 +3284,6 @@ async def test_doubly_nested_graph_state(
                 "parents": {},
                 "source": "loop",
                 "step": 3,
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=(
@@ -3389,7 +3317,6 @@ async def test_doubly_nested_graph_state(
                 "parents": {},
                 "source": "loop",
                 "step": 3,
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -3428,7 +3355,6 @@ async def test_doubly_nested_graph_state(
                 "parents": {},
                 "source": "loop",
                 "step": 1,
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -3457,12 +3383,6 @@ async def test_doubly_nested_graph_state(
                 "source": "loop",
                 "step": 0,
                 "parents": {"": AnyStr()},
-                "thread_id": "1",
-                "langgraph_node": "child",
-                "langgraph_path": [PULL, AnyStr("child")],
-                "langgraph_step": 2,
-                "langgraph_triggers": ["branch:to:child"],
-                "langgraph_checkpoint_ns": AnyStr("child:"),
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -3514,17 +3434,6 @@ async def test_doubly_nested_graph_state(
                         AnyStr("child:"): AnyStr(),
                     }
                 ),
-                "thread_id": "1",
-                "langgraph_checkpoint_ns": AnyStr("child:"),
-                "langgraph_node": "child_1",
-                "langgraph_path": [
-                    PULL,
-                    AnyStr("child_1"),
-                ],
-                "langgraph_step": 1,
-                "langgraph_triggers": [
-                    "branch:to:child_1",
-                ],
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -3748,7 +3657,11 @@ async def test_weather_subgraph(
     assert [
         c
         async for c in graph.astream(
-            inputs, config=config, stream_mode="updates", subgraphs=True
+            inputs,
+            config=config,
+            stream_mode="updates",
+            subgraphs=True,
+            checkpoint_during=False,
         )
     ] == [
         ((), {"router_node": {"route": "weather"}}),
@@ -3775,7 +3688,6 @@ async def test_weather_subgraph(
             "source": "loop",
             "step": 1,
             "parents": {},
-            "thread_id": "1",
         },
         created_at=AnyStr(),
         parent_config=None,
@@ -3834,7 +3746,11 @@ async def test_weather_subgraph(
     assert [
         c
         async for c in graph.astream(
-            inputs, config=config, stream_mode="updates", subgraphs=True
+            inputs,
+            config=config,
+            stream_mode="updates",
+            subgraphs=True,
+            checkpoint_during=False,
         )
     ] == [
         ((), {"router_node": {"route": "weather"}}),
@@ -3859,7 +3775,6 @@ async def test_weather_subgraph(
             "source": "loop",
             "step": 1,
             "parents": {},
-            "thread_id": "14",
         },
         created_at=AnyStr(),
         parent_config=None,
@@ -3893,12 +3808,6 @@ async def test_weather_subgraph(
                         "source": "loop",
                         "step": 1,
                         "parents": {"": AnyStr()},
-                        "thread_id": "14",
-                        "langgraph_node": "weather_graph",
-                        "langgraph_path": [PULL, "weather_graph"],
-                        "langgraph_step": 2,
-                        "langgraph_triggers": ["branch:to:weather_graph"],
-                        "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
                     },
                     created_at=AnyStr(),
                     parent_config=None,
@@ -3938,7 +3847,6 @@ async def test_weather_subgraph(
             "source": "loop",
             "step": 1,
             "parents": {},
-            "thread_id": "14",
         },
         created_at=AnyStr(),
         parent_config=None,
@@ -3974,14 +3882,6 @@ async def test_weather_subgraph(
                         "step": 2,
                         "source": "update",
                         "parents": {"": AnyStr()},
-                        "thread_id": "14",
-                        "checkpoint_id": AnyStr(),
-                        "checkpoint_ns": AnyStr("weather_graph:"),
-                        "langgraph_node": "weather_graph",
-                        "langgraph_path": [PULL, "weather_graph"],
-                        "langgraph_step": 2,
-                        "langgraph_triggers": ["branch:to:weather_graph"],
-                        "langgraph_checkpoint_ns": AnyStr("weather_graph:"),
                     },
                     created_at=AnyStr(),
                     parent_config=(

@@ -3,16 +3,15 @@
 import asyncio
 import glob
 import os
-from typing import TypedDict, List, Optional
-import pydantic
 import re
-from pydantic import BaseModel, Field
-from langchain_core.rate_limiters import InMemoryRateLimiter
+from typing import TypedDict, List, Optional
 
 import yaml
 from langchain.chat_models import init_chat_model
+from langchain_core.rate_limiters import InMemoryRateLimiter
 from mkdocs.structure.files import File
 from mkdocs.structure.pages import Page
+from pydantic import BaseModel, Field
 from yaml import SafeLoader
 
 from _scripts.notebook_hooks import _on_page_markdown_with_config
@@ -211,7 +210,9 @@ async def process_nav_items(nav_items: list[NavItem]) -> list[NavItem]:
     # Remove any items that start with http:// or https:// looking only for
     # local file at this stages.
     nav_items = [
-        item for item in nav_items if not item["url"].startswith(("http://", "https://"))
+        item
+        for item in nav_items
+        if not item["url"].startswith(("http://", "https://"))
     ]
     # Process items in parallel
     tasks = [process_single_item(item) for item in nav_items]

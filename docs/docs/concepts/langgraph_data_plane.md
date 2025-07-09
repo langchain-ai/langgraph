@@ -50,13 +50,22 @@ Runs in a LangGraph Server may be retried for specific failures (currently only 
 
 This section describes various features of the data plane.
 
+### Data Region
+
+!!! info "Only for Cloud SaaS"
+    Data regions are only applicable for [Cloud SaaS](../concepts/langgraph_cloud.md) deployments.
+
+Deployments can be created in 2 data regions: US and EU
+
+The data region for a deployment is implied by the data region of the LangSmith organization where the deployment is created. Deployments and the underlying database for the deployments cannot be migrated between data regions.
+
 ### Autoscaling
 
 [`Production` type](../concepts/langgraph_control_plane.md#deployment-types) deployments automatically scale up to 10 containers. Scaling is based on 3 metrics:
 
 1. CPU utilization
 1. Memory utilization
-1. Number of pending (in progress) [runs](../cloud/concepts/runs.md)
+1. Number of pending (in progress) [runs](./assistants.md#execution)
 
 For CPU utilization, the autoscaler targets 75% utilization. This means the autoscaler will scale the number of containers up or down to ensure that CPU utilization is at or near 75%. For memory utilization, the autoscaler targets 75% utilization as well.
 

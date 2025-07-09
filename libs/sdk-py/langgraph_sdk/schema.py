@@ -36,7 +36,15 @@ Represents the status of a thread:
 """
 
 StreamMode = Literal[
-    "values", "messages", "updates", "events", "debug", "custom", "messages-tuple"
+    "values",
+    "messages",
+    "updates",
+    "events",
+    "tasks",
+    "checkpoints",
+    "debug",
+    "custom",
+    "messages-tuple",
 ]
 """
 Defines the mode of streaming:
@@ -44,6 +52,8 @@ Defines the mode of streaming:
 - "messages": Stream complete messages.
 - "updates": Stream updates to the state.
 - "events": Stream events occurring during execution.
+- "checkpoints": Stream checkpoints as they are created.
+- "tasks": Stream task start and finish events.
 - "debug": Stream detailed debug information.
 - "custom": Stream custom events.
 """
@@ -103,6 +113,13 @@ The field to sort by.
 """
 
 ThreadSortBy = Literal["thread_id", "status", "created_at", "updated_at"]
+"""
+The field to sort by.
+"""
+
+CronSortBy = Literal[
+    "cron_id", "assistant_id", "thread_id", "created_at", "updated_at", "next_run_date"
+]
 """
 The field to sort by.
 """
@@ -302,6 +319,8 @@ class Cron(TypedDict):
 
     cron_id: str
     """The ID of the cron."""
+    assistant_id: str
+    """The ID of the assistant."""
     thread_id: str | None
     """The ID of the thread."""
     end_time: datetime | None
@@ -314,6 +333,12 @@ class Cron(TypedDict):
     """The last time the cron was updated."""
     payload: dict
     """The run payload to use for creating new run."""
+    user_id: str | None
+    """The user ID of the cron."""
+    next_run_date: datetime | None
+    """The next run date of the cron."""
+    metadata: dict
+    """The metadata of the cron."""
 
 
 class RunCreate(TypedDict):
