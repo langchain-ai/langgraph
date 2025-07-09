@@ -69,9 +69,9 @@ LangGraph Server is an API platform for creating and managing agent-based applic
 ## v0.2.45 (2025-06-05)
 - Enhanced streaming feature by incorporating tracing contexts.
 - Removed an unnecessary query from the Crons.search function.
-- Resolved connection re-use issue when scheduling next run for multiple cron jobs.
+- Resolved connection reuse issue when scheduling next run for multiple cron jobs.
 - Removed an unnecessary query in the Crons.search function to improve efficiency.
-- Resolved an issue with scheduling the next cron run by improving connection re-use.
+- Resolved an issue with scheduling the next cron run by improving connection reuse.
 
 ## v0.2.44 (2025-06-04)
 - Enhanced the worker logic to exit the pipeline before continuing when the Redis message limit is reached.
