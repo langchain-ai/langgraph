@@ -511,7 +511,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
             self.nodes[node] = StateNodeSpec(
                 coerce_to_runnable(action, name=node, trace=False),
                 metadata,
-                input_schema=inferred_input_schema,  # type: ignore[arg-type]
+                input_schema=inferred_input_schema,
                 retry_policy=retry_policy,
                 cache_policy=cache_policy,
                 ends=ends,
