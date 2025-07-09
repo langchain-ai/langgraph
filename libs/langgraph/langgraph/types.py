@@ -14,7 +14,6 @@ from typing import (
     NamedTuple,
     TypeVar,
     Union,
-    cast,
     final,
 )
 from warnings import warn
