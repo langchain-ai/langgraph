@@ -42,7 +42,11 @@ For deployments to LangGraph Platform, this environment variable is set automati
 
 ## `LANGGRAPH_POSTGRES_POOL_MAX_SIZE`
 
-Beginning with langgraph-api version `0.2.12`, the maximum size of the Postgres connection pool can be controlled using the `LANGGRAPH_POSTGRES_POOL_MAX_SIZE` environment variable. By setting this variable, you can determine the upper bound on the number of simultaneous connections the server will establish with the Postgres database. This is particularly useful for deployments where database resources are limited (or more available) or where you need to tune connection behavior for performance or scaling reasons. If not specified, the pool size defaults to 150 connections.
+Beginning with langgraph-api version `0.2.12`, the maximum size of the Postgres connection pool (per replica) can be controlled using the `LANGGRAPH_POSTGRES_POOL_MAX_SIZE` environment variable. By setting this variable, you can determine the upper bound on the number of simultaneous connections the server will establish with the Postgres database.
+
+For example, if a deployment is scaled up to 10 replicas and `LANGGRAPH_POSTGRES_POOL_MAX_SIZE` is configured to `150`, then up to `1500` connections to Postgres can be established. This is particularly useful for deployments where database resources are limited (or more available) or where you need to tune connection behavior for performance or scaling reasons.
+
+Defaults to `150` connections.
 
 ## `LANGSMITH_RUNS_ENDPOINTS`
 
