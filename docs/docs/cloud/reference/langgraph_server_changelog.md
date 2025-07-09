@@ -4,6 +4,56 @@
 
 ---
 
+## v0.2.83 (2025-07-09)
+- Reduced the default TTL for resumable streams to 2 minutes for improved resource management.
+- Enhanced data submission logic to send self-hosted data to the LangSmith instance, with conditional submissions to Beacon based on license type and deployment mode.
+- Enabled automatic submission of self-hosted data to a Langsmith instance when an endpoint is configured.
+
+## v0.2.82 (2025-07-03)
+- Implemented a join to lock runs and prevent race conditions across CTEs in `Runs.next`, ensuring smoother background operations.
+
+## v0.2.81 (2025-07-03)
+- Retained the `/ok` endpoint to ensure successful deployment even when `disable_meta=True`.
+- Optimized stream processing by starting with a shorter wait time to improve response times for older or nonexistent runs.
+
+## v0.2.80 (2025-07-03)
+- Resolved a TypeError in `logger.ainfo()` by correctly passing the `event` parameter as a named argument.
+
+## v0.2.79 (2025-07-02)
+- Resolved a JsonDecodeError in checkpointing with remote graphs by improving how invalid JSON is handled.
+- Introduced a configuration flag to disable webhooks across all routes.
+
+## v0.2.78 (2025-07-02)
+- Added retries for webhook calls that experience timeouts to improve reliability.
+- Added HTTP request counter and latency histogram metrics for enhanced monitoring and analysis.
+
+## v0.2.77 (2025-07-02)
+- Added HTTP metrics to enhance monitoring capabilities.
+- Updated the Redis cache delimiter to reduce conflicts with subgraph messages.
+
+## v0.2.76 (2025-07-01)
+- Updated the Redis cache delimiter to prevent conflicts with subgraph messages.
+
+## v0.2.74 (2025-06-30)
+- Scheduled webhook events in an isolated loop for enhanced thread safety and error prevention.
+
+## v0.2.73 (2025-06-27)
+- Fixed an infinite frame loop and removed the dict_parser to streamline logging.
+- Issued a 409 error when encountering a deadlock during the cancel operation.
+
+## v0.2.72 (2025-06-27)
+- Avoid catching cancellation errors in SSE heartbeat to improve process handling.
+- Returned a 409 error when encountering a deadlock during cancellation.
+
+## v0.2.71 (2025-06-26)
+- Improved logging mechanism to enhance tracking and debugging with detailed type information.
+
+## v0.2.70 (2025-06-26)
+- Improved error handling by distinguishing between user and runtime TimeoutErrors for clearer logging and encapsulation.
+
+## v0.2.69 (2025-06-26)
+- Added sorting and pagination to the crons API and updated schema definitions for improved accuracy.
+
 ## v0.2.66 (2025-06-26)
 - Fixed a 404 error when creating multiple runs with the same thread_id using `on_not_exist="create"`.
 
