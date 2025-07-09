@@ -9,7 +9,7 @@ LangGraph's [persistence](../../concepts/persistence.md) layer supports **human-
 :::
 
 :::js
-`interrupt` is ergonomically similar to Node.js's built-in `prompt()` function, [with some caveats](../../how-tos/human_in_the_loop/add-human-in-the-loop.md).
+`interrupt` is ergonomically similar to Node.js's built-in `readline.question()` function, [with some caveats](../../how-tos/human_in_the_loop/add-human-in-the-loop.md).
 :::
 
 !!! note
@@ -32,19 +32,23 @@ from langchain.chat_models import init_chat_model
 llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
 ```
 -->
+
 :::
 
 :::js
+
 ```typescript
 // Add your API key here
 process.env.ANTHROPIC_API_KEY = "YOUR_API_KEY";
 ```
+
 :::
 
 We can now incorporate it into our `StateGraph` with an additional tool:
 
 :::python
-``` python hl_lines="12 19 20 21 22 23"
+
+```python hl_lines="12 19 20 21 22 23"
 from typing import Annotated
 
 from langchain_tavily import TavilySearch
@@ -93,68 +97,53 @@ graph_builder.add_conditional_edges(
 graph_builder.add_edge("tools", "chatbot")
 graph_builder.add_edge(START, "chatbot")
 ```
+
 :::
 
 :::js
-```typescript hl_lines="12 19 20 21 22 23"
-import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
+
+```typescript hl_lines="1 7-19"
+import { interrupt, MessagesZodState } from "@langchain/langgraph";
+import { ChatAnthropic } from "@langchain/anthropic";
+import { TavilySearch } from "@langchain/tavily";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
-import { MemorySaver } from "@langchain/langgraph";
-import { StateGraph, START, END, MessagesAnnotation } from "@langchain/langgraph";
-import { ToolNode } from "@langchain/langgraph/prebuilt";
-import { ChatAnthropic } from "@langchain/anthropic";
+const humanAssistance = tool(
+  async ({ query }) => {
+    const humanResponse = interrupt({ query });
+    return humanResponse.data;
+  },
+  {
+    name: "humanAssistance",
+    description: "Request assistance from a human.",
+    schema: z.object({
+      query: z.string().describe("Human readable question for the human"),
+    }),
+  }
+);
 
-import { Command, interrupt } from "@langchain/langgraph";
-
-const humanAssistance = tool(async ({ query }) => {
-  const humanResponse = interrupt({ query });
-  return humanResponse.data;
-}, {
-  name: "humanAssistance",
-  description: "Request assistance from a human.",
-  schema: z.object({
-    query: z.string().describe("Human readable question for the human")
-  })
-});
-
-const searchTool = new TavilySearchResults({ maxResults: 2 });
+const searchTool = new TavilySearch({ maxResults: 2 });
 const tools = [searchTool, humanAssistance];
 
-const model = new ChatAnthropic({ model: "claude-3-5-sonnet-latest" });
-const llmWithTools = model.bindTools(tools);
+const llmWithTools = new ChatAnthropic({
+  model: "claude-3-5-sonnet-latest",
+}).bindTools(tools);
 
-const chatbot = async (state: typeof MessagesAnnotation.State) => {
+async function chatbot(state: z.infer<typeof MessagesZodState>) {
   const message = await llmWithTools.invoke(state.messages);
+
   // Because we will be interrupting during tool execution,
   // we disable parallel tool calling to avoid repeating any
   // tool invocations when we resume.
   if (message.tool_calls && message.tool_calls.length > 1) {
     throw new Error("Multiple tool calls not supported with interrupts");
   }
-  return { messages: [message] };
-};
 
-const graphBuilder = new StateGraph(MessagesAnnotation)
-  .addNode("chatbot", chatbot);
-
-const toolNode = new ToolNode(tools);
-graphBuilder.addNode("tools", toolNode);
-
-const shouldContinue = (state: typeof MessagesAnnotation.State) => {
-  const messages = state.messages;
-  const lastMessage = messages[messages.length - 1];
-  if ("tool_calls" in lastMessage && lastMessage.tool_calls?.length) {
-    return "tools";
-  }
-  return END;
-};
-
-graphBuilder.addConditionalEdges("chatbot", shouldContinue);
-graphBuilder.addEdge("tools", "chatbot");
-graphBuilder.addEdge(START, "chatbot");
+  return { messages: message };
+}
 ```
+
 :::
 
 !!! tip
@@ -166,19 +155,31 @@ graphBuilder.addEdge(START, "chatbot");
 We compile the graph with a checkpointer, as before:
 
 :::python
+
 ```python
 memory = MemorySaver()
 
 graph = graph_builder.compile(checkpointer=memory)
 ```
+
 :::
 
 :::js
-```typescript
+
+```typescript hl_lines="3 11"
+import { StateGraph, MemorySaver, START, END } from "@langchain/langgraph";
+
 const memory = new MemorySaver();
 
-const graph = graphBuilder.compile({ checkpointer: memory });
+const graph = new StateGraph(MessagesZodState)
+  .addNode("chatbot", chatbot)
+  .addNode("tools", new ToolNode(tools))
+  .addConditionalEdges("chatbot", toolsCondition, ["tools", END])
+  .addEdge("tools", "chatbot")
+  .addEdge(START, "chatbot")
+  .compile({ checkpointer: memory });
 ```
+
 :::
 
 ## 3. Visualize the graph (optional)
@@ -186,7 +187,8 @@ const graph = graphBuilder.compile({ checkpointer: memory });
 Visualizing the graph, you get the same layout as before – just with the added tool!
 
 :::python
-``` python
+
+```python
 from IPython.display import Image, display
 
 try:
@@ -195,18 +197,21 @@ except Exception:
     # This requires some extra dependencies and is optional
     pass
 ```
+
 :::
 
 :::js
+
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const drawableGraph = graph.getGraph();
+const drawableGraph = await graph.getGraphAsync();
 const image = await drawableGraph.drawMermaidPng();
-const arrayBuffer = await image.arrayBuffer();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer));
+await fs.writeFile("chatbot-with-tools.png", imageBuffer);
 ```
+
 :::
 
 ![chatbot-with-tools-diagram](chatbot-with-tools.png)
@@ -216,6 +221,7 @@ await tslab.display.png(new Uint8Array(arrayBuffer));
 Now, prompt the chatbot with a question that will engage the new `human_assistance` tool:
 
 :::python
+
 ```python
 user_input = "I need some expert guidance for building an AI agent. Could you request assistance for me?"
 config = {"configurable": {"thread_id": "1"}}
@@ -243,23 +249,32 @@ Tool Calls:
   Args:
     query: A user is requesting expert guidance for building an AI agent. Could you please provide some expert advice or resources on this topic?
 ```
+
 :::
 
 :::js
+
 ```typescript
-const userInput = "I need some expert guidance for building an AI agent. Could you request assistance for me?";
-const config = { configurable: { thread_id: "1" }, streamMode: "values" as const };
+import { isAIMessage } from "@langchain/core/messages";
+
+const userInput =
+  "I need some expert guidance for building an AI agent. Could you request assistance for me?";
 
 const events = await graph.stream(
   { messages: [{ role: "user", content: userInput }] },
-  config
+  { configurable: { thread_id: "1" }, streamMode: "values" }
 );
 
 for await (const event of events) {
   if ("messages" in event) {
-    const lastMessage = event.messages[event.messages.length - 1];
-    console.log(`[${lastMessage._getType()}]: ${lastMessage.content}`);
-    if ("tool_calls" in lastMessage && lastMessage.tool_calls?.length) {
+    const lastMessage = event.messages.at(-1);
+    console.log(`[${lastMessage?.getType()}]: ${lastMessage?.text}`);
+
+    if (
+      lastMessage &&
+      isAIMessage(lastMessage) &&
+      lastMessage.tool_calls?.length
+    ) {
       console.log("Tool calls:", lastMessage.tool_calls);
     }
   }
@@ -268,22 +283,25 @@ for await (const event of events) {
 
 ```
 [human]: I need some expert guidance for building an AI agent. Could you request assistance for me?
-[ai]: Certainly! I'd be happy to request expert assistance for you regarding building an AI agent. To do this, I'll use the human_assistance function to relay your request. Let me do that for you now.
+[ai]: I'll help you request human assistance for guidance on building an AI agent.
 Tool calls: [
   {
     name: 'humanAssistance',
     args: {
-      query: 'A user is requesting expert guidance for building an AI agent. Could you please provide some expert advice or resources on this topic?'
+      query: 'I would like expert guidance on building an AI agent. Could you please provide assistance with this topic?'
     },
-    id: 'toolu_01ABUqneqnuHNuo1vhfDFQCW'
+    id: 'toolu_01Bpxc8rFVMhSaRosS6b85Ts',
+    type: 'tool_call'
   }
 ]
 ```
+
 :::
 
 The chatbot generated a tool call, but then execution has been interrupted. If you inspect the graph state, you see that it stopped at the tools node:
 
 :::python
+
 ```python
 snapshot = graph.get_state(config)
 snapshot.next
@@ -292,24 +310,28 @@ snapshot.next
 ```
 ('tools',)
 ```
+
 :::
 
 :::js
+
 ```typescript
-const snapshot = await graph.getState(config);
-console.log(snapshot.next);
+const snapshot = await graph.getState({ configurable: { thread_id: "1" } });
+snapshot.next;
 ```
 
+```json
+["tools"]
 ```
-['tools']
-```
+
 :::
 
 !!! info Additional information
 
+    :::python
+
     Take a closer look at the `human_assistance` tool:
 
-    :::python
     ```python
     @tool
     def human_assistance(query: str) -> str:
@@ -322,20 +344,26 @@ console.log(snapshot.next);
     :::
 
     :::js
-    ```typescript
-    const humanAssistance = tool(async ({ query }) => {
-      const humanResponse = interrupt({ query });
-      return humanResponse.data;
-    }, {
-      name: "humanAssistance",
-      description: "Request assistance from a human.",
-      schema: z.object({
-        query: z.string().describe("Human readable question for the human")
-      })
-    });
+
+    Take a closer look at the `humanAssistance` tool:
+
+    ```typescript hl_lines="3"
+    const humanAssistance = tool(
+      async ({ query }) => {
+        const humanResponse = interrupt({ query });
+        return humanResponse.data;
+      },
+      {
+        name: "humanAssistance",
+        description: "Request assistance from a human.",
+        schema: z.object({
+          query: z.string().describe("Human readable question for the human"),
+        }),
+      },
+    );
     ```
 
-    Similar to JavaScript's built-in `prompt()` function, calling `interrupt` inside the tool will pause execution. Progress is persisted based on the [checkpointer](../../concepts/persistence.md#checkpointer-libraries); so if it is persisting with Postgres, it can resume at any time as long as the database is alive. In this example, it is persisting with the in-memory checkpointer and can resume any time if the JavaScript runtime is running.
+    Calling `interrupt` inside the tool will pause execution. Progress is persisted based on the [checkpointer](../../concepts/persistence.md#checkpointer-libraries); so if it is persisting with Postgres, it can resume at any time as long as the database is alive. In this example, it is persisting with the in-memory checkpointer and can resume any time if the JavaScript runtime is running.
     :::
 
 ## 5. Resume execution
@@ -343,9 +371,10 @@ console.log(snapshot.next);
 To resume execution, pass a [`Command`](../../concepts/low_level.md#command) object containing data expected by the tool. The format of this data can be customized based on needs.
 
 :::python
+
 For this example, use a dict with a key `"data"`:
 
-``` python
+```python
 human_response = (
     "We, the experts are here to help! We'd recommend you check out LangGraph to build your agent."
     " It's much more reliable and extensible than simple autonomous agents."
@@ -392,25 +421,30 @@ LangGraph is likely a framework or library designed specifically for creating AI
 If you'd like more specific information about LangGraph or have any questions about this recommendation, please feel free to ask, and I can request further assistance from the experts.
 Output is truncated. View as a scrollable element or open in a text editor. Adjust cell output settings...
 ```
+
 :::
 
 :::js
 For this example, use an object with a key `"data"`:
 
 ```typescript
-const humanResponse = (
+import { Command } from "@langchain/langgraph";
+
+const humanResponse =
   "We, the experts are here to help! We'd recommend you check out LangGraph to build your agent." +
-  " It's much more reliable and extensible than simple autonomous agents."
-);
+  " It's much more reliable and extensible than simple autonomous agents.";
 
 const humanCommand = new Command({ resume: { data: humanResponse } });
 
-const resumeEvents = await graph.stream(humanCommand, config);
+const resumeEvents = await graph.stream(humanCommand, {
+  configurable: { thread_id: "1" },
+  streamMode: "values",
+});
 
 for await (const event of resumeEvents) {
   if ("messages" in event) {
-    const lastMessage = event.messages[event.messages.length - 1];
-    console.log(`[${lastMessage._getType()}]: ${lastMessage.content}`);
+    const lastMessage = event.messages.at(-1);
+    console.log(`[${lastMessage?.getType()}]: ${lastMessage?.text}`);
   }
 }
 ```
@@ -431,6 +465,7 @@ LangGraph is likely a framework or library designed specifically for creating AI
 
 ...
 ```
+
 :::
 
 The input has been received and processed as a tool message. Review this call's [LangSmith trace](https://smith.langchain.com/public/9f0f87e3-56a7-4dde-9c76-b71675624e91/r) to see the exact work that was done in the above call. Notice that the state is loaded in the first step so that our chatbot can continue where it left off.
@@ -440,6 +475,7 @@ The input has been received and processed as a tool message. Review this call's 
 Check out the code snippet below to review the graph from this tutorial:
 
 :::python
+
 {!snippets/chat_model_tabs.md!}
 
 ```python
@@ -490,67 +526,72 @@ graph_builder.add_edge(START, "chatbot")
 memory = MemorySaver()
 graph = graph_builder.compile(checkpointer=memory)
 ```
+
 :::
 
 :::js
+
 ```typescript
-import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
+import {
+  interrupt,
+  MessagesZodState,
+  StateGraph,
+  MemorySaver,
+  START,
+  END,
+} from "@langchain/langgraph";
+import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
+import { isAIMessage } from "@langchain/core/messages";
+import { ChatAnthropic } from "@langchain/anthropic";
+import { TavilySearch } from "@langchain/tavily";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
-import { MemorySaver } from "@langchain/langgraph";
-import { StateGraph, START, END, MessagesAnnotation } from "@langchain/langgraph";
-import { ToolNode } from "@langchain/langgraph/prebuilt";
-import { ChatAnthropic } from "@langchain/anthropic";
-import { Command, interrupt } from "@langchain/langgraph";
+const humanAssistance = tool(
+  async ({ query }) => {
+    const humanResponse = interrupt({ query });
+    return humanResponse.data;
+  },
+  {
+    name: "humanAssistance",
+    description: "Request assistance from a human.",
+    schema: z.object({
+      query: z.string().describe("Human readable question for the human"),
+    }),
+  }
+);
 
-const humanAssistance = tool(async ({ query }) => {
-  const humanResponse = interrupt({ query });
-  return humanResponse.data;
-}, {
-  name: "humanAssistance",
-  description: "Request assistance from a human.",
-  schema: z.object({
-    query: z.string().describe("Human readable question for the human")
-  })
-});
-
-const searchTool = new TavilySearchResults({ maxResults: 2 });
+const searchTool = new TavilySearch({ maxResults: 2 });
 const tools = [searchTool, humanAssistance];
 
-const model = new ChatAnthropic({ model: "claude-3-5-sonnet-latest" });
-const llmWithTools = model.bindTools(tools);
+const llmWithTools = new ChatAnthropic({
+  model: "claude-3-5-sonnet-latest",
+}).bindTools(tools);
 
-const chatbot = async (state: typeof MessagesAnnotation.State) => {
+const chatbot = async (state: z.infer<typeof MessagesZodState>) => {
   const message = await llmWithTools.invoke(state.messages);
+
+  // Because we will be interrupting during tool execution,
+  // we disable parallel tool calling to avoid repeating any
+  // tool invocations when we resume.
   if (message.tool_calls && message.tool_calls.length > 1) {
     throw new Error("Multiple tool calls not supported with interrupts");
   }
-  return { messages: [message] };
+
+  return { messages: message };
 };
-
-const graphBuilder = new StateGraph(MessagesAnnotation)
-  .addNode("chatbot", chatbot);
-
-const toolNode = new ToolNode(tools);
-graphBuilder.addNode("tools", toolNode);
-
-const shouldContinue = (state: typeof MessagesAnnotation.State) => {
-  const messages = state.messages;
-  const lastMessage = messages[messages.length - 1];
-  if ("tool_calls" in lastMessage && lastMessage.tool_calls?.length) {
-    return "tools";
-  }
-  return END;
-};
-
-graphBuilder.addConditionalEdges("chatbot", shouldContinue);
-graphBuilder.addEdge("tools", "chatbot");
-graphBuilder.addEdge(START, "chatbot");
 
 const memory = new MemorySaver();
-const graph = graphBuilder.compile({ checkpointer: memory });
+
+const graph = new StateGraph(MessagesZodState)
+  .addNode("chatbot", chatbot)
+  .addNode("tools", new ToolNode(tools))
+  .addConditionalEdges("chatbot", toolsCondition, ["tools", END])
+  .addEdge("tools", "chatbot")
+  .addEdge(START, "chatbot")
+  .compile({ checkpointer: memory });
 ```
+
 :::
 
 ## Next steps
