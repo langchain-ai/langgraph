@@ -14,16 +14,20 @@ from typing import (
     NamedTuple,
     TypeVar,
     Union,
-    cast,
+    final,
 )
+from warnings import warn
 
 from langchain_core.runnables import Runnable, RunnableConfig
+from typing_extensions import Unpack, deprecated
 from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._cache import default_cache_key
 from langgraph._internal._fields import get_cached_annotated_keys, get_update_as_tuples
 from langgraph._internal._retry import default_retry_on
+from langgraph._internal._typing import UNSET, DeprecatedKwargs
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
+from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
@@ -86,8 +90,10 @@ Always injected into nodes if requested as a keyword argument, but it's a no-op
 when not using stream_mode="custom"."""
 
 if sys.version_info >= (3, 10):
+    _DC_SLOTS = {"slots": True}
     _DC_KWARGS = {"kw_only": True, "slots": True, "frozen": True}
 else:
+    _DC_SLOTS = {}
     _DC_KWARGS = {"frozen": True}
 
 
@@ -128,7 +134,11 @@ class CachePolicy(Generic[KeyFuncT]):
     """Time to live for the cache entry in seconds. If None, the entry never expires."""
 
 
-@dataclasses.dataclass(**_DC_KWARGS)
+_DEFAULT_INTERRUPT_ID = "placeholder-id"
+
+
+@final
+@dataclasses.dataclass(init=False, **_DC_SLOTS)
 class Interrupt:
     """Information about an interrupt that occurred in a node.
 
@@ -136,16 +146,41 @@ class Interrupt:
     """
 
     value: Any
-    resumable: bool = False
-    ns: Sequence[str] | None = None
-    when: Literal["during"] = dataclasses.field(default="during", repr=False)
+    id: str
+
+    def __init__(
+        self,
+        value: Any,
+        id: str = _DEFAULT_INTERRUPT_ID,
+        **deprecated_kwargs: Unpack[DeprecatedKwargs],
+    ) -> None:
+        self.value = value
+
+        if (
+            (ns := deprecated_kwargs.get("ns", UNSET)) is not UNSET
+            and (id == _DEFAULT_INTERRUPT_ID)
+            and (isinstance(ns, Sequence))
+        ):
+            self.id = xxh3_128_hexdigest("|".join(ns).encode())
+        else:
+            self.id = id
+
+    @classmethod
+    def from_ns(cls, value: Any, ns: str) -> Interrupt:
+        return cls(value=value, id=xxh3_128_hexdigest(ns.encode()))
 
     @property
+    @deprecated(
+        "`interrupt_id` is deprecated. Use `id` instead.",
+        stacklevel=2,
+    )
     def interrupt_id(self) -> str:
-        """Generate a unique ID for the interrupt based on its namespace."""
-        if self.ns is None:
-            return "placeholder-id"
-        return xxh3_128_hexdigest("|".join(self.ns).encode())
+        warn(
+            "`interrupt_id` is deprecated. Use `id` instead.",
+            LangGraphDeprecatedSinceV10,
+            stacklevel=2,
+        )
+        return self.id
 
 
 class StateUpdate(NamedTuple):
@@ -419,22 +454,16 @@ def interrupt(value: Any) -> Any:
 
         for chunk in graph.stream({\"foo\": \"abc\"}, config):
             print(chunk)
-        ```
 
-        ```pycon
-        {'__interrupt__': (Interrupt(value='what is your age?', resumable=True, ns=['node:62e598fa-8653-9d6d-2046-a70203020e37'], when='during'),)}
-        ```
+        # > {'__interrupt__': (Interrupt(value='what is your age?', id='45fda8478b2ef754419799e10992af06'),)}
 
-        ```python
         command = Command(resume=\"some input from a human!!!\")
 
         for chunk in graph.stream(Command(resume=\"some input from a human!!!\"), config):
             print(chunk)
-        ```
 
-        ```pycon
-        Received an input from the interrupt: some input from a human!!!
-        {'node': {'human_value': 'some input from a human!!!'}}
+        # > Received an input from the interrupt: some input from a human!!!
+        # > {'node': {'human_value': 'some input from a human!!!'}}
         ```
 
     Args:
@@ -451,7 +480,6 @@ def interrupt(value: Any) -> Any:
         CONFIG_KEY_CHECKPOINT_NS,
         CONFIG_KEY_SCRATCHPAD,
         CONFIG_KEY_SEND,
-        NS_SEP,
         RESUME,
     )
     from langgraph.errors import GraphInterrupt
@@ -474,10 +502,9 @@ def interrupt(value: Any) -> Any:
     # no resume value found
     raise GraphInterrupt(
         (
-            Interrupt(
+            Interrupt.from_ns(
                 value=value,
-                resumable=True,
-                ns=cast(str, conf[CONFIG_KEY_CHECKPOINT_NS]).split(NS_SEP),
+                ns=conf[CONFIG_KEY_CHECKPOINT_NS],
             ),
         )
     )

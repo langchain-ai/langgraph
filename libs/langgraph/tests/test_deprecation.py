@@ -1,9 +1,10 @@
 import pytest
 from typing_extensions import TypedDict
 
+from langgraph.errors import NodeInterrupt
 from langgraph.func import entrypoint, task
 from langgraph.graph import StateGraph
-from langgraph.types import RetryPolicy
+from langgraph.types import Interrupt, RetryPolicy
 from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
 
 
@@ -88,3 +89,21 @@ def test_pregel_deprecation() -> None:
         match="Importing from langgraph.pregel.types is deprecated. Please use 'from langgraph.types import ...' instead.",
     ):
         from langgraph.pregel.types import StateSnapshot  # noqa: F401
+
+
+def test_interrupt_attributes_deprecation() -> None:
+    interrupt = Interrupt(value="question", id="abc")
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`interrupt_id` is deprecated. Use `id` instead.",
+    ):
+        interrupt.interrupt_id
+
+
+def test_node_interrupt_deprecation() -> None:
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="NodeInterrupt is deprecated. Please use `langgraph.types.interrupt` instead.",
+    ):
+        NodeInterrupt(value="test")
