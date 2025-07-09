@@ -24,7 +24,7 @@
 
 ## v0.2.60 (2025-06-20)
 - Enhanced error logging to include traceback details for dictionary operations.
-- Added a /metrics endpoint to expose queue worker metrics for monitoring.
+- Added a `/metrics` endpoint to expose queue worker metrics for monitoring.
 
 ## v0.2.57 (2025-06-18)
 - Removed CancelledError from retriable exceptions to allow local interrupts while maintaining retriability for workers.
@@ -64,7 +64,7 @@
 - Resolved a race condition by ensuring Postgres updates only occur after the Redis running marker is set.
 
 ## v0.2.46 (2025-06-07)
-- Introduced a new connection for each operation while preserving transaction characteristics in Threads state update() and bulk() commands.
+- Introduced a new connection for each operation while preserving transaction characteristics in Threads state `update()` and `bulk()` commands.
 
 ## v0.2.45 (2025-06-05)
 - Enhanced streaming feature by incorporating tracing contexts.
