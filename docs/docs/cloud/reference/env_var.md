@@ -12,7 +12,7 @@ Defaults to `False`.
 
 ## `BG_JOB_SHUTDOWN_GRACE_PERIOD_SECS`
 
-Specifies, in seconds, how long the server will wait for background jobs to finish after the queue receives a shutdown signal. After this period, the server will force termination. Defaults to `3600` seconds. Set this to ensure jobs have enough time to complete cleanly during shutdown. Added in `langgraph-api==0.2.16`.
+Specifies, in seconds, how long the server will wait for background jobs to finish after the queue receives a shutdown signal. After this period, the server will force termination. Defaults to `180` seconds. Set this to ensure jobs have enough time to complete cleanly during shutdown. Added in `langgraph-api==0.2.16`.
 
 ## `BG_JOB_TIMEOUT_SECS`
 
