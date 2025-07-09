@@ -1,15 +1,8 @@
-blank_issues_enabled: true
 version: 2.1
 contact_links:
-  - name: 🤔 Question or Problem
-    about: Ask a question or ask about a problem in GitHub Discussions.
-    url: https://github.com/langchain-ai/langgraph/discussions/categories/q-a
   - name: Feature Request
     url: https://github.com/langchain-ai/langgraph/discussions/categories/ideas
     about: Suggest a feature or an idea
-  - name: Show and tell
-    about: Show what you built with LangChain
-    url: https://github.com/langchain-ai/langgraph/discussions/categories/show-and-tell
   - name: LangChain Forum
     url:  https://forum.langchain.com/
     about: General community discussions and support

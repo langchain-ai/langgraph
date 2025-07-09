@@ -382,7 +382,7 @@ def interrupt(value: Any) -> Any:
         from langgraph.checkpoint.memory import MemorySaver
         from langgraph.constants import START
         from langgraph.graph import StateGraph
-        from langgraph.types import interrupt
+        from langgraph.types import interrupt, Command
 
 
         class State(TypedDict):
