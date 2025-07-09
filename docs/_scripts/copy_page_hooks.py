@@ -46,7 +46,7 @@ def _clean_markdown(content: str) -> str:
     content = re.sub(r'^---\n.*?\n---\n', '', content, flags=re.DOTALL)
     
     # Remove script tags
-    content = re.sub(r'<script[^>]*>.*?</script>', '', content, flags=re.DOTALL)
+    content = re.sub(r'<script[^>]*>.*?</script>', '', content, flags=re.DOTALL | re.IGNORECASE)
     
     # Remove style tags  
     content = re.sub(r'<style[^>]*>.*?</style>', '', content, flags=re.DOTALL)
