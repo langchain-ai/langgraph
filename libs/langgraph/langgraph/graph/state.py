@@ -83,7 +83,7 @@ from langgraph.types import (
     RetryPolicy,
     Send,
 )
-from langgraph.typing import InputT, OutputT, StateT
+from langgraph.typing import InputT, NodeInputT, OutputT, StateT
 from langgraph.warnings import LangGraphDeprecatedSinceV05
 
 __all__ = ("StateGraph", "CompiledStateGraph")
@@ -267,7 +267,25 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
         *,
         defer: bool = False,
         metadata: dict[str, Any] | None = None,
-        input_schema: type[Any] | None = None,
+        input_schema: None = None,
+        retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+        cache_policy: CachePolicy | None = None,
+        destinations: dict[str, str] | tuple[str, ...] | None = None,
+        **kwargs: Unpack[DeprecatedKwargs],
+    ) -> Self:
+        """Add a new node to the state graph.
+        Will take the name of the function/runnable as the node name.
+        """
+        ...
+
+    @overload
+    def add_node(
+        self,
+        node: StateNode[NodeInputT],
+        *,
+        defer: bool = False,
+        metadata: dict[str, Any] | None = None,
+        input_schema: type[NodeInputT],
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
@@ -286,7 +304,24 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
         *,
         defer: bool = False,
         metadata: dict[str, Any] | None = None,
-        input_schema: type[Any] | None = None,
+        input_schema: None = None,
+        retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+        cache_policy: CachePolicy | None = None,
+        destinations: dict[str, str] | tuple[str, ...] | None = None,
+        **kwargs: Unpack[DeprecatedKwargs],
+    ) -> Self:
+        """Add a new node to the state graph."""
+        ...
+
+    @overload
+    def add_node(
+        self,
+        node: str,
+        action: StateNode[NodeInputT],
+        *,
+        defer: bool = False,
+        metadata: dict[str, Any] | None = None,
+        input_schema: type[NodeInputT],
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
@@ -302,7 +337,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
         *,
         defer: bool = False,
         metadata: dict[str, Any] | None = None,
-        input_schema: type[Any] | None = None,
+        input_schema: type[NodeInputT] | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         cache_policy: CachePolicy | None = None,
         destinations: dict[str, str] | tuple[str, ...] | None = None,
@@ -412,6 +447,8 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
                     f"'{character}' is a reserved character and is not allowed in the node names."
                 )
 
+        original_input_schema = input_schema
+
         ends: tuple[str, ...] | dict[str, str] = EMPTY_SEQ
         try:
             if (
@@ -462,15 +499,27 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
 
         if input_schema is not None:
             self._add_schema(input_schema)
-        self.nodes[node] = StateNodeSpec(
-            coerce_to_runnable(action, name=node, trace=False),
-            metadata,
-            input_schema=input_schema or self.state_schema,
-            retry_policy=retry_policy,
-            cache_policy=cache_policy,
-            ends=ends,
-            defer=defer,
-        )
+
+        if original_input_schema is not None:
+            self.nodes[node] = StateNodeSpec[NodeInputT](
+                coerce_to_runnable(action, name=node, trace=False),
+                metadata,
+                input_schema=cast(type[NodeInputT], original_input_schema),
+                retry_policy=retry_policy,
+                cache_policy=cache_policy,
+                ends=ends,
+                defer=defer,
+            )
+        else:
+            self.nodes[node] = StateNodeSpec[StateT](
+                coerce_to_runnable(action, name=node, trace=False),
+                metadata,
+                input_schema=self.state_schema,
+                retry_policy=retry_policy,
+                cache_policy=cache_policy,
+                ends=ends,
+                defer=defer,
+            )
         return self
 
     def add_edge(self, start_key: str | list[str], end_key: str) -> Self:

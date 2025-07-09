@@ -27,6 +27,9 @@ InputT = TypeVar("InputT", bound=StateLike, default=StateT)
 Defaults to `StateT`.
 """
 
-
 OutputT = TypeVar("OutputT", bound=Union[StateLike, None], default=StateT)
 """Type variable used to represent the output of a state graph."""
+
+NodeInputT = TypeVar("NodeInputT", bound=StateLike)
+
+NodeInputT_contra = TypeVar("NodeInputT_contra", bound=StateLike, contravariant=True)

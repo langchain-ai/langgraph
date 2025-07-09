@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, NamedTuple, Protocol, Union
+from dataclasses import dataclass
+from typing import Any, Generic, Protocol, Union
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from typing_extensions import TypeAlias
@@ -9,47 +10,47 @@ from typing_extensions import TypeAlias
 from langgraph.constants import EMPTY_SEQ
 from langgraph.store.base import BaseStore
 from langgraph.types import CachePolicy, RetryPolicy, StreamWriter
-from langgraph.typing import StateT_contra
+from langgraph.typing import NodeInputT, NodeInputT_contra
 
 
-class _Node(Protocol[StateT_contra]):
-    def __call__(self, state: StateT_contra) -> Any: ...
+class _Node(Protocol[NodeInputT_contra]):
+    def __call__(self, state: NodeInputT_contra) -> Any: ...
 
 
-class _NodeWithConfig(Protocol[StateT_contra]):
-    def __call__(self, state: StateT_contra, config: RunnableConfig) -> Any: ...
+class _NodeWithConfig(Protocol[NodeInputT_contra]):
+    def __call__(self, state: NodeInputT_contra, config: RunnableConfig) -> Any: ...
 
 
-class _NodeWithWriter(Protocol[StateT_contra]):
-    def __call__(self, state: StateT_contra, *, writer: StreamWriter) -> Any: ...
+class _NodeWithWriter(Protocol[NodeInputT_contra]):
+    def __call__(self, state: NodeInputT_contra, *, writer: StreamWriter) -> Any: ...
 
 
-class _NodeWithStore(Protocol[StateT_contra]):
-    def __call__(self, state: StateT_contra, *, store: BaseStore) -> Any: ...
+class _NodeWithStore(Protocol[NodeInputT_contra]):
+    def __call__(self, state: NodeInputT_contra, *, store: BaseStore) -> Any: ...
 
 
-class _NodeWithWriterStore(Protocol[StateT_contra]):
+class _NodeWithWriterStore(Protocol[NodeInputT_contra]):
     def __call__(
-        self, state: StateT_contra, *, writer: StreamWriter, store: BaseStore
+        self, state: NodeInputT_contra, *, writer: StreamWriter, store: BaseStore
     ) -> Any: ...
 
 
-class _NodeWithConfigWriter(Protocol[StateT_contra]):
+class _NodeWithConfigWriter(Protocol[NodeInputT_contra]):
     def __call__(
-        self, state: StateT_contra, *, config: RunnableConfig, writer: StreamWriter
+        self, state: NodeInputT_contra, *, config: RunnableConfig, writer: StreamWriter
     ) -> Any: ...
 
 
-class _NodeWithConfigStore(Protocol[StateT_contra]):
+class _NodeWithConfigStore(Protocol[NodeInputT_contra]):
     def __call__(
-        self, state: StateT_contra, *, config: RunnableConfig, store: BaseStore
+        self, state: NodeInputT_contra, *, config: RunnableConfig, store: BaseStore
     ) -> Any: ...
 
 
-class _NodeWithConfigWriterStore(Protocol[StateT_contra]):
+class _NodeWithConfigWriterStore(Protocol[NodeInputT_contra]):
     def __call__(
         self,
-        state: StateT_contra,
+        state: NodeInputT_contra,
         *,
         config: RunnableConfig,
         writer: StreamWriter,
@@ -61,23 +62,23 @@ class _NodeWithConfigWriterStore(Protocol[StateT_contra]):
 # we move to adding a context arg. Maybe what we do is we add support for kwargs with param spec
 # this is purely for typing purposes though, so can easily change in the coming weeks.
 StateNode: TypeAlias = Union[
-    _Node[StateT_contra],
-    _NodeWithConfig[StateT_contra],
-    _NodeWithWriter[StateT_contra],
-    _NodeWithStore[StateT_contra],
-    _NodeWithWriterStore[StateT_contra],
-    _NodeWithConfigWriter[StateT_contra],
-    _NodeWithConfigStore[StateT_contra],
-    _NodeWithConfigWriterStore[StateT_contra],
-    Runnable[StateT_contra, Any],
+    _Node[NodeInputT],
+    _NodeWithConfig[NodeInputT],
+    _NodeWithWriter[NodeInputT],
+    _NodeWithStore[NodeInputT],
+    _NodeWithWriterStore[NodeInputT],
+    _NodeWithConfigWriter[NodeInputT],
+    _NodeWithConfigStore[NodeInputT],
+    _NodeWithConfigWriterStore[NodeInputT],
+    Runnable[NodeInputT, Any],
 ]
 
 
-# TODO: use a dataclass generic on NodeInputType
-class StateNodeSpec(NamedTuple):
-    runnable: StateNode
+@dataclass
+class StateNodeSpec(Generic[NodeInputT]):
+    runnable: StateNode[NodeInputT]
     metadata: dict[str, Any] | None
-    input_schema: type[Any]
+    input_schema: type[NodeInputT]
     retry_policy: RetryPolicy | Sequence[RetryPolicy] | None
     cache_policy: CachePolicy | None
     ends: tuple[str, ...] | dict[str, str] | None = EMPTY_SEQ
