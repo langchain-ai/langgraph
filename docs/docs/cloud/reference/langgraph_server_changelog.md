@@ -4,6 +4,55 @@
 
 ---
 
+## v0.2.83 (2025-07-09)
+- Reduced the `default` Time-To-Live (TTL) for `resumable` `streams` to 2 `minutes`.
+- Updated `data` `submission` `logic` to `handle` `various` `deployment` `modes`, `ensuring` `correct` `endpoints` (`beacon` or `LangSmith`) are `used` `based` on `license` `type` and `configuration`.
+- Added `functionality` to `submit` `self`-`hosted` `data` to a Langsmith `instance` when the `endpoint` is `configured`.
+
+## v0.2.82 (2025-07-03)
+- Resolved a `race` `condition` in `background` `jobs` by `using` a `join` to `lock` `Runs.`next``, `ensuring` `consistent` `execution` `without` `affecting` `performance`.
+
+## v0.2.81 (2025-07-03)
+- Added a `placeholder` `/`ok`` `endpoint` for `deployments` with ``disable_meta`=True` to `ensure` `they` are `marked` as `successful`.
+- Adjusted the `initial` `wait` `time` for `run` `streams` to be `shorter`, `improving` `responsiveness` for `runs` that are more than 60 `seconds` `old` or `non`-`existent`.
+
+## v0.2.80 (2025-07-03)
+- Fixed an `issue` where the ``logger`.`ainfo`()` `method` `incorrectly` `passed` `multiple` `values` to the ``event`` `argument`.
+
+## v0.2.79 (2025-07-02)
+- Resolved an `issue` `causing` `JsonDecodeError` `during` `checkpointing` with `remote` `graphs`, `ensuring` `proper` JSON `handling` when `falling` `back` to `sanitization`.
+- Introduced the ``disable_webhooks`` `configuration` `flag` to `prevent` `webhooks` `across` all `routes`.
+
+## v0.2.78 (2025-07-02)
+- Implemented `automatic` `retries` for `webhook` `calls` that `experience` `timeouts`.
+- Added ``lg_api_http_requests_total`` `counter` and ``lg_api_http_requests_latency_seconds`` `histogram` `metrics` to `enable` `request` `rate` and `latency` `charting`.
+
+## v0.2.77 (2025-07-02)
+- Added HTTP `metrics` for `better` `performance` `tracking`.
+- Changed the Redis `cache` `delimiter` to `reduce` `conflicts` with `subgraph` `messages`.
+
+## v0.2.76 (2025-07-01)
+- Updated Redis `cache` `delimiter` to `prevent` `conflicts` with `subgraph` `messages`.
+
+## v0.2.74 (2025-06-30)
+- Scheduled `webhooks` `using` an `isolated` `loop` to `ensure` `thread` `safety` and `prevent` `event` `loop` `errors`.
+
+## v0.2.73 (2025-06-27)
+- Fixed an `issue` `causing` `infinite` `frame` `loops` and `removed` the ``dict_parser`` `due` to `structlog` `conflicts`.
+- Now `responds` with a 409 `error` when a `deadlock` `occurs` `during` `cancellation` `attempts`.
+
+## v0.2.72 (2025-06-27)
+- Return a 409 `error` `code` when a `deadlock` `occurs` `during` `cancellation` `requests`.
+
+## v0.2.71 (2025-06-26)
+- Improved `logging` by `updating` the `log` `type` for `better` `clarity` and `consistency`.
+
+## v0.2.70 (2025-06-26)
+- Improved `error` `handling` to `better` `distinguish` `between` `user` `TimeoutError` and `system` `timeouts`, `ensuring` `clearer` `logging` and `encapsulation` of `user` `errors`.
+
+## v0.2.69 (2025-06-26)
+- Enhanced the `crons` API with `sorting`, `pagination`, and `updated` `schema` `definitions` for `improved` `accuracy`.
+
 ## v0.2.66 (2025-06-26)
 - Fixed a 404 error when creating multiple runs with the same thread_id using `on_not_exist="create"`.
 
