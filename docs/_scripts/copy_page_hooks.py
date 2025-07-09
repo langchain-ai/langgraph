@@ -45,11 +45,11 @@ def _clean_markdown(content: str) -> str:
     # Remove frontmatter
     content = re.sub(r'^---\n.*?\n---\n', '', content, flags=re.DOTALL)
     
-    # Remove script tags
-    content = re.sub(r'<script[^>]*>.*?</script>', '', content, flags=re.DOTALL | re.IGNORECASE)
+    # Remove script tags (handle spaces in closing tags)
+    content = re.sub(r'<script[^>]*>.*?</script\s*>', '', content, flags=re.DOTALL | re.IGNORECASE)
     
-    # Remove style tags  
-    content = re.sub(r'<style[^>]*>.*?</style>', '', content, flags=re.DOTALL)
+    # Remove style tags (handle spaces in closing tags)
+    content = re.sub(r'<style[^>]*>.*?</style\s*>', '', content, flags=re.DOTALL | re.IGNORECASE)
     
     # Remove HTML comments
     content = re.sub(r'<!--.*?-->', '', content, flags=re.DOTALL)
