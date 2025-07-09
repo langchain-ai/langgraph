@@ -4,6 +4,9 @@
 
 ---
 
+## v0.2.84 (2025-07-09)
+- Removed unnecessary status updates to streamline thread handling and updated version to 0.2.84.
+
 ## v0.2.83 (2025-07-09)
 - Reduced the default time-to-live for resumable streams to 2 minutes.
 - Enhanced data submission logic to send data to both Beacon and LangSmith instance based on license configuration.
