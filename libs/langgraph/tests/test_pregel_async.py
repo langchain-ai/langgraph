@@ -2496,6 +2496,10 @@ async def test_imp_stream_order(
     ]
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Requires Python 3.11 or higher for context management",
+)
 async def test_send_dedupe_on_resume(
     async_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
 ) -> None:
