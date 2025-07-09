@@ -4,6 +4,55 @@
 
 ---
 
+## v0.2.83 (2025-07-09)
+- Reduced the default TTL for resumable streams to 2 minutes for improved resource management.
+- Enabled data submission to LangSmith instance for self-hosted environments, with varied behavior based on license and API key configurations.
+- Enabled submission of self-hosted data to a Langsmith instance when an endpoint is configured.
+
+## v0.2.82 (2025-07-03)
+- Used `join` to lock run and prevent race condition across CTEs in `Runs.next` for improved stability.
+
+## v0.2.81 (2025-07-03)
+- Retained the `/ok` endpoint by adding a placeholder to ensure deployments are marked successful even with `disable_meta=True`.
+- Reduced initial wait time for run streams to improve performance on older runs and nonexistent executions.
+
+## v0.2.80 (2025-07-03)
+- Fixed an issue in the `logger.ainfo()` API call to prevent multiple values error for the 'event' argument.
+
+## v0.2.79 (2025-07-02)
+- Fixed a JsonDecodeError during checkpointing with remote graphs by improving handling of invalid JSON data.
+- Added a configuration flag to disable webhooks across all routes for enhanced control.
+
+## v0.2.78 (2025-07-02)
+- Added retries for webhook calls that timeout to improve reliability.
+- Added `lg_api_http_requests_total` and `lg_api_http_requests_latency_seconds` metrics for tracking request counts and latency.
+
+## v0.2.77 (2025-07-02)
+- Added HTTP metrics to enhance monitoring capabilities.
+- Updated Redis cache delimiter to reduce conflicts with subgraph messages.
+
+## v0.2.76 (2025-07-01)
+- Modified the Redis cache delimiter to prevent conflicts with subgraph messages.
+
+## v0.2.74 (2025-06-30)
+- Scheduled webhooks in an isolated loop to ensure thread-safe operations and avoid errors with `PYTHONASYNCIODEBUG=1`.
+
+## v0.2.73 (2025-06-27)
+- Fixed an infinite frame loop issue and removed the `dict_parser` due to `structlog` complications.
+- Raised a 409 error on deadlock scenarios during the run cancellation process.
+
+## v0.2.72 (2025-06-27)
+- Returned a 409 error code instead of a 500 when a deadlock occurs during cancellation to prevent server crashes.
+
+## v0.2.71 (2025-06-26)
+- Improved logging to properly capture and categorize different log types.
+
+## v0.2.70 (2025-06-26)
+- Improved error handling to distinguish between user-initiated TimeoutErrors and runtime timeouts for clearer logging.
+
+## v0.2.69 (2025-06-26)
+- Added sorting and pagination to the crons API and updated schema definitions for accuracy.
+
 ## v0.2.66 (2025-06-26)
 - Fixed a 404 error when creating multiple runs with the same thread_id using `on_not_exist="create"`.
 
