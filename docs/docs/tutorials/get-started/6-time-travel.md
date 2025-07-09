@@ -416,7 +416,11 @@ for await (const state of graph.getStateHistory({
 ```
 
 ```
-Num Messages: 8, Next: []
+Num Messages: 8 Next:  []
+--------------------------------------------------------------------------------
+Num Messages: 7 Next:  ["chatbot"]
+--------------------------------------------------------------------------------
+Num Messages: 6 Next:  ["tools"]
 --------------------------------------------------------------------------------
 Num Messages: 7, Next: ["chatbot"]
 --------------------------------------------------------------------------------
@@ -450,7 +454,7 @@ Resume from the `to_replay` state, which is after the `chatbot` node in the seco
 :::
 
 :::js
-Resume from the `to_replay` state, which is after a specific node in one of the graph invocations. Resuming from this point will call the next scheduled node.
+Resume from the `toReplay` state, which is after a specific node in one of the graph invocations. Resuming from this point will call the next scheduled node.
 :::
 
 :::python
