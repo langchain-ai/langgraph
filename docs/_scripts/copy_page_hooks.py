@@ -41,54 +41,21 @@ def _process_includes(content: str, docs_dir: Path) -> str:
 
 
 def _clean_markdown(content: str) -> str:
-    """Clean up markdown content by removing MkDocs artifacts."""
+    """Minimal cleanup of markdown content - preserve original as much as possible."""
     # Remove frontmatter
     content = re.sub(r'^---\n.*?\n---\n', '', content, flags=re.DOTALL)
     
-    # Remove script tags (handle spaces in closing tags)
+    # Remove script tags (security)
     content = re.sub(r'<script[^>]*>.*?</script\s*>', '', content, flags=re.DOTALL | re.IGNORECASE)
     
-    # Remove style tags (handle spaces in closing tags)
+    # Remove style tags (security)
     content = re.sub(r'<style[^>]*>.*?</style\s*>', '', content, flags=re.DOTALL | re.IGNORECASE)
     
     # Remove HTML comments
     content = re.sub(r'<!--.*?-->', '', content, flags=re.DOTALL)
     
-    # Remove all HTML tags (more aggressive cleaning)
-    content = re.sub(r'<[^>]+>', '', content)
-    
-    # Remove markdown image references that might be logos
-    content = re.sub(r'!\[[^\]]*\]\([^)]*logo[^)]*\)', '', content, flags=re.IGNORECASE)
-    
-    # Clean up line by line
-    lines = content.split('\n')
-    cleaned_lines = []
-    
-    for line in lines:
-        line = line.strip()
-        # Skip completely empty lines for now
-        if line:
-            cleaned_lines.append(line)
-    
-    # Join lines and then clean up spacing
-    content = '\n'.join(cleaned_lines)
-    
-    # Add proper paragraph breaks by looking for markdown patterns
-    # Add double newline before headers
-    content = re.sub(r'\n(#{1,6}\s)', r'\n\n\1', content)
-    
-    # Add double newline before list items
-    content = re.sub(r'\n(\*\s|-\s|\d+\.\s)', r'\n\n\1', content)
-    
-    # Add double newline before code blocks
-    content = re.sub(r'\n(```)', r'\n\n\1', content)
-    
-    # Clean up any triple+ newlines
-    content = re.sub(r'\n{3,}', '\n\n', content)
-    
-    content = content.strip()
-    
-    return content
+    # Just strip and return - preserve original structure
+    return content.strip()
 
 
 def inject_markdown_content(html: str, page: Page, config: MkDocsConfig) -> str:
