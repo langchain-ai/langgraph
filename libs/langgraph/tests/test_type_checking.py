@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from operator import add
 from typing import Annotated, Any
 
+import pytest
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 from typing_extensions import TypedDict
@@ -106,6 +107,7 @@ def test_input_state_specified() -> None:
     new_graph.invoke({"something": 2, "info": ["hello", "world"]})  # type: ignore[arg-type]
 
 
+@pytest.mark.skip("Purely for type checking")
 def test_invoke_with_all_valid_types() -> None:
     class State(TypedDict):
         a: int
