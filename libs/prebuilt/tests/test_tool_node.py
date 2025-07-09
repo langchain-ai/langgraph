@@ -14,10 +14,10 @@ from langchain_core.tools import tool as dec_tool
 from pydantic import BaseModel, ValidationError
 from pydantic.v1 import ValidationError as ValidationErrorV1
 
-from langgraph.errors import GraphInterrupt
+from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.tool_node import TOOL_CALL_ERROR_TEMPLATE
-from langgraph.types import Command, Send, interrupt
+from langgraph.types import Command, Send
 
 pytestmark = pytest.mark.anyio
 
@@ -464,14 +464,14 @@ def test_tool_node_incorrect_tool_name():
 def test_tool_node_node_interrupt():
     def tool_interrupt(some_val: int) -> None:
         """Tool docstring."""
-        interrupt("foo")
+        raise GraphBubbleUp("foo")
 
     def handle(e: GraphInterrupt):
         return "handled"
 
-    for handle_tool_errors in (True, (GraphInterrupt,), "handled", handle, False):
+    for handle_tool_errors in (True, (GraphBubbleUp,), "handled", handle, False):
         node = ToolNode([tool_interrupt], handle_tool_errors=handle_tool_errors)
-        with pytest.raises(GraphInterrupt) as exc_info:
+        with pytest.raises(GraphBubbleUp) as exc_info:
             node.invoke(
                 {
                     "messages": [
