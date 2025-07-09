@@ -126,18 +126,19 @@ def inject_markdown_content(html: str, page: Page, config: MkDocsConfig) -> str:
         with open(markdown_file, 'r', encoding='utf-8') as f:
             markdown_content = f.read()
         
-        # Special handling for index page - use the actual README.md file
+        # Special handling for index page - use relative path to the actual README.md
         if src_path == 'index.md':
-            # Use the actual README.md file from the repository root
-            readme_file = docs_dir.parent / 'README.md'
-            if readme_file.exists():
-                with open(readme_file, 'r', encoding='utf-8') as f:
+            # Relative path to the repository README.md file (go up two levels from docs/docs)
+            readme_path = docs_dir.parent.parent / 'README.md'
+            
+            try:
+                with open(readme_path, 'r', encoding='utf-8') as f:
                     readme_content = f.read()
                 # Remove frontmatter if present
                 processed_markdown = re.sub(r'^---\n.*?\n---\n', '', readme_content, flags=re.DOTALL)
                 processed_markdown = processed_markdown.strip()
-            else:
-                # Fallback to processing includes if README doesn't exist
+            except Exception as e:
+                # If we can't read the README, fallback to original behavior
                 processed_markdown = _process_includes(markdown_content, docs_dir)
                 processed_markdown = re.sub(r'^---\n.*?\n---\n', '', processed_markdown, flags=re.DOTALL)
                 processed_markdown = processed_markdown.strip()
