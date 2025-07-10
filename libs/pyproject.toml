@@ -1,6 +1,6 @@
 [project]
 name = "libs"
-version = "0.0.1"
+version = "0.1.1"
 description = "LangGraph monorepo uv workspace"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -39,6 +39,6 @@ members = [
   './prebuilt'
 ]
 exclude = [
-    './sdk-js',
-    './sdk-py'
+  './sdk-js',
+  './sdk-py'
 ]
