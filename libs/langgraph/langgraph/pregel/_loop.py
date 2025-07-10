@@ -113,6 +113,7 @@ from langgraph.types import (
     All,
     CachePolicy,
     Command,
+    Durability,
     PregelExecutableTask,
     RetryPolicy,
     StreamMode,
@@ -154,7 +155,7 @@ class PregelLoop:
     manager: None | AsyncParentRunManager | ParentRunManager
     interrupt_after: All | Sequence[str]
     interrupt_before: All | Sequence[str]
-    checkpoint_during: bool
+    durability: Durability
     retry_policy: Sequence[RetryPolicy]
     cache_policy: CachePolicy | None
 
@@ -216,13 +217,13 @@ class PregelLoop:
         output_keys: str | Sequence[str],
         stream_keys: str | Sequence[str],
         trigger_to_nodes: Mapping[str, Sequence[str]],
+        durability: Durability,
         interrupt_after: All | Sequence[str] = EMPTY_SEQ,
         interrupt_before: All | Sequence[str] = EMPTY_SEQ,
         manager: None | AsyncParentRunManager | ParentRunManager = None,
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
-        checkpoint_during: bool = True,
     ) -> None:
         self.stream = stream
         self.config = config
@@ -246,7 +247,7 @@ class PregelLoop:
         self.trigger_to_nodes = trigger_to_nodes
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
-        self.checkpoint_during = checkpoint_during
+        self.durability = durability
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
         scratchpad: PregelScratchpad | None = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
@@ -323,7 +324,7 @@ class PregelLoop:
             writes_to_save = writes
         # save writes
         self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
-        if self.checkpoint_during and self.checkpointer_put_writes is not None:
+        if self.durability != "exit" and self.checkpointer_put_writes is not None:
             config = patch_configurable(
                 self.checkpoint_config,
                 {
@@ -684,7 +685,7 @@ class PregelLoop:
             self.checkpoint_metadata = metadata
         # do checkpoint?
         do_checkpoint = self._checkpointer_put_after_previous is not None and (
-            exiting or self.checkpoint_during
+            exiting or self.durability != "exit"
         )
         # create new checkpoint
         self.checkpoint = create_checkpoint(
@@ -746,7 +747,7 @@ class PregelLoop:
         traceback: TracebackType | None,
     ) -> bool | None:
         # persist current checkpoint and writes
-        if not self.checkpoint_during and (
+        if self.durability == "exit" and (
             # if it's a top graph
             not self.is_nested
             # or a nested graph with error or interrupt
@@ -891,6 +892,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, BaseChannel | ManagedValueSpec],
         trigger_to_nodes: Mapping[str, Sequence[str]],
+        durability: Durability,
         manager: None | AsyncParentRunManager | ParentRunManager = None,
         interrupt_after: All | Sequence[str] = EMPTY_SEQ,
         interrupt_before: All | Sequence[str] = EMPTY_SEQ,
@@ -900,7 +902,6 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
-        checkpoint_during: bool = True,
     ) -> None:
         super().__init__(
             input,
@@ -921,7 +922,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             trigger_to_nodes=trigger_to_nodes,
             retry_policy=retry_policy,
             cache_policy=cache_policy,
-            checkpoint_during=checkpoint_during,
+            durability=durability,
         )
         self.stack = ExitStack()
         if checkpointer:
@@ -1062,6 +1063,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, BaseChannel | ManagedValueSpec],
         trigger_to_nodes: Mapping[str, Sequence[str]],
+        durability: Durability,
         interrupt_after: All | Sequence[str] = EMPTY_SEQ,
         interrupt_before: All | Sequence[str] = EMPTY_SEQ,
         manager: None | AsyncParentRunManager | ParentRunManager = None,
@@ -1071,7 +1073,6 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
-        checkpoint_during: bool = True,
     ) -> None:
         super().__init__(
             input,
@@ -1092,7 +1093,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             trigger_to_nodes=trigger_to_nodes,
             retry_policy=retry_policy,
             cache_policy=cache_policy,
-            checkpoint_during=checkpoint_during,
+            durability=durability,
         )
         self.stack = AsyncExitStack()
         if checkpointer:

@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from dataclasses import is_dataclass
 from functools import partial
 from inspect import isclass
-from typing import Any, Callable, Generic, Union, cast, get_type_hints
+from typing import Any, Callable, Generic, Optional, Union, cast, get_type_hints
 from uuid import UUID, uuid5
 
 from langchain_core.globals import get_debug
@@ -40,10 +40,10 @@ from langgraph._internal._constants import (
     CACHE_NS_WRITES,
     CONF,
     CONFIG_KEY_CACHE,
-    CONFIG_KEY_CHECKPOINT_DURING,
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
+    CONFIG_KEY_DURABILITY,
     CONFIG_KEY_NODE_FINISHED,
     CONFIG_KEY_READ,
     CONFIG_KEY_RUNNER_SUBMIT,
@@ -123,6 +123,7 @@ from langgraph.types import (
     CachePolicy,
     Checkpointer,
     Command,
+    Durability,
     Interrupt,
     Send,
     StateSnapshot,
@@ -2345,6 +2346,8 @@ class Pregel(
         output_keys: str | Sequence[str] | None,
         interrupt_before: All | Sequence[str] | None,
         interrupt_after: All | Sequence[str] | None,
+        durability: Durability | None = None,
+        checkpoint_during: bool | None = None,
     ) -> tuple[
         set[StreamMode],
         str | Sequence[str],
@@ -2353,6 +2356,7 @@ class Pregel(
         BaseCheckpointSaver | None,
         BaseStore | None,
         BaseCache | None,
+        Durability,
     ]:
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
@@ -2391,6 +2395,17 @@ class Pregel(
             cache: BaseCache | None = config[CONF][CONFIG_KEY_CACHE]
         else:
             cache = self.cache
+        if checkpoint_during is not None:
+            if durability is not None:
+                raise ValueError(
+                    "Cannot use both `checkpoint_during` and `durability` parameters."
+                )
+            elif checkpoint_during:
+                durability = "async"
+            else:
+                durability = "exit"
+        if durability is None:
+            durability = config.get(CONF, {}).get(CONFIG_KEY_DURABILITY, "async")
         return (
             stream_modes,
             output_keys,
@@ -2399,6 +2414,7 @@ class Pregel(
             checkpointer,
             store,
             cache,
+            durability,
         )
 
     def stream(
@@ -2412,9 +2428,10 @@ class Pregel(
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        checkpoint_during: bool | None = None,
-        debug: bool | None = None,
+        durability: Durability | None = None,
         subgraphs: bool = False,
+        debug: bool | None = None,
+        **kwargs: Unpack[DeprecatedKwargs],
     ) -> Iterator[dict[str, Any] | Any]:
         """Stream graph steps for a single input.
 
@@ -2442,7 +2459,10 @@ class Pregel(
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
-            checkpoint_during: Whether to checkpoint intermediate steps, defaults to False. If False, only the final checkpoint is saved.
+            durability: The durability mode for the graph execution, defaults to "async". Options are:
+                - `"sync"`: Changes are persisted synchronously before the next step starts.
+                - `"async"`: Changes are persisted asynchronously while the next step executes.
+                - `"exit"`: Changes are persisted only when the graph exits.
             subgraphs: Whether to stream events from inside subgraphs, defaults to False.
                 If True, the events will be emitted as tuples `(namespace, data)`,
                 or `(namespace, mode, data)` if `stream_mode` is a list,
@@ -2477,6 +2497,14 @@ class Pregel(
             run_id=config.get("run_id"),
         )
         try:
+            deprecated_checkpoint_during = cast(
+                Optional[bool], kwargs.get("checkpoint_during")
+            )
+            if deprecated_checkpoint_during is not None:
+                warnings.warn(
+                    "`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
+                    category=LangGraphDeprecatedSinceV10,
+                )
             # assign defaults
             (
                 stream_modes,
@@ -2486,6 +2514,7 @@ class Pregel(
                 checkpointer,
                 store,
                 cache,
+                durability_,
             ) = self._defaults(
                 config,
                 stream_mode=stream_mode,
@@ -2493,7 +2522,15 @@ class Pregel(
                 output_keys=output_keys,
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
+                durability=durability,
+                checkpoint_during=deprecated_checkpoint_during,
             )
+            if checkpointer is None and (
+                durability is not None or deprecated_checkpoint_during is not None
+            ):
+                warnings.warn(
+                    "`durability` has no effect when no checkpointer is present.",
+                )
             # set up subgraph checkpointing
             if self.checkpointer is True:
                 ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
@@ -2526,9 +2563,9 @@ class Pregel(
                 def stream_writer(c: Any) -> None:
                     pass
 
-            # set checkpointing mode for subgraphs
-            if checkpoint_during is not None:
-                config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
+            # set durability mode for subgraphs
+            if durability is not None or deprecated_checkpoint_during is not None:
+                config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
             config[CONF][CONFIG_KEY_RUNTIME] = Runtime(
                 context=context,
@@ -2551,9 +2588,7 @@ class Pregel(
                 interrupt_before=interrupt_before_,
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
-                checkpoint_during=checkpoint_during
-                if checkpoint_during is not None
-                else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, True),
+                durability=durability_,
                 trigger_to_nodes=self.trigger_to_nodes,
                 migrate_checkpoint=self._migrate_checkpoint,
                 retry_policy=self.retry_policy,
@@ -2614,6 +2649,9 @@ class Pregel(
                             stream_mode, print_mode, subgraphs, stream.get, queue.Empty
                         )
                     loop.after_tick()
+                    # wait for checkpoint
+                    if durability_ == "sync":
+                        loop._put_checkpoint_fut.result()
             # emit output
             yield from _output(
                 stream_mode, print_mode, subgraphs, stream.get, queue.Empty
@@ -2646,9 +2684,10 @@ class Pregel(
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        checkpoint_during: bool | None = None,
-        debug: bool | None = None,
+        durability: Durability | None = None,
         subgraphs: bool = False,
+        debug: bool | None = None,
+        **kwargs: Unpack[DeprecatedKwargs],
     ) -> AsyncIterator[dict[str, Any] | Any]:
         """Asynchronously stream graph steps for a single input.
 
@@ -2675,7 +2714,10 @@ class Pregel(
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
-            checkpoint_during: Whether to checkpoint intermediate steps, defaults to False. If False, only the final checkpoint is saved.
+            durability: The durability mode for the graph execution, defaults to "async". Options are:
+                - `"sync"`: Changes are persisted synchronously before the next step starts.
+                - `"async"`: Changes are persisted asynchronously while the next step executes.
+                - `"exit"`: Changes are persisted only when the graph exits.
             subgraphs: Whether to stream events from inside subgraphs, defaults to False.
                 If True, the events will be emitted as tuples `(namespace, data)`,
                 or `(namespace, mode, data)` if `stream_mode` is a list,
@@ -2729,6 +2771,14 @@ class Pregel(
             else False
         )
         try:
+            deprecated_checkpoint_during = cast(
+                Optional[bool], kwargs.get("checkpoint_during")
+            )
+            if deprecated_checkpoint_during is not None:
+                warnings.warn(
+                    "`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
+                    category=LangGraphDeprecatedSinceV10,
+                )
             # assign defaults
             (
                 stream_modes,
@@ -2738,6 +2788,7 @@ class Pregel(
                 checkpointer,
                 store,
                 cache,
+                durability_,
             ) = self._defaults(
                 config,
                 stream_mode=stream_mode,
@@ -2745,7 +2796,15 @@ class Pregel(
                 output_keys=output_keys,
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
+                durability=durability,
+                checkpoint_during=deprecated_checkpoint_during,
             )
+            if checkpointer is None and (
+                durability is not None or deprecated_checkpoint_during is not None
+            ):
+                warnings.warn(
+                    "`durability` has no effect when no checkpointer is present.",
+                )
             # set up subgraph checkpointing
             if self.checkpointer is True:
                 ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
@@ -2793,9 +2852,9 @@ class Pregel(
                 def stream_writer(c: Any) -> None:
                     pass
 
-            # set checkpointing mode for subgraphs
-            if checkpoint_during is not None:
-                config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
+            # set durability mode for subgraphs
+            if durability is not None or deprecated_checkpoint_during is not None:
+                config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
             config[CONF][CONFIG_KEY_RUNTIME] = Runtime(
                 context=context,
@@ -2818,9 +2877,7 @@ class Pregel(
                 interrupt_before=interrupt_before_,
                 interrupt_after=interrupt_after_,
                 manager=run_manager,
-                checkpoint_during=checkpoint_during
-                if checkpoint_during is not None
-                else config[CONF].get(CONFIG_KEY_CHECKPOINT_DURING, True),
+                durability=durability_,
                 trigger_to_nodes=self.trigger_to_nodes,
                 migrate_checkpoint=self._migrate_checkpoint,
                 retry_policy=self.retry_policy,
@@ -2877,6 +2934,9 @@ class Pregel(
                         ):
                             yield o
                     loop.after_tick()
+                    # wait for checkpoint
+                    if durability_ == "sync":
+                        await cast(asyncio.Future, loop._put_checkpoint_fut)
             # emit output
             for o in _output(
                 stream_mode,
