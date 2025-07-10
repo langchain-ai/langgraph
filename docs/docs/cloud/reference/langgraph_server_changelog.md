@@ -4,6 +4,9 @@
 
 ---
 
+## v0.2.85 (2025-07-10)
+- Added support for the `on_disconnect` field to `runs/wait` and included disconnect logs for better debugging.
+
 ## v0.2.84 (2025-07-09)
 - Removed unnecessary status updates to streamline thread handling and updated version to 0.2.84.
 
