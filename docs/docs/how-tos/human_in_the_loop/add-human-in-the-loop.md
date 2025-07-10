@@ -320,6 +320,13 @@ parent_graph.invoke(Command(resume=resume_map), config=thread_config)
         print(event)
     ```
 
+### Use static interrupts to debug in LangGraph Studio
+
+You can use [LangGraph Studio](../../concepts/langgraph_studio.md) to debug your graph. You can set static breakpoints in the UI and then run the graph. You can also use the UI to inspect the graph state at any point in the execution.
+
+![image](../../concepts/img/human_in_the_loop/static-interrupt.png){: style="max-height:400px"}
+
+LangGraph Studio is free with [locally deployed applications](../../tutorials/langgraph-platform/local-server.md) using `langgraph dev`. 
 
 ## Common patterns
 
