@@ -28,6 +28,8 @@ InputT = TypeVar("InputT", bound=StateLike, default=StateT)
 Defaults to `StateT`.
 """
 
-
 OutputT = TypeVar("OutputT", bound=StateLike, default=StateT)
-"""Type variable used to represent the output of a state graph."""
+"""Type variable used to represent the output of a state graph.
+
+Defaults to `StateT`.
+"""

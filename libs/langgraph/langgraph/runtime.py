@@ -7,7 +7,8 @@ from langgraph.store.base import BaseStore
 from langgraph.types import _DC_KWARGS, StreamWriter
 from langgraph.typing import ContextT
 
-_no_op_stream_writer = lambda _: None
+
+def _no_op_stream_writer(_: Any) -> None: ...
 
 
 @dataclass(**_DC_KWARGS)
@@ -26,7 +27,7 @@ class Runtime(Generic[ContextT]):
     """Store for the graph run, enabling persistence and memory."""
 
     stream_writer: StreamWriter
-    """Function to write to the stream."""
+    """Function that writes to the custom stream."""
 
     previous: Any | None
     """The previous return value for the given thread (available only when a checkpointer is provided)."""

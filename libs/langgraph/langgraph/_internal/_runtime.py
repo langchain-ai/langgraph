@@ -1,7 +1,7 @@
 """Internal utilities for the Runtime class."""
 
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any
+from typing import Any, cast
 
 from typing_extensions import TypedDict, Unpack
 
@@ -31,4 +31,7 @@ def patch_runtime_non_null(
 
     Only patch fields with overrides that are not None.
     """
-    return replace(runtime, **{k: v for k, v in overrides.items() if v is not None})
+    return replace(
+        runtime,
+        **cast(dict[str, Any], {k: v for k, v in overrides.items() if v is not None}),
+    )

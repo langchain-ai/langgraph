@@ -820,15 +820,17 @@ class Pregel(
             schema = self.config_schema(include=include)
         return schema.model_json_schema()
 
-    def get_context_jsonschema(self) -> dict[str, Any]:
-        context_schema = self.context_schema
+    def get_context_jsonschema(self) -> dict[str, Any] | None:
+        if (context_schema := self.context_schema) is None:
+            return None
+
         if isclass(context_schema) and issubclass(context_schema, BaseModel):
             return context_schema.model_json_schema()
         elif is_typeddict(context_schema) or is_dataclass(context_schema):
             return TypeAdapter(context_schema).json_schema()
         else:
             raise ValueError(
-                f"Invalid context schema type: {context_schema}. Must be a BaseModel or a TypedDict."
+                f"Invalid context schema type: {context_schema}. Must be a BaseModel, TypedDict or dataclass."
             )
 
     @property

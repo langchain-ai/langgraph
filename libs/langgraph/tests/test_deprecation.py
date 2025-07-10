@@ -3,10 +3,10 @@ from pytest_mock import MockerFixture
 from typing_extensions import TypedDict
 
 from langgraph.channels.last_value import LastValue
+from langgraph.errors import NodeInterrupt
 from langgraph.func import entrypoint, task
 from langgraph.graph import StateGraph
 from langgraph.pregel import NodeBuilder, Pregel
-from langgraph.errors import NodeInterrupt
 from langgraph.types import Interrupt, RetryPolicy
 from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
 

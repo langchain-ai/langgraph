@@ -25,8 +25,7 @@ LangGraph provides **three** primary ways to supply context:
     In LangGraph < v1.0, static runtime context was passed via the `config['configurable']` key, paired with a `config_schema` argument
     to `StateGraph` or `Pregel`. This is now deprecated and will be removed in v2.0.
 
-    In LangGraph v1.0, we've introduced the [`Runtime`][langgraph.types.Runtime] object, which holds both static `context` and other
-    runtime-specific information like the store and stream writer.
+    As of LangGraph v1.0, the Runtime object is recommended to access static context and runtime-specific information like the store and stream writer.
 
 Runtime context is for immutable data like user metadata or API keys. Use this when you have values that don't change mid-run.
 

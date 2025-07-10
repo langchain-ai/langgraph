@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from collections import deque
 from collections.abc import Hashable, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -27,7 +27,6 @@ from langgraph._internal._fields import get_cached_annotated_keys, get_update_as
 from langgraph._internal._retry import default_retry_on
 from langgraph._internal._typing import UNSET, DeprecatedKwargs
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
-from langgraph.typing import ContextT
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 if TYPE_CHECKING:
@@ -139,7 +138,7 @@ _DEFAULT_INTERRUPT_ID = "placeholder-id"
 
 
 @final
-@dataclasses.dataclass(init=False, **_DC_SLOTS)
+@dataclass(init=False, **_DC_SLOTS)
 class Interrupt:
     """Information about an interrupt that occurred in a node.
 

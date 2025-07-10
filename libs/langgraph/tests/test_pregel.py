@@ -410,6 +410,7 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
         "title": "LangGraphOutput",
         "type": "integer",
     }
+    assert app.get_context_jsonschema() is None
 
     assert app.invoke(2) == 3
     assert app.invoke(2, output_keys=["output"]) == {"output": 3}

@@ -12,6 +12,7 @@ from typing import (
     Callable,
     Generic,
     TypeVar,
+    cast,
     get_args,
     get_origin,
     overload,
@@ -389,7 +390,7 @@ class entrypoint(Generic[ContextT]):
                 stacklevel=2,
             )
             if context_schema is None:
-                context_schema = config_schema  # type: ignore[assignment]
+                context_schema = cast(type[ContextT], config_schema)
 
         if (retry := kwargs.get("retry", UNSET)) is not UNSET:
             warnings.warn(
@@ -397,7 +398,7 @@ class entrypoint(Generic[ContextT]):
                 category=LangGraphDeprecatedSinceV05,
             )
             if retry_policy is None:
-                retry_policy = retry  # type: ignore[assignment]
+                retry_policy = cast("RetryPolicy | Sequence[RetryPolicy]", retry)
 
         self.checkpointer = checkpointer
         self.store = store
