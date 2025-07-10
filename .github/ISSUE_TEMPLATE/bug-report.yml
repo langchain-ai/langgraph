@@ -7,12 +7,12 @@ body:
       value: >
         Thank you for taking the time to file a bug report. 
         
-        Use this to report BUGS in LangGraph. For usage questions, feature requests and general design questions, please use [GitHub Discussions](https://github.com/langchain-ai/langgraph/discussions).
+        Use this to report BUGS in LangGraph. For usage questions, feature requests and general design questions, please use the [LangChain Forum](https://forum.langchain.com/).
         
         Relevant links to check before filing a bug report to see if your issue has already been reported, fixed or
         if there's another way to solve your problem:
         
-        [LangGraph Github Discussions](https://github.com/langchain-ai/langgraph/discussions),
+        [LangChain Forum](https://forum.langchain.com/),
         [LangGraph Github Issues](https://github.com/langchain-ai/langgraph/issues),
         [LangGraph how-to guides](https://langchain-ai.github.io/langgraph/how-tos/).
         [LangChain documentation with the integrated search](https://python.langchain.com/docs/get_started/introduction),

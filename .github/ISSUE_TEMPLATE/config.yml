@@ -1,8 +1,5 @@
 version: 2.1
 contact_links:
-  - name: Feature Request
-    url: https://github.com/langchain-ai/langgraph/discussions/categories/ideas
-    about: Suggest a feature or an idea
   - name: LangChain Forum
     url:  https://forum.langchain.com/
-    about: General community discussions and support
+    about: General community discussions, support, and feature requests
