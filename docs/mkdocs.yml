@@ -261,6 +261,7 @@ nav:
       - MCP Adapters: reference/mcp.md
     - LangGraph Platform:
       - Server API: cloud/reference/api/api_ref.md
+      - Server changelog: cloud/reference/langgraph_server_changelog.md
       - Control Plane API: cloud/reference/api/api_ref_control_plane.md
       - CLI: cloud/reference/cli.md
       - SDK (Python): cloud/reference/sdk/python_sdk_ref.md
@@ -381,7 +382,6 @@ validation:
 copyright: >
   Copyright &copy; 2025 LangChain, Inc | <a href="#__consent">Consent Preferences</a>
 extra_css:
-  - stylesheets/navigation_title_ovverides.css
   - stylesheets/version_admonitions.css
   - stylesheets/logos.css
   - stylesheets/sticky_navigation.css
