@@ -1,0 +1,44 @@
+[project]
+name = "libs"
+version = "0.0.1"
+description = "LangGraph monorepo uv workspace"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  'langgraph',
+  'langgraph-checkpoint',
+  'langgraph-checkpoint-postgres',
+  'langgraph-checkpoint-sqlite',
+  'langgraph-prebuilt',
+  # 'langgraph-sdk-py',
+  'langgraph-cli'
+]
+
+[dependency-groups]
+dev = [
+  "ruff >= 0.8.1"
+]
+
+[tool.uv.sources]
+langgraph = { workspace = true }
+langgraph-checkpoint = { workspace = true }
+langgraph-checkpoint-postgres = { workspace = true }
+langgraph-checkpoint-sqlite = { workspace = true }
+langgraph-prebuilt = { workspace = true }
+# langgraph-sdk = { workspace = true }
+langgraph-cli = { workspace = true }
+
+[tool.uv.workspace]
+members = [
+  './langgraph',
+  # './sdk-py',
+  './cli',
+  './checkpoint',
+  './checkpoint-sqlite',
+  './checkpoint-postgres',
+  './prebuilt'
+]
+exclude = [
+    './sdk-js',
+    './sdk-py'
+]
