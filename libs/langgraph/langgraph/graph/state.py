@@ -279,7 +279,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     @overload
     def add_node(
         self,
-        node: StateNode[StateT],
+        node: StateNode[StateT, ContextT],
         *,
         defer: bool = False,
         metadata: dict[str, Any] | None = None,
@@ -298,7 +298,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     def add_node(
         self,
         node: str,
-        action: StateNode[StateT],
+        action: StateNode[StateT, ContextT],
         *,
         defer: bool = False,
         metadata: dict[str, Any] | None = None,
@@ -313,8 +313,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
     def add_node(
         self,
-        node: str | StateNode[StateT],
-        action: StateNode[StateT] | None = None,
+        node: str | StateNode[StateT, ContextT],
+        action: StateNode[StateT, ContextT] | None = None,
         *,
         defer: bool = False,
         metadata: dict[str, Any] | None = None,
@@ -591,7 +591,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
     def add_sequence(
         self,
-        nodes: Sequence[StateNode[StateT] | tuple[str, StateNode[StateT]]],
+        nodes: Sequence[
+            StateNode[StateT, ContextT] | tuple[str, StateNode[StateT, ContextT]]
+        ],
     ) -> Self:
         """Add a sequence of nodes that will be executed in the provided order.
 

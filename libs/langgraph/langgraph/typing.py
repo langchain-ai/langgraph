@@ -10,6 +10,7 @@ __all__ = (
     "StateT_contra",
     "InputT",
     "OutputT",
+    "ContextT",
 )
 
 StateT = TypeVar("StateT", bound=StateLike)
@@ -19,7 +20,9 @@ StateT_co = TypeVar("StateT_co", bound=StateLike, covariant=True)
 
 StateT_contra = TypeVar("StateT_contra", bound=StateLike, contravariant=True)
 
-ContextT = TypeVar("ContextT", default=None, contravariant=True)
+ContextT = TypeVar("ContextT", bound=StateLike)
+
+ContextT_contra = TypeVar("ContextT_contra", bound=StateLike, contravariant=True)
 """Type variable used to represent graph run scoped context."""
 
 InputT = TypeVar("InputT", bound=StateLike, default=StateT)

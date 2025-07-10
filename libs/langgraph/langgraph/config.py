@@ -181,4 +181,4 @@ def get_stream_writer() -> StreamWriter:
         ```
     """
     runtime = get_config()[CONF][CONFIG_KEY_RUNTIME]
-    return runtime.stream_writer or _no_op_stream_writer
+    return runtime.stream_writer
