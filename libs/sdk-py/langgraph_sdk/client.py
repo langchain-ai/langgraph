@@ -4919,7 +4919,7 @@ class SyncRunsClient:
         run_id: str,
         *,
         headers: dict[str, str] | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Block until a run is done. Returns the final state of the thread.
 
         Args:
@@ -4928,7 +4928,7 @@ class SyncRunsClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            None
+            dict[str, Any]: The final state values of the thread
 
         ???+ example "Example Usage"
 
