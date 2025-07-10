@@ -31,7 +31,7 @@ To review, edit, and approve tool calls in an agent or workflow, [use LangGraph'
     - [Static interrupts](../how-tos/human_in_the_loop/add-human-in-the-loop.md#static-interrupts): Use `interrupt_before` and `interrupt_after` to pause the graph at defined points, either before or after a node executes.
 
     <figure markdown="1">
-    ![image](.img/breakpoints.png){: style="max-height:400px"}
+    ![image](./img/breakpoints.png){: style="max-height:400px"}
     <figcaption>An example graph consisting of 3 sequential steps with a breakpoint before step_3. </figcaption> </figure>
 
 * **Flexible integration points**: Human-in-the-loop logic can be introduced at any point in the workflow. This allows targeted human involvement, such as approving API calls, correcting outputs, or guiding conversations.
