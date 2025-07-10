@@ -11,15 +11,15 @@ hide:
 
 # Enable human intervention
 
-To review, edit, and approve tool calls in an agent or workflow, use interrupts to pause a graph and wait for [human input](../../concepts/human_in_the_loop.md).
+To review, edit, and approve tool calls in an agent or workflow, use interrupts to pause a graph and wait for human input. [Interrupts](../../concepts/human_in_the_loop.md#key-capabilities) use LangGraph's [persistence](../../concepts/persistence.md) layer, which saves the graph state, to indefinitely pause graph execution until you resume.
 
 ## Dynamic interrupts
 
-The [`interrupt` function][langgraph.types.interrupt] in LangGraph enables human-in-the-loop workflows by pausing the graph at a specific node, presenting information to a human, and resuming the graph with their input. It's useful for tasks like approvals, edits, or gathering additional context.
+[Dynamic interrupts](../../concepts/human_in_the_loop.md#key-capabilities) (also known as dynamic breakpoints) are triggered when a condition is met inside a node. You can set dynamic interrupts by calling [`interrupt` function][langgraph.types.interrupt] in the appropriate place. The graph will pause, which allows for human intervention, and then resumes the graph with their input. It's useful for tasks like approvals, edits, or gathering additional context.
 
 !!! note
 
-    As of v1.0, `interrupt` is the recommended way to pause a graph. `NodeInterrupt` is deprecated and will be removed in a future version.
+    As of v1.0, `interrupt` is the recommended way to pause a graph. `NodeInterrupt` is deprecated and will be removed in v2.0.
 
 ### Pause using `interrupt`
 
@@ -174,12 +174,11 @@ parent_graph.invoke(Command(resume=resume_map), config=thread_config)
 
 ## Static interrupts
 
-Static interrupts (also known as static breakpoints) are triggered either before or after a node executes. You can set static interrupts by specifying `interrupt_before` and `interrupt_after` at compile time or run time.
+[Static interrupts](../../concepts/human_in_the_loop.md#key-capabilities) (also known as static breakpoints) are triggered at defined points either before or after a node executes. You can set static interrupts by specifying `interrupt_before` and `interrupt_after` at compile time or run time.
 
 !!! warning
 
-    Static interrupts are **not** recommended for human-in-the-loop workflows. They are best used for debugging and testing.
-
+    Static interrupts are **not** recommended for human-in-the-loop workflows. They are best used for debugging and testing if you want to step through the graph execution one node at a time or if you want to pause the graph execution at specific nodes.
 
 === "Compile time"
 

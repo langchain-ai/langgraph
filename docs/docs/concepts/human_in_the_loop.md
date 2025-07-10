@@ -23,11 +23,16 @@ To review, edit, and approve tool calls in an agent or workflow, [use LangGraph'
 
 ## Key capabilities
 
-* **Persistent execution state**: Breakpoints (`interrupt`) allow you to pause graph execution at defined points **indefinitely** — for minutes, hours, or even days—until human input is received. They use LangGraph's [persistence layer](./persistence.md), which saves the graph state after each step. This allows the system to persist execution context and later resume the workflow, continuing from where it left off, supporting asynchronous human review or input without time constraints.
+* **Persistent execution state**: [Interrupts](../../concepts/human_in_the_loop.md#key-capabilities) use LangGraph's [persistence](../../concepts/persistence.md) layer, which saves the graph state, to indefinitely pause graph execution until you resume. This is possible because LangGraph checkpoints the graph state after each step, which allows the system to persist execution context and later resume the workflow, continuing from where it left off. This supports asynchronous human review or input without time constraints.
 
-  <figure markdown="1">
-  ![image](img/breakpoints.png){: style="max-height:400px"}
-  <figcaption>An example graph consisting of 3 sequential steps with a breakpoint before step_3. </figcaption> </figure>
+    There are two ways to pause a graph:
+
+    - [Dynamic interrupts](../how-tos/human_in_the_loop/add-human-in-the-loop.md#dynamic-interrupts): Use `interrupt` to pause a graph from inside a specific node based on a condition.
+    - [Static interrupts](../how-tos/human_in_the_loop/add-human-in-the-loop.md#static-interrupts): Use `interrupt_before` and `interrupt_after` to pause the graph at defined points, either before or after a node executes.
+
+    <figure markdown="1">
+    ![image](.img/breakpoints.png){: style="max-height:400px"}
+    <figcaption>An example graph consisting of 3 sequential steps with a breakpoint before step_3. </figcaption> </figure>
 
 * **Flexible integration points**: Human-in-the-loop logic can be introduced at any point in the workflow. This allows targeted human involvement, such as approving API calls, correcting outputs, or guiding conversations.
 
