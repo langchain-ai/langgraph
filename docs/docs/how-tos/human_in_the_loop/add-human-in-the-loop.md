@@ -19,7 +19,7 @@ To review, edit, and approve tool calls in an agent or workflow, use interrupts 
 
 ## Pause using `interrupt`
 
-[Dynamic interrupts](../../concepts/human_in_the_loop.md#key-capabilities) (also known as dynamic breakpoints) are conditional on the current state of the graph. You can set dynamic interrupts by calling [`interrupt` function][langgraph.types.interrupt] in the appropriate place. The graph will pause, which allows for human intervention, and then resumes the graph with their input. It's useful for tasks like approvals, edits, or gathering additional context.
+[Dynamic interrupts](../../concepts/human_in_the_loop.md#key-capabilities) (also known as dynamic breakpoints) are triggered based on the current state of the graph. You can set dynamic interrupts by calling [`interrupt` function][langgraph.types.interrupt] in the appropriate place. The graph will pause, which allows for human intervention, and then resumes the graph with their input. It's useful for tasks like approvals, edits, or gathering additional context.
 
 !!! note
 
