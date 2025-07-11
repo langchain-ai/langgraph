@@ -54,6 +54,7 @@ plugins:
       separator: '[\s\u200b\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;'
   - autorefs
   - tags
+  - include-markdown
   - mkdocstrings:
       custom_templates: templates
       handlers:
@@ -257,6 +258,7 @@ nav:
       - MCP Adapters: reference/mcp.md
     - LangGraph Platform:
       - Server API: cloud/reference/api/api_ref.md
+      - Server changelog: cloud/reference/langgraph_server_changelog.md
       - Control Plane API: cloud/reference/api/api_ref_control_plane.md
       - CLI: cloud/reference/cli.md
       - SDK (Python): cloud/reference/sdk/python_sdk_ref.md
@@ -352,8 +354,6 @@ markdown_extensions:
       combine_header_slug: true
   - pymdownx.tasklist:
       custom_checkbox: true
-  - markdown_include.include:
-      base_path: ./
   - github-callouts
 hooks:
   - _scripts/notebook_hooks.py
