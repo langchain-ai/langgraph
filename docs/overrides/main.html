@@ -37,7 +37,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
             
             
             const data = JSON.parse(rawContent);
-            const content = `# ${data.title}\n\nSource: ${window.location.href}\n\n${data.markdown}`;
+            const content = `Source: ${window.location.href}\n\n${data.markdown}`;
             
             navigator.clipboard.writeText(content).then(() => {
                 // Simple notification
