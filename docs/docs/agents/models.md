@@ -7,7 +7,7 @@ LangGraph provides built-in support for [LLMs (language models)](https://python.
 
 Use [`init_chat_model`](https://python.langchain.com/docs/how_to/chat_models_universal_init/) to initialize models:
 
-{!snippets/chat_model_tabs.md!}
+{% include-markdown "snippets/chat_model_tabs.md" %}
 
 ### Instantiate a model directly
 

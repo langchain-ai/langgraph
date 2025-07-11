@@ -14,7 +14,7 @@ Starting with the existing code from the [Add memory to the chatbot](./3-add-mem
 
 Let's first select a chat model:
 
-{!snippets/chat_model_tabs.md!}
+{% include-markdown "snippets/chat_model_tabs.md" %}
 
 <!---
 ```python
