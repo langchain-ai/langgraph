@@ -33,7 +33,7 @@ The state of a thread at a particular point in time is called a checkpoint. Chec
 - `metadata`: Metadata associated with this checkpoint.
 - `values`: Values of the state channels at this point in time.
 - `next` A tuple of the node names to execute next in the graph.
-- `tasks`: A tuple of `PregelTask` objects that contain information about next tasks to be executed. If the step was previously attempted, it will include error information. If a graph was interrupted [dynamically](../how-tos/human_in_the_loop/add-human-in-the-loop.md#dynamic-interrupts) from within a node, tasks will contain additional data associated with interrupts.
+- `tasks`: A tuple of `PregelTask` objects that contain information about next tasks to be executed. If the step was previously attempted, it will include error information. If a graph was interrupted [dynamically](../how-tos/human_in_the_loop/add-human-in-the-loop.md#pause-using-interrupt) from within a node, tasks will contain additional data associated with interrupts.
 
 Checkpoints are persisted and can be used to restore the state of a thread at a later time.
 
