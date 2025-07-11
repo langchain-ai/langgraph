@@ -362,6 +362,7 @@ markdown_extensions:
   - github-callouts
 hooks:
   - _scripts/notebook_hooks.py
+  - _scripts/copy_page_hooks.py
 extra:
   social:
     - icon: fontawesome/brands/js
