@@ -48,6 +48,7 @@ docs = [
     "ruff",
     "jupyter",
     "langchain-cohere",
+    "mkdocs-include-markdown-plugin>=7.1.6",
 ]
 test = [
     "langchain",
