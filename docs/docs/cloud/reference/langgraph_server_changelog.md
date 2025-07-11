@@ -4,6 +4,9 @@
 
 ---
 
+## v0.2.86 (2025-07-11)
+- Respected tool descriptions in the `/mcp` endpoint.
+
 ## v0.2.85 (2025-07-10)
 - Added support for the `on_disconnect` field to `runs/wait` and included disconnect logs for better debugging.
 
