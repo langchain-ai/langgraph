@@ -14,7 +14,7 @@ You can create these types of experiences using LangGraph's built-in **time trav
 
 Rewind your graph by fetching a checkpoint using the graph's `get_state_history` method. You can then resume execution at this previous point in time.
 
-{% include-markdown "snippets/chat_model_tabs.md" %}
+{% include-markdown "../../../snippets/chat_model_tabs.md" %}
 
 <!---
 ```python
