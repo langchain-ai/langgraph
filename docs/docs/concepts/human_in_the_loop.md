@@ -23,7 +23,7 @@ To review, edit, and approve tool calls in an agent or workflow, [use LangGraph'
 
 ## Key capabilities
 
-* **Persistent execution state**: [Interrupts](../../concepts/human_in_the_loop.md#key-capabilities) use LangGraph's [persistence](../../concepts/persistence.md) layer, which saves the graph state, to indefinitely pause graph execution until you resume. This is possible because LangGraph checkpoints the graph state after each step, which allows the system to persist execution context and later resume the workflow, continuing from where it left off. This supports asynchronous human review or input without time constraints.
+* **Persistent execution state**: Interrupts use LangGraph's [persistence](../../concepts/persistence.md) layer, which saves the graph state, to indefinitely pause graph execution until you resume. This is possible because LangGraph checkpoints the graph state after each step, which allows the system to persist execution context and later resume the workflow, continuing from where it left off. This supports asynchronous human review or input without time constraints.
 
     There are two ways to pause a graph:
 
