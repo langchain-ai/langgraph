@@ -557,7 +557,7 @@ class BasePostgresStore(Generic[C]):
     ) -> list[tuple[str, Sequence]]:
         queries: list[tuple[str, Sequence]] = []
         for _, op in list_ops:
-            query = """
+            query = r"""
                 SELECT DISTINCT ON (truncated_prefix) truncated_prefix, prefix
                 FROM (
                     SELECT
