@@ -203,7 +203,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         while True:
             try:
                 yield asyncio.run_coroutine_threadsafe(
-                    anext(aiter_),  # noqa: F821
+                    anext(aiter_),  # type: ignore[arg-type]  # noqa: F821
                     self.loop,
                 ).result()
             except StopAsyncIteration:

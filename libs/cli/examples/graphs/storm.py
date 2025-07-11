@@ -285,7 +285,7 @@ class AnswerWithCitations(BaseModel):
     @property
     def as_str(self) -> str:
         return f"{self.answer}\n\nCitations:\n\n" + "\n".join(
-            f"[{i+1}]: {url}" for i, url in enumerate(self.cited_urls)
+            f"[{i + 1}]: {url}" for i, url in enumerate(self.cited_urls)
         )
 
 
@@ -553,7 +553,7 @@ async def conduct_interviews(state: ResearchState):
 def format_conversation(interview_state):
     messages = interview_state["messages"]
     convo = "\n".join(f"{m.name}: {m.content}" for m in messages)
-    return f'Conversation with {interview_state["editor"].name}\n\n' + convo
+    return f"Conversation with {interview_state['editor'].name}\n\n" + convo
 
 
 async def refine_outline(state: ResearchState):

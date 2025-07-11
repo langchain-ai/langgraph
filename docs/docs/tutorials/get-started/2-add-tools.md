@@ -23,12 +23,16 @@ pip install -U langchain-tavily
 
 Configure your environment with your search engine API key:
 
-```bash
+```python
+def _set_env(var: str):
+    if not os.environ.get(var):
+        os.environ[var] = getpass.getpass(f"{var}: ")
+
 _set_env("TAVILY_API_KEY")
 ```
 
 ```
-TAVILY_API_KEY:  ········
+os.environ["TAVILY_API_KEY"]:  "········"
 ```
 
 ## 3. Define the tool
@@ -69,7 +73,7 @@ For the `StateGraph` you created in the [first tutorial](./1-build-basic-chatbot
 
 Let's first select our LLM:
 
-{!snippets/chat_model_tabs.md!}
+{% include-markdown "../../../snippets/chat_model_tabs.md" %}
 
 <!---
 ```python
@@ -282,7 +286,7 @@ For ease of use, adjust your code to replace the following with LangGraph prebui
 - `BasicToolNode` is replaced with the prebuilt [ToolNode](https://langchain-ai.github.io/langgraph/reference/prebuilt/#toolnode)
 - `route_tools` is replaced with the prebuilt [tools_condition](https://langchain-ai.github.io/langgraph/reference/prebuilt/#tools_condition)
 
-{!snippets/chat_model_tabs.md!}
+{% include-markdown "../../../snippets/chat_model_tabs.md" %}
 
 
 ```python hl_lines="25 30"

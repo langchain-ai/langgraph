@@ -448,10 +448,8 @@ class BasePostgresStore(Generic[C]):
 
                 score_operator, post_operator = get_distance_operator(self)
                 post_operator = post_operator.replace("scored", "uniq")
-                vector_type = (
-                    cast(PostgresIndexConfig, self.index_config)
-                    .get("ann_index_config", {})
-                    .get("vector_type", "vector")
+                vector_type = self.index_config.get("ann_index_config", {}).get(
+                    "vector_type", "vector"
                 )
 
                 # For hamming bit vectors, or “regular” vectors
@@ -559,7 +557,7 @@ class BasePostgresStore(Generic[C]):
     ) -> list[tuple[str, Sequence]]:
         queries: list[tuple[str, Sequence]] = []
         for _, op in list_ops:
-            query = """
+            query = r"""
                 SELECT DISTINCT ON (truncated_prefix) truncated_prefix, prefix
                 FROM (
                     SELECT
@@ -1141,7 +1139,7 @@ def _get_vector_type_ops(store: BasePostgresStore) -> str:
     if not store.index_config:
         return "vector_cosine_ops"
 
-    config = cast(PostgresIndexConfig, store.index_config)
+    config = store.index_config
     index_config = config.get("ann_index_config", _DEFAULT_ANN_CONFIG).copy()
     vector_type = cast(str, index_config.get("vector_type", "vector"))
     if vector_type not in ("vector", "halfvec"):

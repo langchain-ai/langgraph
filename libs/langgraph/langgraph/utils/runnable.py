@@ -83,7 +83,7 @@ def _unset_config_context(token: Token[RunnableConfig | None], run: Any = None) 
     """Set the child Runnable config + tracing context.
 
     Args:
-        config: The config to set.
+        token: The config token to reset.
     """
     var_child_runnable_config.reset(token)
     if run is not None:

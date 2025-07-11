@@ -10,13 +10,14 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from langgraph_cli.cli import cli, prepare_args_and_stdin
-from langgraph_cli.config import PIP_CLEANUP_LINES, Config, validate_config
+from langgraph_cli.config import Config, _get_pip_cleanup_lines, validate_config
 from langgraph_cli.docker import DEFAULT_POSTGRES_URI, DockerCapabilities, Version
 from langgraph_cli.util import clean_empty_lines
 
-FORMATTED_CLEANUP_LINES = PIP_CLEANUP_LINES.format(
+FORMATTED_CLEANUP_LINES = _get_pip_cleanup_lines(
     install_cmd="uv pip install --system",
-    uv_removal="RUN uv pip uninstall --system pip setuptools wheel && rm /usr/bin/uv /usr/bin/uvx",
+    to_uninstall=("pip", "setuptools", "wheel"),
+    pip_installer="uv",
 )
 DEFAULT_DOCKER_CAPABILITIES = DockerCapabilities(
     version_docker=Version(26, 1, 1),
@@ -280,9 +281,9 @@ def test_version_option() -> None:
     assert result.exit_code == 0, "Expected exit code 0 for --version option"
 
     # Check that the output contains the correct version information
-    assert (
-        "LangGraph CLI, version" in result.output
-    ), "Expected version information in output"
+    assert "LangGraph CLI, version" in result.output, (
+        "Expected version information in output"
+    )
 
 
 def test_dockerfile_command_basic() -> None:
@@ -570,6 +571,6 @@ def test_build_generate_proper_build_context():
         build_context_pattern = re.compile(r"--build-context\s+(\w+)=([^\s]+)")
 
         build_contexts = re.findall(build_context_pattern, result.output)
-        assert (
-            len(build_contexts) == 2
-        ), f"Expected 2 build contexts, but found {len(build_contexts)}"
+        assert len(build_contexts) == 2, (
+            f"Expected 2 build contexts, but found {len(build_contexts)}"
+        )
