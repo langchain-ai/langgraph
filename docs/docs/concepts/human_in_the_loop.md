@@ -27,7 +27,7 @@ To review, edit, and approve tool calls in an agent or workflow, [use LangGraph'
 
     There are two ways to pause a graph:
 
-    - [Dynamic interrupts](../how-tos/human_in_the_loop/add-human-in-the-loop.md#pause-using-interrupt): Use `interrupt` to pause a graph from inside a specific node based on a condition.
+    - [Dynamic interrupts](../how-tos/human_in_the_loop/add-human-in-the-loop.md#pause-using-interrupt): Use `interrupt` to pause a graph from inside a specific node, conditional on the state of the graph.
     - [Static interrupts](../how-tos/human_in_the_loop/add-human-in-the-loop.md#debug-with-interrupts): Use `interrupt_before` and `interrupt_after` to pause the graph at defined points, either before or after a node executes.
 
     <figure markdown="1">
