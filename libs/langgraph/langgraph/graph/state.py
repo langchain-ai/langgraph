@@ -794,7 +794,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
         interrupt_after: All | list[str] | None = None,
         debug: bool = False,
         name: str | None = None,
-    ) -> CompiledStateGraph[StateT, InputT]:
+    ) -> CompiledStateGraph[StateT, InputT, OutputT]:
         """Compiles the state graph into a `CompiledStateGraph` object.
 
         The compiled graph implements the `Runnable` interface and can be invoked,
@@ -996,7 +996,7 @@ class CompiledStateGraph(
                 writers=[ChannelWrite(write_entries)],
             )
         elif node is not None:
-            input_schema = node.input if node else self.builder._state_schema
+            input_schema = node.input if node else self.builder.state_schema
             input_channels = list(self.builder.schemas[input_schema])
             is_single_input = len(input_channels) == 1 and "__root__" in input_channels
             if input_schema in self.schema_to_mapper:
