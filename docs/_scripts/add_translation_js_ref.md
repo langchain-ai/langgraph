@@ -82,7 +82,7 @@ const model = new ChatOpenAI({
 
 // Define the function that determines whether to continue or not
 function shouldContinue({ messages }: typeof MessagesAnnotation.State) {
-  const lastMessage = messages.at(-1) as AIMessage;
+  const lastMessage = messages.at(-1) as AIMessage | undefined;
 
   // If the LLM makes a tool call, then we route to the "tools" node
   if (lastMessage.tool_calls?.length) {
@@ -270,7 +270,7 @@ const modelWithTools = model.bindTools([...tools, askHumanTool]);
 function shouldContinue(
   state: typeof MessagesAnnotation.State
 ): "action" | "askHuman" | typeof END {
-  const lastMessage = state.messages.at(-1) as AIMessage;
+  const lastMessage = state.messages.at(-1) as AIMessage | undefined;
   // If there is no function call, then we finish
   if (lastMessage && !lastMessage.tool_calls?.length) {
     return END;
@@ -300,8 +300,8 @@ async function callModel(
 function askHuman(
   state: typeof MessagesAnnotation.State
 ): Partial<typeof MessagesAnnotation.State> {
-  const lastMessage = state.messages.at(-1) as AIMessage;
-  const toolCallId = lastMessage.tool_calls?.[0].id;
+  const lastMessage = state.messages.at(-1) as AIMessage | undefined;
+  const toolCallId = lastMessage?.tool_calls?.[0].id;
   const location: string = interrupt("Please provide your location:");
   const newToolMessage = new ToolMessage({
     tool_call_id: toolCallId!,
@@ -369,9 +369,7 @@ const config2 = {
 };
 
 for await (const event of await messagesApp.stream(
-  {
-    messages: [input],
-  },
+  { messages: [input] },
   config2
 )) {
   const recentMsg = event.messages.at(-1);
@@ -997,7 +995,7 @@ import { AIMessage } from "@langchain/core/messages";
 
 const routeMessage = (state: typeof StateAnnotation.State) => {
   const { messages } = state;
-  const lastMessage = messages.at(-1) as AIMessage;
+  const lastMessage = messages.at(-1) as AIMessage | undefined;
   // If no tools are called, we can finish (respond to the user)
   if (!lastMessage?.tool_calls?.length) {
     return END;
@@ -1965,8 +1963,8 @@ const callLLM = async (state: typeof MessagesAnnotation.State) => {
 const humanReviewNode = async (
   state: typeof MessagesAnnotation.State
 ): Promise<Command> => {
-  const lastMessage = state.messages.at(-1) as AIMessage;
-  const toolCall = lastMessage.tool_calls!.at(-1);
+  const lastMessage = state.messages.at(-1) as AIMessage | undefined;
+  const toolCall = lastMessage?.tool_calls?.at(-1);
 
   const humanReview = interrupt<
     {
@@ -1987,7 +1985,9 @@ const humanReviewNode = async (
 
   if (reviewAction === "continue") {
     return new Command({ goto: "run_tool" });
-  } else if (reviewAction === "update") {
+  }
+
+  if (reviewAction === "update") {
     const updatedMessage = {
       role: "ai",
       content: lastMessage.content,
@@ -2004,7 +2004,9 @@ const humanReviewNode = async (
       goto: "run_tool",
       update: { messages: [updatedMessage] },
     });
-  } else if (reviewAction === "feedback") {
+  }
+
+  if (reviewAction === "feedback") {
     const toolMessage = new ToolMessage({
       name: toolCall.name,
       content: reviewData,
@@ -2015,13 +2017,14 @@ const humanReviewNode = async (
       update: { messages: [toolMessage] },
     });
   }
+
   throw new Error("Invalid review action");
 };
 
 const runTool = async (state: typeof MessagesAnnotation.State) => {
   const newMessages: ToolMessage[] = [];
   const tools = { weather_search: weatherSearch };
-  const lastMessage = state.messages.at(-1) as AIMessage;
+  const lastMessage = state.messages.at(-1) as AIMessage | undefined;
   const toolCalls = lastMessage.tool_calls!;
 
   for (const toolCall of toolCalls) {
@@ -2041,8 +2044,8 @@ const runTool = async (state: typeof MessagesAnnotation.State) => {
 const routeAfterLLM = (
   state: typeof MessagesAnnotation.State
 ): typeof END | "human_review_node" => {
-  const lastMessage = state.messages.at(-1) as AIMessage;
-  if (!lastMessage.tool_calls?.length) {
+  const lastMessage = state.messages.at(-1) as AIMessage | undefined;
+  if (!lastMessage?.tool_calls?.length) {
     return END;
   }
   return "human_review_node";
@@ -2954,7 +2957,7 @@ const masterHaikuGenerator2 = tool(
 const callTool2 = async (state: typeof MessagesAnnotation.State) => {
   const { messages } = state;
   const toolsByName = { master_haiku_generator: masterHaikuGenerator };
-  const lastMessage = messages.at(-1) as AIMessage;
+  const lastMessage = messages.at(-1) as AIMessage | undefined;
   const outputMessages: ToolMessage[] = [];
   for (const toolCall of lastMessage.tool_calls) {
     try {
@@ -3495,7 +3498,7 @@ import { AIMessage } from "@langchain/core/messages";
 
 const routeMessage = (state: typeof StateAnnotation.State) => {
   const { messages } = state;
-  const lastMessage = messages.at(-1) as AIMessage;
+  const lastMessage = messages.at(-1) as AIMessage | undefined;
   // If no tools are called, we can finish (respond to the user)
   if (!lastMessage?.tool_calls?.length) {
     return END;
@@ -3757,7 +3760,7 @@ import { RunnableConfig } from "@langchain/core/runnables";
 // Define the function that determines whether to continue or not
 const shouldContinue = (state: typeof AgentState.State) => {
   const { messages } = state;
-  const lastMessage = messages.at(-1) as AIMessage;
+  const lastMessage = messages.at(-1) as AIMessage | undefined;
   // If there is no function call, then we finish
   if (!lastMessage.tool_calls || lastMessage.tool_calls.length === 0) {
     return END;
@@ -4145,7 +4148,7 @@ import { AIMessage } from "@langchain/core/messages";
 
 const routeMessage = (state: typeof StateAnnotation.State) => {
   const { messages } = state;
-  const lastMessage = messages.at(-1) as AIMessage;
+  const lastMessage = messages.at(-1) as AIMessage | undefined;
   // If no tools are called, we can finish (respond to the user)
   if (!lastMessage?.tool_calls?.length) {
     return END;
@@ -4266,7 +4269,7 @@ import { AIMessage } from "@langchain/core/messages";
 // Define the function that determines whether to continue or not
 const shouldContinue = (state: typeof AgentState.State) => {
   const { messages } = state;
-  const lastMessage = messages.at(-1) as AIMessage;
+  const lastMessage = messages.at(-1) as AIMessage | undefined;
   // If there is no function call, then we finish
   if (!lastMessage?.tool_calls?.length) {
     return END;
@@ -5957,7 +5960,7 @@ import { concat } from "@langchain/core/utils/stream";
 // Define logic that will be used to determine which conditional edge to go down
 const shouldContinue = (state: typeof AgentState.State) => {
   const { messages } = state;
-  const lastMessage = messages.at(-1) as AIMessage;
+  const lastMessage = messages.at(-1) as AIMessage | undefined;
   // If there is no function call, then we finish
   if (!lastMessage.tool_calls || lastMessage.tool_calls.length === 0) {
     return "end";
@@ -6859,7 +6862,7 @@ import { RunnableConfig } from "@langchain/core/runnables";
 // Define the function that determines whether to continue or not
 const route = (state: typeof GraphState.State) => {
   const { messages } = state;
-  const lastMessage = messages.at(-1) as AIMessage;
+  const lastMessage = messages.at(-1) as AIMessage | undefined;
   // If there is no function call, then we finish
   if (!lastMessage.tool_calls || lastMessage.tool_calls.length === 0) {
     return "__end__";
@@ -7912,7 +7915,7 @@ const tools = [getFavoritePets, updateFavoritePets];
 
 const routeMessage = (state: typeof StateAnnotation.State) => {
   const { messages } = state;
-  const lastMessage = messages.at(-1) as AIMessage;
+  const lastMessage = messages.at(-1) as AIMessage | undefined;
   // If no tools are called, we can finish (respond to the user)
   if (!lastMessage?.tool_calls?.length) {
     return END;
